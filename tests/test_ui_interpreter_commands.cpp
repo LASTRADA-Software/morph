@@ -906,3 +906,141 @@ TEST_CASE("text: a computed role of no known name is reported once for its path 
     CHECK(h.backend.prop(text, "role") == "Normal");
     CHECK(h.diagnostics.size() == 2);  // a second unknown name is a second reason for the path
 }
+
+// A date string is a calendar date, not an instant: it reads as midnight in the display zone. Mutation: read it as
+// midnight UTC (the field records 2026-10-23T00:00:00.000Z).
+TEST_CASE("interpreter dateTimeInput: a date string shows midnight of that date in the display zone",
+          "[ui][interpreter]") {
+    Harness h;
+    ui::FormatContext format;
+    format.utcOffsetMinutes = -300;
+    h.session.setFormatting(format);
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "dates",
+      "state": { "when": { "type": "string", "init": "2026-10-23" } },
+      "view": { "kind": "dateTimeInput", "testId": "when", "mode": "date", "value": { "ref": "when" } } })");
+    CHECK(readJson(*screen, R"({"ref": "when"})") == R"("2026-10-23")");
+    CHECK(h.backend.prop(h.byTestId("DateTimeInput", "when"), "value") == "2026-10-23T05:00:00.000Z");
+}
+
+// The field writes the type the application keeps: a string field writes the date in date mode and the instant in
+// date-time mode, and clearing writes "". Mutation: write a timestamp (the `set` of a string state is refused).
+TEST_CASE("interpreter dateTimeInput: a field over a string state writes a string in its mode", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "writes",
+      "state": { "day": { "type": "string" }, "moment": { "type": "string" },
+                 "writtenDay": { "init": null }, "writtenMoment": { "init": null } },
+      "view": { "kind": "column", "children": [
+        { "kind": "dateTimeInput", "testId": "day", "mode": "date", "value": { "ref": "day" },
+          "onChange": [ { "set": "day", "value": { "ref": "event" } },
+                        { "set": "writtenDay", "value": { "ref": "event" } } ] },
+        { "kind": "dateTimeInput", "testId": "moment", "value": { "ref": "moment" },
+          "onChange": [ { "set": "moment", "value": { "ref": "event" } },
+                        { "set": "writtenMoment", "value": { "ref": "event" } } ] } ] } })");
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    DateTime const instant{year{2026}, month{10}, day{23}, hours{10}, minutes{16}, seconds{0}};
+    int const day = h.byTestId("DateTimeInput", "day");
+    int const moment = h.byTestId("DateTimeInput", "moment");
+    h.backend.setDateTime(day, morph::time::Timestamp{instant});
+    h.backend.setDateTime(moment, morph::time::Timestamp{instant});
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "day"})") == R"("2026-10-23")");
+    CHECK(readJson(*screen, R"({"ref": "moment"})") == R"("2026-10-23T10:16:00.000Z")");
+    CHECK(readJson(*screen, R"({"ref": "writtenDay"})") == R"("2026-10-23")");
+    CHECK(readJson(*screen, R"({"ref": "writtenMoment"})") == R"("2026-10-23T10:16:00.000Z")");
+    h.backend.setDateTime(day, std::nullopt);
+    h.backend.setDateTime(moment, std::nullopt);
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "day"})") == R"("")");
+    CHECK(readJson(*screen, R"({"ref": "moment"})") == R"("")");
+}
+
+// A value whose type the document does not decide is written as the type it holds at the edit. Mutation: write a
+// timestamp (the event is an instant, not the date string).
+TEST_CASE("interpreter dateTimeInput: an undecided value that holds a string writes a string", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "undecided",
+      "state": { "when": { "type": "any", "init": "2026-10-23" }, "written": { "init": null } },
+      "view": { "kind": "dateTimeInput", "testId": "when", "mode": "date", "value": { "ref": "when" },
+                "onChange": [ { "set": "written", "value": { "ref": "event" } } ] } })");
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    DateTime const instant{year{2026}, month{10}, day{23}, hours{10}, minutes{16}, seconds{0}};
+    h.backend.setDateTime(h.byTestId("DateTimeInput", "when"), morph::time::Timestamp{instant});
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "written"})") == R"("2026-10-23")");
+}
+
+// A timestamp field keeps its type, and clearing it writes null. Mutation: write a string (the `set` of a timestamp
+// state is refused, and the state stays null).
+TEST_CASE("interpreter dateTimeInput: a timestamp field still writes a timestamp", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "stamps",
+      "state": { "when": { "type": "timestamp" }, "written": { "init": null } },
+      "view": { "kind": "dateTimeInput", "testId": "when", "value": { "ref": "when" },
+                "onChange": [ { "set": "when", "value": { "ref": "event" } },
+                              { "set": "written", "value": { "ref": "event" } } ] } })");
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    DateTime const instant{year{2026}, month{10}, day{23}, hours{10}, minutes{16}, seconds{0}};
+    int const field = h.byTestId("DateTimeInput", "when");
+    h.backend.setDateTime(field, morph::time::Timestamp{instant});
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "written"})") == R"("2026-10-23T10:16:00.000Z")");
+    CHECK(readJson(*screen, R"({"ref": "when"})") == R"("2026-10-23T10:16:00.000Z")");
+    h.backend.setDateTime(field, std::nullopt);
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "written"})") == "null");
+}
+
+// The field follows its bound value again once both show the same instant, although their text differs. Mutation:
+// compare the two with `==` (the later change to the bound value does not show).
+TEST_CASE("interpreter dateTimeInput: a field follows its bound value when both show the same instant",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "follow",
+      "state": { "when": { "type": "string", "init": "2026-10-23T09:00:00Z" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "dateTimeInput", "testId": "when", "value": { "ref": "when" },
+          "onChange": [ { "set": "when", "value": "2026-10-23T10:16:00Z" } ] },
+        { "kind": "button", "testId": "later", "label": "later",
+          "onClick": [ { "set": "when", "value": "2026-10-24T10:16:00Z" } ] } ] } })");
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    DateTime const instant{year{2026}, month{10}, day{23}, hours{10}, minutes{16}, seconds{0}};
+    int const field = h.byTestId("DateTimeInput", "when");
+    h.backend.setDateTime(field, morph::time::Timestamp{instant});
+    h.settle();
+    CHECK(h.backend.prop(field, "value") == "2026-10-23T10:16:00.000Z");
+    h.backend.click(h.byTestId("Button", "later"));
+    h.settle();
+    CHECK(h.backend.prop(field, "value") == "2026-10-24T10:16:00.000Z");
+}
+
+// A value that names no date shows empty and is reported once, whatever the value is. Mutation: drop the report
+// (no diagnostic), or put the value in the reason (a second diagnostic for the second value).
+TEST_CASE("interpreter dateTimeInput: a value that names no date shows empty and is reported once",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "bad",
+      "state": { "when": { "type": "any", "init": "23.10.2026" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "dateTimeInput", "testId": "when", "value": { "ref": "when" } },
+        { "kind": "button", "testId": "next", "label": "next", "onClick": [ { "set": "when", "value": "24.10.2026" } ] } ] } })");
+    int const field = h.byTestId("DateTimeInput", "when");
+    CHECK(readJson(*screen, R"({"ref": "when"})") == R"("23.10.2026")");
+    CHECK(h.backend.prop(field, "value") == "none");
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().path == "/view/children/0/value");
+    CHECK(h.diagnostics.front().reason == "`dateTimeInput` shows a timestamp or an ISO-8601 date or date-time string");
+    h.backend.click(h.byTestId("Button", "next"));
+    h.settle();
+    CHECK(h.backend.prop(field, "value") == "none");
+    CHECK(h.diagnostics.size() == 1);
+}

@@ -198,6 +198,12 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 
 `gap` and `padding` are spacing steps, 0 to 5 ([`view_tree.md`](view_tree.md)); the mount clamps any other value.
 
+A `dateTimeInput`'s `value` is a `timestamp` or an ISO-8601 date or date-time string (`yyyy-MM-dd` or
+`yyyy-MM-ddTHH:MM:SS[.fff][Z]`); the loader refuses any other type at `value`. The field keeps the type the
+document declares and writes it back: a string field writes `yyyy-MM-dd` in `date` mode and the ISO-8601 instant
+in `date-time` mode, and `""` on clearing; a timestamp field writes the timestamp, or `null` on clearing. A value
+whose type the document leaves undecided is written as the type it holds at the edit.
+
 A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 
 ## Scopes and names

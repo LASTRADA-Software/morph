@@ -9,6 +9,7 @@
 #include <deque>
 #include <exception>
 #include <expected>
+#include <format>
 #include <functional>
 #include <limits>
 #include <map>
@@ -4193,7 +4194,63 @@ inline void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vect
     }
 }
 
-/// @brief Whether two values show the same in an input: by text for a text input, by value otherwise.
+/// @brief What a date input reads from a value: the instant it shows, and whether the value names one at all.
+struct DateReading {
+    /// @brief The instant shown; empty for an empty field.
+    std::optional<time::DateTime> instant;
+    /// @brief Whether the value names a date, an instant or nothing; `false` for text that names no date.
+    bool readable = true;
+};
+
+/// @brief Reads what a date input shows for @p value, in a display zone @p offsetMinutes from UTC.
+///
+/// A timestamp is its instant; a `yyyy-MM-dd` string is midnight of that date in the display zone; a string
+/// `DateTime::fromIso8601` reads is its instant; `null` and `""` are empty. Any other value is empty and
+/// unreadable.
+/// @param value         The value.
+/// @param offsetMinutes The display zone's offset from UTC, in minutes.
+/// @return The instant, or nothing, and whether the value was readable.
+[[nodiscard]] inline DateReading dateInstantOf(Value const& value, std::int32_t offsetMinutes) {
+    if (value.isNull()) {
+        return {};
+    }
+    if (time::DateTime const* const instant = value.asTimestamp()) {
+        return {.instant = *instant};
+    }
+    std::string const* const text = value.asString();
+    if (text == nullptr) {
+        return {.instant = std::nullopt, .readable = false};
+    }
+    if (text->empty()) {
+        return {};
+    }
+    if (forms::detail::engine::isIsoDate(*text)) {
+        auto const wall = forms::detail::engine::parseWallClock(std::string{*text} + "T00:00");
+        if (!wall) {
+            return {.instant = std::nullopt, .readable = false};
+        }
+        auto const utc =
+            std::chrono::time_point_cast<std::chrono::milliseconds>(*wall - std::chrono::minutes{offsetMinutes});
+        return {.instant = time::DateTime{utc}};
+    }
+    std::optional<time::DateTime> parsed = time::DateTime::fromIso8601(*text);
+    bool const readable = parsed.has_value();
+    return {.instant = std::move(parsed), .readable = readable};
+}
+
+/// @brief A date input's date text for @p instant in a display zone @p offsetMinutes from UTC.
+/// @param instant       The instant.
+/// @param offsetMinutes The display zone's offset from UTC, in minutes.
+/// @return `yyyy-MM-dd`.
+[[nodiscard]] inline std::string dateTextOf(time::DateTime const& instant, std::int32_t offsetMinutes) {
+    auto const local = instant.value + std::chrono::minutes{offsetMinutes};
+    std::chrono::year_month_day const date{std::chrono::floor<std::chrono::days>(local)};
+    return std::format("{:04}-{:02}-{:02}", static_cast<int>(date.year()), static_cast<unsigned>(date.month()),
+                       static_cast<unsigned>(date.day()));
+}
+
+/// @brief Whether two values show the same in an input: by text for a text input, by instant for a date input, by
+///        value otherwise.
 /// @param kind   The input's kind.
 /// @param lhs    One value.
 /// @param rhs    The other.
@@ -4203,6 +4260,10 @@ inline void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vect
                                     FormatContext const& format) {
     if (kind == "textInput" || kind == "filePicker") {
         return textOf(lhs, format) == textOf(rhs, format);
+    }
+    if (kind == "dateTimeInput") {
+        return dateInstantOf(lhs, format.utcOffsetMinutes).instant ==
+               dateInstantOf(rhs, format.utcOffsetMinutes).instant;
     }
     return lhs == rhs;
 }
@@ -6064,12 +6125,40 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     }
     if (kind == "dateTimeInput") {
         DateTimeInput spec;
-        spec.value = slotProp<std::optional<time::Timestamp>>([element]() -> std::optional<time::Timestamp> {
-            time::DateTime const* const instant = element->draft.get().asTimestamp();
-            return instant == nullptr ? std::nullopt : std::optional<time::Timestamp>{time::Timestamp{*instant}};
+        DateMode const mode = onceText("mode") == "date" ? DateMode::Date : DateMode::DateTime;
+        std::optional<TypeKind> heldAtLoad;
+        if (auto const found = _doc->dateValueKinds.find(&node); found != _doc->dateValueKinds.end()) {
+            heldAtLoad = found->second;
+        }
+        std::string const valuePath = pointerAppend(node.path, "value");
+        std::int32_t const offsetMinutes = format.utcOffsetMinutes;
+        spec.value = slotProp<std::optional<time::Timestamp>>([this, element, offsetMinutes,
+                                                               valuePath]() -> std::optional<time::Timestamp> {
+            DateReading const reading = dateInstantOf(element->draft.get(), offsetMinutes);
+            if (!reading.readable) {
+                report(valuePath, "`dateTimeInput` shows a timestamp or an ISO-8601 date or date-time string");
+            }
+            return reading.instant ? std::optional<time::Timestamp>{time::Timestamp{*reading.instant}} : std::nullopt;
         });
-        spec.onChange = [this, ctx, element, onChange = node.event("onChange")](std::optional<time::Timestamp> value) {
-            Value const entered = value && value->hasValue() ? Value{*value->value} : Value{};
+        spec.onChange = [this, ctx, element, heldAtLoad, mode, offsetMinutes,
+                         onChange = node.event("onChange")](std::optional<time::Timestamp> value) {
+            bool asString = element->bound != nullptr && element->bound->get().asString() != nullptr;
+            if (heldAtLoad) {
+                asString = *heldAtLoad == TypeKind::String;
+            }
+            std::optional<time::DateTime> const instant = value ? value->value : std::nullopt;
+            Value entered;
+            if (!asString) {
+                if (instant) {
+                    entered = Value{*instant};
+                }
+            } else if (!instant) {
+                entered = Value{std::string{}};
+            } else if (mode == DateMode::Date) {
+                entered = Value{dateTextOf(*instant, offsetMinutes)};
+            } else {
+                entered = Value{instant->toIso8601()};
+            }
             session.asUser([&] {
                 session.noteWrite();
                 element->draft.set(entered);
@@ -6080,8 +6169,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             });
             runEvent(onChange, ctx, entered);
         };
-        spec.mode = onceText("mode") == "date" ? DateMode::Date : DateMode::DateTime;
-        spec.offsetMinutes = format.utcOffsetMinutes;
+        spec.mode = mode;
+        spec.offsetMinutes = offsetMinutes;
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);

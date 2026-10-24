@@ -568,6 +568,9 @@ struct Document {
     std::map<std::string, CustomizePoint, std::less<>> customize;
     /// @brief The view; `nullptr` for the app document.
     DocNodePtr view;
+    /// @brief The static type of each `dateTimeInput`'s `value` that the loader could decide: `String` or
+    ///        `Timestamp`, keyed by the node. A node whose value type is `any` or `key` has no entry.
+    std::map<DocNode const*, TypeKind> dateValueKinds;
     /// @brief What load-time validation found that does not refuse the document, in the order found. Empty when
     ///        the catalog answers no actions.
     std::vector<LoadWarning> warnings;
@@ -2336,6 +2339,12 @@ public:
     /// @return The warnings, in the order found; the validator keeps none.
     [[nodiscard]] std::vector<LoadWarning> takeWarnings() noexcept { return std::move(_warnings); }
 
+    /// @brief The static type of each date input's `value` that the checker could decide.
+    /// @return The table, keyed by node; the validator keeps none.
+    [[nodiscard]] std::map<DocNode const*, TypeKind> takeDateValueKinds() noexcept {
+        return std::move(_dateValueKinds);
+    }
+
     /// @brief Finds a name in a scope chain.
     /// @param scope The innermost scope.
     /// @param name  The name.
@@ -2594,6 +2603,17 @@ private:
         Type const type = checkExpr(expr, context);
         if (!compatible(Type::of(TypeKind::Bool), type)) {
             refuse(expr.path, std::string{what} + " is " + type.name() + "; expected bool");
+        }
+    }
+
+    // A date input shows a timestamp or an ISO-8601 date or date-time string; any other type it can never show.
+    void checkDateValue(DocNode const& node, Expr const& expr, Type const& type) {
+        if (type.kind == TypeKind::String || type.kind == TypeKind::Timestamp) {
+            _dateValueKinds.insert_or_assign(&node, type.kind);
+        } else if (type.kind != TypeKind::Any && type.kind != TypeKind::Key) {
+            refuse(expr.path,
+                   "`dateTimeInput` shows a timestamp or an ISO-8601 date or date-time string; `value` is " +
+                       type.name());
         }
     }
 
@@ -2880,14 +2900,7 @@ private:
             // NOLINTNEXTLINE(bugprone-unchecked-optional-access): a node or case with a scope of its own has its declarations.
             checkScope(*node.scope, inner);
         }
-        for (auto const& [key, expr] : node.props) {
-            CheckContext const& context = isInner(spec, key) ? inner : outer;
-            if (isCondition(spec, key)) {
-                checkCondition(*expr, context, "`" + key + "`");
-            } else {
-                checkExpr(*expr, context);
-            }
-        }
+        checkProps(node, spec, inner, outer);
         for (auto const& [key, commands] : node.events) {
             if (node.kind == "custom") {
                 checkCustomEvent(node, key.substr(3), node.path);
@@ -2919,6 +2932,20 @@ private:
             // An overlay's footer actions; a form's field components.
             checkActionButtons(node.partList("actions"), pointerAppend(node.path, "actions"));
             checkFieldComponents(node);
+        }
+    }
+
+    void checkProps(DocNode const& node, KindSpec const* spec, CheckContext const& inner, CheckContext const& outer) {
+        for (auto const& [key, expr] : node.props) {
+            CheckContext const& context = isInner(spec, key) ? inner : outer;
+            if (isCondition(spec, key)) {
+                checkCondition(*expr, context, "`" + key + "`");
+                continue;
+            }
+            Type const type = checkExpr(*expr, context);
+            if (node.kind == "dateTimeInput" && key == "value") {
+                checkDateValue(node, *expr, type);
+            }
         }
     }
 
@@ -3633,6 +3660,7 @@ private:
     std::vector<std::pair<MutationDecl const*, ScopeInfo*>> _mutations;
     std::vector<std::pair<QueryDecl const*, ScopeInfo*>> _queryScopes;
     std::vector<LoadWarning> _warnings;
+    std::map<DocNode const*, TypeKind> _dateValueKinds;
     std::vector<std::string> _deriving;
     // NOLINTEND(misc-no-recursion)
 };
@@ -3785,6 +3813,7 @@ inline std::expected<Type, std::string> ScopeResolver::pref(std::string_view poi
         detail::DocumentValidator validator{doc, options};
         validator.run();
         doc.warnings = validator.takeWarnings();
+        doc.dateValueKinds = validator.takeDateValueKinds();
         return doc;
     } catch (detail::DocumentRefused const& refused) {
         Refusal refusal = refused.refusal();

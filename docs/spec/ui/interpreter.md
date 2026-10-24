@@ -207,6 +207,15 @@ reply; `parallel` applies each. `pending` counts runs in flight and queued.
   a select's `selected`) is controlled: its draft follows the bound value while the user has not edited
   it, and keeps the user's edit until the bound value equals it. An input whose value is not bound keeps
   its own `committed` value. A text input's values are text.
+- **Date inputs.** A date input holds its value as a `timestamp` or as a string. The loader records the
+  static type of `value` when it is a `timestamp` or a `string`; a value whose type is `any` or `key`
+  takes the type it holds at the edit, and an uncontrolled input holds a timestamp. A string field
+  shows a `yyyy-MM-dd` date as midnight in the display zone and an ISO-8601 date-time as its instant,
+  and writes `yyyy-MM-dd` in `date` mode or the ISO-8601 instant in `date-time` mode (`""` on
+  clearing); a timestamp field writes the timestamp (`null` on clearing). A value that names no date
+  shows empty and is reported once at the node's `value` path. A date input follows its bound value by
+  instant: the draft and the bound value show the same when both read to the same instant, and two
+  values that read to nothing are the same.
 - **`commitOn`** (`change` by default, `blur`, `enter`) decides when an edit commits: the committed
   value is written and `onChange` runs. `onCommit` (Enter or focus leaving after an edit) also marks the
   element `touched`. The view tree reports no focus, so `focused` stays false.
