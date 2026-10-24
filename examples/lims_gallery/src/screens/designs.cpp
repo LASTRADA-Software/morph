@@ -30,7 +30,7 @@ std::span<Design const> designs() {
          .id = "lims-gallery.audit",
          .title = "Audit trail",
          .summary = "Facets beside a read-only table",
-         .make = nullptr},
+         .make = &auditScreen},
         {.number = "05",
          .id = "lims-gallery.samples",
          .title = "Sample list",

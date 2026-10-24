@@ -11,6 +11,7 @@ add_library(lims_gallery_screens STATIC
     src/screens/esignature.cpp
     src/screens/receipt.cpp
     src/screens/instrument.cpp
+    src/screens/audit.cpp
     src/screens/layout.hpp
     include/lims_gallery/lims_gallery.hpp
     include/lims_gallery/screens.hpp)
@@ -31,7 +32,8 @@ if(MORPH_BUILD_TESTS)
         tests/test_lims_gallery.cpp
         tests/test_esignature.cpp
         tests/test_receipt.cpp
-        tests/test_instrument.cpp)
+        tests/test_instrument.cpp
+        tests/test_audit.cpp)
     target_link_libraries(lims_gallery_tests PRIVATE lims_gallery_screens morph_test_main)
     # The screen harness is the ladder testkit's.
     target_include_directories(lims_gallery_tests PRIVATE ${PROJECT_SOURCE_DIR}/examples/common)

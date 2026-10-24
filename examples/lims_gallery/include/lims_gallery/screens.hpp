@@ -46,4 +46,8 @@ struct Design {
 /// @return The screen.
 [[nodiscard]] morph::ui::author::Screen instrumentScreen();
 
+/// @brief Design 04: the audit trail, its facets beside a read-only table.
+/// @return The screen.
+[[nodiscard]] morph::ui::author::Screen auditScreen();
+
 }  // namespace lims_gallery
