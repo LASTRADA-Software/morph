@@ -183,7 +183,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | `filePicker` | `accept`, `multiple`, `mode`, `label`, `onPick` | |
 | `banner` | `tone`, `text`, `dismissible`, `action` (`{label, onClick}`), `onDismiss` | |
 | `badge` | `tone`, `text`, `icon` | |
-| `progress` | `value`, `label` | |
+| `progress` | `value` (0 to 1; a decimal is read exactly, at whatever places it carries), `label` | |
 | `steps` | `items`, `current` | |
 | `keyValue` | `items` | |
 | `emptyState` | `title`, `text`, `icon`, `action` | |

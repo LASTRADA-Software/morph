@@ -5475,6 +5475,16 @@ namespace detail {
     return textOf(value, format);
 }
 
+/// @brief An exact rational as the nearest double, unrounded.
+///
+/// `Rational::toDouble` rounds to the value's own places, which is a display reading: `29 / 100` keeps its operands'
+/// 0 places and would read as 0. The view tree wants the magnitude, so the lowering reads it here.
+/// @param value The rational.
+/// @return Its numerator divided by its denominator.
+[[nodiscard]] inline double realOf(math::Rational const& value) noexcept {
+    return static_cast<double>(value.numerator) / static_cast<double>(value.denominator);
+}
+
 /// @brief A value as a custom component's `number` prop: the one kind that crosses as a double.
 /// @param value The value.
 /// @return It; zero for anything that is not a number.
@@ -5483,10 +5493,10 @@ namespace detail {
         return static_cast<double>(*whole);
     }
     if (Decimal const* const number = value.asDecimal()) {
-        return number->value.toDouble();
+        return realOf(number->value);
     }
     if (Quantity const* const quantity = value.asQuantity()) {
-        return quantity->value.toDouble();
+        return realOf(quantity->value);
     }
     return 0.0;
 }
@@ -5527,7 +5537,8 @@ namespace detail {
         return *number;
     }
     if (Decimal const* const number = value.asDecimal()) {
-        return static_cast<std::int64_t>(number->value.toDouble());
+        // Integer division truncates toward zero, and reads the exact value rather than one rounded to its places.
+        return number->value.numerator / number->value.denominator;
     }
     return fallback;
 }
@@ -6315,7 +6326,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                     return static_cast<double>(*number);
                 }
                 if (Decimal const* const number = value.asDecimal()) {
-                    return number->value.toDouble();
+                    return realOf(number->value);
                 }
                 return std::nullopt;
             });

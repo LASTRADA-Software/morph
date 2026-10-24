@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -228,4 +229,41 @@ TEST_CASE("interpreter calculation: parseDecimal turns a cell's text into the nu
     h.advance(300ms);
     CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_EvaluateResult")).body ==
           R"({"inputs":{"mass":{"num":25,"den":2,"dp":3}},"resultId":1})");
+}
+
+// `div` keeps its operands' places, so 29 / 100 is the exact 29/100 at 0 places. Each test below reads that quotient
+// where the lowering turns a decimal into a number for the view tree.
+// Mutation: read the decimal through `toDouble()` (rounded to its 0 places) -> the bar records 0.
+TEST_CASE("interpreter calculation: a progress bar reads a decimal exactly, at whatever places it carries",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "bar",
+      "view": { "kind": "progress", "value": { "fn": "div", "args": [ 29, 100 ] } } })");
+    CHECK(h.backend.prop(h.backend.all("Progress").at(0), "value") == "0.29");
+}
+
+// Mutation: cast `toDouble()` (2.9 rounded to its 0 places is 3) -> the grid records 3 columns.
+TEST_CASE("interpreter calculation: an integer property truncates a decimal toward zero", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "cells",
+      "view": { "kind": "grid", "columns": { "fn": "div", "args": [ 29, 10 ] },
+                "children": [ { "kind": "spacer" } ] } })");
+    CHECK(h.backend.prop(h.backend.all("Grid").at(0), "columns") == "2");
+}
+
+// Mutation: read the decimal through `toDouble()` -> the component receives 0.
+TEST_CASE("interpreter calculation: a custom component's number prop receives a decimal exactly",
+          "[ui][interpreter]") {
+    Harness h;
+    h.backend.loadsComponents({"Gauge"});
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "gauge",
+      "components": { "Gauge": { "host": "Gauge", "version": 1, "props": { "level": "number" },
+                                 "fallback": { "kind": "spacer" } } },
+      "view": { "kind": "custom", "name": "Gauge", "props": { "level": { "fn": "div", "args": [ 29, 100 ] } } } })");
+    std::optional<int> const gauge = h.backend.find("Custom", "component", "Gauge");
+    REQUIRE(gauge.has_value());
+    CHECK(h.backend.prop(*gauge, "prop.level") == "0.29");
 }

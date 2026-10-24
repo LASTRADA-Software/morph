@@ -292,6 +292,12 @@ literal integers the loader checked, become `LayoutHints::minWidth`, `maxWidth`,
 `justify` and `alignSelf`, names the loader checked, become the stack's or grid's `align` and `justify` and
 `LayoutHints::alignSelf`.
 
+Wherever the lowering turns a decimal into a number for the view tree, it reads the exact value: a `progress`'s
+`value` and a custom component's `number` prop take the quotient unrounded, and an integer property (a grid's
+`columns`, `gap` and `span`, `sizing`, a slider's value and range, the steps' `current`, a table's virtualization
+bounds) truncates it toward zero. A decimal's places are a display fact, so only display rounds to them: `29 / 100`
+keeps its operands' 0 places and still fills 0.29 of a bar.
+
 - **Scoped content.** A dialog's, drawer's or switch case's content is lowered behind a one-row
   `forEach` whose row view declares the content's scope, so the scope is made when the content mounts
   and released when it unmounts. Row scopes are made by the row view of a `forEach` or `table`.
