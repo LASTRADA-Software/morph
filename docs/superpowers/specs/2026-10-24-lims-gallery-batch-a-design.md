@@ -18,11 +18,11 @@ log was wrong, the item says so.
 | G21 | `MorphProgress.qml` | Right |
 | G34 | `MorphKeyValue.qml` | The symptom is right; the cause the log inferred is wrong |
 | G48 | `MorphInputBackground.qml`, terminal field | Right; the specs say nothing either way, so this adds the rule |
-| G42 | Qt Quick, terminal, `RecordingBackend` | Reproduced. Both real backends click, and `RecordingBackend` alone runs the chord |
-| G15, G40, G54 | `MorphTableRow.qml`, `MorphTable.qml` | Right |
-| G1 | `IViewBackend`, the client shell, the three backends, the testkit | Right; `locale`, `platform` and `online` are never set either |
+| G42 | Qt Quick, terminal (dispatch, fields, lists, check box), `RecordingBackend` | Reproduced. Both real backends click, and `RecordingBackend` alone runs the chord |
+| G15, G40, G54 | `MorphTableRow.qml`, `MorphTable.qml`, the terminal table | Right; the terminal also squeezes a stretch column to 0 |
+| G1 | `IViewBackend`, the client shell, the four backends, the testkit | Right; `locale`, `platform` and `online` are never set either (#1056) |
 | G5 | `Theme`, the Qt Quick controls | Right |
-| G19 | `ShellFrame` | Right |
+| G19 | `ShellFrame`, `Workspace`, the client shell | Right |
 
 Order of landing: G22, G25, G49, G12 (interpreter), then G7, G21, G34, G48 (QML only), then G42, the table items, G1,
 G5 (which needs G1's width class), and G19.
@@ -65,8 +65,20 @@ number for the view tree, it uses the exact value, and only display rounds to pl
 - A custom component's `number` prop given 29/100 receives 0.29.
 - **Control:** put `toDouble()` back in each of the three readers, and each test fails: 0, 3 and 0.
 
-**Risks.** None outside these readers. A document that worked around the rounding with explicit places
-(`decimal(x, 2)`) reads the same value as before.
+**Risks.**
+
+- **`intOf`'s other callers.** Exact truncation changes `intOf` for every caller that receives a decimal whose
+  fraction rounds up at its own places:
+  - `fixed` and `stretch` sizing (`sizingOf`, `interpreter.hpp:5594-5597`);
+  - a slider's `value` (`:6105`);
+  - the steps' `current` (`:6346`);
+  - `onceInt`, which reads a slider's `min`, `max` and `step` (`:5925`);
+  - a table's `virtualizeThreshold` and `virtualizeOverscan` (`:7168-7172`).
+
+  For each of these, a computed `29 / 10` now gives 2 where it gave 3. An integer or an exact decimal with no
+  fraction is unchanged. The commit greps the corpus and the examples for a computed decimal feeding these keys, and
+  lists any it changes.
+- A document that worked around the rounding with explicit places (`decimal(x, 2)`) reads the same value as before.
 
 ## G25: `forEach` drops its common properties (#1052)
 
@@ -167,11 +179,18 @@ The corpus uses the dialog meaning (`tests/ui/corpus/documents.json:158`, a dial
   is unaffected.
 - A mutation's `onSuccess` runs in the scope that declares the mutation. Declared in a dialog's `scope`, its
   `close: self` closes that dialog. Declared at the screen, it ends the screen. That is the same lexical rule.
+- **The walk does not cross a custom component's boundary.**
+  - A component's fallback is lowered in a scope with no parent (`lowerCustom`, `interpreter.hpp:7373`), so the walk
+    ends there, as the component's own names do.
+  - A walk that ends at a scope that is not the screen's root scope (`rootScope`) is inside a component, with no
+    dialog or drawer of its own around the command. It reports "`close: self` inside a component names no dialog or
+    drawer" and fails the command. It does not close the screen the component happens to sit in.
+  - A dialog declared inside the component's fallback is found as usual.
 
 **Spec.**
 
 - `document.md:269`: "`close` also `self`: the innermost dialog or drawer whose content holds the command, or the
-  screen when there is none".
+  screen when there is none; inside a component, only a dialog or drawer of the component's own".
 - `interpreter.md`'s Commands section gets the same rule.
 - `host.md:100-101` qualifies `close: self` as "outside any dialog or drawer".
 - `author.hpp`'s `Self` and `close(Self)` docs say both cases.
@@ -180,8 +199,12 @@ The corpus uses the dialog meaning (`tests/ui/corpus/documents.json:158`, a dial
 
 - A dialog whose action's `onClick` is `[{"close": "self"}]`. Open it, click the action: the dialog's `open` is
   `false`, and the host's `closeSelf` was not called. The test uses a host that counts calls.
-- The same with the dialog's `default`, via `press(…, "Enter")`.
+- The same with the dialog's `default`. The test presses Enter on the dialog's content column, the widget that
+  declares the `Enter` chord (`lowerDialog`'s `holding(…, keys)`), not on a field inside it. After G42, a field's own
+  handling of Enter comes first.
 - The same inside a `switch` case inside the dialog, to test the parent walk.
+- A component whose fallback holds a button with `close: self`, mounted at screen level: the command reports and
+  fails, and `closeSelf` is not called. The same component placed inside a dialog does not close that dialog either.
 - The existing screen-level case (`testId: "self"` in `kHostDoc`) still reaches `closeSelf`.
 - **Control:** restore the unconditional `host->closeSelf`, and the dialog cases report "`close: self` is not
   supported by the host".
@@ -355,73 +378,124 @@ test passes only because it runs there.
   the inner `Button`, whose `Keys.onReturnPressed` and `Keys.onEnterPressed` fire the click
   (`MorphButton.qml:95-96`). A specific `Keys.on<Key>Pressed` handler accepts the event, so it never propagates to
   the root.
-- **Terminal.** `WidgetBase::dispatch` (`src/tui/widget.cpp:344-351`) runs the widget's own `key()` first and only
-  an ignored key reaches `chord()`. `tui/frontend.md` ("Keys and chords") specifies that order.
+- **Terminal.** Every path handles a key before it reaches `chord()`, and `tui/frontend.md` ("Keys and chords")
+  specifies that order:
+  - `WidgetBase::dispatch` (`src/tui/widget.cpp:344-351`) runs the widget's own `key()` first, and only an ignored
+    key reaches `chord()`;
+  - a text input's key goes through `FieldView::onEvent` (`src/tui/field_widgets.cpp:66-108`). That runs
+    `intercept` and the field's `processEvent` first, and calls `owner().chord` only for a key the field left;
+  - a select's or a menu's key goes through `ListView::onEvent` (`src/tui/list_widgets.cpp:133-155`), which runs
+    `listKey` and `List::onEvent` first.
 - **`RecordingBackend`.** `press` (`include/morph/ui/testing/recording_backend.hpp:1799-1812`) models chords only,
   never a widget's own keys.
 - **The contract** (`backend_contract.md:52-55`, `view_tree.md:148`) says a chord goes to the innermost declaring
   widget, and says nothing about the widget's own key handling.
 
-**Fix: a chord a widget declares itself comes before that widget's own handling of the key. A chord an ancestor
-declares gets only the keys the focused widget leaves.**
+**Enter inside a dialog.** A dialog's `default` is an `Enter` chord on the dialog's content column (`lowerDialog`,
+`interpreter.hpp:6960-6969`). So which focused widgets let Enter through decides when the default runs, and the
+backends disagree today:
 
-Why this rule:
+- **Qt Quick.**
+  - A `TextField` emits `accepted` (commit, then submit) and ignores the event, so Enter also reaches the default.
+    `tests/test_ui_interpreter_relations.cpp:286-290` relies on this through `RecordingBackend`.
+  - A `CheckBox` does not take Enter.
+- **Terminal.**
+  - A text input's `Submit` returns `Handled` whether or not the node has an `onSubmit`.
+  - A check box takes Enter as activation (`CheckboxImpl::key`, `src/tui/leaf_widgets.cpp:207`, through
+    `isActivation`), so Enter toggles it and the default never runs.
 
-- the author declared the binding on that very node, which is the only way to say "Enter here means something
-  else";
-- a dialog's `default` (an Enter chord on the dialog's content) must still not take Enter from a focused button
-  inside it, so ancestors keep coming after the widget's own handling.
+**Fix: one key order, the same on every backend.**
 
-The rule per backend:
+1. A chord the focused widget declares itself comes first. The author declared it on that very node, which is the
+   only way to say "Enter here means something else".
+2. Then the widget's own handling of the key, for the keys its kind takes:
+   - A **button** takes Enter and Space: they click it.
+   - A **single-line text input** takes Enter only when the node has its own `onSubmit`: the field commits, submits,
+     and the key stops there. Without an `onSubmit`, Enter commits and goes on outwards, so a dialog's `default`
+     runs. That is what Qt Quick does today, and what `test_ui_interpreter_relations.cpp:286-290` expects.
+   - A **check box** takes Space only, which toggles it. Enter goes on outwards.
+   - A **table** takes Enter, which activates the current row.
+   - Every other key a kind handles today (editing keys, arrows, a list's navigation) is unchanged.
+3. Then the ancestors' chords, innermost first, for the keys the widget left. A dialog's `default` is one of them,
+   so it cannot take Enter from a focused button.
 
-- **Terminal.** `WidgetBase::dispatch` tries `chord()` before `key()`. The same handler-may-destroy-the-widget care
-  applies: return as soon as either one handles the key.
-- **Qt Quick.** `MorphWidget` gains `takeOwnChord(event): bool`, the existing `question("chord", …)` call. Every
-  control whose focus target handles keys itself asks it first:
-  - `MorphButton`'s Return and Enter handlers become `event => { if (!root.takeOwnChord(event)) root.fire("click") }`;
-  - the focus targets of the text input, text area, check box, select, slider, date input and table get
+Per backend:
+
+- **Terminal.**
+  - `WidgetBase::dispatch`, `FieldView::onEvent` and `ListView::onEvent` each try `owner().chord(key)` before their
+    own handling. Each returns as soon as one of them handles the key, since a handler may destroy the widget.
+  - `FieldView::onEvent` returns `Ignored` after a `Submit` when the owner has no submit handler (the commit has
+    already run), so the key bubbles on.
+  - `CheckboxImpl::key` activates on Space only, not through `isActivation`. The other `isActivation` users (a
+    collapsible's header, an empty state's action) keep Enter.
+- **Qt Quick.**
+  - `MorphWidget` gains `takeOwnChord(event): bool`, the existing `question("chord", …)` call.
+  - `MorphButton`'s Return and Enter handlers become `event => { if (!root.takeOwnChord(event)) root.fire("click") }`.
+  - The focus targets of the text input, text area, check box, select, slider, date input and table get
     `Keys.priority: Keys.BeforeItem` and a `Keys.onPressed` that accepts the event when `takeOwnChord` took it.
-- **`RecordingBackend::press`.** When the focused widget does not declare the chord itself and its kind has a
-  built-in key, the built-in action runs and `press` returns `true` without walking outwards. The built-in keys:
-  - a `Button`'s Enter and Space click;
-  - a single-line `TextInput`'s Enter submits;
-  - a `Checkbox`'s Space toggles;
-  - a `Table`'s Enter activates the current row.
+  - `MorphTextInput`'s `onAccepted` keeps firing commit and submit. A `Keys.onReturnPressed`/`onEnterPressed` on the
+    field accepts the event only when the widget has a submit handler. `TextInputImpl` tells the item whether
+    `setOnSubmit` was given a non-empty handler, through a `submits` property.
+  - The check box needs no change: Qt's `CheckBox` already takes only Space.
+- **`RecordingBackend::press`** implements the three steps itself. It is written from the rule above and copies
+  neither backend:
+  - it first checks the focused widget's own chords;
+  - then the built-in keys of its kind, per step 2: a `Button`'s Enter or Space clicks; a single-line `TextInput`'s
+    Enter commits, then submits and stops when it has a submit handler, and commits and goes on when it has none; a
+    `Checkbox`'s Space toggles; a `Table`'s Enter activates the current row;
+  - then the ancestors' chords.
 
-  This is what makes `RecordingBackend` agree with the other two for an ancestor's chord too.
+  `press` returns `true` when any step took the key.
+- **The mount.** `setOnSubmit` gets an empty function for a node without `onSubmit`, and a backend reads "empty" as
+  "no submit". The commit checks that `mount.hpp:771`'s `inputEvent` gives an empty handler for an absent list. If it
+  doesn't, the mount skips the setter for that node.
 
 **Spec.**
 
-- `backend_contract.md`'s **Chords** bullet and `view_tree.md:148` state the rule.
-- `tui/frontend.md`'s "Keys and chords" changes "A widget's own key handling comes first" to "A chord the widget
-  declares comes first, then the widget's own key handling, then its ancestors' chords".
+- `backend_contract.md`'s **Chords** bullet states the three-step order and the built-in keys of step 2.
+  `view_tree.md:148` points there.
+- `tui/frontend.md`'s "Keys and chords" changes "A widget's own key handling comes first" to that order, and its
+  Widgets table says a check box toggles on Space and a text input without `onSubmit` passes Enter on.
 - The `RecordingBackend` section lists the built-in keys `press` honours.
+- `interpreter.md` notes that a dialog's `default` runs for Enter that no focused widget took.
 
-**Tests.** Two conformance cases in `include/morph/ui/testing/backend_conformance.hpp`, run on all three backends:
+**Tests.** Six conformance cases in `include/morph/ui/testing/backend_conformance.hpp`, run on all three backends.
+The four dialog cases mount a `Dialog` whose content column declares an `Enter` chord standing in for the `default`.
 
-1. Enter on a focused button that declares an Enter chord runs the chord and not the click.
+1. Enter on a focused button that declares an Enter chord runs the chord, not the click.
 2. Enter on a focused button inside a column that declares an Enter chord clicks the button, and the column's chord
    does not run.
+3. In a dialog, Enter on a single-line text input with an `onSubmit` submits it, and the dialog's chord does not run.
+4. In a dialog, Enter on a single-line text input without an `onSubmit` commits it, and the dialog's chord runs once.
+5. In a dialog, Enter on a focused check box leaves it unchanged and runs the dialog's chord. Space toggles it and
+   does not.
+6. Enter on a single-line text input that declares an Enter chord itself runs the chord and neither submits nor
+   commits through Enter. This covers the terminal's `FieldView` path.
 
-Then:
-
-- `test_ui_conformance.cpp`'s count goes from 34 to 36;
-- the gallery's plate test keeps `press(well, "Enter")` and now means it on every backend.
+`test_ui_conformance.cpp`'s count goes from 34 to 40. `test_ui_interpreter_relations.cpp:286-290` keeps passing
+unchanged; that is case 4 through the interpreter. The gallery's plate test keeps `press(well, "Enter")`, and now
+means it on every backend.
 
 **Control:**
 
-- restore the terminal's `key()`-first order, and case 1 fails on the terminal;
-- drop `MorphButton`'s check, and it fails on Qt Quick;
-- drop the built-in keys from `RecordingBackend::press`, and case 2 fails there.
+- restore the terminal's `key()`-first order in `dispatch`, and case 1 fails on the terminal;
+- restore it in `FieldView`, and case 6 fails there;
+- restore `isActivation` in `CheckboxImpl::key`, and case 5 fails there;
+- drop `MorphButton`'s check, and case 1 fails on Qt Quick;
+- drop the `submits` check, and case 3 fails there;
+- in `RecordingBackend::press`, skip step 2, and cases 2 and 3 fail; skip the "goes on" branch, and case 4 fails.
 
 **Risks.**
 
 - A test that pressed Enter on a button to reach a dialog's `default` now clicks the button instead, as a user
   would. Each such test is wrong today and is fixed where it fails.
+- On the terminal, Enter on a check box no longer toggles it. Space does, as on Qt Quick.
+- On Qt Quick, a text input with an `onSubmit` inside a dialog no longer also runs the default. That double run was
+  the defect.
 - A text input that declares a chord such as `Ctrl+A` now loses that key's built-in meaning. This is the rule doing
   what it says.
 
-## G15, G40, G54: table cells on Qt Quick
+## G15, G40, G54: table cells
 
 **Causes (read; the gap log's grabs stand).**
 
@@ -432,59 +506,120 @@ Then:
 - **G40 (cells at the top of a taller row).** The same function sets every cell's `height` to the tallest cell's and
   leaves `y` at 0. A `Text` has top vertical alignment, so a text cell draws at the top beside a taller select or
   check box.
-- **G54 (an overfull table overlaps its own cells).** `MorphTable.qml`'s `columnWidths` (`:47-68`) gives a stretch
-  column `max(0, total − used)`. When the fixed columns use more than the table's width, that column is 0 wide: its
-  header goes, and a neighbour's unclipped text draws over its cells. The table's `Flickable` scrolls vertically only
-  (`:227-245`) and clips only when virtualized, so the columns past the edge cannot be reached.
+- **G54 (an overfull table overlaps its own cells).**
+  - `MorphTable.qml`'s `columnWidths` (`:47-68`) gives a stretch column `max(0, total − used)`. When the fixed
+    columns use more than the table's width, that column is 0 wide: its header goes, and a neighbour's unclipped text
+    draws over its cells.
+  - The table's `Flickable` scrolls vertically only (`:226-245`) and clips only when virtualized, so the columns past
+    the edge cannot be reached.
 
-On the terminal, `TableImpl::columnWidths` (`src/tui/table_widget.cpp:127-134`) uses the shared `layout::distribute`,
-and each cell paints in its own subcanvas. So cells cannot draw over each other there (read, not run).
+**On the terminal (read, not run).**
 
-**Fix (Qt Quick).**
+- `TableImpl::columnWidths` (`src/tui/table_widget.cpp:127-134`) uses the shared `layout::distribute`
+  (`src/tui/layout.cpp:156-176`). That gives a stretch column 0 before sharing what is left, and takes an overflow
+  from the last column first, down to each column's minimum, which is 0 for every column.
+- So in an overfull table the stretch column also vanishes, and the last columns shrink to nothing. Each cell paints
+  in its own subcanvas, so cells never draw over one another there.
+- A row is a horizontal stack with column extents (`StackImpl::setColumnLayout`, `src/tui/container_widgets.cpp:43`)
+  under the default `Align::Stretch`, so a one-line text sits at the top of a taller row, as on Qt Quick.
+- A badge already draws at its natural width at its line's start, so G15 holds there today.
 
-- **G15.** In `place()`, a cell whose `fillsAcross` is `false` is `min(implicitWidth, column − 2·inset)` wide at the
-  column's start. Every other cell keeps the column's width. This is the cross-axis rule stacks already follow
-  (`backend_contract.md:156-162`: "a kind whose width is its label … draws at its natural width at the line's
-  start"), now applied to cells as well.
-- **G40.** Each cell keeps `min(implicitHeight, tallest)` and is centred vertically in the row, at
-  `y = (tallest − height) / 2`.
-- **G54.**
-  - A stretch column is never narrower than a content column's floor: its header's width plus the padding, and at
-    least 8 units, the floor `columnWidths` already gives a content column.
-  - The header and the body sit in one horizontally flickable area, clipped, with the horizontal `MorphScrollBar`,
-    whose content width is the sum of the column widths. When that sum fits, the area does not scroll and nothing
-    changes.
+**Fix: the same contract on both frontends.**
 
-**Spec.** `backend_contract.md:156-162`'s last sentence ("a table's cells are sized by the table, not by this rule")
-becomes:
+- **G15: a label-width kind keeps its width.**
+  - *Qt Quick.* In `place()`, a cell whose `fillsAcross` is `false` is `min(implicitWidth, column − 2·inset)` wide at
+    the column's start, and every other cell keeps the column's width. That is the cross-axis rule stacks already
+    follow (`backend_contract.md:156-160`), applied to cells.
+  - *Terminal.* No change.
+- **G40: cells are centred vertically.**
+  - *Qt Quick.* Each cell keeps `min(implicitHeight, tallest)` and sits at `y = (tallest − height) / 2`.
+  - *Terminal.* The table sets `Align::Center` on each row's stack, so a content cell keeps its own height and is
+    centred, rounded down (`backend_contract.md`, Alignment).
+- **G54: a column is never squeezed to nothing, and nothing is lost silently.**
+  - **The floor.** A stretch column is at least as wide as a content column with no cells would be.
+    - On Qt Quick the floor `columnWidths` gives a content column is `max(header, widest cell) + 2` units, at least
+      8 (`MorphTable.qml:55-57`).
+    - For a stretch column, the floor uses the header alone:
+      `max(headerMetrics.advanceWidth(label) + 2 · unitWidth, 8 · unitWidth)`. Its cells are meant to take what is
+      left, so they don't raise it.
+    - On the terminal, `columnWidths` passes the header's display width as the `layout::Item::minimum` of every
+      column, of any sizing. `distribute` then never gives a stretch column less than its header, and never shrinks
+      a column below it.
+  - **Overflow.**
+    - *Qt Quick* scrolls horizontally, as below.
+    - *Terminal.* `distribute` runs out of room once every column is at its minimum. The row and the header then
+      draw at the summed widths, clipped by the table's own canvas, so the columns past the edge are cut and not
+      reachable. A horizontal scroll on the terminal is not in this batch; the contract says the terminal cuts.
 
-- a table's cell fills its column's width, except a kind whose width is its label, which draws at its natural width
-  at the column's start;
-- every cell keeps its own height and is centred in its row;
-- a stretch column is at least as wide as its header;
-- a table whose columns are wider than the table scrolls horizontally on Qt Quick and cuts at its edge on the
-  terminal.
+**The Qt Quick horizontal area, with row virtualization.**
 
-`document.md:252-254` is unchanged: a cell still takes no `alignSelf`.
+- Today the vertical `flick` (`MorphTable.qml:226-245`) is a `ColumnLayout` child. It takes
+  `Layout.fillHeight: root.virtualized` and `Layout.preferredHeight: root.virtualized ? -1 : body.implicitHeight`,
+  which is how a virtualized table claims the height its document gave it.
+- The new outer area, a horizontal `Flickable` named `hflick` holding the header and `flick`, is that layout child
+  instead:
+  - `hflick` takes `Layout.fillWidth: true`, `Layout.fillHeight: root.virtualized` and the same
+    `Layout.preferredHeight`;
+  - `flick` is no longer in a layout, so its `height` binds to `hflick.height` less the header's height when
+    virtualized, and to `body.implicitHeight` otherwise. Its `contentY` arithmetic, `topSpace` and `bottomSpace` are
+    unchanged.
+- **Widths.**
+  - `hflick.contentWidth` is the sum of `root.widths`.
+  - `body.width` and the header row's width bind to that sum, not to the table's width, so a stretch column's share
+    is computed from the table's own width, as now, and the rows are as wide as their columns.
+  - `columnWidths(total)` keeps reading the table's width.
+- **Scroll behaviour.**
+  - `hflick.interactive` is `contentWidth > width`, so a table that fits takes no drag and no wheel event, and an
+    ancestor's scroll keeps them.
+  - `hflick.flickableDirection` is horizontal only, so a vertical wheel over an overfull table still reaches the
+    vertical `flick` or an ancestor.
+  - It clips only while interactive.
+  - A horizontal `MorphScrollBar` shows only while interactive.
 
-**Tests** (`tests/qt_quick/test_qt_quick_table.cpp`).
+**Spec.** `backend_contract.md:156-162`'s last sentence currently reads "A splitter's panes and a table's cells are
+sized by the splitter and the table, not by this rule". It becomes:
 
-- A badge cell in a 30-unit content column is narrower than the column, and starts at the inset.
-- A text cell beside a select cell has equal space above and below, within one pixel.
-- A table 60 units wide with fixed columns of 40 and 40 and a stretch column:
-  - the stretch column is at least its header's width;
-  - no two cells' x-ranges overlap;
-  - the horizontal flick's `contentWidth` exceeds its width.
-- **Control:** revert `place()`, and the first two fail. Revert `columnWidths`, and the overlap check fails.
+- "A splitter's panes are sized by the splitter, not by this rule." The splitter part stays as it is.
+- A table's cell fills its column's width, except a kind whose width is its label, which draws at its natural width
+  at the column's start.
+- Every cell keeps its own height and is centred in its row.
+- No column is narrower than its header, and a stretch column takes what is left after that.
+- A table whose columns are wider than the table scrolls horizontally on Qt Quick, and on the terminal the columns
+  past its edge are cut.
+
+`tui/frontend.md`'s Table row adds the header minimum and the centred cells. `document.md:252-254` is unchanged: a
+cell still takes no `alignSelf`.
+
+**Tests.**
+
+- `tests/qt_quick/test_qt_quick_table.cpp`:
+  - A badge cell in a 30-unit content column is narrower than the column, and starts at the inset.
+  - A text cell beside a select cell has equal space above and below, within one pixel.
+  - A table 60 units wide with fixed columns of 40 and 40 and a stretch column:
+    - the stretch column is at least its header's floor;
+    - no two cells' x-ranges overlap;
+    - `hflick.interactive` is true and its `contentWidth` is the sum of the widths.
+  - The same table at 200 units: `hflick.interactive` is false.
+  - The existing virtualization cases pass unchanged. One more: a virtualized table in a fixed-height column keeps
+    that height, and `flick` scrolls it.
+- `tests/tui/test_tui_table.cpp`:
+  - A table 30 columns wide with fixed columns of 20 and 20 and a stretch column headed `Analyte` gives the stretch
+    column at least 7 columns.
+  - A one-line text cell beside a three-line cell is drawn on the middle line.
+- **Control:**
+  - revert `place()`, and the first two Qt Quick cases fail;
+  - revert the floor in `columnWidths` (either frontend), and the stretch-column checks fail;
+  - drop the row stack's `Align::Center`, and the terminal centring case fails;
+  - drop `Layout.fillHeight` from `hflick`, and the virtualized-height case fails.
 
 **Risks.**
 
-- A table of multi-line text cells beside single-line ones now centres the single-line ones. Some designs (an audit
-  trail) prefer the top. If one needs that, it is a column option for batch B, not a reason to keep the defect.
+- A table of multi-line text cells beside single-line ones now centres the single-line ones, on both frontends.
+  Some designs (an audit trail) prefer the top. If one needs that, it is a column option for batch B, not a reason to
+  keep the defect.
+- The header minimum makes some terminal tables wider than their screen where a column used to shrink to nothing.
+  Those columns are now cut at the edge instead of drawn at width 0.
 - The gallery's `layout::cellTag` row wrapper goes.
-- A virtualized table's vertical flick keeps its own clip. The horizontal area wraps both the header and that flick,
-  so virtualization's `contentY` arithmetic is untouched. This needs checking against
-  `test_qt_quick_table.cpp`'s virtualization cases.
 
 ## G1: `{"env": "widthClass"}` is never set (#1046)
 
@@ -516,16 +651,40 @@ as #1056.
 - So the seam is on `IViewBackend`, and the shell copies its value into the session. The `Interpreter` is per screen
   and is the wrong owner.
 
+**The classes are defined in units.**
+
+- `expressions.md` defines the classes in the vocabulary's own unit, the unit `fixed(n)` counts: `compact` below 80
+  units, `medium` below 160, `expanded` otherwise.
+- **The terminal** counts its columns, since its unit is a column.
+- **Qt Quick** counts the window's width divided by `Theme.unitWidth`, the body font's average character width.
+  This replaces the pixel thresholds in `qt_quick/backend.md:44` (600 and 1200 px).
+- So a document's breakpoints sit at the same number of its own units on both frontends. A `fixed(28)` sidebar
+  takes the same share of a `compact` window on either.
+- **An 80-column terminal is `medium`.** The gallery draws two layouts and maps `medium` to its expanded one
+  (`layout::byWidth`), so a standard terminal shows the expanded layout and a narrower one the compact layout.
+- On Qt Quick, with a unit of about 7 to 8 px for a 13–14 px body font, the boundaries land near 600 and 1200 px as
+  before. A theme with a larger font moves them, which is intended: the content is wider too.
+
 **Fix.**
 
 - **`IViewBackend`** (`include/morph/ui/backend.hpp`) gains two pure virtuals, documented in full:
   - `std::string widthClass() const`: `compact`, `medium` or `expanded`, the class of the surface the backend draws
-    on;
+    on, now;
   - `void setOnWidthClass(std::function<void(std::string const&)>)`: one listener, called on the owner each time the
-    class changes, outside any layout pass. Empty clears it. A backend reports to one listener, the shell mounted on
-    it.
+    class changes after the call, outside any layout pass. Empty clears it. A backend reports to one listener, the
+    shell mounted on it.
 
-  They are pure, not defaulted, so a backend cannot silently report nothing. There are three implementations.
+  `setOnWidthClass` **does not call the listener at once**. The caller reads `widthClass()` for the current value.
+  That keeps one write path for the initial value, before the first mount.
+
+  The members are pure, not defaulted, so a backend cannot silently report nothing. There are four implementations:
+  - `qt_quick::Backend`;
+  - `tui::Backend`;
+  - `ui::testing::RecordingBackend`;
+  - the test-only `EchoingBackend` (`tests/ui_echoing_backend.hpp:61`). It forwards both to its inner
+    `RecordingBackend`, as it forwards every factory.
+- **`ui::widthClassOf(double units)`** moves from `qt_quick` to `include/morph/ui/backend.hpp`, beside the seam,
+  with the unit thresholds. Every backend calls it, so the thresholds live in one place.
 - **`Session::setEnvironmentValue(std::string name, Value value)`** sets one `env` value and keeps the others.
   `setEnvironment` replaces the whole record, which would drop `backend`, and `backendChanged` already merges this
   way.
@@ -533,24 +692,22 @@ as #1056.
   registers the listener, which writes each change. `~Shell` clears it. A class change re-evaluates every
   `{"env": "widthClass"}` in every open tab, through the session's signal.
 - **Qt Quick.**
-  - `Backend::widthClass()` is the class `Context::widthChanged` last computed. Its listener is called from
-    `widthChanged`, which runs from the host item's `widthChanged` signal on the GUI thread, never inside polish.
+  - `Context::widthChanged` computes `ui::widthClassOf(host.width() / Theme.unitWidth)`, reading `unitWidth` from
+    the engine's `Theme` singleton (the way `Roots::scheme` reads it, `src/qt_quick/context.cpp:47-55`). It also
+    runs when `Theme.unitWidthChanged` fires, so applying a theme with another font re-classifies the window.
+  - `Backend::widthClass()` is the last computed class. The listener is called from `widthChanged`, which runs from a
+    Qt signal on the GUI thread, never inside polish.
   - `BackendOptions::onWidthClass` and `FrontendConfig::onWidthClass` are removed: two ways to learn one fact, one of
-    them documented to do what nothing does. Every caller passes `{}` except one test, which moves to
-    `setOnWidthClass`.
-  - `widthClassOf` and its thresholds are unchanged.
-- **Terminal: a class computed from the columns.**
-  - `compact` below 80 columns, `medium` below 160, `expanded` from 160.
-  - The terminal's unit is a column: `fixed(n)` is `n` columns, and `n` average character widths on Qt Quick, about
-    7 to 8 px for a 13–14 px body font. So 600 px and 1200 px are about 80 and 160 units, and the same document lays
-    out alike on both frontends. A fixed class would make every terminal render one layout, whatever its size.
-  - `tui::Backend::widthClass()` reads `screen.viewportArea().width` when asked.
+    them documented to do what nothing does. Every caller passes `{}` except the test below, which is rewritten.
+- **Terminal.**
+  - `tui::Backend::widthClass()` is `ui::widthClassOf(screen.viewportArea().width)`, read when asked.
   - The terminal `Session` (`src/tui/session.cpp:159-173`) calls a new `Backend::refreshWidthClass()` after
-    dispatching a `ResizeEvent`, outside the draw, so a change re-renders on the next turn. `fit()`, which runs inside
-    the draw, never calls the listener.
-- **`RecordingBackend`.** It reports `expanded` until `setWidthClass(name)` changes it. The setter also calls the
-  listener, so a test can drive a resize. A recording backend has no width, and `expanded` is the class every screen
-  had before this change.
+    dispatching a `ResizeEvent`, outside the draw. That compares the class with the last one reported and calls the
+    listener on a change, so the re-render happens on the next turn. `fit()`, which runs inside the draw, never calls
+    the listener.
+- **`RecordingBackend`.** It reports `expanded` until `setWidthClass(name)` changes it. The setter calls the listener
+  when the class changes, so a test can drive a resize. A recording backend has no width, and `expanded` is the class
+  every screen had before this change.
 
 **The testkit and the gallery.**
 
@@ -558,45 +715,69 @@ as #1056.
   "expanded"` and sets it on its `RecordingBackend` before `mountShell`. It also exposes `setWidthClass` for resize
   tests.
 - `GalleryScreen` passes its `width` there, not as a param.
-- The gallery's render smoke resizes the real window between mounts, 400 × 900 for `compact` and 1280 × 900 for
-  `expanded`, through the `QQuickWindow` its `onEngine` hook receives, and asserts the class each mount saw. So the
-  smoke drives the same path the client does.
-- The screens drop `kWidthParam`. `layout::widthClass` becomes `coalesce(env widthClass, "expanded")`. The `width`
-  params that `index`, `review` and `console` forward through `navigate` go.
+- The gallery's render smoke resizes the real window between mounts, through the `QQuickWindow` its `onEngine` hook
+  receives, and asserts the class each mount saw. The sizes are 60 units wide for `compact` and 180 for `expanded`,
+  at `Theme.unitWidth` read from the engine, each 900 px tall. So the smoke drives the same path the client does,
+  whatever the font.
+- The screens drop `kWidthParam`. `layout::widthClass` becomes `coalesce(env widthClass, "expanded")`, and `byWidth`
+  keeps mapping `medium` to the expanded layout. The `width` params that `index`, `review` and `console` forward
+  through `navigate` go.
 
 **Spec.**
 
-- `expressions.md:42`: `widthClass` is one of `compact`, `medium`, `expanded`, set by the client from its view
-  backend and updated on a resize.
-- `backend_contract.md` Interfaces: the two `IViewBackend` members.
+- `expressions.md:42`: `widthClass` is one of `compact` (below 80 units), `medium` (below 160) and `expanded`, in
+  the unit `fixed(n)` counts. It is set by the client from its view backend and updated on a resize. An 80-column
+  terminal is `medium`.
+- `backend_contract.md` Interfaces: the two `IViewBackend` members, the "not at once" rule, and `ui::widthClassOf`.
 - `backend_contract.md` RecordingBackend: `setWidthClass` and the `expanded` default.
 - `interpreter.md:37`: `setEnvironmentValue`.
 - `client/client.md` "The shell": the shell sets `env.widthClass`.
-- `qt_quick/backend.md:43-45` and `qt_quick/frontend.md:35-38`: `onWidthClass` replaced by `widthClass()`.
-- `tui/frontend.md`: the column thresholds and the reasoning above.
+- `qt_quick/backend.md:43-45`: the pixel thresholds become "the host's width in `Theme.unitWidth`s, classed by
+  `ui::widthClassOf`", and `onWidthClass` is replaced by `widthClass()`.
+- `qt_quick/frontend.md:35-38`: `FrontendConfig` loses `onWidthClass`.
+- `tui/frontend.md`: the class is the screen's columns, classed by `ui::widthClassOf`, and is re-read on a resize.
 
 **Tests.**
 
+- `tests/test_ui_view.cpp` (or wherever `backend.hpp`'s free functions are tested): `widthClassOf(79.5)` is
+  `compact`, `widthClassOf(80)` and `widthClassOf(159.5)` are `medium`, and `widthClassOf(160)` is `expanded`.
+- `tests/qt_quick/test_qt_quick_widgets.cpp:843-856`, `a widget's width class follows the host's width`, is
+  rewritten. The pixel `widthClassOf` checks move to the units test above. The new body:
+  1. `Scene scene;` (800 × 600), then `scene.settle()`.
+  2. Read `u = Theme.unitWidth` from the engine. `CHECK(scene.backend().widthClass() == ui::widthClassOf(800 / u))`.
+  3. Register `setOnWidthClass` to push into `classes`. Nothing is pushed by registering.
+  4. Resize the window, with a `settle()` after each, to `170·u`, `165·u`, `120·u`, `70·u` and `75·u`.
+  5. `CHECK(classes == {"expanded", "medium", "compact"})`. The listener fires only on a change, and only after it
+     was registered, so 165·u (still `expanded`) and 75·u (still `compact`) push nothing.
+
+  The old expectation, `{"compact", "medium", "expanded", "compact"}`, included the construction-time call that no
+  longer exists.
 - `tests/test_ui_interpreter_permissions.cpp`, beside the existing `setEnvironment` case: `setEnvironmentValue`
   keeps `backend` after a switch, and a switch keeps `widthClass`.
 - `tests/client/` (a new case beside `test_sign_in.cpp`'s shells): a screen showing `{"env": "widthClass"}` through
   `mountShell` on a `RecordingBackend` set to `compact` shows `compact`. `setWidthClass("medium")` updates it.
-- `tests/qt_quick/test_qt_quick_frontend.cpp`: a `qt_quick::Frontend` whose `onEngine` resizes the window to 400 px
-  shows `compact`, and after a resize to 1300 px shows `expanded`. This is #1046's own closing condition.
-- `tests/tui/test_tui_frontend.cpp`: a 70-column screen shows `compact`, and a resize event to 120 shows `medium`.
+- `tests/qt_quick/test_qt_quick_frontend.cpp`: a `qt_quick::Frontend` whose `onEngine` resizes the window to
+  `60·u` shows `compact`, and after a resize to `180·u` shows `expanded`. This is #1046's own closing condition.
+- `tests/tui/test_tui_frontend.cpp`: a 70-column screen shows `compact`, and a resize event to 120 columns shows
+  `medium`.
 - Gallery: every `GalleryScreen` test and the render smoke now select their layout through the class.
 - **Control:**
   - remove the shell's `setEnvironmentValue` call, and the client, Qt Quick and terminal tests read an empty text;
+  - classify Qt Quick by pixels again, and the rewritten widget test's sequence changes;
   - make the gallery's `layout::widthClass` constant `expanded`, and the compact gallery tests fail. This shows they
     depend on the class.
 
 **Risks.**
 
 - **State loss.** A screen that switches layout on the class unmounts the other case's subtree when the class
-  changes, and with it the state declared in that case's scope. A window dragged across 600 px loses what was typed
+  changes, and with it the state declared in that case's scope. A window dragged across 80 units loses what was typed
   in a field whose state lives inside a `switchOn` case. That is how `switch` works. Screens keep their state at
   screen level, as the gallery's do.
-- **Removed public members.** `onWidthClass` goes from two public option structs. Every in-tree caller is updated.
+- **Removed and moved public members.**
+  - `onWidthClass` goes from two public option structs.
+  - `qt_quick::widthClassOf` becomes `ui::widthClassOf` and takes units.
+
+  Every in-tree caller is updated.
 - **Several backends on one window.** An application that builds several `qt_quick::Backend`s and its own `Session`
   writes the class itself. The library has no rule for which backend's class wins.
 
@@ -620,14 +801,17 @@ layer.**
   and the spec reserves a `{"pref": "density"}` to choose one. A width class is a fact about the window, not a
   preference. Selecting a layer by it would need a reserved density name in every bundle, and the whole theme
   re-resolved and re-applied on each class change.
-- One more token in the closed set does it without either: `control.height.touch`, a dimension, default 44 px (the
+- One more token in the closed set does it without either: `control.touchHeight`, a dimension, default 44 px (the
   common minimum touch target).
+- **The name must be a sibling of `control.height`, not a child.** `readGroup` treats any object with a `$value` as a
+  token and never descends into it (`include/morph/ui/theme.hpp:563-565`). So in a file that sets `control.height`, a
+  `control.height.touch` would be a member of a token's object, never read as a token.
 - A frontend rule with no token would hard-code 44 for every application. The token keeps it a theme value, and
   `theme.md` already says `control.*` joins the set "with the components that read them".
 
 **Fix (Qt Quick only).**
 
-- `kThemeTokens` gains `control.height.touch` (44). `applyTheme` maps it to a new `Theme.touchHeight`.
+- `kThemeTokens` gains `control.touchHeight` (44). `applyTheme` maps it to a new `Theme.touchHeight`.
 - `Theme` gains `touchTargets: bool`, written by the backend's `Context::widthChanged` with the class
   (`compact` → `true`), and a read-only `targetHeight`: `touchTargets ? Math.max(controlHeight, touchHeight) :
   controlHeight`.
@@ -637,8 +821,8 @@ layer.**
 
 **Spec.** `theme.md`:
 
-- "The closed set" gains the `control.height.touch` row;
-- "On Qt Quick" maps it and states the rule (controls are at least `control.height.touch` tall while the window is
+- "The closed set" gains the `control.touchHeight` row;
+- "On Qt Quick" maps it and states the rule (controls are at least `control.touchHeight` tall while the window is
   `compact`);
 - "Not yet" keeps the runtime density choice.
 
@@ -646,9 +830,14 @@ layer.**
 
 **Tests** (`tests/qt_quick/test_qt_quick_theme.cpp`).
 
-- At 400 px a button's and a text input's heights are 44, and a check box's is at least 44.
-- At 1000 px a button is `control.height`.
-- A theme setting `control.height.touch` to 48 gives 48 at 400 px.
+- At 60 units a button's and a text input's heights are 44, and a check box's is at least 44.
+- At 180 units a button is `control.height`.
+- A theme setting `control.touchHeight` to 48 gives 48 at 60 units.
+- `tests/test_ui_theme.cpp`: one token file sets both `control.height` (30) and `control.touchHeight` (48).
+  `resolveTokens` and `themeValues` give both values. In `test_qt_quick_theme.cpp`, `applyTheme` with the same file
+  sets `Theme.controlHeight` to 30 and `Theme.touchHeight` to 48. **Control:** name the token `control.height.touch`
+  in that file, and the touch value is the default 44, since the token is never read. That pins down why the name is
+  a sibling.
 - **Control:** have `Context::widthChanged` not write `touchTargets`, and the compact case reads 32.
 
 **Risks.**
@@ -691,26 +880,51 @@ narrow.**
 - The top bar becomes a column on the `toolbar` surface with two rows.
   - Line 1: the spacer, the title (stretch), the principal, the sign-out button and the spacer, as today.
   - Line 2: a horizontal `scroll` (`createScroll(…, Axis::Horizontal)`) holding the head slot.
-- Line 2 is hidden while the active tab's head has no subtitle, badge or action, which is the condition
-  `buildHeadRow` already binds to its row's `visible`. A screen without a head keeps a one-line bar.
+- **Hiding line 2.** `ShellFrame` builds widgets and never sees the head row, which the client mounts into
+  `headSlot()`. So it cannot tell when the head is empty, and the client decides:
+  - `ShellFrame::setHeadShown(bool)` shows or hides line 2. A new frame starts hidden.
+  - `Workspace` gains `bool activeHeadShown() const`, a tracked read that is true while the active tab's head has a
+    subtitle, a badge or an action. It and `buildHeadRow`'s row `visible` share one private
+    `headHasContent(tab)`, so the two cannot disagree.
+  - The client shell (`src/client/shell.cpp`, where it mounts `headRowForActive()` into `headSlot()`) owns a
+    reactive effect, in the same scope as that mount, that calls `_frame->setHeadShown(_workspace->activeHeadShown())`.
+    It re-runs when the active tab or its head changes, and goes with the head mount (`resetHead`).
+  - A screen without a head keeps a one-line bar. An application that mounts something else into `headSlot()` calls
+    `setHeadShown` itself.
 - The title has the first line to itself, beside two small widgets, so it no longer wraps at any width the gallery
   uses.
 - In the scroll, the head row fills the viewport when narrower, so its actions stay at the trailing edge. When wider,
   it scrolls.
 - `headSlot()` keeps its name and meaning, and is now line 2's content.
 
-**Spec.** `shell_frame.md`'s Shape table:
+**Spec.**
 
-- the `shell_topbar` row becomes a column, with `shell_topbar_main` (line 1) and `shell_head_line` (the scroll,
-  line 2);
-- the `headSlot()` bullet says the slot is on its own line, shown only while the head has content, and scrolls
-  sideways when wider than the bar;
-- the Design decisions table gains the wrap, elide or menu row and its reasoning.
+- `shell_frame.md`'s Shape table:
+  - the `shell_topbar` row becomes a column, with `shell_topbar_main` (line 1) and `shell_head_line` (the scroll,
+    line 2);
+  - the Design decisions table gains the wrap, elide or menu row and its reasoning.
+- `shell_frame.md:27-31`, the `headSlot()` bullet, is rewritten:
+  - the slot is line 2's content, shown only while `setHeadShown(true)`;
+  - the mounted row fills the line's width, so its spacer pushes the actions to the trailing edge, and it scrolls
+    sideways when wider than the bar;
+  - a new bullet documents `setHeadShown`.
+- **Settling the two specs.** `shell_frame.md:27-31` says the mounted row "renders at its own natural width within
+  the slot rather than reaching the slot's own trailing edge". `workspace.md:118` says it "stretches to the full width
+  it is given and its spacer stretches with it". The code agrees with `workspace.md`: `buildHeadRow` sizes the row
+  `stretch` (`workspace.hpp:379`). So `shell_frame.md`'s sentence goes, and `workspace.md:118` stays.
+- `workspace.md:123` ("mounts this row into `ShellFrame::headSlot()`, beside the title in the top bar") becomes
+  "into `ShellFrame::headSlot()`, the top bar's second line, below the title, and shows that line while
+  `activeHeadShown()` holds". `activeHeadShown()` joins the public API listed there.
 
 **Tests.**
 
 - `tests/test_ui_shell_frame.cpp` (`RecordingBackend`): the head slot is under `shell_head_line`, not beside
-  `shell_signOut`, and `shell_head_line` is hidden while the head row is.
+  `shell_signOut`. `shell_head_line` is hidden on a new frame, shown after `setHeadShown(true)`, and hidden again
+  after `setHeadShown(false)`.
+- `tests/test_ui_workspace.cpp`: `activeHeadShown()` is false for a screen
+  without a head, true once the active screen's head has a badge, and follows a tab switch.
+- `tests/client/`: through `mountShell`, a screen with a head shows `shell_head_line`, and switching to a tab
+  without a head hides it. **Control:** drop the shell's effect, and the line stays hidden.
 - `tests/qt_quick/test_qt_quick_containers.cpp`: a `ShellFrame` at 1000 px with `onSignOut` set and a head row of a
   subtitle, three badges and two actions mounted into `headSlot()`.
   - Neither action's scene rectangle intersects `shell_signOut`'s, and both lie inside the window.
@@ -730,10 +944,7 @@ narrow.**
 1. **G5's signal.** The width class stands in for "touch input". Should Qt Quick instead follow whether a touch
    screen is present (`QInputDevice::devices()`), or both? The design follows the class, because that is what the
    gallery's designs are drawn for.
-2. **G1's terminal thresholds.** 80 and 160 columns keep a unit a unit on both frontends. The consequence is that a
-   standard 80-column terminal is `medium`, not `compact`. Is that the intended reading?
-3. **G15/G40's default.** Cells are centred vertically by default. Should batch B's table work add a per-column
+2. **G15/G40's default.** Cells are centred vertically by default. Should batch B's table work add a per-column
    vertical alignment, or is centred enough?
-4. **G42's `RecordingBackend` built-in keys.** The list (Button Enter and Space, single-line TextInput Enter,
-   Checkbox Space, Table Enter) is what the two real backends do today. Should the conformance suite gain a case per
-   kind, or are the two cases above enough?
+3. **G54 on the terminal.** The terminal cuts the columns past its edge, and they can't be reached. Is a horizontal
+   scroll for terminal tables wanted, in this batch or later?
