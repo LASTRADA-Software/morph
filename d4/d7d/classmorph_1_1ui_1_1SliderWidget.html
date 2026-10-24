@@ -147,6 +147,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a3a15bebba06789559a0033ce0755d7c7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a value. Never calls the <span class="tt">onChange</span> handler.  <br /></td></tr>
 <tr class="memitem:a7e3e607a55aea8a1a4fcaf3b225dbf51" id="r_a7e3e607a55aea8a1a4fcaf3b225dbf51"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a7e3e607a55aea8a1a4fcaf3b225dbf51">setOnChange</a> (std::function&lt; void(std::int64_t)&gt; onChange)=0</td></tr>
 <tr class="memdesc:a7e3e607a55aea8a1a4fcaf3b225dbf51"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a user move calls, with the new value.  <br /></td></tr>
+<tr class="memitem:a044859ca2b4076c75ddb899bf9b74361" id="r_a044859ca2b4076c75ddb899bf9b74361"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a044859ca2b4076c75ddb899bf9b74361">setOnCommit</a> (std::function&lt; void(std::int64_t)&gt; onCommit)=0</td></tr>
+<tr class="memdesc:a044859ca2b4076c75ddb899bf9b74361"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a finished move calls, with the value it ended on: a release after a drag, a key step, or a wheel step.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1FieldWidget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d5/dbb/classmorph_1_1ui_1_1FieldWidget.html">morph::ui::FieldWidget</a></td></tr>
 <tr class="memitem:a2191979f8dc3a207166ad1c5c58d7080 pub_methods_classmorph_1_1ui_1_1FieldWidget" id="r_a2191979f8dc3a207166ad1c5c58d7080"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dbb/classmorph_1_1ui_1_1FieldWidget.html#a2191979f8dc3a207166ad1c5c58d7080">setReadOnly</a> (bool readonly)=0</td></tr>
 <tr class="memdesc:a2191979f8dc3a207166ad1c5c58d7080 pub_methods_classmorph_1_1ui_1_1FieldWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes the value read-only or editable again. A read-only field still takes focus and lets its text be selected, and reports no edit, submit or commit.  <br /></td></tr>
@@ -310,6 +312,41 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../d4/d56/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSlider.html#a9428abb84c4a20896dc6c4d347f8c69e">morph::ui::testing::detail::FakeSlider</a>.</p>
+
+</div>
+</div>
+<a id="a044859ca2b4076c75ddb899bf9b74361" name="a044859ca2b4076c75ddb899bf9b74361"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a044859ca2b4076c75ddb899bf9b74361">&#9670;&#160;</a></span>setOnCommit()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::SliderWidget::setOnCommit </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void(std::int64_t)&gt;</td>          <td class="paramname"><span class="paramname"><em>onCommit</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets what a finished move calls, with the value it ended on: a release after a drag, a key step, or a wheel step. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">onCommit</td><td>The handler; empty does nothing. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d4/d56/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSlider.html#acf312b50772c79f5f2fa0b843dc072a0">morph::ui::testing::detail::FakeSlider</a>.</p>
 
 </div>
 </div>

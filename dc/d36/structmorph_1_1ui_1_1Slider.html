@@ -138,6 +138,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a8deaf1dea19ce728b2e5046f0d933bb5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The increment between neighbouring values; set once.  <br /></td></tr>
 <tr class="memitem:a25ae27a300235af841eb2db5f6397813" id="r_a25ae27a300235af841eb2db5f6397813"><td class="memItemLeft">std::function&lt; void(std::int64_t)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a25ae27a300235af841eb2db5f6397813">onChange</a></td></tr>
 <tr class="memdesc:a25ae27a300235af841eb2db5f6397813"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with the value the user moved to.  <br /></td></tr>
+<tr class="memitem:a7e8c16fcb8fe2cd4aec08bfae1ce6cc9" id="r_a7e8c16fcb8fe2cd4aec08bfae1ce6cc9"><td class="memItemLeft">std::function&lt; void(std::int64_t)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7e8c16fcb8fe2cd4aec08bfae1ce6cc9">onCommit</a></td></tr>
+<tr class="memdesc:a7e8c16fcb8fe2cd4aec08bfae1ce6cc9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with the value a finished move ended on: a release after a drag, a key step, or a wheel step.  <br /></td></tr>
 <tr class="memitem:a6a3018574af4ec061852ad33dc138542" id="r_a6a3018574af4ec061852ad33dc138542"><td class="memItemLeft"><a class="el" href="../../d1/d36/structmorph_1_1ui_1_1FieldState.html">FieldState</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6a3018574af4ec061852ad33dc138542">field</a> {}</td></tr>
 <tr class="memdesc:a6a3018574af4ec061852ad33dc138542"><td class="mdescLeft">&#160;</td><td class="mdescRight">Read-only, required, errors and stale.  <br /></td></tr>
 <tr class="memitem:a6852a65dfa2f396dce6f3a57eee085af" id="r_a6852a65dfa2f396dce6f3a57eee085af"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6852a65dfa2f396dce6f3a57eee085af">common</a> {}</td></tr>
@@ -238,6 +240,24 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="a7e8c16fcb8fe2cd4aec08bfae1ce6cc9" name="a7e8c16fcb8fe2cd4aec08bfae1ce6cc9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7e8c16fcb8fe2cd4aec08bfae1ce6cc9">&#9670;&#160;</a></span>onCommit</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;void(std::int64_t)&gt; morph::ui::Slider::onCommit</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Called with the value a finished move ended on: a release after a drag, a key step, or a wheel step. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00948">948</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a6a3018574af4ec061852ad33dc138542" name="a6a3018574af4ec061852ad33dc138542"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6a3018574af4ec061852ad33dc138542">&#9670;&#160;</a></span>field</h2>
 
@@ -252,7 +272,7 @@ Public Attributes</h2></td></tr>
 
 <p>Read-only, required, errors and stale. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00948">948</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00950">950</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -270,7 +290,7 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00950">950</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00952">952</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

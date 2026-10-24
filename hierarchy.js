@@ -518,6 +518,7 @@ var hierarchy =
     [ "morph::ui::detail::CheckRuntime", "d4/dad/structmorph_1_1ui_1_1detail_1_1CheckRuntime.html", null ],
     [ "morph::ui::detail::CommandCtx", "d7/dbd/structmorph_1_1ui_1_1detail_1_1CommandCtx.html", null ],
     [ "morph::ui::detail::CommandLineChoice", "d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice.html", null ],
+    [ "morph::ui::detail::DateReading", "dd/d16/structmorph_1_1ui_1_1detail_1_1DateReading.html", null ],
     [ "morph::ui::detail::DetachedLower", "dc/d92/structmorph_1_1ui_1_1detail_1_1DetachedLower.html", null ],
     [ "morph::ui::detail::DocumentActions", "d6/d46/classmorph_1_1ui_1_1detail_1_1DocumentActions.html", null ],
     [ "morph::ui::detail::DocumentParser", "dc/dee/classmorph_1_1ui_1_1detail_1_1DocumentParser.html", null ],

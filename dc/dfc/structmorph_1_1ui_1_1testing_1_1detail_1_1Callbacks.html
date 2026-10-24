@@ -148,6 +148,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ac7c98cf48ab6c759f0eaa9c3c1288746"><td class="mdescLeft">&#160;</td><td class="mdescRight">From <span class="tt"><a class="el" href="../../db/d9b/classmorph_1_1ui_1_1DateTimeInputWidget.html#a152ce8979db7ac496374e3c842e5343e" title="Sets what a user edit calls, with the instant entered or nullopt for a cleared field.">DateTimeInputWidget::setOnChange</a></span>.  <br /></td></tr>
 <tr class="memitem:a8d4b1ccfdf7644304b097029e69f929f" id="r_a8d4b1ccfdf7644304b097029e69f929f"><td class="memItemLeft">std::function&lt; void(std::int64_t)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8d4b1ccfdf7644304b097029e69f929f">slide</a></td></tr>
 <tr class="memdesc:a8d4b1ccfdf7644304b097029e69f929f"><td class="mdescLeft">&#160;</td><td class="mdescRight">From <span class="tt"><a class="el" href="../../d4/d7d/classmorph_1_1ui_1_1SliderWidget.html#a7e3e607a55aea8a1a4fcaf3b225dbf51" title="Sets what a user move calls, with the new value.">SliderWidget::setOnChange</a></span>.  <br /></td></tr>
+<tr class="memitem:ac09399e77edbcac6deec7ecdd82d89e8" id="r_ac09399e77edbcac6deec7ecdd82d89e8"><td class="memItemLeft">std::function&lt; void(std::int64_t)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac09399e77edbcac6deec7ecdd82d89e8">slideCommit</a></td></tr>
+<tr class="memdesc:ac09399e77edbcac6deec7ecdd82d89e8"><td class="mdescLeft">&#160;</td><td class="mdescRight">From <span class="tt"><a class="el" href="../../d4/d7d/classmorph_1_1ui_1_1SliderWidget.html#a044859ca2b4076c75ddb899bf9b74361" title="Sets what a finished move calls, with the value it ended on: a release after a drag,...">SliderWidget::setOnCommit</a></span>.  <br /></td></tr>
 <tr class="memitem:a7ec2a09b02d57bc46cf3d2f9a5de6aac" id="r_a7ec2a09b02d57bc46cf3d2f9a5de6aac"><td class="memItemLeft">std::function&lt; void(std::string)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7ec2a09b02d57bc46cf3d2f9a5de6aac">picked</a></td></tr>
 <tr class="memdesc:a7ec2a09b02d57bc46cf3d2f9a5de6aac"><td class="mdescLeft">&#160;</td><td class="mdescRight">From <span class="tt"><a class="el" href="../../d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html#a698981c59383e16055e9e1a288380344" title="Sets what a user pick calls, with the path.">FilePickerWidget::setOnPicked</a></span>.  <br /></td></tr>
 <tr class="memitem:a1ec5f56eac7fba871bb6e53cba8ef517" id="r_a1ec5f56eac7fba871bb6e53cba8ef517"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>&#160;</td><td class="memItemRight"><a class="el" href="#a1ec5f56eac7fba871bb6e53cba8ef517">dismiss</a></td></tr>
@@ -360,6 +362,24 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="ac09399e77edbcac6deec7ecdd82d89e8" name="ac09399e77edbcac6deec7ecdd82d89e8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac09399e77edbcac6deec7ecdd82d89e8">&#9670;&#160;</a></span>slideCommit</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;void(std::int64_t)&gt; morph::ui::testing::detail::Callbacks::slideCommit</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>From <span class="tt"><a class="el" href="../../d4/d7d/classmorph_1_1ui_1_1SliderWidget.html#a044859ca2b4076c75ddb899bf9b74361" title="Sets what a finished move calls, with the value it ended on: a release after a drag,...">SliderWidget::setOnCommit</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00460">460</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a7ec2a09b02d57bc46cf3d2f9a5de6aac" name="a7ec2a09b02d57bc46cf3d2f9a5de6aac"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7ec2a09b02d57bc46cf3d2f9a5de6aac">&#9670;&#160;</a></span>picked</h2>
 
@@ -374,7 +394,7 @@ Public Attributes</h2></td></tr>
 
 <p>From <span class="tt"><a class="el" href="../../d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html#a698981c59383e16055e9e1a288380344" title="Sets what a user pick calls, with the path.">FilePickerWidget::setOnPicked</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00460">460</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00462">462</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -392,7 +412,7 @@ Public Attributes</h2></td></tr>
 
 <p>From <span class="tt"><a class="el" href="../../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#abfe9f8e1ed2759f606aa3ffc0f3766d3" title="Sets what a user dismissal (Esc on the TUI) of the open dialog calls.">DialogWidget::setOnDismiss</a></span>, <span class="tt"><a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html#a942321f59ec1fe79a37c1d986da435be" title="Sets what a user dismissal (Esc on the TUI) calls.">DrawerWidget::setOnDismiss</a></span> or <span class="tt"><a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1BannerWidget.html#acd6ac56f433e99367ab4fc36500c0754" title="Sets what a dismissal calls. A dismissal leaves the banner shown: the application hides it.">BannerWidget::setOnDismiss</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00462">462</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00464">464</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -410,7 +430,7 @@ Public Attributes</h2></td></tr>
 
 <p>From <span class="tt"><a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a6f26c731e1f73666f5210be99bb3db52" title="Sets what a user&#39;s selection change calls, with the keys of every row then selected.">TableWidget::setOnSelectionChange</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00464">464</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00466">466</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -428,7 +448,7 @@ Public Attributes</h2></td></tr>
 
 <p>From <span class="tt"><a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#ac00fed62056c476c5aec27e4b40b71eb" title="Sets what activating a row (Enter or a double click) calls, with its key.">TableWidget::setOnActivate</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00466">466</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00468">468</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -446,7 +466,7 @@ Public Attributes</h2></td></tr>
 
 <p>The drop handler's predicate, from <span class="tt"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#af3fb3928f22d76f329204f4cb68ca712" title="Makes the widget a drop target.">Widget::setDropHandler</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00468">468</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00470">470</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -464,7 +484,7 @@ Public Attributes</h2></td></tr>
 
 <p>The drop handler, from <span class="tt"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#af3fb3928f22d76f329204f4cb68ca712" title="Makes the widget a drop target.">Widget::setDropHandler</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00470">470</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00472">472</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -482,7 +502,7 @@ Public Attributes</h2></td></tr>
 
 <p>From <span class="tt"><a class="el" href="../../d2/dd1/classmorph_1_1ui_1_1CustomWidget.html#aaaa74680031235895bf9d0cbfcb89684" title="Hands over the handler of the component&#39;s events.">CustomWidget::setOnEvent</a></span>: the event's name and its payload. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00472">472</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00474">474</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -500,7 +520,7 @@ Public Attributes</h2></td></tr>
 
 <p>The chord handler, from <span class="tt"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a96f94ca0cf2c093d8f8463091d91bbfb" title="Declares the keyboard chords the widget handles while focus is inside it.">Widget::setKeys</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00474">474</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00476">476</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -518,7 +538,7 @@ Public Attributes</h2></td></tr>
 
 <p>From <span class="tt"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#ae7647f2e8d57d47de8d1297a4c5669a9" title="Calls onHover each time the pointer comes to rest over the widget. A backend without a pointer,...">Widget::setOnHover</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00476">476</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00478">478</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -536,7 +556,7 @@ Public Attributes</h2></td></tr>
 
 <p>A menu's activation handler, from <span class="tt"><a class="el" href="../../d4/dfc/classmorph_1_1ui_1_1MenuWidget.html#ac14a09b9c4e2deffaa9098846e5576df" title="Sets what choosing an entry calls, with its path.">MenuWidget::setOnActivate</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00478">478</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00480">480</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -554,7 +574,7 @@ Public Attributes</h2></td></tr>
 
 <p>An action button's handler, from <span class="tt"><a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1BannerWidget.html#adc39da7a96f9a818d469c639852b53ef" title="Sets what activating the action button calls.">BannerWidget::setOnAction</a></span> or <span class="tt"><a class="el" href="../../de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#ab39ab95b1b516cc499cdfa34e30bcf27" title="Sets what activating the action button calls.">EmptyStateWidget::setOnAction</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00480">480</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00482">482</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -572,7 +592,7 @@ Public Attributes</h2></td></tr>
 
 <p>From <span class="tt"><a class="el" href="../../d7/d2a/classmorph_1_1ui_1_1SplitterWidget.html#a69d9eb149048b0d89dfc80a2db0eee33" title="Sets what dragging a handle calls, with every pane&#39;s size once the user lets go.">SplitterWidget::setOnResize</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00482">482</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00484">484</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -590,7 +610,7 @@ Public Attributes</h2></td></tr>
 
 <p>From <span class="tt"><a class="el" href="../../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html#a80c778bf4680cc79e7dba30a405a47fd" title="Sets what a drop it takes calls. A drop with a file outside the accepted extensions,...">DropZoneWidget::setOnDrop</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00484">484</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00486">486</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

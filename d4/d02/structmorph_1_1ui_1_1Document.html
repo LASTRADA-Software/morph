@@ -162,6 +162,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ad50853c0e76fbb81fadf7051cc4b435f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Customization points, by name.  <br /></td></tr>
 <tr class="memitem:a51cec9276e5d0bdc65c3844fdb291299" id="r_a51cec9276e5d0bdc65c3844fdb291299"><td class="memItemLeft"><a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#a51cec9276e5d0bdc65c3844fdb291299">view</a></td></tr>
 <tr class="memdesc:a51cec9276e5d0bdc65c3844fdb291299"><td class="mdescLeft">&#160;</td><td class="mdescRight">The view; <span class="tt">nullptr</span> for the app document.  <br /></td></tr>
+<tr class="memitem:a41f152c66a05c744486f13ef4d99dadf" id="r_a41f152c66a05c744486f13ef4d99dadf"><td class="memItemLeft">std::map&lt; <a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const  *, <a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349">TypeKind</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a41f152c66a05c744486f13ef4d99dadf">dateValueKinds</a></td></tr>
+<tr class="memdesc:a41f152c66a05c744486f13ef4d99dadf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The static type of each <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a3833826c9c7de9c8be32215cff26333f" title="A date or date-and-time field.">dateTimeInput</a></span>'s <span class="tt">value</span> that the loader could decide: <span class="tt">String</span> or <span class="tt">Timestamp</span>, keyed by the node. A node whose value type is <span class="tt">any</span> or <span class="tt">key</span> has no entry.  <br /></td></tr>
 <tr class="memitem:a65b8b97b29914c1a60ad5e4c39360034" id="r_a65b8b97b29914c1a60ad5e4c39360034"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d7/d8c/structmorph_1_1ui_1_1LoadWarning.html">LoadWarning</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a65b8b97b29914c1a60ad5e4c39360034">warnings</a></td></tr>
 <tr class="memdesc:a65b8b97b29914c1a60ad5e4c39360034"><td class="mdescLeft">&#160;</td><td class="mdescRight">What load-time validation found that does not refuse the document, in the order found. Empty when the catalog answers no actions.  <br /></td></tr>
 </table>
@@ -476,6 +478,24 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="a41f152c66a05c744486f13ef4d99dadf" name="a41f152c66a05c744486f13ef4d99dadf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a41f152c66a05c744486f13ef4d99dadf">&#9670;&#160;</a></span>dateValueKinds</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::map&lt;<a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const*, <a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349">TypeKind</a>&gt; morph::ui::Document::dateValueKinds</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The static type of each <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a3833826c9c7de9c8be32215cff26333f" title="A date or date-and-time field.">dateTimeInput</a></span>'s <span class="tt">value</span> that the loader could decide: <span class="tt">String</span> or <span class="tt">Timestamp</span>, keyed by the node. A node whose value type is <span class="tt">any</span> or <span class="tt">key</span> has no entry. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00573">573</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a65b8b97b29914c1a60ad5e4c39360034" name="a65b8b97b29914c1a60ad5e4c39360034"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a65b8b97b29914c1a60ad5e4c39360034">&#9670;&#160;</a></span>warnings</h2>
 
@@ -490,7 +510,7 @@ Public Attributes</h2></td></tr>
 
 <p>What load-time validation found that does not refuse the document, in the order found. Empty when the catalog answers no actions. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00573">573</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00576">576</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>

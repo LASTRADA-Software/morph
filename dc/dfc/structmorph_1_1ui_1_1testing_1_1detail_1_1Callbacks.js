@@ -10,6 +10,7 @@ var structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks =
     [ "index", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#ae855041cd6c69a511ec1838183e27e51", null ],
     [ "dateTime", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#ac7c98cf48ab6c759f0eaa9c3c1288746", null ],
     [ "slide", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a8d4b1ccfdf7644304b097029e69f929f", null ],
+    [ "slideCommit", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#ac09399e77edbcac6deec7ecdd82d89e8", null ],
     [ "picked", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a7ec2a09b02d57bc46cf3d2f9a5de6aac", null ],
     [ "dismiss", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a1ec5f56eac7fba871bb6e53cba8ef517", null ],
     [ "selection", "dc/dfc/structmorph_1_1ui_1_1testing_1_1detail_1_1Callbacks.html#a9e4fdbb5d265120a331ddc4d769d1001", null ],

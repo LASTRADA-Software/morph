@@ -514,6 +514,7 @@ var annotated_dup =
           [ "CheckRuntime", "d4/dad/structmorph_1_1ui_1_1detail_1_1CheckRuntime.html", "d4/dad/structmorph_1_1ui_1_1detail_1_1CheckRuntime" ],
           [ "CommandCtx", "d7/dbd/structmorph_1_1ui_1_1detail_1_1CommandCtx.html", "d7/dbd/structmorph_1_1ui_1_1detail_1_1CommandCtx" ],
           [ "CommandLineChoice", "d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice.html", "d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice" ],
+          [ "DateReading", "dd/d16/structmorph_1_1ui_1_1detail_1_1DateReading.html", "dd/d16/structmorph_1_1ui_1_1detail_1_1DateReading" ],
           [ "DetachedLower", "dc/d92/structmorph_1_1ui_1_1detail_1_1DetachedLower.html", "dc/d92/structmorph_1_1ui_1_1detail_1_1DetachedLower" ],
           [ "DocumentActions", "d6/d46/classmorph_1_1ui_1_1detail_1_1DocumentActions.html", "d6/d46/classmorph_1_1ui_1_1detail_1_1DocumentActions" ],
           [ "DocumentParser", "dc/dee/classmorph_1_1ui_1_1detail_1_1DocumentParser.html", "dc/dee/classmorph_1_1ui_1_1detail_1_1DocumentParser" ],
