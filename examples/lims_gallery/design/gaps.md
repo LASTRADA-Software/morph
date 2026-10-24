@@ -1,7 +1,7 @@
 # LIMS gallery gap log: what the ten designs need that ui/1 cannot express, and the defects found building them
 
 ### G1: `{"env": "widthClass"}` is never set (defect) — filed as #1046
-- **Design(s):** 01, 02, 03, 04, 05, 06, 07, 08
+- **Design(s):** 01, 02, 03, 04, 05, 06, 07, 08, 09
 - **Needs:** every design switches between an expanded (≥ 1200 px) and a compact (< 600 px) layout on the window's
   width class.
 - **ui/1 today:** the expression exists (`docs/spec/ui/expressions.md:42`) and `Session::setEnvironment` holds it
@@ -19,7 +19,7 @@
 - **Weight:** High
 
 ### G2: Monospace text for identifiers
-- **Design(s):** 01, 02, 03, 04, 05, 07, 08
+- **Design(s):** 01, 02, 03, 04, 05, 07, 08, 09
 - **Needs:** record, lot, sample, equipment and investigation ids (`WS-2026-0412`, `L-26-0381`, `OOS-2026-031`) set
   in a monospace face, the LIMS convention that makes ids scannable and unambiguous (0/O, 1/l).
 - **ui/1 today:** a `text` node's `role` is `normal`, `muted`, `heading`, `section`, `error` or `success`
@@ -50,7 +50,7 @@
 - **Weight:** Medium
 
 ### G5: Touch-sized controls on compact
-- **Design(s):** 01, 02, 03, 04, 05, 06, 07, 08
+- **Design(s):** 01, 02, 03, 04, 05, 06, 07, 08, 09
 - **Needs:** 44 px controls and touch targets in the compact layout (30 px when expanded).
 - **ui/1 today:** one global `control.height` token (`docs/spec/ui/theme.md:128`); a runtime density choice is listed
   under "Not yet" (`docs/spec/ui/theme.md:221`), and no node or width class can ask for a larger control. Inferred
@@ -145,7 +145,7 @@
 - **Weight:** Low
 
 ### G14: A secondary destructive button
-- **Design(s):** 02
+- **Design(s):** 02, 09
 - **Needs:** "Reject sample…" as an outlined button with red text, so the filled primary "Receive and scan next"
   stays the one action that stands out.
 - **ui/1 today:** `emphasis` is `normal`, `primary`, `danger` or `ghost` (`docs/spec/ui/document.md:165`); `danger`
@@ -164,7 +164,7 @@
 - **Weight:** Low
 
 ### G16: A bottom action bar that stays in view on compact
-- **Design(s):** 02, 05, 06, 08
+- **Design(s):** 02, 05, 06, 08, 09
 - **Needs:** "Reject…" and "Receive, next" pinned to the bottom of the phone screen while the form above scrolls.
 - **ui/1 today:** no screen-level footer or sticky region; the only footer is a dialog's or drawer's (`actions`,
   `docs/spec/ui/document.md:177`; `ActionBar` mounts only inside one, `docs/spec/ui/view_tree.md:131`). Inferred
@@ -260,7 +260,7 @@
 - **Weight:** Low
 
 ### G25: `forEach` drops its own common properties (defect) — filed as #1052
-- **Design(s):** 04, 05, 06, 07
+- **Design(s):** 04, 05, 06, 07, 09
 - **Needs:** a `forEach` with a `testId`, `visible`, `sizing` or `a11y`, as `document.md` says every node takes
   (`docs/spec/ui/document.md:150-157`).
 - **ui/1 today:** the interpreter lowers `forEach` without calling `commonOf` (`include/morph/ui/interpreter.hpp:7066-7085`;
@@ -554,18 +554,20 @@
 - **Workaround used:** the analyte cell adds a muted "calculated".
 - **Weight:** Low
 
-### G49: A `splitter`'s `sizes` is accepted and ignored (defect, inferred)
+### G49: A `splitter`'s `sizes` is accepted and ignored (defect)
 - **Design(s):** 09
 - **Needs:** the review queue as a 280 px pane beside the worksheet, resizable, with the queue's width as the
   starting size.
 - **ui/1 today:** `splitter` takes `orientation`, `sizes` and `children` (`docs/spec/ui/document.md:190`), and the
   view tree's `Splitter` has `sizes` and `onResize` (`include/morph/ui/view.hpp:1097-1109`), which the Qt Quick
   splitter applies (`src/qt_quick/qml/MorphSplitter.qml:19-35`). The interpreter's lowering sets only `children` and
-  `orientation` (`include/morph/ui/interpreter.hpp:6379-6386`), so `sizes` is loaded and dropped with no report, and
-  a stretched splitter shares its width equally. Inferred from reading only; not reproduced (design 09 was stopped
-  before its screen was built). Reproduce on `RecordingBackend` (a `Splitter` widget with no `sizes` prop) before
-  filing.
-- **Workaround used:** none yet.
+  `orientation` (`include/morph/ui/interpreter.hpp:6379-6386`), so `sizes` is loaded and dropped with no report.
+  Reproduced on revision 36cb5d419 plus design 09 (test `review: the splitter's sizes are dropped by the lowering`):
+  the document `lims-gallery.review` holds, verbatim, `"sizes":{"lit":[37,96]}`, and the splitter mounted on
+  `RecordingBackend` from that document reads `Splitter#43 a11yName=Queue and worksheet axis=Horizontal sizes=[]
+  testId=split`, with no problem reported. On Qt Quick (grab, 1280 × 900, offscreen) the queue pane is about 355 px
+  wide, not the 37 units asked for. Not checked on the terminal frontend.
+- **Workaround used:** none; the panes take the splitter's own sharing, and the user can still drag the handle.
 - **Weight:** Medium
 
 ### G50: `navigate` with `as: dialog` opens a tab in the generic client
@@ -576,9 +578,14 @@
   (`include/morph/ui/author.hpp:2800-2820`); a host that shows dialogs overrides `onNavigate(NavigateRequest)` to read
   `as` (`docs/spec/ui/host.md:95-97`). The generic client's host overrides only `onNavigate(screenId, params)`
   (`src/client/shell.cpp:55-57`), and its spec says every `navigate` opens a tab (`docs/spec/client/client.md:76-77`),
-  so `as` is dropped without a report. A document also cannot reuse a dialog another screen declares, and design 01
-  never `return`s, so `onResult` could not fire. Inferred from reading; not tried.
-- **Workaround used:** none yet (design 09 not built).
+  so `as` is dropped without a report. Reproduced on revision 36cb5d419 plus design 09 (test `review: approve and
+  sign opens the e-signature screen as a tab`): after the click, the harness has mounted `lims-gallery.review` then
+  `lims-gallery.esignature`, the workspace's tab bar reads `tabs=[Review and approval,E-signature]`, and no problem is
+  reported. A document also cannot reuse a dialog another screen declares (there is no include or shared dialog),
+  and design 01 never `return`s, so an `onResult` could not fire either; that part is inferred from reading.
+- **Workaround used:** the screen keeps `as: dialog`, so a host that honours it shows the signature over the review;
+  the generic client opens it as a tab beside it, and the review does not learn that it was signed. The e-signature
+  screen takes no worksheet param, so it always signs WS-2026-0412.
 - **Weight:** Medium
 
 ### G51: A tab label cannot follow the data
@@ -586,6 +593,39 @@
 - **Needs:** "Audit trail · 3", "Comments · 1" counting the selected worksheet's entries.
 - **ui/1 today:** the lowering evaluates each tab's `label` once (`include/morph/ui/interpreter.hpp:6268-6275`), and
   the view tree's `Tab::label` is a plain string, "set once" (`include/morph/ui/view.hpp:674-676`). Inferred from
-  reading; not tried.
-- **Workaround used:** none yet (design 09 not built).
+  reading; not tried without the workaround.
+- **Workaround used:** the tabs sit in a `switch` on the selected worksheet with one case per worksheet, so picking
+  another worksheet mounts new tabs whose labels count its entries (verified: `Audit trail · 0, Comments · 0` for
+  WS-2026-0409). The switch also resets the pick to the first tab.
+- **Weight:** Low
+
+### G52: A selectable list entry of several lines
+- **Design(s):** 09
+- **Needs:** a review queue entry as one selectable card: id and age, test and analyst, its tags, tinted with an
+  accent bar while it is the one under review, the whole card clickable.
+- **ui/1 today:** a `style: item` button is the selectable entry (`docs/spec/ui/document.md:165`), and its `label` is
+  one string; no node is selectable around other content. Verified in the grab: the tint and bar cover only the
+  first line.
+- **Workaround used:** each entry is a column of an item button ("WS-2026-0412 · 2 h 10 min"), a text, a row of tags
+  and, for the reviewer's own worksheet, the muted reason; only the first line is clickable.
+- **Weight:** Medium
+
+### G53: A segmented control
+- **Design(s):** 09
+- **Needs:** "Show: All 24 | Flagged 2" as a compact two-segment switch.
+- **ui/1 today:** a `select`'s `style` is `dropdown` or `radio` (`include/morph/ui/interpreter.hpp:6095`); `radio`
+  draws a column of radio buttons on Qt Quick (seen in the grab). Inferred from reading for other styles.
+- **Workaround used:** `style: radio`. The counts are the results the gallery holds (All 7) rather than the
+  design's 24.
+- **Weight:** Low
+
+### G54: A table wider than its pane overlaps its own cells on Qt Quick
+- **Design(s):** 09
+- **Needs:** the results table fitting its pane, wrapping or scrolling when its columns do not fit.
+- **ui/1 today:** seen in a grab (1280 × 900, offscreen) of a first version of design 09 whose fixed columns added up
+  to 104 units in a pane about 680 px wide: the stretched Analyte column was drawn with no width, its header gone, and the
+  Result column's text drawn over the analyte ("Impurity B" under "0.21 %"); the Change column ran off the pane's
+  edge with no scroll bar. Verified by trying; not reduced to a minimal document, not checked on the terminal
+  frontend. Whether a stretched column has a minimum width is not in `docs/spec/ui/backend_contract.md:156-162`.
+- **Workaround used:** narrower fixed columns and a stretched Change column, which fit at 1280 px.
 - **Weight:** Low

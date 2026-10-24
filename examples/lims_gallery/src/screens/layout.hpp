@@ -66,12 +66,12 @@ using morph::ui::Justify;
 }
 
 /// @brief A status tag as a table cell. A table sizes its cells itself and stretches a bare badge across the
-///        column; inside a row the tag keeps its label's width.
+///        column; inside a row the tag keeps its label's width, and its own height in a taller row.
 /// @param text The text.
 /// @param tone `ok`, `warn`, `err`, `info` or `neutral`.
 /// @return The node.
 [[nodiscard]] inline ui::Node cellTag(ui::AnyHandle const& text, ui::AnyHandle const& tone) {
-    return ui::row({tag(text, tone)});
+    return ui::row({tag(text, tone)}, {.align = Align::Center});
 }
 
 }  // namespace lims_gallery::layout

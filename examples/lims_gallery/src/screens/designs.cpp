@@ -55,7 +55,7 @@ std::span<Design const> designs() {
          .id = "lims-gallery.review",
          .title = "Review and approval",
          .summary = "Queue and worksheet side by side",
-         .make = nullptr},
+         .make = &reviewScreen},
         {.number = "10",
          .id = "lims-gallery.console",
          .title = "Lab operations console",

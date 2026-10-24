@@ -66,4 +66,8 @@ struct Design {
 /// @return The screen.
 [[nodiscard]] morph::ui::author::Screen resultsScreen();
 
+/// @brief Design 09: review and approval, the queue beside the worksheet under review.
+/// @return The screen.
+[[nodiscard]] morph::ui::author::Screen reviewScreen();
+
 }  // namespace lims_gallery
