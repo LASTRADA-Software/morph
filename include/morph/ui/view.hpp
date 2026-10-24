@@ -1390,17 +1390,19 @@ template <typename E>
 ///        bindings: what the view reads directly while it is built is read once and never again.
 /// @param axis The stacking direction.
 /// @param gap Space between rows.
+/// @param common Visibility, enablement, layout and the rest of the row container's common properties.
 /// @return The node.
 /// @throws std::invalid_argument when @p rows, @p keyOf or @p rowView is empty.
 template <typename RowT>
 [[nodiscard]] Node forEach(std::function<std::vector<RowT>()> rows, std::function<Key(RowT const&)> keyOf,
                            std::function<Node(reactive::Signal<RowT> const&)> rowView, Axis axis = Axis::Vertical,
-                           int gap = 0) {
+                           int gap = 0, Common const& common = {}) {
     return detail::makeNode(ForEach{
         .model =
             std::make_shared<detail::TypedForEach<RowT> const>(std::move(rows), std::move(keyOf), std::move(rowView)),
         .axis = axis,
         .gap = gap,
+        .common = common,
     });
 }
 
@@ -1411,13 +1413,14 @@ template <typename RowT>
 /// @param rowView Builds a row's view once, from a signal the mount keeps equal to the row.
 /// @param axis The stacking direction.
 /// @param gap Space between rows.
+/// @param common Visibility, enablement, layout and the rest of the row container's common properties.
 /// @return The node.
 /// @throws std::invalid_argument when @p keyOf or @p rowView is empty.
 template <typename RowT>
 [[nodiscard]] Node forEach(reactive::Signal<std::vector<RowT>> const& rows, std::function<Key(RowT const&)> keyOf,
                            std::function<Node(reactive::Signal<RowT> const&)> rowView, Axis axis = Axis::Vertical,
-                           int gap = 0) {
-    return forEach<RowT>([&rows] { return rows.get(); }, std::move(keyOf), std::move(rowView), axis, gap);
+                           int gap = 0, Common const& common = {}) {
+    return forEach<RowT>([&rows] { return rows.get(); }, std::move(keyOf), std::move(rowView), axis, gap, common);
 }
 
 /// @brief Everything about a `table` beyond its columns and rows.

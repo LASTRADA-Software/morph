@@ -116,7 +116,7 @@ lowers them to the kinds below.
 | `Tabs` | `tabs` | `tabs` (`Tab{label, node}`, set once), `selected` (`Prop<std::size_t>`), `onSelect` |
 | `Dialog` | `dialog` | `open`, `title`, `child`, `onDismiss` |
 | `Busy` | `busy` | `active`, `label` |
-| `ForEach` | `forEach<RowT>` | rows, key function, row view, `axis`, `gap` ([below](#keyed-collections)) |
+| `ForEach` | `forEach<RowT>` | rows, key function, row view, `axis`, `gap`, `common` (the row container's, as on every kind) ([below](#keyed-collections)) |
 | `Table` | `table<RowT>` | `columns` (`TableColumn{label, width, role}`, set once; `role` styles a column's default cell and has no effect on one with its own `.cell`), rows, key function, cells — or a row view answering `TableRowView{cells, tone}`, whose tone binds in the row's own scope — and `TableOptions{selectionMode, selection, onSelectionChange, onActivate, common}` ([below](#keyed-collections)) |
 | `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field; the change is the commit, since both backends report one only when an edit is finished), `onCommit` (the same value, after `onChange`), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC) — the last two set once; `label` and `showLabel` (below) |
 | `Slider` | `slider` | `value` (`std::int64_t`), `minimum`, `maximum`, `step` (the three set once), `onChange` (each step while a drag lasts), `onCommit` (a finished move: a release after a drag, a key step, or a wheel step) |
@@ -183,7 +183,7 @@ selector throws `std::invalid_argument` from `switchOn`.
 
 ## Keyed collections
 
-`forEach<RowT>(rows, keyOf, rowView, axis, gap)` mounts one widget per row and keeps it while its
+`forEach<RowT>(rows, keyOf, rowView, axis, gap, common)` mounts one widget per row and keeps it while its
 key stays:
 
 - `rows` is a binding, `std::function<std::vector<RowT>()>`, so a `Query`'s `value()` works; every

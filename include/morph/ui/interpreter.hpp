@@ -7091,9 +7091,11 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         };
         ExprPtr const axis = node.prop("axis");
         ExprPtr const gap = node.prop("gap");
+        Common common;
+        commonOf(node, ctx, element, common);
         return ui::forEach<Value>(std::move(rows), std::move(keyFn), std::move(rowView),
                                   axis ? axisOf(once(ctx, axis)) : Axis::Vertical,
-                                  gap ? static_cast<int>(intOf(once(ctx, gap), 0)) : 0);
+                                  gap ? static_cast<int>(intOf(once(ctx, gap), 0)) : 0, common);
     }
     std::vector<TableColumn> columns;
     std::vector<DocNode const*> cells;

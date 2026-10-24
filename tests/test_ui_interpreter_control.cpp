@@ -617,3 +617,28 @@ TEST_CASE("interpreter control: picking a tab shows its page, mounted once and k
     CHECK(h.backend.find("Text", "testId", "second").has_value());
     CHECK(h.text("first") == "1");
 }
+
+// Mutation: build the `forEach` without `commonOf` (no Column has the test id `rows`).
+TEST_CASE("interpreter control: a forEach honours its common properties", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "rows",
+      "state": { "shown": { "init": true } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "hide", "label": "Hide", "onClick": [ { "set": "shown", "value": false } ] },
+        { "kind": "forEach", "testId": "rows", "visible": { "ref": "shown" },
+          "sizing": { "lit": { "fixed": 20 } }, "rows": { "lit": [ 1, 2 ] },
+          "children": [ { "kind": "text", "testId": "row", "text": { "fn": "format", "args": [ "{0}", { "row": "" } ] } } ] } ] } })");
+    int const rows = h.byTestId("Column", "rows");
+    CHECK(h.backend.prop(rows, "layout") == "fixed(20)/content");
+    CHECK(h.backend.prop(rows, "visible") == "true");
+    h.backend.click(h.byTestId("Button", "hide"));
+    h.settle();
+    CHECK(h.backend.prop(rows, "visible") == "false");
+    // Hiding the container keeps its rows mounted.
+    std::size_t texts = 0;
+    for (int const text : h.backend.all("Text")) {
+        texts += h.backend.prop(text, "testId") == "row" ? 1U : 0U;
+    }
+    CHECK(texts == 2);
+}
