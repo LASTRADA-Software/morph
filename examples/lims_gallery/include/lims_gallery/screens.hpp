@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <morph/ui/author.hpp>
+#include <span>
+#include <string_view>
+
+/// @file
+/// The gallery's screens as the C++ builders write them, and the one list of designs the bundle registers and the
+/// index shows. Apart from `lims_gallery.hpp`, so a translation unit that needs only the served bundle does not
+/// compile the builders.
+
+namespace lims_gallery {
+
+/// @brief One design of the gallery.
+struct Design {
+    /// @brief Its number in the design set, `01` to `10`.
+    std::string_view number;
+    /// @brief The screen's id.
+    std::string_view id;
+    /// @brief Its name, as the index lists it.
+    std::string_view title;
+    /// @brief What it shows, in one line.
+    std::string_view summary;
+    /// @brief Builds the screen; null while the design is not built yet, which the index shows as unavailable.
+    morph::ui::author::Screen (*make)() = nullptr;
+};
+
+/// @brief Every design, in the design set's order. The bundle registers each one that is built.
+/// @return The designs.
+[[nodiscard]] std::span<Design const> designs();
+
+/// @brief The index: every design, each opened by a button.
+/// @return The screen.
+[[nodiscard]] morph::ui::author::Screen indexScreen();
+
+/// @brief Design 01: the e-signature dialog that approves a worksheet.
+/// @return The screen.
+[[nodiscard]] morph::ui::author::Screen eSignatureScreen();
+
+}  // namespace lims_gallery
