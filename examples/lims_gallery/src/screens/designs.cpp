@@ -20,7 +20,7 @@ std::span<Design const> designs() {
          .id = "lims-gallery.receipt",
          .title = "Sample receipt",
          .summary = "Scan, check, receive, next",
-         .make = nullptr},
+         .make = &receiptScreen},
         {.number = "03",
          .id = "lims-gallery.instrument",
          .title = "Instrument record",

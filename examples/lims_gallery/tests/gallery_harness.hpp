@@ -10,9 +10,11 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <testkit/screen_harness.hpp>
+#include <utility>
 
 #include "lims_gallery/lims_gallery.hpp"
 
@@ -57,6 +59,18 @@ public:
             return std::nullopt;
         }
         return backend().prop(*found, name);
+    }
+
+    /// @brief Types @p text into the text input with @p testId and presses Enter, as a scanner does.
+    /// @param testId The test id.
+    /// @param text   The text.
+    /// @throws std::runtime_error when no such input is mounted.
+    void submit(std::string_view testId, std::string text) {
+        auto const input = find("TextInput", testId);
+        if (!input) {
+            throw std::runtime_error{"GalleryScreen: no text input " + std::string{testId}};
+        }
+        backend().submit(*input, std::move(text));
     }
 
     /// @brief Fails the test, listing them, when the screen reported a problem.

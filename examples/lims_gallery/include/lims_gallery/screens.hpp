@@ -38,4 +38,8 @@ struct Design {
 /// @return The screen.
 [[nodiscard]] morph::ui::author::Screen eSignatureScreen();
 
+/// @brief Design 02: sample receipt at the bench: scan, check, receive, next.
+/// @return The screen.
+[[nodiscard]] morph::ui::author::Screen receiptScreen();
+
 }  // namespace lims_gallery
