@@ -118,6 +118,7 @@ public:
     void setRange(std::int64_t minimum, std::int64_t maximum, std::int64_t step) override;
     void setValue(std::int64_t value) override;
     void setOnChange(std::function<void(std::int64_t)> onChange) override;
+    void setOnCommit(std::function<void(std::int64_t)> onCommit) override;
     [[nodiscard]] std::int64_t value() const;
 };
 

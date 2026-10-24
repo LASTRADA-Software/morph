@@ -869,6 +869,30 @@ TEST_CASE("tui slider: a press on the track sets the value there, by step, and a
     CHECK(scene.slider->probeText() == "50");
 }
 
+TEST_CASE("tui slider: a key step commits, and a drag commits once when the press ends", "[tui][slider][pointer]") {
+    Harness harness{30, 1};
+    SliderRow scene{harness};
+    std::vector<std::int64_t> changes;
+    std::vector<std::int64_t> commits;
+    scene.slider->setValue(50);
+    scene.slider->setOnChange([&changes](std::int64_t value) { changes.push_back(value); });
+    scene.slider->setOnCommit([&commits](std::int64_t value) { commits.push_back(value); });
+    static_cast<void>(harness.draw());
+    harness.focus(*scene.slider);
+    static_cast<void>(harness.key(KeyCode::Right));
+    CHECK(changes == std::vector<std::int64_t>{60});
+    CHECK(commits == std::vector<std::int64_t>{60});
+    // A drag across two cells reports each change, and one commit when the release ends it.
+    CHECK(harness.send(pressAt({.x = 3, .y = 0})) == EventResult::Handled);
+    CHECK(changes == std::vector<std::int64_t>{60, 0});
+    CHECK(commits == std::vector<std::int64_t>{60});
+    static_cast<void>(harness.send(moveTo({.x = 12, .y = 0})));
+    CHECK(changes == std::vector<std::int64_t>{60, 0, 50});
+    CHECK(commits == std::vector<std::int64_t>{60});
+    static_cast<void>(harness.send(releaseAt({.x = 12, .y = 0})));
+    CHECK(commits == std::vector<std::int64_t>{60, 50});
+}
+
 TEST_CASE("tui slider: a press off the track moves nothing, and neither does its drag", "[tui][slider][pointer]") {
     Harness harness{30, 1};
     SliderRow scene{harness};

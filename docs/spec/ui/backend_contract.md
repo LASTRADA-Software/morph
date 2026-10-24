@@ -203,7 +203,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `BusyWidget` | `setActive`, `setLabel` | — |
 | `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)` | `setOnSelectionChange(keys)`, `setOnActivate(Key)` (Enter or a double click) |
 | `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)` | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
-| `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)` |
+| `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)`, `setOnCommit(value)` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
 | `BannerWidget` | `setTone`, `setText`, `setActionLabel`, `setDismissible` (once) | `setOnAction`, `setOnDismiss` |
 | `BadgeWidget` | `setTone`, `setText`, `setIcon` (once) | — |

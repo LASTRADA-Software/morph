@@ -109,13 +109,15 @@ private:
 /// Slider: `[====|----] value`. Left and Right move by one step, Home and End to the ends. A press on the track
 /// moves to the value at that cell, to the nearest step, and while the press lasts the value follows the pointer
 /// along the track, held at either end past it; a press elsewhere moves nothing. Each move reports the new value once
-/// it changed; no setter reports.
+/// it changed; a key step is a finished move and reports the commit too, and a drag reports the commit when the press
+/// ends. No setter reports.
 class SliderImpl final : public TuiField<ui::SliderWidget> {
 public:
     explicit SliderImpl(Context& context) : TuiField{context} { adopt(makeView(*this)); }
     void setRange(std::int64_t minimum, std::int64_t maximum, std::int64_t step) override;
     void setValue(std::int64_t value) override;
     void setOnChange(std::function<void(std::int64_t)> onChange) override;
+    void setOnCommit(std::function<void(std::int64_t)> onCommit) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override { return {.width = 24, .height = 1}; }
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override;
@@ -123,6 +125,7 @@ public:
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void pressAt(::core::tui::Point cell) override;
     void dragTo(::core::tui::Point cell) override;
+    [[nodiscard]] bool pressEnded() override;
 
 private:
     /// The value at track cell @p position (0-based, held to the track), to the nearest step from the minimum.
@@ -133,7 +136,8 @@ private:
     [[nodiscard]] std::int64_t stepBelow() const;
     /// The track cell of the current value, among @p cells.
     [[nodiscard]] int knobCell(int cells) const;
-    void moveTo(std::int64_t value);
+    /// Moves to @p value and reports the change; a @p finished move reports the commit too.
+    void moveTo(std::int64_t value, bool finished);
 
     std::int64_t _minimum = 0;
     std::int64_t _maximum = 100;
@@ -141,7 +145,9 @@ private:
     std::int64_t _value = 0;
     int _track = 0;           ///< How many cells the track had in the last frame.
     bool _following = false;  ///< Whether the press that lasts began on the track.
+    bool _moved = false;      ///< Whether the press that lasts moved the value.
     std::function<void(std::int64_t)> _onChange;
+    std::function<void(std::int64_t)> _onCommit;
 };
 
 }  // namespace morph::tui::detail

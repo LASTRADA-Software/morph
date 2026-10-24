@@ -276,3 +276,29 @@ TEST_CASE("ui document: a dialog or drawer's literal sizing accepts fixed but re
     REQUIRE_FALSE(stretchingHeight.has_value());
     CHECK(stretchingHeight.error().message().contains("an overlay is sized by the frontend"));
 }
+
+// A date input shows a timestamp or an ISO-8601 date or date-time string; any other type it can never show.
+// Mutation: drop the refusal in checkDateValue (the int case loads).
+TEST_CASE("ui document: a date input's value is a timestamp or a string, and any other type is refused",
+          "[ui][document]") {
+    auto const refused = loadDocumentText(R"({"vocab": "ui/1", "id": "d",
+        "state": { "n": { "init": 1 } },
+        "view": { "kind": "dateTimeInput", "value": { "ref": "n" } }})");
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().path == "/view/value");
+    CHECK(refused.error().reason ==
+          "`dateTimeInput` shows a timestamp or an ISO-8601 date or date-time string; `value` is int");
+
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "d",
+        "state": { "when": { "type": "string" } },
+        "view": { "kind": "dateTimeInput", "value": { "ref": "when" } }})")
+              .has_value());
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "d",
+        "state": { "when": { "type": "timestamp" } },
+        "view": { "kind": "dateTimeInput", "value": { "ref": "when" } }})")
+              .has_value());
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "d",
+        "state": { "when": { "type": "any" } },
+        "view": { "kind": "dateTimeInput", "value": { "ref": "when" } }})")
+              .has_value());
+}
