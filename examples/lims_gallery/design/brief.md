@@ -13,7 +13,7 @@
 
 **Next steps:**
 1. All ten designs are built.
-2. Group `gaps.md` into a few large framework batches. Each batch gets one design, one review, then implementation on this same branch.
+2. Implement the framework batches in `batches.md` (A to E), in order. Each batch gets one design, one review, then implementation on this same branch.
 3. The gallery screens drop their workarounds.
 
 The library defects in `gaps.md` are filed as #1046 to #1055, and each entry names its issue. G42 (Enter on a plate well) is inferred from reading the code; reproduce it before filing it.
