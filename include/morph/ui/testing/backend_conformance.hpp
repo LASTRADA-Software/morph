@@ -858,8 +858,9 @@ struct Entry {
                       .onSelect = note("Select onSelect")}),
                  ui::menu({.items = {{.label = [&phase] { return "m" + std::to_string(phase.get()); },
                                       .onSelect = note("Menu item onSelect")}}}),
-                 ui::slider(
-                     {.value = [&phase] { return std::int64_t{phase.get()}; }, .onChange = note("Slider onChange")}),
+                 ui::slider({.value = [&phase] { return std::int64_t{phase.get()}; },
+                             .onChange = note("Slider onChange"),
+                             .onCommit = note("Slider onCommit")}),
                  ui::dateTimeInput({.value = instant, .onChange = note("DateTimeInput onChange")}),
                  ui::filePicker({.path = [&phase] { return "/p" + std::to_string(phase.get()); },
                                  .onPicked = note("FilePicker onPicked")}),

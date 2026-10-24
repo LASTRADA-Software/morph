@@ -9,6 +9,8 @@ MorphField {
 
     // The value C++ last showed, which a refused move returns to.
     property real shownValue: 0
+    // Whether the value moved during the press that is still down, so its release commits.
+    property bool movedWhilePressed: false
 
     function show(value: real) {
         root.shownValue = value
@@ -33,6 +35,17 @@ MorphField {
             }
             root.shownValue = Math.round(value)
             root.fire("change", root.shownValue)
+            if (slider.pressed) {
+                root.movedWhilePressed = true
+            } else {
+                root.fire("commit", root.shownValue)
+            }
+        }
+        onPressedChanged: {
+            if (!pressed && root.movedWhilePressed) {
+                root.movedWhilePressed = false
+                root.fire("commit", root.shownValue)
+            }
         }
     }
 }

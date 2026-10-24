@@ -218,7 +218,10 @@ reply; `parallel` applies each. `pending` counts runs in flight and queued.
   values that read to nothing are the same.
 - **`commitOn`** (`change` by default, `blur`, `enter`) decides when an edit commits: the committed
   value is written and `onChange` runs. `onCommit` (Enter or focus leaving after an edit) also marks the
-  element `touched`. The view tree reports no focus, so `focused` stays false.
+  element `touched`. A date input's change is its commit: `onChange` runs, then `onCommit` with the same
+  value. A slider reports `onChange` on each step and `onCommit` on a finished move (a release after a
+  drag, a key step, a wheel step). Both commits mark the element `touched`. The view tree reports no
+  focus, so `focused` stays false.
 - **Errors.** An element's `errors` are, in order: `Required` when `required` is true and the value is
   not engaged (`null`, `""` or an empty list), the node's own `errors`, the field errors of a reply in
   its scope (a query's or mutation's value `errors.<id>`), and each failing check's message. `valid` is

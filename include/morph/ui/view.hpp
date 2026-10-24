@@ -944,6 +944,8 @@ struct Slider {
     std::int64_t step = 1;
     /// @brief Called with the value the user moved to.
     std::function<void(std::int64_t)> onChange;
+    /// @brief Called with the value a finished move ended on: a release after a drag, a key step, or a wheel step.
+    std::function<void(std::int64_t)> onCommit;
     /// @brief Read-only, required, errors and stale.
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.

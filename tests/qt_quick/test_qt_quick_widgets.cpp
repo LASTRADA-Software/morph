@@ -367,6 +367,52 @@ TEST_CASE("qt_quick widgets: a slider moves by keys and reports the value; a rea
     CHECK(impl.value() == 5);
 }
 
+TEST_CASE("qt_quick widgets: a slider commits a finished move, on a release or a key click", "[qt_quick]") {
+    Scene scene;
+    auto slider = scene.backend().createSlider(nullptr);
+    std::vector<std::int64_t> changes;
+    std::vector<std::int64_t> commits;
+    slider->setOnChange([&changes](std::int64_t value) { changes.push_back(value); });
+    slider->setOnCommit([&commits](std::int64_t value) { commits.push_back(value); });
+    slider->setRange(0, 10, 1);
+    slider->setValue(4);
+    scene.settle();
+    QQuickItem& control = Scene::controlOf(*slider);
+    // The window point of @p value on the control's track.
+    auto const at = [&control](qreal value) {
+        qreal const from = control.property("from").toReal();
+        qreal const to = control.property("to").toReal();
+        qreal const left = control.property("leftPadding").toReal();
+        qreal const available = control.property("availableWidth").toReal();
+        return control.mapToScene(QPointF{left + (((value - from) / (to - from)) * available), control.height() / 2})
+            .toPoint();
+    };
+    // A drag across two steps reports each change while the press lasts, and one commit on its release.
+    QTest::mousePress(&scene.window(), Qt::LeftButton, {}, at(5));
+    scene.settle();
+    QTest::mouseMove(&scene.window(), at(6));
+    scene.settle();
+    QTest::mouseRelease(&scene.window(), Qt::LeftButton, {}, at(6));
+    scene.settle();
+    CHECK(changes == std::vector<std::int64_t>{5, 6});
+    CHECK(commits == std::vector<std::int64_t>{6});
+    // A key click is a press and a release: one change and one commit.
+    slider->focus();
+    scene.key(Qt::Key_Right);
+    CHECK(changes == std::vector<std::int64_t>{5, 6, 7});
+    CHECK(commits == std::vector<std::int64_t>{6, 7});
+    // A read-only slider refuses the move, so it commits nothing either.
+    slider->setReadOnly(true);
+    QTest::mousePress(&scene.window(), Qt::LeftButton, {}, at(2));
+    scene.settle();
+    QTest::mouseMove(&scene.window(), at(3));
+    scene.settle();
+    QTest::mouseRelease(&scene.window(), Qt::LeftButton, {}, at(3));
+    scene.settle();
+    CHECK(changes == std::vector<std::int64_t>{5, 6, 7});
+    CHECK(commits == std::vector<std::int64_t>{6, 7});
+}
+
 TEST_CASE("qt_quick widgets: a date-time input formats in its zone and parses what the user types", "[qt_quick]") {
     using morph::time::DateTime;
     using namespace std::chrono;

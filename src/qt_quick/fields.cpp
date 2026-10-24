@@ -394,6 +394,14 @@ void SliderImpl::setOnChange(std::function<void(std::int64_t)> onChange) {
     });
 }
 
+void SliderImpl::setOnCommit(std::function<void(std::int64_t)> onCommit) {
+    relay().on(QStringLiteral("commit"), [onCommit = std::move(onCommit)](QVariant const& payload) {
+        if (onCommit) {
+            onCommit(payload.toLongLong());
+        }
+    });
+}
+
 std::int64_t SliderImpl::value() const {
     QObject const* const control = part("control");
     return control != nullptr ? static_cast<std::int64_t>(std::round(control->property("value").toDouble())) : 0;

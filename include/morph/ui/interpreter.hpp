@@ -6118,6 +6118,10 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             });
             runEvent(onChange, ctx, Value{value});
         };
+        spec.onCommit = [this, ctx, element, onCommit = node.event("onCommit")](std::int64_t value) {
+            element->touched.set(true);
+            runEvent(onCommit, ctx, Value{value});
+        };
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);
@@ -6140,8 +6144,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             }
             return reading.instant ? std::optional<time::Timestamp>{time::Timestamp{*reading.instant}} : std::nullopt;
         });
-        spec.onChange = [this, ctx, element, heldAtLoad, mode, offsetMinutes,
-                         onChange = node.event("onChange")](std::optional<time::Timestamp> value) {
+        spec.onChange = [this, ctx, element, heldAtLoad, mode, offsetMinutes, onChange = node.event("onChange"),
+                         onCommit = node.event("onCommit")](std::optional<time::Timestamp> value) {
             bool asString = element->bound != nullptr && element->bound->get().asString() != nullptr;
             if (heldAtLoad) {
                 asString = *heldAtLoad == TypeKind::String;
@@ -6159,6 +6163,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             } else {
                 entered = Value{instant->toIso8601()};
             }
+            element->touched.set(true);
             session.asUser([&] {
                 session.noteWrite();
                 element->draft.set(entered);
@@ -6168,6 +6173,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                 }
             });
             runEvent(onChange, ctx, entered);
+            runEvent(onCommit, ctx, entered);
         };
         spec.mode = mode;
         spec.offsetMinutes = offsetMinutes;

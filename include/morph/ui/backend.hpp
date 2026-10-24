@@ -563,6 +563,11 @@ public:
     /// @brief Sets what a user move calls, with the new value.
     /// @param onChange The handler; empty does nothing.
     virtual void setOnChange(std::function<void(std::int64_t)> onChange) = 0;
+
+    /// @brief Sets what a finished move calls, with the value it ended on: a release after a drag, a key step, or a
+    ///        wheel step.
+    /// @param onCommit The handler; empty does nothing.
+    virtual void setOnCommit(std::function<void(std::int64_t)> onCommit) = 0;
 };
 
 /// @brief A file path field, in the mode fixed at creation.

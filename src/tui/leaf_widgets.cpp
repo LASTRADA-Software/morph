@@ -16,6 +16,8 @@
 #include <string_view>
 #include <utility>
 
+#include "tui/drag.hpp"
+
 namespace morph::tui::detail {
 
 namespace {
@@ -291,6 +293,8 @@ void SliderImpl::setValue(std::int64_t value) {
 
 void SliderImpl::setOnChange(std::function<void(std::int64_t)> onChange) { _onChange = std::move(onChange); }
 
+void SliderImpl::setOnCommit(std::function<void(std::int64_t)> onCommit) { _onCommit = std::move(onCommit); }
+
 std::string SliderImpl::probeText() const { return std::to_string(_value); }
 
 std::int64_t SliderImpl::stepAbove() const {
@@ -340,13 +344,13 @@ void SliderImpl::paint(::core::tui::Canvas& canvas) {
         return ::core::tui::EventResult::Ignored;
     }
     if (key.key == KeyCode::Left) {
-        moveTo(stepBelow());
+        moveTo(stepBelow(), true);
     } else if (key.key == KeyCode::Right) {
-        moveTo(stepAbove());
+        moveTo(stepAbove(), true);
     } else if (key.key == KeyCode::Home) {
-        moveTo(_minimum);
+        moveTo(_minimum, true);
     } else if (key.key == KeyCode::End) {
-        moveTo(_maximum);
+        moveTo(_maximum, true);
     } else {
         return ::core::tui::EventResult::Ignored;
     }
@@ -357,14 +361,15 @@ void SliderImpl::paint(::core::tui::Canvas& canvas) {
 void SliderImpl::pressAt(::core::tui::Point cell) {
     int const position = cell.x - 1;
     _following = position >= 0 && position < _track;
+    _moved = false;
     if (_following) {
-        moveTo(valueAt(position));
+        moveTo(valueAt(position), false);
     }
 }
 
 void SliderImpl::dragTo(::core::tui::Point cell) {
     if (_following) {
-        moveTo(valueAt(cell.x - 1));
+        moveTo(valueAt(cell.x - 1), false);
     }
 }
 
@@ -392,18 +397,42 @@ std::int64_t SliderImpl::valueAt(int position) const {
     return static_cast<std::int64_t>(static_cast<std::uint64_t>(_minimum) + snapped);
 }
 
-// The handler may destroy this slider, so nothing is touched after it.
-void SliderImpl::moveTo(std::int64_t value) {
+// Both handlers may destroy this slider, so they are copied before either runs, and nothing is touched after the
+// first call. A pointer move is not finished: it waits for the press to end.
+void SliderImpl::moveTo(std::int64_t value, bool finished) {
     auto const next = std::clamp(value, _minimum, _maximum);
     if (next == _value || readOnly()) {
         return;
     }
     _value = next;
-    refresh();
-    auto const handler = _onChange;
-    if (handler) {
-        handler(next);
+    if (!finished) {
+        _moved = true;
     }
+    refresh();
+    auto const onChange = _onChange;
+    auto const onCommit = finished ? _onCommit : std::function<void(std::int64_t)>{};
+    if (onChange) {
+        onChange(next);
+    }
+    if (onCommit) {
+        onCommit(next);
+    }
+}
+
+bool SliderImpl::pressEnded() {
+    bool const moved = _moved;
+    _moved = false;
+    // A drag key turns the press into a drag-and-drop once the pointer moves, and that gesture's release is the drag
+    // controller's: the slider did not finish a move of its own.
+    if (!moved || context().drag->dragging()) {
+        return false;
+    }
+    auto const value = _value;
+    auto const onCommit = _onCommit;
+    if (onCommit) {
+        onCommit(value);
+    }
+    return true;
 }
 
 }  // namespace morph::tui::detail

@@ -1650,6 +1650,7 @@ private:
         widget.setRange(spec.minimum, spec.maximum, spec.step);
         widget.setOnChange(inputEvent(
             spec.onChange, controlled(scope, spec.value, [&widget](std::int64_t value) { widget.setValue(value); })));
+        widget.setOnCommit(event(spec.onCommit));
         return widget;
     }
 

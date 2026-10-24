@@ -1044,3 +1044,58 @@ TEST_CASE("interpreter dateTimeInput: a value that names no date shows empty and
     CHECK(h.backend.prop(field, "value") == "none");
     CHECK(h.diagnostics.size() == 1);
 }
+
+// A date input's change is its commit: onCommit runs once, after onChange, with the value written, and marks the
+// element touched. Mutation: drop the onCommit call (the log holds "change" only and touched stays false).
+TEST_CASE("interpreter dateTimeInput: an edit runs onCommit once, after onChange, and marks it touched",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "commit",
+      "state": { "held": { "type": "string" }, "log": { "init": "" }, "committed": { "init": null } },
+      "view": { "kind": "column", "children": [
+        { "kind": "dateTimeInput", "id": "field", "testId": "when", "mode": "date", "value": { "ref": "held" },
+          "onChange": [ { "set": "held", "value": { "ref": "event" } },
+                        { "set": "log", "value": { "fn": "concat", "args": [ { "ref": "log" }, "change" ] } } ],
+          "onCommit": [ { "set": "log", "value": { "fn": "concat", "args": [ { "ref": "log" }, " commit" ] } },
+                        { "set": "committed", "value": { "ref": "event" } } ] },
+        { "kind": "text", "testId": "touched",
+          "text": { "fn": "format", "args": [ "{0}", { "ref": "field.touched" } ] } } ] } })");
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    DateTime const instant{year{2026}, month{10}, day{23}, hours{10}, minutes{16}, seconds{0}};
+    h.backend.setDateTime(h.byTestId("DateTimeInput", "when"), morph::time::Timestamp{instant});
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "log"})") == R"("change commit")");
+    CHECK(readJson(*screen, R"({"ref": "committed"})") == R"("2026-10-23")");
+    CHECK(h.text("touched") == "true");
+}
+
+// A slider reports each step while a drag lasts, and the commit once the move finishes. Mutation: commit on every
+// change (the drag's first step commits too).
+TEST_CASE("interpreter slider: a drag reports each change, and a finished move also commits", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "slid",
+      "state": { "value": { "init": 0 }, "log": { "init": "" }, "committed": { "init": null } },
+      "view": { "kind": "column", "children": [
+        { "kind": "slider", "id": "level", "testId": "level", "min": 0, "max": 10, "step": 1,
+          "value": { "ref": "value" },
+          "onChange": [ { "set": "value", "value": { "ref": "event" } },
+                        { "set": "log", "value": { "fn": "concat", "args": [ { "ref": "log" }, "change " ] } } ],
+          "onCommit": [ { "set": "log", "value": { "fn": "concat", "args": [ { "ref": "log" }, "commit" ] } },
+                        { "set": "committed", "value": { "ref": "event" } } ] },
+        { "kind": "text", "testId": "touched",
+          "text": { "fn": "format", "args": [ "{0}", { "ref": "level.touched" } ] } } ] } })");
+    int const slider = h.byTestId("Slider", "level");
+    h.backend.dragSlider(slider, 3);
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "log"})") == R"("change ")");
+    CHECK(readJson(*screen, R"({"ref": "committed"})") == "null");
+    CHECK(h.text("touched") == "false");
+    h.backend.slide(slider, 5);
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "log"})") == R"("change change commit")");
+    CHECK(readJson(*screen, R"({"ref": "committed"})") == "5");
+    CHECK(h.text("touched") == "true");
+}

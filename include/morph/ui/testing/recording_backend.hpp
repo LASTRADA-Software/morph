@@ -456,6 +456,8 @@ struct Callbacks {
     std::function<void(std::optional<morph::time::Timestamp>)> dateTime;
     /// @brief From `SliderWidget::setOnChange`.
     std::function<void(std::int64_t)> slide;
+    /// @brief From `SliderWidget::setOnCommit`.
+    std::function<void(std::int64_t)> slideCommit;
     /// @brief From `FilePickerWidget::setOnPicked`.
     std::function<void(std::string)> picked;
     /// @brief From `DialogWidget::setOnDismiss`, `DrawerWidget::setOnDismiss` or `BannerWidget::setOnDismiss`.
@@ -1127,6 +1129,9 @@ public:
     }
     void setValue(std::int64_t value) override { set("value", std::to_string(value)); }
     void setOnChange(std::function<void(std::int64_t)> onChange) override { callbacks().slide = std::move(onChange); }
+    void setOnCommit(std::function<void(std::int64_t)> onCommit) override {
+        callbacks().slideCommit = std::move(onCommit);
+    }
 };
 
 /// @brief A fake `FilePickerWidget`: properties `mode`, `path`.
@@ -2127,12 +2132,27 @@ public:
         }
     }
 
-    /// @brief Moves a slider.
+    /// @brief Moves a slider to @p value, a finished move: `onChange` gets it, then `onCommit`.
     /// @param widgetId The slider.
     /// @param value The value moved to.
     /// @throws std::logic_error when the widget is not a slider.
     void slide(int widgetId, std::int64_t value) {
         if (detail::Record const* const record = editable(widgetId, "slide", {"Slider"}); record != nullptr) {
+            _store->setByUser(widgetId, "value", std::to_string(value));
+            // The change handler may destroy the slider, so the commit handler is copied before either runs.
+            auto const commit = record->callbacks.slideCommit;
+            invoke(record->callbacks.slide, value);
+            invoke(commit, value);
+        }
+    }
+
+    /// @brief Moves a slider to @p value while the move is still in progress: `onChange` gets it, and `onCommit` does
+    ///        not run until the move finishes. Named apart from `drag`, which drags one widget onto another.
+    /// @param widgetId The slider.
+    /// @param value The value moved to.
+    /// @throws std::logic_error when the widget is not a slider.
+    void dragSlider(int widgetId, std::int64_t value) {
+        if (detail::Record const* const record = editable(widgetId, "dragSlider", {"Slider"}); record != nullptr) {
             _store->setByUser(widgetId, "value", std::to_string(value));
             invoke(record->callbacks.slide, value);
         }
