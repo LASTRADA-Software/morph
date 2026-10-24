@@ -1,6 +1,6 @@
 # LIMS gallery gap log: what the ten designs need that ui/1 cannot express, and the defects found building them
 
-### G1: `{"env": "widthClass"}` is never set (defect)
+### G1: `{"env": "widthClass"}` is never set (defect) — filed as #1046
 - **Design(s):** 01, 02, 03, 04, 05, 06, 07
 - **Needs:** every design switches between an expanded (≥ 1200 px) and a compact (< 600 px) layout on the window's
   width class.
@@ -67,7 +67,7 @@
 - **Workaround used:** a muted `text` as the dialog's first child.
 - **Weight:** Low
 
-### G7: The Qt Quick dialog ignores the theme's surface (defect)
+### G7: The Qt Quick dialog ignores the theme's surface (defect) — filed as #1047
 - **Design(s):** 01, 02, 03
 - **Needs:** the dialog drawn as the theme's card: `color.surface` (#FFFFFF here), the card radius, padded content.
 - **ui/1 today:** `MorphDialog.qml`'s `Popup` sets no `background` (`grep -n background
@@ -115,7 +115,7 @@
 - **Workaround used:** an ordinary input with the barcode icon, `autofocus`, and a `focus` command after each scan.
 - **Weight:** Low
 
-### G12: `close: self` in an inline dialog asks the host to close the screen, not the dialog (defect)
+### G12: `close: self` in an inline dialog asks the host to close the screen, not the dialog (defect) — filed as #1048
 - **Design(s):** 02
 - **Needs:** a dialog's footer button that closes the dialog it is in.
 - **ui/1 today:** the author API documents `self` as "The dialog or drawer a command list runs in" and
@@ -189,7 +189,7 @@
   (expanded) or after the two large buttons (compact); no separator; the hint is part of the entry's label.
 - **Weight:** Medium
 
-### G19: The screen head overflows the shell's top bar (defect)
+### G19: The screen head overflows the shell's top bar (defect) — filed as #1049
 - **Design(s):** 03
 - **Needs:** a record's head: title, breadcrumb, three status tags and two actions, as the design draws it in two
   lines at 1000 px.
@@ -211,7 +211,7 @@
 - **Workaround used:** all five tabs on both layouts; Book opens a booking dialog rather than the Bookings tab.
 - **Weight:** Low
 
-### G21: The Qt Quick progress bar ignores the theme's accent (defect)
+### G21: The Qt Quick progress bar ignores the theme's accent (defect) — filed as #1050
 - **Design(s):** 03
 - **Needs:** the booking's elapsed bar in the accent green, thin, on a muted track.
 - **ui/1 today:** `MorphProgress.qml` sets no colour (`grep -n color src/qt_quick/qml/MorphProgress.qml` finds
@@ -220,7 +220,7 @@
 - **Workaround used:** none.
 - **Weight:** Low
 
-### G22: `progress` rounds an exact quotient to its places (defect)
+### G22: `progress` rounds an exact quotient to its places (defect) — filed as #1051
 - **Design(s):** 03
 - **Needs:** a progress value computed as a fraction, such as `29 / 100` for a booking 29 % elapsed.
 - **ui/1 today:** `div` keeps the exact quotient, "a decimal at the operands' places, which display rounds"
@@ -254,7 +254,7 @@
 - **Workaround used:** a column per pair, a muted `text` over a `text`; no dividers.
 - **Weight:** Low
 
-### G25: `forEach` drops its own common properties (defect)
+### G25: `forEach` drops its own common properties (defect) — filed as #1052
 - **Design(s):** 04, 05, 06, 07
 - **Needs:** a `forEach` with a `testId`, `visible`, `sizing` or `a11y`, as `document.md` says every node takes
   (`docs/spec/ui/document.md:150-157`).
@@ -297,7 +297,7 @@
   one page. 07 lists all fourteen samples to place.
 - **Weight:** Medium
 
-### G29: A table's selection cannot be bound or set
+### G29: A table's selection cannot be bound or set — filed as #1053
 - **Design(s):** 05
 - **Needs:** the sample table opens with three rows selected; "Clear", "Select all 312" and the header's "select all on
   this page" box change the selection; a bulk action clears it when done.
@@ -357,7 +357,7 @@
   only.
 - **Weight:** Low
 
-### G34: Qt Quick `keyValue` reports a polish loop for some caption and value widths (defect)
+### G34: Qt Quick `keyValue` reports a polish loop for some caption and value widths (defect) — filed as #1054
 - **Design(s):** 06
 - **Needs:** the stability study's summary as a `keyValue` (Product, Lot, Protocol, Pulls, First pull, Last pull,
   Containers), whose values follow the conditions.
