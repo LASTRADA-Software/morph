@@ -42,7 +42,7 @@ var searchData=
   ['wizardsteptitlekey_39',['wizardStepTitleKey',['../dc/d3c/forms_2i18n_8hpp.html#ad99d387ffb0f5f87ba7032580035fdea',1,'morph::forms::i18n']]],
   ['wizardtitlekey_40',['wizardTitleKey',['../dc/d3c/forms_2i18n_8hpp.html#ac7eba434747903fea599b72b2337907d',1,'morph::forms::i18n']]],
   ['wizardview_41',['wizardView',['../df/df7/wizard__view_8hpp.html#a4834b3606dfbe8a7b13eee0bf067bad1',1,'morph::forms']]],
-  ['workspace_42',['Workspace',['../d6/d77/classmorph_1_1ui_1_1Workspace.html#ab261a5690054f1171b8eaf6d1e168ccb',1,'morph::ui::Workspace']]],
+  ['workspace_42',['Workspace',['../d6/d77/classmorph_1_1ui_1_1Workspace.html#a340308fb37647b78ee0d5d12b133566e',1,'morph::ui::Workspace']]],
   ['workspacemodel_43',['WorkspaceModel',['../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a59abf2e501e4c249419202607c04846a',1,'morph::ui::WorkspaceModel']]],
   ['wrapped_44',['wrapped',['../df/dd0/classmorph_1_1backend_1_1SynchronousBackendAdapter.html#aed5d6e48caf89b9cb05085d392b5b2d0',1,'morph::backend::SynchronousBackendAdapter']]],
   ['write_45',['write',['../d4/d0c/classmorph_1_1ui_1_1author_1_1Screen.html#ae3739a9cb7918c38d816e0423626a0da',1,'morph::ui::author::Screen']]],

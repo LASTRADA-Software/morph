@@ -148,7 +148,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Opens an application's bundle through the UI service, verifying everything it fetches. </p>
 <p><span class="tt"><a class="el" href="#aad5da9bef541aa8dbed66a9e32bd8765" title="Opens the bundle. done is called once, from whichever thread the exchange calls back on; a synchronou...">open</a></span> runs <span class="tt">ui-hello</span>, refuses a bundle that needs a vocabulary the client does not speak, takes the manifest from the cache or fetches it by the digest and verifies it, runs <span class="tt">ui-catalog</span>, and fetches the files the principal may use that the cache does not hold, all at once, verifying each. A file that does not hash to its manifest entry, or a manifest that does not hash to the digest, refuses the whole bundle (<span class="tt">Unverified</span>). An unchanged manifest fetches nothing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00250">250</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a929ca25ac4e2d0e4f19b00bf33c0d694" name="a929ca25ac4e2d0e4f19b00bf33c0d694"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a929ca25ac4e2d0e4f19b00bf33c0d694">&#9670;&#160;</a></span>Done</h2>
@@ -164,7 +164,7 @@ Public Member Functions</h2></td></tr>
 
 <p>What <span class="tt"><a class="el" href="#aad5da9bef541aa8dbed66a9e32bd8765" title="Opens the bundle. done is called once, from whichever thread the exchange calls back on; a synchronou...">open</a></span> delivers. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00265">265</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -182,7 +182,7 @@ Public Member Functions</h2></td></tr>
 
 <p>What <span class="tt"><a class="el" href="#abf453da1ed705e58067dd3620363aa97" title="One step of a development client&#39;s reload (spec 5 §12): sends ui-hello, and when the manifest digest ...">poll</a></span> delivers: the changed bundle, nothing when the digest is the one already held, or why there is none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00276">276</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,7 +235,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00255">255</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00257">257</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -276,7 +276,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00269">269</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00271">271</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -322,7 +322,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00287">287</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -358,7 +358,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The bundle, or <span class="tt">Unreachable</span> when no verified manifest is cached. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00304">304</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00306">306</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>

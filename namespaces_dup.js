@@ -889,6 +889,10 @@ var namespaces_dup =
           [ "Single", "d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7a66ba162102bbf6ae31b522aec561735e", null ],
           [ "Multiple", "d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7aa0bf169f2539e893e00d7b1296bc4d8e", null ]
         ] ],
+        [ "HeadPlacement", "dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ec", [
+          [ "InPage", "dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50", null ],
+          [ "External", "dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779", null ]
+        ] ],
         [ "serveStdio", "dd/d2d/agent_8hpp.html#a8bba10fd599fe31365300f6f91bf3983", null ],
         [ "contentHash", "d0/dab/bundle_8hpp.html#adfb6354c46423a24584a795148d84a03", null ],
         [ "isContentHash", "d0/dab/bundle_8hpp.html#a0cc5b9e555c3d996f74102fa3c926e7a", null ],
@@ -1052,7 +1056,7 @@ var namespaces_dup =
         [ "kMaxThemeTokens", "d9/df6/ui_2theme_8hpp.html#adfc8b5a52d66901cb00798ebc8a4af0f", null ],
         [ "kMaxThemeVariants", "d9/df6/ui_2theme_8hpp.html#ae187550ac7fc325bfd25003bb1c61c41", null ],
         [ "kMaxThemeIcons", "d9/df6/ui_2theme_8hpp.html#a924af3fbed9de8c7b9862c703533fde9", null ],
-        [ "kFrameworkIcons", "d9/df6/ui_2theme_8hpp.html#a1fca6e21526df5f46ad14b45e2c7291e", null ],
+        [ "kFrameworkIcons", "d9/df6/ui_2theme_8hpp.html#aa7b6d0a81e10c3a198db1b7fe8e383d6", null ],
         [ "kMaxAliasChain", "d9/df6/ui_2theme_8hpp.html#a6e4b4f213f8422895388c9d7fa8fa591", null ],
         [ "kThemeTokens", "d9/df6/ui_2theme_8hpp.html#aaa8953723e22531ca13b715c866b1cca", null ],
         [ "kMaxJsonDepth", "d6/dda/value_8hpp.html#acc5f1eed1d2fc9a76dccdbbffbda77e9", null ],

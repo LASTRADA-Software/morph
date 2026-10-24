@@ -154,14 +154,54 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceTab" id="r_morph_3A_3Aui_3A_3AWorkspaceTab"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html">morph::ui::WorkspaceTab</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One open tab, as an application's tab menu or a test reads it.  <a href="../../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AWorkspace" id="r_morph_3A_3Aui_3A_3AWorkspace"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html">morph::ui::Workspace</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> over screens: a tab bar over a <span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html" title="The workspace&#39;s tabs with no widgets: which screens are open, in which order, which is active,...">WorkspaceModel</a></span>, one screen instance per tab, mounted into the tab's page through <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>, with the screen's head row above it.  <a href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> over screens: a tab bar over a <span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html" title="The workspace&#39;s tabs with no widgets: which screens are open, in which order, which is active,...">WorkspaceModel</a></span>, one screen instance per tab, mounted into the tab's page through <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>, with the screen's head row above it or, when the placement is <span class="tt">External</span>, mounted by the host instead.  <a href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html#details">More...</a><br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
+Enumerations</h2></td></tr>
+<tr class="memitem:ac588613cfacc29776a836250b58694ec" id="r_ac588613cfacc29776a836250b58694ec"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#ac588613cfacc29776a836250b58694ec">morph::ui::HeadPlacement</a> : std::uint8_t { <a class="el" href="#ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50">InPage</a>
+, <a class="el" href="#ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779">External</a>
+ }</td></tr>
+<tr class="memdesc:ac588613cfacc29776a836250b58694ec"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a workspace draws the active screen's head row.  <a href="#ac588613cfacc29776a836250b58694ec">More...</a><br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The workspace shell (spec 6 §7, §15): tabs over screens, mounted through a <span class="tt">DocumentScreenHost</span>. </p>
 <p>Specified in <span class="tt">docs/spec/ui/workspace.md</span>. </p>
 
 <p class="definition">Definition in file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
-</div></div><!-- contents -->
+</div><a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Enumeration Type Documentation</h2>
+<a id="ac588613cfacc29776a836250b58694ec" name="ac588613cfacc29776a836250b58694ec"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac588613cfacc29776a836250b58694ec">&#9670;&#160;</a></span>HeadPlacement</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#ac588613cfacc29776a836250b58694ec">morph::ui::HeadPlacement</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Where a workspace draws the active screen's head row. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50" name="ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50"></a>InPage&#160;</td><td class="fielddoc"><p>Above each page, inside the workspace. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779" name="ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779"></a>External&#160;</td><td class="fielddoc"><p>Nowhere: the host mounts <span class="tt">headRowForActive()</span> where it chooses, and a page holds only its screen. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+</div><!-- contents -->
 </div><!-- doc-content -->
 <div id="page-nav" class="page-nav-panel">
 <div id="page-nav-resize-handle"></div>

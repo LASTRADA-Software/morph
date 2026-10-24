@@ -19,5 +19,6 @@ var searchData=
   ['expired_16',['Expired',['../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bca24fe48030f7d3097d5882535b04c3fa8',1,'morph::session']]],
   ['explicit_17',['Explicit',['../d5/dc9/field__model_8hpp.html#ad7bd075645a4f59f7cf110b0b4fc3510a9d71760e2dd451db2df354d0fd29cd7f',1,'morph::forms']]],
   ['expr_18',['Expr',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff',1,'morph::ui::detail']]],
-  ['exprrecord_19',['ExprRecord',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1ac42f2bbf64f720d182fbc5339a743281',1,'morph::ui::detail']]]
+  ['exprrecord_19',['ExprRecord',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1ac42f2bbf64f720d182fbc5339a743281',1,'morph::ui::detail']]],
+  ['external_20',['External',['../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779',1,'morph::ui']]]
 ];

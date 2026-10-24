@@ -83,7 +83,7 @@ var searchData=
   ['wizardview_80',['wizardView',['../df/df7/wizard__view_8hpp.html#a4834b3606dfbe8a7b13eee0bf067bad1',1,'morph::forms']]],
   ['wizardviewoptions_81',['WizardViewOptions',['../d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html',1,'morph::forms']]],
   ['worker_82',['worker',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html#af450e166892e8dbd892468e736703eb0',1,'morph::table::EngineOptions']]],
-  ['workspace_83',['Workspace',['../d6/d77/classmorph_1_1ui_1_1Workspace.html',1,'morph::ui::Workspace'],['../d6/d77/classmorph_1_1ui_1_1Workspace.html#ab261a5690054f1171b8eaf6d1e168ccb',1,'morph::ui::Workspace::Workspace()']]],
+  ['workspace_83',['Workspace',['../d6/d77/classmorph_1_1ui_1_1Workspace.html',1,'morph::ui::Workspace'],['../d6/d77/classmorph_1_1ui_1_1Workspace.html#a340308fb37647b78ee0d5d12b133566e',1,'morph::ui::Workspace::Workspace()']]],
   ['workspace_2ehpp_84',['workspace.hpp',['../dc/de1/workspace_8hpp.html',1,'']]],
   ['workspace_5fmodel_2ehpp_85',['workspace_model.hpp',['../d0/d27/workspace__model_8hpp.html',1,'']]],
   ['workspacemodel_86',['WorkspaceModel',['../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html',1,'morph::ui::WorkspaceModel'],['../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a59abf2e501e4c249419202607c04846a',1,'morph::ui::WorkspaceModel::WorkspaceModel()']]],

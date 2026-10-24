@@ -1,6 +1,6 @@
 var classmorph_1_1ui_1_1Workspace =
 [
-    [ "Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html#ab261a5690054f1171b8eaf6d1e168ccb", null ],
+    [ "Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a340308fb37647b78ee0d5d12b133566e", null ],
     [ "~Workspace", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a5d77ac885f19e43986785df74f8bf255", null ],
     [ "root", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a4dc7cee5793b4171dae5c385e6cd1983", null ],
     [ "model", "d6/d77/classmorph_1_1ui_1_1Workspace.html#a7e33472efabd86a9aa0c10513b0c8218", null ],

@@ -178,5 +178,6 @@ var searchData=
   ['exprparser_175',['ExprParser',['../d1/d2b/classmorph_1_1ui_1_1detail_1_1ExprParser.html',1,'morph::ui::detail']]],
   ['exprptr_176',['ExprPtr',['../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5',1,'morph::ui']]],
   ['exprrecord_177',['ExprRecord',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1ac42f2bbf64f720d182fbc5339a743281',1,'morph::ui::detail']]],
-  ['extra_178',['extra',['../d9/d50/structmorph_1_1ui_1_1Command.html#a72d8d48cf5e28433fe4338f42c172d02',1,'morph::ui::Command']]]
+  ['external_178',['External',['../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779',1,'morph::ui']]],
+  ['extra_179',['extra',['../d9/d50/structmorph_1_1ui_1_1Command.html#a72d8d48cf5e28433fe4338f42c172d02',1,'morph::ui::Command']]]
 ];

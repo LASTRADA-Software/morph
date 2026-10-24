@@ -1,5 +1,10 @@
 var NAVTREEINDEX32 =
 {
+"df/d19/structmorph_1_1model_1_1HandlerResult.html":[3,0,0,14,7],
+"df/d19/structmorph_1_1model_1_1HandlerResult.html#ad5e7043f0798997df9c66f6432477e94":[3,0,0,14,7,0],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html":[1,0,0,1,155],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html":[3,0,0,28,157],
+"df/d1c/classmorph_1_1ui_1_1PanelWidget.html#a3dccef17042a95c5ddde0a7bcd5d61cd":[1,0,0,1,155,5],
 "df/d1c/classmorph_1_1ui_1_1PanelWidget.html#a3dccef17042a95c5ddde0a7bcd5d61cd":[3,0,0,28,157,5],
 "df/d1c/classmorph_1_1ui_1_1PanelWidget.html#a4404da9e2ed2b0c94a7f6692eeeaaa79":[1,0,0,1,155,4],
 "df/d1c/classmorph_1_1ui_1_1PanelWidget.html#a4404da9e2ed2b0c94a7f6692eeeaaa79":[3,0,0,28,157,4],
@@ -244,10 +249,5 @@ var NAVTREEINDEX32 =
 "df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html#ac153dfd68e2eefed24a6a823bf12998b":[1,0,0,1,7,2],
 "df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html#ac153dfd68e2eefed24a6a823bf12998b":[3,0,0,28,9,2],
 "df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html#ad30c6bfc9dcf40fb207bab5d40c392f2":[1,0,0,1,7,0],
-"df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html#ad30c6bfc9dcf40fb207bab5d40c392f2":[3,0,0,28,9,0],
-"df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html#ae48ceaf981ed57991de9490bf0fe67ae":[1,0,0,1,7,3],
-"df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html#ae48ceaf981ed57991de9490bf0fe67ae":[3,0,0,28,9,3],
-"df/d6a/attributes_8hpp_source.html":[4,0,0,17],
-"df/d6c/structmorph_1_1forms_1_1PendingConfirm.html":[3,0,0,10,45],
-"df/d6c/structmorph_1_1forms_1_1PendingConfirm.html#a1f706036cd6b6958191a4257c03d60f7":[3,0,0,10,45,2]
+"df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html#ad30c6bfc9dcf40fb207bab5d40c392f2":[3,0,0,28,9,0]
 };

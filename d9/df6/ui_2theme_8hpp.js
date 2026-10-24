@@ -54,7 +54,7 @@ var ui_2theme_8hpp =
     [ "morph::ui::kMaxThemeTokens", "d9/df6/ui_2theme_8hpp.html#adfc8b5a52d66901cb00798ebc8a4af0f", null ],
     [ "morph::ui::kMaxThemeVariants", "d9/df6/ui_2theme_8hpp.html#ae187550ac7fc325bfd25003bb1c61c41", null ],
     [ "morph::ui::kMaxThemeIcons", "d9/df6/ui_2theme_8hpp.html#a924af3fbed9de8c7b9862c703533fde9", null ],
-    [ "morph::ui::kFrameworkIcons", "d9/df6/ui_2theme_8hpp.html#a1fca6e21526df5f46ad14b45e2c7291e", null ],
+    [ "morph::ui::kFrameworkIcons", "d9/df6/ui_2theme_8hpp.html#aa7b6d0a81e10c3a198db1b7fe8e383d6", null ],
     [ "morph::ui::kMaxAliasChain", "d9/df6/ui_2theme_8hpp.html#a6e4b4f213f8422895388c9d7fa8fa591", null ],
     [ "morph::ui::detail::kPixelsPerRem", "d9/df6/ui_2theme_8hpp.html#aa75d5224e69a0ed975ce8f1494c59cc1", null ],
     [ "morph::ui::detail::kKnownTokenTypes", "d9/df6/ui_2theme_8hpp.html#a2f2fa03b36507a9424d191f5f0a20b0a", null ],

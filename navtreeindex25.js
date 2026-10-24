@@ -131,6 +131,11 @@ var NAVTREEINDEX25 =
 "dc/ddf/classmorph_1_1ui_1_1MemoryBundleStore.html#adbc19ba982926eb39b35c0acae3897c8":[1,0,0,1,126,5],
 "dc/ddf/classmorph_1_1ui_1_1MemoryBundleStore.html#adbc19ba982926eb39b35c0acae3897c8":[3,0,0,28,128,5],
 "dc/de1/workspace_8hpp.html":[4,0,0,15,35],
+"dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ec":[1,0,0,1,314],
+"dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779":[1,0,0,1,314,1],
+"dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779":[4,0,0,15,35,2,1],
+"dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50":[1,0,0,1,314,0],
+"dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50":[4,0,0,15,35,2,0],
 "dc/de1/workspace_8hpp_source.html":[4,0,0,15,35],
 "dc/de2/structmorph_1_1effects_1_1changesInstance.html":[3,0,0,7,4],
 "dc/de4/wire_8hpp_source.html":[4,0,0,1,28],
@@ -244,10 +249,5 @@ var NAVTREEINDEX25 =
 "dd/d10/classmorph_1_1exec_1_1IoLoop.html#a251b1113b7ee6a05a5eb3a50946babeb":[3,0,0,8,1,3],
 "dd/d10/classmorph_1_1exec_1_1IoLoop.html#a379935ed8b83aa12760352f5c2ed91f2":[3,0,0,8,1,6],
 "dd/d10/classmorph_1_1exec_1_1IoLoop.html#a421663767c037426336b390bb5b6f6d6":[3,0,0,8,1,1],
-"dd/d10/classmorph_1_1exec_1_1IoLoop.html#a889a87694e3a19d068d503cd1c58a7b7":[3,0,0,8,1,4],
-"dd/d10/classmorph_1_1exec_1_1IoLoop.html#aa324f8ed446c4bef6138604259f16845":[3,0,0,8,1,5],
-"dd/d10/classmorph_1_1exec_1_1IoLoop.html#aaf3ba04264b876d99e1c6222d002dfc5":[3,0,0,8,1,2],
-"dd/d10/classmorph_1_1exec_1_1IoLoop.html#ab121dc0cd51dabc9f178903af472bfdf":[3,0,0,8,1,8],
-"dd/d13/structmorph_1_1ui_1_1OptimisticDecl.html":[1,0,0,1,153],
-"dd/d13/structmorph_1_1ui_1_1OptimisticDecl.html":[3,0,0,28,155]
+"dd/d10/classmorph_1_1exec_1_1IoLoop.html#a889a87694e3a19d068d503cd1c58a7b7":[3,0,0,8,1,4]
 };

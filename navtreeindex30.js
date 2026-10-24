@@ -1,5 +1,10 @@
 var NAVTREEINDEX30 =
 {
+"de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#a085e01e7567e1d56b2f1cf51bf374fb1":[1,0,0,1,65,2],
+"de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#a085e01e7567e1d56b2f1cf51bf374fb1":[3,0,0,28,67,2],
+"de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#a0f81e79fac59c25646e651e2c9f3415b":[1,0,0,1,65,3],
+"de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#a0f81e79fac59c25646e651e2c9f3415b":[3,0,0,28,67,3],
+"de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#a28c5e3b9b0506758bafaf7db26f463f2":[1,0,0,1,65,1],
 "de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#a28c5e3b9b0506758bafaf7db26f463f2":[3,0,0,28,67,1],
 "de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#ab39ab95b1b516cc499cdfa34e30bcf27":[1,0,0,1,65,4],
 "de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#ab39ab95b1b516cc499cdfa34e30bcf27":[3,0,0,28,67,4],
@@ -244,10 +249,5 @@ var NAVTREEINDEX30 =
 "de/dd9/recording__backend_8hpp.html":[4,0,0,15,0,2],
 "de/dd9/recording__backend_8hpp_source.html":[4,0,0,15,0,2],
 "de/ddc/classmorph_1_1reactive_1_1Effect.html":[1,0,0,0,2],
-"de/ddc/classmorph_1_1reactive_1_1Effect.html":[3,0,0,20,3],
-"de/ddc/classmorph_1_1reactive_1_1Effect.html#a55174ea34b70f852a7523752e20c1a78":[1,0,0,0,2,0],
-"de/ddc/classmorph_1_1reactive_1_1Effect.html#a55174ea34b70f852a7523752e20c1a78":[3,0,0,20,3,0],
-"de/de0/coroutine_8hpp.html":[4,0,0,1,9],
-"de/de0/coroutine_8hpp_source.html":[4,0,0,1,9],
-"de/de3/structmorph_1_1ui_1_1Table.html":[1,0,0,1,216]
+"de/ddc/classmorph_1_1reactive_1_1Effect.html":[3,0,0,20,3]
 };

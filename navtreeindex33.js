@@ -1,5 +1,10 @@
 var NAVTREEINDEX33 =
 {
+"df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html#ae48ceaf981ed57991de9490bf0fe67ae":[1,0,0,1,7,3],
+"df/d68/structmorph_1_1ui_1_1ActionRecordInfo.html#ae48ceaf981ed57991de9490bf0fe67ae":[3,0,0,28,9,3],
+"df/d6a/attributes_8hpp_source.html":[4,0,0,17],
+"df/d6c/structmorph_1_1forms_1_1PendingConfirm.html":[3,0,0,10,45],
+"df/d6c/structmorph_1_1forms_1_1PendingConfirm.html#a1f706036cd6b6958191a4257c03d60f7":[3,0,0,10,45,2],
 "df/d6c/structmorph_1_1forms_1_1PendingConfirm.html#a3523c1c68b2e93909fda552a5be4f350":[3,0,0,10,45,0],
 "df/d6c/structmorph_1_1forms_1_1PendingConfirm.html#a8741b7978db26d3aa9f9bb9a3bab192d":[3,0,0,10,45,1],
 "df/d74/qt__websocket__server_8hpp_source.html":[4,0,0,7,4],
@@ -244,10 +249,5 @@ var NAVTREEINDEX33 =
 "dir_9c0da41caaffffc8847239098d349f93.html":[4,0,0,2],
 "dir_a68ff5ce6d8fa55594dd9459435a4228.html":[4,0,0,14],
 "dir_a8ab1370f87f29d8fe28dfdbdb3a203c.html":[4,0,0,3,1,0],
-"dir_a963dab7696dea6aaee5a2ab545c471f.html":[4,0,0,9,0],
-"dir_b70d1a0a2762c63026d60b28530dbb2e.html":[4,0,0,12],
-"dir_bffcccf840396238db47ddeb455f524f.html":[4,0,0,3,1],
-"dir_c45115ca617597ec13666b7791b40bdb.html":[4,0,0,5],
-"dir_c94d8eb8404db33129cdf5c8c3254fc4.html":[4,0,0,3,0],
-"dir_d90c0bea7afa7342b7f0cc0215033638.html":[4,0,0,9,1]
+"dir_a963dab7696dea6aaee5a2ab545c471f.html":[4,0,0,9,0]
 };
