@@ -63,8 +63,15 @@ MorphWidget {
     Accessible.role: Accessible.Row
     Accessible.selected: selected
 
-    Keys.onReturnPressed: root.fire("activate", undefined)
-    Keys.onEnterPressed: root.fire("activate", undefined)
+    // A chord the table declares comes before the row's activation.
+    Keys.onReturnPressed: event => {
+        if (!(root.table && root.table.takeOwnChord(event)))
+            root.fire("activate", undefined)
+    }
+    Keys.onEnterPressed: event => {
+        if (!(root.table && root.table.takeOwnChord(event)))
+            root.fire("activate", undefined)
+    }
 
     Loader {
         id: backgroundLoader

@@ -43,6 +43,9 @@ MorphField {
         font: Theme.bodyFont
         id: combo
         visible: !root.radio
+        // The widget's own chords come before the control's handling of the key.
+        Keys.priority: Keys.BeforeItem
+        Keys.onPressed: event => event.accepted = root.takeOwnChord(event)
         width: root.controlWidth
         palette.buttonText: root.scheme.text
         palette.text: root.scheme.text
@@ -88,6 +91,9 @@ MorphField {
     Column {
         id: radios
         visible: root.radio
+        // The widget's own chords come before the control's handling of the key.
+        Keys.priority: Keys.BeforeItem
+        Keys.onPressed: event => event.accepted = root.takeOwnChord(event)
         width: root.controlWidth
         Accessible.role: root.accessibleRole
         Accessible.name: root.accessibleName

@@ -37,6 +37,9 @@ public:
     virtual void edited() = 0;
     /// Enter was pressed. Like `edited`, it may end in a handler that destroys the widget.
     virtual void submitted() = 0;
+    /// Whether Enter stops at the field. When it does not, the field still commits on Enter, and the key then goes on
+    /// outwards to the ancestors' chords (a dialog's default).
+    [[nodiscard]] virtual bool submits() const = 0;
     /// The focus left the field while the user could reach it. Like `edited`, it may end in a handler that destroys
     /// the widget.
     virtual void left() = 0;
@@ -103,6 +106,8 @@ public:
 private:
     void edited() override;
     void submitted() override;
+    /// Only a field given a submit handler takes Enter for itself.
+    [[nodiscard]] bool submits() const override { return static_cast<bool>(_onSubmit); }
     void left() override;
     [[nodiscard]] std::optional<::core::tui::EventResult> intercept(::core::tui::KeyEvent const& /*key*/) override {
         return std::nullopt;
@@ -143,6 +148,8 @@ public:
 private:
     void edited() override;
     void submitted() override;
+    /// Enter commits what was typed, and stops here.
+    [[nodiscard]] bool submits() const override { return true; }
     void left() override;
     [[nodiscard]] std::optional<::core::tui::EventResult> intercept(::core::tui::KeyEvent const& key) override;
     [[nodiscard]] std::string_view placeholder() const override { return {}; }
@@ -178,6 +185,8 @@ public:
 private:
     void edited() override {}
     void submitted() override;
+    /// Enter picks what was typed, and stops here.
+    [[nodiscard]] bool submits() const override { return true; }
     void left() override;
     [[nodiscard]] std::optional<::core::tui::EventResult> intercept(::core::tui::KeyEvent const& /*key*/) override {
         return std::nullopt;

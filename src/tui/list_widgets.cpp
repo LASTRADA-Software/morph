@@ -141,16 +141,17 @@ public:
             return EventResult::Ignored;
         }
         if (auto const* key = std::get_if<::core::tui::KeyEvent>(&event)) {
+            // The widget's own chords come before the list's keys, so a chord it declares takes that key from it.
+            if (EventResult const result = owner().chord(*key); result != EventResult::Ignored) {
+                return result;
+            }
             if (isKey(*key, KeyCode::Tab) || isKey(*key, KeyCode::Escape)) {
                 return EventResult::Ignored;
             }
             if (auto const handled = _lists->listKey(*key)) {
                 return *handled;
             }
-            if (EventResult const result = List::onEvent(event); result != EventResult::Ignored) {
-                return result;
-            }
-            return owner().chord(*key);
+            return List::onEvent(event);
         }
         return List::onEvent(event);
     }

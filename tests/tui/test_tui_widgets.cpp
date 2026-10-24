@@ -171,7 +171,8 @@ TEST_CASE("tui widgets: Enter, Space and a click activate a button; a disabled o
     CHECK(clicks == 3);
 }
 
-TEST_CASE("tui widgets: a checkbox toggles on Enter and reports the new state; setChecked reports nothing",
+// Mutation: activate the checkbox on Enter too (Enter then toggles it).
+TEST_CASE("tui widgets: a checkbox toggles on Space, not Enter, and reports the new state; setChecked reports nothing",
           "[tui][widgets]") {
     Harness harness{20, 1};
     auto const box = harness.make<CheckboxImpl>(nullptr);
@@ -181,7 +182,9 @@ TEST_CASE("tui widgets: a checkbox toggles on Enter and reports the new state; s
     box->setOnToggle([&](bool checked) { toggles.push_back(checked); });
     CHECK(harness.draw() == Rows{"[ ] Done"});
     harness.focus(*box);
-    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
+    CHECK(toggles.empty());
+    static_cast<void>(harness.type(" "));
     CHECK(toggles == std::vector<bool>{true});
     CHECK(harness.draw() == Rows{"[x] Done"});
     box->setChecked(false);
@@ -276,12 +279,12 @@ TEST_CASE("tui widgets: a focused widget inside a hidden container takes no key 
     harness.focus(*box);
 
     outer->setVisible(false);
-    CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
+    CHECK(harness.type(" ") == EventResult::Ignored);
     CHECK(toggles.empty());
     CHECK(harness.draw().empty());
 
     outer->setVisible(true);
-    CHECK(harness.key(KeyCode::Enter) == EventResult::Handled);
+    CHECK(harness.type(" ") == EventResult::Handled);
     CHECK(toggles == std::vector<bool>{true});
 }
 

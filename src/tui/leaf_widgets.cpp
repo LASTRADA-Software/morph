@@ -204,8 +204,9 @@ void CheckboxImpl::paint(::core::tui::Canvas& canvas) {
     paintMarks(canvas);
 }
 
+// Space only: Enter goes on outwards, so a dialog's default runs from a focused check box as from a field.
 ::core::tui::EventResult CheckboxImpl::key(::core::tui::KeyEvent const& key) {
-    if (!isActivation(key)) {
+    if (::core::tui::withoutLockKeys(key.modifiers) != ::core::tui::Modifier::None || key.codepoint != U' ') {
         return ::core::tui::EventResult::Ignored;
     }
     activate();

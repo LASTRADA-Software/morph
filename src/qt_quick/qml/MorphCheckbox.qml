@@ -40,6 +40,9 @@ MorphField {
                 font.pixelSize: parent.height * 0.75
             }
         }
+        // The widget's own chords come before the control's handling of the key.
+        Keys.priority: Keys.BeforeItem
+        Keys.onPressed: event => event.accepted = root.takeOwnChord(event)
         // Declared, as the text input's field declares them.
         Accessible.role: root.accessibleRole
         Accessible.name: root.accessibleName

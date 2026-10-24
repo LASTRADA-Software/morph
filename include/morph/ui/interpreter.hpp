@@ -6079,10 +6079,14 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             commit("blur", text);
             runEvent(onCommit, ctx, Value{text});
         };
-        spec.onSubmit = [this, ctx, commit, onSubmit = node.event("onSubmit")](std::string const& text) {
-            commit("enter", text);
-            runEvent(onSubmit, ctx, Value{text});
-        };
+        // Only a field that does something on Enter submits: one without `onSubmit` that does not commit on Enter
+        // lets Enter go on to its ancestors' chords, a dialog's `default` among them.
+        if (Commands const* const onSubmit = node.event("onSubmit"); onSubmit != nullptr || commitOn == "enter") {
+            spec.onSubmit = [this, ctx, commit, onSubmit](std::string const& text) {
+                commit("enter", text);
+                runEvent(onSubmit, ctx, Value{text});
+            };
+        }
         spec.placeholder = textProp("placeholder");
         std::string const mode = onceText("mode");
         spec.mode = TextInputMode::SingleLine;

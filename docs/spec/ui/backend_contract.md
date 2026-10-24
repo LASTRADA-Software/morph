@@ -52,7 +52,19 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
 - **Chords.** `setKeys(chords, onChord)` declares the chords a widget handles while focus is inside
   it, and `onChord` receives the chord pressed. A chord pressed while focus is inside several
   widgets that declare it goes to the innermost of them only, and a chord pressed inside a widget
-  that takes no input (below) goes to none.
+  that takes no input (below) goes to none. A key pressed with focus on a widget goes, the same on every backend:
+  1. to a chord the focused widget declares itself, since declaring it on that very node is how an author says the
+     key means something else there;
+  2. then to the widget's own handling of the key, for the keys its kind takes. A button takes Enter and Space,
+     which click it. A single-line or password text input takes Enter only when it has a submit handler: it commits,
+     submits, and the key stops there; without one it commits, and Enter goes on. A check box takes Space, which
+     toggles it, and lets Enter go on. A table takes Enter, which activates the current row. Every other key a kind
+     handles (editing keys, arrows, a list's navigation) is its own as before;
+  3. then to the ancestors' chords, innermost first, for a key the widget left. A dialog's Enter chord (a document's
+     `default`) is one of them, so it runs for Enter that no focused widget took.
+
+  The mount gives `setOnSubmit` an empty handler for a text input without `onSubmit`, and a backend reads an empty
+  handler as "this field does not submit".
 - **Read-only.** A field made read-only by `setReadOnly(true)` shows its value, takes focus and
   lets its text be selected, and reports no edit, submit or commit; `setReadOnly(false)` makes it
   editable again.
@@ -320,9 +332,13 @@ The headless reference backend and the test double for everything above the cont
     `slide` and `pick`.
   - `chooseMenuEntry` and `chooseIndex` on a menu run nothing for a path that names no entry, an
     entry with a submenu, or an entry that is disabled or inside a disabled one.
-  - `press(id, chord)` presses a chord with focus on widget `id`: the innermost widget from `id`
-    outwards that declares the chord receives it, and `press` returns whether one did. It changes
-    no recorded focus.
+  - `press(id, chord)` presses a chord with focus on widget `id`, in the key order of **Chords** above: a chord
+    `id` declares; then the built-in keys of its kind (a `Button`'s `Enter` or `Space` clicks it; a single-line or
+    password `TextInput`'s `Enter` commits, then submits and stops when the field has a submit handler, and goes on
+    when it has none; a `Checkbox`'s `Space` toggles it; a `Table`'s `Enter` activates its first marked row, and
+    stops there whether or not one is marked); then the innermost ancestor that declares the chord. A handler that
+    destroys `id` stops the key there. `press` returns whether any step took the key. It changes no recorded
+    focus.
   - A helper used on a kind it does not apply to throws `std::logic_error`, and so does an action
     no user could take: choosing a key the Select does not offer, collapsing a panel that is not
     collapsible, selecting a key with no row, a row twice, any row in a `None` table or more than
@@ -442,15 +458,26 @@ Each case is named by the rule it checks:
 27. A chord goes to the innermost widget that declares it, and one only an outer widget declares
     reaches that widget.
 28. A chord pressed inside a container hidden two levels up runs nothing; while shown it runs once.
-29. The first `autofocus` widget in document order has focus once the mount completes.
-30. A menu reports only an enabled entry without a submenu, and an entry enabled later can be
+29. Enter on a focused button that declares an Enter chord runs the chord, not the click.
+30. Enter on a focused button inside a column that declares an Enter chord clicks the button, and the column's
+    chord does not run.
+31. In a dialog whose content column declares an Enter chord, Enter on a single-line text input with a submit
+    handler commits and submits it, and the dialog's chord does not run.
+32. In the same dialog, Enter on a single-line text input without a submit handler commits it, and the dialog's
+    chord runs once.
+33. In the same dialog, Enter on a focused check box leaves it unchanged and runs the dialog's chord; Space toggles
+    it and runs no chord.
+34. Enter on a single-line text input that declares an Enter chord itself runs the chord, and neither commits nor
+    submits.
+35. The first `autofocus` widget in document order has focus once the mount completes.
+36. A menu reports only an enabled entry without a submenu, and an entry enabled later can be
     chosen.
-31. Typing into a read-only input reaches no handler and leaves its value; once editable again,
+37. Typing into a read-only input reaches no handler and leaves its value; once editable again,
     typing reaches `onChange`.
-32. Dismissing a dismissible banner reaches `onDismiss` once, and the banner stays shown.
-33. A closed collapsible section's content takes no click and its header does; the user's opening
+38. Dismissing a dismissible banner reaches `onDismiss` once, and the banner stays shown.
+39. A closed collapsible section's content takes no click and its header does; the user's opening
     reaches `onToggle`, and once the application opens it the content takes clicks.
-34. A drop zone takes a drop of one accepted file, compared without case, and refuses a file it
+40. A drop zone takes a drop of one accepted file, compared without case, and refuses a file it
     does not accept and several files when it takes one.
 
 ### What the probe cannot reach

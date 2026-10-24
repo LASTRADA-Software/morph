@@ -272,7 +272,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 34);
+    REQUIRE(cases.size() == 40);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -328,6 +328,12 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
           "a dismissal the document refuses leaves the dialog open",
           "a chord goes to the innermost widget that declares it",
           "a chord pressed inside a hidden container runs nothing",
+          "a chord the focused widget declares comes before its own key",
+          "a focused button takes Enter before its ancestors' chords",
+          "a submitting field in a dialog takes Enter from the dialog",
+          "a field without a submit commits on Enter and lets the dialog have it",
+          "a check box toggles on Space and lets the dialog have Enter",
+          "a field's own Enter chord comes before its commit and submit",
           "a menu reports only an enabled entry without a submenu", "a read-only input takes no edit",
           "a dismissed banner reports it and stays shown",
           "a closed collapsible's content takes no input, its header does",

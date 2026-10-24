@@ -344,11 +344,13 @@ EventResult WidgetBase::dispatch(::core::tui::InputEvent const& event) {
     }
     if (auto const* pressed = std::get_if<::core::tui::KeyEvent>(&event);
         pressed != nullptr && actionable() && !blockedByDialog()) {
-        // A handler of the widget's own key may destroy it; only an ignored key goes on to its chords.
-        if (EventResult const result = key(*pressed); result != EventResult::Ignored) {
+        // A chord the widget declares comes before its own handling of the key: declaring it on this very node is
+        // how an author says the key means something else here. Either handler may destroy the widget, so a handled
+        // key returns at once.
+        if (EventResult const result = chord(*pressed); result != EventResult::Ignored) {
             return result;
         }
-        return chord(*pressed);
+        return key(*pressed);
     }
     return EventResult::Ignored;
 }

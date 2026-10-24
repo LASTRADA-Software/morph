@@ -149,6 +149,12 @@ Item {
         return root.host ? root.host.ask(name, payload) : false
     }
 
+    // Runs the chord a key is, when this widget declares it; returns whether it did. A control calls it before its
+    // own handling of a key, so a chord declared on the very node takes that key from the control.
+    function takeOwnChord(event: var): bool {
+        return root.chords.length > 0 && root.question("chord", [event.key, event.modifiers])
+    }
+
     // A content child under an alignment other than stretch keeps its own extent across; a stretch child keeps its
     // fill, and its maximum with the alignment places it.
     Layout.fillWidth: widthKind === 2 || (widthKind === 0 && fillsWidth && fillsAcross && !(alignAcross === 1 && placedAlign !== 0))
@@ -185,7 +191,7 @@ Item {
     }
 
     Keys.onPressed: event => {
-        if (root.chords.length > 0 && root.question("chord", [event.key, event.modifiers]))
+        if (root.takeOwnChord(event))
             event.accepted = true
     }
 

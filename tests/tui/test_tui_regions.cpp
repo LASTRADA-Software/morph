@@ -200,10 +200,10 @@ TEST_CASE("tui fields: a read-only checkbox takes the focus and reports no toggl
     static_cast<void>(harness.draw());
     harness.focus(*box);
     CHECK(harness.focused(*box));
-    static_cast<void>(harness.key(core::tui::KeyCode::Enter));
+    static_cast<void>(harness.type(" "));
     CHECK(toggles.empty());
     box->setReadOnly(false);
-    static_cast<void>(harness.key(core::tui::KeyCode::Enter));
+    static_cast<void>(harness.type(" "));
     CHECK(toggles == std::vector<bool>{true});
 }
 
@@ -258,8 +258,9 @@ TEST_CASE("tui menu: Right opens a submenu, Left goes back, and a choice reports
     CHECK(menu->level().empty());
 }
 
-// Mutation: run the chords of a widget whose own key took the event (Enter on the button then runs both).
-TEST_CASE("tui chords: a button's own key wins over its chord, an ignored key reaches the chord", "[tui][chords]") {
+// Mutation: try the button's own key before its chords (Enter then clicks it, and the chord never runs).
+TEST_CASE("tui chords: a button's chord wins over its own key, and a key it does not declare clicks",
+          "[tui][chords]") {
     Harness harness{30, 3};
     auto const button = harness.make<ButtonImpl>(nullptr);
     std::vector<std::string> chords;
@@ -270,14 +271,17 @@ TEST_CASE("tui chords: a button's own key wins over its chord, an ignored key re
     static_cast<void>(harness.draw());
     harness.focus(*button);
     CHECK(harness.key(core::tui::KeyCode::Enter) == core::tui::EventResult::Handled);
-    CHECK(clicks == 1);
-    CHECK(chords.empty());
+    CHECK(clicks == 0);
+    CHECK(chords == std::vector<std::string>{"Enter"});
     CHECK(harness.key(core::tui::KeyCode::F5) == core::tui::EventResult::Handled);
-    CHECK(chords == std::vector<std::string>{"F5"});
+    CHECK(chords == std::vector<std::string>{"Enter", "F5"});
+    CHECK(harness.type(" ") == core::tui::EventResult::Handled);
+    CHECK(clicks == 1);
 }
 
-// Mutation: leave a field's chords out of the keys its view leaves (Ctrl+S then reaches nothing).
-TEST_CASE("tui chords: a field's own key wins over its chord, an ignored key reaches the chord", "[tui][chords]") {
+// Mutation: try the field's own keys before its chords (Enter then submits, and the chord never runs).
+TEST_CASE("tui chords: a field's chord wins over its own key, and a key no editing takes reaches the chord",
+          "[tui][chords]") {
     Harness harness{30, 3};
     auto const field = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
     std::vector<std::string> chords;
@@ -287,12 +291,12 @@ TEST_CASE("tui chords: a field's own key wins over its chord, an ignored key rea
     static_cast<void>(harness.draw());
     harness.focus(*field);
     CHECK(harness.key(core::tui::KeyCode::Enter) == core::tui::EventResult::Handled);
-    CHECK(submits.size() == 1);
-    CHECK(chords.empty());
+    CHECK(submits.empty());
+    CHECK(chords == std::vector<std::string>{"Enter"});
     CHECK(harness.send(core::tui::KeyEvent{.key = core::tui::keyCodeFromCodepoint(U's'),
                                            .modifiers = core::tui::Modifier::Ctrl,
                                            .codepoint = U's'}) == core::tui::EventResult::Handled);
-    CHECK(chords == std::vector<std::string>{"Ctrl+S"});
+    CHECK(chords == std::vector<std::string>{"Enter", "Ctrl+S"});
 }
 
 // Mutation: give every root the whole screen (the second root is then drawn over the first).

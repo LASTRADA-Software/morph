@@ -74,8 +74,8 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 |---|---|---|
 | Text | one row per line, styled by role: a heading bold, a section bold in the muted style, muted, error and success in their theme styles | — |
 | Button | `[ label ]`, a framework icon's glyph before the label; a list item ` label`, unbracketed and padded to its slot's width, in the list's selected-item style while selected and the focus style while focused | Enter, Space, click |
-| TextInput | `core::tui::InputField`; single-line, multiline or masked; a unit is drawn muted at the right edge before the field marks, and the editable width ends one cell before it | typing; Enter submits a single-line field after its commit; the focus leaving after an edit commits |
-| Checkbox | `[x] label` | Enter, Space, click |
+| TextInput | `core::tui::InputField`; single-line, multiline or masked; a unit is drawn muted at the right edge before the field marks, and the editable width ends one cell before it | typing; Enter submits a single-line field after its commit, and a field without a submit handler commits and passes Enter on; the focus leaving after an edit commits |
+| Checkbox | `[x] label` | Space, click; Enter passes on |
 | Select | radio: a row per option, `(•)` marking; dropdown: `[label ▾]` opening a list overlay | Enter, Space, click; arrows in the list |
 | Menu | one level of entries as a list, `>` on an entry with a submenu, the mark of a checkable one, its chord | Right, Enter, Space or a click opens a submenu; Left or Backspace goes up; choosing a leaf shows the top again |
 | Stack, Slot | children along an axis, a spacing step apart | — |
@@ -163,9 +163,13 @@ toolkit's dismissal does: an application that keeps it open opens it again.
 
 ## Keys and chords
 
-A key goes to the focused view and bubbles to its ancestors until one handles it. A widget's own key handling comes
-first; a key it leaves goes to the widget's chords, and on to the next ancestor. The innermost widget declaring a
-chord therefore takes it, and a hidden or disabled widget, which takes no key, runs none.
+A key goes to the focused view and bubbles to its ancestors until one handles it, in the order every backend follows
+([`backend_contract.md`](../ui/backend_contract.md), Chords). A widget's own chords come first: `WidgetBase::dispatch`,
+a field's view and a list's view each try the widget's chords before its own handling of the key. Then the widget's
+own handling, and a key it leaves bubbles on to the next ancestor, which tries its chords the same way. The innermost
+widget declaring a chord therefore takes it, and a hidden or disabled widget, which takes no key, runs none. A handler
+may destroy the widget, so a handled key returns at once; a text input that commits on Enter without submitting lets
+the key bubble only while it is still alive.
 
 A chord is modifiers (`Ctrl` or `Control`, `Alt`, `Shift`, `Super`, `Meta` or `Cmd`) joined by `+` to one character
 or a named key (`Enter`, `Tab`, `Escape`, `Space`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`,

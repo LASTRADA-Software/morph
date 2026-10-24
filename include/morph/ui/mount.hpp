@@ -768,7 +768,10 @@ private:
         }
         applyCaption(scope, widget, spec.label, spec.showLabel);
         widget.setOnChange(inputEvent(spec.onChange, reassert));
-        widget.setOnSubmit(inputEvent(spec.onSubmit, std::move(reassert)));
+        // An empty submit handler tells the backend the field does not submit, so Enter goes on to its ancestors'
+        // chords (a dialog's default) once the field has committed.
+        widget.setOnSubmit(spec.onSubmit ? inputEvent(spec.onSubmit, std::move(reassert))
+                                         : std::function<void(std::string)>{});
         widget.setOnCommit(event(spec.onCommit));
         return widget;
     }

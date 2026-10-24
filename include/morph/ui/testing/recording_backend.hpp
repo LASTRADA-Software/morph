@@ -1513,15 +1513,22 @@ public:
         remark();
     }
 
-private:
-    [[nodiscard]] std::string marked() const {
+    /// @brief The keys of the rows the table marks: the requested keys, in the order requested, that a current row
+    ///        has.
+    /// @return The keys.
+    [[nodiscard]] std::vector<Key> markedKeys() const {
         std::vector<Key> keys;
         for (Key const& key : _requested.value_or(std::vector<Key>{})) {
             if (rowOf(key).has_value()) {
                 keys.push_back(key);
             }
         }
-        return formatList(keys, [](Key const& key) { return formatKey(key); });
+        return keys;
+    }
+
+private:
+    [[nodiscard]] std::string marked() const {
+        return formatList(markedKeys(), [](Key const& key) { return formatKey(key); });
     }
 
     void remark() {
@@ -1789,18 +1796,31 @@ public:
     /// @return Its id, or 0 when no widget has, or it has since been destroyed.
     [[nodiscard]] int focused() const noexcept { return _store->focused(); }
 
-    /// @brief Presses a keyboard chord with focus on a widget.
+    /// @brief Presses a keyboard chord with focus on a widget, in the key order every backend follows.
     ///
-    /// The chord goes to the innermost widget, from @p widgetId outwards, that declares it through `setKeys`. Like
-    /// every helper it acts only when a user could reach @p widgetId.
+    /// First a chord @p widgetId declares itself through `setKeys`. Then the built-in keys of its kind: a `Button`'s
+    /// `Enter` or `Space` clicks it; a single-line or password `TextInput`'s `Enter` commits, then submits and stops
+    /// when the field has a submit handler, and goes on after the commit when it has none; a `Checkbox`'s `Space`
+    /// toggles it; a `Table`'s `Enter` activates its first marked row, and stops whether or not one is marked. Then
+    /// the chords of its ancestors, innermost first. A handler that destroys the focused widget stops the key there.
+    /// Like every helper it acts only when a user could reach @p widgetId.
     /// @param widgetId The widget focus is on.
-    /// @param chord The chord, as declared, such as `"Ctrl+S"`.
-    /// @return True when a widget took the chord.
+    /// @param chord The chord, as declared, such as `"Ctrl+S"`, `"Enter"` or `"Space"`.
+    /// @return True when any step took the chord.
     bool press(int widgetId, std::string const& chord) {
-        if (!reachable(_store->at(widgetId))) {
+        detail::Record const& focused = _store->at(widgetId);
+        if (!reachable(focused)) {
             return false;
         }
-        for (int candidate = widgetId; candidate != 0;) {
+        int const parent = focused.parent;
+        if (std::ranges::find(focused.chords, chord) != focused.chords.end()) {
+            invoke(focused.callbacks.chord, chord);
+            return true;
+        }
+        if (ownKey(widgetId, chord) || !exists(widgetId)) {
+            return true;
+        }
+        for (int candidate = parent; candidate != 0;) {
             detail::Record const& record = _store->at(candidate);
             if (std::ranges::find(record.chords, chord) != record.chords.end()) {
                 invoke(record.callbacks.chord, chord);
@@ -2200,6 +2220,38 @@ private:
     // The fake behind a text field's record.
     static detail::FakeTextInput& textInput(detail::Record const& record) {
         return dynamic_cast<detail::FakeTextInput&>(*record.widget);
+    }
+
+    // The built-in keys of the focused widget's kind, `press`'s second step: whether the key stops here. A text input
+    // without a submit handler commits on Enter and lets the key go on.
+    bool ownKey(int widgetId, std::string const& chord) {
+        detail::Record const& record = _store->at(widgetId);
+        bool const enter = chord == "Enter";
+        if (record.kind == "Button" && (enter || chord == "Space")) {
+            invoke(record.callbacks.click);
+            return true;
+        }
+        if (record.kind == "Checkbox" && chord == "Space") {
+            toggle(widgetId);
+            return true;
+        }
+        if (record.kind == "TextInput" && enter && prop(widgetId, "mode") != "Multiline") {
+            if (record.callbacks.submit) {
+                submit(widgetId, textInput(record).text());
+                return true;
+            }
+            commit(widgetId);
+            return false;
+        }
+        if (record.kind == "Table" && enter) {
+            auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+            std::vector<Key> const marked = table == nullptr ? std::vector<Key>{} : table->markedKeys();
+            if (!marked.empty()) {
+                activateRow(widgetId, marked.front());
+            }
+            return true;
+        }
+        return false;
     }
 
     // A helper applies to some kinds only; using it on another kind is a mistake in the test, not a user action.

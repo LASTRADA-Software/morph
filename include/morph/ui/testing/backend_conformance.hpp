@@ -1253,6 +1253,188 @@ private:
     return checks.result();
 }
 
+/// @brief Case: Enter on a focused button that declares an Enter chord runs the chord, not the click. A chord the
+///        focused widget declares comes before the widget's own handling of the key.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> ownChordBeforeOwnKey(ConformanceProbe& probe) {
+    std::vector<std::string> ran;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {
+                        ui::column({.children = {ui::button({.label = "Go",
+                                                             .onClick = [&ran] { ran.emplace_back("click"); },
+                                                             .common = {.keys = {{.chord = "Enter", .onPress = [&ran] {
+                                                                                      ran.emplace_back("chord");
+                                                                                  }}}}})}})}})};
+    probe.settle();
+    Widget* const button = childOf(probe, childOf(probe, &view.root(), 0), 0);
+    if (button == nullptr) {
+        return "a Button in a Column in a Column is not shown";
+    }
+    probe.press(*button, "Enter");
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"chord"}, "Enter on a button that declares an Enter chord ran " +
+                                                              std::to_string(ran.size()) +
+                                                              " handlers, not the chord alone");
+    return checks.result();
+}
+
+/// @brief Case: Enter on a focused button inside a column that declares an Enter chord clicks the button, and the
+///        column's chord does not run. A button takes Enter for itself before its ancestors' chords.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> ownKeyBeforeAncestorChord(ConformanceProbe& probe) {
+    std::vector<std::string> ran;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {ui::button({.label = "Go", .onClick = [&ran] { ran.emplace_back("click"); }})},
+                    .common = {.keys = {{.chord = "Enter", .onPress = [&ran] { ran.emplace_back("chord"); }}}}})};
+    probe.settle();
+    Widget* const button = childOf(probe, &view.root(), 0);
+    if (button == nullptr) {
+        return "a Button in a Column is not shown";
+    }
+    probe.press(*button, "Enter");
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"click"},
+                "Enter on a button inside a column that declares an Enter chord ran " + std::to_string(ran.size()) +
+                    " handlers, not the click alone");
+    return checks.result();
+}
+
+/// @brief A dialog, open, whose content column declares an Enter chord standing in for a document's `default`, and
+///        holds @p field.
+/// @param ran Where the chord records `default`.
+/// @param field The node inside the content column.
+/// @return The dialog.
+[[nodiscard]] inline Node dialogWithDefault(std::vector<std::string>& ran, Node field) {
+    return ui::dialog(
+        {.open = true,
+         .title = "Confirm",
+         .child = ui::column(
+             {.children = {std::move(field)},
+              .common = {.keys = {{.chord = "Enter", .onPress = [&ran] { ran.emplace_back("default"); }}}}})});
+}
+
+/// @brief The widget inside the content column of the dialog `dialogWithDefault` makes.
+/// @param probe The backend under test.
+/// @param view The mounted dialog.
+/// @return The widget, or null while it is not shown.
+[[nodiscard]] inline Widget* insideDialog(ConformanceProbe& probe, Mounted const& view) {
+    return childOf(probe, childOf(probe, &view.root(), 0), 0);
+}
+
+/// @brief Case: in a dialog, Enter on a single-line text input with a submit handler commits and submits it, and the
+///        dialog's Enter chord does not run.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> submittingFieldTakesEnter(ConformanceProbe& probe) {
+    std::vector<std::string> ran;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        dialogWithDefault(
+            ran, ui::textInput({.onSubmit = [&ran](std::string const& text) { ran.push_back("submit " + text); },
+                                .onCommit = [&ran](std::string const& text) { ran.push_back("commit " + text); }}))};
+    probe.settle();
+    Widget* const field = insideDialog(probe, view);
+    if (field == nullptr) {
+        return "a TextInput in an open Dialog's Column is not shown";
+    }
+    probe.type(*field, "ok");
+    probe.settle();
+    probe.press(*field, "Enter");
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"commit ok", "submit ok"},
+                "Enter on a submitting field in a dialog ran " + std::to_string(ran.size()) +
+                    " handlers, not its commit and its submit alone");
+    return checks.result();
+}
+
+/// @brief Case: in a dialog, Enter on a single-line text input without a submit handler commits it, and the dialog's
+///        Enter chord runs once.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> fieldWithoutSubmitPassesEnterOn(ConformanceProbe& probe) {
+    std::vector<std::string> ran;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        dialogWithDefault(
+            ran, ui::textInput({.onCommit = [&ran](std::string const& text) { ran.push_back("commit " + text); }}))};
+    probe.settle();
+    Widget* const field = insideDialog(probe, view);
+    if (field == nullptr) {
+        return "a TextInput in an open Dialog's Column is not shown";
+    }
+    probe.type(*field, "ok");
+    probe.settle();
+    probe.press(*field, "Enter");
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"commit ok", "default"},
+                "Enter on a field without a submit handler in a dialog ran " + std::to_string(ran.size()) +
+                    " handlers, not its commit and then the dialog's chord");
+    return checks.result();
+}
+
+/// @brief Case: in a dialog, Enter on a focused check box leaves it unchanged and runs the dialog's Enter chord;
+///        Space toggles it and runs no chord.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> checkboxTakesSpaceNotEnter(ConformanceProbe& probe) {
+    std::vector<std::string> ran;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       dialogWithDefault(ran, ui::checkbox({.label = "Agree", .onToggle = [&ran](bool checked) {
+                                                                ran.emplace_back(checked ? "checked" : "unchecked");
+                                                            }}))};
+    probe.settle();
+    Widget* const box = insideDialog(probe, view);
+    if (box == nullptr) {
+        return "a Checkbox in an open Dialog's Column is not shown";
+    }
+    probe.press(*box, "Enter");
+    probe.settle();
+    probe.press(*box, "Space");
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"default", "checked"},
+                "Enter then Space on a check box in a dialog ran " + std::to_string(ran.size()) +
+                    " handlers, not the dialog's chord and then one toggle");
+    return checks.result();
+}
+
+/// @brief Case: Enter on a single-line text input that declares an Enter chord itself runs the chord, and neither
+///        submits nor commits through Enter.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> fieldChordBeforeSubmit(ConformanceProbe& probe) {
+    std::vector<std::string> ran;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column(
+            {.children = {ui::textInput(
+                 {.onSubmit = [&ran](std::string const& text) { ran.push_back("submit " + text); },
+                  .onCommit = [&ran](std::string const& text) { ran.push_back("commit " + text); },
+                  .common = {.keys = {{.chord = "Enter", .onPress = [&ran] { ran.emplace_back("chord"); }}}}})}})};
+    probe.settle();
+    Widget* const field = childOf(probe, &view.root(), 0);
+    if (field == nullptr) {
+        return "a TextInput in a Column is not shown";
+    }
+    probe.type(*field, "ok");
+    probe.settle();
+    probe.press(*field, "Enter");
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"chord"}, "Enter on a field that declares an Enter chord ran " +
+                                                              std::to_string(ran.size()) +
+                                                              " handlers, not the chord alone");
+    return checks.result();
+}
+
 /// @brief Case: the first `autofocus` widget in document order has focus once the mount completes.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -1674,7 +1856,7 @@ struct Measured {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 34> const cases{{
+    static std::array<ConformanceCase, 40> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -1712,6 +1894,17 @@ struct Measured {
         {.name = "a drop target without accepts takes every key", .run = detail::dropTargetWithoutAcceptsTakesAll},
         {.name = "a chord goes to the innermost widget that declares it", .run = detail::innermostChordWins},
         {.name = "a chord pressed inside a hidden container runs nothing", .run = detail::hiddenChordRunsNothing},
+        {.name = "a chord the focused widget declares comes before its own key", .run = detail::ownChordBeforeOwnKey},
+        {.name = "a focused button takes Enter before its ancestors' chords",
+         .run = detail::ownKeyBeforeAncestorChord},
+        {.name = "a submitting field in a dialog takes Enter from the dialog",
+         .run = detail::submittingFieldTakesEnter},
+        {.name = "a field without a submit commits on Enter and lets the dialog have it",
+         .run = detail::fieldWithoutSubmitPassesEnterOn},
+        {.name = "a check box toggles on Space and lets the dialog have Enter",
+         .run = detail::checkboxTakesSpaceNotEnter},
+        {.name = "a field's own Enter chord comes before its commit and submit",
+         .run = detail::fieldChordBeforeSubmit},
         {.name = "the first autofocus widget in document order has focus", .run = detail::firstAutofocusWins},
         {.name = "a menu reports only an enabled entry without a submenu",
          .run = detail::onlyEnabledMenuLeavesAreChosen},

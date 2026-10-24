@@ -29,6 +29,9 @@ MorphField {
         font: Theme.bodyFont
         id: area
         width: root.controlWidth
+        // The widget's own chords come before the control's handling of the key.
+        Keys.priority: Keys.BeforeItem
+        Keys.onPressed: event => event.accepted = root.takeOwnChord(event)
         color: root.scheme.text
         placeholderTextColor: root.scheme.muted
         padding: Theme.spaceOf(3)

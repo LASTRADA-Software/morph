@@ -17,7 +17,9 @@
 #include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
+#include "tui/context.hpp"
 #include "tui/drag.hpp"
 
 namespace morph::tui::detail {
@@ -77,6 +79,10 @@ public:
         auto* const fields = _fields;
         auto const input = asFieldInput(event);
         if (auto const* key = std::get_if<::core::tui::KeyEvent>(&input)) {
+            // The field's own chords come before its editing keys, so a chord it declares takes that key from it.
+            if (EventResult const result = owner().chord(*key); result != EventResult::Ignored) {
+                return result;
+            }
             if (key->codepoint == 0 && (key->key == KeyCode::Tab || key->key == KeyCode::Escape)) {
                 return EventResult::Ignored;
             }
@@ -96,14 +102,10 @@ public:
             return EventResult::Handled;
         }
         if (action == ::core::tui::InputFieldAction::Submit) {
-            fields->submitted();
-            return EventResult::Handled;
+            return submit(*fields);
         }
-        // None, and the agent-shell actions (Ctrl+T, Ctrl+G, …) that mean nothing here, go to the widget's chords
-        // and then bubble on.
-        if (auto const* key = std::get_if<::core::tui::KeyEvent>(&input)) {
-            return owner().chord(*key);
-        }
+        // None, and the agent-shell actions (Ctrl+T, Ctrl+G, …) that mean nothing here, bubble on: the widget's
+        // chords were tried first.
         return EventResult::Ignored;
     }
 
@@ -117,6 +119,22 @@ public:
     }
 
 private:
+    /// Enter: the field submits, and the key stops here when the owner submits; otherwise the field has committed
+    /// and Enter goes on outwards, to a dialog's default. The commit's handler may destroy the owner and this view,
+    /// and then the key stops here too, since nothing may bubble from a destroyed view.
+    [[nodiscard]] EventResult submit(FieldOwner& fields) {
+        if (fields.submits()) {
+            fields.submitted();
+            return EventResult::Handled;
+        }
+        Context& context = owner().context();
+        WidgetBase* alive = &owner();
+        context.watches.push_back(&alive);
+        fields.submitted();
+        std::erase(context.watches, &alive);
+        return alive != nullptr ? EventResult::Ignored : EventResult::Handled;
+    }
+
     /// What a read-only field does with @p input: whatever moves the cursor or the selection does so, and whatever
     /// would change the text is undone and reports nothing, nor does a submit.
     [[nodiscard]] EventResult lockedEvent(::core::tui::InputEvent const& input) {
@@ -132,10 +150,9 @@ private:
             return EventResult::Handled;
         }
         if (action == ::core::tui::InputFieldAction::Submit) {
-            return EventResult::Handled;
+            return _fields->submits() ? EventResult::Handled : EventResult::Ignored;
         }
-        auto const* key = std::get_if<::core::tui::KeyEvent>(&input);
-        return key != nullptr ? owner().chord(*key) : EventResult::Ignored;
+        return EventResult::Ignored;
     }
 
     FieldOwner* _fields;

@@ -19,6 +19,25 @@ MorphField {
     property int decimals: -1
     // The name of an icon in the theme's icon set, drawn at the leading edge inside the field; empty draws none.
     property string icon: ""
+    // Whether the widget has a submit handler. Only then does Enter stop at the field; otherwise the field commits
+    // and Enter goes on to the ancestors' chords, a dialog's default among them.
+    property bool submits: false
+
+    // Return or Enter: the widget's own chord first; then a field that submits commits, submits and takes the key;
+    // otherwise the TextField takes it, commits through `accepted` and lets it go on.
+    function enterPressed(event: var) {
+        if (root.takeOwnChord(event))
+            return
+        if (!root.submits) {
+            event.accepted = false
+            return
+        }
+        if (root.readOnly)
+            return
+        root.edited = false
+        root.fire("commit", field.text)
+        root.fire("submit", field.text)
+    }
 
     control: field
     accessibleItem: field
@@ -28,6 +47,14 @@ MorphField {
         font: Theme.bodyFont
         id: field
         width: root.controlWidth
+        Keys.priority: Keys.BeforeItem
+        Keys.onReturnPressed: event => root.enterPressed(event)
+        Keys.onEnterPressed: event => root.enterPressed(event)
+        // Every other key: the widget's own chords come before the field's handling of it.
+        Keys.onPressed: event => {
+            if (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter)
+                event.accepted = root.takeOwnChord(event)
+        }
         color: root.scheme.text
         placeholderTextColor: root.scheme.muted
         // The text starts after the icon.

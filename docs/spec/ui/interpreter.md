@@ -217,7 +217,8 @@ reply; `parallel` applies each. `pending` counts runs in flight and queued.
   instant: the draft and the bound value show the same when both read to the same instant, and two
   values that read to nothing are the same.
 - **`commitOn`** (`change` by default, `blur`, `enter`) decides when an edit commits: the committed
-  value is written and `onChange` runs. `onCommit` (Enter or focus leaving after an edit) also marks the
+  value is written and `onChange` runs. A text input is given a submit handler only when it has `onSubmit` or
+  commits on `enter`; any other one lets Enter go on to its ancestors' chords once it has committed. `onCommit` (Enter or focus leaving after an edit) also marks the
   element `touched`. A date input's change is its commit: `onChange` runs, then `onCommit` with the same
   value. A slider reports `onChange` on each step and `onCommit` on a finished move (a release after a
   drag, a key step, a wheel step). Both commits mark the element `touched`. The view tree reports no
@@ -318,7 +319,9 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
 - **Overlay actions.** A dialog's or drawer's `actions` are lowered with its content, in its scope, and end the
   content as a `ui::ActionBar` of buttons (test id `action_<id>`, shown and enabled as the action is), so their
   bindings hold the overlay's scope as the content does; the mount puts the bar in the overlay's footer. `default`
-  and `cancel` keep their Enter and Escape bindings.
+  and `cancel` keep their Enter and Escape bindings, chords of the content column. So the `default` runs for Enter
+  that no focused widget inside took: a button, a text input with `onSubmit` or that commits on Enter, and a table
+  take it first.
 - **The head.** A screen's `status` and `actions` are lowered once, at mount, in the screen scope; `Screen::status()`
   and `Screen::actions()` read the visible ones (a tracked read), `Screen::subtitle()` evaluates `subtitle`, and
   `Screen::runAction(id)` runs an enabled, visible action, reporting an unknown, hidden or disabled id.

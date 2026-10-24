@@ -92,7 +92,15 @@ MorphWidget {
         }
         Accessible.ignored: true
         onClicked: root.fire("click", undefined)
-        Keys.onReturnPressed: root.fire("click", undefined)
-        Keys.onEnterPressed: root.fire("click", undefined)
+        // A chord the button declares comes before its own click; Return and Enter click it otherwise.
+        Keys.onReturnPressed: event => {
+            if (!root.takeOwnChord(event))
+                root.fire("click", undefined)
+        }
+        Keys.onEnterPressed: event => {
+            if (!root.takeOwnChord(event))
+                root.fire("click", undefined)
+        }
+        Keys.onPressed: event => event.accepted = root.takeOwnChord(event)
     }
 }
