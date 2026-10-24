@@ -97,10 +97,10 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
   `as`. A `navigate` that names no screen (a route) goes to the application's host.
 - **Call and return** (§16). A `navigate` with `onResult` or `onCancel` files a call. The next `mount` of that
   screen with equal params adopts it, so the host decides how to show the callee and the framework still ties the
-  answer to the opener. The callee answers exactly once: `{"return": e}` runs `onResult` with `e`; `close: self` and
-  any other close (the platform's, `forceClose`, a destroyed handle) run `onCancel`. After `return` or `close: self`
-  the host closes the callee (posted, since the command is still running in it) and calls `onScreenClosed(handle)`,
-  so the host drops its tab or dialog. A `return` from a screen that answers no call goes to the application's
+  answer to the opener. The callee answers exactly once: `{"return": e}` runs `onResult` with `e`; `close: self`
+  outside any dialog or drawer, and any other close (the platform's, `forceClose`, a destroyed handle), run
+  `onCancel`. After `return` or such a `close: self` the host closes the callee (posted, since the command is still
+  running in it) and calls `onScreenClosed(handle)`, so the host drops its tab or dialog. A `return` from a screen that answers no call goes to the application's
   host.
 - `title()` is the document's `title` as text: a string as is, `null` as empty, anything else as its canonical JSON.
   `dirty()` is whether `dirty` is `true`. `title()` and `identity()` keep their last values once the screen has

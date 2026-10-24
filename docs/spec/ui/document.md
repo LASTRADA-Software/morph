@@ -266,7 +266,9 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   `let`; a watch that writes what it reads is a cycle of one. The refusal names the cycle in order.
 - **Targets.** `set` names state, an input (`textInput`, `checkbox`, `select`, `dateTimeInput`,
   `slider`) or `app.name`; `reset` state or a dialog; `run`, `signIn` and `upload` a mutation;
-  `refetch` a query; `open` and `close` a dialog or drawer (`close` also `self`); `focus` an element;
+  `refetch` a query; `open` and `close` a dialog or drawer (`close` also `self`: the innermost dialog or drawer whose
+  content holds the command, or the screen when there is none; inside a component, only a dialog or drawer of the
+  component's own); `focus` an element;
   `resetPrefs` a point or `all`; a download to preview a state. `from` and `into` are `ref` or `bytes`; a download
   from bytes gives a `name`; `type` is given only with `"from": "bytes"`, and `nameAs` and `typeAs` only with
   `"into": "bytes"`. A check's targets are elements;

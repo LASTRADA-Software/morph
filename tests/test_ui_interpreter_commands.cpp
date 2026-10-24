@@ -1099,3 +1099,104 @@ TEST_CASE("interpreter slider: a drag reports each change, and a finished move a
     CHECK(readJson(*screen, R"({"ref": "committed"})") == "5");
     CHECK(h.text("touched") == "true");
 }
+
+namespace {
+
+// `close: self` from each place a dialog's content runs commands: an action, the `default`, a button inside a
+// `switch` case, and a component's fallback; and from a component at screen level.
+constexpr char const* kCloseSelf = R"({
+  "vocab": "ui/1", "id": "self.scope", "state": { "on": { "init": "a" } },
+  "components": { "Closer": { "qml": "sha256:4b1e0000000000000000000000000000000000000000000000000000000000ab",
+                              "fallback": { "kind": "button", "testId": "componentClose", "label": "close",
+                                            "onClick": [ { "close": "self" } ] } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "open", "label": "open", "onClick": { "open": "dlg" } },
+    { "kind": "custom", "name": "Closer" },
+    { "kind": "dialog", "id": "dlg", "default": [ { "close": "self" } ],
+      "actions": [ { "id": "done", "label": "Done", "onClick": [ { "close": "self" } ] } ],
+      "children": [
+        { "kind": "switch", "on": { "ref": "on" }, "cases": [
+          { "when": "a", "children": [ { "kind": "button", "testId": "caseClose", "label": "close",
+                                         "onClick": [ { "close": "self" } ] } ] } ] },
+        { "kind": "custom", "name": "Closer" } ] } ] } })";
+
+/// The number of `closeSelf` calls the host saw.
+std::size_t closes(Harness const& h) {
+    return static_cast<std::size_t>(
+        std::ranges::count_if(h.host.log, [](std::string const& line) { return line.starts_with("close "); }));
+}
+
+/// The first widget under @p root, @p root included, whose test id is @p testId.
+// NOLINTNEXTLINE(misc-no-recursion): the widget tree is finite.
+std::optional<int> within(ui::testing::RecordingBackend const& backend, int root, std::string const& testId) {
+    if (backend.prop(root, "testId") == testId) {
+        return root;
+    }
+    for (int const child : backend.children(root)) {
+        if (std::optional<int> const found = within(backend, child, testId)) {
+            return found;
+        }
+    }
+    return std::nullopt;
+}
+
+/// Opens the dialog of `kCloseSelf` and returns the Dialog widget.
+int openDialog(Harness& h) {
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    int const dialog = h.backend.all("Dialog").at(0);
+    REQUIRE(h.backend.prop(dialog, "open") == "true");
+    return dialog;
+}
+
+}  // namespace
+
+// Mutation: send every `close: self` to the host (the dialog stays open, and the host is asked to close the screen).
+TEST_CASE("interpreter commands: close self inside a dialog closes that dialog, not the screen", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(kCloseSelf);
+    SECTION("from an action") {
+        int const dialog = openDialog(h);
+        h.backend.click(h.byTestId("Button", "action_done"));
+        h.settle();
+        CHECK(h.backend.prop(dialog, "open") == "false");
+    }
+    SECTION("from the default, pressed on the content column that declares it") {
+        int const dialog = openDialog(h);
+        std::optional<int> const content = h.backend.find("Column", "keys", "Enter");
+        REQUIRE(content.has_value());
+        CHECK(h.backend.press(*content, "Enter"));
+        h.settle();
+        CHECK(h.backend.prop(dialog, "open") == "false");
+    }
+    SECTION("from a switch case inside it") {
+        int const dialog = openDialog(h);
+        h.backend.click(h.byTestId("Button", "caseClose"));
+        h.settle();
+        CHECK(h.backend.prop(dialog, "open") == "false");
+    }
+    CHECK(closes(h) == 0);
+    CHECK(h.diagnostics.empty());
+}
+
+// Mutation: let the walk end anywhere and ask the host (the screen-level component's click reaches closeSelf).
+TEST_CASE("interpreter commands: close self inside a component names no dialog or drawer of its own",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(kCloseSelf);
+    SECTION("at screen level") {
+        h.backend.click(h.byTestId("Button", "componentClose"));
+        h.settle();
+    }
+    SECTION("inside a dialog, which stays open") {
+        int const dialog = openDialog(h);
+        std::optional<int> const inner = within(h.backend, dialog, "componentClose");
+        REQUIRE(inner.has_value());
+        h.backend.click(*inner);
+        h.settle();
+        CHECK(h.backend.prop(dialog, "open") == "true");
+    }
+    CHECK(closes(h) == 0);
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().reason == "`close: self` inside a component names no dialog or drawer");
+}

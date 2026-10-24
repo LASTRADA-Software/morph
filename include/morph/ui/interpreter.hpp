@@ -4644,12 +4644,29 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
         }
         case CommandKind::Open:
         case CommandKind::Close: {
+            ElementState* target = nullptr;
             if (command.kind == CommandKind::Close && command.target == "self") {
-                finish((host != nullptr && host->closeSelf(_doc->id, std::nullopt)) ||
-                       unsupported(command, "`close: self`"));
-                return;
+                // `self` is the innermost dialog or drawer whose content holds the command, found lexically. A
+                // component's fallback scope has no parent, so the walk stops at its boundary as its names do.
+                RtScope const* walk = &scope;
+                while (walk->owner == nullptr && walk->parent) {
+                    walk = walk->parent.get();
+                }
+                target = walk->owner;
+                if (target == nullptr && walk != rootScope.lock().get()) {
+                    report(command.path, "`close: self` inside a component names no dialog or drawer");
+                    finish(false);
+                    return;
+                }
+                if (target == nullptr) {
+                    finish((host != nullptr && host->closeSelf(_doc->id, std::nullopt)) ||
+                           unsupported(command, "`close: self`"));
+                    return;
+                }
+            } else {
+                target = scope.find(command.target)->element;
             }
-            ElementState& element = *scope.find(command.target)->element;
+            ElementState& element = *target;
             if (element.node->prop("open")) {
                 report(command.path, "the dialog's `open` is bound to an expression");
                 finish(false);

@@ -1288,10 +1288,10 @@ private:
 /// @return The element.
 [[nodiscard]] inline Element element(std::string name) { return Element{std::move(name)}; }
 
-/// @brief The dialog or drawer a command list runs in, for `close`.
+/// @brief The dialog or drawer a command list runs in, for `close`; outside every dialog and drawer, the screen.
 struct Self {};
 
-/// @brief The dialog or drawer a command list runs in.
+/// @brief The innermost dialog or drawer whose content holds the command list, or the screen when there is none.
 inline constexpr Self self{};
 
 /// @brief A query of a scope, without its action type: what `refetch`, `prefetch` and `optimistic` name.
@@ -2783,7 +2783,9 @@ template <typename Action>
 /// @return The command.
 [[nodiscard]] inline Command close(Element const& dialog) { return detail::command("close", dialog.name()); }
 
-/// @brief `close` of the dialog or drawer the command list runs in.
+/// @brief `close` of the innermost dialog or drawer whose content holds the command list. Outside every dialog and
+///        drawer it ends the screen, through the host. Inside a component it names only a dialog or drawer of the
+///        component's own, and with none it is reported and fails.
 /// @param current `self`.
 /// @return The command.
 [[nodiscard]] inline Command close(Self current) {

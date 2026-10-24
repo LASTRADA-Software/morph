@@ -252,6 +252,13 @@ its target does not resolve, and when the host does not support it.
 - `if` with a condition that is not a `bool` (`null` included) runs neither branch.
 - `open` and `close` set a dialog's own `open`; a dialog whose `open` is an expression is refused and
   reported. `reset` of a dialog restores its content's state and inputs and clears `submitted`.
+- `close: self` is resolved by scope. The command's scope and its parents are walked to the first one a dialog or
+  drawer owns (its content, `default`, `cancel` and actions all run there), and that overlay is closed as
+  `close: <id>` closes it. A walk that reaches the screen's root scope asks the host's `closeSelf`, so a screen
+  opened as a dialog still ends itself. A component's fallback scope has no parent, so a walk that ends there, with
+  no dialog or drawer of the component's own around the command, is reported ("`close: self` inside a component
+  names no dialog or drawer") and fails the command: it never closes the screen the component sits in. A
+  mutation's `onSuccess` runs in the scope that declares the mutation, so the same lexical rule applies to it.
 - `navigate` runs `onResult` with the returned value as `event`, or `onCancel`.
 - `focus` moves keyboard focus to the element of that id in the screen's mounted tree (`Mounted::focus`); an
   element that is not mounted is reported and fails the command.
