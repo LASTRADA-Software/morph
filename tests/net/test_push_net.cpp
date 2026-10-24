@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <future>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -287,20 +288,12 @@ TEST_CASE("net_connect_handler_fires_on_first_and_reconnect", "[push][channel]")
     ::morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<::morph::backend::RemoteServer>(pool);
 
-    // Learn a free port, then leave it closed: the backend starts retrying
-    // before anything listens, so its handlers are installed before the first
-    // connect can happen.
-    std::uint16_t port = 0;
-    {
-        ::morph::net::SocketServer probe{*server, 0};
-        REQUIRE(probe.listen());
-        port = probe.port();
-    }
-
-    ::morph::net::SocketBackend::Config cfg;
-    cfg.initialReconnectDelay = 20ms;
-    cfg.maxReconnectDelay = 100ms;
-    ::morph::net::SocketBackend backend{wsUrl(port), cfg};
+    // The server listens before the backend's first dial: a backend that has never reached its server gives up
+    // instead of retrying.
+    std::optional<::morph::net::SocketServer> first;
+    first.emplace(*server, 0);
+    REQUIRE(first->listen());
+    std::uint16_t const port = first->port();
 
     std::mutex mtx;
     std::vector<std::string> seen;
@@ -315,14 +308,22 @@ TEST_CASE("net_connect_handler_fires_on_first_and_reconnect", "[push][channel]")
     // Each step waits on a real connect and handshake, which under Valgrind takes far longer than the default budget.
     ::morph::testing::WaitBudget const budget{10s};
     CountingExec reconnectExec;
+
+    // The loop is held while the backend starts and takes its handlers. Tasks run in the order posted, so both
+    // handlers are installed before the first dial begins, however the threads are scheduled.
+    ::morph::exec::IoLoop io;
+    std::promise<void> release;
+    io.post([held = release.get_future().share()] { held.wait(); });
+    ::morph::net::SocketBackend::Config cfg;
+    cfg.initialReconnectDelay = 20ms;
+    cfg.maxReconnectDelay = 100ms;
+    ::morph::net::SocketBackend backend{io, wsUrl(port), cfg};
     backend.setConnectHandler([&] { record("connect"); });
     backend.setReconnectHandler([&] { record("reconnect"); }, &reconnectExec);
+    release.set_value();
 
-    {
-        ::morph::net::SocketServer first{*server, port};
-        REQUIRE(first.listen());
-        REQUIRE(::morph::testing::waitUntil([&] { return snapshot().size() == 1; }, budget));
-    }
+    REQUIRE(::morph::testing::waitUntil([&] { return snapshot().size() == 1; }, budget));
+    first.reset();
     REQUIRE(::morph::testing::waitUntil([&] { return !backend.waitForConnected(0ms); }, budget));
 
     ::morph::net::SocketServer second{*server, port};
