@@ -77,6 +77,19 @@ params, `onProblem`, `onMounted`, the downloads directory, the history, developm
 `navigate` and a navigator choice open the screen as a tab from a task posted to the owner. An empty `signIn` is
 `std::invalid_argument`.
 
+The shell mounts the bundle's app document (`DocumentScreenHost::mountApp`), so `{"ref": "app.name"}` in any screen
+reads the session's app state, lets and queries. The root lives as long as the frame it was mounted for, and is
+destroyed after the screens and before the session changes hands, as the interpreter orders:
+
+- building the frame destroys the old root after the old workspace's tabs, and mounts the current app document after
+  the new frame and workspace are built, before the first tab;
+- signing out destroys it after every tab closed, before the source signs out;
+- the shell's destructor destroys it after the workspace and before the document host.
+
+An app document that does not load, or that the interpreter refuses, is reported through `onProblem`, and the
+screens mount without it. A development reload that changes the app document loads and reports it, and the new
+document takes effect at the next frame build (a sign-in or sign-out); the root is not remounted in place.
+
 The shell sets `{"env": "widthClass"}` from its view backend: before the first mount it writes
 `backend.widthClass()` into the session (`Session::setEnvironmentValue`), then registers the backend's
 `setOnWidthClass` listener, which writes each change, so every open tab re-evaluates it; the shell clears the

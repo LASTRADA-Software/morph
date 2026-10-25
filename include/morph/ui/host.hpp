@@ -381,6 +381,28 @@ public:
         return mountAt(screenId, params, &parent);
     }
 
+    /// @brief Mounts the app document as the session's root scope (spec 6 §5) through this host's own interpreter, so
+    ///        its commands reach the same hosts as the screens' commands do (its `navigate` is this host's) and its
+    ///        diagnostics reach the same `diagnostics` callback.
+    ///
+    /// Destroy the root after the screens that read `app.*` and before this host: destroying it runs its `onUnmount`
+    /// through this host.
+    /// @param document The app document, loaded.
+    /// @return The root, or why it was refused: no document, a document whose id is not `app`, or a second root on
+    ///         the session.
+    [[nodiscard]] std::expected<std::unique_ptr<AppRoot>, MountError> mountApp(
+        std::shared_ptr<Document const> document) {
+        if (!document) {
+            return std::unexpected(MountError{.screenId = "app", .reason = "no app document"});
+        }
+        std::string const documentId = document->id;
+        auto root = _interpreter.mountApp(std::move(document));
+        if (!root) {
+            return std::unexpected(mountErrorOf(documentId, root.error()));
+        }
+        return std::move(*root);
+    }
+
     /// @brief The identity a document screen would have with @p params: its `identity` evaluated over the params.
     /// @param screenId The screen id.
     /// @param params   The params.

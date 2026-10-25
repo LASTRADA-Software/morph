@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -112,9 +113,11 @@ public:
         *_alive = false;
         _backend->setOnWidthClass({});
         // The head row's own mount first, since it is built from the Workspace's data and lives in the ShellFrame;
-        // then the tabs, then the frame they sit in.
+        // then the tabs, then the app document's root the tabs read, then the frame they sit in. The root goes before
+        // the document host, whose interpreter runs its onUnmount.
         resetHead();
         _workspace.reset();
+        _appRoot.reset();
         _frame.reset();
     }
     Shell(Shell const&) = delete;
@@ -300,6 +303,8 @@ private:
             _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, done = std::move(done)] {
                 if (auto const live = alive.lock(); live != nullptr && *live) {
                     unmount();
+                    // After the screens that read it, and before the session changes hands.
+                    _appRoot.reset();
                     _source->signOut(done);
                 }
             });
@@ -311,6 +316,7 @@ private:
     void buildFrame() {
         resetHead();
         _workspace.reset();
+        _appRoot.reset();
         _frame.reset();
         ui::CatalogReply const* const catalog = _source->catalogReply();
         std::vector<ui::CatalogEntry> entries;
@@ -377,6 +383,21 @@ private:
         // The shell mounts the head row itself, in its top bar: an in-page head would show it a second time.
         _workspace = std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs),
                                                      &_frame->page(), ui::HeadPlacement::External);
+        mountApp();
+    }
+
+    // The app document's root for the frame just built, before its first tab: every screen's `app.*` reads it. A
+    // refused one is reported, and the screens mount without it.
+    void mountApp() {
+        if (!_appDocument) {
+            return;
+        }
+        auto root = _host->mountApp(_appDocument);
+        if (!root) {
+            problem("the app document: " + root.error().reason);
+            return;
+        }
+        _appRoot = std::move(*root);
     }
 
     // The sidebar and the top bar, with the principal, while the shell is signed in; the page alone otherwise.
@@ -610,6 +631,7 @@ private:
                     ui::MountedScreen{.screenId = tabs.at(index).screenId, .handle = _workspace->handleOf(index)});
             }
         }
+        reloadApp(changed);
         ui::ReloadOutcome const outcome = ui::reloadDocuments(
             changed, *_source->bundle(), ui::LoadOptions{.catalog = _source->catalog()}, _documents, *_host, mounted);
         for (ui::Refusal const& refusal : outcome.refused) {
@@ -618,6 +640,25 @@ private:
         if (_options.onReloaded) {
             _options.onReloaded(outcome.remounted);
         }
+    }
+
+    // A changed app document is loaded and reported; the mounted root keeps the old one, and the new one is mounted
+    // at the next frame build, since remounting the root would reset the state every open screen reads.
+    void reloadApp(std::vector<std::string> const& changed) {
+        if (std::ranges::find(changed, ui::kAppFile) == changed.end()) {
+            return;
+        }
+        auto const text = _source->bundle()->documents.find(ui::kAppFile);
+        if (text == _source->bundle()->documents.end()) {
+            return;
+        }
+        auto loaded = ui::loadDocumentText(text->second, ui::LoadOptions{.catalog = _source->catalog()});
+        if (!loaded) {
+            problem("reload refused: " + loaded.error().message());
+            return;
+        }
+        _appDocument = std::make_shared<ui::Document const>(std::move(*loaded));
+        problem("the app document changed; it takes effect at the next sign-in or sign-out");
     }
 
     void unmount() {
@@ -641,7 +682,7 @@ private:
     bool _reloading = false;
     std::optional<std::pair<std::string, ui::ParamMap>> _pending;
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _documents;
-    // The app document, which the explorer reads its uses from.
+    // The app document: mounted as the session's root scope with each frame, and read by the explorer.
     std::shared_ptr<ui::Document const> _appDocument;
     // The documents the explorer generates for "Try it", by their screen ids.
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _generated;
@@ -653,6 +694,8 @@ private:
     std::unique_ptr<Host> _host;
     std::unique_ptr<ui::ShellFrame> _frame;
     std::unique_ptr<ui::Workspace> _workspace;
+    // The app document's root for the current frame; destroyed after the tabs that read it.
+    std::unique_ptr<ui::AppRoot> _appRoot;
     std::optional<ui::Mounted> _message;
     // The active tab's head row, mounted into the frame's top-bar slot; reset together with its own comparison key
     // (never one without the other) ahead of _workspace, since both are built from the Workspace's own data and

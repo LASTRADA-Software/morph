@@ -62,6 +62,11 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
 - **`mountInto(screenId, params, parent)`** mounts as `mount` does, with the screen's root widget appended to the
   host's own container instead of made a backend root: a tab's page, a pane. The container outlives the handle. A
   refused mount leaves the container as it was.
+- **`mountApp(document)`** mounts the app document as the session's root scope (`Interpreter::mountApp`,
+  [interpreter.md](interpreter.md#the-app-root-scope)) through the host's own interpreter, so the app document's
+  commands reach the same hosts as the screens' (its `navigate` is this host's) and its diagnostics the same
+  `diagnostics` callback. A missing document, one whose id is not `app`, and a second root on the session are
+  `MountError`. The `AppRoot` is destroyed after the screens that read `app.*` and before the host.
 - **`remount(handle, document)`** mounts a changed document of a screen it mounted, with the same params in the
   same place, and replaces the screen behind the same handle (spec 5 §12, development reload;
   [`service.md`](service.md#development-reload)).
