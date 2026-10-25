@@ -533,6 +533,22 @@ TEST_CASE("qt_quick components: a write of a property the item does not declare 
     CHECK(reported.size() == 1);
 }
 
+// Mutation: write `submits` on every text input (the multi-line one reports the write it refuses).
+TEST_CASE("qt_quick components: a submit handler on a multi-line input writes nothing it does not declare",
+          "[qt_quick]") {
+    std::vector<ComponentFailure> reported;
+    Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    std::unique_ptr<ui::TextInputWidget> const area =
+        scene.backend().createTextInput(nullptr, ui::TextInputMode::Multiline);
+    area->setOnSubmit([](std::string const&) {});
+    std::unique_ptr<ui::TextInputWidget> const line =
+        scene.backend().createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    line->setOnSubmit([](std::string const&) {});
+    scene.settle();
+    CHECK(reported.empty());
+}
+
 // Mutation: drop `footer` from MorphDialog (a restyle without it is accepted, and C++ finds nowhere for the actions).
 TEST_CASE("qt_quick components: a dialog restyle without the footer part is refused, naming it", "[qt_quick]") {
     Components components;

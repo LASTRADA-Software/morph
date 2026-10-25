@@ -120,9 +120,11 @@ void TextInputImpl::setOnChange(std::function<void(std::string)> onChange) {
 }
 
 // The field reads `submits` to decide whether Enter stops at it; a multiline input, which never submits, declares no
-// such property and skips it.
+// such property, so it is not written there.
 void TextInputImpl::setOnSubmit(std::function<void(std::string)> onSubmit) {
-    write("submits", static_cast<bool>(onSubmit));
+    if (!_multiline) {
+        write("submits", static_cast<bool>(onSubmit));
+    }
     relay().on(QStringLiteral("submit"), textHandler(std::move(onSubmit)));
 }
 
