@@ -3,6 +3,7 @@
 // Rational's checked arithmetic: report overflow instead of committing it.
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstdint>
 #include <limits>
 #include <morph/core/logger.hpp>
 #include <morph/util/rational.hpp>
@@ -457,4 +458,159 @@ TEST_CASE("mulWouldOverflow answers false for a 0/0 operand built by writing its
     const Rational zero{Numerator{0}, Denominator{1}, DecimalPlaces{0}};
     CHECK_FALSE(broken.mulWouldOverflow(broken));
     CHECK_FALSE(zero.mulWouldOverflow(broken));
+}
+
+namespace {
+
+using morph::math::detail::U128;
+
+/// A deterministic 64-bit sequence (splitmix64), so a failure names a reproducible case.
+struct Sequence {
+    std::uint64_t state;
+    std::uint64_t next() {
+        state += 0x9e3779b97f4a7c15ULL;
+        std::uint64_t mixed = state;
+        mixed = (mixed ^ (mixed >> 30U)) * 0xbf58476d1ce4e5b9ULL;
+        mixed = (mixed ^ (mixed >> 27U)) * 0x94d049bb133111ebULL;
+        return mixed ^ (mixed >> 31U);
+    }
+    /// A 128-bit value whose width varies, so carries, borrows and both division paths are all reached.
+    U128 wide() {
+        std::uint64_t const shape = next() % 4U;
+        std::uint64_t const high = next();
+        std::uint64_t const low = next();
+        if (shape == 0) {
+            return U128{.hi = 0, .lo = low};
+        }
+        if (shape == 1) {
+            return U128{.hi = high >> (next() % 64U), .lo = low};
+        }
+        if (shape == 2) {
+            return U128{.hi = 0, .lo = low >> (next() % 64U)};
+        }
+        return U128{.hi = high, .lo = low};
+    }
+};
+
+}  // namespace
+
+TEST_CASE("The 128-bit integer adds, subtracts, multiplies and divides exactly", "[rational][checked][u128]") {
+    using morph::math::detail::checkedAddU128;
+    using morph::math::detail::checkedMulU128;
+    using morph::math::detail::checkedSubU128;
+    using morph::math::detail::divModU128;
+    using morph::math::detail::mulU64;
+    constexpr auto kAll = std::numeric_limits<std::uint64_t>::max();
+    constexpr U128 kTop{.hi = kAll, .lo = kAll};
+
+    CHECK(mulU64(kAll, kAll) == U128{.hi = kAll - 1, .lo = 1});
+    CHECK(checkedAddU128(U128{.hi = 0, .lo = kAll}, U128{.hi = 0, .lo = 1}) == U128{.hi = 1, .lo = 0});
+    CHECK_FALSE(checkedAddU128(kTop, U128{.hi = 0, .lo = 1}).has_value());
+    CHECK_FALSE(checkedAddU128(U128{.hi = kAll, .lo = 0}, U128{.hi = 1, .lo = 0}).has_value());
+    CHECK(checkedSubU128(U128{.hi = 1, .lo = 0}, U128{.hi = 0, .lo = 1}) == U128{.hi = 0, .lo = kAll});
+    CHECK_FALSE(checkedSubU128(U128{.hi = 0, .lo = 1}, U128{.hi = 0, .lo = 2}).has_value());
+    CHECK(checkedMulU128(U128{.hi = 1, .lo = 0}, U128{.hi = 0, .lo = kAll}) == U128{.hi = kAll, .lo = 0});
+    CHECK_FALSE(checkedMulU128(U128{.hi = 1, .lo = 0}, U128{.hi = 1, .lo = 0}).has_value());
+    CHECK_FALSE(checkedMulU128(U128{.hi = 2, .lo = 0}, U128{.hi = 0, .lo = kAll}).has_value());
+    CHECK_FALSE(divModU128(kTop, U128{}).has_value());
+    // A divisor past 2^127 makes the shifted remainder drop its top bit: the wrapping subtraction still lands exactly.
+    auto const large = divModU128(kTop, U128{.hi = 0x8000000000000000ULL, .lo = 1});
+    REQUIRE(large.has_value());
+    CHECK(large->quotient == U128{.hi = 0, .lo = 1});
+    CHECK(large->remainder == U128{.hi = 0x7fffffffffffffffULL, .lo = kAll - 1});
+    CHECK(U128{.hi = 1, .lo = 0} > U128{.hi = 0, .lo = kAll});
+}
+
+#ifdef __SIZEOF_INT128__
+// Mutation: drop the carry in checkedAddU128, or the carried-bit branch in divModU128's loop -> the native
+// comparison fails on the first case that needs it.
+TEST_CASE("The 128-bit integer agrees with unsigned __int128", "[rational][checked][u128]") {
+    using morph::math::detail::checkedAddU128;
+    using morph::math::detail::checkedMulU128;
+    using morph::math::detail::checkedSubU128;
+    using morph::math::detail::divModU128;
+    __extension__ using Native = unsigned __int128;
+    auto const native = [](U128 value) { return (static_cast<Native>(value.hi) << 64U) | value.lo; };
+    auto const limbs = [](Native value) {
+        return U128{.hi = static_cast<std::uint64_t>(value >> 64U), .lo = static_cast<std::uint64_t>(value)};
+    };
+    Sequence sequence{.state = 20261025};
+    for (int round = 0; round < 20000; ++round) {
+        U128 const lhs = sequence.wide();
+        U128 const rhs = sequence.wide();
+        CAPTURE(lhs.hi, lhs.lo, rhs.hi, rhs.lo);
+        Native sum = 0;
+        bool const sumOverflows = __builtin_add_overflow(native(lhs), native(rhs), &sum);
+        auto const added = checkedAddU128(lhs, rhs);
+        CHECK(added.has_value() == !sumOverflows);
+        if (added && !sumOverflows) {
+            CHECK(*added == limbs(sum));
+        }
+        Native product = 0;
+        bool const productOverflows = __builtin_mul_overflow(native(lhs), native(rhs), &product);
+        auto const multiplied = checkedMulU128(lhs, rhs);
+        CHECK(multiplied.has_value() == !productOverflows);
+        if (multiplied && !productOverflows) {
+            CHECK(*multiplied == limbs(product));
+        }
+        auto const subtracted = checkedSubU128(lhs, rhs);
+        CHECK(subtracted.has_value() == (native(lhs) >= native(rhs)));
+        if (subtracted) {
+            CHECK(*subtracted == limbs(native(lhs) - native(rhs)));
+        }
+        CHECK((lhs < rhs) == (native(lhs) < native(rhs)));
+        if (native(rhs) != 0) {
+            auto const divided = divModU128(lhs, rhs);
+            REQUIRE(divided.has_value());
+            CHECK(divided->quotient == limbs(native(lhs) / native(rhs)));
+            CHECK(divided->remainder == limbs(native(lhs) % native(rhs)));
+        }
+    }
+}
+#endif
+
+// Mutation: round through the saturating roundToDecimalPlaces in checkedRoundToDecimalPlaces -> `10/3` at 18 places
+// is clamped and `28/3` is not empty.
+TEST_CASE("checkedRoundToDecimalPlaces rounds as roundToDecimalPlaces does, and reports what does not fit",
+          "[rational][checked][round]") {
+    using morph::math::checkedRoundToDecimalPlaces;
+    using morph::math::RoundingMode;
+    using morph::math::roundToDecimalPlaces;
+    std::vector<std::pair<Rational, std::uint32_t>> const fitting = {
+        {Rational{Numerator{1}, Denominator{8}, DecimalPlaces{3}}, 2},
+        {Rational{Numerator{-1}, Denominator{8}, DecimalPlaces{3}}, 2},
+        {Rational{Numerator{27}, Denominator{200}, DecimalPlaces{3}}, 2},
+        {Rational{Numerator{-27}, Denominator{200}, DecimalPlaces{3}}, 2},
+        {Rational{Numerator{5}, Denominator{2}, DecimalPlaces{1}}, 0},
+        {Rational{Numerator{-5}, Denominator{2}, DecimalPlaces{1}}, 0},
+        {Rational{Numerator{1}, Denominator{3}, DecimalPlaces{1}}, 3},
+        {Rational{Numerator{-2}, Denominator{3}, DecimalPlaces{1}}, 3},
+        {Rational{Numerator{2469}, Denominator{2000}, DecimalPlaces{4}}, 3},
+        {Rational{Numerator{1}, Denominator{3}, DecimalPlaces{1}}, 18},
+        {Rational{Numerator{9'000'000'000'000'000'000}, Denominator{1}, DecimalPlaces{0}}, 18},
+        {Rational{Numerator{-7}, Denominator{1}, DecimalPlaces{0}}, 2},
+    };
+    for (auto const& [value, places] : fitting) {
+        for (RoundingMode const mode : {RoundingMode::HalfEven, RoundingMode::HalfAwayFromZero}) {
+            CAPTURE(value.numerator, value.denominator, places, mode == RoundingMode::HalfEven);
+            auto const checked = checkedRoundToDecimalPlaces(value, DecimalPlaces{places}, mode);
+            REQUIRE(checked.has_value());
+            auto const saturating = roundToDecimalPlaces(value, DecimalPlaces{places}, mode);
+            CHECK(*checked == saturating);
+            CHECK(checked->decimalPlaces == saturating.decimalPlaces);
+        }
+    }
+    // The product passes int64 on the way, but the result fits.
+    auto const tenThirds = checkedRoundToDecimalPlaces(Rational{Numerator{10}, Denominator{3}, DecimalPlaces{1}},
+                                                       DecimalPlaces{18}, RoundingMode::HalfEven);
+    REQUIRE(tenThirds.has_value());
+    CHECK(*tenThirds ==
+          Rational{Numerator{3'333'333'333'333'333'333}, Denominator{1'000'000'000'000'000'000}, DecimalPlaces{18}});
+    // 9.333333333333333333 has a numerator past int64.
+    CHECK_FALSE(checkedRoundToDecimalPlaces(Rational{Numerator{28}, Denominator{3}, DecimalPlaces{18}},
+                                            DecimalPlaces{18}, RoundingMode::HalfEven)
+                    .has_value());
+    CHECK(checkedRoundToDecimalPlaces(Rational{Numerator{1}, Denominator{8}, DecimalPlaces{3}}, DecimalPlaces{99},
+                                      RoundingMode::HalfEven)
+              ->decimalPlaces == DecimalPlaces{18});
 }

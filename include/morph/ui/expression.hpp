@@ -1803,8 +1803,11 @@ private:
             return std::string{*flag ? "true" : "false"};
         }
         if (Quantity const* const quantity = value.asQuantity()) {
-            return formatNumber(value, context.numeric).value_or(std::string{}) + " " +
-                   unitDisplay(quantity->unit, context.units);
+            auto number = formatNumber(value, context.numeric);
+            if (!number) {
+                return std::nullopt;
+            }
+            return *number + " " + unitDisplay(quantity->unit, context.units);
         }
         if (auto number = formatNumber(value, context.numeric)) {
             return number;
@@ -1831,13 +1834,21 @@ private:
         return iso.substr(0, 10) + " " + iso.substr(11, style == "long" ? 8 : 5);
     }
 
+    /// Why `format` cannot show an argument: a number that overflows at its places, or a value it has no text for.
+    Value cannotShow(Expr const& expr, Value const& arg, std::size_t index) {
+        if (numeric(arg)) {
+            return mismatch(expr, "the result overflows");
+        }
+        return mismatch(expr, "`format` cannot show argument " + std::to_string(index + 1));
+    }
+
     Value formatTemplate(Expr const& expr, std::vector<Value> const& args) {
         std::string const& pattern = *args.front().asString();
         std::vector<std::string> shown;
         for (std::size_t index = 1; index < args.size(); ++index) {
             auto text = display(args.at(index));
             if (!text) {
-                return mismatch(expr, "`format` cannot show argument " + std::to_string(index + 1));
+                return cannotShow(expr, args.at(index), index);
             }
             shown.push_back(std::move(*text));
         }
@@ -2015,10 +2026,13 @@ private:
         }
         auto const quotient =
             math::checkedDiv(total, math::Rational{static_cast<std::int64_t>(items.size()), math::DecimalPlaces{0}});
-        // A sum of int64 values divided by their count cannot overflow, and the count is never zero here.
-        math::Rational const rounded = math::roundToDecimalPlaces(
-            quotient.value_or(total), math::DecimalPlaces{places}, math::RoundingMode::HalfEven);
-        return makeNumber(rounded, integer, unit);
+        auto const rounded = quotient ? math::checkedRoundToDecimalPlaces(*quotient, math::DecimalPlaces{places},
+                                                                          math::RoundingMode::HalfEven)
+                                      : std::nullopt;
+        if (!rounded) {
+            return mismatch(expr, "the result overflows");
+        }
+        return makeNumber(*rounded, integer, unit);
     }
 
     Value call(Expr const& expr) {
@@ -2050,7 +2064,6 @@ private:
     }
 
     /// The functions whose every argument is required: any `null` argument has already made the result `null`.
-    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per function of the library.
     // GCC's -Wstrict-overflow fires on this whole function at -O3, attributing it to the function's opening line
     // rather than a specific statement -- a known false positive from its range analysis across the switch's many
     // checked-arithmetic calls (Rational's own checkedAdd/checkedSub/checkedMul are all free of signed-overflow UB).
@@ -2058,6 +2071,7 @@ private:
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-overflow"
 #endif
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per function of the library.
     Value strict(Expr const& expr, std::vector<Value> const& args) {
         FormatContext const& context = _env->formatting();
         switch (expr.function) {
@@ -2117,17 +2131,13 @@ private:
                 if (number->integer) {
                     return args.at(0);
                 }
-                auto const placesValue = static_cast<std::uint32_t>(*places);
-                std::int64_t scale = 1;
-                for (std::uint32_t digit = 0; digit < placesValue; ++digit) {
-                    scale *= 10;
-                }
-                if (!math::checkedMul(number->value, math::Rational{scale, math::DecimalPlaces{0}})) {
+                auto const rounded = math::checkedRoundToDecimalPlaces(
+                    number->value, math::DecimalPlaces{static_cast<std::uint32_t>(*places)},
+                    math::RoundingMode::HalfEven);
+                if (!rounded) {
                     return mismatch(expr, "the result overflows");
                 }
-                return makeNumber(math::roundToDecimalPlaces(number->value, math::DecimalPlaces{placesValue},
-                                                             math::RoundingMode::HalfEven),
-                                  false, number->unit);
+                return makeNumber(*rounded, false, number->unit);
             }
             case FunctionId::Concat: {
                 std::string out;
@@ -2216,7 +2226,7 @@ private:
             case FunctionId::Number: {
                 auto text = formatNumber(args.front(), context.numeric);
                 if (!text) {
-                    return mismatch(expr, "`number` takes a number");
+                    return mismatch(expr, numeric(args.front()) ? "the result overflows" : "`number` takes a number");
                 }
                 return std::move(*text);
             }
@@ -2227,8 +2237,11 @@ private:
                     std::cmp_greater(*places, math::kMaxDecimalPlaces)) {
                     return mismatch(expr, "`decimal` takes a number and places from 0 to 18");
                 }
-                return render::formatCanonicalNumber(decimalText(number->value, static_cast<std::uint32_t>(*places)),
-                                                     context.numeric);
+                auto const text = decimalText(number->value, static_cast<std::uint32_t>(*places));
+                if (!text) {
+                    return mismatch(expr, "the result overflows");
+                }
+                return render::formatCanonicalNumber(*text, context.numeric);
             }
             case FunctionId::QuantityText: {
                 Quantity const* const quantity = args.at(0).asQuantity();
@@ -2246,8 +2259,11 @@ private:
                     }
                     shown = Quantity{.value = *converted, .unit = *unit};
                 }
-                return formatNumber(shown, context.numeric).value_or(std::string{}) + " " +
-                       unitDisplay(shown.unit, context.units);
+                auto const text = formatNumber(shown, context.numeric);
+                if (!text) {
+                    return mismatch(expr, "the result overflows");
+                }
+                return *text + " " + unitDisplay(shown.unit, context.units);
             }
             case FunctionId::Money: {
                 auto const number = numeric(args.at(0));
@@ -2255,9 +2271,11 @@ private:
                 if (!number || number->unit != nullptr || currency == nullptr) {
                     return mismatch(expr, "`money` takes an amount and a currency code");
                 }
-                return render::formatCanonicalNumber(decimalText(number->value, currencyDigits(*currency)),
-                                                     context.numeric) +
-                       " " + *currency;
+                auto const text = decimalText(number->value, currencyDigits(*currency));
+                if (!text) {
+                    return mismatch(expr, "the result overflows");
+                }
+                return render::formatCanonicalNumber(*text, context.numeric) + " " + *currency;
             }
             case FunctionId::Date:
             case FunctionId::DateTime: {

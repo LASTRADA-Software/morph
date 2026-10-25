@@ -43,8 +43,9 @@ TEST_CASE("ui messages: CLDR plural categories per locale", "[ui][messages]") {
             auto const number = morph::ui::detail::numberOf(*value);
             REQUIRE(number.has_value());
             CAPTURE(locale, glz::write_json(pair.at(0)).value_or("?"));
-            CHECK(categoryName(pluralCategory(locale, number->first, number->second)) ==
-                  std::get<std::string>(pair.at(1).data));
+            auto const category = pluralCategory(locale, number->first, number->second);
+            REQUIRE(category.has_value());
+            CHECK(categoryName(*category) == std::get<std::string>(pair.at(1).data));
             ++checked;
         }
     }
@@ -106,6 +107,25 @@ TEST_CASE("ui messages: numbers take the locale's separators and digits", "[ui][
         morph::ui::detail::decimalText(morph::math::Rational{morph::math::Numerator{-15}, morph::math::Denominator{10},
                                                              morph::math::DecimalPlaces{1}},
                                        0) == "-2");
+}
+
+// Mutation: round a placeholder through the saturating roundToDecimalPlaces -> `{$n :number}` shows
+// 9.223372036854775807 and returns no error, and the `.match` selects `other`.
+TEST_CASE("ui messages: a number that overflows at its places is not shown", "[ui][messages]") {
+    // 28/3 at 18 places: 9.333333333333333333 has a numerator past int64.
+    Value const q28{morph::ui::Decimal{morph::math::Rational{morph::math::Numerator{28}, morph::math::Denominator{3},
+                                                             morph::math::DecimalPlaces{18}}}};
+    auto const placeholder = parseMessage("{$n :number} units");
+    REQUIRE(placeholder.has_value());
+    auto const shown = formatMessage(*placeholder, ValueRecord{{"n", q28}}, MessageLocale{});
+    CHECK(shown.text == "{$n} units");
+    REQUIRE(shown.errors.size() == 1);
+    CHECK(shown.errors.front() == "the argument `n` overflows at its places");
+    CHECK_FALSE(pluralCategory("en", q28.asDecimal()->value, 18).has_value());
+    // The plural category cannot read it: only `*` matches.
+    auto const selection = parseMessage(".input {$n :number} .match $n one {{one}} other {{other}} * {{none}}");
+    REQUIRE(selection.has_value());
+    CHECK(formatMessage(*selection, ValueRecord{{"n", q28}}, MessageLocale{}).text == "none");
 }
 
 // Mutation: drop the catch-all guard in formatMessage -> a hand-built pattern without one crashes.

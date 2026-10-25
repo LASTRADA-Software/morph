@@ -92,7 +92,14 @@ over the tree recurse, and a few hundred levels exhaust a 1 MB thread stack.
   operands' places. `div` keeps the exact quotient: an `int` when two `int`s divide, otherwise a
   decimal at the operands' places, which display rounds — so a document shows a quotient with
   `decimal(x, dp)`.
-- **Rounding** is half to even wherever `expr/1` rounds: `round`, `mean`, and every display.
+- **Rounding** is half to even wherever `expr/1` rounds: `round`, `mean`, and every display. It is
+  one checked rounding, `math::checkedRoundToDecimalPlaces`: the value is scaled by `10^dp` and
+  divided in 128 bits, so it never saturates, and its result is empty only when the rounded
+  value's numerator does not fit an `int64`. `10/3` at 18 places is `3.333333333333333333`;
+  `28/3` at 18 places is not representable, and every function that would round it (`round`,
+  `mean`, `decimal`, `number`, `quantity`, `money`, `format`) is `null`, reported "the result
+  overflows", rather than showing a clamped value. In a message the placeholder shows as `{$name}`
+  and the error is returned, and such a number matches only a `.match`'s `*`.
 - **Quantities.** Two quantities add, subtract and compare when their units convert; the result is
   in the left operand's unit. A quantity times or over a plain number keeps its unit; a quantity over
   a quantity is a decimal ratio; a product of two quantities, or a sum of a quantity and a plain
