@@ -233,6 +233,32 @@ TEST_CASE("qt_quick theme: a table header's colour reaches Theme, a surface's sc
     CHECK(fill->property("color").value<QColor>() == QColor{"#102030"});
 }
 
+// Mutation: drop `color.chart.2` from either property table in theme.cpp (Theme or the sidebar keeps its default).
+TEST_CASE("qt_quick theme: a chart colour reaches Theme and a surface's scheme", "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color", "chart": {"2": {"$value": "#102030"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    auto const sidebarTokens =
+        ui::parseTokens(R"({"color": {"$type": "color", "chart": {"2": {"$value": "#405060"}}}})");
+    REQUIRE(sidebarTokens);
+    auto const sidebarResolved = ui::resolveTokens({&*sidebarTokens});
+    REQUIRE(sidebarResolved);
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"sidebar", ui::themeValues(*sidebarResolved)}};
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved), surfaces).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("chart1").value<QColor>() == QColor{"#0072b2"});  // a token the theme lacks: the default
+    CHECK(theme->property("chart2").value<QColor>() == QColor{"#102030"});
+    auto* const page = theme->property("pageScheme").value<QObject*>();
+    REQUIRE(page != nullptr);
+    CHECK(page->property("chart2").value<QColor>() == QColor{"#102030"});  // a built-in surface follows Theme
+    auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
+    REQUIRE(sidebar != nullptr);
+    CHECK(sidebar->property("chart2").value<QColor>() == QColor{"#405060"});
+}
+
 namespace {
 
 /// The background a surface draws: the widget's direct child Rectangle at z -1.

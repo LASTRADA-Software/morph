@@ -31,7 +31,7 @@ namespace morph::qt_quick {
 namespace {
 
 /// The `Theme` property each colour token of the set sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 25> kColorProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 29> kColorProperties = {{
     {"color.text", "text"},
     {"color.muted", "muted"},
     {"color.err", "error"},
@@ -57,10 +57,14 @@ constexpr std::array<std::pair<std::string_view, char const*>, 25> kColorPropert
     {"color.info.border", "infoBorder"},
     {"color.info.dot", "infoDot"},
     {"color.table.header", "tableHeader"},
+    {"color.chart.1", "chart1"},
+    {"color.chart.2", "chart2"},
+    {"color.chart.3", "chart3"},
+    {"color.chart.4", "chart4"},
 }};
 
 /// The scheme property each colour token of a surface sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 25> kSchemeProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 29> kSchemeProperties = {{
     {"color.surface", "surface"},
     {"color.text", "text"},
     {"color.muted", "muted"},
@@ -86,6 +90,10 @@ constexpr std::array<std::pair<std::string_view, char const*>, 25> kSchemeProper
     {"color.info.border", "infoBorder"},
     {"color.info.dot", "infoDot"},
     {"color.table.header", "tableHeader"},
+    {"color.chart.1", "chart1"},
+    {"color.chart.2", "chart2"},
+    {"color.chart.3", "chart3"},
+    {"color.chart.4", "chart4"},
 }};
 
 /// The `Theme` property each dimension token of the set sets, besides the spacing scale.
