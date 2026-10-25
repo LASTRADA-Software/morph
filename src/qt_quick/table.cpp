@@ -23,6 +23,7 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
         scrolled(static_cast<std::size_t>(std::max<qlonglong>(0, map.value(QStringLiteral("first")).toLongLong())),
                  static_cast<std::size_t>(std::max<qlonglong>(0, map.value(QStringLiteral("count")).toLongLong())));
     });
+    relay().on(QStringLiteral("selectAll"), [this](QVariant const&) { selectAll(); });
 }
 
 void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
@@ -39,7 +40,10 @@ void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
 
 void TableImpl::setShowHeader(bool shown) { write("showHeader", shown); }
 
-void TableImpl::setSelectionMode(ui::SelectionMode mode) { _mode = mode; }
+void TableImpl::setSelectionMode(ui::SelectionMode mode) {
+    _mode = mode;
+    write("multiple", mode == ui::SelectionMode::Multiple);
+}
 
 void TableImpl::setRowKey(ui::Widget& row, ui::Key const& key) {
     if (auto* const tableRow = dynamic_cast<TableRowImpl*>(&row)) {
@@ -61,7 +65,8 @@ void TableImpl::setSelection(std::vector<ui::Key> const& keys) {
     mark();
 }
 
-void TableImpl::setOnSelectionChange(std::function<void(std::vector<ui::Key>)> onSelectionChange) {
+void TableImpl::setOnSelectionChange(
+    std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) {
     _onSelectionChange = std::move(onSelectionChange);
 }
 
@@ -69,6 +74,7 @@ void TableImpl::setOnActivate(std::function<void(ui::Key)> onActivate) { _onActi
 
 void TableImpl::setExistingKeys(std::vector<ui::Key> const& keys) {
     _existingKeys = std::unordered_set<ui::Key>{keys.begin(), keys.end()};
+    _existingOrder = keys;
 }
 
 void TableImpl::setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) {
@@ -164,28 +170,79 @@ std::vector<ui::Key> TableImpl::existingSelection() const {
     return keys;
 }
 
-void TableImpl::tapped(TableRowImpl const& row, bool extend) {
+std::vector<ui::Key> TableImpl::rowKeys() const {
+    // Below a virtualized table's threshold every row is realized, in row order.
+    if (!_existingOrder.empty()) {
+        return _existingOrder;
+    }
+    std::vector<ui::Key> keys;
+    for (ItemBase const* const child : children()) {
+        auto const* const row = dynamic_cast<TableRowImpl const*>(child);
+        if (row != nullptr && row->key()) {
+            keys.push_back(*row->key());
+        }
+    }
+    return keys;
+}
+
+void TableImpl::tapped(TableRowImpl const& row, ui::RowClick click) {
     if (_mode == ui::SelectionMode::None || !row.key() || !row.reachable()) {
         return;
     }
-    ui::Key const& key = *row.key();
-    if (_mode == ui::SelectionMode::Multiple && extend) {
-        // A user's change drops a requested key still waiting for its row.
-        std::vector<ui::Key> next = existingSelection();
-        if (auto const found = std::ranges::find(next, key); found != next.end()) {
-            next.erase(found);
-        } else {
-            next.push_back(key);
-        }
-        _requested = std::move(next);
-    } else {
-        _requested = {key};
+    ui::Key const key = *row.key();
+    if (_mode == ui::SelectionMode::Single || click == ui::RowClick::Only) {
+        _anchor = key;
+        select({key}, ui::SelectionChange::Replace);
+        return;
     }
+    if (click == ui::RowClick::Range) {
+        std::vector<ui::Key> const keys = rowKeys();
+        auto const target = std::ranges::find(keys, key);
+        auto from = _anchor ? std::ranges::find(keys, *_anchor) : keys.end();
+        if (from == keys.end()) {
+            from = target;
+        }
+        auto const [low, high] = std::minmax(from, target);
+        select(target == keys.end() ? std::vector<ui::Key>{key} : std::vector<ui::Key>{low, std::next(high)},
+               ui::SelectionChange::Replace);
+        return;
+    }
+    // A user's change drops a requested key still waiting for its row.
+    std::vector<ui::Key> next = existingSelection();
+    if (auto const found = std::ranges::find(next, key); found != next.end()) {
+        next.erase(found);
+    } else {
+        next.push_back(key);
+    }
+    _anchor = key;
+    select(std::move(next), ui::SelectionChange::Extend);
+}
+
+void TableImpl::anchorAt(TableRowImpl const& row) {
+    std::vector<ui::Key> const keys = rowKeys();
+    if (row.key() && (!_anchor || std::ranges::find(keys, *_anchor) == keys.end())) {
+        _anchor = row.key();
+    }
+}
+
+void TableImpl::selectAll() {
+    if (_mode != ui::SelectionMode::Multiple) {
+        return;
+    }
+    std::vector<ui::Key> keys = rowKeys();
+    std::vector<ui::Key> const selected = existingSelection();
+    bool const every = std::ranges::all_of(
+        keys, [&selected](ui::Key const& key) { return std::ranges::find(selected, key) != selected.end(); });
+    select(every ? std::vector<ui::Key>{} : std::move(keys), ui::SelectionChange::Extend);
+}
+
+void TableImpl::select(std::vector<ui::Key> next, ui::SelectionChange change) {
+    _requested = std::move(next);
     mark();
     if (_onSelectionChange) {
         // A copy: the handler may destroy this table.
         auto const handler = _onSelectionChange;
-        handler(existingSelection());
+        handler(existingSelection(), change);
     }
 }
 
@@ -203,9 +260,22 @@ TableRowImpl::TableRowImpl(Context& context, ui::ContainerWidget* parent, TableI
           QVariantMap{{QStringLiteral("table"), QVariant::fromValue<QObject*>(table.item())},
                       {QStringLiteral("background"),
                        QVariant::fromValue(&context.component(QStringLiteral("MorphTableRowBackground")))}}} {
+    // A click or a key on the row: `ctrl` toggles it, `shift` selects a range, neither selects it alone.
     relay().on(QStringLiteral("tap"), [this](QVariant const& payload) {
         if (auto* const owner = dynamic_cast<TableImpl*>(container())) {
-            owner->tapped(*this, payload.toBool());
+            QVariantMap const held = payload.toMap();
+            ui::RowClick click = ui::RowClick::Only;
+            if (held.value(QStringLiteral("ctrl")).toBool()) {
+                click = ui::RowClick::Toggle;
+            } else if (held.value(QStringLiteral("shift")).toBool()) {
+                click = ui::RowClick::Range;
+            }
+            owner->tapped(*this, click);
+        }
+    });
+    relay().on(QStringLiteral("anchor"), [this](QVariant const&) {
+        if (auto* const owner = dynamic_cast<TableImpl*>(container())) {
+            owner->anchorAt(*this);
         }
     });
     relay().on(QStringLiteral("activate"), [this](QVariant const&) {

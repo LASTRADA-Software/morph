@@ -151,6 +151,12 @@ public:
     virtual void activate() {}
     /// A click on @p cell (0-based, relative to this widget); runs `activate()` unless overridden.
     virtual void click(::core::tui::Point cell);
+    /// A click with the modifiers the terminal reported with it; `click(cell)` unless overridden, since only a table
+    /// row's selection reads them.
+    virtual void clickWith(::core::tui::Point cell, ::core::tui::Modifier modifiers) {
+        static_cast<void>(modifiers);
+        click(cell);
+    }
     /// A left press on @p cell (0-based, relative to this widget) that this widget took, after it took the focus
     /// when it takes it on a press. It may destroy the widget.
     virtual void pressAt(::core::tui::Point cell);

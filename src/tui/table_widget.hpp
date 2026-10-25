@@ -26,11 +26,16 @@ namespace morph::tui::detail {
 /// focus, the cursor row `>`.
 ///
 /// Up, Down, Home and End move the cursor, and PageUp and PageDown by as many rows as fill the room below the header;
-/// Space selects the cursor row (Single) or toggles it (Multiple); Enter selects it in Single mode and activates it in
-/// every mode. A click moves the cursor to a row and selects or toggles it as Space does; a second click on the same
-/// row within half a second (on `Context::now`), with no key between, is a double click, which activates the row and
+/// Space selects the cursor row (Single) or toggles it and makes it the anchor (Multiple); Enter selects it in Single
+/// mode and activates it in every mode. In Multiple mode Shift+Up and Shift+Down move the cursor and select the rows
+/// from the anchor to it, and Ctrl+A selects every row, or clears them when every row is selected; in Single mode
+/// Shift with an arrow moves as the arrow does and Ctrl+A goes on outwards. A click moves the cursor to a row and
+/// selects only that row, making it the anchor; Ctrl+click toggles the row and makes it the anchor, Shift+click
+/// selects the rows from the anchor to it, where the terminal passes the modifier on. A second click on the same row
+/// within half a second (on `Context::now`), with no key between, is a double click, which activates the row and
 /// leaves the selection as the first click left it. A row the user cannot reach (disabled) is neither selected nor
-/// activated.
+/// activated. A click, a Shift-click, Shift with an arrow and every Single change report `Replace`; a Ctrl-click,
+/// Space and Ctrl+A `Extend`.
 ///
 /// The table keeps the keys last requested by `setSelection` or selected by the user, and marks every row that has
 /// one of them: a key with no row marks nothing and stays requested, a row that goes is unmarked and is marked again
@@ -53,7 +58,8 @@ public:
     /// The row's cells draw in the tone's style. Throws std::logic_error when @p row is not one of this table's rows.
     void setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) override;
     void setSelection(std::vector<ui::Key> const& selection) override;
-    void setOnSelectionChange(std::function<void(std::vector<ui::Key>)> onSelectionChange) override;
+    void setOnSelectionChange(
+        std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
     /// The positions among `children()` of the rows the table marks as selected, ascending.
     [[nodiscard]] std::vector<std::size_t> markedRows() const;
@@ -62,7 +68,7 @@ public:
     [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
-    void click(::core::tui::Point cell) override;
+    void clickWith(::core::tui::Point cell, ::core::tui::Modifier modifiers) override;
     [[nodiscard]] bool wheel(int delta) override;
 
 protected:
@@ -97,8 +103,20 @@ private:
     /// Selects @p row (Single) or toggles it (Multiple) as the user did, and reports a change; whether this table is
     /// still there afterwards.
     [[nodiscard]] bool pick(WidgetBase const& row);
-    /// Calls onSelectionChange with @p keys; whether this table is still there afterwards.
-    [[nodiscard]] bool report(std::vector<ui::Key> keys);
+    /// What a click on @p row selects, as the user did, and reports a change; whether this table is still there
+    /// afterwards.
+    [[nodiscard]] bool choose(WidgetBase const& row, ui::RowClick click);
+    /// The keys of the shown rows from the anchor to @p row, in row order; @p row alone without an anchor.
+    [[nodiscard]] std::vector<ui::Key> rangeTo(WidgetBase const& row) const;
+    /// Every shown row's key, or none when every one is selected already.
+    [[nodiscard]] std::vector<ui::Key> allOrNone() const;
+    /// Makes @p next the selection and reports it as @p change, unless it is the selection already; whether this
+    /// table is still there afterwards.
+    [[nodiscard]] bool change(std::vector<ui::Key> next, ui::SelectionChange change);
+    /// Calls onSelectionChange with @p keys and @p change; whether this table is still there afterwards.
+    [[nodiscard]] bool report(std::vector<ui::Key> keys, ui::SelectionChange change);
+    /// Handles the keys a modifier changes: Shift+Up, Shift+Down and Ctrl+A.
+    [[nodiscard]] ::core::tui::EventResult modifiedKey(::core::tui::KeyEvent const& key);
     /// Calls onActivate with @p key when a row the user can reach has it; the handler may destroy this table.
     void activateRow(ui::Key const& key);
 
@@ -108,6 +126,7 @@ private:
     std::unordered_map<WidgetBase const*, ui::Key> _keys;
     std::vector<ui::Key> _selection;  ///< The keys requested or selected by the user, in that order.
     WidgetBase* _cursor = nullptr;    ///< The cursor row; null for the first shown row.
+    std::optional<ui::Key> _anchor;   ///< Where a range starts: the row last clicked or toggled.
     std::size_t _cursorPlace = 0;     ///< The cursor's position among the shown rows, when last known.
     std::size_t _top = 0;             ///< The first shown row drawn.
     ::core::tui::Size _size{};        ///< The table's size, as of the last frame.
@@ -122,7 +141,7 @@ private:
         std::chrono::steady_clock::time_point at;  ///< When.
     };
     LastClick _lastClick;
-    std::function<void(std::vector<ui::Key>)> _onSelectionChange;
+    std::function<void(std::vector<ui::Key>, ui::SelectionChange)> _onSelectionChange;
     std::function<void(ui::Key)> _onActivate;
 };
 

@@ -7349,8 +7349,9 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     });
     // A user's change: the table's own selection takes it when no key binds one, then `onSelectionChange` runs with
     // `event` the new selection, in the table's scope, in the same batch.
-    options.onSelectionChange = [this, ctx, element,
-                                 commands = node.event("onSelectionChange")](std::vector<Key> const& keys) {
+    // The backend holds every row of a table over `rows`, so a report of either kind is the whole selection.
+    options.onSelectionChange = [this, ctx, element, commands = node.event("onSelectionChange")](
+                                    std::vector<Key> const& keys, SelectionChange /*change*/) {
         ValueList items;
         for (Key const& key : keys) {
             items.push_back(valueOfKey(key));

@@ -444,6 +444,13 @@ public:
     virtual void setLabel(std::string_view label) = 0;
 };
 
+/// @brief How a click on a table row is modified, which decides what it does to the selection.
+enum class RowClick : std::uint8_t {
+    Only,    ///< A plain click: only the row is selected, and it becomes the anchor.
+    Toggle,  ///< Ctrl+click: the row is toggled, the rest kept, and it becomes the anchor.
+    Range,   ///< Shift+click: the rows from the anchor to this one are selected, in place of the rest.
+};
+
 /// @brief Keyed rows under column headers, with selection and activation by key.
 ///
 /// Its children are the rows, each a horizontal stack whose children are the cells in column order. A hidden cell
@@ -459,6 +466,15 @@ public:
 /// selection. `onSelectionChange` then gets exactly the keys of the existing rows now selected, in any mode: a key
 /// still waiting for its row is dropped by a user's change, while `setSelection` keeps it waiting. It reports the
 /// user's selections only: no setter, and no row arriving or going, calls it.
+///
+/// Every backend selects with the same inputs. In `Multiple` mode a click selects only its row and makes it the
+/// anchor, Ctrl+click toggles its row and makes it the anchor, Shift+click selects the rows from the anchor to it in
+/// place of the rest; Space toggles the current row, Shift+Up and Shift+Down move the current row and select from the
+/// anchor to it, and Ctrl+A selects every row, or clears them all when every row is selected already. In `Single`
+/// mode each of them selects the one row, and Ctrl+A goes on outwards. The arrows, Home, End, PageUp and PageDown
+/// move the current row without selecting, and Enter activates it. A report says which kind of change it was: a
+/// click, a Shift-click, a Shift+arrow and every `Single` change `Replace`; a Ctrl-click, Space and Ctrl+A `Extend`.
+/// A range runs over the keys in row order, rows the backend has not realized included.
 class TableWidget : public ContainerWidget {
 public:
     /// @brief Sets the column headers and widths.
@@ -488,9 +504,10 @@ public:
     /// @param keys The selected keys.
     virtual void setSelection(std::vector<Key> const& keys) = 0;
 
-    /// @brief Sets what a user's selection change calls, with the keys of every row then selected.
+    /// @brief Sets what a user's selection change calls, with the keys of every row then selected and the kind of
+    ///        change the input made.
     /// @param onSelectionChange The handler; empty does nothing.
-    virtual void setOnSelectionChange(std::function<void(std::vector<Key>)> onSelectionChange) = 0;
+    virtual void setOnSelectionChange(std::function<void(std::vector<Key>, SelectionChange)> onSelectionChange) = 0;
 
     /// @brief Sets what activating a row (Enter or a double click) calls, with its key.
     /// @param onActivate The handler; empty does nothing.
@@ -525,7 +542,8 @@ public:
     ///        silently drop a selected key's membership the moment its row scrolls out of view. A backend that
     ///        never virtualizes may ignore this -- every key it cares about already has a realized row, by
     ///        definition, so `setRowKey` alone already tells it everything this call would add.
-    /// @param keys Every key currently in the table's data, in no particular order.
+    /// @param keys Every key currently in the table's data, in row order, so a range or Ctrl+A covers the rows the
+    ///        backend has not realized.
     virtual void setExistingKeys(std::vector<Key> const& keys) { static_cast<void>(keys); }
 };
 

@@ -128,6 +128,12 @@ public:
     ///        one only for a `Single` table.
     virtual void selectRows(Widget& table, std::vector<std::size_t> const& rows) = 0;
 
+    /// @brief Clicks a row of a table as a user would, with the modifiers @p click stands for: none, Ctrl, or Shift.
+    /// @param table The table.
+    /// @param row   A position among the table's current rows.
+    /// @param click How the click is modified.
+    virtual void clickRow(Widget& table, std::size_t row, RowClick click) = 0;
+
     /// @brief The rows a table shows as selected.
     /// @param table The table.
     /// @return Their positions among the table's current rows, ascending.
@@ -660,12 +666,13 @@ struct Entry {
     // direct parent fails: an outer Column hides or disables, a Panel inside it collapses, and an inner Column
     // holds the widgets.
     Node const widgets = ui::column(
-        {.children = {
-             ui::button({.label = "Go", .onClick = [&clicks] { ++clicks; }}),
-             ui::textInput({.onChange = [&edits](std::string const&) { ++edits; }}),
-             ui::text({.text = "card", .common = {.dragKey = std::optional<Key>{Key{std::int64_t{7}}}}}),
-             entryTable(rows, {.selectionMode = SelectionMode::Single,
-                               .onSelectionChange = [&selections](std::vector<Key> const&) { ++selections; }})}});
+        {.children = {ui::button({.label = "Go", .onClick = [&clicks] { ++clicks; }}),
+                      ui::textInput({.onChange = [&edits](std::string const&) { ++edits; }}),
+                      ui::text({.text = "card", .common = {.dragKey = std::optional<Key>{Key{std::int64_t{7}}}}}),
+                      entryTable(rows, {.selectionMode = SelectionMode::Single,
+                                        .onSelectionChange = [&selections](std::vector<Key> const&, SelectionChange) {
+                                            ++selections;
+                                        }})}});
     Mounted const gated{runtime, probe.backend(),
                         ui::column({.children = {ui::panel({.title = "Outer",
                                                             .child = widgets,
@@ -950,7 +957,7 @@ struct Entry {
                        entryTable(rows, {.selectionMode = SelectionMode::Multiple,
                                          .selection = [&selection] { return selection.get(); },
                                          .onSelectionChange =
-                                             [&reports, &selection](std::vector<Key> keys) {
+                                             [&reports, &selection](std::vector<Key> keys, SelectionChange) {
                                                  reports.push_back(keys);
                                                  selection.set(std::move(keys));
                                              }})};
@@ -999,9 +1006,10 @@ struct Entry {
 [[nodiscard]] inline std::optional<std::string> tableShowsUnboundUserSelection(ConformanceProbe& probe) {
     reactive::Signal<std::vector<Entry>> rows{probe.runtime(), {{.id = 1, .label = "a"}, {.id = 2, .label = "b"}}};
     int reports = 0;
-    Mounted const view{probe.runtime(), probe.backend(),
-                       entryTable(rows, {.selectionMode = SelectionMode::Single,
-                                         .onSelectionChange = [&reports](std::vector<Key> const&) { ++reports; }})};
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        entryTable(rows, {.selectionMode = SelectionMode::Single,
+                          .onSelectionChange = [&reports](std::vector<Key> const&, SelectionChange) { ++reports; }})};
     probe.settle();
     probe.selectRows(view.root(), {1});
     probe.settle();
@@ -1918,6 +1926,165 @@ struct Measured {
     return checks.result();
 }
 
+/// @brief One report of a table's selection: the keys, sorted, and the kind of change.
+struct SelectionReport {
+    /// @brief The keys reported, sorted.
+    std::vector<Key> keys;
+    /// @brief The kind of change.
+    SelectionChange change = SelectionChange::Replace;
+};
+
+/// @brief A table over @p rows whose user's selection is recorded in @p reports and shown without a binding.
+/// @param rows    The rows.
+/// @param mode    The selection mode.
+/// @param reports Where each report goes.
+/// @param common  The table's common properties.
+/// @return The node.
+[[nodiscard]] inline Node reportingTable(reactive::Signal<std::vector<Entry>> const& rows, SelectionMode mode,
+                                         std::vector<SelectionReport>& reports, Common common = {}) {
+    return entryTable(rows, {.selectionMode = mode,
+                             .onSelectionChange =
+                                 [&reports](std::vector<Key> keys, SelectionChange change) {
+                                     std::ranges::sort(keys);
+                                     reports.push_back({.keys = std::move(keys), .change = change});
+                                 },
+                             .common = std::move(common)});
+}
+
+/// @brief The last report as text: its keys, then `/replace` or `/extend`; `none` when there is none.
+/// @param reports The reports.
+/// @return The text.
+[[nodiscard]] inline std::string lastReport(std::vector<SelectionReport> const& reports) {
+    if (reports.empty()) {
+        return "none";
+    }
+    return keyTexts(reports.back().keys) +
+           (reports.back().change == SelectionChange::Replace ? "/replace" : "/extend");
+}
+
+/// @brief Positions as text, comma-separated.
+/// @param rows The positions.
+/// @return The text.
+[[nodiscard]] inline std::string rowTexts(std::vector<std::size_t> const& rows) {
+    std::string text;
+    for (std::size_t const row : rows) {
+        text += (text.empty() ? "" : ",") + std::to_string(row);
+    }
+    return text;
+}
+
+/// @brief Rows a, b, c and d, keyed 1 to 4.
+/// @return The rows.
+[[nodiscard]] inline std::vector<Entry> fourEntries() {
+    return {{.id = 1, .label = "a"}, {.id = 2, .label = "b"}, {.id = 3, .label = "c"}, {.id = 4, .label = "d"}};
+}
+
+/// @brief Case: in a `Multiple` table a plain click selects only its row, and a Ctrl-click adds a row and then
+///        removes it, keeping the first. The click reports `Replace`, each Ctrl-click `Extend`.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> clickSelectsCtrlClickToggles(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<SelectionReport> reports;
+    Mounted const view{probe.runtime(), probe.backend(), reportingTable(rows, SelectionMode::Multiple, reports)};
+    probe.settle();
+    Checks checks;
+    probe.clickRow(view.root(), 2, RowClick::Toggle);
+    probe.settle();
+    probe.clickRow(view.root(), 0, RowClick::Only);
+    probe.settle();
+    checks.text("the rows selected after a Ctrl-click on c and a click on a", "0",
+                rowTexts(probe.selectedRows(view.root())));
+    checks.text("a click's report", "1/replace", lastReport(reports));
+    probe.clickRow(view.root(), 1, RowClick::Toggle);
+    probe.settle();
+    checks.text("the rows selected after a Ctrl-click on b", "0,1", rowTexts(probe.selectedRows(view.root())));
+    checks.text("a Ctrl-click's report", "1,2/extend", lastReport(reports));
+    probe.clickRow(view.root(), 1, RowClick::Toggle);
+    probe.settle();
+    checks.text("the rows selected after a second Ctrl-click on b", "0", rowTexts(probe.selectedRows(view.root())));
+    checks.text("the second Ctrl-click's report", "1/extend", lastReport(reports));
+    return checks.result();
+}
+
+/// @brief Case: a click on row 1, then a Shift-click on row 3, selects rows 1 to 3; a Shift-click on row 0 then
+///        selects rows 0 and 1, the range from the same anchor in place of the rest. Each Shift-click reports
+///        `Replace`.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> shiftClickSelectsRange(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<SelectionReport> reports;
+    Mounted const view{probe.runtime(), probe.backend(), reportingTable(rows, SelectionMode::Multiple, reports)};
+    probe.settle();
+    Checks checks;
+    probe.clickRow(view.root(), 1, RowClick::Only);
+    probe.settle();
+    probe.clickRow(view.root(), 3, RowClick::Range);
+    probe.settle();
+    checks.text("the rows selected by a click on b and a Shift-click on d", "1,2,3",
+                rowTexts(probe.selectedRows(view.root())));
+    checks.text("the Shift-click's report", "2,3,4/replace", lastReport(reports));
+    probe.clickRow(view.root(), 0, RowClick::Range);
+    probe.settle();
+    checks.text("the rows selected by a further Shift-click on a", "0,1", rowTexts(probe.selectedRows(view.root())));
+    checks.text("the second Shift-click's report", "1,2/replace", lastReport(reports));
+    return checks.result();
+}
+
+/// @brief Case: the keyboard on a focused table of text cells. Ctrl+A on a `Multiple` table selects every row, and
+///        pressed again clears them, each reported as `Extend`. On a `Single` table Ctrl+A selects nothing and
+///        reaches the enclosing column's chord, and after a click on row 1, Enter activates row 1.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> tableTakesItsKeys(ConformanceProbe& probe) {
+    Checks checks;
+    {
+        reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+        std::vector<SelectionReport> reports;
+        Mounted const view{probe.runtime(), probe.backend(), reportingTable(rows, SelectionMode::Multiple, reports)};
+        probe.settle();
+        probe.press(view.root(), "Ctrl+A");
+        probe.settle();
+        checks.text("the rows selected by Ctrl+A on a multiple table", "0,1,2,3",
+                    rowTexts(probe.selectedRows(view.root())));
+        checks.text("Ctrl+A's report", "1,2,3,4/extend", lastReport(reports));
+        probe.press(view.root(), "Ctrl+A");
+        probe.settle();
+        checks.text("the rows selected by a second Ctrl+A", "", rowTexts(probe.selectedRows(view.root())));
+        checks.text("the second Ctrl+A's report", "/extend", lastReport(reports));
+    }
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<SelectionReport> reports;
+    std::vector<Key> activated;
+    int chords = 0;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {entryTable(
+                        rows, {.selectionMode = SelectionMode::Single,
+                               .onSelectionChange =
+                                   [&reports](std::vector<Key> keys, SelectionChange change) {
+                                       reports.push_back({.keys = std::move(keys), .change = change});
+                                   },
+                               .onActivate = [&activated](Key const& key) { activated.push_back(key); }})},
+                    .common = {.keys = {{.chord = "Ctrl+A", .onPress = [&chords] { ++chords; }}}}})};
+    probe.settle();
+    Widget* const table = childOf(probe, &view.root(), 0);
+    if (table == nullptr) {
+        return "a Table in a Column is not shown";
+    }
+    probe.press(*table, "Ctrl+A");
+    probe.settle();
+    checks.text("the rows selected by Ctrl+A on a single table", "", rowTexts(probe.selectedRows(*table)));
+    checks.that(chords == 1, "Ctrl+A on a single table ran the column's chord " + std::to_string(chords) + " times");
+    probe.clickRow(*table, 1, RowClick::Only);
+    probe.settle();
+    probe.press(*table, "Enter");
+    probe.settle();
+    checks.text("the rows activated by Enter after a click on b", "2", keyTexts(activated));
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
@@ -1947,7 +2114,7 @@ struct Measured {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 40> const cases{{
+    static std::array<ConformanceCase, 43> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -2004,6 +2171,12 @@ struct Measured {
         {.name = "a closed collapsible's content takes no input, its header does",
          .run = detail::closedCollapsibleKeepsItsHeader},
         {.name = "a drop zone takes a drop whole or refuses it whole", .run = detail::dropZoneTakesWholeDrops},
+        {.name = "a click selects only its row, and a Ctrl-click toggles one and keeps the rest",
+         .run = detail::clickSelectsCtrlClickToggles},
+        {.name = "a Shift-click selects the rows from the anchor, in place of the rest",
+         .run = detail::shiftClickSelectsRange},
+        {.name = "a focused table takes Ctrl+A in multiple mode, passes it on in single mode, and Enter activates",
+         .run = detail::tableTakesItsKeys},
     }};
     return cases;
 }

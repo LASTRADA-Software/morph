@@ -213,8 +213,17 @@ otherwise it takes no drag or wheel event, and it never takes a vertical one. Th
 by rescanning every row on every change: a cell growing only raises its column's cached width; a cell shrinking, a row
 leaving, or a cell's visibility flipping rescans that one column, since the cache alone cannot tell whether the row
 that set its current maximum is still contributing. Either way, every row still places its cells again once a
-column's width actually changes, since a widened column's cells all need their new x/width. A click selects the row, Ctrl+click toggles it in `Multiple` mode, a double
-click or Enter activates it without toggling the selection. Selection is kept as the requested keys, marked on the
+column's width actually changes, since a widened column's cells all need their new x/width. A table is a Tab stop
+(`activeFocusOnTab`) that hands the focus on to its current row, or the first; the focused row is the current one,
+which its background draws and assistive technology announces with `Accessible.selected`. A click makes its row
+current and focuses it, unless a control in a cell took the focus with the press; the `TapHandler` reports Ctrl and
+Shift, which `TableImpl::tapped` reads as a `RowClick` against the anchor it keeps. The table's own keys
+(`MorphWidget.ownKey`, after its chords) run while the table or a row holds the focus itself: the arrows, Home, End,
+PageUp and PageDown move the focus between the shown rows, Shift with Up or Down marks the row left as the anchor
+when there is none and selects the range, Space toggles the current row, and Ctrl+A (`multiple` only) selects every
+row or clears them. A plain double click or Enter on a row activates it without toggling the selection. A range and
+Ctrl+A run over `setExistingKeys`' keys in row order when the table virtualizes, and over the realized rows
+otherwise. Selection is kept as the requested keys, marked on the
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
 

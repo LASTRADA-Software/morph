@@ -14,6 +14,10 @@ MorphWidget {
     // 0 stretch, 1 start, 2 center, 3 end.
     property var columns: []
     property bool showHeader: true
+    // Whether the user can select several rows; C++ writes it with the selection mode.
+    property bool multiple: false
+    // The row keyboard focus is on, or was on last; null before any.
+    property Item currentRow: null
     // Set by C++ (TableImpl::setRealizedWindow) only above a virtualized table's threshold; totalRows stays -1
     // (its default, meaning "not virtualizing") otherwise, which is what keeps every binding below referencing
     // these three properties a no-op for a table that never crosses its threshold -- body has no spacers, and the
@@ -195,6 +199,82 @@ MorphWidget {
     onColumnsChanged: {
         root.columnCache = []
         root.seedMissingColumns()
+    }
+
+    // A Tab stop: the focus goes on to the current row, or the first one.
+    activeFocusOnTab: true
+    onActiveFocusChanged: {
+        if (activeFocus)
+            root.focusRow(root.shownRows().includes(root.currentRow) ? root.currentRow : root.shownRows()[0])
+    }
+    ownKey: event => root.tableKey(event)
+
+    // The rows the user can see, in order.
+    function shownRows(): var {
+        const shown = []
+        for (let i = 0; i < body.children.length; ++i) {
+            const row = body.children[i]
+            if (row.visible && row.table === root)
+                shown.push(row)
+        }
+        return shown
+    }
+
+    function focusRow(row: Item) {
+        if (row) {
+            root.currentRow = row
+            row.forceActiveFocus(Qt.TabFocusReason)
+        }
+    }
+
+    // The table's own keys, while the table or one of its rows holds the focus itself; a key a control in a cell
+    // leaves goes on outwards. The arrows, Home, End, PageUp and PageDown move the current row; Shift with Up or Down
+    // moves it and selects from the anchor; Space toggles it (selects it in single mode); Ctrl+A selects every row,
+    // or clears them, in multiple mode only. Enter is the row's own key.
+    function tableKey(event: var): bool {
+        const focused = root.Window.activeFocusItem
+        if (focused !== root && !(focused && focused.table === root))
+            return false
+        const rows = root.shownRows()
+        const at = rows.indexOf(root.currentRow)
+        const mods = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)
+        if (event.key === Qt.Key_A && mods === Qt.ControlModifier) {
+            if (!root.multiple)
+                return false
+            root.fire("selectAll", undefined)
+            return true
+        }
+        if (event.key === Qt.Key_Space && mods === Qt.NoModifier) {
+            if (at >= 0)
+                rows[at].fire("tap", {"ctrl": true})
+            return true
+        }
+        const page = Math.max(1, Math.floor((root.Window.height > 0 ? root.Window.height : 0) /
+                                            Math.max(1, root.estimatedRowHeight)) - 1)
+        let next = -1
+        if (event.key === Qt.Key_Up)
+            next = Math.max(0, at - 1)
+        else if (event.key === Qt.Key_Down)
+            next = at < 0 ? 0 : Math.min(rows.length - 1, at + 1)
+        else if (event.key === Qt.Key_Home && mods === Qt.NoModifier)
+            next = 0
+        else if (event.key === Qt.Key_End && mods === Qt.NoModifier)
+            next = rows.length - 1
+        else if (event.key === Qt.Key_PageUp && mods === Qt.NoModifier)
+            next = Math.max(0, at - page)
+        else if (event.key === Qt.Key_PageDown && mods === Qt.NoModifier)
+            next = Math.min(rows.length - 1, at + page)
+        if (next < 0 || (mods !== Qt.NoModifier && mods !== Qt.ShiftModifier))
+            return false
+        const extend = mods === Qt.ShiftModifier
+        if (extend && event.key !== Qt.Key_Up && event.key !== Qt.Key_Down)
+            return false
+        if (extend && at >= 0)
+            rows[at].fire("anchor", undefined)
+        root.focusRow(rows[next])
+        if (extend)
+            rows[next].fire("tap", {"shift": true})
+        return true
     }
 
     implicitWidth: Math.max(root.showHeader ? header.implicitWidth : 0, body.implicitWidth)

@@ -25,6 +25,7 @@
 #include <ranges>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "qt_quick/kinds.hpp"
@@ -80,7 +81,9 @@ TEST_CASE("qt_quick table: a row made in a table is a table row, and an int64 ke
     CHECK(Scene::itemOf(*table.rows.at(0)).property("rowKey").toString() == QStringLiteral("i:9007199254740993"));
     std::vector<std::vector<ui::Key>> reported;
     std::vector<ui::Key> activated;
-    table.table->setOnSelectionChange([&reported](std::vector<ui::Key> keys) { reported.push_back(std::move(keys)); });
+    table.table->setOnSelectionChange([&reported](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) {
+        reported.push_back(std::move(keys));
+    });
     table.table->setOnActivate([&activated](ui::Key key) { activated.push_back(std::move(key)); });
     scene.click(Scene::itemOf(*table.rows.at(0)));
     REQUIRE(reported.size() == 1);
@@ -102,7 +105,8 @@ TEST_CASE("qt_quick table: the selection mode limits what the user selects, not 
     Scene scene;
     Rows table = makeTable(scene, {ui::Key{std::string{"a"}}, ui::Key{std::string{"b"}}}, ui::SelectionMode::None);
     int reports = 0;
-    table.table->setOnSelectionChange([&reports](std::vector<ui::Key> const&) { ++reports; });
+    table.table->setOnSelectionChange(
+        [&reports](std::vector<ui::Key> const&, ui::SelectionChange /*change*/) { ++reports; });
     scene.click(Scene::itemOf(*table.rows.at(0)));
     CHECK(reports == 0);
     table.table->setSelection({ui::Key{std::string{"b"}}, ui::Key{std::string{"z"}}});
@@ -633,4 +637,30 @@ TEST_CASE("qt_quick table: a virtualized table keeps the height it is given, and
     CHECK(std::abs(flick->y() + flick->height() - given) < 1.0);
     CHECK(flick->property("contentHeight").toReal() > flick->height());
     CHECK(flick->property("interactive").toBool());
+}
+
+// Mutation: drop MorphTable's activeFocusOnTab (Tab never reaches a row) or its ownKey (Down and Space do nothing).
+TEST_CASE("qt_quick table: Tab focuses a table of text cells, Down then Space selects the second row, Enter activates",
+          "[qt_quick]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}, ui::Key{std::int64_t{2}}, ui::Key{std::int64_t{3}}},
+                           ui::SelectionMode::Multiple);
+    std::vector<std::pair<std::vector<ui::Key>, ui::SelectionChange>> reported;
+    std::vector<ui::Key> activated;
+    table.table->setOnSelectionChange([&reported](std::vector<ui::Key> keys, ui::SelectionChange change) {
+        reported.emplace_back(std::move(keys), change);
+    });
+    table.table->setOnActivate([&activated](ui::Key key) { activated.push_back(std::move(key)); });
+    scene.key(Qt::Key_Tab);
+    CHECK(Scene::itemOf(*table.rows.at(0)).hasActiveFocus());
+    scene.key(Qt::Key_Down);
+    CHECK(Scene::itemOf(*table.rows.at(1)).hasActiveFocus());
+    CHECK(reported.empty());
+    scene.key(Qt::Key_Space);
+    REQUIRE(reported.size() == 1);
+    CHECK(reported.back().first == std::vector<ui::Key>{ui::Key{std::int64_t{2}}});
+    CHECK(reported.back().second == ui::SelectionChange::Extend);
+    CHECK(detail::TableImpl::marked(*detail::baseOf(*table.rows.at(1))));
+    scene.key(Qt::Key_Return);
+    CHECK(activated == std::vector<ui::Key>{ui::Key{std::int64_t{2}}});
 }

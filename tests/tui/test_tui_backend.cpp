@@ -515,7 +515,7 @@ TEST_CASE("tui::Backend: a mounted Table marks a selected row again when it retu
                                {.selectionMode = ui::SelectionMode::Single,
                                 .selection = [&selection] { return selection.get(); },
                                 .onSelectionChange =
-                                    [&](std::vector<ui::Key> keys) {
+                                    [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) {
                                         reports.push_back(keys);
                                         selection.set(std::move(keys));
                                     }})};

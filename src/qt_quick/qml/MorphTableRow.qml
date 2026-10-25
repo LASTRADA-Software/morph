@@ -4,8 +4,9 @@ import QtQuick
 import QtQuick.Layouts
 
 // One row of a table: its cells placed by column, so a hidden cell keeps its column and the cells after it stay
-// under their own headers, over its background part. A click selects it, Ctrl+click toggles it, a double click or
-// Enter activates it. C++ calls `place` again whenever a cell's implicit size changes.
+// under their own headers, over its background part. A click selects it alone, Ctrl+click toggles it, Shift+click
+// selects the range from the anchor, and each makes it the table's current row; a double click or Enter activates
+// it. C++ calls `place` again whenever a cell's implicit size changes.
 MorphWidget {
     id: root
 
@@ -22,6 +23,10 @@ MorphWidget {
     property Component background: null
     readonly property bool hovered: rowHover.hovered
     readonly property bool current: root.holdsFocus(Window.activeFocusItem)
+    onCurrentChanged: {
+        if (current && root.table)
+            root.table.currentRow = root
+    }
     // Whether the row is at an odd position in its table; C++ writes it as rows come, go and move.
     property bool alternate: false
     // The row's tone: -1 for none, else a tone index (Neutral, Info, Ok, Warn, Err).
@@ -154,10 +159,19 @@ MorphWidget {
     TapHandler {
         id: tap
         onTapped: {
-            if (tap.tapCount >= 2)
+            const held = tap.point.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)
+            // Only plain clicks make a double click, so two quick Ctrl-clicks toggle a row twice.
+            if (tap.tapCount >= 2 && held === Qt.NoModifier) {
                 root.fire("activate", undefined)
-            else
-                root.fire("tap", (tap.point.modifiers & Qt.ControlModifier) !== 0)
+                return
+            }
+            // The row takes the focus unless a control in one of its cells took it with the press.
+            if (!root.holdsFocus(root.Window.activeFocusItem))
+                root.forceActiveFocus(Qt.MouseFocusReason)
+            root.fire("tap", {
+                "ctrl": (tap.point.modifiers & Qt.ControlModifier) !== 0,
+                "shift": (tap.point.modifiers & Qt.ShiftModifier) !== 0
+            })
         }
     }
 }

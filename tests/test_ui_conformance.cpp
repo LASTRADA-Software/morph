@@ -86,6 +86,7 @@ enum class Fault : std::uint8_t {
     WrongText,      // every widget reads as showing other text
     DeadInput,      // user actions never reach the widgets
     EchoingSelect,  // the backend's Select reports a choice when its options are replaced
+    NoModifiers,    // a click on a table row arrives without its modifiers, as a plain click
 };
 
 // The reference probe: what a TUI or Qt Quick probe does with a rendered screen or a QQuickItem tree, this one does
@@ -166,6 +167,14 @@ public:
         }
         _backend.selectRows(tableId, std::move(keys));
     }
+    void clickRow(ui::Widget& table, std::size_t row, ui::RowClick click) override {
+        if (_fault == Fault::DeadInput) {
+            return;
+        }
+        int const tableId = _backend.idOf(table);
+        ui::Key const key = parseKey(_backend.prop(_backend.children(tableId).at(row), "rowKey"));
+        _backend.clickRow(tableId, key, _fault == Fault::NoModifiers ? ui::RowClick::Only : click);
+    }
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         int const tableId = _backend.idOf(table);
         std::vector<std::string> const marked = listItems(_backend.prop(tableId, "selection"));
@@ -241,6 +250,7 @@ public:
     void drag(ui::Widget&, ui::Widget&) override {}
     void dismiss(ui::Widget&) override {}
     void selectRows(ui::Widget&, std::vector<std::size_t> const&) override {}
+    void clickRow(ui::Widget&, std::size_t, ui::RowClick) override {}
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const&) override { return {}; }
     void moveCursor(ui::Widget&, std::size_t) override {}
     [[nodiscard]] std::size_t cursorOf(ui::Widget const&) override { return 0; }
@@ -272,7 +282,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 40);
+    REQUIRE(cases.size() == 43);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -340,6 +350,14 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
           "a drop zone takes a drop whole or refuses it whole"}) {
         INFO(name);
         CHECK(deadInput.contains(name));
+    }
+
+    std::set<std::string_view> const noModifiers = failingCases(Fault::NoModifiers);
+    for (std::string_view const name :
+         {"a click selects only its row, and a Ctrl-click toggles one and keeps the rest",
+          "a Shift-click selects the rows from the anchor, in place of the rest"}) {
+        INFO(name);
+        CHECK(noModifiers.contains(name));
     }
 
     // Only the setter case is run against the echoing backend: the probe reads widgets through the recording

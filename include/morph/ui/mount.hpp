@@ -461,16 +461,17 @@ private:
 
     // An input's event: the application's handler, run as `event` runs it, then the re-assertion of the request.
     // Installed whenever either exists, so a slot without a handler is read-only rather than editable.
-    template <typename T, typename Arg>
-    [[nodiscard]] std::function<void(Arg)> inputEvent(std::function<void(Arg)> const& handler,
-                                                      std::function<void(T const&)> reassert) const {
+    // The first argument is what the user asked for; any others (a table's kind of change) only reach the handler.
+    template <typename T, typename Arg, typename... Rest>
+    [[nodiscard]] std::function<void(Arg, Rest...)> inputEvent(std::function<void(Arg, Rest...)> const& handler,
+                                                               std::function<void(T const&)> reassert) const {
         if (!reassert) {
             return event(handler);
         }
-        return [inner = event(handler), reassert = std::move(reassert)](Arg arg) {
+        return [inner = event(handler), reassert = std::move(reassert)](Arg arg, Rest... rest) {
             T const requested(arg);
             if (inner) {
-                inner(std::move(arg));
+                inner(std::move(arg), std::move(rest)...);
             }
             reassert(requested);
         };

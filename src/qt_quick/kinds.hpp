@@ -427,14 +427,21 @@ public:
     void setRowKey(ui::Widget& row, ui::Key const& key) override;
     void setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) override;
     void setSelection(std::vector<ui::Key> const& keys) override;
-    void setOnSelectionChange(std::function<void(std::vector<ui::Key>)> onSelectionChange) override;
+    void setOnSelectionChange(
+        std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
     void setExistingKeys(std::vector<ui::Key> const& keys) override;
     void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) override;
     void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override;
 
-    /// A click on a row; @p extend for Ctrl+click.
-    void tapped(TableRowImpl const& row, bool extend);
+    /// A click on a row, or Space or Shift with an arrow on the current row, as @p click; the table's selection model
+    /// (`ui::TableWidget`).
+    void tapped(TableRowImpl const& row, ui::RowClick click);
+    /// Makes @p row the anchor of a range when the table has none, or its anchor's row is gone: the row Shift with an
+    /// arrow leaves.
+    void anchorAt(TableRowImpl const& row);
+    /// Ctrl+A in `Multiple` mode: every row, or none when every row is selected already.
+    void selectAll();
     /// A double click on a row, or Enter on it.
     void activated(TableRowImpl const& row) const;
     /// The Flickable reported a scroll; @p first and @p count are what it wants realized next.
@@ -452,15 +459,23 @@ private:
     /// Writes `alternate` on every row but @p leaving: true at each odd position.
     void stripe(ItemBase const* leaving) const noexcept;
     [[nodiscard]] std::vector<ui::Key> existingSelection() const;
+    /// Every key the table has, realized or not, in row order.
+    [[nodiscard]] std::vector<ui::Key> rowKeys() const;
+    /// Makes @p next the requested keys, marks the rows and reports the existing ones as @p change.
+    void select(std::vector<ui::Key> next, ui::SelectionChange change);
 
     ui::SelectionMode _mode = ui::SelectionMode::None;
     std::vector<ui::Key> _requested;
-    std::function<void(std::vector<ui::Key>)> _onSelectionChange;
+    std::function<void(std::vector<ui::Key>, ui::SelectionChange)> _onSelectionChange;
+    // Where a range starts: the row last clicked or toggled.
+    std::optional<ui::Key> _anchor;
     std::function<void(ui::Key)> _onActivate;
     // Every key the table's data has, realized or dewindowed; set only above a virtualized table's threshold
     // (mount.hpp never calls setExistingKeys below it). Empty below threshold, where existingSelection() falls
     // back to realized children alone, which is already exactly every key that exists at that size.
     std::unordered_set<ui::Key> _existingKeys;
+    // The same keys, in row order, for a range or Ctrl+A over rows that are not realized.
+    std::vector<ui::Key> _existingOrder;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
 };
 

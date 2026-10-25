@@ -58,8 +58,11 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   2. then to the widget's own handling of the key, for the keys its kind takes. A button takes Enter and Space,
      which click it. A single-line or password text input takes Enter only when it has a submit handler: it commits,
      submits, and the key stops there; without one it commits, and Enter goes on. A check box takes Space, which
-     toggles it, and lets Enter go on. A table takes Enter, which activates the current row. Every other key a kind
-     handles (editing keys, arrows, a list's navigation) is its own as before;
+     toggles it, and lets Enter go on. A table takes Enter, which activates the current row, and, while it or one of
+     its rows holds the focus itself, the arrows, Home, End, PageUp, PageDown, Space, Shift+Up, Shift+Down and, in
+     `Multiple` mode, Ctrl+A ([Selection by key](#selection-by-key)); a `Single` table's Ctrl+A, and a key a control
+     inside a cell leaves, go on. Every other key a kind handles (editing keys, arrows, a list's navigation) is its
+     own as before;
   3. then to the ancestors' chords, innermost first, for a key the widget left. A dialog's Enter chord (a document's
      `default`) is one of them, so it runs for Enter that no focused widget took.
 
@@ -226,7 +229,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `DialogWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `ToastWidget` | `show(text, tone)` (one call: shows the message and restarts the dismiss interval regardless of whether the toast is already on-screen) | — |
 | `BusyWidget` | `setActive`, `setLabel` | — |
-| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)` | `setOnSelectionChange(keys)`, `setOnActivate(Key)` (Enter or a double click) |
+| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)`, `setExistingKeys(keys)` (every key, in row order, above the virtualization threshold) | `setOnSelectionChange(keys, SelectionChange)`, `setOnActivate(Key)` (Enter or a double click) |
 | `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)` | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)`, `setOnCommit(value)` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
@@ -269,6 +272,26 @@ the list it refers to may arrive in either order.
   change, while `setSelection` keeps it waiting. A backend may report each step of the user's
   picking (a click, then a Ctrl-click); the last report is the whole selection, and no report names
   a key without a row.
+- **The table's selection model** is the same on every backend; the document says nothing of it:
+
+  | Input | `Single` | `Multiple` | Reports |
+  |---|---|---|---|
+  | Click | selects the row | selects only the row, and makes it the anchor | `Replace` |
+  | Ctrl+click | as a click | toggles the row, keeps the rest, and makes it the anchor | `Extend` (`Replace` in `Single`) |
+  | Shift+click | as a click | selects the rows from the anchor to this one, in place of the rest | `Replace` |
+  | Up, Down, Home, End, PageUp, PageDown | move the current row | move the current row | — |
+  | Space | selects the current row | toggles the current row, and makes it the anchor | `Extend` (`Replace` in `Single`) |
+  | Shift+Up, Shift+Down | as Up and Down | move the current row and select from the anchor to it | `Replace` |
+  | Ctrl+A | goes on outwards | selects every row; with every row selected already, clears them | `Extend` |
+  | Enter | activates the current row | activates the current row | — |
+
+  Only a plain click is half of a double click, so two quick Ctrl-clicks toggle a row twice. Shift with an arrow and
+  no anchor starts the range at the row the current row leaves. A range and Ctrl+A run over the keys in row order,
+  rows the backend has not realized included (`setExistingKeys`). The kind (`SelectionChange`) travels with every
+  report: a `Replace` is the whole selection, and an `Extend` keeps every selected key the backend does not hold.
+  A modified click reaches a terminal application only where the emulator passes it on (xterm keeps Shift+click
+  for its own text selection), so on a terminal the dependable toggle is Space and the dependable range Shift with
+  an arrow.
 
 ## Drag and drop
 
@@ -343,7 +366,9 @@ The headless reference backend and the test double for everything above the cont
   leaving: the text the field shows), `moveCursor`, `toggle`, `choose`, `chooseIndex` (a menu's
   top-level entry or a tab), `chooseMenuEntry(id, path)`, `collapse`, `expand(id, open)` (a
   collapsible section), `dismiss` (a dialog, a drawer or a dismissible banner), `resize(id,
-  sizes)`, `dropFiles(id, paths)` (true when the zone took the drop), `selectRows`, `activateRow`,
+  sizes)`, `dropFiles(id, paths)` (true when the zone took the drop), `selectRows` (reported as `Replace`, its last
+  key the anchor), `clickRow(id, key, RowClick)` (a click with its modifiers, as the selection model has it),
+  `activateRow`,
   `setDateTime`, `slide`, `pick` and `drag`. A helper first changes what the native widget would
   change by itself — the field's text and cursor, the box's check mark, the marked option or rows,
   the highlighted tab, the collapsed or open state, a dismissed dialog's or drawer's `open`, the
@@ -361,7 +386,8 @@ The headless reference backend and the test double for everything above the cont
     `id` declares; then the built-in keys of its kind (a `Button`'s `Enter` or `Space` clicks it; a single-line or
     password `TextInput`'s `Enter` commits, then submits and stops when the field has a submit handler, and goes on
     when it has none; a `Checkbox`'s `Space` toggles it; a `Table`'s `Enter` activates its first marked row, and
-    stops there whether or not one is marked); then the innermost ancestor that declares the chord. A handler that
+    stops there whether or not one is marked; a `Multiple` table's `Ctrl+A` selects every row or clears them, as
+    `Extend`, and a `Single` one's goes on — a recording table keeps no current row, so it takes no arrow or Space); then the innermost ancestor that declares the chord. A handler that
     destroys `id` stops the key there. `press` returns whether any step took the key. It changes no recorded
     focus.
   - A helper used on a kind it does not apply to throws `std::logic_error`, and so does an action
@@ -433,6 +459,7 @@ after it; its reading operations report what the widget shows now.
 | `drag(source, target)` | Drags one widget onto another |
 | `dismiss(dialog)` | Dismisses a dialog or drawer (Esc on the TUI), or a dismissible banner |
 | `selectRows(table, rows)` | Selects rows by position, in the order the user picks them — at least one, and only one in a `Single` table — so the user's selection is exactly those rows |
+| `clickRow(table, row, click)` | Clicks a row by position as a user would, plain (`RowClick::Only`), with Ctrl (`Toggle`) or with Shift (`Range`) |
 | `selectedRows(table)` | The positions of the rows the table shows as selected, ascending |
 | `moveCursor(field, position)` | Moves a text field's cursor as the arrow keys or a click would, without changing the text |
 | `cursorOf(field)` | Where a text field's cursor is, as a byte offset into its text |
@@ -509,6 +536,13 @@ Each case is named by the rule it checks:
     reaches `onToggle`, and once the application opens it the content takes clicks.
 40. A drop zone takes a drop of one accepted file, compared without case, and refuses a file it
     does not accept and several files when it takes one.
+41. In a `Multiple` table a plain click selects only its row, and a Ctrl-click adds a second row and then removes
+    it, keeping the first; the click reports `Replace`, each Ctrl-click `Extend`.
+42. A click on row 1, then a Shift-click on row 3, selects rows 1 to 3; a Shift-click on row 0 then selects rows 0
+    and 1, the range from the same anchor in place of the rest. Each Shift-click reports `Replace`.
+43. On a focused table of text cells, Ctrl+A in `Multiple` mode selects every row and pressed again clears them,
+    each as `Extend`; in `Single` mode it selects nothing and reaches the enclosing column's chord, and after a click
+    on row 1, Enter activates row 1.
 
 ### What the probe cannot reach
 

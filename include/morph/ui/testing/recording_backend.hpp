@@ -465,7 +465,7 @@ struct Callbacks {
     /// @brief From `DialogWidget::setOnDismiss`, `DrawerWidget::setOnDismiss` or `BannerWidget::setOnDismiss`.
     Action dismiss;
     /// @brief From `TableWidget::setOnSelectionChange`.
-    std::function<void(std::vector<Key>)> selection;
+    std::function<void(std::vector<Key>, SelectionChange)> selection;
     /// @brief From `TableWidget::setOnActivate`.
     std::function<void(Key)> activate;
     /// @brief The drop handler's predicate, from `Widget::setDropHandler`.
@@ -1466,7 +1466,7 @@ public:
 
     /// @brief Stores the handler `RecordingBackend::selectRows` calls.
     /// @param onSelectionChange The handler.
-    void setOnSelectionChange(std::function<void(std::vector<Key>)> onSelectionChange) override {
+    void setOnSelectionChange(std::function<void(std::vector<Key>, SelectionChange)> onSelectionChange) override {
         callbacks().selection = std::move(onSelectionChange);
     }
 
@@ -1516,11 +1516,72 @@ public:
         return std::nullopt;
     }
 
-    /// @brief Marks the rows the user selected, as the requested keys; nothing is logged.
+    /// @brief Marks the rows the user selected, as the requested keys; nothing is logged. The last key becomes the
+    ///        anchor of a later Shift-click.
     /// @param keys Keys of current rows.
     void selectByUser(std::vector<Key> const& keys) {
+        if (!keys.empty()) {
+            _anchor = keys.back();
+        }
+        select(keys);
+    }
+
+    /// @brief Marks the rows a user's click or key selected, as the requested keys, leaving the anchor where the
+    ///        input left it; nothing is logged.
+    /// @param keys Keys of current rows.
+    void select(std::vector<Key> const& keys) {
         _requested = keys;
         remark();
+    }
+
+    /// @brief What a click on the row with @p key selects, as every backend's selection model has it, and makes
+    ///        the clicked row the anchor unless the click was a range.
+    /// @param key   A current row's key.
+    /// @param click How the click was modified.
+    /// @return The keys then selected, in row order for a range, and the kind of change.
+    [[nodiscard]] std::pair<std::vector<Key>, SelectionChange> clicked(Key const& key, RowClick click) {
+        if (_mode != SelectionMode::Multiple || click == RowClick::Only) {
+            _anchor = key;
+            return {{key}, SelectionChange::Replace};
+        }
+        if (click == RowClick::Toggle) {
+            _anchor = key;
+            std::vector<Key> next = markedKeys();
+            if (auto const found = std::ranges::find(next, key); found != next.end()) {
+                next.erase(found);
+            } else {
+                next.push_back(key);
+            }
+            return {next, SelectionChange::Extend};
+        }
+        std::vector<Key> const rows = rowKeys();
+        Key const from = _anchor.has_value() && rowOf(*_anchor).has_value() ? *_anchor : key;
+        auto const first = std::ranges::find(rows, from);
+        auto const last = std::ranges::find(rows, key);
+        auto const [low, high] = std::minmax(first, last);
+        return {std::vector<Key>{low, std::next(high)}, SelectionChange::Replace};
+    }
+
+    /// @brief What Ctrl+A selects in a `Multiple` table: every row, or none when every row is selected already.
+    /// @return The keys, in row order.
+    [[nodiscard]] std::vector<Key> allOrNone() const {
+        std::vector<Key> const rows = rowKeys();
+        std::vector<Key> const marked = markedKeys();
+        bool const every =
+            std::ranges::all_of(rows, [&marked](Key const& key) { return std::ranges::contains(marked, key); });
+        return every ? std::vector<Key>{} : rows;
+    }
+
+    /// @brief The keys of the current rows, in row order.
+    /// @return The keys.
+    [[nodiscard]] std::vector<Key> rowKeys() const {
+        std::vector<Key> keys;
+        for (int const child : store().at(id()).children) {
+            if (auto const found = _rowKeys.find(child); found != _rowKeys.end()) {
+                keys.push_back(found->second);
+            }
+        }
+        return keys;
     }
 
     /// @brief The keys of the rows the table marks: the requested keys, in the order requested, that a current row
@@ -1551,6 +1612,8 @@ private:
     std::map<int, Key> _rowKeys;  // row id -> key, as setRowKey told it
     // Engaged once `setSelection` ran or the user selected.
     std::optional<std::vector<Key>> _requested;
+    // The row a Shift-click's range starts from: the last row clicked without Shift.
+    std::optional<Key> _anchor;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
 };
 
@@ -1835,7 +1898,8 @@ public:
     /// First a chord @p widgetId declares itself through `setKeys`. Then the built-in keys of its kind: a `Button`'s
     /// `Enter` or `Space` clicks it; a single-line or password `TextInput`'s `Enter` commits, then submits and stops
     /// when the field has a submit handler, and goes on after the commit when it has none; a `Checkbox`'s `Space`
-    /// toggles it; a `Table`'s `Enter` activates its first marked row, and stops whether or not one is marked. Then
+    /// toggles it; a `Table`'s `Enter` activates its first marked row, and stops whether or not one is marked; a
+    /// `Multiple` table's `Ctrl+A` selects every row, or clears them when every row is selected, as `Extend`. Then
     /// the chords of its ancestors, innermost first. A handler that destroys the focused widget stops the key there.
     /// Like every helper it acts only when a user could reach @p widgetId.
     /// @param widgetId The widget focus is on.
@@ -2134,8 +2198,35 @@ public:
         }
         if (reachable(record)) {
             table->selectByUser(keys);
-            invoke(record.callbacks.selection, std::move(keys));
+            invoke(record.callbacks.selection, std::move(keys), SelectionChange::Replace);
         }
+    }
+
+    /// @brief Clicks a row of a table as the user would with the click's modifiers: the table marks what the click
+    ///        selects (`TableWidget`'s selection model), then `onSelectionChange` gets the keys and the kind of
+    ///        change, `Replace` for a plain click or a range and `Extend` for a toggle.
+    /// @param widgetId The table.
+    /// @param key The row's key.
+    /// @param click How the click is modified.
+    /// @throws std::logic_error when the widget is not a table, it selects nothing, or no current row has @p key.
+    void clickRow(int widgetId, Key const& key, RowClick click) {
+        detail::Record const& record = expectKind(widgetId, "clickRow", {"Table"});
+        auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
+        std::string const where = " of Table#" + std::to_string(widgetId);
+        if (table == nullptr || table->mode() == SelectionMode::None) {
+            throw std::logic_error{"RecordingBackend: clickRow" + where + ", which selects nothing"};
+        }
+        std::optional<int> const rowId = table->rowOf(key);
+        if (!rowId.has_value()) {
+            throw std::logic_error{"RecordingBackend: clickRow of " + detail::formatKey(key) + where +
+                                   ", which has no such row"};
+        }
+        if (!reachable(record) || !reachable(_store->at(*rowId))) {
+            return;
+        }
+        auto [keys, change] = table->clicked(key, click);
+        table->select(keys);
+        invoke(record.callbacks.selection, std::move(keys), change);
     }
 
     /// @brief Activates a row of a table (Enter or a double click).
@@ -2276,6 +2367,16 @@ private:
             }
             commit(widgetId);
             return false;
+        }
+        if (record.kind == "Table" && chord == "Ctrl+A") {
+            auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
+            if (table == nullptr || table->mode() != SelectionMode::Multiple) {
+                return false;
+            }
+            std::vector<Key> keys = table->allOrNone();
+            table->select(keys);
+            invoke(record.callbacks.selection, std::move(keys), SelectionChange::Extend);
+            return true;
         }
         if (record.kind == "Table" && enter) {
             auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);

@@ -177,6 +177,26 @@ public:
             }
         }
     }
+    // A mouse click on the row's drawn cell, with Ctrl or Shift held as the terminal reports it in SGR mouse mode.
+    void clickRow(ui::Widget& table, std::size_t row, ui::RowClick click) override {
+        settle();
+        ui::Widget const* const rowWidget = childAt(dynamic_cast<ui::ContainerWidget&>(table), row);
+        auto const cell = rowWidget == nullptr ? std::nullopt : drawnCell(*rowWidget);
+        if (!cell || _fault == Fault::DeadInput) {
+            return;
+        }
+        Modifier modifiers = Modifier::None;
+        if (click == ui::RowClick::Toggle) {
+            modifiers = Modifier::Ctrl;
+        } else if (click == ui::RowClick::Range) {
+            modifiers = Modifier::Shift;
+        }
+        send(core::tui::MouseEvent{
+            .type = Type::Press, .button = 0, .x = cell->x + 1, .y = cell->y + 1, .modifiers = modifiers});
+        send(core::tui::MouseEvent{
+            .type = Type::Release, .button = 0, .x = cell->x + 1, .y = cell->y + 1, .modifiers = modifiers});
+        settle();
+    }
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         return tableOf(table).markedRows();
     }

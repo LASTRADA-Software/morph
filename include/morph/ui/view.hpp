@@ -267,6 +267,15 @@ enum class SelectionMode : std::uint8_t {
     Multiple,  ///< Any number of rows.
 };
 
+/// @brief What a user's change of a table's selection did, which travels with every report: a backend that holds
+///        only some of the rows (one page) cannot report the keys it does not hold, so only the kind tells whether
+///        those stay selected.
+enum class SelectionChange : std::uint8_t {
+    Replace,  ///< The reported keys are the whole selection: a click, a Shift-click or Shift+arrow, any `Single`
+              ///< change.
+    Extend,   ///< The reported keys replace those the backend holds and keep the rest: a Ctrl-click, Space, Ctrl+A.
+};
+
 /// @brief How much space a widget asks for along one dimension, in backend units (a character cell on the TUI).
 struct Sizing {
     /// @brief The sizing rule.
@@ -911,8 +920,8 @@ struct Table {
     SelectionMode selectionMode = SelectionMode::None;
     /// @brief The selected rows' keys. A key with no row selects nothing until such a row appears.
     Prop<std::vector<Key>> selection;
-    /// @brief Called with the keys the user selected.
-    std::function<void(std::vector<Key>)> onSelectionChange;
+    /// @brief Called with the keys the user selected and what kind of change it was.
+    std::function<void(std::vector<Key>, SelectionChange)> onSelectionChange;
     /// @brief Called with a row's key when the user activates it (Enter or a double click).
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop.
@@ -1442,8 +1451,8 @@ struct TableOptions {
     SelectionMode selectionMode = SelectionMode::None;
     /// @brief The selected rows' keys.
     Prop<std::vector<Key>> selection;
-    /// @brief Called with the keys the user selected.
-    std::function<void(std::vector<Key>)> onSelectionChange;
+    /// @brief Called with the keys the user selected and what kind of change it was.
+    std::function<void(std::vector<Key>, SelectionChange)> onSelectionChange;
     /// @brief Called with a row's key when the user activates it.
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop of the table.

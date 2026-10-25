@@ -14,6 +14,7 @@
 #include <string>
 #include <utility>
 
+#include "tui/chord.hpp"
 #include "tui/container_widgets.hpp"
 #include "tui/layout.hpp"
 
@@ -75,7 +76,8 @@ void TableImpl::setSelection(std::vector<ui::Key> const& selection) {
     refresh();
 }
 
-void TableImpl::setOnSelectionChange(std::function<void(std::vector<ui::Key>)> onSelectionChange) {
+void TableImpl::setOnSelectionChange(
+    std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) {
     _onSelectionChange = std::move(onSelectionChange);
 }
 
@@ -326,11 +328,40 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
     }
 }
 
+// Shift with an arrow moves as the arrow does and, in Multiple mode, selects from the anchor to the new cursor row;
+// without an anchor, the range starts at the row the cursor leaves.
+EventResult TableImpl::modifiedKey(::core::tui::KeyEvent const& key) {
+    bool const upward = matchesChord("Shift+Up", key);
+    if (upward || matchesChord("Shift+Down", key)) {
+        auto const rows = shownChildren();
+        auto const place = cursorPlace(rows);
+        if (!rows.empty() && (!_anchor || rowWith(*_anchor) == nullptr)) {
+            _anchor = keyOf(rows.at(place));
+        }
+        auto const last = rows.empty() ? std::size_t{0} : rows.size() - 1;
+        std::size_t const above = place > 0 ? place - 1 : 0;
+        moveCursor(rows, upward ? above : std::min(place + 1, last));
+        refresh();
+        if (_mode == ui::SelectionMode::Multiple && !rows.empty()) {
+            auto const* const cursor = rows.at(cursorPlace(rows));
+            if (cursor->actionable()) {
+                static_cast<void>(change(rangeTo(*cursor), ui::SelectionChange::Replace));
+            }
+        }
+        return EventResult::Handled;
+    }
+    if (matchesChord("Ctrl+A", key) && _mode == ui::SelectionMode::Multiple) {
+        static_cast<void>(change(allOrNone(), ui::SelectionChange::Extend));
+        return EventResult::Handled;
+    }
+    return EventResult::Ignored;
+}
+
 // Any key ends a double click: the click after it is a first click.
 EventResult TableImpl::key(::core::tui::KeyEvent const& key) {
     _lastClick = {};
     if (::core::tui::withoutLockKeys(key.modifiers) != ::core::tui::Modifier::None) {
-        return EventResult::Ignored;
+        return modifiedKey(key);
     }
     auto const rows = shownChildren();
     auto const place = cursorPlace(rows);
@@ -377,19 +408,27 @@ WidgetBase* TableImpl::rowAtLine(int line) const {
     return nullptr;
 }
 
-void TableImpl::click(::core::tui::Point cell) {
+void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifiers) {
     auto* const row = rowAtLine(cell.y);
     if (row == nullptr) {
         return;
     }
+    auto const held = ::core::tui::withoutLockKeys(modifiers);
+    ui::RowClick click = ui::RowClick::Only;
+    if (::core::tui::hasModifier(held, ::core::tui::Modifier::Ctrl)) {
+        click = ui::RowClick::Toggle;
+    } else if (::core::tui::hasModifier(held, ::core::tui::Modifier::Shift)) {
+        click = ui::RowClick::Range;
+    }
+    // Only plain clicks make a double click, so two quick Ctrl-clicks toggle a row twice.
     auto const now = context().now();
-    bool const twice = _lastClick.row == row && now - _lastClick.at <= kDoubleClick;
-    _lastClick = twice ? LastClick{} : LastClick{.row = row, .at = now};
+    bool const twice = click == ui::RowClick::Only && _lastClick.row == row && now - _lastClick.at <= kDoubleClick;
+    _lastClick = (twice || click != ui::RowClick::Only) ? LastClick{} : LastClick{.row = row, .at = now};
     auto const rows = shownChildren();
     moveCursor(rows, static_cast<std::size_t>(std::distance(rows.begin(), std::ranges::find(rows, row))));
     refresh();
     if (!twice) {
-        static_cast<void>(pick(*row));
+        static_cast<void>(choose(*row, click));
     } else if (auto const rowKey = keyOf(row)) {
         activateRow(*rowKey);
     }
@@ -412,34 +451,80 @@ bool TableImpl::wheel(int delta) {
 }
 
 bool TableImpl::pick(WidgetBase const& row) {
+    return choose(row, _mode == ui::SelectionMode::Multiple ? ui::RowClick::Toggle : ui::RowClick::Only);
+}
+
+bool TableImpl::choose(WidgetBase const& row, ui::RowClick click) {
     auto const rowKey = keyOf(&row);
     if (_mode == ui::SelectionMode::None || !rowKey || !row.actionable()) {
         return true;
     }
+    if (_mode == ui::SelectionMode::Single || click == ui::RowClick::Only) {
+        _anchor = *rowKey;
+        return change({*rowKey}, ui::SelectionChange::Replace);
+    }
+    if (click == ui::RowClick::Range) {
+        return change(rangeTo(row), ui::SelectionChange::Replace);
+    }
+    // A user's change drops a requested key still waiting for its row.
     std::vector<ui::Key> next;
-    if (_mode == ui::SelectionMode::Single) {
-        next.push_back(*rowKey);
-    } else {
-        for (auto const& selected : _selection) {
-            if (rowWith(selected) != nullptr && std::ranges::find(next, selected) == next.end()) {
-                next.push_back(selected);
-            }
-        }
-        if (auto const found = std::ranges::find(next, *rowKey); found != next.end()) {
-            next.erase(found);
-        } else {
-            next.push_back(*rowKey);
+    for (auto const& selected : _selection) {
+        if (rowWith(selected) != nullptr && std::ranges::find(next, selected) == next.end()) {
+            next.push_back(selected);
         }
     }
+    if (auto const found = std::ranges::find(next, *rowKey); found != next.end()) {
+        next.erase(found);
+    } else {
+        next.push_back(*rowKey);
+    }
+    _anchor = *rowKey;
+    return change(std::move(next), ui::SelectionChange::Extend);
+}
+
+std::vector<ui::Key> TableImpl::rangeTo(WidgetBase const& row) const {
+    auto const rows = shownChildren();
+    auto const target = std::ranges::find(rows, &row);
+    if (target == rows.end()) {
+        return {};
+    }
+    WidgetBase const* const anchorRow = _anchor ? rowWith(*_anchor) : nullptr;
+    auto from = anchorRow == nullptr ? rows.end() : std::ranges::find(rows, anchorRow);
+    if (from == rows.end()) {
+        from = target;
+    }
+    auto const [low, high] = std::minmax(from, target);
+    std::vector<ui::Key> keys;
+    for (auto const* const between : std::ranges::subrange(low, std::next(high))) {
+        if (auto const betweenKey = keyOf(between); betweenKey && between->actionable()) {
+            keys.push_back(*betweenKey);
+        }
+    }
+    return keys;
+}
+
+std::vector<ui::Key> TableImpl::allOrNone() const {
+    std::vector<ui::Key> keys;
+    for (auto const* const row : shownChildren()) {
+        if (auto const rowKey = keyOf(row); rowKey && row->actionable()) {
+            keys.push_back(*rowKey);
+        }
+    }
+    bool const every = std::ranges::all_of(
+        keys, [this](ui::Key const& rowKey) { return std::ranges::find(_selection, rowKey) != _selection.end(); });
+    return every ? std::vector<ui::Key>{} : keys;
+}
+
+bool TableImpl::change(std::vector<ui::Key> next, ui::SelectionChange change) {
     if (next == _selection) {
         return true;
     }
     _selection = next;
     refresh();
-    return report(std::move(next));
+    return report(std::move(next), change);
 }
 
-bool TableImpl::report(std::vector<ui::Key> keys) {
+bool TableImpl::report(std::vector<ui::Key> keys, ui::SelectionChange change) {
     auto const handler = _onSelectionChange;
     if (!handler) {
         return true;
@@ -447,7 +532,7 @@ bool TableImpl::report(std::vector<ui::Key> keys) {
     auto& shared = context();
     WidgetBase* alive = this;
     shared.watches.push_back(&alive);
-    handler(std::move(keys));
+    handler(std::move(keys), change);
     std::erase(shared.watches, &alive);
     return alive != nullptr;
 }

@@ -136,6 +136,21 @@ public:
         }
     }
 
+    void clickRow(ui::Widget& table, std::size_t row, ui::RowClick click) override {
+        settle();
+        auto const& children = core(dynamic_cast<ui::ContainerWidget&>(table)).children();
+        if (row >= children.size()) {
+            return;
+        }
+        Qt::KeyboardModifiers modifiers = Qt::NoModifier;
+        if (click == ui::RowClick::Toggle) {
+            modifiers = Qt::ControlModifier;
+        } else if (click == ui::RowClick::Range) {
+            modifiers = Qt::ShiftModifier;
+        }
+        mouseClick(children.at(row)->item(), modifiers);
+    }
+
     std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         settle();
         std::vector<std::size_t> rows;

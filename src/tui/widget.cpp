@@ -502,7 +502,7 @@ EventResult WidgetBase::release(::core::tui::MouseEvent const& mouse) {
     auto const bounds = _view->screenBounds();
     bool const inside = cell.x >= 0 && cell.y >= 0 && cell.x < bounds.width && cell.y < bounds.height;
     if (inside && actionable()) {
-        click({.x = cell.x + _drawShift.x, .y = cell.y + _drawShift.y});
+        clickWith({.x = cell.x + _drawShift.x, .y = cell.y + _drawShift.y}, mouse.modifiers);
     }
     return EventResult::Handled;
 }

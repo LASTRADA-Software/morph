@@ -103,11 +103,13 @@ public:
     }
 
     /// A left-button press and release on a 0-based viewport cell; returns the release's result.
-    ::core::tui::EventResult click(::core::tui::Point cell) {
+    ::core::tui::EventResult click(::core::tui::Point cell,
+                                   ::core::tui::Modifier modifiers = ::core::tui::Modifier::None) {
         using Type = ::core::tui::MouseEvent::Type;
-        static_cast<void>(
-            send(::core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = cell.x + 1, .y = cell.y + 1}));
-        return send(::core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = cell.x + 1, .y = cell.y + 1});
+        static_cast<void>(send(::core::tui::MouseEvent{
+            .type = Type::Press, .button = 0, .x = cell.x + 1, .y = cell.y + 1, .modifiers = modifiers}));
+        return send(::core::tui::MouseEvent{
+            .type = Type::Release, .button = 0, .x = cell.x + 1, .y = cell.y + 1, .modifiers = modifiers});
     }
 
     /// Decodes @p bytes as terminal input (SGR mouse reports included) and dispatches each event.
