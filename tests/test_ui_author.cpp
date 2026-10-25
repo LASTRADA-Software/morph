@@ -345,6 +345,10 @@ TEST_CASE("the library and reading forms have builders", "[ui][author]") {
     CHECK(text(ui::decimal(ui::ref("x"), 1)) == R"({"fn":"decimal","args":[{"ref":"x"},1]})");
     CHECK(text(ui::decimal(ui::ref("x"), 1, ui::Rounding::HalfUp)) ==
           R"({"fn":"decimal","args":[{"ref":"x"},1,"halfUp"]})");
+    CHECK(text(ui::abs(ui::ref("x"))) == R"({"fn":"abs","args":[{"ref":"x"}]})");
+    CHECK(text(ui::sqrt(ui::ref("x"), 4)) == R"({"fn":"sqrt","args":[{"ref":"x"},4]})");
+    CHECK(text(ui::stdev(items, 3)) == R"({"fn":"stdev","args":[{"ref":"items"},3]})");
+    CHECK(text(ui::rsd(items, 2, ui::Rounding::HalfUp)) == R"({"fn":"rsd","args":[{"ref":"items"},2,"halfUp"]})");
     CHECK(text(ui::quantity(ui::ref("q"))) == R"({"fn":"quantity","args":[{"ref":"q"}]})");
     CHECK(text(ui::quantity(ui::ref("q"), "mg/L")) == R"({"fn":"quantity","args":[{"ref":"q"},"mg/L"]})");
     CHECK(text(ui::call("mean", {items})) == R"({"fn":"mean","args":[{"ref":"items"}]})");

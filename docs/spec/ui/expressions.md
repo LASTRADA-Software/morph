@@ -91,7 +91,7 @@ over the tree recurse, and a few hundred levels exhaust a 1 MB thread stack.
   half away from zero: `round(0.125, 2)` is `0.12`, `round(0.125, 2, "halfUp")` is `0.13` and
   `round(-0.125, 2, "halfUp")` is `-0.13`, as the pharmacopoeial rule (USP General Notices 7.20,
   Ph. Eur. 1.2) and `HALF_UP` round a magnitude. The mode is the last, optional argument of
-  `round` and `decimal`; it is the document's word at the call, not a client setting, because a
+  `round`, `decimal`, `sqrt`, `stdev` and `rsd`; it is the document's word at the call, not a client setting, because a
   rounded value is data a screen compares with a limit and submits. A literal mode other than
   `"halfEven"` or `"halfUp"` is refused at load; a computed one is a reported mismatch, and a
   `null` mode makes the result `null` like any absent argument. `mean`, `number`, `quantity`,
@@ -131,10 +131,10 @@ arithmetic, and `any` where it depends on data the document does not describe.
 | Group | Functions |
 |---|---|
 | Logic, comparison | `and`, `or` (one or more), `not`, `eq`, `ne`, `lt`, `le`, `gt`, `ge` |
-| Arithmetic | `add`, `sub`, `mul`, `div`, `neg`, `round(x, dp, mode?)` |
+| Arithmetic | `add`, `sub`, `mul`, `div`, `neg`, `abs`, `round(x, dp, mode?)`, `sqrt(x, dp, mode?)` |
 | Optional | `engaged(x)` (never `null`), `coalesce(x, ...)` (the first non-`null`) |
 | Strings | `concat(s, ...)`, `format(template, args...)`, `trim`, `length` (code points), `isEmpty` (a string or a list), `contains` |
-| Lists | `count`, `sum` (0 for an empty list), `mean`, `min`, `max`, `any`, `all`, `first`, `includes`, `indexOf`, `concatLists(list, ...)` |
+| Lists | `count`, `sum` (0 for an empty list), `mean`, `min`, `max`, `stdev(list, dp, mode?)` (sample, n − 1), `rsd(list, dp, mode?)` (in percent), `any`, `all`, `first`, `includes`, `indexOf`, `concatLists(list, ...)` |
 | Display | `number`, `decimal(x, dp, mode?)`, `quantity(x, unit?)`, `money(x, currency)`, `date(x, style?)`, `dateTime(x, style?)` |
 | Entry | `parseDecimal(text, dp?)` |
 | Text | `t(key, fallback, args?)` |
@@ -149,6 +149,42 @@ arithmetic, and `any` where it depends on data the document does not describe.
   `decimal(mean(xs), 1, "halfUp")` rounds twice, and for `99.6` and `99.3` shows `99.4` where the
   exact `99.45` reports as `99.5`.
   `min` and `max` return the element itself.
+- `abs(x)` is the magnitude of a number or quantity, of the same kind, places and unit; `abs` of the
+  most negative `int` overflows, as `neg` does.
+- `sqrt`, `stdev` and `rsd` are **exact until one correctly rounded result**: of the decimals at `dp`
+  places (0 to 18), the one nearest the exact real result, and on an exact tie the one `mode` picks
+  (the rounding modes above). The result is always a decimal at `dp` places, so `sqrt(4, 0)` is the
+  decimal `2`. A root is never computed in floating point and then rounded, since that loses ties:
+  `√0.2025` is exactly `0.45`, whose nearest `double` is above it.
+  - `sqrt(x, dp, mode?)` takes a plain number of 0 or more. A negative number is `null`, reported
+    "the square root of a negative number"; a quantity is a mismatch, since `expr/1` has no unit to
+    the half power.
+  - `stdev(list, dp, mode?)` is the sample standard deviation, dividing by `n − 1` as USP <1010>,
+    Ph. Eur. 2.2.46 and USP <621> do for a set of results and replicate injections:
+    `√((n·Σx² − (Σx)²) / (n·(n − 1)))`. `rsd(list, dp, mode?)` is `100 × SD / |mean|` in percent,
+    `√(10⁴ · n · (n·Σx² − (Σx)²) / ((n − 1) · (Σx)²))`, a plain decimal. Neither rounds the mean
+    or the variance first; the one-pass formula is safe because exact arithmetic has no
+    cancellation. They take numbers, or quantities in one dimension converted to the first
+    element's unit, as `sum` does: `stdev` of quantities is a quantity in that unit, `rsd` of
+    quantities a plain decimal. Fewer than two values, or a `null` element, is `null` without a
+    report (a worksheet holds one preparation while the second is typed); `rsd` of values whose
+    sum is zero is `null`, reported; a negative mean counts by its magnitude.
+  - **Width.** The elements are put over one denominator `D`, the least common multiple of their
+    denominators (a decimal's divides its `10^places`, an exact quotient such as `div(1, 3)` has
+    its own), as integers `X = x · D`, and the sums are computed in a checked 128-bit integer. The
+    root is of `M = A / B` with, for `stdev`, `A = (n·ΣX² − (ΣX)²) · 10^(2·dp)` and
+    `B = n·(n − 1)·D²`, and for `rsd` `A = 10^(4 + 2·dp) · n · (n·ΣX² − (ΣX)²)` and
+    `B = (n − 1)·(ΣX)²`. The result is exact whenever `D`, each `X`, `A`, `B` and every
+    intermediate fit (`D` in 63 bits, `X` in 64, the rest in 128) and the result's numerator fits
+    an `int64`; past that it is `null`, reported "the statistics overflow". In the worst case for ten
+    thousand values of seven significant digits, bounding `n·ΣX² − (ΣX)²` by `n·ΣX² ≤ 10²²`, `A`
+    fits for `stdev` to 8 places and for `rsd` to 4; real data, whose spread is small beside its
+    magnitude, sits far inside.
+  - **The root.** With `F = ⌊A / B⌋` and `q = ⌊√F⌋`, which is `⌊√M⌋`, the result is `q / 10^dp`,
+    raised by one unit in the last place when `M > (q + ½)²`, or when `M = (q + ½)²` and the mode is
+    `halfUp` or `q` is odd. The comparison reads the remainder of `A / B`, not `F` alone: `F` against
+    `(q + ½)²` never ties and misses every value just above one, so `sqrt(6.3, 0)` would be `2`
+    instead of `3`.
 - `any` and `all` are Kleene over the elements: `any([])` is `false`, `all([])` is `true`.
 - `indexOf` is `null` when the value is absent; `includes` is `false`.
 - `concatLists` takes one to 255 lists and answers their elements in order. Each argument must be a

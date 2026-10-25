@@ -11,8 +11,10 @@
 #include <expected>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <ranges>
 #include <set>
@@ -128,6 +130,10 @@ enum class FunctionId : std::uint8_t {
     Translate,
     ParseDecimal,
     ConcatLists,
+    Abs,
+    Sqrt,
+    Stdev,
+    Rsd,
 };
 
 struct Expr;
@@ -192,7 +198,7 @@ struct FunctionSpec {
 
 /// @brief The library, indexed by `FunctionId`.
 // NOLINTBEGIN(modernize-use-designated-initializers): one row per function reads as a table; names on every field would not.
-inline constexpr std::array<FunctionSpec, 42> kFunctions = {{
+inline constexpr std::array<FunctionSpec, 46> kFunctions = {{
     {"and", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"or", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"not", 1, 1, {kindBit(TypeKind::Bool), 0, 0}, TypeKind::Bool},
@@ -255,6 +261,14 @@ inline constexpr std::array<FunctionSpec, 42> kFunctions = {{
      255,
      {kindBit(TypeKind::List), kindBit(TypeKind::List), kindBit(TypeKind::List)},
      TypeKind::Any},
+    {"abs", 1, 1, {kNumeric, 0, 0}, TypeKind::Any},
+    {"sqrt",
+     2,
+     3,
+     {kindBit(TypeKind::Int) | kindBit(TypeKind::Decimal), kindBit(TypeKind::Int), kindBit(TypeKind::String)},
+     TypeKind::Decimal},
+    {"stdev", 2, 3, {kindBit(TypeKind::List), kindBit(TypeKind::Int), kindBit(TypeKind::String)}, TypeKind::Any},
+    {"rsd", 2, 3, {kindBit(TypeKind::List), kindBit(TypeKind::Int), kindBit(TypeKind::String)}, TypeKind::Decimal},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
 
@@ -269,7 +283,8 @@ inline constexpr std::array<FunctionSpec, 42> kFunctions = {{
 /// @param function The function.
 /// @return The argument index of its mode, or empty for a function that does not round.
 [[nodiscard]] constexpr std::optional<std::size_t> modeArgument(FunctionId function) noexcept {
-    if (function == FunctionId::Round || function == FunctionId::DecimalText) {
+    if (function == FunctionId::Round || function == FunctionId::DecimalText || function == FunctionId::Sqrt ||
+        function == FunctionId::Stdev || function == FunctionId::Rsd) {
         return 2;
     }
     return std::nullopt;
@@ -1063,10 +1078,11 @@ private:
 
     [[nodiscard]] static Type numericResult(FunctionId function, std::vector<Type> const& types) {
         if (function == FunctionId::Coalesce || function == FunctionId::Sum || function == FunctionId::Mean ||
-            function == FunctionId::Min || function == FunctionId::Max || function == FunctionId::First) {
+            function == FunctionId::Min || function == FunctionId::Max || function == FunctionId::First ||
+            function == FunctionId::Stdev) {
             return Type::any();
         }
-        if (function == FunctionId::Neg || function == FunctionId::Round) {
+        if (function == FunctionId::Neg || function == FunctionId::Round || function == FunctionId::Abs) {
             return Type::of(types.front().kind, true);
         }
         Type const& lhs = types.at(0);
@@ -1337,6 +1353,150 @@ struct Number {
     return oneOf(kThree, currency) ? 3U : 2U;
 }
 
+/// @brief A sample's exact moments over one denominator: the elements as integers `X = x * D`, their sum and the sum
+///        of their squares, in 128 bits.
+struct Moments {
+    /// @brief The count.
+    std::uint64_t count = 0;
+    /// @brief The common denominator `D`, the least common multiple of the elements' denominators.
+    std::uint64_t scale = 1;
+    /// @brief `|sum X|`.
+    math::detail::U128 sumMagnitude;
+    /// @brief `sum X^2`.
+    math::detail::U128 squares;
+    /// @brief The unit of a sample of quantities, the first element's; `nullptr` for plain numbers.
+    std::string const* unit = nullptr;
+};
+
+/// @brief The least common multiple of exact values' denominators, over which each value is an integer.
+/// @param values The values, canonical.
+/// @return The common denominator, or empty past `int64`.
+[[nodiscard]] inline std::optional<std::uint64_t> commonDenominator(std::vector<math::Rational> const& values) {
+    std::uint64_t common = 1;
+    for (math::Rational const& value : values) {
+        auto const denominator = static_cast<std::uint64_t>(value.denominator);
+        math::detail::U128 const product = math::detail::mulU64(common, denominator / std::gcd(common, denominator));
+        if (product.hi != 0 || product.lo > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+            return std::nullopt;
+        }
+        common = product.lo;
+    }
+    return common;
+}
+
+/// @brief A sample read for `stdev` and `rsd`: its moments, `null` without a report, or the reason to report.
+using SampleReading = std::expected<std::optional<Moments>, std::string>;
+
+/// @brief The exact moments of a sample of numbers, or of quantities converted to the first element's unit.
+///
+/// A `null` element makes the sample `null`; an element that is not a number, a quantity among plain numbers or units
+/// that do not convert is a mismatch; a common denominator, an element or a sum that leaves its width overflows.
+/// @param items The sample.
+/// @param units The unit table.
+/// @return The moments; empty for a `null` element; the reason for a mismatch or an overflow.
+[[nodiscard]] inline SampleReading momentsOf(ValueList const& items, UnitTable const& units) {
+    using math::detail::U128;
+    std::vector<math::Rational> values;
+    values.reserve(items.size());
+    Moments moments;
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        auto const number = numeric(items.at(index));
+        if (items.at(index).isNull()) {
+            return std::optional<Moments>{};
+        }
+        if (!number) {
+            return std::unexpected(std::string{"an element is not a number"});
+        }
+        if (index == 0) {
+            moments.unit = number->unit;
+        } else if ((moments.unit == nullptr) != (number->unit == nullptr)) {
+            return std::unexpected(std::string{"quantities and plain numbers do not combine"});
+        }
+        auto converted = moments.unit == nullptr ? std::optional{number->value}
+                                                 : convertUnit(number->value, *number->unit, *moments.unit, units);
+        if (!converted) {
+            return std::unexpected(std::string{"the elements' units do not convert"});
+        }
+        values.push_back(*converted);
+    }
+    auto const scale = commonDenominator(values);
+    if (!scale) {
+        return std::unexpected(std::string{"the statistics overflow"});
+    }
+    moments.scale = *scale;
+    U128 positive{};
+    U128 negative{};
+    for (math::Rational const& value : values) {
+        auto const denominator = static_cast<std::uint64_t>(value.denominator);
+        U128 const scaled = math::detail::mulU64(math::detail::absU64(value.numerator), moments.scale / denominator);
+        auto squares = scaled.hi == 0
+                           ? math::detail::checkedAddU128(moments.squares, math::detail::mulU64(scaled.lo, scaled.lo))
+                           : std::nullopt;
+        auto sum = math::detail::checkedAddU128(value.numerator < 0 ? negative : positive, scaled);
+        if (!squares || !sum) {
+            return std::unexpected(std::string{"the statistics overflow"});
+        }
+        moments.squares = *squares;
+        (value.numerator < 0 ? negative : positive) = *sum;
+    }
+    moments.count = values.size();
+    moments.sumMagnitude = positive >= negative ? math::detail::wrappingSubU128(positive, negative)
+                                                : math::detail::wrappingSubU128(negative, positive);
+    return std::optional{moments};
+}
+
+/// @brief The standard deviation or the RSD of a sample, correctly rounded at @p places.
+///
+/// With `n` elements `X = x * D`, `V = n * sum X^2 - (sum X)^2`: the sample standard deviation is the root of
+/// `V * 10^(2 * places) / (n * (n - 1) * D^2)`, and the RSD in percent the root of
+/// `10^(4 + 2 * places) * n * V / ((n - 1) * (sum X)^2)`, where `D` cancels. Nothing is rounded before the root.
+/// @param moments  The sample's moments, two or more elements.
+/// @param relative Whether to compute the RSD.
+/// @param places   The places of the result.
+/// @param mode     The tie-breaking rule.
+/// @return The result, or the reason it cannot be computed.
+[[nodiscard]] inline std::expected<math::Rational, std::string> spreadOf(Moments const& moments, bool relative,
+                                                                         std::uint32_t places,
+                                                                         math::RoundingMode mode) {
+    using math::detail::checkedMulU128;
+    using math::detail::U128;
+    std::string const overflow = "the statistics overflow";
+    U128 const count{.hi = 0, .lo = moments.count};
+    U128 const degrees{.hi = 0, .lo = moments.count - 1};
+    auto const scaledSquares = checkedMulU128(count, moments.squares);
+    auto const squaredSum = checkedMulU128(moments.sumMagnitude, moments.sumMagnitude);
+    // n * sum X^2 >= (sum X)^2 by Cauchy-Schwarz, so the difference is never negative.
+    auto const spread =
+        scaledSquares && squaredSum ? math::detail::checkedSubU128(*scaledSquares, *squaredSum) : std::nullopt;
+    if (!spread) {
+        return std::unexpected(overflow);
+    }
+    std::optional<U128> numerator;
+    std::optional<U128> denominator;
+    if (relative) {
+        if (moments.sumMagnitude == U128{}) {
+            return std::unexpected(std::string{"the RSD of values whose mean is zero"});
+        }
+        auto const power = math::detail::powerOfTenU128(4 + (2 * places));
+        auto const scaled = power ? checkedMulU128(*power, count) : std::nullopt;
+        numerator = scaled ? checkedMulU128(*scaled, *spread) : std::nullopt;
+        denominator = checkedMulU128(degrees, *squaredSum);
+    } else {
+        auto const power = math::detail::powerOfTenU128(2 * places);
+        numerator = power ? checkedMulU128(*spread, *power) : std::nullopt;
+        auto const pairs = checkedMulU128(count, degrees);
+        denominator =
+            pairs ? checkedMulU128(*pairs, math::detail::mulU64(moments.scale, moments.scale)) : std::nullopt;
+    }
+    auto const root = numerator && denominator
+                          ? math::detail::roundSqrtOfFraction(*numerator, *denominator, places, mode)
+                          : std::nullopt;
+    if (!root) {
+        return std::unexpected(overflow);
+    }
+    return *root;
+}
+
 /// @brief Evaluates expressions against an environment, with the comprehension variables in scope.
 // NOLINTBEGIN(misc-no-recursion): an expression is a tree and evaluating it descends it; the node bound limits the depth.
 class Evaluator {
@@ -1406,6 +1566,64 @@ private:
     Value mismatch(Expr const& expr, std::string_view reason) {
         _env->report(expr.path, reason);
         return Value{};
+    }
+
+    /// `sqrt(x, dp, mode?)`: the root of a plain number, correctly rounded at `dp` places.
+    Value squareRoot(Expr const& expr, std::vector<Value> const& args) {
+        auto const number = numeric(args.at(0));
+        std::int64_t const* const places = args.at(1).asInt();
+        auto const mode = modeOf(args);
+        if (!number || number->unit != nullptr || places == nullptr || *places < 0 ||
+            std::cmp_greater(*places, math::kMaxDecimalPlaces) || !mode) {
+            return mismatch(expr, "`sqrt` takes a plain number, places from 0 to 18 and a rounding mode");
+        }
+        if (number->value.isNegative()) {
+            return mismatch(expr, "the square root of a negative number");
+        }
+        auto const digits = static_cast<std::uint32_t>(*places);
+        auto const power = math::detail::powerOfTenU128(2 * digits);
+        auto const scaled =
+            power ? math::detail::checkedMulU128(
+                        math::detail::U128{.hi = 0, .lo = static_cast<std::uint64_t>(number->value.numerator)}, *power)
+                  : std::nullopt;
+        auto const root =
+            scaled ? math::detail::roundSqrtOfFraction(
+                         *scaled,
+                         math::detail::U128{.hi = 0, .lo = static_cast<std::uint64_t>(number->value.denominator)},
+                         digits, *mode)
+                   : std::nullopt;
+        if (!root) {
+            return mismatch(expr, "the result overflows");
+        }
+        return Decimal{*root};
+    }
+
+    /// `stdev(list, dp, mode?)` and `rsd(list, dp, mode?)`: exact, rounded once at `dp` places.
+    Value statistic(Expr const& expr, std::vector<Value> const& args) {
+        ValueList const* const items = args.at(0).asList();
+        std::int64_t const* const places = args.at(1).asInt();
+        auto const mode = modeOf(args);
+        if (items == nullptr || places == nullptr || *places < 0 ||
+            std::cmp_greater(*places, math::kMaxDecimalPlaces) || !mode) {
+            return mismatch(expr, "the statistics take a list, places from 0 to 18 and a rounding mode");
+        }
+        SampleReading const sample = momentsOf(*items, _env->formatting().units);
+        if (!sample) {
+            return mismatch(expr, sample.error());
+        }
+        // Fewer than two values is a worksheet still being filled: no spread yet, and nothing to report.
+        if (!sample->has_value() || (*sample)->count < 2) {
+            return Value{};
+        }
+        bool const relative = expr.function == FunctionId::Rsd;
+        auto const spread = spreadOf(**sample, relative, static_cast<std::uint32_t>(*places), *mode);
+        if (!spread) {
+            return mismatch(expr, spread.error());
+        }
+        if (!relative && (*sample)->unit != nullptr) {
+            return Quantity{.value = *spread, .unit = *(*sample)->unit};
+        }
+        return Decimal{*spread};
     }
 
     /// The rounding mode of a call whose mode is its third argument: half to even when it is absent.
@@ -2120,6 +2338,25 @@ private:
                 }
                 return Value{};
             }
+            case FunctionId::Abs: {
+                auto const number = numeric(args.front());
+                if (!number) {
+                    return mismatch(expr, "`abs` takes a number");
+                }
+                if (!number->value.isNegative()) {
+                    return args.front();
+                }
+                auto magnitude = math::checkedSub(math::Rational{0, number->value.decimalPlaces}, number->value);
+                if (!magnitude) {
+                    return mismatch(expr, "the result overflows");
+                }
+                return makeNumber(*magnitude, number->integer, number->unit);
+            }
+            case FunctionId::Sqrt:
+                return squareRoot(expr, args);
+            case FunctionId::Stdev:
+            case FunctionId::Rsd:
+                return statistic(expr, args);
             case FunctionId::ConcatLists: {
                 ValueList out;
                 for (Value const& arg : args) {
