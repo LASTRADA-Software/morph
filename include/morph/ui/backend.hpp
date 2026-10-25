@@ -727,6 +727,15 @@ public:
     virtual void setItems(std::vector<KeyValueItem> const& items) = 0;
 };
 
+/// @brief Points against a numeric axis, with reference lines. It takes no focus and calls no handler.
+class ChartWidget : public Widget {
+public:
+    /// @brief Replaces what the chart draws. Called at mount and whenever the data changes; an unchanged chart is
+    ///        not set again.
+    /// @param data The range, the ticks, the lines, the series and the summary, every text already formatted.
+    virtual void setData(ChartData const& data) = 0;
+};
+
 /// @brief What a region shows when it has nothing to show.
 class EmptyStateWidget : public Widget {
 public:
@@ -1008,6 +1017,11 @@ public:
     /// @param parent The container to append to, or null for a root.
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<KeyValueWidget> createKeyValue(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a chart.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<ChartWidget> createChart(ContainerWidget* parent) = 0;
 
     /// @brief Makes an empty state.
     /// @param parent The container to append to, or null for a root.

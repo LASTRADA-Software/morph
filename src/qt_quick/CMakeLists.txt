@@ -70,6 +70,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphProgress.qml
         qml/MorphSteps.qml
         qml/MorphKeyValue.qml
+        qml/MorphChart.qml
         qml/MorphEmptyState.qml
         qml/MorphSplitter.qml
         qml/MorphSplitterHandle.qml

@@ -173,6 +173,10 @@ std::unique_ptr<ui::EmptyStateWidget> Backend::createEmptyState(ui::ContainerWid
     return std::make_unique<detail::EmptyStateImpl>(*_context, parent);
 }
 
+std::unique_ptr<ui::ChartWidget> Backend::createChart(ui::ContainerWidget* parent) {
+    return std::make_unique<detail::ChartImpl>(*_context, parent);
+}
+
 std::unique_ptr<ui::DrawerWidget> Backend::createDrawer(ui::ContainerWidget* parent, ui::Side side) {
     return std::make_unique<detail::DrawerImpl>(*_context, QStringLiteral("MorphDrawer"), parent,
                                                 QVariantMap{{QStringLiteral("side"), side == ui::Side::End ? 1 : 0}});

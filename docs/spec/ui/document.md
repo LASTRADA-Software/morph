@@ -187,6 +187,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | `steps` | `items`, `current` | |
 | `keyValue` | `items` | |
 | `emptyState` | `title`, `text`, `icon`, `action` | |
+| `chart` | `summary` (required: the text alternative), `series` (required, 1 to 4 parts `{points, y ⓘ, x ⓘ, xLabel ⓘ, tone ⓘ, note ⓘ, label, joined}`), `lines` (0 to 16 parts `{value, label, tone, style}`), `yMin`, `yMax`, `yPlaces` (a literal integer, 0 to 18), `yLabel`; see [Charts](#charts) | |
 | `splitter` | `orientation`, `sizes` (a list of integers in units, one per pane; a list of another length shares the space equally), `children` | |
 | `collapsible` | `title`, `open`, `header`, `children`, `onToggle` | |
 | `dropZone` | `accept`, `multiple`, `children`, `onDrop` | |
@@ -205,6 +206,30 @@ in `date-time` mode, and `""` on clearing; a timestamp field writes the timestam
 whose type the document leaves undecided is written as the type it holds at the edit.
 
 A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
+
+### Charts
+
+A `chart` plots points against a numeric axis, optionally joined, with horizontal reference lines: a control
+chart, a trend, a stability plot. It is a palette node rather than a host component, so it reaches every client and
+backend, and what it plots, marks and says is the interpreter's ([`interpreter.md`](interpreter.md#charts)).
+
+- A **series** draws one point per element of `points`. `y` (required), `x`, `xLabel`, `tone` and `note` are read
+  once per point, with `row` the point's element, as a table's `key` is; no row scope is made, so they read no name
+  a row scope would declare. `y` is a number or a quantity, and `null` leaves a gap; `x` is a number, a date or an
+  instant, and without `x` on any series a point sits at its index; `xLabel` labels the point on the horizontal
+  axis; `tone` (`neutral`, `info`, `ok`, `warn`, `err`, or `null`) marks it; `note` is text beside it. `label` is
+  the series' name in the legend, required when there are two or more series. `joined` (a literal `bool`, default
+  `true`) joins the points.
+- A **line** is drawn at `value` (required, a number or a quantity), in its `tone` (default `neutral`), with
+  `style` `solid` (the default), `dashed` or `dotted`; `label` defaults to the value at `yPlaces`.
+- `yMin` and `yMax` fix the ends of the value axis; `yPlaces` is the places its labels are shown at; `yLabel` names
+  its unit.
+
+The loader refuses, each at its path: a chart without `summary` or `series`; a series without `points` or `y`; two
+or more series where one has no `label`; `x` on some series and not on others; more than 4 series or 16 lines; a
+`yPlaces` that is not a literal integer from 0 to 18; a `style` other than the three; a literal `tone` that names no
+tone; literal `yMin` above literal `yMax`. A computed value that breaks one of these is reported when it is
+evaluated.
 
 ## Scopes and names
 

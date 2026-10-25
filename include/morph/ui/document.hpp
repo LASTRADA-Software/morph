@@ -647,7 +647,8 @@ struct KeySpec {
 
 /// @brief The node or part creates a scope.
 inline constexpr std::uint8_t kScope = 1U;
-/// @brief The scope it creates is a row scope, where `row` is valid.
+/// @brief The scope it creates is a row scope, where `row` is valid. On a part without `kScope`, the part's inner keys
+///        are read in a row scope of their own that declares nothing: a chart series' per-point keys.
 inline constexpr std::uint8_t kRowScope = 2U;
 /// @brief It carries the input decorations `readonly`, `required`, `errors` and `stale`.
 inline constexpr std::uint8_t kField = 4U;
@@ -904,6 +905,27 @@ inline constexpr std::array<KeySpec, 1> kKeyValueKeys = {{{"items", Shape::Expr}
 /// @brief The keys of `emptyState`.
 inline constexpr std::array<KeySpec, 4> kEmptyStateKeys = {
     {{"title", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}, {"action", Shape::Part, "action"}}};
+/// @brief The keys of `chart`.
+inline constexpr std::array<KeySpec, 7> kChartKeys = {{{"summary", Shape::Expr, {}, kRequired},
+                                                       {"series", Shape::Parts, "series", kRequired},
+                                                       {"lines", Shape::Parts, "line"},
+                                                       {"yMin", Shape::Expr},
+                                                       {"yMax", Shape::Expr},
+                                                       {"yPlaces", Shape::Expr},
+                                                       {"yLabel", Shape::Expr}}};
+/// @brief The keys of a chart's `series` part. The keys read per point are evaluated in the part's row scope, with
+///        `row` the point's element.
+inline constexpr std::array<KeySpec, 8> kSeriesKeys = {{{"points", Shape::Expr, {}, kRequired},
+                                                        {"y", Shape::Expr, {}, kRequired | kInner},
+                                                        {"x", Shape::Expr, {}, kInner},
+                                                        {"xLabel", Shape::Expr, {}, kInner},
+                                                        {"tone", Shape::Expr, {}, kInner},
+                                                        {"note", Shape::Expr, {}, kInner},
+                                                        {"label", Shape::Expr},
+                                                        {"joined", Shape::Flag}}};
+/// @brief The keys of a chart's reference `line` part.
+inline constexpr std::array<KeySpec, 4> kLineKeys = {
+    {{"value", Shape::Expr, {}, kRequired}, {"label", Shape::Expr}, {"tone", Shape::Expr}, {"style", Shape::Text}}};
 /// @brief The keys of `splitter`.
 inline constexpr std::array<KeySpec, 3> kSplitterKeys = {
     {{"orientation", Shape::Expr}, {"sizes", Shape::Expr}, {"children", Shape::Nodes}}};
@@ -957,7 +979,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 49> kKinds = {{
+inline constexpr std::array<KindSpec, 52> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -986,6 +1008,7 @@ inline constexpr std::array<KindSpec, 49> kKinds = {{
     {"steps", kStepsKeys},
     {"keyValue", kKeyValueKeys},
     {"emptyState", kEmptyStateKeys},
+    {"chart", kChartKeys},
     {"splitter", kSplitterKeys},
     {"collapsible", kCollapsibleKeys},
     {"dropZone", kDropZoneKeys},
@@ -1007,6 +1030,8 @@ inline constexpr std::array<KindSpec, 49> kKinds = {{
     {"actionButton", kActionButtonKeys, kPart},
     {"headBadge", kHeadBadgeKeys, kPart},
     {"fields", {}, kPart},
+    {"series", kSeriesKeys, kPart | kRowScope},
+    {"line", kLineKeys, kPart},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
 
@@ -2576,6 +2601,8 @@ private:
             _scopeOf.emplace(&part, inner);
             // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the parser gives every switch case a scope.
             declare(*part.scope, *inner);
+        } else if (spec != nullptr && (spec->flags & kRowScope) != 0) {
+            inner = &newScope(&outer, true);
         }
         _innerOf.emplace(&part, inner);
         for (auto const& [key, commands] : part.events) {
@@ -2987,6 +3014,67 @@ private:
         }
     }
 
+    // What a chart's literal keys may be, and the shape of its series and lines. A computed `tone` or `yMin` is
+    // checked when it is evaluated, and reported then.
+    static void checkChart(DocNode const& node) {
+        static constexpr std::size_t kMaxSeries = 4;
+        static constexpr std::size_t kMaxLines = 16;
+        std::span<DocNodePtr const> const series = node.partList("series");
+        std::string const seriesPath = pointerAppend(node.path, "series");
+        if (series.empty() || series.size() > kMaxSeries) {
+            refuse(seriesPath, "a chart draws 1 to 4 series");
+        }
+        if (node.partList("lines").size() > kMaxLines) {
+            refuse(pointerAppend(node.path, "lines"), "a chart draws at most 16 reference lines");
+        }
+        bool const positioned = series.front()->prop("x") != nullptr;
+        for (DocNodePtr const& part : series) {
+            DocNode const& one = *part;
+            if (series.size() > 1 && one.prop("label") == nullptr) {
+                refuse(one.path, "each of two or more series has a `label`, its name in the legend");
+            }
+            if ((one.prop("x") != nullptr) != positioned) {
+                refuse(one.path, "`x` is on every series of a chart or on none");
+            }
+            checkChartTone(one);
+        }
+        for (DocNodePtr const& line : node.partList("lines")) {
+            checkChartTone(*line);
+            std::string_view const style = line->name("style");
+            if (!style.empty() && style != "solid" && style != "dashed" && style != "dotted") {
+                refuse(pointerAppend(line->path, "style"), "`style` is `solid`, `dashed` or `dotted`");
+            }
+        }
+        if (ExprPtr const places = node.prop("yPlaces")) {
+            std::int64_t const* const literal = places->kind == ExprKind::Literal ? places->literal.asInt() : nullptr;
+            if (literal == nullptr || *literal < 0 || std::cmp_greater(*literal, math::kMaxDecimalPlaces)) {
+                refuse(places->path, "`yPlaces` is a literal integer from 0 to 18");
+            }
+        }
+        ExprPtr const low = node.prop("yMin");
+        ExprPtr const high = node.prop("yMax");
+        if (low && high && low->kind == ExprKind::Literal && high->kind == ExprKind::Literal) {
+            std::optional<Number> const lowNumber = numeric(low->literal);
+            std::optional<Number> const highNumber = numeric(high->literal);
+            if (lowNumber && highNumber && highNumber->value < lowNumber->value) {
+                refuse(low->path, "`yMin` is above `yMax`");
+            }
+        }
+    }
+
+    // A literal `tone` of a chart's series or line names one of the five tones; `null` marks nothing.
+    static void checkChartTone(DocNode const& part) {
+        ExprPtr const tone = part.prop("tone");
+        if (!tone || tone->kind != ExprKind::Literal || tone->literal.isNull()) {
+            return;
+        }
+        static constexpr std::array<std::string_view, 5> kTones = {"neutral", "info", "ok", "warn", "err"};
+        std::string const* const name = tone->literal.asString();
+        if (name == nullptr || !listed(kTones, *name)) {
+            refuse(tone->path, "`tone` is `neutral`, `info`, `ok`, `warn` or `err`");
+        }
+    }
+
     // A flag that needs a key beside it.
     static void checkFlags(DocNode const& node) {
         if (node.flag("showLabel") && node.prop("label") == nullptr) {
@@ -2997,6 +3085,8 @@ private:
     void checkKindRules(DocNode const& node, CheckContext const& context) {
         if (node.kind == "custom") {
             checkCustomProps(node);
+        } else if (node.kind == "chart") {
+            checkChart(node);
         } else if (node.kind == "customize" && !_doc->customize.contains(node.name("point"))) {
             refuse(pointerAppend(node.path, "point"),
                    "`" + std::string{node.name("point")} + "` is not a customization point of this document");

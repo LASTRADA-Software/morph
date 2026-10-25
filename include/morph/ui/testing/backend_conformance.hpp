@@ -885,6 +885,13 @@ struct Entry {
                            .selected = [odd] { return odd() ? std::size_t{1} : std::size_t{0}; },
                            .onSelect = note("Tabs onSelect")}),
                  ui::dialog({.open = odd, .title = "d", .onDismiss = note("Dialog onDismiss")}),
+                 ui::chart({.data =
+                                [&phase] {
+                                    ChartData data;
+                                    data.yMax = 4.0;
+                                    data.summary = "c" + std::to_string(phase.get());
+                                    return data;
+                                }}),
                  entryTable(rows, {.selectionMode = SelectionMode::Multiple,
                                    .selection =
                                        [&phase] {
@@ -1611,6 +1618,31 @@ private:
     return checks.result();
 }
 
+/// @brief Case: a chart shows the summary of the data it was last given, not the first.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> chartShowsCurrentSummary(ConformanceProbe& probe) {
+    reactive::Signal<std::string> summary{probe.runtime(), std::string{"A"}};
+    Mounted const view{probe.runtime(), probe.backend(), ui::chart({.data = [&summary] {
+                                                                        ChartData data;
+                                                                        data.yMax = 1.0;
+                                                                        data.xMax = 1.0;
+                                                                        data.series.push_back(ChartSeries{
+                                                                            .label = {},
+                                                                            .joined = true,
+                                                                            .points = {ChartPoint{.x = 0.5, .y = 0.5}}});
+                                                                        data.summary = summary.get();
+                                                                        return data;
+                                                                    }})};
+    probe.settle();
+    Checks checks;
+    checks.text("a chart's summary", "A", probe.textOf(view.root()));
+    summary.set("B");
+    probe.settle();
+    checks.text("a chart's summary once the data changed", "B", probe.textOf(view.root()));
+    return checks.result();
+}
+
 /// @brief Reads where the layout cases' widgets are drawn, and fails a case whose probe reads no geometry.
 class Geometry {
 public:
@@ -2209,13 +2241,34 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: a content-sized chart in a 60-unit column is 40 units wide and 8 tall.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> chartHasContentSize(ConformanceProbe& probe) {
+    Chart made{.data = ChartData{.xMin = 0.0, .xMax = 1.0, .yMin = 0.0, .yMax = 1.0, .summary = "chart"}};
+    Column column{.children = {ui::chart(std::move(made))}, .align = Align::Start};
+    column.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::column(std::move(column)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 1, "the column holds one child");
+    if (children.size() == 1) {
+        WidgetBounds const bounds = geometry.of(*children.at(0));
+        geometry.near("a content-sized chart's width", 40, bounds.width);
+        geometry.near("a content-sized chart's height", 8, bounds.height);
+    }
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 10> const cases{{
+    static std::array<ConformanceCase, 11> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -2229,6 +2282,7 @@ struct SelectionReport {
         {.name = "a table column's valign places a cell at its row's top or bottom",
          .run = detail::columnPlacesCellsDownRow},
         {.name = "a table's heading row spans every column", .run = detail::headingSpansColumns},
+        {.name = "a chart's content size is 40 by 8 units", .run = detail::chartHasContentSize},
     }};
     return cases;
 }
@@ -2239,7 +2293,7 @@ struct SelectionReport {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 45> const cases{{
+    static std::array<ConformanceCase, 46> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -2305,6 +2359,7 @@ struct SelectionReport {
         {.name = "a click on a sortable header asks to sort by it, and no other header or setter does",
          .run = detail::headerClickAsksToSort},
         {.name = "a heading row is never selected, by Ctrl+A or a click", .run = detail::headingIsNeverSelected},
+        {.name = "a chart shows its current summary", .run = detail::chartShowsCurrentSummary},
     }};
     return cases;
 }

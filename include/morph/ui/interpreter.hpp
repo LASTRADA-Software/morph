@@ -41,6 +41,7 @@
 #include "../reactive/scope.hpp"
 #include "../reactive/signal.hpp"
 #include "../ui/backend.hpp"
+#include "chart_scale.hpp"
 #include "dev_tools.hpp"
 #include "document.hpp"
 #include "expression.hpp"
@@ -2307,6 +2308,42 @@ inline constexpr std::size_t kPruneLoweredAt = 256;
     }
 }
 
+/// @brief What the horizontal positions of a chart's points have been, across every series.
+struct ChartAxisKinds {
+    /// @brief A position was a number.
+    bool numbers = false;
+    /// @brief A position was a date or an instant.
+    bool instants = false;
+};
+
+/// @brief One reference line of a chart as the lowering reads it, before its default label is known.
+struct ChartRawLine {
+    /// @brief Where it is drawn, in the chart's unit.
+    math::Rational value;
+    /// @brief Its label; none takes the value at the chart's places.
+    std::optional<std::string> label;
+    /// @brief Its colour.
+    Tone tone = Tone::Neutral;
+    /// @brief Its stroke.
+    ChartLineStyle style = ChartLineStyle::Solid;
+};
+
+/// @brief One point of a chart's series as the lowering reads it, before the range is known.
+struct ChartRawPoint {
+    /// @brief The element's position in the series' list.
+    std::size_t index = 0;
+    /// @brief Its `x`: a number, or an instant's milliseconds since the epoch; none without `x`.
+    std::optional<math::Rational> x;
+    /// @brief Its value in the chart's unit; none is a gap.
+    std::optional<math::Rational> y;
+    /// @brief Its label on the horizontal axis.
+    std::string xLabel;
+    /// @brief The tone that marks it.
+    std::optional<Tone> tone;
+    /// @brief The text beside it.
+    std::string note;
+};
+
 /// @brief One mounted screen's interpreter: its document, diagnostics, slots and preferences, and the code that
 ///        declares scopes, lowers nodes and runs commands.
 class ScreenCore {
@@ -2611,6 +2648,34 @@ private:
     std::optional<Tone> rowToneOf(Value const& value, std::string const& path, bool& noted);
     Node lowerBoundary(DocNode const& node, LowerCtx const& ctx);
     Node lowerCustom(DocNode const& node, LowerCtx const& ctx);
+    Node lowerChart(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// Everything a chart draws, read from its node in @p scope; the one tracked read of the chart's binding.
+    ChartData chartData(DocNode const& node, RtScope const& scope, Bindings const* bindings);
+    /// One series' points, read exactly: each value in @p unit, the chart's, which the first value fixes.
+    std::vector<detail::ChartRawPoint> chartPoints(DocNode const& series, RtScope const& scope,
+                                                   Bindings const* bindings, std::optional<std::string>& unit,
+                                                   detail::ChartAxisKinds& kinds);
+    /// A chart value as an exact magnitude in @p unit, which the first value read fixes; a value that is not a number
+    /// or does not convert is reported at @p path and read as none.
+    std::optional<math::Rational> chartMagnitude(Value const& value, std::string const& path,
+                                                 std::optional<std::string>& unit);
+    /// A chart tone: one of the five names, or `null` for none; another value is reported at @p path.
+    std::optional<Tone> chartToneOf(Value const& value, std::string const& path);
+    /// A point's `x` as a number or an instant's milliseconds, noting its kind in @p kinds; none for `null`, and for
+    /// another value, which is reported at @p path.
+    std::optional<math::Rational> chartPosition(Value const& value, std::string const& path,
+                                                detail::ChartAxisKinds& kinds);
+    /// A chart's reference lines, read exactly in @p unit; a line whose value is `null` or not a number is left out.
+    std::vector<detail::ChartRawLine> chartLines(DocNode const& node, RtScope const& scope, Bindings const* bindings,
+                                                 std::optional<std::string>& unit);
+    /// @p range with `yMin` and `yMax` in place of its computed ends; ends that leave it empty are reported, and
+    /// @p range is kept.
+    ChartRange chartFixedRange(DocNode const& node, RtScope const& scope, Bindings const* bindings,
+                               std::optional<std::string>& unit, ChartRange const& range);
+    /// The drawn series: each point at its own `x` when @p positioned, else at its index, clipped to @p range.
+    void chartSeries(ChartData& data, DocNode const& node, RtScope const& scope, Bindings const* bindings,
+                     std::vector<std::vector<detail::ChartRawPoint>>& series, bool positioned,
+                     ChartRange const& range) const;
     /// A form field's control drawn by the host component its overlay names, with the built-in control as the
     /// fallback.
     Node fieldComponent(forms::FieldView const& view, DocNode const& overlay, LowerCtx const& ctx);
@@ -6770,6 +6835,9 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         commonOf(node, ctx, element, spec.common);
         return ui::steps(std::move(spec));
     }
+    if (kind == "chart") {
+        return lowerChart(node, ctx, element);
+    }
     if (kind == "keyValue") {
         KeyValue spec;
         spec.items = slotProp<std::vector<KeyValueItem>>(
@@ -7841,6 +7909,321 @@ inline TableRowView ScreenCore::headingRow(DocNode const& node, LowerCtx const& 
     // The cell owns the heading's scope, for as long as the row's node lives, as a data row's first cell does.
     auto owner = std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(lowerAll(heading, rowCtx), scope);
     return TableRowView{.cells = {Node{owner, owner->first.get()}}, .tone = std::nullopt, .heading = true};
+}
+
+inline Node ScreenCore::lowerChart(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    Chart spec;
+    spec.data = slotProp<ChartData>([this, &node, scope = ctx.scope, bindings = ctx.bindings] {
+        return chartData(node, *scope, bindings.get());
+    });
+    commonOf(node, ctx, element, spec.common);
+    return ui::chart(std::move(spec));
+}
+
+inline std::optional<math::Rational> ScreenCore::chartMagnitude(Value const& value, std::string const& path,
+                                                                std::optional<std::string>& unit) {
+    std::optional<Number> const number = numeric(value);
+    if (!number) {
+        report(path, "a chart value is a number or a quantity; this one is left out");
+        return std::nullopt;
+    }
+    std::string const own = number->unit != nullptr ? *number->unit : std::string{};
+    if (!unit) {
+        unit = own;
+        return number->value;
+    }
+    if (*unit == own) {
+        return number->value;
+    }
+    std::optional<math::Rational> converted;
+    if (!own.empty() && !unit->empty()) {
+        converted = convertUnit(number->value, own, *unit, session.formatting().units);
+    }
+    if (!converted) {
+        report(path, "a chart value does not convert to the unit of the chart's first value; it is left out");
+    }
+    return converted;
+}
+
+inline std::optional<Tone> ScreenCore::chartToneOf(Value const& value, std::string const& path) {
+    static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {{
+        {"neutral", Tone::Neutral},
+        {"info", Tone::Info},
+        {"ok", Tone::Ok},
+        {"warn", Tone::Warn},
+        {"err", Tone::Err},
+    }};
+    if (value.isNull()) {
+        return std::nullopt;
+    }
+    if (std::string const* const text = value.asString()) {
+        for (auto const& [name, tone] : kTones) {
+            if (name == *text) {
+                return tone;
+            }
+        }
+    }
+    report(path, "a chart tone is neutral, info, ok, warn or err; this one marks nothing");
+    return std::nullopt;
+}
+
+inline std::optional<math::Rational> ScreenCore::chartPosition(Value const& value, std::string const& path,
+                                                               detail::ChartAxisKinds& kinds) {
+    if (value.isNull()) {
+        return std::nullopt;
+    }
+    if (std::optional<Number> const number = numeric(value)) {
+        kinds.numbers = true;
+        return number->value;
+    }
+    if (std::optional<time::DateTime> const instant =
+            dateInstantOf(value, session.formatting().utcOffsetMinutes).instant) {
+        kinds.instants = true;
+        return math::Rational{instant->value.time_since_epoch().count(), math::DecimalPlaces{0}};
+    }
+    report(path, "a chart's `x` is a number, a date or an instant; this point is left out");
+    return std::nullopt;
+}
+
+inline std::vector<detail::ChartRawPoint> ScreenCore::chartPoints(DocNode const& series, RtScope const& scope,
+                                                                  Bindings const* bindings,
+                                                                  std::optional<std::string>& unit,
+                                                                  detail::ChartAxisKinds& kinds) {
+    // A chart is a picture of a few hundred values; a larger set is a table's.
+    static constexpr std::size_t kMaxPoints = 1000;
+    FormatContext const& format = session.formatting();
+    ExprPtr const pointsExpr = series.prop("points");
+    Value const listed = evalIn(scope, bindings, pointsExpr);
+    ValueList const* const list = listed.asList();
+    if (list == nullptr) {
+        // `null` is a query still loading, and draws as empty without a word.
+        if (!listed.isNull()) {
+            report(pointsExpr->path, "`points` is a list; the series draws as empty");
+        }
+        return {};
+    }
+    std::size_t const first = list->size() > kMaxPoints ? list->size() - kMaxPoints : 0;
+    if (first > 0) {
+        report(pointsExpr->path, "a series draws its last 1000 points");
+    }
+    ExprPtr const yExpr = series.prop("y");
+    ExprPtr const xExpr = series.prop("x");
+    ExprPtr const labelExpr = series.prop("xLabel");
+    ExprPtr const toneExpr = series.prop("tone");
+    ExprPtr const noteExpr = series.prop("note");
+    std::vector<detail::ChartRawPoint> points;
+    for (std::size_t index = first; index < list->size(); ++index) {
+        ScopeEnv const env{scope, bindings, &list->at(index)};
+        detail::ChartRawPoint point{.index = index};
+        if (xExpr) {
+            point.x = chartPosition(evaluate(*xExpr, env), xExpr->path, kinds);
+            if (!point.x) {
+                continue;
+            }
+        }
+        Value const value = evaluate(*yExpr, env);
+        if (!value.isNull()) {
+            point.y = chartMagnitude(value, yExpr->path, unit);
+            if (!point.y) {
+                continue;
+            }
+        }
+        point.xLabel = labelExpr ? textOf(evaluate(*labelExpr, env), format) : std::string{};
+        point.note = noteExpr ? textOf(evaluate(*noteExpr, env), format) : std::string{};
+        point.tone = toneExpr ? chartToneOf(evaluate(*toneExpr, env), toneExpr->path) : std::nullopt;
+        points.push_back(std::move(point));
+    }
+    return points;
+}
+
+/// @brief A chart's exact value at @p places, as the active locale writes it.
+/// @param value  The value.
+/// @param places The places, at most 18.
+/// @param format The formatting facts.
+/// @return The text; the exact JSON when the rounded value does not fit.
+[[nodiscard]] inline std::string chartNumberText(math::Rational const& value, std::uint32_t places,
+                                                 FormatContext const& format) {
+    std::optional<math::Rational> rounded =
+        math::checkedRoundToDecimalPlaces(value, math::DecimalPlaces{places}, math::RoundingMode::HalfEven);
+    if (!rounded) {
+        return textOf(Value{Decimal{value}}, format);
+    }
+    rounded->decimalPlaces = math::DecimalPlaces{places};
+    return textOf(Value{Decimal{*rounded}}, format);
+}
+
+
+/// @brief A reference line's stroke by its document name.
+/// @param name `solid`, `dashed`, `dotted`, or empty for solid; the loader refuses any other.
+/// @return The stroke.
+[[nodiscard]] inline ChartLineStyle chartLineStyle(std::string_view name) {
+    if (name == "dashed") {
+        return ChartLineStyle::Dashed;
+    }
+    return name == "dotted" ? ChartLineStyle::Dotted : ChartLineStyle::Solid;
+}
+
+/// @brief Where a point sits along a value axis that a document may have fixed, and on which side it is clipped.
+/// @param value The point's value.
+/// @param range The axis.
+/// @return The value drawn, the axis end for a value outside, and the side it lies beyond.
+[[nodiscard]] inline std::pair<math::Rational, ChartClip> chartClipped(math::Rational const& value,
+                                                                        ChartRange const& range) {
+    if (value < range.low) {
+        return {range.low, ChartClip::Below};
+    }
+    if (value > range.high) {
+        return {range.high, ChartClip::Above};
+    }
+    return {value, ChartClip::None};
+}
+
+inline std::vector<detail::ChartRawLine> ScreenCore::chartLines(DocNode const& node, RtScope const& scope,
+                                                                Bindings const* bindings,
+                                                                std::optional<std::string>& unit) {
+    FormatContext const& format = session.formatting();
+    std::vector<detail::ChartRawLine> lines;
+    for (DocNodePtr const& part : node.partList("lines")) {
+        ExprPtr const valueExpr = part->prop("value");
+        Value const value = evalIn(scope, bindings, valueExpr);
+        std::optional<math::Rational> const magnitude =
+            value.isNull() ? std::nullopt : chartMagnitude(value, valueExpr->path, unit);
+        if (!magnitude) {
+            continue;
+        }
+        detail::ChartRawLine line{.value = *magnitude, .label = std::nullopt};
+        if (ExprPtr const label = part->prop("label")) {
+            line.label = textOf(evalIn(scope, bindings, label), format);
+        }
+        if (ExprPtr const tone = part->prop("tone")) {
+            line.tone = chartToneOf(evalIn(scope, bindings, tone), tone->path).value_or(Tone::Neutral);
+        }
+        line.style = detail::chartLineStyle(part->name("style"));
+        lines.push_back(std::move(line));
+    }
+    return lines;
+}
+
+inline ChartRange ScreenCore::chartFixedRange(DocNode const& node, RtScope const& scope, Bindings const* bindings,
+                                              std::optional<std::string>& unit, ChartRange const& range) {
+    ChartRange fixed = range;
+    for (auto const& [key, end] : {std::pair{"yMin", &fixed.low}, std::pair{"yMax", &fixed.high}}) {
+        if (ExprPtr const expr = node.prop(key)) {
+            Value const value = evalIn(scope, bindings, expr);
+            if (!value.isNull()) {
+                *end = chartMagnitude(value, expr->path, unit).value_or(*end);
+            }
+        }
+    }
+    if (fixed.high > fixed.low) {
+        return fixed;
+    }
+    report(pointerAppend(node.path, "yMin"), "`yMin` is not below `yMax`; the chart takes its range from its values");
+    return range;
+}
+
+inline void ScreenCore::chartSeries(ChartData& data, DocNode const& node, RtScope const& scope,
+                                    Bindings const* bindings, std::vector<std::vector<detail::ChartRawPoint>>& series,
+                                    bool positioned, ChartRange const& range) const {
+    auto const positionOf = [positioned](detail::ChartRawPoint const& point) {
+        return positioned && point.x ? *point.x
+                                     : math::Rational{static_cast<std::int64_t>(point.index), math::DecimalPlaces{0}};
+    };
+    std::vector<math::Rational> positions;
+    for (auto const& points : series) {
+        std::ranges::transform(points, std::back_inserter(positions), positionOf);
+    }
+    if (std::optional<ChartRange> const across = chartRange(positions, 0)) {
+        data.xMin = realOf(across->low);
+        data.xMax = realOf(across->high);
+    }
+    std::size_t index = 0;
+    for (DocNodePtr const& part : node.partList("series")) {
+        ChartSeries drawn;
+        if (ExprPtr const label = part->prop("label")) {
+            drawn.label = textOf(evalIn(scope, bindings, label), session.formatting());
+        }
+        drawn.joined = !part->flags.contains("joined") || part->flag("joined");
+        for (detail::ChartRawPoint& point : series.at(index)) {
+            ChartPoint out{.x = realOf(positionOf(point)),
+                           .y = std::nullopt,
+                           .clip = ChartClip::None,
+                           .xLabel = std::move(point.xLabel),
+                           .tone = point.tone,
+                           .note = std::move(point.note)};
+            if (point.y) {
+                auto const [shown, clip] = detail::chartClipped(*point.y, range);
+                out.y = realOf(shown);
+                out.clip = clip;
+            }
+            drawn.points.push_back(std::move(out));
+        }
+        data.series.push_back(std::move(drawn));
+        ++index;
+    }
+}
+
+inline ChartData ScreenCore::chartData(DocNode const& node, RtScope const& scope, Bindings const* bindings) {
+    FormatContext const& format = session.formatting();
+    ChartData data;
+    data.summary = textOf(evalIn(scope, bindings, node.prop("summary")), format);
+    if (ExprPtr const label = node.prop("yLabel")) {
+        data.yLabel = textOf(evalIn(scope, bindings, label), format);
+    }
+    std::optional<std::string> unit;
+    detail::ChartAxisKinds kinds;
+    std::vector<std::vector<detail::ChartRawPoint>> series;
+    for (DocNodePtr const& part : node.partList("series")) {
+        series.push_back(chartPoints(*part, scope, bindings, unit, kinds));
+    }
+    std::vector<detail::ChartRawLine> const lines = chartLines(node, scope, bindings, unit);
+    // The values the axis must hold, and the places they are shown at.
+    std::vector<math::Rational> values;
+    for (auto const& points : series) {
+        for (detail::ChartRawPoint const& point : points) {
+            if (point.y) {
+                values.push_back(*point.y);
+            }
+        }
+    }
+    std::ranges::transform(lines, std::back_inserter(values), &detail::ChartRawLine::value);
+    std::uint32_t widest = 0;
+    for (math::Rational const& value : values) {
+        widest = std::max(widest, value.decimalPlaces.value);
+    }
+    ExprPtr const placesExpr = node.prop("yPlaces");
+    std::int64_t const* const fixedPlaces = placesExpr ? placesExpr->literal.asInt() : nullptr;
+    std::uint32_t const places = fixedPlaces != nullptr ? static_cast<std::uint32_t>(*fixedPlaces) : widest;
+    std::optional<ChartRange> const computed = chartRange(values, places);
+    if (!computed) {
+        report(node.path, "the chart's values overflow its arithmetic; it draws nothing");
+        return data;
+    }
+    ChartRange const range = chartFixedRange(node, scope, bindings, unit, *computed);
+    data.yMin = realOf(range.low);
+    data.yMax = realOf(range.high);
+    // Three or more lines are the scale a reader reads the chart against; fewer leave the values without one.
+    std::optional<ChartTicks> const ticks = lines.size() < 3 ? chartTicks(range) : std::nullopt;
+    if (ticks) {
+        std::uint32_t const tickPlaces = std::max(places, ticks->places);
+        for (math::Rational const& tick : ticks->values) {
+            data.yTicks.push_back(
+                ChartTick{.value = realOf(tick), .text = detail::chartNumberText(tick, tickPlaces, format)});
+        }
+    }
+    for (detail::ChartRawLine const& line : lines) {
+        data.lines.push_back(
+            ChartLine{.value = realOf(line.value),
+                      .label = line.label.value_or(detail::chartNumberText(line.value, places, format)),
+                      .tone = line.tone,
+                      .style = line.style});
+    }
+    if (kinds.numbers && kinds.instants) {
+        report(pointerAppend(node.path, "series"),
+               "a chart's `x` values are all numbers or all dates and instants; the points are spaced by index");
+    }
+    chartSeries(data, node, scope, bindings, series, kinds.numbers != kinds.instants, range);
+    return data;
 }
 
 inline std::optional<Tone> ScreenCore::rowToneOf(Value const& value, std::string const& path, bool& noted) {

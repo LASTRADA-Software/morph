@@ -217,6 +217,7 @@ add_executable(morph_tests
     test_ui_interpreter_forms.cpp
     test_ui_interpreter_commands.cpp
     test_ui_interpreter_table.cpp
+    test_ui_interpreter_chart.cpp
     test_ui_author.cpp
     test_ui_author_forms.cpp
     test_cancellation_policy.cpp

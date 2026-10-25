@@ -154,6 +154,10 @@ std::unique_ptr<ui::EmptyStateWidget> Backend::createEmptyState(ui::ContainerWid
     return make<detail::EmptyStateImpl>(_impl->context, parent);
 }
 
+std::unique_ptr<ui::ChartWidget> Backend::createChart(ui::ContainerWidget* parent) {
+    return make<detail::ChartImpl>(_impl->context, parent);
+}
+
 std::unique_ptr<ui::DrawerWidget> Backend::createDrawer(ui::ContainerWidget* parent, ui::Side side) {
     return make<detail::DrawerImpl>(_impl->context, parent, side);
 }

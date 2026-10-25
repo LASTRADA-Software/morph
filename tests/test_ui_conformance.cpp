@@ -110,6 +110,9 @@ public:
         if (kind == "Select") {
             return markedLabel(widgetId);
         }
+        if (kind == "Chart") {
+            return unescape(_backend.prop(widgetId, "summary"));
+        }
         return unescape(_backend.prop(widgetId, kind == "Button" || kind == "Checkbox" ? "label" : "text"));
     }
     [[nodiscard]] bool visibleOf(ui::Widget const& widget) override {
@@ -288,7 +291,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 45);
+    REQUIRE(cases.size() == 46);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -330,7 +333,7 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
     for (std::string_view const name :
          {"a Text shows its constant text", "a bound Text updates once per batch and not for an equal write",
           "a Switch shows the selected case and nothing for a key without one",
-          "a text field shows what the document makes of an edit"}) {
+          "a text field shows what the document makes of an edit", "a chart shows its current summary"}) {
         INFO(name);
         CHECK(wrongText.contains(name));
     }
