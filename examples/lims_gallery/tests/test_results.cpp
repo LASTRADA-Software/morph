@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include "gallery_harness.hpp"
 
@@ -69,6 +70,43 @@ TEST_CASE("results, expanded: undoing the change, then editing a result asks for
     CHECK(screen.waitFor([&screen] { return screen.prop("Dialog", "change", "open") == "false"; }));
     CHECK(screen.backend().prop(resultInput(screen, "Assay, prep 1 result, S-26-104176"), "text") == "101.0");
     screen.requireNoProblems();
+}
+
+// Mutation: compute the mean with `mean`, half to even at the preparations' places -> the mean reads 99.4.
+TEST_CASE("results: the assay mean is the exact mean rounded once, half up", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    screen.click("action_undo");
+    // 99.6 and 99.3: the exact mean 99.45 reports as 99.5; half to even, or a mean rounded first, shows 99.4.
+    screen.backend().submit(resultInput(screen, "Assay, prep 2 result, S-26-104176"), "99.3");
+    CHECK(screen.waitFor([&screen] {
+        return screen.backend().prop(resultInput(screen, "Assay, mean result, S-26-104176"), "text") == "99.5";
+    }));
+    CHECK(screen.backend().find("Text", "text", "RSD 0.21 %").has_value());
+}
+
+// Mutation: round only the display, comparing the half-to-even mean -> the line shows 105.1 but is within spec.
+TEST_CASE("results: the mean compared with its limits is the mean shown", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    screen.click("action_undo");
+    // Each edit asks for its reason before the next one.
+    for (auto const& [name, value] : {std::pair{"Assay, prep 1 result, S-26-104176", "105.0"},
+                                      std::pair{"Assay, prep 2 result, S-26-104176", "105.1"}}) {
+        screen.backend().submit(resultInput(screen, name), value);
+        REQUIRE(screen.waitFor([&screen] { return screen.prop("Dialog", "change", "open") == "true"; }));
+        screen.choose("reason", "transcription");
+        screen.edit("comment", "Typed from the wrong line of the printout.");
+        REQUIRE(screen.waitFor([&screen] { return screen.prop("Button", "action_confirm", "enabled") == "true"; }));
+        screen.click("action_confirm");
+        REQUIRE(screen.waitFor([&screen] { return screen.prop("Dialog", "change", "open") == "false"; }));
+    }
+    // The exact mean 105.05 reports as 105.1, above the 105.0 limit.
+    CHECK(screen.waitFor([&screen] {
+        return screen.backend().prop(resultInput(screen, "Assay, mean result, S-26-104176"), "text") == "105.1";
+    }));
+    auto const mean = screen.backend().find("Row", "rowKey", "\"mean\"");
+    REQUIRE(mean.has_value());
+    CHECK(screen.backend().prop(mean.value_or(0), "tone") == "Err");
+    CHECK(hasBadge(screen, "Out of spec: above 105.0"));
 }
 
 TEST_CASE("results: a result with more places than its specification is not read", "[lims-gallery]") {

@@ -168,11 +168,6 @@ constexpr std::array<char const*, 2> kSamples{"S-26-104176", "S-26-104170"};
 constexpr std::array<char const*, 12> kFields{"id",       "kind", "sample", "analyte", "area", "value",
                                               "original", "unit", "places", "low",     "high", "spec"};
 
-// 100 / √2 to four places. With two preparations the standard deviation is |a − b| / √2, and the expression language
-// has no square root, so the RSD in percent is |a − b| × 100 / √2 over the mean, with the root as this constant.
-constexpr morph::math::Rational kRsdFactor{morph::math::Numerator{707107}, morph::math::Denominator{10000},
-                                           morph::math::DecimalPlaces{4}};
-
 std::int64_t scaleOf(std::int64_t places) {
     std::int64_t scale = 1;
     for (std::int64_t place = 0; place < places; ++place) {
@@ -256,9 +251,9 @@ using Field = std::function<ui::AnyHandle(char const*)>;
 
 ui::AnyHandle valueOf(ui::AnyHandle const& lines, char const* lineId) {
     return ui::call("first",
-                    {ui::map(ui::filter(lines, "line",
-                                        [lineId](ui::AnyHandle const& line) { return ui::eq(line.at("id"), lineId); }),
-                             "line", [](ui::AnyHandle const& line) { return line.at("value"); })});
+                    {ui::filter(lines, "line",
+                                [lineId](ui::AnyHandle const& line) { return ui::eq(line.at("id"), lineId); })})
+        .at("value");
 }
 
 // What a line shows and how it is evaluated against its specification.
@@ -278,9 +273,9 @@ Evaluation evaluate(Worksheet const& sheet, Field const& field) {
     Flag const isTotal = ui::eq(kind, "total");
     auto const typed = ui::call("parseDecimal", {field("value"), field("places")});
     auto const number = ui::cond(isMean, sheet.mean, ui::cond(isTotal, sheet.total, typed));
-    auto const shown = ui::cond(
-        isMean, ui::AnyHandle{ui::call("decimal", {sheet.mean, std::int64_t{1}})},
-        ui::cond(isTotal, ui::AnyHandle{ui::call("decimal", {sheet.total, std::int64_t{2}})}, field("value")));
+    // The mean is rounded once, half up, where it is computed: the value shown is the value compared with the limits.
+    auto const shown = ui::cond(isMean, ui::AnyHandle{ui::decimal(sheet.mean, 1)},
+                                ui::cond(isTotal, ui::AnyHandle{ui::decimal(sheet.total, 2)}, field("value")));
     Flag const unreadable = ui::eq(kind, "entered") && !ui::engaged(number);
     Flag const above = ui::engaged(field("high")) && number > field("high");
     Flag const below = ui::engaged(field("low")) && number < field("low");
@@ -324,10 +319,12 @@ Worksheet declare(ui::Scope& screen) {
     };
     auto const prep1 = ui::parseDecimal(valueOf(sheet.lines, "a1"), 1);
     auto const prep2 = ui::parseDecimal(valueOf(sheet.lines, "a2"), 1);
-    sheet.mean = screen.let("assayMean", ui::call("mean", {ui::list({prep1, prep2})}));
-    auto const spread = ui::cond(prep1 > prep2, ui::AnyHandle{prep1 - prep2}, ui::AnyHandle{prep2 - prep1});
-    sheet.rsd = screen.let("assayRsd",
-                           ui::call("decimal", {spread * ui::AnyHandle{kRsdFactor} / sheet.mean, std::int64_t{2}}));
+    auto const preparations = ui::list({prep1, prep2});
+    // The reportable mean is the exact mean rounded once, half up, at the specification's places, as the
+    // pharmacopoeias report it; `mean` would round half to even at the preparations' places first.
+    sheet.mean =
+        screen.let("assayMean", ui::round(ui::sum(preparations) / ui::count(preparations), 1, ui::Rounding::HalfUp));
+    sheet.rsd = screen.let("assayRsd", ui::rsd(preparations, 2));
     sheet.total = screen.let("totalImpurities", ui::parseDecimal(valueOf(sheet.lines, "ib2"), 2) +
                                                     ui::parseDecimal(valueOf(sheet.lines, "ia2"), 2));
     auto const counted = [&sheet](auto const& pick) {
