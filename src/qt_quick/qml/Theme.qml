@@ -88,6 +88,11 @@ QtObject {
     property color infoDot: "#1565c0"
     // A table's header background; transparent draws no fill, matching a table with no theme-set header.
     property color tableHeader: "#00000000"
+    // A chart's series colours, in drawing order: `color.chart.1` to `color.chart.4`.
+    property color chart1: "#0072b2"
+    property color chart2: "#c25400"
+    property color chart3: "#00805e"
+    property color chart4: "#a8508a"
     property real staleOpacity: 0.55
     // The window behind every surface, the corner radii, the height of an input or a button, and the font sizes, in
     // px. A font size of 0 is derived from the platform font: the body is its size, a heading 1.3 times the body.
@@ -174,6 +179,10 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        chart1: theme.chart1
+        chart2: theme.chart2
+        chart3: theme.chart3
+        chart4: theme.chart4
     }
     readonly property MorphScheme pageScheme: MorphScheme {
         surface: theme.background
@@ -201,6 +210,10 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        chart1: theme.chart1
+        chart2: theme.chart2
+        chart3: theme.chart3
+        chart4: theme.chart4
     }
     readonly property MorphScheme cardScheme: MorphScheme {
         surface: theme.surface
@@ -228,6 +241,10 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        chart1: theme.chart1
+        chart2: theme.chart2
+        chart3: theme.chart3
+        chart4: theme.chart4
     }
     readonly property MorphScheme sidebarScheme: MorphScheme {
         surface: "#1f2430"
@@ -255,6 +272,10 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        chart1: theme.chart1
+        chart2: theme.chart2
+        chart3: theme.chart3
+        chart4: theme.chart4
     }
     readonly property MorphScheme toolbarScheme: MorphScheme {
         surface: theme.surface
@@ -282,6 +303,10 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        chart1: theme.chart1
+        chart2: theme.chart2
+        chart3: theme.chart3
+        chart4: theme.chart4
     }
     property var extraSchemes: ({})
     readonly property Component schemeComponent: Component {

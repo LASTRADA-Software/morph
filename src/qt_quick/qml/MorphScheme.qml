@@ -31,4 +31,9 @@ QtObject {
     property color infoDot: "#1565c0"
     // A table's header background; transparent draws no fill, matching a table with no theme-set header.
     property color tableHeader: "#00000000"
+    // A chart's series colours, in drawing order: `color.chart.1` to `color.chart.4`.
+    property color chart1: "#0072b2"
+    property color chart2: "#c25400"
+    property color chart3: "#00805e"
+    property color chart4: "#a8508a"
 }

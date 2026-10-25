@@ -986,7 +986,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 42> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 46> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1038,6 +1038,12 @@ inline constexpr std::array<ThemeTokenSpec, 42> kThemeTokens = {{
      .shadow = {.color = "#00000014", .offsetX = 0.0, .offsetY = 2.0, .blur = 10.0, .spread = 0.0}},
     // Transparent: an unset theme fills a table's header with nothing, matching today's appearance exactly.
     {.path = "color.table.header", .kind = ThemeTokenKind::Color, .color = "#00000000", .number = 0.0},
+    // A chart's series colours, in drawing order: Okabe and Ito's hues, darkened until each holds 3:1 against both
+    // `color.surface` and `color.background`, the contrast a graphical object needs.
+    {.path = "color.chart.1", .kind = ThemeTokenKind::Color, .color = "#0072b2", .number = 0.0},
+    {.path = "color.chart.2", .kind = ThemeTokenKind::Color, .color = "#c25400", .number = 0.0},
+    {.path = "color.chart.3", .kind = ThemeTokenKind::Color, .color = "#00805e", .number = 0.0},
+    {.path = "color.chart.4", .kind = ThemeTokenKind::Color, .color = "#a8508a", .number = 0.0},
 }};
 
 /// @brief A `shadow` of the set, resolved.
