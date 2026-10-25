@@ -177,7 +177,7 @@ the size never depends on the metrics it feeds.
 Every `MorphUi` component binds to `Theme`, and a host component that imports `MorphUi` reads the same instance in
 the same engine, so a theme reaches both, and applying another theme later updates what is mounted. It returns the
 properties it could not set. Every colour row is also a role of each surface's `MorphScheme`, so a surface's own
-tokens set it there. `MorphWidget`'s `toneBgOf`, `toneBorderOf` and `toneDotOf` answer a tone's fill, outline and
+tokens set it there. A progress bar reads two of them: its fill is `color.accent` on a `color.neutral` track. `MorphWidget`'s `toneBgOf`, `toneBorderOf` and `toneDotOf` answer a tone's fill, outline and
 marker in a widget's scheme (neutral: the muted colour, faint for the fill); a badge and a banner fill and outline
 with them.
 

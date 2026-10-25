@@ -496,3 +496,55 @@ TEMPLATE_TEST_CASE("qt_quick theme: a dialog and a drawer draw on the theme's ca
     CHECK(labelColor(*popup->property("contentItem").value<QQuickItem*>(), QStringLiteral("Sign")) ==
           QColor{"#336699"});
 }
+
+namespace {
+
+/// The descendant item of @p item whose objectName is @p name, or null.
+QQuickItem* namedItem(QQuickItem const& item, QString const& name) {
+    QList<QQuickItem const*> pending{&item};
+    while (!pending.isEmpty()) {
+        QQuickItem const* const node = pending.takeLast();
+        for (QQuickItem* const child : node->childItems()) {
+            if (child->objectName() == name) {
+                return child;
+            }
+            pending.append(child);
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Mutation: drop the bar's `contentItem` (the style's own fill draws, and no item is named `fill`), or colour the
+// fill with anything but the scheme's accent.
+TEST_CASE("qt_quick theme: a progress bar fills with the accent on the neutral track", "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color",
+        "accent": {"$value": "#17784a"}, "neutral": {"$value": "#d0d4d8"}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto progress = scene.backend().createProgress(column.get());
+    progress->setValue(0.25);
+    scene.settle();
+
+    QQuickItem const& item = Scene::itemOf(*progress);
+    QQuickItem const* const fill = namedItem(item, QStringLiteral("fill"));
+    QQuickItem const* const track = namedItem(item, QStringLiteral("track"));
+    REQUIRE(fill != nullptr);
+    REQUIRE(track != nullptr);
+    CHECK(fill->property("color").value<QColor>() == QColor{"#17784a"});
+    CHECK(track->property("color").value<QColor>() == QColor{"#d0d4d8"});
+    CHECK(std::abs(fill->width() - (0.25 * track->width())) <= 1.0);
+
+    // Indeterminate: the segment moves on its own.
+    progress->setValue(std::nullopt);
+    scene.settle();
+    QTest::qWait(100);
+    double const before = fill->x();
+    QTest::qWait(200);
+    CHECK(fill->x() != before);
+}
