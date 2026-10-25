@@ -166,6 +166,13 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `fontFamilies` | `font.family` |
 | `monoFontFamilies` | `font.mono` |
 
+**A chart's colours.** A series reads `chart1` to `chart4` of its widget's scheme in order; a reference line and a
+marked point read their tone's colour (`muted` for neutral). Each default holds 3:1 against `color.surface` and
+`color.background` (WCAG 1.4.11): 5.19, 4.60, 4.94 and 5.02:1 on white. No four colours stay apart from the four
+tone colours under colour-vision deficiency, so a chart never tells series apart by colour alone: each also has its
+own marker shape, a marked point a cross no series uses, and a clipped point an open triangle. A dark theme sets its
+own four, as it sets every colour.
+
 **Touch targets follow the width class.** While the window's width class is `compact`, the backend sets
 `Theme.touchTargets`, and every control is drawn at `Theme.targetHeight`: at least `control.touchHeight`, else
 `control.height`. A button's and an input's background, a text area (twice it) and a table row (8 px less) read it;

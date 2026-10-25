@@ -138,6 +138,38 @@ private:
     std::optional<std::size_t> _current;
 };
 
+/// Chart: points plotted in character cells. A gutter at the left holds the reference lines' labels when three or more
+/// label the axis, else the ticks'; each line is a row of `─`, `╌` or `┄` in its tone. A point is its series' glyph
+/// (`●`, `■`, `▲`, `◆`) in the series colour, a marked one `✕` in its tone with its note after it, a clipped one `△` or
+/// `▽` on the edge row. Points are not joined: a cell is twice as tall as it is wide, so box characters between cells
+/// would draw slopes that are not there. Below the plot, the points' labels and, for two or more series, the legend.
+/// Smaller than 20 by 5 cells, it shows its summary, muted, in place of the plot.
+class ChartImpl final : public TuiWidget<ui::ChartWidget> {
+public:
+    explicit ChartImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
+    void setData(ui::ChartData const& data) override;
+    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] std::string probeText() const override { return _data.summary; }
+    void paint(::core::tui::Canvas& canvas) override;
+
+private:
+    /// The plot area: where a value and a position land, in cells.
+    struct Plot {
+        int top = 0;
+        int left = 0;
+        int rows = 0;
+        int columns = 0;
+        [[nodiscard]] int rowOf(ui::ChartData const& data, double value) const;
+        [[nodiscard]] int columnOf(ui::ChartData const& data, double position) const;
+    };
+    void paintSummary(::core::tui::Canvas& canvas) const;
+    void paintLines(::core::tui::Canvas& canvas, Plot const& plot, bool byLines) const;
+    void paintPoints(::core::tui::Canvas& canvas, Plot const& plot) const;
+    void paintBelow(::core::tui::Canvas& canvas, Plot const& plot) const;
+
+    ui::ChartData _data;
+};
+
 /// Key-value: one row per pair, the captions padded to the widest, then the values.
 class KeyValueImpl final : public TuiWidget<ui::KeyValueWidget> {
 public:

@@ -138,6 +138,8 @@ public:
     [[nodiscard]] std::unique_ptr<ui::KeyValueWidget> createKeyValue(ui::ContainerWidget* parent) override;
     /// @copydoc ui::IViewBackend::createEmptyState
     [[nodiscard]] std::unique_ptr<ui::EmptyStateWidget> createEmptyState(ui::ContainerWidget* parent) override;
+    /// @copydoc ui::IViewBackend::createChart
+    [[nodiscard]] std::unique_ptr<ui::ChartWidget> createChart(ui::ContainerWidget* parent) override;
     /// @copydoc ui::IViewBackend::createDrawer
     [[nodiscard]] std::unique_ptr<ui::DrawerWidget> createDrawer(ui::ContainerWidget* parent, ui::Side side) override;
     /// @copydoc ui::IViewBackend::createSplitter

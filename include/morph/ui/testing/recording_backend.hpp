@@ -2,6 +2,7 @@
 
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -1304,6 +1305,106 @@ public:
     }
 };
 
+/// @brief Formats free text inside a chart property: also escapes `,`, `[`, `]`, `;`, `@` and `|`, the separators
+///        of the chart's formats.
+/// @param text The text, UTF-8.
+/// @return The escaped text.
+[[nodiscard]] inline std::string formatChartText(std::string_view text) {
+    return escape(text, [](char character) { return std::string_view{"=,[];@|"}.contains(character); });
+}
+
+/// @brief A tone's document name, as a chart's formats write it.
+/// @param tone The tone.
+/// @return `neutral`, `info`, `ok`, `warn` or `err`.
+[[nodiscard]] inline std::string chartToneName(Tone tone) {
+    static constexpr std::array<std::string_view, 5> kNames = {"neutral", "info", "ok", "warn", "err"};
+    auto const index = static_cast<std::size_t>(tone);
+    return index < kNames.size() ? std::string{kNames.at(index)} : std::string{"unknown"};
+}
+
+/// @brief A reference line's stroke, as a chart's formats write it.
+/// @param style The stroke.
+/// @return `solid`, `dashed` or `dotted`.
+[[nodiscard]] inline std::string chartStyleName(ChartLineStyle style) {
+    if (style == ChartLineStyle::Dashed) {
+        return "dashed";
+    }
+    return style == ChartLineStyle::Dotted ? "dotted" : "solid";
+}
+
+/// @brief A chart point's value: the number, `gap` for none, and the number followed by `↑` or `↓` for a point
+///        clipped at the axis's upper or lower end.
+/// @param point The point.
+/// @return The text.
+[[nodiscard]] inline std::string formatChartValue(ChartPoint const& point) {
+    if (!point.y.has_value()) {
+        return "gap";
+    }
+    std::string text = std::format("{}", *point.y);
+    if (point.clip == ChartClip::Above) {
+        text += "↑";
+    } else if (point.clip == ChartClip::Below) {
+        text += "↓";
+    }
+    return text;
+}
+
+/// @brief A chart's series: `[entry,…]`, each entry `label;joined;[point|…]` and each point
+///        `xLabel@x,y;tone;note`, the tone empty for an unmarked point.
+/// @param series The series.
+/// @return The text.
+[[nodiscard]] inline std::string formatChartSeries(std::vector<ChartSeries> const& series) {
+    std::string text = "[";
+    for (ChartSeries const& one : series) {
+        text += text.size() == 1 ? "" : ",";
+        text += formatChartText(one.label) + ";" + formatBool(one.joined) + ";[";
+        bool first = true;
+        for (ChartPoint const& point : one.points) {
+            text += first ? "" : "|";
+            first = false;
+            text += formatChartText(point.xLabel) + "@" + std::format("{}", point.x) + "," + formatChartValue(point) +
+                    ";" + (point.tone.has_value() ? chartToneName(*point.tone) : std::string{}) + ";" +
+                    formatChartText(point.note);
+        }
+        text += "]";
+    }
+    return text + "]";
+}
+
+/// @brief A fake `ChartWidget`: properties `yRange` and `xRange` (`[lo,hi]`), `yLabel`, `yTicks`
+///        (`[text@value,…]`), `lines` (`[label@value;tone;style,…]`), `series` (as `formatChartSeries` gives it) and
+///        `summary`, each set only when it changed. Numbers are written shortest-round-trip, so a log is the same on
+///        every platform.
+class FakeChart final : public FakeLeaf<ChartWidget> {
+public:
+    using FakeLeaf<ChartWidget>::FakeLeaf;
+    void setData(ChartData const& data) override {
+        update("yRange", std::format("[{},{}]", data.yMin, data.yMax));
+        update("xRange", std::format("[{},{}]", data.xMin, data.xMax));
+        update("yLabel", formatText(data.yLabel));
+        update("yTicks", formatList(data.yTicks, [](ChartTick const& tick) {
+                   return formatChartText(tick.text) + "@" + std::format("{}", tick.value);
+               }));
+        update("lines", formatList(data.lines, [](ChartLine const& line) {
+                   return formatChartText(line.label) + "@" + std::format("{}", line.value) + ";" +
+                          chartToneName(line.tone) + ";" + chartStyleName(line.style);
+               }));
+        update("series", formatChartSeries(data.series));
+        update("summary", formatText(data.summary));
+    }
+
+private:
+    // Logs a property only when its text differs from what is recorded, so a test sees which parts changed.
+    void update(std::string_view name, std::string value) {
+        auto const& props = store().at(id()).props;
+        auto const found = props.find(name);
+        if (found != props.end() && found->second == value) {
+            return;
+        }
+        set(name, std::move(value));
+    }
+};
+
 /// @brief A fake `KeyValueWidget`: property `items` (`[label:value,…]`).
 class FakeKeyValue final : public FakeLeaf<KeyValueWidget> {
 public:
@@ -1851,6 +1952,9 @@ public:
     }
     [[nodiscard]] std::unique_ptr<EmptyStateWidget> createEmptyState(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeEmptyState>(_store, "EmptyState", parent);
+    }
+    [[nodiscard]] std::unique_ptr<ChartWidget> createChart(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakeChart>(_store, "Chart", parent);
     }
     [[nodiscard]] std::unique_ptr<DrawerWidget> createDrawer(ContainerWidget* parent, Side side) override {
         return std::make_unique<detail::FakeDrawer>(_store, "Drawer", parent,

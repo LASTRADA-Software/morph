@@ -40,7 +40,7 @@ gallery. So the batch lands as two pull requests on `feat/lims-gallery`, each gr
 | Part | Items | Conformance | Layout | Depends on |
 |---|---|---|---|---|
 | E1, expressions | walk's numeric segment, G36, saturated rounding, half-up, G45, G37 (with the date reading) | — | — | C's G13 for the gallery's `03-Dec-2026` text only |
-| E2, the chart | G55 | 54 | L15 | Nothing; it can land before or after E1 |
+| E2, the chart | G55 | 54 | L16 | Nothing; it can land before or after E1 |
 
 Order inside E1: walk's numeric segment (`get` reads through `walk`), G36 (a form, no numbers), saturated rounding (it
 brings the checked 128-bit integer and the one checked rounding every later item calls), the rounding mode (it changes
@@ -839,7 +839,7 @@ tone's colour (`color.err` and the others; `neutral` is `color.muted`).
   its palette table gains `Chart`.
 - `interpreter.md`: `lowerChart`, the range, the ticks and the reports.
 - `backend_contract.md`: `ChartWidget`, `createChart`, the RecordingBackend properties, `textOf` for a chart,
-  conformance case 54 and layout case L15.
+  conformance case 54 and layout case L16.
 - `theme.md`: `color.chart.1` to `.4`. `qt_quick/backend.md` and `tui/frontend.md`: how each draws it.
 - `author.md`: `ui::chart`.
 
@@ -849,9 +849,9 @@ tone's colour (`color.err` and the others; `neutral` is `color.muted`).
   `textOf` reads `B`. Case 17 ("no setter calls a handler") gains `setData`. **Control:** a backend that reads the
   summary at creation only reads `A`. `conformanceCases()` goes from 53 (after D) to 54, and
   `test_ui_conformance.cpp`'s count with it.
-- **Layout case L15**, "a chart's content size is 40 by 8 units": a content-sized chart in a 60-unit column measures
+- **Layout case L16**, "a chart's content size is 40 by 8 units": a content-sized chart in a 60-unit column measures
   40 × 8 on both frontends. **Control:** a `MorphChart` whose implicit size is its `Canvas`'s (0 × 0) measures 0.
-  `layoutConformanceCases()` goes from 14 (after D) to 15.
+  `layoutConformanceCases()` goes from 15 (after D) to 16.
 - `tests/test_ui_interpreter_chart.cpp` (new), on `RecordingBackend`:
   1. Design 10's chart with 20 runs records the seven lines with their labels, `yTicks` empty, and the 20th point
      with `tone=err` and its note; `yRange` is `[98.672,101.488]`: the run at 101.36 and the −3SD line at 98.8, with
@@ -912,7 +912,7 @@ chart is `sizing` 12 rows tall, so the seven lines get rows of their own.
   checked 128-bit integer with division and square root in `rational.hpp`, one implementation on every compiler,
   tested on its own.
 - **The chart (E2).** One palette node, one view-tree kind and one `ChartWidget` with one setter; four `IViewBackend`
-  implementations gain `createChart`. Conformance case 54 (53 to 54), layout case L15 (14 to 15), and case 17 covers
+  implementations gain `createChart`. Conformance case 54 (53 to 54), layout case L16 (15 to 16; batch D takes L15), and case 17 covers
   `setData`. Four theme tokens, which are also scheme roles. A Qt Quick grab test at two scale factors and a terminal
   golden screen.
 - **Gallery.** Removed: `kRsdFactor` and the two-preparation formula; the timepoint date table and `dateOf`; the

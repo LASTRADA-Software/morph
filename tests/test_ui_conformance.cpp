@@ -116,6 +116,9 @@ public:
         if (kind == "Tabs") {
             return highlightedLabel(widgetId);
         }
+        if (kind == "Chart") {
+            return unescape(_backend.prop(widgetId, "summary"));
+        }
         return unescape(
             _backend.prop(widgetId, kind == "Button" || kind == "Checkbox" || kind == "Menu" ? "label" : "text"));
     }
@@ -307,7 +310,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 48);
+    REQUIRE(cases.size() == 49);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -350,7 +353,8 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
          {"a Text shows its constant text", "a bound Text updates once per batch and not for an equal write",
           "a Switch shows the selected case and nothing for a key without one",
           "a text field shows what the document makes of an edit",
-          "a button-style menu reports the entry past a separator, and never the separator"}) {
+          "a button-style menu reports the entry past a separator, and never the separator",
+          "a chart shows its current summary"}) {
         INFO(name);
         CHECK(wrongText.contains(name));
     }

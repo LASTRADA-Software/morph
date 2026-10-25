@@ -467,6 +467,47 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   and no events. A document the catalog lacks, one for another action, one that does not build, or
   a wizard step without a schema is reported and shown as a muted text naming the action.
 
+### Charts
+
+`lowerChart` binds one `ChartData` (`view_tree.md`, Chart data) in the chart's scope: one tracked read evaluates
+`summary`, `yLabel`, each series' `points`, each point's keys with `row` the point's element (as a table's `key` is
+read, with no row scope made), and each line, so a change to the list or to anything a point reads recomputes the
+chart once, and a recomputation that changes nothing sets nothing. The range, the ticks and the labels are computed
+in `math::Rational` (`chart_scale.hpp`) and converted to `double` only at the end; no label is derived from a
+position.
+
+- **Values.** `y` and a line's `value` are numbers or quantities, and convert to the unit of the chart's first
+  value read (the series in order, then the lines), as `sum` converts. A value that is not a number, or does not
+  convert, is left out and reported for its path, once (`a chart value is a number or a quantity; this one is left
+  out`; `… does not convert to the unit of the chart's first value …`). A `null` `y` is a gap: the point is kept,
+  and no line joins across it. A line whose `value` is `null` is not drawn.
+- **Points.** `points` that is `null` draws as empty without a report (a query still loading); any other value
+  that is not a list draws as empty and is reported. A series draws its last 1000 points, reported once past that:
+  a chart is a picture of a few hundred values, and a larger set is a table's. `xLabel` and `note` show as `textOf`
+  shows a value, so an `int` needs no `format` call; `null` marks nothing, and a `tone` outside the five names marks
+  nothing and is reported once for its path.
+- **The horizontal axis.** Without `x`, point *i* of every series sits at *i*, its element's index, so series of
+  equal length line up run by run. With `x`, a number is its value and a date or an instant its milliseconds since
+  the epoch (a `yyyy-MM-dd` date is midnight of it in the display zone, as a date input reads it); a point whose `x`
+  is `null` is left out, and one that is neither is reported and left out. Numbers mixed with dates and instants
+  are reported once, and every point then sits at its index. The axis spans every position, widened by 5 % of the
+  span at each end; a span of zero is widened by one either side.
+- **The value axis.** It spans every drawn value and every line, widened by 5 % of the span at each end, so the
+  outermost point and line lie inside the plot; a span of zero is widened by one unit in the last of the places
+  either side, and a chart with nothing to draw spans 0 to 1. The places are `yPlaces`, or else the widest places of
+  the values and lines. `yMin` and `yMax`, evaluated and converted as values are, replace the computed ends; ends
+  that leave the axis empty are reported (``yMin` is not below `yMax``) and the computed range is kept. A value
+  beyond a fixed end is drawn at that end as clipped (`ChartClip`), not as the end's value, and is reported nowhere:
+  a document that fixed the axis chose that, and the summary carries the value.
+- **Ticks.** With three or more lines, the lines label the axis (they are the scale a control chart is read
+  against) and `yTicks` is empty. With fewer, the ticks are the multiples, inside the range, of the largest step of
+  1, 2 or 5 × 10ᵏ that puts three or more there (three to six, or seven or eight where a step of 5 × 10ᵏ would put
+  two), each shown at the wider of the places and the step's own places, in the active locale. Two specification
+  lines alone would leave the values between them without a scale.
+- **Labels.** A line without a `label` is labelled with its value at the places. Every text is formatted through
+  the session's `FormatContext`, so a decimal takes the locale's separator.
+- **Overflow.** A range the checked arithmetic cannot hold is reported once, and the chart draws its summary alone.
+
 ## Development tools
 
 In development mode (`SessionOptions::developmentTools` is `On`), a screen also records what the development inspector reads

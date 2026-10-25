@@ -4529,6 +4529,124 @@ struct StepperOptions {
                   {.gap = 2});
 }
 
+/// @brief An expression read once per point of a chart's series, from the point's element (`{"row": ""}`).
+using PointExpression = std::function<AnyHandle(AnyHandle const& point)>;
+
+/// @brief One series of a `chart`.
+struct ChartSeries {
+    /// @brief The series' name in the legend; required when the chart has two or more series.
+    AnyHandle label;
+    /// @brief The elements, one point each.
+    AnyHandle points;
+    /// @brief The value, a number or a quantity; `null` leaves a gap.
+    PointExpression y;
+    /// @brief The position along the axis, a number, a date or an instant; absent on every series spaces points by
+    ///        index.
+    PointExpression x;
+    /// @brief The point's label on the horizontal axis.
+    PointExpression xLabel;
+    /// @brief Marks the point in a tone; `null` leaves it ordinary.
+    PointExpression tone;
+    /// @brief Text drawn beside the point.
+    PointExpression note;
+    /// @brief Whether a line joins the points.
+    bool joined = true;
+};
+
+/// @brief How a chart's reference line is stroked.
+enum class LineStyle : std::uint8_t {
+    Solid,   ///< An unbroken line.
+    Dashed,  ///< Dashes.
+    Dotted,  ///< Dots.
+};
+
+/// @brief A horizontal reference line of a `chart`.
+struct ReferenceLine {
+    /// @brief Where the line is drawn, a number or a quantity.
+    AnyHandle value;
+    /// @brief Its label; absent, its value at the chart's places.
+    AnyHandle label;
+    /// @brief Its colour, a tone name; absent, `neutral`.
+    AnyHandle tone;
+    /// @brief Its stroke.
+    LineStyle style = LineStyle::Solid;
+};
+
+/// @brief Options of `chart`.
+struct ChartOptions {
+    /// @brief The text alternative: what a reader must know from the chart.
+    AnyHandle summary;
+    /// @brief The series, one to four, in drawing order.
+    std::vector<ChartSeries> series;
+    /// @brief The reference lines, at most sixteen.
+    std::vector<ReferenceLine> lines;
+    /// @brief A fixed lower end of the value axis.
+    AnyHandle yMin;
+    /// @brief A fixed upper end of the value axis.
+    AnyHandle yMax;
+    /// @brief The places the axis's labels are shown at, 0 to 18; absent, the widest places of the values.
+    std::optional<int> yPlaces;
+    /// @brief The value axis's unit or name.
+    AnyHandle yLabel;
+};
+
+/// @brief A `chart` node: points against a numeric axis, with reference lines.
+/// @param options The summary, the series, the lines and the axis.
+/// @return The node.
+[[nodiscard]] inline Node chart(ChartOptions const& options) {
+    static constexpr std::array<char const*, 3> kStyles = {"solid", "dashed", "dotted"};
+    AnyHandle const point = row();
+    auto const each = [&point](Json& part, char const* key, PointExpression const& read) {
+        if (read) {
+            AnyHandle const value = read(point);
+            if (value.present()) {
+                detail::put(part, key, value.json());
+            }
+        }
+    };
+    Json::array_t series;
+    for (ChartSeries const& one : options.series) {
+        Json part = Json::object_t{};
+        if (one.label.present()) {
+            detail::put(part, "label", one.label.json());
+        }
+        detail::put(part, "points", one.points.json());
+        each(part, "y", one.y);
+        each(part, "x", one.x);
+        each(part, "xLabel", one.xLabel);
+        each(part, "tone", one.tone);
+        each(part, "note", one.note);
+        if (!one.joined) {
+            detail::put(part, "joined", false);
+        }
+        series.push_back(std::move(part));
+    }
+    detail::NodeWriter node{"chart"};
+    node.put("summary", options.summary).raw("series", std::move(series));
+    if (!options.lines.empty()) {
+        Json::array_t lines;
+        for (ReferenceLine const& line : options.lines) {
+            Json part = Json::object_t{};
+            detail::put(part, "value", line.value.json());
+            if (line.label.present()) {
+                detail::put(part, "label", line.label.json());
+            }
+            if (line.tone.present()) {
+                detail::put(part, "tone", line.tone.json());
+            }
+            if (line.style != LineStyle::Solid) {
+                detail::put(part, "style", std::string{kStyles.at(static_cast<std::size_t>(line.style))});
+            }
+            lines.push_back(std::move(part));
+        }
+        node.raw("lines", std::move(lines));
+    }
+    if (options.yPlaces) {
+        node.raw("yPlaces", static_cast<std::int64_t>(*options.yPlaces));
+    }
+    return node.put("yMin", options.yMin).put("yMax", options.yMax).put("yLabel", options.yLabel).done();
+}
+
 /// @brief A `keyValue` node.
 /// @param items The pairs, `[{label, value}]`.
 /// @return The node.

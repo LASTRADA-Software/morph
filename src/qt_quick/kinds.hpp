@@ -222,6 +222,13 @@ public:
     void setCurrent(std::optional<std::size_t> index) override;
 };
 
+class ChartImpl final : public ItemWidget<ui::ChartWidget> {
+public:
+    ChartImpl(Context& context, ui::ContainerWidget* parent);
+    void setData(ui::ChartData const& data) override;
+    [[nodiscard]] std::string shownText() const override;
+};
+
 class KeyValueImpl final : public ItemWidget<ui::KeyValueWidget> {
 public:
     KeyValueImpl(Context& context, ui::ContainerWidget* parent);

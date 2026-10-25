@@ -162,9 +162,30 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Slider | `MorphSlider` | an integer `Slider` | the rounded value moved to |
 | FilePicker | `MorphFilePicker` | a path and a button opening Qt Quick Dialogs' `FileDialog` | the local path picked |
 | Banner, Badge, Progress, Steps, KeyValue, EmptyState | the component of that name; a removable badge's `ToolButton` (`remove`, drawing `close`, its accessible name `removeLabel`) is the badge's focus target | as the backend contract says | a banner's action and dismissal, a badge's removal, an empty state's action |
+| Chart | `MorphChart` | one `Canvas`, below | — |
 | Collapsible | `MorphCollapsible` | a toggle with the title, the header beside it, the content below while open | the open state asked for |
 | DropZone | `MorphDropZone` | a framed `DropArea` for files | the local paths of a drop it took |
 
+- **The chart.** `MorphChart` paints the whole chart on one `Canvas`, part of `QtQuick`, which the frontend already
+  links: Qt Graphs and Qt Charts are separate modules (a package for every build and the WASM client), and
+  `QtQuick.Shapes` is a QML module to deploy, and a chart of a few hundred points paints in well under a frame.
+  `ChartImpl` writes the `ChartData` as one `chart` map of numbers and strings (a tone or clip as its index, `-1`
+  for no tone, a gap as `gap`) and the `summary` text; the item repaints when either, its size or its scheme
+  changes. The labels are painted too, in `Theme.bodyFont`: the axis labels (the lines' when three or more label the
+  axis, else the ticks') right-aligned in a left gutter as wide as the widest, `yLabel` above them; with ticks, each
+  line's label at its right end, above the line; the `xLabel`s in one row below the plot, each skipped when it would
+  overlap the last one drawn, the newest always drawn; the legend below that for two or more series, each series'
+  shape beside its label. It draws, in order: the lines (1 px on a pixel row's centre, so a line is one row of
+  device pixels at any ratio; dashes 4 on 3 off, dots 2 on 3 off, in the tone's colour, `muted` for neutral); each
+  series as a 1.5 px polyline in `scheme.chart1` to `chart4`, broken at gaps, when joined; its points, 5 px across,
+  as a circle, square, triangle or diamond in token order; then over every series the clipped points (an open
+  triangle at the edge, pointing out of the plot) and the marked points (a cross 10 px across, 2 px stroke, in the
+  tone's colour) and the notes (the tone's colour, beside the point, flipped to its left near the right edge).
+  Its content size is 40 units by 8, so a chart in a stretching column is readable before any `sizing`. It is
+  `Accessible.Chart`, named by the node's `a11y` name or else the summary; the summary is the description only
+  when the name is not, so a screen reader reads it once. `shownText()`, the probe's `textOf`, is the summary. A
+  `Canvas` paints at the device pixel ratio, and the chart's tests run again at `QT_SCALE_FACTOR=2`
+  (`qt_quick_chart_scale_2`).
 - **Captions.** `MorphField` carries `caption` and `labelShown`; while `labelShown` it draws the caption above its
   control and moves the control under it, and the field's implicit size takes it in. A text input, select and
   date-time input write both from `setCaption`. A restyle reads `caption` with `labelShown` false to know its

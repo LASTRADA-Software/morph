@@ -244,7 +244,8 @@ TEST_CASE("ui document: a refusal names the document", "[ui][document]") {
     CHECK(loaded->view->kind == "text");
 
     auto const kinds = morph::ui::nodeKinds();
-    CHECK(kinds.size() == 37);
+    CHECK(kinds.size() == 38);
+    CHECK(std::ranges::find(kinds, "chart") != kinds.end());
     CHECK(std::ranges::find(kinds, "dateTimeInput") != kinds.end());
     CHECK(std::ranges::find(kinds, "menuItem") == kinds.end());
 }

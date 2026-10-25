@@ -688,6 +688,26 @@
                   }
                },
                {
+                  "kind": "chart",
+                  "summary": "Runs within limits",
+                  "series": [
+                     {
+                        "points": {
+                           "list": []
+                        },
+                        "y": {
+                           "row": "value"
+                        }
+                     }
+                  ],
+                  "lines": [
+                     {
+                        "value": 100,
+                        "label": "mean"
+                     }
+                  ]
+               },
+               {
                   "kind": "emptyState",
                   "title": "Nothing",
                   "text": "No rows",

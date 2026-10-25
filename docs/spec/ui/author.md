@@ -142,8 +142,11 @@ Every kind of the kind table has a builder whose options struct holds the kind's
 `text`, `button`, `textInput`, `checkbox`, `select`, `menu`, `column`, `row`, `grid`, `spacer`,
 `panel`, `scroll`, `switchOn` with `Case`, `tabs`, `dialog`, `drawer`, `busy`, `forEach`, `table`,
 `dataTable`, `dateTimeInput`, `slider`, `filePicker`, `banner`, `badge`, `progress`, `steps`,
-`keyValue`, `emptyState`, `splitter`, `collapsible`, `dropZone`, `customize`, `boundary`, `form`,
-`collection`, `wizard` and `custom`. Children come first, as a `Nodes` list (`{a, b}`, or one node),
+`keyValue`, `emptyState`, `chart`, `splitter`, `collapsible`, `dropZone`, `customize`, `boundary`, `form`,
+`collection`, `wizard` and `custom`. `chart(ChartOptions{summary, series, lines, yMin, yMax, yPlaces, yLabel})`
+takes its series as `ChartSeries{label, points, y, x, xLabel, tone, note, joined}`, where each per-point key is a
+`PointExpression`, a function from the point's element (`row()`) to an expression, and its lines as
+`ReferenceLine{value, label, tone, style}` with a `LineStyle`. Children come first, as a `Nodes` list (`{a, b}`, or one node),
 options second. `tabs(tabs, TabsOptions{.selected, .onChoose})` takes `Tab{id, label, children}` pages.
 `pinned(content, PinnedOptions{.top, .bottom})` writes the bar-that-stays-in-view idiom: a column sized to stretch
 both ways holding `top`, a vertical `scroll` sized to stretch both ways around `content`, and `bottom`.

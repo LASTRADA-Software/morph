@@ -92,7 +92,7 @@ which maps it (the theme's `space.<step>` on Qt Quick, rows and columns on the t
 The node kinds are the palette of the UI document design (§9): its base kinds (text, button, text
 input, checkbox, select, menu, column, row, grid, spacer, panel, scroll, switch, tabs, dialog, busy,
 forEach, table, date-time input, slider and file picker) and its further kinds (banner, badge,
-progress, steps, key-value, empty state, drawer, splitter, collapsible, drop zone), with `custom`,
+progress, steps, key-value, empty state, drawer, splitter, collapsible, drop zone, chart), with `custom`,
 which this mount shows as its fallback. Every other node carries the common properties, inputs and text
 carry the field state, and menu items nest. `boundary` and `customize` are not view-tree kinds: a
 boundary decides what to show from the state of the queries its children read, and a customization
@@ -132,6 +132,7 @@ lowers them to the kinds below.
 | `Splitter` | `splitter` | `children` (a null child is skipped), `orientation` (`Axis`, set once), `sizes` (`std::vector<int>`; empty shares the space equally), `onResize` (every pane's size after the user dragged a handle) |
 | `Collapsible` | `collapsible` | `title`, `open`, `onToggle` (the state the user asked for), `header` (shown beside the title, usable while closed), `child` (mounted once, hidden while closed) |
 | `DropZone` | `dropZone` | `accept` (extensions such as `".csv"`, without regard to case; empty takes every file), `multiple` (both set once), `onDrop` (the paths of a drop it took; a drop with a refused file, or several files when not `multiple`, is refused whole), `child` |
+| `Chart` | `chart` | `data` (`ChartData`, below): points against a numeric axis with horizontal reference lines. It takes no focus and calls no handler |
 | `Custom` | `custom` | `name`, `fallback` (never null: `custom` throws `std::invalid_argument`), `props` (`CustomProp`: a name and a `Prop` of text, `bool` or `double`), `minVersion`, `onEvent(event, payload)`. `Mounted` asks `IViewBackend::createCustom` for the component and mounts the fallback only when it returns null; `Custom` has no `Common` of its own |
 
 Every node but `Custom` also carries `Common`:
@@ -172,8 +173,27 @@ The `Prop` fields — the ones a binding may drive — are `Common`'s `visible`,
 `label`; Table `selection`; DateTimeInput `value`; Slider `value`; FilePicker `path`; Banner `tone`,
 `text` and the action's `label`; Badge `tone` and `text`; Progress `value` and `label`; Steps `items` and
 `current`; KeyValue `items`; EmptyState `title`, `text` and the action's `label`; Drawer `open` and `title`;
-Splitter `sizes`; Collapsible `title` and `open`. Every other
+Splitter `sizes`; Collapsible `title` and `open`; Chart `data`. Every other
 field is fixed when the node is built.
+
+**Chart data.** A `Chart` has one property, `ChartData`, rather than a setter per part: its range depends on every
+point and line, so the parts change together, and one equality check keeps an unchanged chart from drawing again.
+Everything in it is computed before the backend sees it ([`interpreter.md`](interpreter.md#charts)): positions are
+`double`s and every text is formatted, so a backend draws and never derives a label from a position.
+
+| Field | Meaning |
+|---|---|
+| `xMin`, `xMax`, `yMin`, `yMax` | The plotted range of each axis, padding included |
+| `yLabel` | The value axis's unit or name; empty for none |
+| `yTicks` | `ChartTick{value, text}`s labelling the value axis; empty when three or more reference lines label it |
+| `lines` | `ChartLine{value, label, tone, style}`: a horizontal reference line in its `Tone`'s colour, `ChartLineStyle{Solid, Dashed, Dotted}` |
+| `series` | `ChartSeries{label, joined, points}`, at most four, in drawing order; `label` names it in the legend |
+| `series[].points` | `ChartPoint{x, y, clip, xLabel, tone, note}`: `x` is an index, a number or an instant's milliseconds since the epoch; `y` empty is a gap no line joins across; `clip` (`ChartClip{None, Below, Above}`) marks a value beyond an axis end the document fixed, and `y` is then that end; `tone` engaged marks the point; `note` is text beside it |
+| `summary` | The text alternative: the accessible description, and what a probe reads as the chart's text |
+
+A series is told apart by its shape as well as its colour (`color.chart.1` to `.4`, [`theme.md`](theme.md)), a
+marked point by a shape no series uses, and a clipped point by an open triangle at the edge, so nothing a chart
+says rests on colour alone.
 
 The builder for a Switch is `switchOf` because `switch` is a keyword. `switchOn<E>(selector, cases,
 fallback)` is the enumeration form: `selector` is a `std::function<E()>`, `cases` pairs enumerators
@@ -546,6 +566,7 @@ rows appear at the next change of the rows.
 
 ## Out of scope
 
-Not in the palette: themes beyond `TextRole`, images, charts, and translation catalogues — a
+Not in the palette: themes beyond `TextRole`, images, charts other than points against a numeric axis (bars,
+histograms, areas, pies), chart interaction, and translation catalogues — a
 binding produces translated text. The document's further kinds and properties join with the
 interpreter ([The palette](#the-palette)).

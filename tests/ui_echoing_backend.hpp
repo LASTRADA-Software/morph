@@ -176,6 +176,10 @@ public:
         created();
         return _recording.createEmptyState(parent);
     }
+    std::unique_ptr<::morph::ui::ChartWidget> createChart(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createChart(parent);
+    }
     std::unique_ptr<::morph::ui::CollapsibleWidget> createCollapsible(::morph::ui::ContainerWidget* parent) override {
         created();
         return _recording.createCollapsible(parent);

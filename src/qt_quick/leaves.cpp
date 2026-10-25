@@ -273,6 +273,52 @@ void StepsImpl::setCurrent(std::optional<std::size_t> index) {
     write("current", index ? static_cast<int>(*index) : -1);
 }
 
+ChartImpl::ChartImpl(Context& context, ui::ContainerWidget* parent)
+    : ItemWidget{context, QStringLiteral("MorphChart"), parent} {}
+
+// The chart as one map of numbers and strings, which the item paints in one pass: a tone or a clip as its
+// enumerator's index, -1 for no tone, and a gap as `gap` rather than a missing value.
+void ChartImpl::setData(ui::ChartData const& data) {
+    QVariantList ticks;
+    for (ui::ChartTick const& tick : data.yTicks) {
+        ticks.append(QVariantMap{{QStringLiteral("value"), tick.value}, {QStringLiteral("text"), toQString(tick.text)}});
+    }
+    QVariantList lines;
+    for (ui::ChartLine const& line : data.lines) {
+        lines.append(QVariantMap{{QStringLiteral("value"), line.value},
+                                 {QStringLiteral("label"), toQString(line.label)},
+                                 {QStringLiteral("tone"), static_cast<int>(line.tone)},
+                                 {QStringLiteral("style"), static_cast<int>(line.style)}});
+    }
+    QVariantList series;
+    for (ui::ChartSeries const& one : data.series) {
+        QVariantList points;
+        for (ui::ChartPoint const& point : one.points) {
+            points.append(QVariantMap{{QStringLiteral("x"), point.x},
+                                      {QStringLiteral("y"), point.y.value_or(0.0)},
+                                      {QStringLiteral("gap"), !point.y.has_value()},
+                                      {QStringLiteral("clip"), static_cast<int>(point.clip)},
+                                      {QStringLiteral("xLabel"), toQString(point.xLabel)},
+                                      {QStringLiteral("tone"), point.tone ? static_cast<int>(*point.tone) : -1},
+                                      {QStringLiteral("note"), toQString(point.note)}});
+        }
+        series.append(QVariantMap{{QStringLiteral("label"), toQString(one.label)},
+                                  {QStringLiteral("joined"), one.joined},
+                                  {QStringLiteral("points"), points}});
+    }
+    write("summary", toQString(data.summary));
+    write("chart", QVariantMap{{QStringLiteral("xMin"), data.xMin},
+                               {QStringLiteral("xMax"), data.xMax},
+                               {QStringLiteral("yMin"), data.yMin},
+                               {QStringLiteral("yMax"), data.yMax},
+                               {QStringLiteral("yLabel"), toQString(data.yLabel)},
+                               {QStringLiteral("ticks"), ticks},
+                               {QStringLiteral("lines"), lines},
+                               {QStringLiteral("series"), series}});
+}
+
+std::string ChartImpl::shownText() const { return toUtf8(read("summary").toString()); }
+
 KeyValueImpl::KeyValueImpl(Context& context, ui::ContainerWidget* parent)
     : ItemWidget{context, QStringLiteral("MorphKeyValue"), parent} {}
 

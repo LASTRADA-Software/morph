@@ -3,6 +3,7 @@
 #include "tui/display_widgets.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Modifier.hpp>
@@ -428,6 +429,291 @@ void EmptyStateImpl::click(::core::tui::Point cell) {
     if (cell.y == actionRow() && cell.x < displayWidth(actionText(_actionLabel))) {
         activate();
     }
+}
+
+}  // namespace morph::tui::detail
+
+namespace morph::tui::detail {
+
+namespace {
+
+// Smaller than this, a plot says too little; the summary says it instead.
+constexpr int kChartMinColumns = 20;
+constexpr int kChartMinRows = 5;
+constexpr int kChartGutterLimit = 8;
+constexpr std::array<std::string_view, 4> kSeriesGlyphs = {"●", "■", "▲", "◆"};
+
+/// A series' style: normal text in `color.chart.<n>`'s default, in token order.
+::core::tui::Style seriesStyle(::core::tui::Theme const& theme, std::size_t index) {
+    static constexpr std::array<std::string_view, 4> kTokens = {"color.chart.1", "color.chart.2", "color.chart.3",
+                                                                "color.chart.4"};
+    ::core::tui::Style style = theme.textNormal;
+    std::string_view const token = kTokens.at(index % kTokens.size());
+    for (ui::ThemeTokenSpec const& spec : ui::kThemeTokens) {
+        if (spec.path == token) {
+            if (std::optional<ui::Rgba> const colour = ui::detail::hexColor(spec.color)) {
+                style.fg = ::core::tui::RgbColor{.r = colour->r, .g = colour->g, .b = colour->b};
+            }
+        }
+    }
+    return style;
+}
+
+/// A line's tone style: a neutral line is muted, as on Qt Quick.
+::core::tui::Style const& lineStyle(::core::tui::Theme const& theme, ui::Tone tone) {
+    return tone == ui::Tone::Neutral ? theme.textMuted : toneStyle(theme, tone);
+}
+
+/// How much a line's tone says: an error more than a warning, and any tone more than none.
+int severity(ui::Tone tone) noexcept {
+    switch (tone) {
+        case ui::Tone::Err:
+            return 4;
+        case ui::Tone::Warn:
+            return 3;
+        case ui::Tone::Ok:
+            return 2;
+        case ui::Tone::Info:
+            return 1;
+        case ui::Tone::Neutral:
+        default:
+            return 0;
+    }
+}
+
+/// The longest start of @p text at most @p width cells wide, cut between characters.
+std::string fitted(std::string_view text, int width) {
+    std::size_t end = 0;
+    while (end < text.size()) {
+        std::size_t next = end + 1;
+        while (next < text.size() && (static_cast<unsigned char>(text.at(next)) & 0xC0U) == 0x80U) {
+            ++next;
+        }
+        if (displayWidth(text.substr(0, next)) > width) {
+            break;
+        }
+        end = next;
+    }
+    return std::string{text.substr(0, end)};
+}
+
+/// @p text broken into lines of at most @p width cells at spaces; a word wider than a line is cut.
+std::vector<std::string> wrapped(std::string_view text, int width) {
+    std::vector<std::string> lines;
+    std::string line;
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        std::size_t const end = std::min(text.find(' ', start), text.size());
+        std::string const word{text.substr(start, end - start)};
+        std::string joined = line;
+        if (!joined.empty()) {
+            joined += ' ';
+        }
+        joined += word;
+        if (!line.empty() && displayWidth(joined) > width) {
+            lines.push_back(line);
+            line = word;
+        } else {
+            line = joined;
+        }
+        start = end + 1;
+    }
+    if (!line.empty()) {
+        lines.push_back(line);
+    }
+    return lines;
+}
+
+}  // namespace
+
+void ChartImpl::setData(ui::ChartData const& data) {
+    _data = data;
+    refresh();
+}
+
+::core::tui::Size ChartImpl::naturalSize() const { return {.width = 40, .height = 8}; }
+
+int ChartImpl::Plot::rowOf(ui::ChartData const& data, double value) const {
+    double const span = data.yMax - data.yMin;
+    double const share = span > 0 ? (data.yMax - value) / span : 0.5;
+    return top + static_cast<int>(std::lround(std::clamp(share, 0.0, 1.0) * (rows - 1)));
+}
+
+int ChartImpl::Plot::columnOf(ui::ChartData const& data, double position) const {
+    double const span = data.xMax - data.xMin;
+    double const share = span > 0 ? (position - data.xMin) / span : 0.5;
+    return left + static_cast<int>(std::lround(std::clamp(share, 0.0, 1.0) * (columns - 1)));
+}
+
+void ChartImpl::paintSummary(::core::tui::Canvas& canvas) const {
+    std::vector<std::string> const lines = wrapped(_data.summary, std::max(1, canvas.width()));
+    for (std::size_t index = 0; index < lines.size() && static_cast<int>(index) < canvas.height(); ++index) {
+        canvas.putString(static_cast<int>(index), 0, lines.at(index), canvas.theme().textMuted);
+    }
+}
+
+// A line's row is drawn once, by the most severe line on it; its label is that line's.
+void ChartImpl::paintLines(::core::tui::Canvas& canvas, Plot const& plot, bool byLines) const {
+    auto const& theme = canvas.theme();
+    std::vector<ui::ChartLine const*> rows(static_cast<std::size_t>(plot.top + plot.rows), nullptr);
+    for (ui::ChartLine const& line : _data.lines) {
+        ui::ChartLine const*& slot = rows.at(static_cast<std::size_t>(plot.rowOf(_data, line.value)));
+        if (slot == nullptr || severity(line.tone) > severity(slot->tone)) {
+            slot = &line;
+        }
+    }
+    if (!byLines) {
+        for (ui::ChartTick const& tick : _data.yTicks) {
+            std::string const text = fitted(tick.text, plot.left - 1);
+            canvas.putString(plot.rowOf(_data, tick.value), plot.left - 1 - displayWidth(text), text, theme.textMuted);
+        }
+    }
+    for (std::size_t row = 0; row < rows.size(); ++row) {
+        ui::ChartLine const* const line = rows.at(row);
+        if (line == nullptr) {
+            continue;
+        }
+        std::string_view glyph = "─";
+        if (line->style == ui::ChartLineStyle::Dashed) {
+            glyph = "╌";
+        } else if (line->style == ui::ChartLineStyle::Dotted) {
+            glyph = "┄";
+        }
+        auto const& style = lineStyle(theme, line->tone);
+        canvas.drawHLine(static_cast<int>(row), plot.left, plot.columns, glyph, style);
+        if (byLines) {
+            std::string const text = fitted(line->label, plot.left - 1);
+            canvas.putString(static_cast<int>(row), plot.left - 1 - displayWidth(text), text, style);
+        } else {
+            int const width = std::min(displayWidth(line->label), plot.columns);
+            canvas.putString(static_cast<int>(row), plot.left + plot.columns - width, line->label, style);
+        }
+    }
+}
+
+// A cell holding two points shows the marked one, else the later.
+void ChartImpl::paintPoints(::core::tui::Canvas& canvas, Plot const& plot) const {
+    auto const& theme = canvas.theme();
+    struct Cell {
+        int row;
+        int column;
+        std::size_t series;
+        ui::ChartPoint const* point;
+    };
+    std::vector<Cell> cells;
+    for (std::size_t series = 0; series < _data.series.size(); ++series) {
+        for (ui::ChartPoint const& point : _data.series.at(series).points) {
+            if (!point.y.has_value()) {
+                continue;
+            }
+            Cell const cell{.row = plot.rowOf(_data, *point.y),
+                            .column = plot.columnOf(_data, point.x),
+                            .series = series,
+                            .point = &point};
+            auto const taken = std::ranges::find_if(
+                cells, [&cell](Cell const& other) { return other.row == cell.row && other.column == cell.column; });
+            if (taken == cells.end()) {
+                cells.push_back(cell);
+            } else if (point.tone.has_value() || !taken->point->tone.has_value()) {
+                *taken = cell;
+            }
+        }
+    }
+    for (Cell const& cell : cells) {
+        ui::ChartPoint const& point = *cell.point;
+        ::core::tui::Style const style =
+            point.tone.has_value() ? toneStyle(theme, *point.tone) : seriesStyle(theme, cell.series);
+        std::string_view glyph = kSeriesGlyphs.at(cell.series % kSeriesGlyphs.size());
+        if (point.clip == ui::ChartClip::Above) {
+            glyph = "△";
+        } else if (point.clip == ui::ChartClip::Below) {
+            glyph = "▽";
+        } else if (point.tone.has_value()) {
+            glyph = "✕";
+        }
+        canvas.put(cell.row, cell.column, glyph, style);
+        int const room = plot.left + plot.columns - (cell.column + 2);
+        if (!point.note.empty() && displayWidth(point.note) <= room) {
+            canvas.putString(cell.row, cell.column + 2, point.note, style);
+        }
+    }
+}
+
+// The points' labels, each skipped when it would overlap the last one drawn and the newest always drawn, then the
+// legend for two or more series.
+void ChartImpl::paintBelow(::core::tui::Canvas& canvas, Plot const& plot) const {
+    auto const& theme = canvas.theme();
+    int row = plot.top + plot.rows;
+    std::vector<std::pair<int, std::string const*>> labels;
+    for (ui::ChartSeries const& series : _data.series) {
+        for (ui::ChartPoint const& point : series.points) {
+            if (!point.xLabel.empty()) {
+                labels.emplace_back(plot.columnOf(_data, point.x), &point.xLabel);
+            }
+        }
+    }
+    if (!labels.empty()) {
+        std::ranges::stable_sort(labels, {}, &std::pair<int, std::string const*>::first);
+        auto const [lastColumn, lastText] = labels.back();
+        int const newestStart = std::max(plot.left, lastColumn - (displayWidth(*lastText) / 2));
+        int reach = 0;
+        for (std::size_t index = 0; index + 1 < labels.size(); ++index) {
+            auto const [column, text] = labels.at(index);
+            int const start = std::max(plot.left, column - (displayWidth(*text) / 2));
+            int const end = start + displayWidth(*text);
+            if (start < reach || end >= newestStart) {
+                continue;
+            }
+            canvas.putString(row, start, *text, theme.textMuted);
+            reach = end + 1;
+        }
+        canvas.putString(row, newestStart, *lastText, theme.textMuted);
+        ++row;
+    }
+    if (_data.series.size() >= 2) {
+        int column = plot.left;
+        for (std::size_t index = 0; index < _data.series.size(); ++index) {
+            canvas.put(row, column, kSeriesGlyphs.at(index % kSeriesGlyphs.size()), seriesStyle(theme, index));
+            column += 2;
+            column += canvas.putString(row, column, _data.series.at(index).label, theme.textNormal) + 2;
+        }
+    }
+}
+
+void ChartImpl::paint(::core::tui::Canvas& canvas) {
+    if (canvas.width() < kChartMinColumns || canvas.height() < kChartMinRows) {
+        paintSummary(canvas);
+        return;
+    }
+    bool const byLines = _data.lines.size() >= 3;
+    int gutter = 0;
+    if (byLines) {
+        for (ui::ChartLine const& line : _data.lines) {
+            gutter = std::max(gutter, displayWidth(line.label));
+        }
+    } else {
+        for (ui::ChartTick const& tick : _data.yTicks) {
+            gutter = std::max(gutter, displayWidth(tick.text));
+        }
+    }
+    bool const hasLabels = std::ranges::any_of(_data.series, [](ui::ChartSeries const& series) {
+        return std::ranges::any_of(series.points, [](ui::ChartPoint const& point) { return !point.xLabel.empty(); });
+    });
+    Plot plot;
+    plot.top = _data.yLabel.empty() ? 0 : 1;
+    plot.left = std::min(gutter, kChartGutterLimit) + 1;
+    plot.columns = canvas.width() - plot.left;
+    plot.rows = canvas.height() - plot.top - (hasLabels ? 1 : 0) - (_data.series.size() >= 2 ? 1 : 0);
+    if (plot.rows < 2) {
+        paintSummary(canvas);
+        return;
+    }
+    if (!_data.yLabel.empty()) {
+        canvas.putString(0, 0, _data.yLabel, canvas.theme().textMuted);
+    }
+    paintLines(canvas, plot, byLines);
+    paintPoints(canvas, plot);
+    paintBelow(canvas, plot);
 }
 
 }  // namespace morph::tui::detail
