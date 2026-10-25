@@ -42,6 +42,21 @@ QtObject {
                                                                : boldOf(platformMetrics.font)
     // A heading: the families at the heading size, bold.
     readonly property font headingFont: fontOf(headingPixels, Font.Bold)
+    // The families `font.mono` names, in order of preference; empty draws in the platform's fixed-pitch font.
+    property list<string> monoFontFamilies: []
+    // The family of the platform's fixed-pitch font; the backend writes it, since QML cannot ask the font database.
+    property string platformMonoFamily: ""
+    // The families a `mono` text is drawn in: the theme's, else the platform's fixed-pitch one.
+    readonly property list<string> monoFamilies: monoFontFamilies.length > 0
+                                                 ? monoFontFamilies
+                                                 : platformMonoFamily !== "" ? [platformMonoFamily] : []
+    // An identifier: the mono families at the body size; before the backend wrote the platform's family, the
+    // generic `monospace` alias.
+    readonly property font monoFont: Qt.font({
+        family: monoFamilies.length > 0 ? monoFamilies[0] : "monospace",
+        families: monoFamilies.length > 0 ? monoFamilies : ["monospace"],
+        pixelSize: Math.round(bodyPixels)
+    })
     readonly property real unitWidth: metrics.averageCharacterWidth
     readonly property real unitHeight: metrics.height
     readonly property real spacing: unitHeight / 2

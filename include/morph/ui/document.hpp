@@ -2925,6 +2925,9 @@ private:
             }
         }
         checkPlacements(node);
+        if (part && node.kind == "column") {
+            checkColumnPart(node);
+        }
         if (!part) {
             checkFlags(node);
             checkLayoutKeys(node);
@@ -3226,15 +3229,15 @@ private:
         }
     }
 
-    // A text's literal `role` is one of the roles (`title` is `heading`'s alias); a computed one is read at mount, and
-    // one of no known name is reported there.
+    // A text's or a table column's literal `role` is one of the roles (`title` is `heading`'s alias); a computed one
+    // is read at mount, and one of no known name is reported there.
     static void checkTextRole(DocNode const& node) {
         ExprPtr const role = node.prop("role");
         if (role == nullptr || role->kind != ExprKind::Literal) {
             return;
         }
-        static constexpr std::array<std::string_view, 7> kRoles = {"normal",  "muted", "heading", "title",
-                                                                   "section", "error", "success"};
+        static constexpr std::array<std::string_view, 8> kRoles = {"normal",  "muted", "heading", "title",
+                                                                   "section", "error", "success", "mono"};
         std::string const* const name = role->literal.asString();
         if (name == nullptr) {
             refuse(pointerAppend(node.path, "role"), "`role` is a name");
@@ -3243,6 +3246,9 @@ private:
             refuse(pointerAppend(node.path, "role"), "`" + *name + "` is not one of the values of `role`");
         }
     }
+
+    // A table column's closed sets: its default cell's text role.
+    static void checkColumnPart(DocNode const& node) { checkTextRole(node); }
 
     // A form's `columns`: a literal integer, 1 to 12, the `x-colspan` convention's full row.
     static void checkFormColumns(DocNode const& node) {

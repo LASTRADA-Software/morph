@@ -101,7 +101,7 @@ lowers them to the kinds below.
 
 | Node | Builder | Props and callbacks |
 |---|---|---|
-| `Text` | `text` | `text`, `role` (`TextRole{Normal, Muted, Heading, Error, Success, Section}`; `Section` heads a group within a list: body size, bold and muted, a step below `Heading`) |
+| `Text` | `text` | `text`, `role` (`TextRole{Normal, Muted, Heading, Error, Success, Section, Mono}`; `Section` heads a group within a list: body size, bold and muted, a step below `Heading`; `Mono` is an identifier, at the body size in the theme's fixed-pitch family) |
 | `Button` | `button` | `label`, `onClick`, `emphasis` and `icon` (set once; the mount tells the widget only a non-`Normal` emphasis and a non-empty icon), `style` (a `ButtonStyle`, `Push` or `Item`, set once; the mount tells the widget only `Item`) and `selected` (a `Prop<bool>`, default `false`: whether an item is the current entry, told to the widget only for an item, when bound or `true`). The mount refuses (`std::logic_error`) a bound or `true` `selected` on a push button |
 | `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once), `unit` (the unit the input shows; empty: none), `decimals` (a number's entry places, set once; −1: not a number), `icon` (an icon of the theme's icon set, drawn at the leading edge; empty: none; set once — the mount refuses a multiline input with one, as it does `unit`/`decimals`), `label` and `showLabel` (below) |
 | `Checkbox` | `checkbox` | `label`, `checked`, `onToggle` |

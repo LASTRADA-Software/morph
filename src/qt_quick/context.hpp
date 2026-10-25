@@ -21,6 +21,10 @@ namespace morph::qt_quick::detail {
 class ContainerCore;
 class Relay;
 
+/// Writes the family of the platform's fixed-pitch font as @p theme's `platformMonoFamily`, which QML cannot ask the
+/// font database for; whether the property took it.
+bool writePlatformMonoFamily(QObject& theme);
+
 /// What every widget of one backend shares: the engine, the compiled components, the column the roots go in, and
 /// the restyle map.
 class Context {

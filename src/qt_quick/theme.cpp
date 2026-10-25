@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QColor>
 #include <QFont>
+#include <QFontDatabase>
 #include <QFontInfo>
 #include <QList>
 #include <QMetaObject>
@@ -22,6 +23,8 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include "qt_quick/context.hpp"
 
 namespace morph::qt_quick {
 
@@ -126,10 +129,12 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     }
 }
 
-// The families of `font.family`; one Qt resolves to none of them falls back to Qt's own substitute and is reported, so
-// a theme naming a font the machine lacks says so rather than drawing in another.
-void setFamilies(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
-    auto const found = values.families.find("font.family");
+// The families of a family token (`font.family`, `font.mono`) onto @p property; one Qt resolves to none of them falls
+// back to Qt's own substitute and is reported, so a theme naming a font the machine lacks says so rather than drawing
+// in another.
+void setFamilies(QObject& theme, ui::ThemeValues const& values, std::string_view path, char const* property,
+                 std::vector<std::string>& unset) {
+    auto const found = values.families.find(path);
     if (found == values.families.end()) {
         return;
     }
@@ -139,8 +144,8 @@ void setFamilies(QObject& theme, ui::ThemeValues const& values, std::vector<std:
         names.append(QString::fromStdString(name));
         listed += (listed.empty() ? "" : ", ") + name;
     }
-    if (!theme.setProperty("fontFamilies", QVariant::fromValue(names))) {
-        unset.emplace_back("fontFamilies");
+    if (!theme.setProperty(property, QVariant::fromValue(names))) {
+        unset.emplace_back(property);
         return;
     }
     if (names.isEmpty()) {
@@ -149,7 +154,7 @@ void setFamilies(QObject& theme, ui::ThemeValues const& values, std::vector<std:
     QFont font;
     font.setFamilies(names);
     if (!names.contains(QFontInfo{font}.family(), Qt::CaseInsensitive)) {
-        unset.push_back("font.family: none of " + listed + " is installed");
+        unset.push_back(std::string{path} + ": none of " + listed + " is installed");
     }
 }
 
@@ -210,6 +215,14 @@ void setSurfaces(QObject& theme, std::map<std::string, ui::ThemeValues, std::les
 
 }  // namespace
 
+namespace detail {
+
+bool writePlatformMonoFamily(QObject& theme) {
+    return theme.setProperty("platformMonoFamily", QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
+}
+
+}  // namespace detail
+
 std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& values,
                                     std::map<std::string, ui::ThemeValues, std::less<>> const& surfaces) {
     std::vector<std::string> unset;
@@ -219,7 +232,11 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
         return unset;
     }
     setPlainTokens(*theme, values, unset);
-    setFamilies(*theme, values, unset);
+    setFamilies(*theme, values, "font.family", "fontFamilies", unset);
+    setFamilies(*theme, values, "font.mono", "monoFontFamilies", unset);
+    if (!detail::writePlatformMonoFamily(*theme)) {
+        unset.emplace_back("platformMonoFamily");
+    }
     setShadowAndSpace(*theme, values, unset);
     setSurfaces(*theme, surfaces, unset);
     return unset;
