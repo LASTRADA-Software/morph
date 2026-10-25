@@ -9,6 +9,15 @@ import QtQuick.Layouts
 Item {
     id: root
     readonly property Item content: column
+    // The relay the width below is reported through.
+    property var host: null
+    // The host's width in units, which the backend classes as `{"env": "widthClass"}`; reported on each change, from
+    // a resize or a theme with another font.
+    readonly property real widthUnits: Theme.unitWidth > 0 ? width / Theme.unitWidth : 0
+    onWidthUnitsChanged: {
+        if (root.host)
+            root.host.fire("widthUnits", root.widthUnits)
+    }
 
     readonly property bool stretches: {
         for (const child of column.children) {

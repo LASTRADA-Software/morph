@@ -230,8 +230,7 @@ int run(int argc, char** argv) {
     ShellFactory const factory{.source = source->get(), .args = &*clientArgs, .grab = grab};
     std::vector<ui::FrontendOption> built;
 #if MORPH_CLIENT_HAS_QT_QUICK
-    morph::qt_quick::FrontendConfig qtConfig{
-        .mountShell = factory, .components = nullptr, .title = "morph", .onWidthClass = {}};
+    morph::qt_quick::FrontendConfig qtConfig{.mountShell = factory, .components = nullptr, .title = "morph"};
     qtConfig.devTools = clientArgs->dev ? ui::DevelopmentTools::On : ui::DevelopmentTools::Off;
     if (!grab->path.empty()) {
         qtConfig.onEngine = [grab](QQmlEngine& /*engine*/, QQuickWindow& window) {

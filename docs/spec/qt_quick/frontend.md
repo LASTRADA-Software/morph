@@ -32,9 +32,8 @@ int main(int argc, char** argv) {
 
 - `qt_quick::ShellFactory` is `ui::ShellFactory` with the backend the shell mounts on, since `ui::AppContext` names
   no renderer: `(AppContext&, IViewBackend&, expected<Bundle, ConnectError>) -> unique_ptr<MountedShell>`.
-- `FrontendConfig{mountShell, components, title, onWidthClass}`: the shell factory (it must not be empty), the
-  components and restyle map the backend uses (borrowed), the window's title, and the width class callback
-  (`BackendOptions::onWidthClass`), and `devTools`, a `ui::DevelopmentTools`: with `On`, Ctrl+Shift+I in the
+- `FrontendConfig{mountShell, components, title}`: the shell factory (it must not be empty), the
+  components and restyle map the backend uses (borrowed), the window's title, and `devTools`, a `ui::DevelopmentTools`: with `On`, Ctrl+Shift+I in the
   window opens the inspector over the shell's focused screen ([`../ui/inspector.md`](../ui/inspector.md)).
 - `onEngine`, `std::function<void(QQmlEngine&, QQuickWindow&)>`: called once per run with the engine and the window,
   after both exist and before the backend is built, where an application registers its QML modules, maps its
@@ -56,7 +55,8 @@ builds `qt_quick::Backend` itself ([`backend.md`](backend.md)).
 3. the `reactive::Runtime`;
 4. a `QtScheduler`;
 5. the `QQmlEngine`, the `QQuickWindow` (1024 × 768, the configured title), then `onEngine(engine, window)`, then the
-   `Backend` on the window's content item. Restyles and `applyTheme` made in the hook reach every widget the shell
+   `Backend` on the window's content item, which first takes the window's size: a window not yet shown has not sized
+   it, and the shell reads the backend's width class before the first mount. Restyles and `applyTheme` made in the hook reach every widget the shell
    creates, since the backend resolves a kind's component on its first use;
 6. the `AppContext` it lends: `runtime()`, `executor()`, `scheduler()`, `ioLoop()` (null: Qt's loop is the only one),
    `quit()`.

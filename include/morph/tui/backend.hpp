@@ -5,6 +5,7 @@
 #include <core/tui/Screen.hpp>
 #include <functional>
 #include <memory>
+#include <string>
 
 #include "../attributes.hpp"
 #include "../ui/backend.hpp"
@@ -99,6 +100,18 @@ public:
     /// widget took, so that a drag ends while nothing is focused too.
     /// @return True when a drag was in progress and has ended.
     bool endDrag();
+
+    /// @brief The screen's width class: its viewport's columns, classed by `ui::widthClassOf` (an 80-column
+    ///        terminal is `medium`).
+    /// @return The class.
+    [[nodiscard]] std::string widthClass() const override;
+
+    /// @copydoc ui::IViewBackend::setOnWidthClass
+    void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) override;
+
+    /// @brief Calls the width class listener when the screen's class differs from the one last reported; a frontend
+    ///        calls it after dispatching a resize, outside the draw, so the re-render comes on the next turn.
+    void refreshWidthClass();
 
     /// @brief Whether any Busy widget is spinning, so the frontend should keep advancing the animation.
     /// @return True while at least one Busy is active.

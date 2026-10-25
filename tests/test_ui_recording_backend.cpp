@@ -685,3 +685,30 @@ TEST_CASE("a backend that reports no hovering and loads no components keeps the 
     CHECK(plain.ui::IViewBackend::createCustom(
               nullptr, ui::CustomRequest{.name = "Chart", .props = {}, .minVersion = 1}) == nullptr);
 }
+
+TEST_CASE("ui backend: a width in units is compact below 80, medium below 160, expanded from 160", "[ui][backend]") {
+    CHECK(ui::widthClassOf(0) == "compact");
+    CHECK(ui::widthClassOf(79.5) == "compact");
+    CHECK(ui::widthClassOf(80) == "medium");
+    CHECK(ui::widthClassOf(159.5) == "medium");
+    CHECK(ui::widthClassOf(160) == "expanded");
+}
+
+// Mutation: call the listener from setOnWidthClass (it hears `expanded` first), or on every setWidthClass (it hears
+// `compact` twice).
+TEST_CASE("recording backend: the width class is expanded until set, and a change alone reaches the listener",
+          "[ui][backend]") {
+    RecordingBackend backend;
+    CHECK(backend.widthClass() == "expanded");
+    std::vector<std::string> heard;
+    backend.setOnWidthClass([&heard](std::string const& name) { heard.push_back(name); });
+    CHECK(heard.empty());
+    backend.setWidthClass("compact");
+    backend.setWidthClass("compact");
+    backend.setWidthClass("medium");
+    CHECK(backend.widthClass() == "medium");
+    CHECK(heard == std::vector<std::string>{"compact", "medium"});
+    backend.setOnWidthClass({});
+    backend.setWidthClass("expanded");
+    CHECK(heard.size() == 2);
+}

@@ -77,6 +77,11 @@ params, `onProblem`, `onMounted`, the downloads directory, the history, developm
 `navigate` and a navigator choice open the screen as a tab from a task posted to the owner. An empty `signIn` is
 `std::invalid_argument`.
 
+The shell sets `{"env": "widthClass"}` from its view backend: before the first mount it writes
+`backend.widthClass()` into the session (`Session::setEnvironmentValue`), then registers the backend's
+`setOnWidthClass` listener, which writes each change, so every open tab re-evaluates it; the shell clears the
+listener when it goes. The session belongs to the shell, and every screen of the client shares the value.
+
 The frame shows its sidebar and top bar, and the principal, while the shell is signed in, and the page alone
 otherwise (`ShellFrame::showSignedIn`). The shell is signed in after a sign-in, until a sign-out, and from the start
 when its start screen is not public: an application without a public screen, or a `--screen` that is not public, is

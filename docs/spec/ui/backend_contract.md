@@ -238,6 +238,14 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `DropZoneWidget` | `setAccept(extensions)`, `setMultiple` (both once) | `setOnDrop(paths)` |
 | `CustomWidget` | `setTextProp(name, text)`, `setBoolProp(name, bool)`, `setNumberProp(name, double)` | `setOnEvent(event, payload)` |
 
+**The width class.** `IViewBackend::widthClass()` is the class of the surface the backend draws on, now, and
+`setOnWidthClass(listener)` registers the one listener told of each later change, on the owner and outside any layout
+pass; empty clears it. Registering does not call the listener: the caller reads `widthClass()` for the current class,
+so the initial value has one write path, before the first mount. Both are pure, so a backend cannot silently report
+nothing. Every backend classes its width in units through `ui::widthClassOf(units)` (`compact` below 80, `medium` below
+160, `expanded` otherwise), so the thresholds live in one place: the terminal its viewport's columns, Qt Quick its host
+item's width over `Theme.unitWidth`.
+
 ## Selection by key
 
 Both selecting widgets keep what was **requested** apart from what they **mark**, so a value and
@@ -270,6 +278,9 @@ container) takes part in no drag.
 ## RecordingBackend
 
 The headless reference backend and the test double for everything above the contract.
+
+- **Width class.** It has no width, and reports `expanded`, the class of every screen before a client set one, until
+  `setWidthClass(name)` changes it; a change calls the `setOnWidthClass` listener, so a test drives a resize.
 
 - **Ids and kinds.** Widget ids are creation numbers from 1. A stack's kind is `Column` or `Row` by
   its axis; every other kind is the interface name without `Widget` (`Text`, `Slot`, `Table`, …).

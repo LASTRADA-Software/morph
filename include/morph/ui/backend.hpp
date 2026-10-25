@@ -991,6 +991,32 @@ public:
         static_cast<void>(request);
         return nullptr;
     }
+
+    /// @brief The width class of the surface this backend draws on, now: `compact`, `medium` or `expanded`
+    ///        (`widthClassOf`), what `{"env": "widthClass"}` reads.
+    /// @return The class.
+    [[nodiscard]] virtual std::string widthClass() const = 0;
+
+    /// @brief Registers the one listener told of each later change of `widthClass()`, on the owner and outside any
+    ///        layout pass; a backend reports to the shell mounted on it. It is not called at once: the caller reads
+    ///        `widthClass()` for the current class.
+    /// @param onWidthClass The listener, given the new class; empty clears it.
+    virtual void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) = 0;
 };
+
+/// @brief A width in the vocabulary's units (what `fixed(n)` counts) as a width class: `compact` below 80 units,
+///        `medium` below 160, `expanded` otherwise. Every backend classes its surface with it, so a document's
+///        breakpoints sit at the same number of its own units on every frontend.
+/// @param units The width, in units: a terminal's columns, or a window's width over its unit width.
+/// @return The class: `compact`, `medium` or `expanded`.
+[[nodiscard]] inline std::string widthClassOf(double units) {
+    if (units < 80.0) {
+        return "compact";
+    }
+    if (units < 160.0) {
+        return "medium";
+    }
+    return "expanded";
+}
 
 }  // namespace morph::ui

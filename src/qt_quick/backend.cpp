@@ -15,6 +15,12 @@ namespace morph::qt_quick {
 Backend::Backend(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
     : _context{std::make_unique<detail::Context>(engine, host, std::move(options))} {}
 
+std::string Backend::widthClass() const { return _context->widthClass(); }
+
+void Backend::setOnWidthClass(std::function<void(std::string const&)> onWidthClass) {
+    _context->setOnWidthClass(std::move(onWidthClass));
+}
+
 Backend::~Backend() = default;
 
 QQuickItem* Backend::itemOf(ui::Widget const& widget) noexcept {

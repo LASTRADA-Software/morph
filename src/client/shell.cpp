@@ -109,6 +109,7 @@ public:
 
     ~Shell() override {
         *_alive = false;
+        _backend->setOnWidthClass({});
         // The head row's own mount first, since it is built from the Workspace's data and lives in the ShellFrame;
         // then the tabs, then the frame they sit in.
         resetHead();
@@ -154,6 +155,7 @@ public:
         sessionOptions.developmentTools = _options.dev ? ui::DevelopmentTools::On : ui::DevelopmentTools::Off;
         sessionOptions.watcher = source.watcher();
         _session = std::make_unique<ui::Session>(_context->runtime(), std::move(sessionOptions));
+        followWidthClass();
         listen(source);
         showPermitted();
         ui::DocumentScreenHostOptions hostOptions;
@@ -220,6 +222,17 @@ public:
                 });
             });
         }
+    }
+
+    /// Writes the backend's width class into the session before the first mount, then each change of it, so every
+    /// `{"env": "widthClass"}` in every tab follows the window.
+    void followWidthClass() {
+        _session->setEnvironmentValue("widthClass", ui::Value{_backend->widthClass()});
+        _backend->setOnWidthClass([this, alive = std::weak_ptr<bool>{_alive}](std::string const& widthClass) {
+            if (auto const live = alive.lock(); live != nullptr && *live && _session) {
+                _session->setEnvironmentValue("widthClass", ui::Value{widthClass});
+            }
+        });
     }
 
     void inspectFocused(std::function<void(ui::Inspector&)> const& visit) override {

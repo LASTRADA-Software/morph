@@ -7,6 +7,7 @@
 #include <morph/ui/testing/recording_backend.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -191,6 +192,10 @@ public:
                                                                 ::morph::ui::Axis axis) override {
         created();
         return _recording.createSplitter(parent, axis);
+    }
+    [[nodiscard]] std::string widthClass() const override { return _recording.widthClass(); }
+    void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) override {
+        _recording.setOnWidthClass(std::move(onWidthClass));
     }
 
 private:

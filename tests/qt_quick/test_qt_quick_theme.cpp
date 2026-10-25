@@ -122,7 +122,7 @@ TEST_CASE("qt_quick theme: a host component reads the same tokens; a missing tok
                                  "    property color text: Theme.text\n    property color accent: Theme.accent\n"
                                  "    property color muted: Theme.muted\n    property real stale: Theme.staleOpacity\n"
                                  "    implicitWidth: 10\n}\n"));
-    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), brandTheme()).empty());
     auto const swatch = scene.backend().createCustom(nullptr, CustomRequest{.name = "Swatch", .props = {}});
     REQUIRE(swatch != nullptr);
@@ -387,7 +387,7 @@ TEST_CASE("qt_quick theme: a bundle's icon set draws the icons it names, and a n
     std::vector<morph::qt_quick::ComponentFailure> reported;
     morph::qt_quick::Components components{
         [&reported](morph::qt_quick::ComponentFailure const& failure) { reported.push_back(failure); }};
-    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
     std::string const tick =
         R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d="M1 4l2 2 4-4"/></svg>)";
     CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}, {{"tone.ok", tick}}).empty());

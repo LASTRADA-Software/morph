@@ -26,19 +26,11 @@ namespace detail {
 class Context;
 }  // namespace detail
 
-/// @brief The window width class `{"env": "widthClass"}` reads (spec 3 §8).
-/// @param logicalWidth A width in logical pixels.
-/// @return `"compact"` below 600, `"medium"` below 1200, else `"expanded"`.
-[[nodiscard]] std::string widthClassOf(double logicalWidth);
-
 /// @brief What a `Backend` is made with beside its engine and host item.
 struct BackendOptions {
     /// @brief The restyle map and the custom components; null renders every kind with its `MorphUi` component and
     ///        loads no custom component. Borrowed: it outlives the backend.
     Components* components = nullptr;
-    /// @brief Called with the host item's width class (`widthClassOf`) once at construction and again each time
-    ///        the class changes, not on every resize; empty calls nothing.
-    std::function<void(std::string const& widthClass)> onWidthClass;
 };
 
 // The view tree's custom component and request, which `Backend::createCustom` makes and takes.
@@ -56,7 +48,7 @@ public:
     /// @brief A backend whose roots fill @p host.
     /// @param engine  The engine its components are compiled in. Borrowed.
     /// @param host    The item its roots are shown in. Borrowed.
-    /// @param options The components and the width class callback.
+    /// @param options The components.
     Backend(QQmlEngine& engine MORPH_LIFETIMEBOUND, QQuickItem& host MORPH_LIFETIMEBOUND, BackendOptions options = {});
     /// @brief Removes the roots' column from the host.
     ~Backend() override;
@@ -81,6 +73,13 @@ public:
     /// @return The widget, or null when the fallback is shown instead.
     [[nodiscard]] std::unique_ptr<CustomWidget> createCustom(ui::ContainerWidget* parent,
                                                              CustomRequest const& request) override;
+
+    /// @brief The host item's width class: its width in `Theme.unitWidth`s, classed by `ui::widthClassOf`.
+    /// @return The class.
+    [[nodiscard]] std::string widthClass() const override;
+
+    /// @copydoc ui::IViewBackend::setOnWidthClass
+    void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) override;
 
     /// @copydoc ui::IViewBackend::createText
     [[nodiscard]] std::unique_ptr<ui::TextWidget> createText(ui::ContainerWidget* parent) override;

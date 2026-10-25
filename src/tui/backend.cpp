@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <functional>
 #include <memory>
 #include <morph/tui/backend.hpp>
+#include <string>
 #include <utility>
 
 #include "tui/container_widgets.hpp"
@@ -24,6 +26,9 @@ struct Backend::Impl {
         }
     }
     detail::Context context;
+    std::function<void(std::string const&)> onWidthClass;
+    // The class last reported, or current when the listener was registered.
+    std::string reported;
 };
 
 namespace {
@@ -166,6 +171,26 @@ std::unique_ptr<ui::DropZoneWidget> Backend::createDropZone(ui::ContainerWidget*
 }
 
 void Backend::fit() { detail::fit(_impl->context); }
+
+std::string Backend::widthClass() const { return ui::widthClassOf(_impl->context.screen->viewportArea().width); }
+
+void Backend::setOnWidthClass(std::function<void(std::string const&)> onWidthClass) {
+    _impl->onWidthClass = std::move(onWidthClass);
+    _impl->reported = widthClass();
+}
+
+void Backend::refreshWidthClass() {
+    std::string current = widthClass();
+    if (current == _impl->reported) {
+        return;
+    }
+    _impl->reported = std::move(current);
+    if (_impl->onWidthClass) {
+        // A copy: the listener re-renders, which may replace it.
+        auto const listener = _impl->onWidthClass;
+        listener(_impl->reported);
+    }
+}
 
 void Backend::focusNext() { detail::moveFocus(_impl->context, detail::Direction::Forward); }
 

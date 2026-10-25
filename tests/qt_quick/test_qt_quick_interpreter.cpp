@@ -769,7 +769,7 @@ struct TwoPages {
     void restyle() { REQUIRE(components.restyle(engine, "textInput", "BrandInput").has_value()); }
 
     void makeFirst() {
-        first.emplace(engine, left, morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}});
+        first.emplace(engine, left, morph::qt_quick::BackendOptions{.components = &components});
         hostA.emplace(session, dispatcher,
                       ui::DocumentScreenHostOptions{
                           .documents = lookup(),
@@ -782,7 +782,7 @@ struct TwoPages {
     }
 
     void makeSecond() {
-        second.emplace(engine, right, morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}});
+        second.emplace(engine, right, morph::qt_quick::BackendOptions{.components = &components});
         hostB.emplace(session, dispatcher,
                       ui::DocumentScreenHostOptions{
                           .documents = lookup(),

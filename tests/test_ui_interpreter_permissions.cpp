@@ -256,6 +256,27 @@ TEST_CASE("interpreter permissions: an arrange point's editor moves and hides ch
     CHECK(arrangement(h, "Row", "strip") == "copy cut");
 }
 
+// Mutation: have setEnvironmentValue replace the whole record (the backend a switch set is dropped).
+TEST_CASE("interpreter permissions: one env value set keeps the others, and a switch keeps the width class",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "client",
+      "view": { "kind": "text", "testId": "t", "text": { "fn": "format", "args": [ "{0} {1}",
+        { "fn": "coalesce", "args": [ { "env": "widthClass" }, "-" ] },
+        { "fn": "coalesce", "args": [ { "env": "backend" }, "-" ] } ] } } })");
+    CHECK(h.text("t") == "- -");
+    h.session.setEnvironmentValue("widthClass", ui::Value{"compact"});
+    h.settle();
+    CHECK(h.text("t") == "compact -");
+    h.session.backendChanged("primary");
+    h.settle();
+    CHECK(h.text("t") == "compact primary");
+    h.session.setEnvironmentValue("widthClass", ui::Value{"medium"});
+    h.settle();
+    CHECK(h.text("t") == "medium primary");
+}
+
 TEST_CASE("interpreter permissions: env, session and host values follow the session", "[ui][interpreter]") {
     Harness h;
     h.session.setEnvironment({{"widthClass", ui::Value{"phone"}}});

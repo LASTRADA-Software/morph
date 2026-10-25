@@ -892,21 +892,26 @@ TEST_CASE("qt_quick widgets: chords match exactly the modifiers pressed", "[qt_q
     CHECK_FALSE(detail::chordMatches("Hyper+S", Qt::Key_S, {}));
 }
 
-TEST_CASE("qt_quick widgets: a widget's width class follows the host's width", "[qt_quick]") {
-    CHECK(morph::qt_quick::widthClassOf(599) == "compact");
-    CHECK(morph::qt_quick::widthClassOf(600) == "medium");
-    CHECK(morph::qt_quick::widthClassOf(1199.5) == "medium");
-    CHECK(morph::qt_quick::widthClassOf(1200) == "expanded");
+// Mutation: class the host by its width in pixels (800 px is then `medium`, and the resizes below report other
+// classes), or call the listener at registration (it hears the current class first).
+TEST_CASE("qt_quick widgets: the backend's width class follows the host's width in units", "[qt_quick]") {
+    Scene scene;
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    double const unit = theme->property("unitWidth").toDouble();
+    REQUIRE(unit > 0);
+    CHECK(scene.backend().widthClass() == ui::widthClassOf(800 / unit));
+
     std::vector<std::string> classes;
-    Scene scene{morph::qt_quick::BackendOptions{
-        .components = nullptr, .onWidthClass = [&classes](std::string const& name) { classes.push_back(name); }}};
-    scene.window().resize(1300, 600);
-    scene.settle();
-    scene.window().resize(1250, 600);
-    scene.settle();
-    scene.window().resize(500, 600);
-    scene.settle();
-    CHECK(classes == std::vector<std::string>{"compact", "medium", "expanded", "compact"});
+    scene.backend().setOnWidthClass([&classes](std::string const& name) { classes.push_back(name); });
+    CHECK(classes.empty());
+    for (double const units : {170.0, 165.0, 120.0, 70.0, 75.0}) {
+        scene.window().resize(static_cast<int>(std::ceil(units * unit)), 600);
+        scene.settle();
+    }
+    CHECK(classes == std::vector<std::string>{"expanded", "medium", "compact"});
+    scene.backend().setOnWidthClass({});
 }
 
 TEST_CASE(

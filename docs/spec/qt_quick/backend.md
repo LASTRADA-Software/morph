@@ -40,9 +40,11 @@ auto screen = interpreter.mount(document, params, backend);   // or ui::Mounted{
   destroyed before it.
 - `Backend::itemOf(widget)` is the `QQuickItem` a widget shows, for a host that embeds a screen or a test that drives
   one; null for a widget another backend made.
-- `BackendOptions::components` is the restyle map and the custom components; `onWidthClass` is called with the host's
-  width class (`widthClassOf`: below 600 logical pixels `compact`, below 1200 `medium`, else `expanded`) once at
-  construction and each time the class changes, so the shell can set `{"env": "widthClass"}`.
+- `BackendOptions::components` is the restyle map and the custom components.
+- `Backend::widthClass()` is the host's width in `Theme.unitWidth`s, classed by `ui::widthClassOf`. `MorphRoots`
+  reports that width in units (`widthUnits`) through its relay whenever it changes, from a resize or a theme with
+  another font, and the context re-classes it there, on the GUI thread and never inside polish; a change calls the
+  `setOnWidthClass` listener.
 
 ## Several mounts
 

@@ -39,9 +39,15 @@ new `expr` version, not to `expr/1` (spec 5 §12). The shared corpus is
 | `{"if": [c, a, b]}` | `If` | |
 | `{"obj": {...}}`, `{"list": [...]}` | `Object`, `List` | Constructors |
 | `{"map": e, "as": "x", "to": e}`, `{"filter": e, "as": "x", "where": e}` | `Map`, `Filter` | Comprehensions over a list |
-| `{"env": "name"}` | `Env` | `widthClass`, `locale`, `platform`, `online`, `backend` |
+| `{"env": "name"}` | `Env` | `widthClass`, `locale`, `platform`, `online`, `backend` (see below) |
 | `{"session": "name"}` | `Session` | `principal`, `userName`, `displayName`, `userKey`, `tenant`, `authenticated` |
 | `{"host": "name"}` | `Host` | A value the application registered, `null` when absent |
+
+`widthClass` is the width of the surface the client draws on, in the unit `fixed(n)` counts: `compact` below 80
+units, `medium` below 160, `expanded` otherwise (`ui::widthClassOf`). The client sets it from its view backend before
+the first mount and updates it on a resize. The terminal counts its columns, so an 80-column terminal is `medium`; Qt
+Quick counts the window's width in `Theme.unitWidth`s. A document's breakpoints therefore sit at the same number of
+its own units on both frontends.
 
 An expression object has one form key and only that form's companion keys (`fn` with `args`; `t`
 with `fallback` and `args`; `map` with `as` and `to`; `filter` with `as` and `where`). An array is

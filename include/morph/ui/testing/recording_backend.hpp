@@ -1677,6 +1677,30 @@ public:
                              {"minVersion", std::to_string(request.minVersion)}});
     }
 
+    /// @brief The width class it reports: `expanded`, the class of a surface with no width, until `setWidthClass`.
+    /// @return The class.
+    [[nodiscard]] std::string widthClass() const override { return _widthClass; }
+
+    /// @brief Registers the listener `setWidthClass` tells of a change; it is not called at once.
+    /// @param onWidthClass The listener; empty clears it.
+    void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) override {
+        _onWidthClass = std::move(onWidthClass);
+    }
+
+    /// @brief Changes the width class it reports, as a resize would, and tells the listener when the class changed.
+    /// @param name The class: `compact`, `medium` or `expanded`.
+    void setWidthClass(std::string name) {
+        if (name == _widthClass) {
+            return;
+        }
+        _widthClass = std::move(name);
+        if (_onWidthClass) {
+            // A copy: the listener may replace itself.
+            auto const listener = _onWidthClass;
+            listener(_widthClass);
+        }
+    }
+
     /// @brief Names the components `createCustom` loads; none until called, so a custom node shows its fallback.
     /// @param names The components.
     void loadsComponents(std::vector<std::string> names) {
@@ -2327,6 +2351,8 @@ private:
 
     std::shared_ptr<detail::RecordStore> _store = std::make_shared<detail::RecordStore>();
     std::unordered_set<std::string> _components;
+    std::string _widthClass = "expanded";
+    std::function<void(std::string const&)> _onWidthClass;
 };
 
 }  // namespace morph::ui::testing

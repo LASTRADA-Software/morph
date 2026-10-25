@@ -66,6 +66,11 @@ are coalesced to one per turn. A frame fits the roots to the screen, gives the f
 when nothing holds it, and draws; while a visible `busy` spins, a timer advances it. Tab and Shift+Tab move the
 focus; Esc ends a drag wherever the focus is.
 
+The width class (`Backend::widthClass()`) is the viewport's columns, classed by `ui::widthClassOf`, read when asked:
+an 80-column terminal is `medium`. After dispatching a resize the session calls `Backend::refreshWidthClass()`, which
+compares the class with the one last reported and calls the `setOnWidthClass` listener on a change, outside the draw,
+so the re-render comes on the next turn; `fit()`, which runs inside the draw, never calls it.
+
 ## Widgets
 
 Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Component` it owns.

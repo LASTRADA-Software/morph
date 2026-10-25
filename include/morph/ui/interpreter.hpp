@@ -961,6 +961,16 @@ public:
     /// @param values The values.
     void setEnvironment(ValueRecord values) { _env.set(std::move(values)); }
 
+    /// @brief Sets one `env` value and keeps the others, so a client that learns its width class does not drop the
+    ///        `backend` a switch set, nor a switch the width class.
+    /// @param name The value's name, such as `widthClass`.
+    /// @param value The value.
+    void setEnvironmentValue(std::string const& name, Value value) {
+        ValueRecord env = _env.peek();
+        env.insert_or_assign(name, std::move(value));
+        _env.set(std::move(env));
+    }
+
     /// @brief Sets the `session` values (`principal`, `userName`, …).
     /// @param values The values.
     void setSessionValues(ValueRecord values) { _sessionValues.set(std::move(values)); }

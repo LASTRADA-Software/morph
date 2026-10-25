@@ -122,9 +122,12 @@ public:
     /// @param mode     The backend the models run behind.
     /// @param params   The screen's params.
     /// @param setup    Local mode's options, such as the user its calls run as; simulated mode ignores them.
+    /// @param widthClass The width class the backend reports from the first mount: `compact`, `medium` or
+    ///                   `expanded`.
     /// @throws std::runtime_error when the application does not open or the screen does not mount.
     ScreenHarness(::morph::client::LocalApp const& app, std::string screenId, RigMode mode, ui::ParamMap params = {},
-                  ::morph::client::LocalSetup setup = {}) {
+                  ::morph::client::LocalSetup setup = {}, std::string widthClass = "expanded") {
+        _backend.setWidthClass(std::move(widthClass));
         if (mode == RigMode::Local) {
             _source = std::make_unique<::morph::client::LocalSource>(app, std::move(setup));
         } else {
@@ -168,6 +171,10 @@ public:
     /// @brief The widgets.
     /// @return The backend.
     [[nodiscard]] ui::testing::RecordingBackend& backend() noexcept { return _backend; }
+
+    /// @brief Changes the width class the backend reports, as a resize would; the shell hands it to the screen.
+    /// @param widthClass `compact`, `medium` or `expanded`.
+    void setWidthClass(std::string widthClass) { _backend.setWidthClass(std::move(widthClass)); }
 
     /// @brief Where a screen's downloads are saved: a directory of this harness's own, removed with it.
     /// @return It.
