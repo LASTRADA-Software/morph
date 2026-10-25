@@ -3728,8 +3728,13 @@ struct TableOptions {
     std::size_t virtualizeThreshold = 2000;
     /// @brief How many rows beyond the visible range, on each side, keep a realized widget.
     std::size_t virtualizeOverscan = 10;
-    /// @brief How the selection works.
-    std::optional<Selection> selection;
+    /// @brief How many rows the user can select; absent writes no key, none.
+    std::optional<Selection> selectionMode;
+    /// @brief The selected rows' keys, a list: bound, the table shows it and nothing else, and a user's change
+    ///        comes back only through `onSelectionChange`. Absent: the table keeps the user's selection itself.
+    AnyHandle selection;
+    /// @brief Commands run after each user change of the selection, with `event` the new list of keys.
+    Commands onSelectionChange;
     /// @brief Where a model-backed table works; ignored by a table over rows.
     std::optional<TableMode> mode;
     /// @brief The sort.
@@ -3802,9 +3807,10 @@ namespace detail {
         }
         node.raw("columns", std::move(parts));
     }
-    if (options.selection) {
-        node.raw("selectionMode", std::string{kSelections.at(static_cast<std::size_t>(*options.selection))});
+    if (options.selectionMode) {
+        node.raw("selectionMode", std::string{kSelections.at(static_cast<std::size_t>(*options.selectionMode))});
     }
+    node.put("selection", options.selection).put("onSelectionChange", options.onSelectionChange);
     if (!options.showHeader) {
         node.raw("showHeader", false);
     }

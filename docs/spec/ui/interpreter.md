@@ -207,6 +207,9 @@ reply; `parallel` applies each. `pending` counts runs in flight and queued.
   a select's `selected`) is controlled: its draft follows the bound value while the user has not edited
   it, and keeps the user's edit until the bound value equals it. An input whose value is not bound keeps
   its own `committed` value. A text input's values are text.
+- **Tables.** A table's `selection` is controlled as a select's `selected` is: any expression but a literal
+  `null` binds it, and the table then shows the bound keys and nothing else. A user's change runs
+  `onSelectionChange` with `event` the new keys, and shows only once the document writes them back.
 - **Date inputs.** A date input holds its value as a `timestamp` or as a string. The loader records the
   static type of `value` when it is a `timestamp` or a `string`; a value whose type is `any` or `key`
   takes the type it holds at the edit, and an uncontrolled input holds a timestamp. A string field
@@ -336,7 +339,15 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   `{id, label}`. `onActivate` runs in the activated row's scope. `rowTone` is evaluated in each row's
   scope and gives the row its tone: `"neutral"`, `"info"`, `"ok"`, `"warn"`, `"err"`, or `null` for
   none; another value shows no tone and is reported once for the table (`rowTone is <v>; a tone is
-  neutral, info, ok, warn or err`). `sort`, `filters` and `hoveredKey` are not lowered. With `empty`,
+  neutral, info, ok, warn or err`). The selection the table shows is a slot over the bound `selection`
+  (each item a key), or over the table's own selection when no key binds it; a bound value that is `null`
+  selects nothing, and one that is neither a list nor `null` selects nothing and is reported once at the
+  table's `selection` path. A user's change sets the table's own selection when no key binds one, then
+  runs `onSelectionChange` in the table's scope with `event` the new keys, as a user event, in one batch.
+  The mount re-asserts the slot after the handler, so a bound selection the document does not write back
+  snaps back, and a literal one never changes. The element values `selection` and `selectedCount` read the
+  bound value when there is one and the table's own otherwise. `sort`, `filters` and `hoveredKey` are not
+  lowered. With `empty`,
   the table lowers to a `Column` holding the table and the lowered `empty` content, in the table's own scope:
   while `rows` evaluates to an empty list the table is hidden and the content shown; while it is a non-empty
   list, or `null` (a query not answered yet), the reverse. The column takes the node's `visible` and its layout,

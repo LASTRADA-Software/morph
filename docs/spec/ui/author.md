@@ -161,7 +161,9 @@ The keys every node takes are member functions of `Node`, each returning a copy 
   `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` is the grid's, and
   a grid's `justify` is written so the loader refuses it rather than dropped.
 - **`table`** takes its rows, its options (`key`, `columns` (each `TableColumn{name, label, width, role, align,
-  valign, cell}`; an absent `align` or `valign` is left out and a present one is written by name), `selection`, `sort`, `filters`,
+  valign, cell}`; an absent `align` or `valign` is left out and a present one is written by name), `selectionMode` (a
+  `Selection`, written as `selectionMode`), `selection` (the selected keys, controlled when given), `onSelectionChange`
+  (with `event` the new keys), `sort`, `filters`,
   `rowTone` (each row's tone, which the client draws), `highlightKey`, `onActivate`, `empty` (the nodes shown in
   its place while its rows are an empty list), `valign`), and optionally a row-scope builder that returns the
   columns; `cells({...})` makes columns from cells alone. **`dataTable<A>(model, body, options)`**

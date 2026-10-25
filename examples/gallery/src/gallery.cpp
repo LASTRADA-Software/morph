@@ -115,7 +115,7 @@ ui::Screen homeScreen() {
                        {.key = ui::row(&Fact::id),
                         .columns = {{.name = "label", .label = "Label", .cell = ui::text({.text = ui::row("label")})},
                                     {.name = "value", .label = "Value", .cell = ui::text({.text = ui::row("value")})}},
-                        .selection = ui::Selection::Single})
+                        .selectionMode = ui::Selection::Single})
                  .a11y("Facts")
                  .testId("facts"),
              ui::keyValue(facts.value())});

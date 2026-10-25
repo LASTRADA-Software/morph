@@ -699,7 +699,7 @@ ui::Screen paletteScreen() {
                  {.key = ui::row(&ResultView::id),
                   .columns = {{.name = "id", .label = "Id", .width = 80, .cell = ui::text({.text = ui::row("id")})},
                               {.name = "flag"}},
-                  .selection = ui::Selection::Multiple,
+                  .selectionMode = ui::Selection::Multiple,
                   .sort = ui::list({}),
                   .filters = ui::list({}),
                   .rowTone = "neutral",
@@ -707,11 +707,11 @@ ui::Screen paletteScreen() {
                   .onActivate = ui::set(choice, ui::row("id"))})
                  .a11y("Results"),
              ui::dataTable<ListProjects>(sample, {{&ListProjects::page, 0}},
-                                         {.selection = ui::Selection::Single,
+                                         {.selectionMode = ui::Selection::Single,
                                           .mode = ui::TableMode::Server,
                                           .onActivate = ui::run(pick, {{&LoadSample::id, ui::row("id")}})})
                  .a11y("Projects"),
-             ui::dataTable<ListProjects>(sample, {.selection = ui::Selection::None, .mode = ui::TableMode::Client})
+             ui::dataTable<ListProjects>(sample, {.selectionMode = ui::Selection::None, .mode = ui::TableMode::Client})
                  .a11y("All projects")});
 
         auto feedback = ui::column(

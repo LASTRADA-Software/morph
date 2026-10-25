@@ -1573,8 +1573,8 @@ struct ElementState {
     reactive::Signal<RtScope*> inner;
     /// @brief The checks targeting it.
     std::vector<CheckRuntime*> checks;
-    /// @brief The value an expression binds (`value`, `checked`, `selected`); `nullptr` when the element is
-    ///        uncontrolled.
+    /// @brief The value an expression binds (`value`, `checked`, `selected`, a table's `selection`); `nullptr` when
+    ///        the element is uncontrolled.
     reactive::Computed<Value>* bound = nullptr;
     /// @brief What is wrong now, as a list of strings: `required` unmet, the node's `errors`, the reply's field
     ///        errors and the failing checks' messages.
@@ -4400,7 +4400,24 @@ inline void ScreenCore::wireElement(ElementState& element) {
     if (kind == "table" && node.prop("rows")) {
         element.rows =
             &scope.nodes.computed([&scope, expr = node.prop("rows")] { return evalIn(scope, nullptr, expr); });
+        // A bound selection is controlled, as a select's `selected` is: any expression but a literal `null` binds it.
+        ExprPtr const selection = node.prop("selection");
+        if (selection && (selection->kind != ExprKind::Literal || !selection->literal.isNull())) {
+            element.bound = &scope.nodes.computed([&scope, selection] { return evalIn(scope, nullptr, selection); });
+        }
     }
+}
+
+/// @brief A table's selection as its element value reads it: the bound `selection` when the key binds one, else
+///        the table's own. A bound value that is not a list (`null` while state starts empty) selects nothing.
+/// @param element The table's element.
+/// @return A list of keys. Tracked.
+[[nodiscard]] inline Value tableSelection(ElementState const& element) {
+    if (element.bound == nullptr) {
+        return element.selection.get();
+    }
+    Value const bound = element.bound->get();
+    return bound.asList() != nullptr ? bound : Value{ValueList{}};
 }
 
 /// @brief A JSON text as a document value; `null` when it is not JSON or holds what a value cannot (a fraction).
@@ -4538,13 +4555,13 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
     }
     if (kind == "table") {
         if (name == "selection") {
-            return element.selection.get();
+            return tableSelection(element);
         }
         if (name == "activeKey") {
             return element.activeKey.get();
         }
         if (name == "selectedCount") {
-            return count(element.selection.get());
+            return count(tableSelection(element));
         }
         if (name == "viewCount" || name == "sourceCount") {
             return element.rows == nullptr ? Value{std::int64_t{0}} : count(element.rows->get());
@@ -7309,23 +7326,44 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     } else if (mode == "multiple") {
         options.selectionMode = SelectionMode::Multiple;
     }
-    options.selection = slotProp<std::vector<Key>>([element] {
+    // The selection the table shows: the bound `selection`, or the table's own. A slot even for a literal list, so
+    // a bound selection is fixed until the document writes it, and a user's change the document leaves unwritten
+    // snaps back. A bound value that is neither a list nor `null` is reported once.
+    auto selectionReported = std::make_shared<bool>(false);
+    options.selection = slotProp<std::vector<Key>>([this, element, selectionReported, path = node.path] {
         std::vector<Key> keys;
-        if (ValueList const* const items = element->selection.get().asList()) {
+        if (element->bound != nullptr) {
+            Value const bound = element->bound->get();
+            if (!bound.isNull() && bound.asList() == nullptr && !*selectionReported) {
+                *selectionReported = true;
+                report(pointerAppend(path, "selection"),
+                       "selection is " + canonicalJson(bound) + "; a table's selection is a list of keys");
+            }
+        }
+        if (ValueList const* const items = tableSelection(*element).asList()) {
             for (Value const& item : *items) {
                 keys.push_back(keyOf(item));
             }
         }
         return keys;
     });
-    options.onSelectionChange = [this, element](std::vector<Key> const& keys) {
+    // A user's change: the table's own selection takes it when no key binds one, then `onSelectionChange` runs with
+    // `event` the new selection, in the table's scope, in the same batch.
+    options.onSelectionChange = [this, ctx, element,
+                                 commands = node.event("onSelectionChange")](std::vector<Key> const& keys) {
         ValueList items;
         for (Key const& key : keys) {
             items.push_back(valueOfKey(key));
         }
-        session.asUser([&] {
-            session.noteWrite();
-            element->selection.set(Value{std::move(items)});
+        Value const selected{std::move(items)};
+        runtime().batch([&] {
+            if (element->bound == nullptr) {
+                session.asUser([&] {
+                    session.noteWrite();
+                    element->selection.set(selected);
+                });
+            }
+            runEvent(commands, ctx, selected);
         });
     };
     options.onActivate = [this, ctx, element, registry, commands = node.event("onActivate")](Key const& key) {

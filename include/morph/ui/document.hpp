@@ -802,7 +802,7 @@ inline constexpr std::array<KeySpec, 5> kForEachKeys = {{{"rows", Shape::Expr, {
                                                          {"gap", Shape::Expr},
                                                          {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-inline constexpr std::array<KeySpec, 19> kTableKeys = {{{"rows", Shape::Expr},
+inline constexpr std::array<KeySpec, 20> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"key", Shape::Expr, {}, kInner},
                                                         {"model", Shape::Name},
                                                         {"action", Shape::Text},
@@ -814,6 +814,7 @@ inline constexpr std::array<KeySpec, 19> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"virtualizeOverscan", Shape::Expr},
                                                         {"selectionMode", Shape::Expr},
                                                         {"selection", Shape::Expr},
+                                                        {"onSelectionChange", Shape::Commands},
                                                         {"sort", Shape::Expr},
                                                         {"filters", Shape::Expr},
                                                         {"rowTone", Shape::Expr, {}, kInner},
@@ -2987,6 +2988,34 @@ private:
         } else if (node.kind == "table" && !node.prop("rows")) {
             refuse(node.path, "a table takes `rows`, or a `model` and `action`");
         }
+        if (node.kind == "table") {
+            checkTableSelection(node);
+        }
+    }
+
+    // A table's `selection` and `onSelectionChange` need rows the user can select, and rows the document holds: a
+    // model-backed table's engine owns its selection.
+    static void checkTableSelection(DocNode const& node) {
+        std::string_view key;
+        if (node.prop("selection") != nullptr) {
+            key = "selection";
+        } else if (node.event("onSelectionChange") != nullptr) {
+            key = "onSelectionChange";
+        } else {
+            return;
+        }
+        std::string const where = pointerAppend(node.path, key);
+        if (!node.name("model").empty()) {
+            refuse(where, "a model-backed table's engine owns its selection; `" + std::string{key} +
+                              "` is for a table over `rows`");
+        }
+        ExprPtr const mode = node.prop("selectionMode");
+        std::string const* const literal =
+            mode != nullptr && mode->kind == ExprKind::Literal ? mode->literal.asString() : nullptr;
+        if (mode == nullptr || (literal != nullptr && *literal == "none")) {
+            refuse(where, "a table with `" + std::string{key} +
+                              "` selects rows; give it `selectionMode` `single` or `multiple`");
+        }
     }
 
     // A custom node names a component of the document and gives only the props it declares.
@@ -3437,7 +3466,11 @@ private:
         if (entry.category == NameCategory::Element) {
             KindSpec const* const spec = findKind(entry.element->kind, false);
             if ((spec->flags & kWritable) == 0) {
-                refuse(cmd.path, "`set` writes state or an input's draft; `" + head + "` is a " + entry.element->kind);
+                // A table's state is the document's: it binds its `selection` to state, and the state is set.
+                std::string const hint =
+                    entry.element->kind == "table" ? ": bind its `selection` to state and set that" : "";
+                refuse(cmd.path,
+                       "`set` writes state or an input's draft; `" + head + "` is a " + entry.element->kind + hint);
             }
             return;
         }
