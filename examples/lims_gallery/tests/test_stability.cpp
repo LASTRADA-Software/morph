@@ -46,8 +46,8 @@ TEST_CASE("stability, expanded: step 2 of the wizard, the matrix and the summary
     CHECK(screen.backend().prop(monthBox(screen, "25 °C", "T0"), "checked") == "true");
     CHECK(screen.backend().prop(monthBox(screen, "25 °C", "1 m"), "checked") == "false");
     CHECK(holdsPair(screen, "summary-pairs", "Pulls:15"));
-    CHECK(holdsPair(screen, "summary-pairs", "First pull:03-Dec-2026 (40 °C\\, 1 m)"));
-    CHECK(holdsPair(screen, "summary-pairs", "Last pull:03-Nov-2029"));
+    CHECK(holdsPair(screen, "summary-pairs", "First pull:2026-12-03 (40 °C\\, 1 m)"));
+    CHECK(holdsPair(screen, "summary-pairs", "Last pull:2029-11-03"));
     CHECK(screen.text("summary-containers") == "180 needed, 150 in stock");
     CHECK(screen.prop("Text", "summary-containers", "role") == "Error");
     CHECK(screen.prop("TextInput", "per-pull", "errors") ==
@@ -64,7 +64,7 @@ TEST_CASE("stability, expanded: a timepoint changes the summary, and enough cont
     screen.backend().toggle(monthBox(screen, "40 °C", "1 m"));
     CHECK(screen.waitFor([&screen] {
         return holdsPair(screen, "summary-pairs", "Pulls:14") &&
-               holdsPair(screen, "summary-pairs", "First pull:03-Feb-2027 (25 °C\\, 3 m)");
+               holdsPair(screen, "summary-pairs", "First pull:2027-02-03 (25 °C\\, 3 m)");
     }));
     screen.edit("per-pull", "10");
     CHECK(screen.waitFor([&screen] { return !screen.shows("Banner", "attention"); }));
@@ -77,6 +77,23 @@ TEST_CASE("stability, expanded: a timepoint changes the summary, and enough cont
     screen.requireNoProblems();
 }
 
+// Mutation: look the pull's date up in a table from the design's T0 (the batch E1 workaround) -> the first pull reads
+// 2026-12-03 whatever the start.
+TEST_CASE("stability: the pull dates follow the study start, a month on from 31 January clamped to February",
+          "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    auto const start = screen.backend().find("DateTimeInput", "a11yName", "Study start (T0)");
+    REQUIRE(start.has_value());
+    auto const instant = morph::time::DateTime::fromIso8601("2027-01-31T00:00:00Z");
+    REQUIRE(instant.has_value());
+    screen.backend().setDateTime(start.value_or(0), morph::time::Timestamp{*instant});
+    CHECK(screen.waitFor([&screen] {
+        return holdsPair(screen, "summary-pairs", "First pull:2027-02-28 (40 °C\\, 1 m)") &&
+               holdsPair(screen, "summary-pairs", "Last pull:2030-01-31");
+    }));
+    screen.requireNoProblems();
+}
+
 TEST_CASE("stability, compact: one condition open at a time, every field kept", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "compact"};
     screen.requireNoProblems();
@@ -85,7 +102,7 @@ TEST_CASE("stability, compact: one condition open at a time, every field kept", 
     CHECK(screen.text("shell_title") == "Conditions and timepoints");
     CHECK(screen.backend().find("Collapsible", "title", "25 °C / 60 % RH · 8 pulls").has_value());
     CHECK(screen.backend().find("Collapsible", "title", "40 °C / 75 % RH · 3 pulls").has_value());
-    CHECK(screen.prop("Collapsible", "summary-section", "title") == "Summary · first pull 03-Dec-2026");
+    CHECK(screen.prop("Collapsible", "summary-section", "title") == "Summary · first pull 2026-12-03");
     CHECK(screen.prop("TextInput", "per-pull", "errors") == "[180 units needed\\, 150 in stock for lot L-26-0381.]");
     screen.click("add-condition");
     CHECK(screen.waitFor(

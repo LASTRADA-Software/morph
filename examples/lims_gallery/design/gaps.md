@@ -411,7 +411,7 @@
   Enter and drops the sentence from its help line.
 - **Weight:** Medium
 
-### G36: A field of a computed value cannot be read
+### G36: A field of a computed value cannot be read — fixed in batch E
 - **Design(s):** 06
 - **Needs:** "the date of the first pull": the `date` field of the entry a `filter` and `first` pick.
 - **ui/1 today:** the loader refuses it, verbatim: `a field is read below a name -- a param, state, let, query, row,
@@ -419,7 +419,7 @@
 - **Workaround used:** `map` the field out first, then `first` of that list.
 - **Weight:** Low
 
-### G37: Date arithmetic
+### G37: Date arithmetic — fixed in batch E
 - **Design(s):** 06
 - **Needs:** pull dates as T0 plus a number of months ("First pull 03-Dec-2026 (40 °C, 1 m)", "Last pull
   03-Nov-2029"), following the study start the user picks.
@@ -508,7 +508,7 @@
 - **Workaround used:** one line per well, twelve per row, and one section per row.
 - **Weight:** Low
 
-### G45: No square root, so no standard deviation or RSD
+### G45: No square root, so no standard deviation or RSD — fixed in batch E
 - **Design(s):** 08
 - **Needs:** "Assay, mean · RSD 0.28 %": the relative standard deviation of the preparations, calculated as they are
   typed.

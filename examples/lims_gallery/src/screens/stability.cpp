@@ -62,21 +62,17 @@ struct Timepoint {
     std::int64_t month;
     char const* header;
     char const* label;
-    // The pull's date from the design's T0, 03-Nov-2026. The expression language has no date arithmetic, so the
-    // dates do not follow a new T0.
-    char const* date;
 };
 
-constexpr std::array<Timepoint, 9> kTimepoints{
-    {{.month = 0, .header = "T0", .label = "T0", .date = "03-Nov-2026"},
-     {.month = 1, .header = "1", .label = "1 m", .date = "03-Dec-2026"},
-     {.month = 3, .header = "3", .label = "3 m", .date = "03-Feb-2027"},
-     {.month = 6, .header = "6", .label = "6 m", .date = "03-May-2027"},
-     {.month = 9, .header = "9", .label = "9 m", .date = "03-Aug-2027"},
-     {.month = 12, .header = "12", .label = "12 m", .date = "03-Nov-2027"},
-     {.month = 18, .header = "18", .label = "18 m", .date = "03-May-2028"},
-     {.month = 24, .header = "24", .label = "24 m", .date = "03-Nov-2028"},
-     {.month = 36, .header = "36", .label = "36 m", .date = "03-Nov-2029"}}};
+constexpr std::array<Timepoint, 9> kTimepoints{{{.month = 0, .header = "T0", .label = "T0"},
+                                                {.month = 1, .header = "1", .label = "1 m"},
+                                                {.month = 3, .header = "3", .label = "3 m"},
+                                                {.month = 6, .header = "6", .label = "6 m"},
+                                                {.month = 9, .header = "9", .label = "9 m"},
+                                                {.month = 12, .header = "12", .label = "12 m"},
+                                                {.month = 18, .header = "18", .label = "18 m"},
+                                                {.month = 24, .header = "24", .label = "24 m"},
+                                                {.month = 36, .header = "36", .label = "36 m"}}};
 
 constexpr std::array<char const*, 4> kSteps{"Product and lot", "Conditions and timepoints", "Tests per timepoint",
                                             "Review and sign"};
@@ -161,17 +157,9 @@ ui::AnyHandle pulledMonths(Study const& study) {
     });
 }
 
-ui::AnyHandle dateOf(ui::AnyHandle const& month) {
-    std::vector<ui::AnyHandle> dates;
-    dates.reserve(kTimepoints.size());
-    for (Timepoint const& point : kTimepoints) {
-        dates.push_back(ui::obj({{"month", point.month}, {"date", point.date}}));
-    }
-    // A field is read only below a name, so the date is mapped out before `first` picks it.
-    auto const matching = ui::filter(
-        ui::list(dates), "entry", [&month](ui::AnyHandle const& entry) { return ui::eq(entry.at("month"), month); });
-    return ui::call("first",
-                    {ui::map(matching, "entry", [](ui::AnyHandle const& entry) { return entry.at("date"); })});
+// The date of the pull @p month months after the study's start, as the date functions show it.
+ui::AnyHandle pullDate(ui::AnyHandle const& start, ui::AnyHandle const& month) {
+    return ui::call("date", {ui::dateAdd(start, month, ui::DateUnit::Months)});
 }
 
 Study declare(ui::Scope& screen) {
@@ -191,12 +179,11 @@ Study declare(ui::Scope& screen) {
     study.openCondition = screen.state("openCondition", std::string{"lt"});
     study.tests = screen.state<ui::Any>("tests", testList());
     study.confirmed = screen.state("confirmed", false);
-    study.stock = screen.let(
-        "stock", ui::call("first", {ui::map(ui::filter(lotList(), "entry",
-                                                       [&study](ui::AnyHandle const& entry) {
-                                                           return ui::eq(entry.at("key"), study.lot);
-                                                       }),
-                                            "entry", [](ui::AnyHandle const& entry) { return entry.at("stock"); })}));
+    study.stock = screen.let("stock", ui::call("first", {ui::filter(lotList(), "entry",
+                                                                    [&study](ui::AnyHandle const& entry) {
+                                                                        return ui::eq(entry.at("key"), study.lot);
+                                                                    })})
+                                          .at("stock"));
     study.pulls = screen.let(
         "pulls", Count{ui::call("sum", {ui::map(study.conditions, "condition", [](ui::AnyHandle const& item) {
                                     return ui::call("count", {item.at("points")});
@@ -220,15 +207,15 @@ Study declare(ui::Scope& screen) {
     auto const pulled = screen.let("pulledMonths", pulledMonths(study));
     auto const first = screen.let("firstMonth", ui::call("min", {pulled}));
     auto const last = screen.let("lastMonth", ui::call("max", {pulled}));
-    auto const firstCondition = ui::call(
-        "first",
-        {ui::map(ui::filter(study.conditions, "condition",
-                            [&first](ui::AnyHandle const& item) { return ui::includes(item.at("points"), first); }),
-                 "condition", [](ui::AnyHandle const& item) { return item.at("short"); })});
-    study.firstDate = screen.let("firstDate", dateOf(first));
+    auto const firstCondition =
+        ui::call("first",
+                 {ui::filter(study.conditions, "condition",
+                             [&first](ui::AnyHandle const& item) { return ui::includes(item.at("points"), first); })})
+            .at("short");
+    study.firstDate = screen.let("firstDate", pullDate(study.start, first));
     study.firstPull =
         screen.let("firstPull", ui::format("{0} ({1}, {2} m)", {study.firstDate, firstCondition, first}));
-    study.lastPull = screen.let("lastPull", dateOf(last));
+    study.lastPull = screen.let("lastPull", pullDate(study.start, last));
     return study;
 }
 
@@ -527,7 +514,7 @@ ui::Node reviewStep(Study const& study) {
                {ui::panel({pairs({{"Study", "STB-2026-014, draft"},
                                   {"Product", "Paracetamol 500 mg tablets"},
                                   {"Lot", study.lot},
-                                  {"Start (T0)", study.start},
+                                  {"Start (T0)", ui::call("date", {study.start})},
                                   {"Conditions", ui::format("{0} with pulls", {conditions})},
                                   {"Pulls", ui::format("{0}, first {1}, last {2}",
                                                        {study.pulls, study.firstDate, study.lastPull})},

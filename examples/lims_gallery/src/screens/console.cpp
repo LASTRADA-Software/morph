@@ -405,8 +405,7 @@ ui::AnyHandle field(Console const& console, char const* name) {
     auto const shown = ui::filter(console.samples, "sample", [&console](ui::AnyHandle const& sample) {
         return ui::eq(sample.at("index"), console.current);
     });
-    return ui::call("first",
-                    {ui::map(shown, "sample", [name](ui::AnyHandle const& sample) { return sample.at(name); })});
+    return ui::call("first", {shown}).at(name);
 }
 
 Console declare(ui::Scope& screen) {
@@ -479,8 +478,7 @@ ui::Commands findSample(Console const& console) {
     auto const matching = ui::filter(console.samples, "sample", [](ui::AnyHandle const& sample) {
         return ui::eq(sample.at("id"), ui::call("trim", {ui::event()}));
     });
-    auto const index = ui::call(
-        "first", {ui::map(matching, "sample", [](ui::AnyHandle const& sample) { return sample.at("index"); })});
+    auto const index = ui::call("first", {matching}).at("index");
     return ui::ifThen(ui::engaged(index), {ui::set(console.current, index), ui::set(console.search, std::string{})},
                       ui::notify(ui::format("No sample {0} on today's worklist.", {ui::event()}), ui::Role::Warning));
 }
