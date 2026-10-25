@@ -3,7 +3,9 @@
 // The shell frame (docs/spec/ui/shell_frame.md): the sidebar with the application's name and the navigator, the top
 // bar with the title, the principal and sign-out, and the page; signed out, only the page.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <iterator>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/shell_frame.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
@@ -39,7 +41,7 @@ TEST_CASE("shell frame: a sidebar with the navigator, a top bar and the page, on
     frame.setPrincipal("alice");
 
     int const sidebar = backend.find("Row", "testId", "shell_sidebar").value();
-    int const topBar = backend.find("Row", "testId", "shell_topbar").value();
+    int const topBar = backend.find("Column", "testId", "shell_topbar").value();
     int const page = backend.find("Column", "testId", "shell_page").value();
     CHECK(backend.prop(sidebar, "surface") == "sidebar");
     CHECK(backend.prop(sidebar, "layout") == "fixed(28)/stretch(1)");
@@ -93,8 +95,52 @@ TEST_CASE("shell frame: signed out, the sidebar and the top bar are hidden", "[u
     ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
     frame.showSignedIn(false);
     CHECK(backend.prop(backend.find("Row", "testId", "shell_sidebar").value(), "visible") == "false");
-    CHECK(backend.prop(backend.find("Row", "testId", "shell_topbar").value(), "visible") == "false");
+    CHECK(backend.prop(backend.find("Column", "testId", "shell_topbar").value(), "visible") == "false");
     CHECK_FALSE(backend.hasProp(backend.find("Column", "testId", "shell_page").value(), "visible"));
     frame.showSignedIn(true);
     CHECK(backend.prop(backend.find("Row", "testId", "shell_sidebar").value(), "visible") == "true");
+}
+
+namespace {
+
+/// Whether @p node is @p ancestor or one of its descendants.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the ancestor, then the node, as a containment reads.
+bool within(RecordingBackend const& backend, int ancestor, int node) {
+    std::vector<int> pending{ancestor};
+    while (!pending.empty()) {
+        int const at = pending.back();
+        pending.pop_back();
+        if (at == node) {
+            return true;
+        }
+        std::ranges::copy(backend.children(at), std::back_inserter(pending));
+    }
+    return false;
+}
+
+}  // namespace
+
+// Mutation: put the head slot back in the title's line (it is then beside the sign-out button, outside
+// `shell_head_line`), or start the head line shown.
+TEST_CASE("shell frame: the head slot has the top bar's second line, shown only when the client says", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const line = backend.find("Row", "testId", "shell_head_line").value();
+    int const main = backend.find("Row", "testId", "shell_topbar_main").value();
+    int const slot = backend.find("Row", "testId", "shell_head").value();
+    int const signOut = backend.find("Button", "testId", "shell_signOut").value();
+    CHECK(within(backend, line, slot));
+    CHECK_FALSE(within(backend, main, slot));
+    CHECK(within(backend, main, signOut));
+    // The slot sits in a scroll along the line, so a head wider than the bar scrolls sideways.
+    int const scroll = backend.find("Scroll", "testId", "shell_head_scroll").value();
+    CHECK(within(backend, scroll, slot));
+
+    CHECK(backend.prop(line, "visible") == "false");
+    frame.setHeadShown(true);
+    CHECK(backend.prop(line, "visible") == "true");
+    frame.setHeadShown(false);
+    CHECK(backend.prop(line, "visible") == "false");
 }

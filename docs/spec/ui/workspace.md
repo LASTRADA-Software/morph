@@ -120,8 +120,10 @@ it, so the actions sit at the trailing edge in either placement.
 
 `Workspace::headRowForActive()` builds the same row for whichever tab is active, as a public `Node` a host can mount
 somewhere else entirely (a client's own shell chrome) — `morph::client::Shell` constructs its `Workspace` with
-`HeadPlacement::External` and mounts this row into `ShellFrame::headSlot()`, beside the title in the top bar, so the
-head shows once. It reads
+`HeadPlacement::External` and mounts this row into `ShellFrame::headSlot()`, the top bar's second line, below the
+title, and shows that line while `activeHeadShown()` holds, so the head shows once. `activeHeadShown()` is a tracked
+read: true while the active tab's head has a subtitle, a badge or an action. It and the row's own visibility share one
+rule, so the two cannot disagree. It reads
 `WorkspaceModel::active()` directly, not the public `Workspace::active()` index, since the index is a position in
 the tab bar, not an identity, and is unsafe to compare across a close. With no tab open it returns a defined,
 invisible row — never a null `Node` — so a caller mounting it need not handle a null case itself.

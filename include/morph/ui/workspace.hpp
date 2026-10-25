@@ -243,6 +243,15 @@ public:
         return ui::row(std::move(empty));
     }
 
+    /// @brief Whether the active tab's head shows anything: a subtitle, a badge or an action. A tracked read, so a
+    ///        shell that shows the head on a line of its own follows a tab switch and a head's own changes; the head
+    ///        row's own visibility is the same rule.
+    /// @return Whether there is an active tab whose head has content.
+    [[nodiscard]] bool activeHeadShown() const {
+        std::optional<WorkspaceTabId> const tab = _model->active().get();
+        return tab.has_value() && headHasContent(*tab);
+    }
+
     /// @brief Closes every tab without asking, newest first: what signing out does, since no close guard may keep a
     ///        screen of the principal who is leaving.
     void forceCloseAll() { _model->forceCloseAll(); }
@@ -355,6 +364,13 @@ private:
         return handle == nullptr ? nullptr : handle->head();
     }
 
+    // Whether a tab's head has a subtitle, a badge or an action; a tracked read.
+    [[nodiscard]] bool headHasContent(WorkspaceTabId tab) const {
+        ScreenHead const* const head = headOf(tab);
+        return head != nullptr &&
+               (!head->subtitle().get().empty() || !head->status().get().empty() || !head->actions().get().empty());
+    }
+
     // The head row's own content, built but not yet wrapped into an immutable Node: the subtitle (muted), the
     // badges, a spacer and the actions as buttons. Hidden while the head has none of them, so a screen without a
     // head looks as it would without the row. Factored out of headRow() so a caller needing to set additional
@@ -377,8 +393,7 @@ private:
         row.common.testId = "head";
         // Full width, so the actions sit at the trailing edge in either placement.
         row.common.layout.width = Sizing::stretch();
-        row.common.visible = Prop<bool>{
-            [subtitle, status, actions] { return !subtitle().empty() || !status().empty() || !actions().empty(); }};
+        row.common.visible = Prop<bool>{[this, tab] { return headHasContent(tab); }};
         Text text{.text = Prop<std::string>{subtitle}, .role = TextRole::Muted, .field = {}, .common = {}};
         text.common.testId = "head_subtitle";
         text.common.visible = Prop<bool>{[subtitle] { return !subtitle().empty(); }};

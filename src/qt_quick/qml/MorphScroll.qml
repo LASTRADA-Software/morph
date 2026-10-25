@@ -46,16 +46,18 @@ MorphWidget {
     Flickable {
         id: flick
         anchors.fill: parent
-        contentWidth: root.axis === 0 ? width : column.implicitWidth
+        contentWidth: root.axis === 0 ? width : column.width
         contentHeight: root.axis === 0 ? column.implicitHeight : height
         flickableDirection: root.axis === 0 ? Flickable.VerticalFlick : Flickable.HorizontalFlick
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: root.axis === 0 ? root.barItem : null
         ScrollBar.horizontal: root.axis === 1 ? root.barItem : null
 
+        // Along a horizontal axis the content is at least the viewport's width, so a child that stretches fills the
+        // viewport while it is narrower, and scrolls once it is wider; the terminal sizes it the same way.
         ColumnLayout {
             id: column
-            width: root.axis === 0 ? flick.width : implicitWidth
+            width: root.axis === 0 ? flick.width : Math.max(implicitWidth, flick.width)
         }
     }
 

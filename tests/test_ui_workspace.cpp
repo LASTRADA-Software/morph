@@ -4,11 +4,13 @@
 // one per singleton, a reuseEmpty placeholder replaced, captions that follow title and dirty, closing tab by tab
 // until a veto, and the most-recently-used walk.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
+#include <morph/reactive/signal.hpp>
 #include <morph/ui/host.hpp>
 #include <morph/ui/workspace.hpp>
 #include <optional>
@@ -443,6 +445,28 @@ TEST_CASE("workspace: a screen without head parts leaves the head row hidden", "
     CHECK(head->status().peek().empty());
     CHECK(head->actions().peek().empty());
     CHECK(harness.backend.prop(harness.byTestId("Row", "head"), "visible") == "false");
+}
+
+// Mutation: answer activeHeadShown() from the first tab rather than the active one (it stays false after the switch
+// to the headed tab), or read the active tab untracked (the effect never hears the switch).
+TEST_CASE("workspace: activeHeadShown follows the active tab's head, as a tracked read", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    std::vector<bool> heard;
+    morph::reactive::Effect const watch{harness.runtime, [&] { heard.push_back(shell.activeHeadShown()); }};
+    CHECK(heard == std::vector<bool>{false});
+    REQUIRE(shell.open("home", {}) == 0U);
+    harness.settle();
+    CHECK_FALSE(shell.activeHeadShown());
+    REQUIRE(shell.open("headed", {}) == 1U);
+    harness.settle();
+    CHECK(shell.activeHeadShown());
+    shell.activate(0);
+    harness.settle();
+    CHECK_FALSE(shell.activeHeadShown());
+    CHECK(heard.back() == false);
+    CHECK(std::ranges::find(heard, true) != heard.end());
 }
 
 // Mutation: build headRowForActive() from Workspace::active()'s index rather than the model's own tab id (would

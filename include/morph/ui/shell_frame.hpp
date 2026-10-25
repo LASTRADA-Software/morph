@@ -35,9 +35,10 @@ struct ShellFrameOptions {
 /// @brief The frame around a client's screens.
 ///
 /// A row filling the window: the sidebar (surface `sidebar`, `kShellSidebarWidth` units wide), holding the
-/// application's name and a `Navigator`, and the main column holding the top bar (surface `toolbar`: the shown
-/// screen's title, a slot for its active tab's head row, the principal and a sign-out button) above the page
-/// (surface `page`), where the client places the workspace. Signed out, the sidebar and the top bar are hidden and
+/// application's name and a `Navigator`, and the main column holding the top bar (surface `toolbar`) above the page
+/// (surface `page`), where the client places the workspace. The top bar has two lines: the shown screen's title, the
+/// principal and a sign-out button, and below them, while `setHeadShown(true)`, a line that scrolls sideways holding
+/// the slot for the active tab's head row. Signed out, the sidebar and the top bar are hidden and
 /// the page is all there is. Neither copyable nor movable; owned by the owner thread of its backend.
 class ShellFrame {
 public:
@@ -56,13 +57,18 @@ public:
           _navigator{std::make_unique<Navigator>(backend, _side.get(), std::move(options.navigator))},
           _sideEnd{backend.createSpacer(_sidebar.get())},
           _main{backend.createStack(_root.get(), Axis::Vertical)},
-          _topBar{backend.createStack(_main.get(), Axis::Horizontal)},
-          _topStart{backend.createSpacer(_topBar.get())},
-          _title{backend.createText(_topBar.get())},
-          _headSlot{backend.createStack(_topBar.get(), Axis::Horizontal)},
-          _principal{backend.createText(_topBar.get())},
-          _signOut{backend.createButton(_topBar.get())},
-          _topEnd{backend.createSpacer(_topBar.get())},
+          _topBar{backend.createStack(_main.get(), Axis::Vertical)},
+          _topLine{backend.createStack(_topBar.get(), Axis::Horizontal)},
+          _topStart{backend.createSpacer(_topLine.get())},
+          _title{backend.createText(_topLine.get())},
+          _principal{backend.createText(_topLine.get())},
+          _signOut{backend.createButton(_topLine.get())},
+          _topEnd{backend.createSpacer(_topLine.get())},
+          _headLine{backend.createStack(_topBar.get(), Axis::Horizontal)},
+          _headStart{backend.createSpacer(_headLine.get())},
+          _headScroll{backend.createScroll(_headLine.get(), Axis::Horizontal)},
+          _headSlot{backend.createStack(_headScroll.get(), Axis::Horizontal)},
+          _headEnd{backend.createSpacer(_headLine.get())},
           _page{backend.createStack(_main.get(), Axis::Vertical)},
           _top{backend.createSpacer(_page.get())},
           _padded{backend.createStack(_page.get(), Axis::Horizontal)},
@@ -87,20 +93,32 @@ public:
         _name->setTestId("shell_application");
 
         _main->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+        // Two lines: the title has the first to itself beside two small widgets, so it does not wrap, and a head
+        // row of any width gets the second, which scrolls sideways when even that is too narrow. Wrapping is the
+        // one choice every backend can draw with the widgets it has; eliding would lose the badges and actions the
+        // head exists for, and an overflow menu needs a node and a measuring pass the vocabulary does not have.
         _topBar->setSurface("toolbar");
-        _topBar->setGap(3);
-        // Spacers at both ends pad the bar by its gap.
+        _topBar->setGap(1);
+        _topBar->setTestId("shell_topbar");
+        _topLine->setGap(3);
+        _topLine->setTestId("shell_topbar_main");
+        // Spacers at both ends pad each line by its gap.
         _topStart->setLayout({.width = Sizing::fixed(0), .height = {}});
         _topEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
-        _topBar->setTestId("shell_topbar");
-        // Centred across the bar, so the principal's text sits level with the sign-out button's label.
-        _topBar->setAlign(Align::Center);
+        // Centred across the line, so the principal's text sits level with the sign-out button's label.
+        _topLine->setAlign(Align::Center);
         _title->setRole(TextRole::Heading);
         _title->setLayout({.width = Sizing::stretch(), .height = {}});
         _title->setTestId("shell_title");
-        // Its own stretch, independent of whether the row mounted inside it is currently visible: the mounted
-        // content's own visibility (hidden while a screen has no head) must not collapse the slot's width, since
-        // MorphStack.qml reads the *slot's* widthKind to decide whether the bar as a whole stretches or packs.
+        _headLine->setGap(3);
+        _headLine->setTestId("shell_head_line");
+        _headLine->setVisible(false);
+        _headStart->setLayout({.width = Sizing::fixed(0), .height = {}});
+        _headEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
+        _headScroll->setLayout({.width = Sizing::stretch(), .height = {}});
+        _headScroll->setTestId("shell_head_scroll");
+        // It stretches, so a mounted row that stretches fills the line and its spacer pushes the actions to the
+        // trailing edge; a row wider than the line makes the scroll's content wider, and the line scrolls.
         _headSlot->setLayout({.width = Sizing::stretch(), .height = {}});
         _headSlot->setTestId("shell_head");
         _principal->setRole(TextRole::Muted);
@@ -137,9 +155,15 @@ public:
     /// @return It.
     [[nodiscard]] Navigator& navigator() noexcept { return *_navigator; }
 
-    /// @brief The container in the top bar a client mounts the active screen's head row into, beside the title.
+    /// @brief The container a client mounts the active screen's head row into: the top bar's second line, below the
+    ///        title, shown only while `setHeadShown(true)`.
     /// @return It.
     [[nodiscard]] ContainerWidget& headSlot() noexcept { return *_headSlot; }
+
+    /// @brief Shows or hides the top bar's second line, which holds `headSlot()`. The frame cannot tell whether what
+    ///        is mounted there shows anything, so the client says; a new frame starts with it hidden.
+    /// @param shown Whether the line is shown.
+    void setHeadShown(bool shown) { _headLine->setVisible(shown); }
 
     /// @brief Shows the shown screen's title in the top bar.
     /// @param title The title; empty shows none.
@@ -183,12 +207,17 @@ private:
     // Lazily made, the first time showToast is called.
     std::unique_ptr<ToastWidget> _toast;
     std::unique_ptr<StackWidget> _topBar;
+    std::unique_ptr<StackWidget> _topLine;
     std::unique_ptr<SpacerWidget> _topStart;
     std::unique_ptr<TextWidget> _title;
-    std::unique_ptr<StackWidget> _headSlot;
     std::unique_ptr<TextWidget> _principal;
     std::unique_ptr<ButtonWidget> _signOut;
     std::unique_ptr<SpacerWidget> _topEnd;
+    std::unique_ptr<StackWidget> _headLine;
+    std::unique_ptr<SpacerWidget> _headStart;
+    std::unique_ptr<ScrollWidget> _headScroll;
+    std::unique_ptr<StackWidget> _headSlot;
+    std::unique_ptr<SpacerWidget> _headEnd;
     std::unique_ptr<StackWidget> _page;
     std::unique_ptr<SpacerWidget> _top;
     std::unique_ptr<StackWidget> _padded;

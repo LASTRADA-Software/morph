@@ -508,7 +508,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
 /// Whether the frame's sidebar and top bar both show (`true`), both are hidden (`false`), or neither holds.
 std::optional<bool> chromeShown(morph::ui::testing::RecordingBackend const& backend) {
     auto const sidebar = backend.find("Row", "testId", "shell_sidebar");
-    auto const topBar = backend.find("Row", "testId", "shell_topbar");
+    auto const topBar = backend.find("Column", "testId", "shell_topbar");
     if (!sidebar || !topBar) {
         return std::nullopt;
     }

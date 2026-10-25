@@ -149,7 +149,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Grid | `MorphGrid` | a `GridLayout`; a child's span is its `Layout.columnSpan`; `align` | — |
 | Spacer | `MorphSpacer` | space that fills the layout | — |
 | Panel | `MorphPanel` | a framed region with a title and padding; collapsible, with a header button | the collapsed state asked for |
-| Scroll | `MorphScroll` | a `Flickable` that scrolls the focused item into view, with one bar on its axis made from its `bar` part (`MorphScrollBar`, a child of the flickable, where the attached `ScrollBar` lays it out) | — |
+| Scroll | `MorphScroll` | a `Flickable` that scrolls the focused item into view, its content along a horizontal axis at least the viewport's width, with one bar on its axis made from its `bar` part (`MorphScrollBar`, a child of the flickable, where the attached `ScrollBar` lays it out) | — |
 | Splitter | `MorphSplitter` | a `SplitView` whose handles are made from its `handle` part (`MorphSplitterHandle`); the splitter sets each handle's `axis` and `scheme`, and leaves a handle's implicit extent along the axis between two panes | the panes' sizes once a drag ends |
 | Slot | `MorphSlot` | its children, packed at the top unless one stretches vertically | — |
 | Tabs | `MorphTabs` | a `TabBar` over the page slots, `Theme.spaceOf(3)` above them; `barShown` false hides the bar and gives its height to the pages, and its `focusTarget` is then the pages, so a hidden bar never holds the keyboard focus | the tab clicked |

@@ -9,6 +9,8 @@
 #include <QMetaObject>
 #include <QPointF>
 #include <QQuickItem>
+#include <QRectF>
+#include <QSizeF>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -24,6 +26,7 @@
 #include <morph/ui/mount.hpp>
 #include <morph/ui/shell_frame.hpp>
 #include <morph/ui/theme.hpp>
+#include <morph/ui/view.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -757,4 +760,69 @@ TEST_CASE("qt_quick containers: a head row puts its actions at the trailing edge
     INFO("slot ends at " << slotRight << ", the last action at " << actionRight << ", a gap is " << gap);
     CHECK(actionRight <= slotRight + 0.5);
     CHECK(actionRight >= slotRight - gap - 0.5);
+}
+
+// Mutation: put the head slot back in the title's line of ShellFrame (at 1000 px the actions are drawn over the
+// sign-out button), or size a horizontal scroll's content to its own width (the head row does not reach the edge).
+TEST_CASE("qt_quick containers: the shell's head has a line of its own, which scrolls when the bar is narrow",
+          "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrameOptions options;
+    options.applicationName = "App";
+    options.onSignOut = [] {};
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
+    frame.showSignedIn(true);
+    frame.setTitle("Sample S-2026-0412 · stability pull");
+    frame.setPrincipal("alice");
+    frame.setHeadShown(true);
+    std::vector<ui::Node> children{ui::text({.text = "Paracetamol 500 mg, lot 24-117", .role = ui::TextRole::Muted})};
+    for (auto const* const tag : {"Draft", "Due today", "Priority"}) {
+        children.push_back(ui::badge({.tone = ui::Tone::Warn, .text = tag}));
+    }
+    ui::Spacer filler;
+    filler.common.layout.width = ui::Sizing::stretch();
+    children.push_back(ui::spacer(std::move(filler)));
+    for (auto const* const action : {"Book", "Sign"}) {
+        ui::Button button{.label = action};
+        button.common.testId = std::string{"head_"} + action;
+        children.push_back(ui::button(std::move(button)));
+    }
+    ui::Row head{.children = std::move(children), .gap = 2};
+    head.common.layout.width = ui::Sizing::stretch();
+    ui::Mounted const mounted{scene.runtime(), scene.backend(), ui::row(std::move(head)), &frame.headSlot()};
+
+    auto const rectOf = [](char const* testId) {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        QQuickItem const* const item = widget->item();
+        REQUIRE(item != nullptr);
+        return QRectF{item->mapToScene(QPointF{0, 0}), QSizeF{item->width(), item->height()}};
+    };
+    scene.window().resize(1000, 600);
+    scene.settle();
+    QRectF const signOut = rectOf("shell_signOut");
+    for (char const* const action : {"head_Book", "head_Sign"}) {
+        QRectF const rect = rectOf(action);
+        INFO(action << " at " << rect.x() << "+" << rect.width());
+        CHECK_FALSE(rect.intersects(signOut));
+        CHECK(rect.right() <= 1000.0);
+    }
+    // The head row fills the line, so its actions sit at the trailing edge.
+    CHECK(rectOf("head_Sign").right() > 900.0);
+
+    scene.window().resize(400, 600);
+    scene.settle();
+    detail::ItemBase const* const scroll = detail::findWidget(QStringLiteral("shell_head_scroll"));
+    REQUIRE(scroll != nullptr);
+    QList<QQuickItem*> const inside = scroll->item()->childItems();
+    auto const found =
+        std::ranges::find_if(inside, [](QQuickItem const* item) { return item->inherits("QQuickFlickable"); });
+    bool const isFlick = found != inside.end();
+    REQUIRE(isFlick);
+    QQuickItem const* const flick = *found;
+    qreal const contentWidth = flick->property("contentWidth").toReal();
+    CHECK(contentWidth > flick->width());
+    QQuickItem const* const sign = detail::findWidget(QStringLiteral("head_Sign"))->item();
+    QPointF const inContent = sign->mapToItem(flick->property("contentItem").value<QQuickItem*>(), QPointF{0, 0});
+    CHECK(inContent.x() + sign->width() <= contentWidth + 0.5);
 }

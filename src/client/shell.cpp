@@ -14,6 +14,7 @@
 #include <morph/client/shell.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/reactive/scheduler.hpp>
+#include <morph/reactive/signal.hpp>
 #include <morph/ui/dev_reload.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/explorer.hpp>
@@ -409,12 +410,18 @@ private:
             return;
         }
         _headTab = active;
+        _headShown.reset();
         _head.emplace(_context->runtime(), *_backend, _workspace->headRowForActive(), &_frame->headSlot());
+        // The head has the top bar's second line, shown while the active tab's head shows anything; the frame cannot
+        // tell from the row it holds.
+        _headShown = std::make_unique<reactive::Effect>(
+            _context->runtime(), [this] { _frame->setHeadShown(_workspace->activeHeadShown()); });
     }
 
     // The head row's own mount and its comparison key, always reset together: resetting one without the other would
     // leave the guard above comparing against a tab id from a Workspace instance that no longer exists.
     void resetHead() {
+        _headShown.reset();
         _head.reset();
         _headTab.reset();
     }
@@ -651,6 +658,8 @@ private:
     // (never one without the other) ahead of _workspace, since both are built from the Workspace's own data and
     // mounted into the ShellFrame.
     std::optional<ui::Mounted> _head;
+    // Shows the frame's head line while the active tab's head has content; goes with `_head`.
+    std::unique_ptr<reactive::Effect> _headShown;
     std::optional<ui::WorkspaceTabId> _headTab;
     // Whether a sign-in or sign-out has reloaded the catalog, and whether the session is now signed in.
     bool _changed = false;

@@ -19,18 +19,23 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 | a row, stretch × stretch | `shell` | the whole frame |
 | a row, surface `sidebar`, `fixed(kShellSidebarWidth)` (28) × stretch, gap 3, its content padded by spacers | `shell_sidebar` | the application's name (`shell_application`, a heading) and a `ui::Navigator` over `ShellFrameOptions::navigator`, whose group headings are sections and whose entries are body text, so the scale runs name, section, entry |
 | a column, stretch × stretch | — | the main column |
-| a row, surface `toolbar`, gap 3, `align: center`, padded by spacers at both ends | `shell_topbar` | the shown screen's title (`shell_title`, a heading that stretches), a slot for its active tab's head row (`shell_head`, its own independent stretch), the principal (`shell_principal`, muted) and a sign-out button (`shell_signOut`) |
+| a column, surface `toolbar`, gap 1 | `shell_topbar` | the top bar's two lines, below |
+| a row, gap 3, `align: center`, padded by spacers at both ends | `shell_topbar_main` | line 1: the shown screen's title (`shell_title`, a heading that stretches), the principal (`shell_principal`, muted) and a sign-out button (`shell_signOut`) |
+| a row, gap 3, padded by spacers at both ends, hidden on a new frame | `shell_head_line` | line 2: a horizontal scroll (`shell_head_scroll`, stretch) holding the slot for the active tab's head row (`shell_head`, a row that stretches) |
 | a column, surface `page`, stretch × stretch | `shell_page` | the page: zero-sized spacers above and either side of the content, each a gap of step 4 away, so the content is padded by step 4 |
 
 - `page()` is the content container, where the client places the workspace.
 - `navigator()` is the navigator, for its pins and search.
 - `headSlot()` is the container a client mounts the active tab's own head row into — `Workspace::
-  headRowForActive()` builds it — beside the title. Its own `stretch` is independent of whether the mounted row is
-  currently visible (a screen with no head mounts an invisible row), so the slot keeps claiming its share of the
-  bar's width either way; `_title` keeps its own separate stretch, so the two split the bar's spare width, and the
-  mounted row renders at its own natural width within the slot rather than reaching the slot's own trailing edge.
-- `setTitle` and `setPrincipal` set the top bar's texts. The bar centres its children across it, so the principal's
-  line sits level with the sign-out button's label rather than on the bar's top edge.
+  headRowForActive()` builds it — the top bar's second line, below the title, shown only while `setHeadShown(true)`.
+  The mounted row fills the line's width, so its spacer pushes the actions to the trailing edge, and it scrolls
+  sideways when it is wider than the bar: a horizontal scroll's content is at least its viewport's width on both
+  frontends.
+- `setHeadShown(shown)` shows or hides that second line. The frame builds widgets and never sees what is mounted in
+  the slot, so it cannot tell when the head is empty: the client says, and a new frame starts with the line hidden.
+  An application that mounts something else into `headSlot()` calls it itself.
+- `setTitle` and `setPrincipal` set the top bar's texts. The first line centres its children across it, so the
+  principal's line sits level with the sign-out button's label rather than on the line's top edge.
 - The sign-out button calls `ShellFrameOptions::onSignOut`; with none, it is hidden.
 
 ## Signed in and signed out
@@ -58,6 +63,7 @@ toast is non-modal, dims nothing, and never takes keyboard focus.
 |---|---|---|
 | Built from widgets | Backend widgets, not a document | The frame is the client's, not an application's, and every frontend has the widgets. |
 | The padding | Zero-sized spacers a gap away | A stack has a gap and no padding; spacers say it in the vocabulary that exists, and step 4 is 16 px on Qt Quick and a row and two columns on the terminal. |
+| A head wider than its share of the bar | A second line that scrolls sideways | A head row (a subtitle, badges, actions) does not fit beside a title, a principal and a sign-out button at every width: on one line it overflowed its slot and the sign-out button was drawn over it. Wrapping to a line of its own is what every backend can draw with the widgets it has. Eliding loses the badges and actions, which are why the head exists; an overflow menu needs a menu node and a measuring pass the vocabulary does not have; and one line when it fits needs a flow container that measures its children, which ui/1 has none of, while a width-class rule cannot decide it, since a head overflows an `expanded` window too. |
 | The width of the sidebar | 28 units, fixed | Wide enough for a navigator entry's title, and a unit on the terminal is a column. |
 | The toast's one `show(text, tone)` call | Not separate setters plus `setVisible` | A widget's `setVisible` skips a write when the value already matches, so a second `setVisible(true)` while the toast is still showing would be silently dropped and its dismiss timer would not restart. |
 | The toast's parent | `_main`, not `_root` or the page | `_root` is a row holding the sidebar and `_main` side by side; parenting there would make a floating widget compete for horizontal space as a third column. The page is replaced per screen, so parenting there would lose the toast on every navigation. |
