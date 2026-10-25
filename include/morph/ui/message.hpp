@@ -46,15 +46,16 @@ enum class PluralCategory : std::uint8_t {
 
 namespace detail {
 
-/// @brief The decimal text of an exact value at a number of places: rounded half to even, then written with exactly
-///        that many fraction digits, through integer arithmetic only.
+/// @brief The decimal text of an exact value at a number of places: rounded once, half to even unless @p mode says
+///        otherwise, then written with exactly that many fraction digits, through integer arithmetic only.
 /// @param value  The exact value.
 /// @param places The number of fraction digits, at most `math::kMaxDecimalPlaces`.
+/// @param mode   The tie-breaking rule.
 /// @return Canonical text `-?[0-9]+(\.[0-9]+)?`, with no sign on a value that rounds to zero; empty when the rounded
 ///         value does not fit a `Rational`, which the caller reports rather than show a clamped number.
-[[nodiscard]] inline std::optional<std::string> decimalText(math::Rational const& value, std::uint32_t places) {
-    auto const checked =
-        math::checkedRoundToDecimalPlaces(value, math::DecimalPlaces{places}, math::RoundingMode::HalfEven);
+[[nodiscard]] inline std::optional<std::string> decimalText(math::Rational const& value, std::uint32_t places,
+                                                            math::RoundingMode mode = math::RoundingMode::HalfEven) {
+    auto const checked = math::checkedRoundToDecimalPlaces(value, math::DecimalPlaces{places}, mode);
     if (!checked) {
         return std::nullopt;
     }

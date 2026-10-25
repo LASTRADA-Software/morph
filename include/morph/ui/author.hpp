@@ -1027,12 +1027,46 @@ template <typename T>
 /// @return The test.
 [[nodiscard]] inline Handle<bool> isEmpty(AnyHandle const& value) { return call<bool>("isEmpty", {value}); }
 
-/// @brief `round(x, dp)`, half to even.
+/// @brief How a function that rounds breaks a tie.
+enum class Rounding : std::uint8_t {
+    HalfEven,  ///< `"halfEven"`: to the even neighbour, `0.125 -> 0.12`; the default, written as no mode.
+    HalfUp,    ///< `"halfUp"`: away from zero, `0.125 -> 0.13`, `-0.125 -> -0.13`, the pharmacopoeial rule.
+};
+
+namespace detail {
+
+/// @brief A rounding call's arguments, with the mode written only when it is not the default.
 /// @param value  The number.
 /// @param places The places.
+/// @param mode   The tie-breaking rule.
+/// @return The arguments.
+[[nodiscard]] inline std::vector<AnyHandle> roundingArgs(AnyHandle const& value, std::int64_t places, Rounding mode) {
+    std::vector<AnyHandle> args{value, places};
+    if (mode == Rounding::HalfUp) {
+        args.emplace_back(std::string{"halfUp"});
+    }
+    return args;
+}
+
+}  // namespace detail
+
+/// @brief `round(x, dp, mode?)`: the number rounded once at @p places.
+/// @param value  The number.
+/// @param places The places, 0 to 18.
+/// @param mode   The tie-breaking rule; half to even unless given.
 /// @return The rounded number.
-[[nodiscard]] inline AnyHandle round(AnyHandle const& value, std::int64_t places) {
-    return call("round", {value, places});
+[[nodiscard]] inline AnyHandle round(AnyHandle const& value, std::int64_t places, Rounding mode = Rounding::HalfEven) {
+    return call("round", detail::roundingArgs(value, places, mode));
+}
+
+/// @brief `decimal(x, dp, mode?)`: the number shown at @p places, rounded once.
+/// @param value  The number.
+/// @param places The places, 0 to 18.
+/// @param mode   The tie-breaking rule; half to even unless given.
+/// @return The text.
+[[nodiscard]] inline Handle<std::string> decimal(AnyHandle const& value, std::int64_t places,
+                                                 Rounding mode = Rounding::HalfEven) {
+    return call<std::string>("decimal", detail::roundingArgs(value, places, mode));
 }
 
 /// @brief `parseDecimal(text)`: typed text, in the client's locale, as an exact decimal; `null` while it does not

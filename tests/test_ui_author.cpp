@@ -338,6 +338,13 @@ TEST_CASE("the library and reading forms have builders", "[ui][author]") {
     CHECK(text(ui::includes(items, 3)) == R"({"fn":"includes","args":[{"ref":"items"},3]})");
     CHECK(text(ui::isEmpty(items)) == R"({"fn":"isEmpty","args":[{"ref":"items"}]})");
     CHECK(text(ui::round(ui::ref("x"), 2)) == R"({"fn":"round","args":[{"ref":"x"},2]})");
+    // The default mode is written as no mode, so documents written before it are unchanged.
+    CHECK(text(ui::round(ui::ref("x"), 2, ui::Rounding::HalfEven)) == R"({"fn":"round","args":[{"ref":"x"},2]})");
+    CHECK(text(ui::round(ui::ref("x"), 2, ui::Rounding::HalfUp)) ==
+          R"({"fn":"round","args":[{"ref":"x"},2,"halfUp"]})");
+    CHECK(text(ui::decimal(ui::ref("x"), 1)) == R"({"fn":"decimal","args":[{"ref":"x"},1]})");
+    CHECK(text(ui::decimal(ui::ref("x"), 1, ui::Rounding::HalfUp)) ==
+          R"({"fn":"decimal","args":[{"ref":"x"},1,"halfUp"]})");
     CHECK(text(ui::quantity(ui::ref("q"))) == R"({"fn":"quantity","args":[{"ref":"q"}]})");
     CHECK(text(ui::quantity(ui::ref("q"), "mg/L")) == R"({"fn":"quantity","args":[{"ref":"q"},"mg/L"]})");
     CHECK(text(ui::call("mean", {items})) == R"({"fn":"mean","args":[{"ref":"items"}]})");
