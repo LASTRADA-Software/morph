@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The LIMS gallery's render smoke: every screen opened in the Qt Quick renderer, offscreen, through the generic
-// client's source and shell, once at each width class. The testkit's smoke mounts each screen once, with no params;
-// this one mounts each at `compact` and at `expanded` through the screens' width param, and fails on any problem the
-// shell reports and on any Qt warning, as the testkit's does.
+// client's source and shell, once at each width class. The testkit's smoke mounts each screen once at the window's
+// default size; this one resizes the window before each mount, so the backend reports `compact` or `expanded` and the
+// shell hands that class to the screen, as a user resizing the window would. It fails when a mount saw another class,
+// on any problem the shell reports, and on any Qt warning, as the testkit's does.
 
+#include <QQmlEngine>
+#include <QQuickWindow>
+#include <QString>
 #include <QtGlobal>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <expected>
 #include <memory>
@@ -16,7 +21,6 @@
 #include <morph/client/source.hpp>
 #include <morph/qt_quick/frontend.hpp>
 #include <morph/ui/frontend.hpp>
-#include <morph/ui/value.hpp>
 #include <string>
 #include <string_view>
 #include <testkit/render_smoke.hpp>
@@ -27,7 +31,11 @@
 
 namespace {
 
-constexpr std::array<std::string_view, 2> kWidths{"compact", "expanded"};
+// Each width class and a window width in units inside it: below 80 units is compact, 160 and over expanded.
+constexpr std::array<std::pair<std::string_view, double>, 2> kWidths{{{"compact", 60.0}, {"expanded", 180.0}}};
+
+// How long a mount waits for the backend to report the class its window was resized to.
+constexpr int kResizeAttempts = 50;
 
 // QGuiApplication keeps a reference to the count, so both live as long as the process.
 int& argCount() {
@@ -41,7 +49,20 @@ char** argValues() {
     return values.data();
 }
 
-// What the smoke saw: each mount is `screen@width`.
+// The window the frontend shows and its engine, as `onEngine` hands them over.
+struct ShownWindow {
+    QQuickWindow* window = nullptr;
+    QQmlEngine* engine = nullptr;
+};
+
+// The window's width in pixels for @p units of the engine's `Theme`.
+int pixelsFor(QQmlEngine& engine, double units) {
+    auto const* const theme = engine.singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    double const unitWidth = theme != nullptr ? theme->property("unitWidth").toDouble() : 0.0;
+    return static_cast<int>(std::ceil(units * unitWidth)) + 1;
+}
+
+// What the smoke saw: each mount is `screen@class`, the class being the one the backend reported as it mounted.
 struct WidthReport {
     std::vector<std::string> expected;
     std::vector<std::string> mounted;
@@ -53,8 +74,8 @@ struct WidthReport {
 class WidthSmokeShell final : public morph::ui::MountedShell {
 public:
     WidthSmokeShell(morph::ui::AppContext& context, morph::ui::IViewBackend& backend, morph::client::Source& source,
-                    WidthReport& report)
-        : _context{&context}, _backend{&backend}, _source{&source}, _report{&report} {}
+                    ShownWindow const& shown, WidthReport& report)
+        : _context{&context}, _backend{&backend}, _source{&source}, _shown{&shown}, _report{&report} {}
 
     ~WidthSmokeShell() override = default;
     WidthSmokeShell(WidthSmokeShell const&) = delete;
@@ -70,8 +91,8 @@ public:
             return;
         }
         for (std::string const& screen : _source->screens()) {
-            for (std::string_view const width : kWidths) {
-                _mounts.emplace_back(screen, std::string{width});
+            for (auto const& [width, units] : kWidths) {
+                _mounts.push_back(Mount{.screen = screen, .width = std::string{width}, .units = units});
                 _report->expected.push_back(screen + "@" + std::string{width});
             }
         }
@@ -79,41 +100,63 @@ public:
     }
 
 private:
+    struct Mount {
+        std::string screen;
+        std::string width;
+        double units = 0.0;
+    };
+
     void next() {
         _shell.reset();
         if (_index == _mounts.size()) {
             _context->quit(0);
             return;
         }
-        auto const [screen, width] = _mounts.at(_index++);
-        std::string const label = screen + "@" + width;
+        Mount const& mount = _mounts.at(_index++);
+        _shown->window->resize(pixelsFor(*_shown->engine, mount.units), 900);
+        awaitWidth(mount, 0);
+    }
+
+    // The backend reports the new class once the resized window has laid out; the shell reads it as it mounts.
+    void awaitWidth(Mount const& mount, int attempt) {
+        if (_backend->widthClass() != mount.width && attempt < kResizeAttempts) {
+            later(std::chrono::milliseconds{10}, [this, &mount, attempt] { awaitWidth(mount, attempt + 1); });
+            return;
+        }
+        std::string const label = mount.screen + "@" + mount.width;
         _shell = morph::client::mountShell(
             *_context, *_backend, _opened, *_source,
             morph::client::ShellOptions{
-                .startScreen = screen,
-                .startParams = morph::ui::ParamMap{{std::string{lims_gallery::kWidthParam}, morph::ui::Value{width}}},
+                .startScreen = mount.screen,
                 .onProblem =
                     [this, label](std::string const& problem) { _report->failures.push_back(label + ": " + problem); },
                 .onMounted =
-                    [this, width](std::string const& mounted) { _report->mounted.push_back(mounted + "@" + width); }});
-        // Posted from the timer, not run in it: `next` replaces the timer, which must not be cancelled from inside
-        // its own callback.
-        _timer =
-            _context->scheduler().after(std::chrono::milliseconds{200}, [this, alive = std::weak_ptr<bool>{_alive}] {
-                _context->executor().post([this, alive] {
-                    if (auto const live = alive.lock(); live != nullptr) {
-                        next();
-                    }
-                });
+                    [this](std::string const& mounted) {
+                        _report->mounted.push_back(mounted + "@" + _backend->widthClass());
+                    }});
+        later(std::chrono::milliseconds{200}, [this] { next(); });
+    }
+
+    // Runs @p action after @p delay, posted from the timer rather than run in it: the action replaces the timer,
+    // which must not be cancelled from inside its own callback.
+    template <typename Action>
+    void later(std::chrono::milliseconds delay, Action action) {
+        _timer = _context->scheduler().after(delay, [this, action, alive = std::weak_ptr<bool>{_alive}] {
+            _context->executor().post([action, alive] {
+                if (auto const live = alive.lock(); live != nullptr) {
+                    action();
+                }
             });
+        });
     }
 
     morph::ui::AppContext* _context;
     morph::ui::IViewBackend* _backend;
     morph::client::Source* _source;
+    ShownWindow const* _shown;
     WidthReport* _report;
     std::expected<morph::ui::Bundle, morph::ui::ConnectError> _opened;
-    std::vector<std::pair<std::string, std::string>> _mounts;
+    std::vector<Mount> _mounts;
     std::size_t _index = 0;
     std::unique_ptr<morph::ui::MountedShell> _shell;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
@@ -126,12 +169,17 @@ WidthReport runWidthSmoke(morph::client::Source& source) {
     std::vector<std::string> warnings;
     detail::smokeWarnings() = &warnings;
     QtMessageHandler const previous = qInstallMessageHandler(&detail::recordQtMessage);
+    ShownWindow shown;
     morph::qt_quick::FrontendConfig config;
     config.title = "lims gallery render smoke";
-    config.mountShell = [&source, &report](morph::ui::AppContext& context, morph::ui::IViewBackend& backend,
-                                           std::expected<morph::ui::Bundle, morph::ui::ConnectError> opened)
+    config.onEngine = [&shown](QQmlEngine& engine, QQuickWindow& window) {
+        shown.window = &window;
+        shown.engine = &engine;
+    };
+    config.mountShell = [&source, &shown, &report](morph::ui::AppContext& context, morph::ui::IViewBackend& backend,
+                                                   std::expected<morph::ui::Bundle, morph::ui::ConnectError> opened)
         -> std::unique_ptr<morph::ui::MountedShell> {
-        auto shell = std::make_unique<WidthSmokeShell>(context, backend, source, report);
+        auto shell = std::make_unique<WidthSmokeShell>(context, backend, source, shown, report);
         shell->start(std::move(opened));
         return shell;
     };
@@ -147,7 +195,7 @@ WidthReport runWidthSmoke(morph::client::Source& source) {
 
 }  // namespace
 
-TEST_CASE("lims gallery render smoke: every screen at both widths, offscreen", "[lims-gallery][render-smoke]") {
+TEST_CASE("lims gallery render smoke: every screen at both width classes, offscreen", "[lims-gallery][render-smoke]") {
     morph::client::LocalSource source{lims_gallery::localApp(), morph::client::LocalSetup{}};
     WidthReport const report = runWidthSmoke(source);
     CHECK(report.exitCode == 0);

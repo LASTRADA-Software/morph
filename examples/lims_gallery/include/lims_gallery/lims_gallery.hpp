@@ -19,10 +19,6 @@ inline constexpr std::string_view kApplicationId = "lims-gallery";
 /// @brief The index screen's id: the list of designs.
 inline constexpr std::string_view kIndexScreen = "lims-gallery.index";
 
-/// @brief The optional param every screen reads its width class from before `{"env": "widthClass"}`: `compact`,
-///        `medium` or `expanded`. Tests and the render smoke set it to mount a screen at a given width.
-inline constexpr std::string_view kWidthParam = "width";
-
 /// @brief The application's bundle: every built design, the index, and the green theme.
 /// @return The bundle, or the refusal.
 [[nodiscard]] std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle();

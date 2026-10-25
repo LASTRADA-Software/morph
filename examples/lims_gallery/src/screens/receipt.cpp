@@ -337,13 +337,12 @@ ui::Node sessionTable(Receipt const& receipt) {
                                                    {.name = "outcome",
                                                     .label = "Outcome",
                                                     .width = ui::stretch(),
-                                                    .cell = layout::cellTag(ui::row("outcome"), outcomeTone)}}})
+                                                    .cell = layout::tag(ui::row("outcome"), outcomeTone)}}})
         .a11y("This session")
         .testId("session");
 }
 
-// Rejecting asks why, then records the outcome as receiving does. The dialog closes itself by name: `close: self`
-// asks the host to close the screen.
+// Rejecting asks why, then records the outcome as receiving does.
 ui::Node rejectDialog(Receipt const& receipt) {
     auto const reasons = ui::list(
         {ui::obj({{"key", "seal broken"}, {"label", "Seal broken"}}),
@@ -354,7 +353,7 @@ ui::Node rejectDialog(Receipt const& receipt) {
         ui::set(receipt.rejected, receipt.rejected + 1),
         ui::set(receipt.lastRejection,
                 ui::format("{0} rejected: {1}.", {receipt.sample.at("id"), receipt.rejectReason})),
-        ui::seq(recordOutcome(receipt, "Rejected")), ui::close(receipt.rejectDialog)};
+        ui::seq(recordOutcome(receipt, "Rejected")), ui::close(ui::self)};
     return ui::dialog(
         receipt.rejectDialog,
         {layout::muted("The sample is recorded as rejected in this session and is not received."),
@@ -365,9 +364,9 @@ ui::Node rejectDialog(Receipt const& receipt) {
              .required(true)
              .testId("reject-reason")},
         {.title = ui::format("Reject sample {0}", {receipt.sample.at("id")}),
-         .cancel = ui::close(receipt.rejectDialog),
+         .cancel = ui::close(ui::self),
          .actions = {
-             {.id = "cancel", .label = "Cancel", .onClick = ui::close(receipt.rejectDialog)},
+             {.id = "cancel", .label = "Cancel", .onClick = ui::close(ui::self)},
              {.id = "confirm", .label = "Reject sample", .emphasis = ButtonEmphasis::Danger, .onClick = reject}}});
 }
 

@@ -27,6 +27,12 @@ int monthBox(GalleryScreen& screen, std::string_view condition, std::string_view
     return checkbox(screen, std::string{condition} + " " + std::string{label});
 }
 
+// Whether the key-value with @p testId holds the pair @p pair, as `RecordingBackend` formats it (`Label:value`, a
+// comma in either escaped).
+bool holdsPair(GalleryScreen& screen, std::string_view testId, std::string_view pair) {
+    return screen.prop("KeyValue", testId, "items").value_or(std::string{}).contains(pair);
+}
+
 }  // namespace
 
 TEST_CASE("stability, expanded: step 2 of the wizard, the matrix and the summary", "[lims-gallery]") {
@@ -39,9 +45,9 @@ TEST_CASE("stability, expanded: step 2 of the wizard, the matrix and the summary
     CHECK(screen.shows("Table", "matrix"));
     CHECK(screen.backend().prop(monthBox(screen, "25 °C", "T0"), "checked") == "true");
     CHECK(screen.backend().prop(monthBox(screen, "25 °C", "1 m"), "checked") == "false");
-    CHECK(screen.text("summary-pulls") == "15");
-    CHECK(screen.text("summary-first") == "03-Dec-2026 (40 °C, 1 m)");
-    CHECK(screen.text("summary-last") == "03-Nov-2029");
+    CHECK(holdsPair(screen, "summary-pairs", "Pulls:15"));
+    CHECK(holdsPair(screen, "summary-pairs", "First pull:03-Dec-2026 (40 °C\\, 1 m)"));
+    CHECK(holdsPair(screen, "summary-pairs", "Last pull:03-Nov-2029"));
     CHECK(screen.text("summary-containers") == "180 needed, 150 in stock");
     CHECK(screen.prop("Text", "summary-containers", "role") == "Error");
     CHECK(screen.prop("TextInput", "per-pull", "errors") ==
@@ -57,7 +63,8 @@ TEST_CASE("stability, expanded: a timepoint changes the summary, and enough cont
     CHECK(screen.prop("Steps", "steps", "current") == "1");
     screen.backend().toggle(monthBox(screen, "40 °C", "1 m"));
     CHECK(screen.waitFor([&screen] {
-        return screen.text("summary-pulls") == "14" && screen.text("summary-first") == "03-Feb-2027 (25 °C, 3 m)";
+        return holdsPair(screen, "summary-pairs", "Pulls:14") &&
+               holdsPair(screen, "summary-pairs", "First pull:03-Feb-2027 (25 °C\\, 3 m)");
     }));
     screen.edit("per-pull", "10");
     CHECK(screen.waitFor([&screen] { return !screen.shows("Banner", "attention"); }));
@@ -112,7 +119,7 @@ TEST_CASE("stability: tests per timepoint, then review and sign", "[lims-gallery
         CHECK(screen.waitFor([&screen] { return screen.text("runs") == "6 tests, 77 test runs over 15 pulls."; }));
         screen.click("continue");
         REQUIRE(screen.waitFor([&screen] { return screen.find("Checkbox", "confirm").has_value(); }));
-        CHECK(screen.text("review-tests") == "6 tests, 77 runs");
+        CHECK(holdsPair(screen, "review-pairs", "Tests:6 tests\\, 77 runs"));
         CHECK(screen.text("review-containers") == "150 needed, 150 in stock");
         CHECK(screen.prop("Button", "continue", "enabled") == "false");
         screen.toggle("confirm");

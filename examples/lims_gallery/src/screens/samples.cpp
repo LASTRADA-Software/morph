@@ -331,15 +331,14 @@ ui::Node assignDialog(Samples const& list) {
                                        .onChoose = ui::set(list.worksheet, ui::event())}))
              .testId("worksheet")},
         {.title = ui::format("Assign {0} samples to a worksheet", {list.selectedCount}),
-         .cancel = ui::close(list.assignDialog),
+         .cancel = ui::close(ui::self),
          .actions = {
-             {.id = "cancel", .label = "Cancel", .onClick = ui::close(list.assignDialog)},
+             {.id = "cancel", .label = "Cancel", .onClick = ui::close(ui::self)},
              {.id = "assign",
               .label = "Assign",
               .emphasis = ButtonEmphasis::Primary,
               .onClick = {ui::notify(ui::format("{0} samples assigned to {1}", {list.selectedCount, list.worksheet})),
-                          ui::seq(updateSelected(list, "status", ui::AnyHandle{"Assigned"})),
-                          ui::close(list.assignDialog)}}}});
+                          ui::seq(updateSelected(list, "status", ui::AnyHandle{"Assigned"})), ui::close(ui::self)}}}});
 }
 
 ui::Node priorityDialog(Samples const& list) {
@@ -353,13 +352,13 @@ ui::Node priorityDialog(Samples const& list) {
                                                      .onChoose = ui::set(list.newPriority, ui::event())}))
                            .testId("new-priority")},
                       {.title = ui::format("Change the priority of {0} samples", {list.selectedCount}),
-                       .cancel = ui::close(list.priorityDialog),
-                       .actions = {{.id = "cancel", .label = "Cancel", .onClick = ui::close(list.priorityDialog)},
+                       .cancel = ui::close(ui::self),
+                       .actions = {{.id = "cancel", .label = "Cancel", .onClick = ui::close(ui::self)},
                                    {.id = "apply",
                                     .label = "Change priority",
                                     .emphasis = ButtonEmphasis::Primary,
                                     .onClick = {ui::seq(updateSelected(list, "priority", list.newPriority)),
-                                                ui::close(list.priorityDialog)}}}});
+                                                ui::close(ui::self)}}}});
 }
 
 // ── Filters ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -427,11 +426,11 @@ ui::Node samplesTable(Samples const& list) {
                             {.name = "priority",
                              .label = "Priority",
                              .width = ui::fixed(8),
-                             .cell = layout::cellTag(ui::row("priority"), priorityTone(ui::row("priority")))},
+                             .cell = layout::tag(ui::row("priority"), priorityTone(ui::row("priority")))},
                             {.name = "status",
                              .label = "Status",
                              .width = ui::fixed(12),
-                             .cell = layout::cellTag(ui::row("status"), ui::row("statusTone"))},
+                             .cell = layout::tag(ui::row("status"), ui::row("statusTone"))},
                             // The rows come sorted by due time; a table over rows does not sort.
                             {.name = "due", .label = "Due ▲", .width = ui::fixed(13), .cell = dueText()},
                             {.name = "spec", .label = "Specification", .width = ui::fixed(14), .cell = specCell()}},
@@ -492,15 +491,14 @@ ui::Node sampleCard(Samples const& list) {
 }
 
 ui::Node compactFilters(Samples const& list) {
-    return ui::drawer(list.filtersDrawer, {statusFilter(list), priorityFilter(list)},
-                      {.title = "Filters",
-                       .side = "end",
-                       .cancel = ui::close(list.filtersDrawer),
-                       .actions = {{.id = "clear", .label = "Clear filters", .onClick = clearFilters(list)},
-                                   {.id = "done",
-                                    .label = "Done",
-                                    .emphasis = ButtonEmphasis::Primary,
-                                    .onClick = ui::close(list.filtersDrawer)}}});
+    return ui::drawer(
+        list.filtersDrawer, {statusFilter(list), priorityFilter(list)},
+        {.title = "Filters",
+         .side = "end",
+         .cancel = ui::close(ui::self),
+         .actions = {
+             {.id = "clear", .label = "Clear filters", .onClick = clearFilters(list)},
+             {.id = "done", .label = "Done", .emphasis = ButtonEmphasis::Primary, .onClick = ui::close(ui::self)}}});
 }
 
 ui::Node compactBulkBar(Samples const& list) {
@@ -536,8 +534,8 @@ ui::Node compactLayout(Samples const& list) {
                   // A table over rows does not sort, and neither can a list; the order is the one the rows came in.
                   ui::button({.label = "Sort: due, earliest first"}).enabled(false).sizing(ui::stretch())},
                  {.gap = 1}),
-         ui::column({ui::forEach(list.shown, {.key = ui::row("id"), .gap = 1},
-                                 [&list](ui::DeclScope&) { return ui::Nodes{sampleCard(list)}; })})
+         ui::forEach(list.shown, {.key = ui::row("id"), .gap = 1},
+                     [&list](ui::DeclScope&) { return ui::Nodes{sampleCard(list)}; })
              .testId("cards"),
          ui::column(noSamples(list)).visible(ui::Handle<bool>{ui::isEmpty(list.shown)}),
          ui::button({.label = ui::format("Load more · 25 of {0}", {ui::AnyHandle{kTotal}})}).enabled(false),

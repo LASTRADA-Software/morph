@@ -420,8 +420,8 @@ ui::Node sourceRow(Plate const& plate) {
 }
 
 ui::Node sources(Plate const& plate) {
-    return ui::panel({ui::column({ui::forEach(plate.toPlace, {.key = ui::row("n"), .gap = 1},
-                                              [&plate](ui::DeclScope&) { return ui::Nodes{sourceRow(plate)}; })})
+    return ui::panel({ui::forEach(plate.toPlace, {.key = ui::row("n"), .gap = 1},
+                                  [&plate](ui::DeclScope&) { return ui::Nodes{sourceRow(plate)}; })
                           .testId("sources"),
                       ui::text({.text = "All samples are placed.", .role = "muted"})
                           .visible(ui::eq(plate.toPlaceCount, std::int64_t{0}))},
@@ -514,14 +514,14 @@ ui::Node assignDialog(Plate const& plate) {
                            .required(true)
                            .testId("assign-well")},
                       {.title = "Assign a sample to a well",
-                       .cancel = ui::close(plate.assignDialog),
-                       .actions = {{.id = "cancel", .label = "Cancel", .onClick = ui::close(plate.assignDialog)},
+                       .cancel = ui::close(ui::self),
+                       .actions = {{.id = "cancel", .label = "Cancel", .onClick = ui::close(ui::self)},
                                    {.id = "assign",
                                     .label = "Assign",
                                     .emphasis = ButtonEmphasis::Primary,
                                     .enabled = ready,
                                     .onClick = {ui::seq(place(plate, plate.assignWell, plate.assignSample)),
-                                                ui::close(plate.assignDialog)}}}});
+                                                ui::close(ui::self)}}}});
 }
 
 // ── Expanded ─────────────────────────────────────────────────────────────────────────────────────────────────────

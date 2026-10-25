@@ -333,12 +333,12 @@ ui::Node filtersDrawer(Audit const& audit) {
                       {ui::column(facetFields(audit), {.gap = 3}), searchField(audit).sizing(ui::stretch())},
                       {.title = "Filters",
                        .side = "start",
-                       .cancel = ui::close(audit.filters),
+                       .cancel = ui::close(ui::self),
                        .actions = {{.id = "clear", .label = "Clear all", .onClick = clearAll(audit)},
                                    {.id = "done",
                                     .label = ui::format("Show {0} entries", {ui::call("count", {audit.shown})}),
                                     .emphasis = ButtonEmphasis::Primary,
-                                    .onClick = ui::close(audit.filters)}}});
+                                    .onClick = ui::close(ui::self)}}});
 }
 
 ui::Node compactLayout(Audit const& audit) {
@@ -351,9 +351,8 @@ ui::Node compactLayout(Audit const& audit) {
                   .sizing(ui::stretch())},
              {.gap = 1}),
          layout::muted("57 entries · times in CEST (UTC+2)"),
-         // The interpreter drops a forEach's own common properties, so a column carries its test id.
-         ui::column({ui::forEach(audit.shown, {.key = ui::row("at"), .gap = 3},
-                                 [](ui::DeclScope&) { return ui::Nodes{entryCard()}; })})
+         ui::forEach(audit.shown, {.key = ui::row("at"), .gap = 3},
+                     [](ui::DeclScope&) { return ui::Nodes{entryCard()}; })
              .testId("entries"),
          ui::column(noEntries(audit)).visible(ui::isEmpty(audit.shown)),
          ui::button({.label = "Load 25 more", .onClick = ui::notify("The gallery holds the first page only")})

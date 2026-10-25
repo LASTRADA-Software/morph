@@ -425,9 +425,8 @@ Review declare(ui::Scope& screen) {
 }
 
 ui::Node tagRow(ui::AnyHandle const& tags, std::string const& testId) {
-    return ui::column(
-               {ui::forEach(tags, {.key = ui::row("text"), .axis = "horizontal", .gap = 1},
-                            [](ui::DeclScope&) { return ui::Nodes{layout::tag(ui::row("text"), ui::row("tone"))}; })})
+    return ui::forEach(tags, {.key = ui::row("text"), .axis = "horizontal", .gap = 1},
+                       [](ui::DeclScope&) { return ui::Nodes{layout::tag(ui::row("text"), ui::row("tone"))}; })
         .testId(testId);
 }
 
@@ -465,8 +464,8 @@ ui::Node queuePane(Review const& review) {
                                       .placeholder = "Worksheet, lot or analyst",
                                       .onChange = ui::set(review.search, ui::event())})
                            .testId("queue-search"),
-                       ui::column({ui::forEach(filteredQueue(review), {.key = ui::row("id"), .gap = 3},
-                                               [&review](ui::DeclScope&) { return ui::Nodes{queueEntry(review)}; })})
+                       ui::forEach(filteredQueue(review), {.key = ui::row("id"), .gap = 3},
+                                   [&review](ui::DeclScope&) { return ui::Nodes{queueEntry(review)}; })
                            .testId("queue")},
                       {.gap = 2});
 }
@@ -500,7 +499,7 @@ ui::Node resultTable(Review const& review) {
         {.name = "evaluation",
          .label = "Evaluation",
          .width = ui::fixed(28),
-         .cell = layout::cellTag(ui::row("evaluation"), ui::row("tone"))},
+         .cell = layout::tag(ui::row("evaluation"), ui::row("tone"))},
         {.name = "change",
          .label = "Change",
          .width = ui::stretch(),
@@ -514,38 +513,35 @@ ui::Node resultTable(Review const& review) {
 }
 
 ui::Node resultCards(Review const& review) {
-    return ui::column(
-               {ui::forEach(
-                   review.shownResults, {.key = ui::row("key"), .gap = 2},
-                   [](ui::DeclScope&) {
-                       return ui::Nodes{
-                           ui::panel(
-                               {ui::row(
-                                    {ui::text({.text = ui::row("sample"), .role = "section"}).sizing(ui::stretch()),
+    return ui::forEach(
+               review.shownResults, {.key = ui::row("key"), .gap = 2},
+               [](ui::DeclScope&) {
+                   return ui::Nodes{
+                       ui::panel(
+                           {ui::row({ui::text({.text = ui::row("sample"), .role = "section"}).sizing(ui::stretch()),
                                      ui::text({.text = ui::row("value"), .role = "section"})},
                                     {.gap = 1}),
-                                ui::text(
-                                    {.text = ui::format("{0} · spec {1} · previous lot {2}",
-                                                        {ui::row("analyte"), ui::row("spec"), ui::row("previous")})}),
-                                layout::cellTag(ui::row("evaluation"), ui::row("tone")),
-                                layout::muted(ui::format("Changed {0}", {ui::row("change")}))
-                                    .visible(ui::ne(ui::row("change"), "—"))},
-                               {.padding = 2})
-                               .surface("card")};
-                   })})
+                            ui::text({.text = ui::format("{0} · spec {1} · previous lot {2}",
+                                                         {ui::row("analyte"), ui::row("spec"), ui::row("previous")})}),
+                            layout::tag(ui::row("evaluation"), ui::row("tone")),
+                            layout::muted(ui::format("Changed {0}", {ui::row("change")}))
+                                .visible(ui::ne(ui::row("change"), "—"))},
+                           {.padding = 2})
+                           .surface("card")};
+               })
         .testId("results");
 }
 
 ui::Node commentCards(Review const& review) {
-    return ui::column({ui::forEach(ofSelected(review, review.comments), {.key = ui::row("key"), .gap = 2},
-                                   [](ui::DeclScope&) {
-                                       return ui::Nodes{
-                                           ui::panel({ui::text({.text = ui::format("Comment from {0} · {1}",
-                                                                                   {ui::row("who"), ui::row("when")}),
-                                                                .role = "section"}),
-                                                      ui::text({.text = ui::row("what")})},
-                                                     {.padding = 2})};
-                                   })})
+    return ui::forEach(
+               ofSelected(review, review.comments), {.key = ui::row("key"), .gap = 2},
+               [](ui::DeclScope&) {
+                   return ui::Nodes{ui::panel(
+                       {ui::text({.text = ui::format("Comment from {0} · {1}", {ui::row("who"), ui::row("when")}),
+                                  .role = "section"}),
+                        ui::text({.text = ui::row("what")})},
+                       {.padding = 2})};
+               })
         .testId("comments");
 }
 
@@ -691,10 +687,7 @@ ui::Node decisionDialog(Review const& review) {
 }
 
 // Approving opens design 01's signature as a dialog over this screen, where the host can show one.
-ui::Commands approve(Review const& review) {
-    return ui::navigate("lims-gallery.esignature",
-                        {.params = ui::obj({{std::string{kWidthParam}, review.width}}), .as = ui::OpenAs::Dialog});
-}
+ui::Commands approve() { return ui::navigate("lims-gallery.esignature", {.as = ui::OpenAs::Dialog}); }
 
 ui::Node returnButton(Review const& review, char const* label) {
     return ui::button({.label = label, .onClick = decide(review, "return")}).testId("return");
@@ -706,7 +699,7 @@ ui::Node rejectButton(Review const& review, char const* label) {
 }
 
 ui::Node approveButton(Review const& review, char const* label) {
-    return ui::button({.label = label, .emphasis = ButtonEmphasis::Primary, .onClick = approve(review)})
+    return ui::button({.label = label, .emphasis = ButtonEmphasis::Primary, .onClick = approve()})
         .enabled(!review.self)
         .tooltip(ui::cond(review.self, Text{kSelfReview}, Text{"Approving needs your signature"}))
         .testId("approve");

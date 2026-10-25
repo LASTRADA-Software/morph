@@ -4,7 +4,7 @@
 // its actions, and its record in tabs. Logging maintenance or a calibration adds to its recent events; taking it out
 // of service asks for a reason and changes its status; booking adds to its bookings.
 
-#include <morph/util/rational.hpp>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -23,10 +23,8 @@ using Text = ui::Handle<std::string>;
 // With no clock behind the gallery, everything logged now is stamped with the design's time.
 constexpr char const* kNow = "24-Oct-2026 09:41";
 constexpr char const* kUser = "A. Meyer";
-// The booking's elapsed share, 29 %. A literal at two places: `progress` reads a decimal at its own places, so the
-// quotient `29 / 100`, at the operands' zero places, would draw as 0.
-constexpr morph::math::Rational kElapsed{morph::math::Numerator{29}, morph::math::Denominator{100},
-                                         morph::math::DecimalPlaces{2}};
+// The booking's elapsed share, 29 %, as the exact quotient `progress` reads.
+ui::AnyHandle elapsed() { return ui::Handle<std::int64_t>{29} / 100; }
 
 ui::AnyHandle event(char const* when, char const* what) { return ui::obj({{"when", when}, {"what", what}}); }
 
@@ -131,7 +129,7 @@ ui::Node logDialog(Instrument const& instrument) {
         ui::set(instrument.events,
                 ui::concatLists({ui::list({ui::obj({{"when", kNow}, {"what", entry}})}), instrument.events})),
         ui::ifThen(isCalibration, ui::set(instrument.calibrated, true)), ui::set(instrument.logNote, std::string{}),
-        ui::close(instrument.logDialog)};
+        ui::close(ui::self)};
     return ui::dialog(instrument.logDialog,
                       {layout::captioned(ui::textInput({.value = instrument.logNote,
                                                         .label = "What was done",
@@ -140,8 +138,8 @@ ui::Node logDialog(Instrument const& instrument) {
                            .required(true)
                            .testId("log-note")},
                       {.title = ui::cond(isCalibration, Text{"Record calibration"}, Text{"Log maintenance"}),
-                       .cancel = ui::close(instrument.logDialog),
-                       .actions = {{.id = "cancelLog", .label = "Cancel", .onClick = ui::close(instrument.logDialog)},
+                       .cancel = ui::close(ui::self),
+                       .actions = {{.id = "cancelLog", .label = "Cancel", .onClick = ui::close(ui::self)},
                                    {.id = "log",
                                     .label = "Log",
                                     .emphasis = ButtonEmphasis::Primary,
@@ -155,23 +153,22 @@ ui::Node serviceDialog(Instrument const& instrument) {
         ui::set(instrument.inService, false),
         ui::set(instrument.events,
                 ui::concatLists({ui::list({ui::obj({{"when", kNow}, {"what", entry}})}), instrument.events})),
-        ui::close(instrument.serviceDialog)};
-    return ui::dialog(
-        instrument.serviceDialog,
-        {layout::muted("HPLC-02 cannot be booked or used for analysis until it is returned to service."),
-         layout::captioned(ui::textInput({.value = instrument.serviceReason,
-                                          .label = "Reason",
-                                          .onChange = ui::set(instrument.serviceReason, ui::event())}))
-             .required(true)
-             .testId("service-reason")},
-        {.title = "Take HPLC-02 out of service",
-         .cancel = ui::close(instrument.serviceDialog),
-         .actions = {{.id = "cancelService", .label = "Cancel", .onClick = ui::close(instrument.serviceDialog)},
-                     {.id = "takeOut",
-                      .label = "Take out of service",
-                      .emphasis = ButtonEmphasis::Danger,
-                      .enabled = !ui::isEmpty(instrument.serviceReason),
-                      .onClick = takeOut}}});
+        ui::close(ui::self)};
+    return ui::dialog(instrument.serviceDialog,
+                      {layout::muted("HPLC-02 cannot be booked or used for analysis until it is returned to service."),
+                       layout::captioned(ui::textInput({.value = instrument.serviceReason,
+                                                        .label = "Reason",
+                                                        .onChange = ui::set(instrument.serviceReason, ui::event())}))
+                           .required(true)
+                           .testId("service-reason")},
+                      {.title = "Take HPLC-02 out of service",
+                       .cancel = ui::close(ui::self),
+                       .actions = {{.id = "cancelService", .label = "Cancel", .onClick = ui::close(ui::self)},
+                                   {.id = "takeOut",
+                                    .label = "Take out of service",
+                                    .emphasis = ButtonEmphasis::Danger,
+                                    .enabled = !ui::isEmpty(instrument.serviceReason),
+                                    .onClick = takeOut}}});
 }
 
 ui::Node bookDialog(Instrument const& instrument) {
@@ -181,28 +178,27 @@ ui::Node bookDialog(Instrument const& instrument) {
                                  ui::list({ui::obj({{"worksheet", instrument.bookWorksheet},
                                                     {"by", kUser},
                                                     {"when", ui::call("dateTime", {instrument.bookStart})}})})})),
-        ui::set(instrument.bookWorksheet, std::string{}), ui::close(instrument.bookDialog)};
-    return ui::dialog(
-        instrument.bookDialog,
-        {layout::captioned(ui::textInput({.value = instrument.bookWorksheet,
-                                          .label = "Worksheet",
-                                          .placeholder = "WS-2026-0413",
-                                          .onChange = ui::set(instrument.bookWorksheet, ui::event())}))
-             .required(true)
-             .testId("book-worksheet"),
-         layout::captioned(ui::dateTimeInput({.value = instrument.bookStart,
-                                              .label = "From",
-                                              .mode = "date-time",
-                                              .onChange = ui::set(instrument.bookStart, ui::event())}))
-             .testId("book-start")},
-        {.title = "Book HPLC-02",
-         .cancel = ui::close(instrument.bookDialog),
-         .actions = {{.id = "cancelBook", .label = "Cancel", .onClick = ui::close(instrument.bookDialog)},
-                     {.id = "confirmBook",
-                      .label = "Book",
-                      .emphasis = ButtonEmphasis::Primary,
-                      .enabled = !ui::isEmpty(instrument.bookWorksheet),
-                      .onClick = book}}});
+        ui::set(instrument.bookWorksheet, std::string{}), ui::close(ui::self)};
+    return ui::dialog(instrument.bookDialog,
+                      {layout::captioned(ui::textInput({.value = instrument.bookWorksheet,
+                                                        .label = "Worksheet",
+                                                        .placeholder = "WS-2026-0413",
+                                                        .onChange = ui::set(instrument.bookWorksheet, ui::event())}))
+                           .required(true)
+                           .testId("book-worksheet"),
+                       layout::captioned(ui::dateTimeInput({.value = instrument.bookStart,
+                                                            .label = "From",
+                                                            .mode = "date-time",
+                                                            .onChange = ui::set(instrument.bookStart, ui::event())}))
+                           .testId("book-start")},
+                      {.title = "Book HPLC-02",
+                       .cancel = ui::close(ui::self),
+                       .actions = {{.id = "cancelBook", .label = "Cancel", .onClick = ui::close(ui::self)},
+                                   {.id = "confirmBook",
+                                    .label = "Book",
+                                    .emphasis = ButtonEmphasis::Primary,
+                                    .enabled = !ui::isEmpty(instrument.bookWorksheet),
+                                    .onClick = book}}});
 }
 
 // ── The record's sections ────────────────────────────────────────────────────────────────────────────────────────
@@ -243,7 +239,7 @@ ui::Node qualificationList() {
 ui::Node currentBooking() {
     return ui::column(
                {ui::text({.text = "Worksheet WS-2026-0412"}), layout::muted("M. Kaur · 24-Oct-2026 08:00–14:00"),
-                ui::progress(kElapsed, "Booking elapsed").testId("booking-elapsed")},
+                ui::progress(elapsed(), "Booking elapsed").testId("booking-elapsed")},
                {.gap = 1})
         .testId("current-booking");
 }

@@ -1,6 +1,6 @@
 # LIMS gallery gap log: what the ten designs need that ui/1 cannot express, and the defects found building them
 
-### G1: `{"env": "widthClass"}` is never set (defect) — filed as #1046
+### G1: `{"env": "widthClass"}` is never set (defect) — filed as #1046 — fixed in batch A
 - **Design(s):** 01, 02, 03, 04, 05, 06, 07, 08, 09
 - **Needs:** every design switches between an expanded (≥ 1200 px) and a compact (< 600 px) layout on the window's
   width class.
@@ -49,7 +49,7 @@
   share the field builders but not the overlay's `ready`/`submitted` semantics.
 - **Weight:** Medium
 
-### G5: Touch-sized controls on compact
+### G5: Touch-sized controls on compact — fixed in batch A
 - **Design(s):** 01, 02, 03, 04, 05, 06, 07, 08, 09
 - **Needs:** 44 px controls and touch targets in the compact layout (30 px when expanded).
 - **ui/1 today:** one global `control.height` token (`docs/spec/ui/theme.md:128`); a runtime density choice is listed
@@ -67,7 +67,7 @@
 - **Workaround used:** a muted `text` as the dialog's first child.
 - **Weight:** Low
 
-### G7: The Qt Quick dialog ignores the theme's surface (defect) — filed as #1047
+### G7: The Qt Quick dialog ignores the theme's surface (defect) — filed as #1047 — fixed in batch A
 - **Design(s):** 01, 02, 03
 - **Needs:** the dialog drawn as the theme's card: `color.surface` (#FFFFFF here), the card radius, padded content.
 - **ui/1 today:** `MorphDialog.qml`'s `Popup` sets no `background` (`grep -n background
@@ -120,7 +120,7 @@
 - **Workaround used:** an ordinary input with the barcode icon, `autofocus`, and a `focus` command after each scan.
 - **Weight:** Low
 
-### G12: `close: self` in an inline dialog asks the host to close the screen, not the dialog (defect) — filed as #1048
+### G12: `close: self` in an inline dialog asks the host to close the screen, not the dialog (defect) — filed as #1048 — fixed in batch A
 - **Design(s):** 02
 - **Needs:** a dialog's footer button that closes the dialog it is in.
 - **ui/1 today:** the author API documents `self` as "The dialog or drawer a command list runs in" and
@@ -153,7 +153,7 @@
 - **Workaround used:** `danger` as it draws.
 - **Weight:** Low
 
-### G15: A status tag in a table cell is stretched across the column
+### G15: A status tag in a table cell is stretched across the column — fixed in batch A
 - **Design(s):** 02
 - **Needs:** an outcome tag ("Received", "Rejected") at its label's width in a table column.
 - **ui/1 today:** a table sizes its cells itself (`docs/spec/ui/backend_contract.md:156-162` exempts its cells from
@@ -194,7 +194,7 @@
   (expanded) or after the two large buttons (compact); no separator; the hint is part of the entry's label.
 - **Weight:** Medium
 
-### G19: The screen head overflows the shell's top bar (defect) — filed as #1049
+### G19: The screen head overflows the shell's top bar (defect) — filed as #1049 — fixed in batch A
 - **Design(s):** 03
 - **Needs:** a record's head: title, breadcrumb, three status tags and two actions, as the design draws it in two
   lines at 1000 px.
@@ -216,7 +216,7 @@
 - **Workaround used:** all five tabs on both layouts; Book opens a booking dialog rather than the Bookings tab.
 - **Weight:** Low
 
-### G21: The Qt Quick progress bar ignores the theme's accent (defect) — filed as #1050
+### G21: The Qt Quick progress bar ignores the theme's accent (defect) — filed as #1050 — fixed in batch A
 - **Design(s):** 03
 - **Needs:** the booking's elapsed bar in the accent green, thin, on a muted track.
 - **ui/1 today:** `MorphProgress.qml` sets no colour (`grep -n color src/qt_quick/qml/MorphProgress.qml` finds
@@ -225,7 +225,7 @@
 - **Workaround used:** none.
 - **Weight:** Low
 
-### G22: `progress` rounds an exact quotient to its places (defect) — filed as #1051
+### G22: `progress` rounds an exact quotient to its places (defect) — filed as #1051 — fixed in batch A
 - **Design(s):** 03
 - **Needs:** a progress value computed as a fraction, such as `29 / 100` for a booking 29 % elapsed.
 - **ui/1 today:** `div` keeps the exact quotient, "a decimal at the operands' places, which display rounds"
@@ -259,7 +259,7 @@
 - **Workaround used:** a column per pair, a muted `text` over a `text`; no dividers.
 - **Weight:** Low
 
-### G25: `forEach` drops its own common properties (defect) — filed as #1052
+### G25: `forEach` drops its own common properties (defect) — filed as #1052 — fixed in batch A
 - **Design(s):** 04, 05, 06, 07, 09
 - **Needs:** a `forEach` with a `testId`, `visible`, `sizing` or `a11y`, as `document.md` says every node takes
   (`docs/spec/ui/document.md:150-157`).
@@ -362,7 +362,7 @@
   only.
 - **Weight:** Low
 
-### G34: Qt Quick `keyValue` reports a polish loop for some caption and value widths (defect) — filed as #1054
+### G34: Qt Quick `keyValue` reports a polish loop for some caption and value widths (defect) — filed as #1054 — fixed in batch A
 - **Design(s):** 06
 - **Needs:** the stability study's summary as a `keyValue` (Product, Lot, Protocol, Pulls, First pull, Last pull,
   Containers), whose values follow the conditions.
@@ -448,7 +448,7 @@
   value takes the `error` role while stock is short: red, not bold.
 - **Weight:** Low
 
-### G40: Table cells sit at the top of a taller row
+### G40: Table cells sit at the top of a taller row — fixed in batch A
 - **Design(s):** 06, 08
 - **Needs:** a table row's text centred against the controls beside it: the condition's name level with its row of
   check boxes, the test's name level with its "When" select.
@@ -475,7 +475,7 @@
   wells are push buttons on their surfaces (G32). No circles.
 - **Weight:** Medium
 
-### G42: Enter on a focused button may never reach the button's own key binding on Qt Quick (defect, inferred)
+### G42: Enter on a focused button may never reach the button's own key binding on Qt Quick (defect, inferred) — fixed in batch A
 - **Design(s):** 07
 - **Needs:** Enter on the focused well opens Assign for it, while a click selects the well.
 - **ui/1 today:** a node's `keys` are chords handled while focus is inside the node (`docs/spec/ui/view_tree.md:148`).
@@ -543,7 +543,7 @@
   the cell's end (seen in the grab); the header label and the result field's text stay at the start.
 - **Weight:** Low
 
-### G48: A read-only field looks like an editable one on Qt Quick
+### G48: A read-only field looks like an editable one on Qt Quick — fixed in batch A
 - **Design(s):** 08
 - **Needs:** the calculated mean and total drawn as read-only fields, on a grey fill, so they do not invite typing.
 - **ui/1 today:** `readonly` is a condition on every input (`docs/spec/ui/document.md:159-160`) and reaches the Qt Quick
@@ -554,7 +554,7 @@
 - **Workaround used:** the analyte cell adds a muted "calculated".
 - **Weight:** Low
 
-### G49: A `splitter`'s `sizes` is accepted and ignored (defect) — filed as #1055
+### G49: A `splitter`'s `sizes` is accepted and ignored (defect) — filed as #1055 — fixed in batch A
 - **Design(s):** 09
 - **Needs:** the review queue as a 280 px pane beside the worksheet, resizable, with the queue's width as the
   starting size.
@@ -619,7 +619,7 @@
   design's 24.
 - **Weight:** Low
 
-### G54: A table wider than its pane overlaps its own cells on Qt Quick
+### G54: A table wider than its pane overlaps its own cells on Qt Quick — fixed in batch A
 - **Design(s):** 09
 - **Needs:** the results table fitting its pane, wrapping or scrolling when its columns do not fit.
 - **ui/1 today:** seen in a grab (1280 × 900, offscreen) of a first version of design 09 whose fixed columns added up

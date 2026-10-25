@@ -435,11 +435,9 @@ Console declare(ui::Scope& screen) {
 
 // ── The shell: navigation ────────────────────────────────────────────────────────────────────────────────────────
 
-ui::Command open(Console const& console, char const* screen) {
-    return ui::navigate(screen, {.params = ui::obj({{std::string{kWidthParam}, console.width}})});
-}
+ui::Command open(char const* screen) { return ui::navigate(screen); }
 
-ui::Node sidebar(Console const& console) {
+ui::Node sidebar() {
     std::vector<ui::Node> items{ui::text({.text = "LabTrack", .role = "heading"})};
     for (NavGroup const& group : navigation()) {
         items.push_back(layout::section(group.heading));
@@ -447,7 +445,7 @@ ui::Node sidebar(Console const& console) {
             bool const here = std::string_view{entry.screen} == "lims-gallery.console";
             bool const built = !std::string_view{entry.screen}.empty();
             ui::Node item = ui::button({.label = entry.label,
-                                        .onClick = built && !here ? open(console, entry.screen) : ui::Commands{},
+                                        .onClick = built && !here ? open(entry.screen) : ui::Commands{},
                                         .style = morph::ui::ButtonStyle::Item,
                                         .selected = here});
             if (!built) {
@@ -460,7 +458,7 @@ ui::Node sidebar(Console const& console) {
 }
 
 // Compact: the same entries in a menu behind one button.
-ui::Node navigationMenu(Console const& console) {
+ui::Node navigationMenu() {
     std::vector<ui::MenuItem> groups;
     for (NavGroup const& group : navigation()) {
         std::vector<ui::MenuItem> entries;
@@ -470,7 +468,7 @@ ui::Node navigationMenu(Console const& console) {
             entries.push_back(ui::MenuItem{.label = entry.label,
                                            .checked = here ? ui::AnyHandle{true} : ui::AnyHandle{},
                                            .enabled = built ? ui::AnyHandle{} : ui::AnyHandle{false},
-                                           .onClick = built && !here ? open(console, entry.screen) : ui::Commands{}});
+                                           .onClick = built && !here ? open(entry.screen) : ui::Commands{}});
         }
         groups.push_back(ui::MenuItem{.label = group.heading, .items = entries});
     }
@@ -510,14 +508,13 @@ ui::Node toolbar(Console const& console) {
 
 // ── The dashboard ────────────────────────────────────────────────────────────────────────────────────────────────
 
-ui::Node alert(Console const& console, bool compact) {
-    return ui::banner(
-               {.tone = "err",
-                .text = compact ? "System suitability failed on HPLC-02 at 09:40: tailing 2.3, limit 2.0. 18 "
-                                  "results on hold."
-                                : "System suitability failed on HPLC-02 at 09:40 CEST: tailing 2.3, limit 2.0. "
-                                  "18 results from this run are on hold.",
-                .action = ui::ActionPart{.label = "Open run", .onClick = open(console, "lims-gallery.instrument")}})
+ui::Node alert(bool compact) {
+    return ui::banner({.tone = "err",
+                       .text = compact ? "System suitability failed on HPLC-02 at 09:40: tailing 2.3, limit 2.0. 18 "
+                                         "results on hold."
+                                       : "System suitability failed on HPLC-02 at 09:40 CEST: tailing 2.3, limit 2.0. "
+                                         "18 results from this run are on hold.",
+                       .action = ui::ActionPart{.label = "Open run", .onClick = open("lims-gallery.instrument")}})
         .a11y("System suitability failed on HPLC-02", "alert")
         .testId("alert");
 }
@@ -600,12 +597,12 @@ ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::s
         {.name = "priority",
          .label = "Priority",
          .width = ui::fixed(9),
-         .cell = layout::cellTag(ui::row("priority"), ui::row("priorityTone"))},
+         .cell = layout::tag(ui::row("priority"), ui::row("priorityTone"))},
         {.name = "due", .label = "Due", .width = ui::fixed(13), .cell = dueCell()},
         {.name = "status",
          .label = "Status",
          .width = ui::fixed(12),
-         .cell = layout::cellTag(ui::row("status"), ui::row("statusTone"))}};
+         .cell = layout::tag(ui::row("status"), ui::row("statusTone"))}};
     return ui::table(rows, {.key = ui::row("id"),
                             .columns = columns,
                             // The sample in the pane: a table over rows has no bound selection.
@@ -696,8 +693,8 @@ ui::Node paneResults(Console const& console) {
         return ui::eq(analyte.at("sample"), console.selected);
     });
     return ui::column(
-        {ui::column({ui::forEach(mine, {.key = ui::row("key"), .gap = 1},
-                                 [&console](ui::DeclScope&) { return ui::Nodes{resultLine(console)}; })})
+        {ui::forEach(mine, {.key = ui::row("key"), .gap = 1},
+                     [&console](ui::DeclScope&) { return ui::Nodes{resultLine(console)}; })
              .testId("pane-results"),
          layout::muted("No results to enter yet.").visible(ui::eq(ui::call("count", {mine}), std::int64_t{0}))},
         {.gap = 1});
@@ -707,16 +704,15 @@ ui::Node custodyLines(Console const& console) {
     auto const mine = ui::filter(console.custody, "entry", [&console](ui::AnyHandle const& entry) {
         return ui::eq(entry.at("sample"), console.selected);
     });
-    return ui::column(
-        {layout::section("Chain of custody"),
-         ui::column({ui::forEach(mine, {.key = ui::row("key"), .gap = 0},
-                                 [](ui::DeclScope&) {
-                                     return ui::Nodes{ui::text(
-                                         {.text = ui::format("● {0} · {1}", {ui::row("step"), ui::row("detail")}),
-                                          .role = ui::cond(Flag{ui::row("alarm")}, Text{"error"}, Text{"normal"})})};
-                                 })})
-             .testId("custody")},
-        {.gap = 1});
+    return ui::column({layout::section("Chain of custody"),
+                       ui::forEach(mine, {.key = ui::row("key"), .gap = 0},
+                                   [](ui::DeclScope&) {
+                                       return ui::Nodes{ui::text(
+                                           {.text = ui::format("● {0} · {1}", {ui::row("step"), ui::row("detail")}),
+                                            .role = ui::cond(Flag{ui::row("alarm")}, Text{"error"}, Text{"normal"})})};
+                                   })
+                           .testId("custody")},
+                      {.gap = 1});
 }
 
 ui::Node rerunDialog(Console const& console) {
@@ -768,10 +764,8 @@ ui::Node samplePane(Console const& console) {
                 ui::text({.text = ui::format("{0} · lot {1} · {2}", {field(console, "product"), field(console, "lot"),
                                                                      field(console, "instrument")})})
                     .testId("pane-line"),
-                ui::column({ui::forEach(tags, {.key = ui::row("text"), .axis = "horizontal", .gap = 1},
-                                        [](ui::DeclScope&) {
-                                            return ui::Nodes{layout::tag(ui::row("text"), ui::row("tone"))};
-                                        })})
+                ui::forEach(tags, {.key = ui::row("text"), .axis = "horizontal", .gap = 1},
+                            [](ui::DeclScope&) { return ui::Nodes{layout::tag(ui::row("text"), ui::row("tone"))}; })
                     .testId("pane-tags"),
                 paneResults(console), custodyLines(console),
                 ui::text({.text = kHoldReason, .role = "error"}).visible(console.held).testId("hold-reason"),
@@ -801,7 +795,7 @@ ui::Node samplePane(Console const& console) {
 ui::Node expandedLayout(Console const& console) {
     // The design's 360 px sample pane, in the frontend's character widths, beside the worklist.
     auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{70, 45}};
-    auto const dashboard = ui::column({toolbar(console), alert(console, false), kpis(false),
+    auto const dashboard = ui::column({toolbar(console), alert(false), kpis(false),
                                        ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
                                                 ui::panel({instruments()}, {.padding = 2}).sizing(ui::stretch(10))},
                                                {.gap = 1, .align = Align::Start}),
@@ -811,7 +805,7 @@ ui::Node expandedLayout(Console const& console) {
                                            .a11y("Worklist and sample")
                                            .testId("work-split")},
                                       {.gap = 2});
-    return ui::row({sidebar(console), dashboard.sizing(ui::stretch())}, {.gap = 2, .align = Align::Start});
+    return ui::row({sidebar(), dashboard.sizing(ui::stretch())}, {.gap = 2, .align = Align::Start});
 }
 
 ui::Node compactCard() {
@@ -826,29 +820,28 @@ ui::Node compactCard() {
 
 // Tapping a sample opens it as its own page: the compact result entry of design 08.
 ui::Node compactWorklist(Console const& console, ui::AnyHandle const& rows, std::string const& testId) {
-    return ui::column(
-               {ui::forEach(rows, {.key = ui::row("id"), .gap = 2},
-                            [&console](ui::DeclScope&) {
-                                return ui::Nodes{ui::panel(
-                                    {compactCard(), ui::button({.label = ui::format("Open {0}", {ui::row("id")}),
-                                                                .onClick = {ui::set(console.current, ui::row("index")),
-                                                                            open(console, "lims-gallery.results")},
-                                                                .style = morph::ui::ButtonStyle::Item,
-                                                                .selected = ui::eq(ui::row("index"), console.current)})
-                                                        .testId("open-sample")},
-                                    {.padding = 2})};
-                            })})
+    return ui::forEach(rows, {.key = ui::row("id"), .gap = 2},
+                       [&console](ui::DeclScope&) {
+                           return ui::Nodes{ui::panel(
+                               {compactCard(), ui::button({.label = ui::format("Open {0}", {ui::row("id")}),
+                                                           .onClick = {ui::set(console.current, ui::row("index")),
+                                                                       open("lims-gallery.results")},
+                                                           .style = morph::ui::ButtonStyle::Item,
+                                                           .selected = ui::eq(ui::row("index"), console.current)})
+                                                   .testId("open-sample")},
+                               {.padding = 2})};
+                       })
         .testId(testId);
 }
 
 ui::Node compactLayout(Console const& console) {
     return ui::column(
-        {ui::row({navigationMenu(console), ui::spacer().sizing(ui::stretch()),
-                  ui::button({.label = "Scan", .icon = "scan", .onClick = open(console, "lims-gallery.receipt")})
+        {ui::row({navigationMenu(), ui::spacer().sizing(ui::stretch()),
+                  ui::button({.label = "Scan", .icon = "scan", .onClick = open("lims-gallery.receipt")})
                       .a11y("Scan a sample")
                       .testId("scan")},
                  {.gap = 1, .align = Align::Center}),
-         alert(console, true), kpis(true),
+         alert(true), kpis(true),
          ui::collapsible({controlChart()}, {.title = "Assay control, HPLC-02 · latest run +3.4 SD", .open = false})
              .testId("chart-section"),
          ui::collapsible({instruments()}, {.title = "Instruments · 1 on hold, 1 calibration due", .open = false})

@@ -5,10 +5,10 @@ one design document, one review, then the implementation, all on this branch. Th
 workarounds for a batch once it has landed. The batches go in this order: A makes the gallery's compact layouts
 real and fixes what is broken, and the batches after it add vocabulary.
 
-## A: Defects and responsive layout
+## A: Defects and responsive layout — landed
 
 Fix what the gallery found broken, and make the width class real. Most items are in the interpreter and the Qt
-Quick frontend.
+Quick frontend. Landed on this branch, and the screens no longer carry its workarounds.
 
 | Gap | What |
 |---|---|

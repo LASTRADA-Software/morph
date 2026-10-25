@@ -4,8 +4,6 @@
 #include <morph/ui/alignment.hpp>
 #include <morph/ui/author.hpp>
 #include <morph/ui/button_emphasis.hpp>
-#include <optional>
-#include <string>
 #include <utility>
 
 #include "lims_gallery/lims_gallery.hpp"
@@ -21,16 +19,15 @@ using morph::ui::Align;
 using morph::ui::ButtonEmphasis;
 using morph::ui::Justify;
 
-/// @brief Declares the screen's width param and answers the width class it lays out for: the param when given, the
-///        client's `{"env": "widthClass"}` otherwise, and `expanded` when neither is set.
+/// @brief The width class the screen lays out for: the client's `{"env": "widthClass"}`, and `expanded` where no
+///        client sets it.
 /// @param screen The screen.
 /// @return The width class, a `let` named `widthClass`.
 [[nodiscard]] inline ui::AnyHandle widthClass(ui::Scope& screen) {
-    auto const given = screen.param<std::optional<std::string>>(std::string{kWidthParam});
-    return screen.let("widthClass", ui::coalesce({given, ui::env("widthClass"), ui::AnyHandle{"expanded"}}));
+    return screen.let("widthClass", ui::coalesce({ui::env("widthClass"), ui::AnyHandle{"expanded"}}));
 }
 
-/// @brief The compact layout below 600 logical pixels, the expanded one otherwise: `medium` takes the expanded
+/// @brief The compact layout below 80 units, the expanded one otherwise: `medium` takes the expanded
 ///        layout, as the designs draw only the two.
 /// @param width    The width class.
 /// @param compact  The compact layout.
@@ -63,15 +60,6 @@ using morph::ui::Justify;
 /// @return The node.
 [[nodiscard]] inline ui::Node tag(ui::AnyHandle const& text, ui::AnyHandle const& tone) {
     return ui::badge(text, tone);
-}
-
-/// @brief A status tag as a table cell. A table sizes its cells itself and stretches a bare badge across the
-///        column; inside a row the tag keeps its label's width, and its own height in a taller row.
-/// @param text The text.
-/// @param tone `ok`, `warn`, `err`, `info` or `neutral`.
-/// @return The node.
-[[nodiscard]] inline ui::Node cellTag(ui::AnyHandle const& text, ui::AnyHandle const& tone) {
-    return ui::row({tag(text, tone)}, {.align = Align::Center});
 }
 
 }  // namespace lims_gallery::layout

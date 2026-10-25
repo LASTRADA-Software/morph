@@ -632,9 +632,9 @@ ui::Node compactLayout(Worksheet const& sheet) {
                       .sizing(ui::stretch())
                       .testId("next")},
                  {.gap = 1}),
-         layout::cellTag("System suitability passed", "ok").testId("suitability"),
-         ui::column({ui::forEach(shown, {.key = ui::row("id"), .gap = 3},
-                                 [&sheet](ui::DeclScope&) { return ui::Nodes{resultField(sheet)}; })})
+         layout::tag("System suitability passed", "ok").testId("suitability"),
+         ui::forEach(shown, {.key = ui::row("id"), .gap = 3},
+                     [&sheet](ui::DeclScope&) { return ui::Nodes{resultField(sheet)}; })
              .testId("fields"),
          ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).testId("oos"),
          ui::row({saveButton().sizing(ui::stretch()), submitButton(sheet).sizing(ui::stretch())}, {.gap = 1})},

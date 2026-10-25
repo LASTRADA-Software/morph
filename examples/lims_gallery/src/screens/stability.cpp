@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "layout.hpp"
@@ -338,10 +339,20 @@ ui::Node attention(Study const& study) {
         .testId("attention");
 }
 
-// A caption beside its value. `keyValue` draws these pairs, but on Qt Quick it reports a layout polish loop for some
-// caption and value widths, which these values reach; and a row lets one value take a tone.
-ui::Node pair(char const* label, ui::AnyHandle const& value, std::string const& testId,
-              ui::AnyHandle const& role = {}) {
+// Captions beside their values.
+ui::Node pairs(std::vector<std::pair<char const*, ui::AnyHandle>> const& items, std::string const& testId) {
+    std::vector<ui::AnyHandle> listed;
+    listed.reserve(items.size());
+    for (auto const& [label, value] : items) {
+        listed.push_back(ui::obj({{"label", label}, {"value", value}}));
+    }
+    return ui::keyValue(ui::list(listed)).testId(testId);
+}
+
+// A caption beside a value that takes a tone, which a `keyValue` pair cannot: the containers, red while stock is
+// short.
+ui::Node tonedPair(char const* label, ui::AnyHandle const& value, std::string const& testId,
+                   ui::AnyHandle const& role) {
     return ui::row({layout::muted(label).sizing(ui::fixed(13)),
                     ui::text({.text = value, .role = role}).sizing(ui::stretch()).testId(testId)},
                    {.gap = 1, .align = Align::Start});
@@ -352,13 +363,15 @@ ui::AnyHandle containersText(Study const& study) {
 }
 
 ui::Node summary(Study const& study) {
-    return ui::column({pair("Product", "Paracetamol 500 mg", "summary-product"), pair("Lot", study.lot, "summary-lot"),
-                       pair("Protocol", "STP-0114 v2", "summary-protocol"),
-                       pair("Pulls", ui::format("{0}", {study.pulls}), "summary-pulls"),
-                       pair("First pull", study.firstPull, "summary-first"),
-                       pair("Last pull", study.lastPull, "summary-last"),
-                       pair("Containers", containersText(study), "summary-containers",
-                            ui::cond(study.enough, Text{"normal"}, Text{"error"}))},
+    return ui::column({pairs({{"Product", "Paracetamol 500 mg"},
+                              {"Lot", study.lot},
+                              {"Protocol", "STP-0114 v2"},
+                              {"Pulls", ui::format("{0}", {study.pulls})},
+                              {"First pull", study.firstPull},
+                              {"Last pull", study.lastPull}},
+                             "summary-pairs"),
+                       tonedPair("Containers", containersText(study), "summary-containers",
+                                 ui::cond(study.enough, Text{"normal"}, Text{"error"}))},
                       {.gap = 1})
         .testId("summary");
 }
@@ -406,9 +419,10 @@ ui::Node reasonField(Study const& study) {
 }
 
 ui::Node productStep(Study const& study, bool compact) {
-    return ui::column({ui::panel({pair("Product", "Paracetamol 500 mg tablets", "product"),
-                                  pair("Protocol", "STP-0114 v2, ICH Q1A(R2) zones I and II", "protocol"),
-                                  pair("Market", "EU, US", "market")},
+    return ui::column({ui::panel({pairs({{"Product", "Paracetamol 500 mg tablets"},
+                                         {"Protocol", "STP-0114 v2, ICH Q1A(R2) zones I and II"},
+                                         {"Market", "EU, US"}},
+                                        "product-pairs")},
                                  {.title = "Product", .padding = 2}),
                        ui::panel({ui::grid({lotField(study), containerField(study), reasonField(study)},
                                            {.gap = 2, .columns = compact ? 1 : 3})},
@@ -480,15 +494,15 @@ ui::Node testTable(Study const& study) {
 }
 
 ui::Node testCards(Study const& study) {
-    return ui::column({ui::forEach(study.tests, {.key = ui::row("id"), .gap = 1},
-                                   [&study](ui::DeclScope&) {
-                                       return ui::Nodes{
-                                           ui::panel({includeBox(study, true), layout::muted(ui::row("method")),
-                                                      ui::row({whenSelect(study).sizing(ui::stretch()),
-                                                               layout::muted(ui::format("{0} runs", {runsOf(study)}))},
-                                                              {.gap = 1, .align = Align::Center})},
-                                                     {.padding = 1})};
-                                   })})
+    return ui::forEach(
+               study.tests, {.key = ui::row("id"), .gap = 1},
+               [&study](ui::DeclScope&) {
+                   return ui::Nodes{ui::panel({includeBox(study, true), layout::muted(ui::row("method")),
+                                               ui::row({whenSelect(study).sizing(ui::stretch()),
+                                                        layout::muted(ui::format("{0} runs", {runsOf(study)}))},
+                                                       {.gap = 1, .align = Align::Center})},
+                                              {.padding = 1})};
+               })
         .testId("tests");
 }
 
@@ -510,18 +524,18 @@ ui::Node reviewStep(Study const& study) {
                      return Count{ui::call("count", {item.at("points")})} > 0;
                  })});
     return ui::column(
-               {ui::panel(
-                    {pair("Study", "STB-2026-014, draft", "review-study"),
-                     pair("Product", "Paracetamol 500 mg tablets", "review-product"),
-                     pair("Lot", study.lot, "review-lot"), pair("Start (T0)", study.start, "review-start"),
-                     pair("Conditions", ui::format("{0} with pulls", {conditions}), "review-conditions"),
-                     pair("Pulls",
-                          ui::format("{0}, first {1}, last {2}", {study.pulls, study.firstDate, study.lastPull}),
-                          "review-pulls"),
-                     pair("Tests", ui::format("{0} tests, {1} runs", {study.testCount, study.runs}), "review-tests"),
-                     pair("Containers", containersText(study), "review-containers",
-                          ui::cond(study.enough, Text{"normal"}, Text{"error"}))},
-                    {.title = "Review", .padding = 2}),
+               {ui::panel({pairs({{"Study", "STB-2026-014, draft"},
+                                  {"Product", "Paracetamol 500 mg tablets"},
+                                  {"Lot", study.lot},
+                                  {"Start (T0)", study.start},
+                                  {"Conditions", ui::format("{0} with pulls", {conditions})},
+                                  {"Pulls", ui::format("{0}, first {1}, last {2}",
+                                                       {study.pulls, study.firstDate, study.lastPull})},
+                                  {"Tests", ui::format("{0} tests, {1} runs", {study.testCount, study.runs})}},
+                                 "review-pairs"),
+                           tonedPair("Containers", containersText(study), "review-containers",
+                                     ui::cond(study.enough, Text{"normal"}, Text{"error"}))},
+                          {.title = "Review", .padding = 2}),
                 ui::checkbox(
                     {.label = "I have checked the conditions, the pulls and the tests against protocol STP-0114 v2.",
                      .checked = study.confirmed,
@@ -635,8 +649,8 @@ ui::Node compactConditions(Study const& study) {
     return ui::column(
         {attention(study), startField(study),
          ui::grid({windowField(study), perPullField(study, true)}, {.gap = 2, .columns = 2}),
-         ui::column({ui::forEach(study.conditions, {.key = ui::row("id"), .gap = 1},
-                                 [&study](ui::DeclScope&) { return ui::Nodes{conditionSection(study)}; })})
+         ui::forEach(study.conditions, {.key = ui::row("id"), .gap = 1},
+                     [&study](ui::DeclScope&) { return ui::Nodes{conditionSection(study)}; })
              .testId("conditions"),
          addCondition(study),
          ui::collapsible({summary(study)}, {.title = ui::format("Summary · first pull {0}", {study.firstDate})})

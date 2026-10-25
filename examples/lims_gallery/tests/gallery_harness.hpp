@@ -30,12 +30,13 @@ inline constexpr std::array<std::string_view, 2> kWidths{"compact", "expanded"};
 /// @brief One screen of the gallery, mounted at a width class and driven by test id.
 class GalleryScreen : public morph::examples::testing::ScreenHarness {
 public:
-    /// @brief Mounts @p screenId as the client would at @p width.
+    /// @brief Mounts @p screenId as the client would on a window of the width class @p width.
     /// @param screenId The screen's id.
-    /// @param width    `compact`, `medium` or `expanded`.
+    /// @param width    `compact`, `medium` or `expanded`: the class the backend reports, which the shell hands to the
+    ///                 screen as `{"env": "widthClass"}`.
     GalleryScreen(std::string_view screenId, std::string_view width)
-        : ScreenHarness{localApp(), std::string{screenId}, morph::examples::testing::RigMode::Local,
-                        morph::ui::ParamMap{{std::string{kWidthParam}, morph::ui::Value{std::string{width}}}}} {}
+        : ScreenHarness{localApp(), std::string{screenId}, morph::examples::testing::RigMode::Local, {},
+                        {},         std::string{width}} {}
 
     /// @brief Whether a widget of @p kind with @p testId is mounted and not hidden itself.
     /// @param kind   The widget kind, as `RecordingBackend` names it.

@@ -17,9 +17,9 @@ morph_examples_client --app lims-gallery --ui=qt
 The first screen is the index, which lists every design and opens the ones that are built. `--screen <id>` opens one
 directly, such as `--screen lims-gallery.esignature`.
 
-Each design has an expanded layout (a window of 1200 px or more) and a compact one (under 600 px). A screen reads its
-width class from an optional `width` param before `{"env": "widthClass"}`, so the tests and the render smoke mount it
-at either width.
+Each design has an expanded layout and a compact one. A screen lays out for the client's `{"env": "widthClass"}`:
+compact below 80 units (some 600 px on Qt Quick, under 80 columns on the terminal), the expanded layout otherwise. The
+tests set the class on the recording backend, and the render smoke resizes the window.
 
 ## Layout
 
