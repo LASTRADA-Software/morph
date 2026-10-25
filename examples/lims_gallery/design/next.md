@@ -11,7 +11,7 @@ open separate PRs.
 | Batch A: defects and responsive layout | landed; the gallery dropped its workarounds |
 | Batch B: tables | designed and reviewed (`docs/superpowers/specs/2026-10-25-lims-gallery-batch-b-design.md`); part 1 in progress, see below |
 | Batch C: text, fields and small controls | designed and reviewed (`docs/superpowers/specs/2026-10-25-lims-gallery-batch-c-design.md`); lands after batch B |
-| Batch D: layout, overlays and navigation | not designed yet |
+| Batch D: layout, overlays and navigation | designed, not reviewed yet (`docs/superpowers/specs/2026-10-25-lims-gallery-batch-d-design.md`); four parts |
 | Batch E: expressions and charts | not designed yet |
 
 **Batch B part 1 is half done.** The top commit is "WIP: batch B part 1, G2 monospace role", which holds an
@@ -28,8 +28,8 @@ built. Finish G2, build, test, and reword the commit into a proper one (amend it
    "— fixed in batch B".
 2. **Batch B part 2** ("the row pipeline"): G41, G31, G28, G44, G46, as the design orders them.
 3. **Batch C**, in the order its design gives (plain text first: #1058).
-4. **Design batches D and E** (`batches.md` lists their gaps), each reviewed once by a separate agent on the default
-   model before implementation. Batch E's chart should need no new Qt module and needs a terminal fallback.
+4. **Review batch D's design** once, by a separate agent on the default model, then implement it in its four parts.
+   **Design batch E** (`batches.md` lists its gaps) and review it the same way. Batch E's chart should need no new Qt module and needs a terminal fallback.
 5. When everything has landed, take the PR out of draft.
 
 Two corrections to `gaps.md` from the batch C design, to apply when batch C lands: G10 says a field is outlined while
@@ -38,7 +38,9 @@ client (related to #1056).
 
 Issues filed along the way and fixed in these batches: #1058 (Qt Quick draws data text as markup), #1059 (Qt Quick
 tables unreachable from the keyboard), #1060 (a multiline text input with an icon loads, then mount throws), #1061 (an
-unknown select style loads silently), #1062 (dialog title and field unit not exposed to screen readers).
+unknown select style loads silently), #1062 (dialog title and field unit not exposed to screen readers). Batch D
+depends on #1063 (the client never mounts the app document) and touches #1064 (navigate with `onResult` to an open
+screen).
 
 ## Working rules
 
