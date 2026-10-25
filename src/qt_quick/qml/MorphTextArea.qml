@@ -38,6 +38,7 @@ MorphField {
         background: MorphInputBackground {
             scheme: root.scheme
             focused: area.activeFocus
+            readOnly: root.readOnly
             implicitHeight: Theme.controlHeight * 2
         }
         readOnly: root.readOnly

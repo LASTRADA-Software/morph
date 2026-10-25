@@ -52,6 +52,7 @@ MorphField {
         background: MorphInputBackground {
             scheme: root.scheme
             focused: combo.visualFocus || combo.popup.visible
+            readOnly: root.readOnly
         }
         indicator: Image {
             objectName: "indicator"

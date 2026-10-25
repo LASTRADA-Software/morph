@@ -40,6 +40,7 @@ MorphField {
             background: MorphInputBackground {
                 scheme: root.scheme
                 focused: pathField.activeFocus
+                readOnly: root.readOnly
             }
             readOnly: true
             text: root.path

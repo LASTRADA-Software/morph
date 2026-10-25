@@ -98,6 +98,7 @@ MorphField {
         background: MorphInputBackground {
             scheme: root.scheme
             focused: field.activeFocus
+            readOnly: root.readOnly
         }
         readOnly: root.readOnly
         placeholderText: root.withTime ? "yyyy-mm-dd hh:mm" : "yyyy-mm-dd"

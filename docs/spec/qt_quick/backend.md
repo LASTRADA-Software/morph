@@ -310,7 +310,8 @@ roles every component reads, with the `ui-theme/1` defaults; `applyTheme(engine,
 tokens, and a host component that imports `MorphUi` reads the same instance ([`../ui/theme.md`](../ui/theme.md)).
 The controls are Qt Quick Controls' `Basic` ones, drawn from the theme rather than with that style's look: an input
 (`MorphInputBackground`) and a button (`MorphButtonBackground`) are `Theme.controlHeight` tall with
-`Theme.radiusControl` corners and a border that takes the focus colour; a check box's indicator is accent-filled when
+`Theme.radiusControl` corners and a border that takes the focus colour; a read-only input (`readOnly`, which every
+input passes its background) draws on `Theme.background` rather than its scheme's surface; a check box's indicator is accent-filled when
 checked; a tab bar underlines the current tab in the accent; a progress bar is the scheme's accent on its `neutral` track,
 `Theme.spaceOf(1)` tall with rounded ends, and an indeterminate one a third-wide accent segment sliding across it while
 shown; a key-value's captions keep their whole width on one line, and its values fill what is left and wrap in it; a table's header is muted and its rows dense with a

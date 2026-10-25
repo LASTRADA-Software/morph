@@ -64,6 +64,7 @@ MorphField {
         background: MorphInputBackground {
             scheme: root.scheme
             focused: field.activeFocus
+            readOnly: root.readOnly
         }
         readOnly: root.readOnly
         placeholderText: root.placeholder

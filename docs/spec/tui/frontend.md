@@ -189,7 +189,8 @@ there. Esc ends a drag with no drop. A terminal without mouse reporting ignores 
 
 A field shows its state as marks at the right edge of its first row: `*` required, `!` with errors, `~` stale. The
 messages show on hover, after the tooltip. A read-only field takes the focus and moves its cursor and selection, but
-any edit is undone and nothing is reported: no change, submit, commit, toggle or choice.
+any edit is undone and nothing is reported: no change, submit, commit, toggle or choice. A field draws no input
+fill, so a read-only one reads as its text in place, in the normal text colour where a disabled one is muted.
 
 ## The conformance probe
 

@@ -548,3 +548,36 @@ TEST_CASE("qt_quick theme: a progress bar fills with the accent on the neutral t
     QTest::qWait(200);
     CHECK(fill->x() != before);
 }
+
+// Mutation: ignore `readOnly` in MorphInputBackground (the read-only field draws the input fill).
+TEST_CASE("qt_quick theme: a read-only input draws on the page's background, an editable one on the input fill",
+          "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color",
+        "surface": {"$value": "#fefefe"}, "background": {"$value": "#e9ecef"}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const editable = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto const readOnly = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    readOnly->setReadOnly(true);
+    auto const select = scene.backend().createSelect(column.get(), ui::SelectStyle::Dropdown);
+    select->setReadOnly(true);
+    scene.settle();
+
+    auto const backgroundOf = [](ui::Widget const& widget) {
+        auto const* const control = Scene::itemOf(widget).property("control").value<QQuickItem*>();
+        REQUIRE(control != nullptr);
+        auto const* const background = control->property("background").value<QQuickItem*>();
+        REQUIRE(background != nullptr);
+        return background->property("color").value<QColor>();
+    };
+    CHECK(backgroundOf(*editable) == QColor{"#fefefe"});
+    CHECK(backgroundOf(*readOnly) == QColor{"#e9ecef"});
+    CHECK(backgroundOf(*select) == QColor{"#e9ecef"});
+    readOnly->setReadOnly(false);
+    scene.settle();
+    CHECK(backgroundOf(*readOnly) == QColor{"#fefefe"});
+}
