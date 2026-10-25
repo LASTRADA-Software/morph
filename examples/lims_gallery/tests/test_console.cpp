@@ -22,7 +22,8 @@ TEST_CASE("console, expanded: navigation, alert, figures, chart, instruments and
     CHECK(screen.shows("Banner", "alert"));
     CHECK(screen.text("kpi-received") == "64");
     CHECK(screen.prop("Text", "kpi-due", "role") == "Error");
-    CHECK(screen.find("Row", "chart").has_value());
+    CHECK(screen.find("Chart", "chart").has_value());
+    CHECK(screen.prop("Chart", "chart", "series").value_or("").ends_with("|20@19,101.36;err;+3.4SD\\, rule 1-3s]]"));
     CHECK(screen.text("chart-violation") == "Run 20: 101.4 % LC, +3.4 SD, rule 1-3s");
     CHECK(screen.find("Row", "instrument-HPLC-02").has_value());
     CHECK(screen.shows("Splitter", "work-split"));
