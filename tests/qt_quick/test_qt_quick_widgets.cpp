@@ -8,12 +8,15 @@
 #include <QColor>
 #include <QDate>
 #include <QDateTime>
+#include <QMessageLogContext>
 #include <QObject>
 #include <QPointF>
 #include <QQuickItem>
+#include <QString>
 #include <QStringList>
 #include <QTest>
 #include <QVariantList>
+#include <QtLogging>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cmath>
@@ -26,6 +29,7 @@
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "qt_quick/keys.hpp"
@@ -685,6 +689,55 @@ TEST_CASE("qt_quick widgets: key-value wraps a long value instead of overflowing
     scene.settle();
     // A label that only grows past its given width would keep overflowing; wrapping instead grows its height.
     CHECK(Scene::itemOf(*narrow).implicitHeight() > unconstrainedHeight);
+}
+
+namespace {
+
+// The warnings Qt logs that name a polish loop, counted while a `PolishCounter` lives.
+int& polishWarnings() {
+    static int count = 0;
+    return count;
+}
+
+void countPolish(QtMsgType type, QMessageLogContext const& context, QString const& message) {
+    static_cast<void>(context);
+    if (type == QtWarningMsg && message.contains(QStringLiteral("polish"))) {
+        ++polishWarnings();
+    }
+}
+
+class PolishCounter {
+public:
+    PolishCounter() : _previous{qInstallMessageHandler(countPolish)} { polishWarnings() = 0; }
+    ~PolishCounter() { qInstallMessageHandler(_previous); }
+    PolishCounter(PolishCounter const&) = delete;
+    PolishCounter& operator=(PolishCounter const&) = delete;
+    PolishCounter(PolishCounter&&) = delete;
+    PolishCounter& operator=(PolishCounter&&) = delete;
+
+private:
+    QtMessageHandler _previous;
+};
+
+}  // namespace
+
+// Mutation: cap the value column at the grid's width less a caption width the captions write back while the grid
+// polishes (the Containers = needed pair loops).
+TEST_CASE("qt_quick widgets: a key-value lays out without a polish loop, whatever its text widths", "[qt_quick]") {
+    std::vector<std::pair<std::string, std::string>> const pairs{{"Containers", "needed"},
+                                                                 {"Containers", "180 needed"},
+                                                                 {"Containers", "x"},
+                                                                 {"Container", "180 needed"},
+                                                                 {"Containers", "xxxxxxxxxx"}};
+    for (auto const& [caption, value] : pairs) {
+        CAPTURE(caption, value);
+        PolishCounter const counter;
+        Scene scene;
+        auto pair = scene.backend().createKeyValue(nullptr);
+        pair->setItems({{.label = caption, .value = value}});
+        scene.settle();
+        CHECK(polishWarnings() == 0);
+    }
 }
 
 // Mutation: leave the label visible while inactive (the label stays visible and the size is the label's).
