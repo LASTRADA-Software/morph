@@ -797,3 +797,25 @@ TEST_CASE("tui table: Shift+Down twice from the first row selects the first thre
     CHECK(reports.back().second == ui::SelectionChange::Replace);
     CHECK(fruit.table->markedRows() == Positions{0, 1, 2});
 }
+
+// Mutation: draw the header without its box (the header line starts with the column's label).
+TEST_CASE("tui table: the select column's header box shows a partial selection, and a click on it selects every row",
+          "[tui][table][selection]") {
+    Harness harness{30, 4};
+    Fruit fruit{harness, ui::SelectionMode::Multiple};
+    fruit.table->setSelectColumn(true);
+    std::vector<std::pair<std::vector<ui::Key>, ui::SelectionChange>> reports;
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange change) { reports.emplace_back(std::move(keys), change); });
+    fruit.table->setSelection({key(1)});
+    CHECK(harness.draw() == Rows{"[-]  Name  Qty", "[x]  apple 3", "[ ]  kiwi  12"});
+    CHECK(harness.click({.x = 1, .y = 0}) == EventResult::Handled);
+    REQUIRE(reports.size() == 1);
+    CHECK(reports.back().first == std::vector<ui::Key>{key(1), key(2)});
+    CHECK(reports.back().second == ui::SelectionChange::Extend);
+    CHECK(harness.draw().front() == "[x]  Name  Qty");
+    // A row's box is a Ctrl-click on its row.
+    CHECK(harness.click({.x = 1, .y = 1}) == EventResult::Handled);
+    CHECK(reports.back().first == std::vector<ui::Key>{key(2)});
+    CHECK(harness.draw() == Rows{"[-]  Name  Qty", "[ ]> apple 3", "[x]  kiwi  12"});
+}

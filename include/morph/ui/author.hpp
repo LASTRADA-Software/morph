@@ -3735,6 +3735,13 @@ struct TableOptions {
     AnyHandle selection;
     /// @brief Commands run after each user change of the selection, with `event` the new list of keys.
     Commands onSelectionChange;
+    /// @brief Whether the table draws its selection as a leading column of check boxes under a select-all box; only
+    ///        with `Selection::Multiple`.
+    bool selectColumn = false;
+    /// @brief The select-all box's accessible name; absent: `"Select all"`.
+    AnyHandle selectAllLabel;
+    /// @brief Each row's accessible name, which its select box carries, read in the row scope; absent: the row's key.
+    AnyHandle rowLabel;
     /// @brief Where a model-backed table works; ignored by a table over rows.
     std::optional<TableMode> mode;
     /// @brief The sort.
@@ -3811,6 +3818,10 @@ namespace detail {
         node.raw("selectionMode", std::string{kSelections.at(static_cast<std::size_t>(*options.selectionMode))});
     }
     node.put("selection", options.selection).put("onSelectionChange", options.onSelectionChange);
+    if (options.selectColumn) {
+        node.raw("selectColumn", true);
+    }
+    node.put("selectAllLabel", options.selectAllLabel).put("rowLabel", options.rowLabel);
     if (!options.showHeader) {
         node.raw("showHeader", false);
     }

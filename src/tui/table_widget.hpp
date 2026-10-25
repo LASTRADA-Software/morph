@@ -12,6 +12,8 @@
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -23,7 +25,9 @@ namespace morph::tui::detail {
 /// Table: a header row above keyed rows. Each row is a horizontal stack of cells laid out in the column widths the
 /// solver gives the table, one cell gap apart; a hidden cell keeps its column, and counts toward its width, so the
 /// cells after it stay under their own headers. A two-cell gutter marks selected rows `*` and, while the table has
-/// focus, the cursor row `>`.
+/// focus, the cursor row `>`. With a select column the gutter is five cells: a `[x]` or `[ ]` box per row in place of
+/// the `*`, under a header box that reads `[x]`, `[-]` or `[ ]`; a click on a row's box toggles the row as Ctrl+click
+/// does, and a click on the header box is Ctrl+A.
 ///
 /// Up, Down, Home and End move the cursor, and PageUp and PageDown by as many rows as fill the room below the header;
 /// Space selects the cursor row (Single) or toggles it and makes it the anchor (Multiple); Enter selects it in Single
@@ -57,6 +61,10 @@ public:
     void setRowKey(ui::Widget& row, ui::Key const& key) override;
     /// The row's cells draw in the tone's style. Throws std::logic_error when @p row is not one of this table's rows.
     void setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) override;
+    void setSelectColumn(bool shown) override;
+    void setSelectAllLabel(std::string_view label) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowLabel(ui::Widget& row, std::string_view label) override;
     void setSelection(std::vector<ui::Key> const& selection) override;
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
@@ -75,6 +83,14 @@ protected:
     void childForgotten(WidgetBase& child) override;
 
 private:
+    /// The cells before the first column: the marks, and the select column's box when it is drawn.
+    [[nodiscard]] int gutter() const noexcept;
+    /// The header's box: `[x]` while every shown row is selected, `[-]` while some are, `[ ]` while none are.
+    [[nodiscard]] std::string headerBox() const;
+    /// Draws the header line: the header box, then each column's label at its alignment.
+    void paintHeader(::core::tui::Canvas& canvas, std::vector<int> const& widths) const;
+    /// The gutter of @p row: its selection mark, or its box, then the cursor mark when @p cursor.
+    [[nodiscard]] std::string rowMark(WidgetBase const* row, bool cursor) const;
     /// Each column's content width: its label's, or its widest cell's, hidden cells included.
     [[nodiscard]] std::vector<int> naturalWidths() const;
     /// The solved column widths for a table @p width cells wide.
@@ -122,6 +138,7 @@ private:
 
     std::vector<ui::TableColumn> _columns;
     bool _showHeader = true;
+    bool _selectColumn = false;
     ui::SelectionMode _mode = ui::SelectionMode::None;
     std::unordered_map<WidgetBase const*, ui::Key> _keys;
     std::vector<ui::Key> _selection;  ///< The keys requested or selected by the user, in that order.

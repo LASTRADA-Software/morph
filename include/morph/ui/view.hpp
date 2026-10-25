@@ -595,6 +595,9 @@ struct Row {
     /// @brief A table row's tone: disengaged when none was given; an engaged `Prop` whose value is `nullopt` has no
     ///        tone at the moment. Only `table`'s row view sets it; the mount refuses it on a row outside a table.
     std::optional<Prop<std::optional<Tone>>> tone;
+    /// @brief A table row's accessible name, and its select box's: disengaged when none was given, which names the
+    ///        row by its key. Only `table`'s row view sets it; the mount refuses it on a row outside a table.
+    std::optional<Prop<std::string>> label;
     /// @brief Where the children sit across the row (vertically); set once.
     Align align = Align::Stretch;
     /// @brief Where the spare width goes while no shown child stretches; set once.
@@ -922,6 +925,11 @@ struct Table {
     Prop<std::vector<Key>> selection;
     /// @brief Called with the keys the user selected and what kind of change it was.
     std::function<void(std::vector<Key>, SelectionChange)> onSelectionChange;
+    /// @brief Whether the table draws its selection as a leading column of check boxes, one per row, under a box
+    ///        that selects every row shown; set once. Only a `Multiple` table draws it.
+    bool selectColumn = false;
+    /// @brief The accessible name of the select column's header box.
+    Prop<std::string> selectAllLabel = std::string{"Select all"};
     /// @brief Called with a row's key when the user activates it (Enter or a double click).
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop.
@@ -1453,6 +1461,10 @@ struct TableOptions {
     Prop<std::vector<Key>> selection;
     /// @brief Called with the keys the user selected and what kind of change it was.
     std::function<void(std::vector<Key>, SelectionChange)> onSelectionChange;
+    /// @brief Whether the table draws its selection as a leading column of check boxes.
+    bool selectColumn = false;
+    /// @brief The accessible name of the select column's header box.
+    Prop<std::string> selectAllLabel = std::string{"Select all"};
     /// @brief Called with a row's key when the user activates it.
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop of the table.
@@ -1465,6 +1477,9 @@ struct TableRowView {
     std::vector<Node> cells;
     /// @brief The row's tone, bound in the row's own scope; disengaged for none.
     std::optional<Prop<std::optional<Tone>>> tone;
+    /// @brief The row's accessible name, and its select box's, bound in the row's own scope; disengaged names the row
+    ///        by its key.
+    std::optional<Prop<std::string>> label = std::nullopt;
 };
 
 /// @brief A table of keyed rows: one `Row` of cells per row, under the column headers.
@@ -1524,7 +1539,8 @@ template <typename RowT>
                 std::ranges::any_of(made.cells, [](Node const& cell) { return cell == nullptr; })) {
                 throw std::invalid_argument{"ui::table: a row needs exactly one non-null cell per column"};
             }
-            return row(Row{.children = std::move(made.cells), .tone = std::move(made.tone)});
+            return row(
+                Row{.children = std::move(made.cells), .tone = std::move(made.tone), .label = std::move(made.label)});
         };
     Table spec{
         .rows =
@@ -1536,6 +1552,8 @@ template <typename RowT>
     spec.columns = std::move(columns);
     spec.selection = std::move(options.selection);
     spec.onSelectionChange = std::move(options.onSelectionChange);
+    spec.selectColumn = options.selectColumn;
+    spec.selectAllLabel = std::move(options.selectAllLabel);
     spec.onActivate = std::move(options.onActivate);
     spec.common = std::move(options.common);
     return detail::makeNode(std::move(spec));

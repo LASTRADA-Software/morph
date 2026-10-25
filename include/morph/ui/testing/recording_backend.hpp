@@ -1370,7 +1370,8 @@ public:
     }
 };
 
-/// @brief A fake `TableWidget`: properties `columns`, `selectionMode`, `selection`, and `rowKey` on a row.
+/// @brief A fake `TableWidget`: properties `columns`, `selectionMode`, `selection`, `selectColumn`, `selectAllLabel`,
+///        and `rowKey`, `tone` and `label` on a row.
 ///
 /// `selection` shows the rows the widget marks: the requested keys, in the order requested, that one of its current
 /// rows has. The requested keys are kept, so a row that arrives with one of them is marked and a row that goes is
@@ -1455,6 +1456,26 @@ public:
             throw std::logic_error{"RecordingBackend: setRowTone of a widget that is not this table's row"};
         }
         store().set(rowId, "tone", tone ? enumName(*tone) : std::string{"none"});
+    }
+
+    /// @brief Records property `selectColumn`.
+    /// @param shown Whether the select column is drawn.
+    void setSelectColumn(bool shown) override { set("selectColumn", formatBool(shown)); }
+
+    /// @brief Records property `selectAllLabel`.
+    /// @param label The header box's name.
+    void setSelectAllLabel(std::string_view label) override { set("selectAllLabel", formatText(label)); }
+
+    /// @brief Records the row's property `label`.
+    /// @param row One of this table's rows.
+    /// @param label The row's name.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowLabel(Widget& row, std::string_view label) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowLabel of a widget that is not this table's row"};
+        }
+        store().set(rowId, "label", formatText(label));
     }
 
     /// @brief Requests the rows with @p keys, and records property `selection` as the rows it marks.

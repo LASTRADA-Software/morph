@@ -826,8 +826,8 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, Row const& spec, ContainerWidget* parent) {
-        if (spec.tone && dynamic_cast<TableWidget*>(parent) == nullptr) {
-            throw std::logic_error{"morph::ui: a row's tone is a table row's; this row is not in a table"};
+        if ((spec.tone || spec.label) && dynamic_cast<TableWidget*>(parent) == nullptr) {
+            throw std::logic_error{"morph::ui: a row's tone and label are a table row's; this row is not in a table"};
         }
         return mountStack(scope, Axis::Horizontal, spec.children, spec.gap, spec.common, parent, spec.align,
                           spec.justify);
@@ -1141,6 +1141,10 @@ private:
         widget.setColumns(spec.columns);
         widget.setShowHeader(spec.showHeader);
         widget.setSelectionMode(spec.selectionMode);
+        if (spec.selectColumn) {
+            widget.setSelectColumn(true);
+            bind(scope, spec.selectAllLabel, [&widget](std::string const& label) { widget.setSelectAllLabel(label); });
+        }
         widget.setOnActivate(event(spec.onActivate));
         mountRows(
             scope, spec.rows, widget,
@@ -1152,6 +1156,10 @@ private:
                     bind(rowScope, *view->tone, [&widget, &rowWidget](std::optional<Tone> const& tone) {
                         widget.setRowTone(rowWidget, tone);
                     });
+                }
+                if (view != nullptr && view->label) {
+                    bind(rowScope, *view->label,
+                         [&widget, &rowWidget](std::string const& label) { widget.setRowLabel(rowWidget, label); });
                 }
             },
             &spec.virtualize);

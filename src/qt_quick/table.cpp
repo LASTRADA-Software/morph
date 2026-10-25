@@ -6,8 +6,12 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <algorithm>
+#include <cstdint>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <variant>
 
 #include "qt_quick/kinds.hpp"
 
@@ -58,6 +62,18 @@ void TableImpl::setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) {
         throw std::logic_error{"morph::qt_quick: setRowTone of a widget that is not this table's row"};
     }
     tableRow->write("tone", tone ? static_cast<int>(*tone) : -1);
+}
+
+void TableImpl::setSelectColumn(bool shown) { write("selectColumn", shown); }
+
+void TableImpl::setSelectAllLabel(std::string_view label) { write("selectAllLabel", toQString(label)); }
+
+void TableImpl::setRowLabel(ui::Widget& row, std::string_view label) {
+    auto const* const tableRow = dynamic_cast<TableRowImpl const*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setRowLabel of a widget that is not this table's row"};
+    }
+    tableRow->write("rowLabel", toQString(label));
 }
 
 void TableImpl::setSelection(std::vector<ui::Key> const& keys) {
@@ -335,6 +351,9 @@ void TableRowImpl::setGap(int gap) { static_cast<void>(gap); }
 
 void TableRowImpl::setKey(ui::Key key) {
     write("rowKey", encodeKey(key));
+    // The row's name until the table gives it a label: its key as text.
+    auto const* const number = std::get_if<std::int64_t>(&key);
+    write("keyText", number != nullptr ? QString::number(*number) : toQString(std::get<std::string>(key)));
     _key = std::move(key);
 }
 

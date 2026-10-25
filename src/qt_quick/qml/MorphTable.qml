@@ -18,6 +18,21 @@ MorphWidget {
     property bool multiple: false
     // The row keyboard focus is on, or was on last; null before any.
     property Item currentRow: null
+    // Whether the selection is drawn as a leading column of check boxes; C++ sets it once, before any row.
+    property bool selectColumn: false
+    // The select-all box's accessible name.
+    property string selectAllLabel: "Select all"
+    // The width the select column takes before the first column: a touch target.
+    readonly property real lead: root.selectColumn ? Theme.targetHeight : 0
+    // How many of the shown rows are selected, for the select-all box.
+    readonly property int selectedShown: {
+        let count = 0
+        for (const row of root.shownRows()) {
+            if (row.selected)
+                ++count
+        }
+        return count
+    }
     // Set by C++ (TableImpl::setRealizedWindow) only above a virtualized table's threshold; totalRows stays -1
     // (its default, meaning "not virtualizing") otherwise, which is what keeps every binding below referencing
     // these three properties a no-op for a table that never crosses its threshold -- body has no spacers, and the
@@ -46,7 +61,7 @@ MorphWidget {
     property var columnCache: []
     // Test-only: how many rows a full column rescan has visited, summed across every rescan. Not a public API.
     property int rowScans: 0
-    readonly property var widths: root.columnWidths(width)
+    readonly property var widths: root.columnWidths(width - root.lead)
 
     // No column is narrower than its header: a content column is at least its header and its widest cell, a stretch
     // column at least its header (its cells are meant to take what is left, so they do not raise it), each with a
@@ -103,7 +118,7 @@ MorphWidget {
 
     // The columns' summed width: the rows' and the header's width, and what `hflick` scrolls across.
     readonly property real columnsWidth: {
-        let sum = 0
+        let sum = root.lead
         for (const w of root.widths)
             sum += w
         return sum
@@ -329,6 +344,29 @@ MorphWidget {
 
             Row {
                 id: header
+
+                // The select-all box: checked while every shown row is selected, partly while some are. It shows the
+                // selection and never changes its own state, so a selection the document refuses leaves it as it was.
+                Item {
+                    visible: root.selectColumn
+                    width: root.lead
+                    height: parent.height
+
+                    CheckBox {
+                        objectName: "selectAll"
+                        anchors.centerIn: parent
+                        tristate: true
+                        enabled: root.shownRows().length > 0
+                        checkState: root.selectedShown === 0 ? Qt.Unchecked
+                                                             : root.selectedShown === root.shownRows().length
+                                                               ? Qt.Checked : Qt.PartiallyChecked
+                        nextCheckState: function() {
+                            return checkState
+                        }
+                        onClicked: root.fire("selectAll", undefined)
+                        Accessible.name: root.selectAllLabel
+                    }
+                }
 
                 Repeater {
                     model: root.columns

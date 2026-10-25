@@ -164,7 +164,8 @@ The keys every node takes are member functions of `Node`, each returning a copy 
   valign, cell}`; an absent `align` or `valign` is left out and a present one is written by name), `selectionMode` (a
   `Selection`, written as `selectionMode`), `selection` (the selected keys, controlled when given), `onSelectionChange`
   (with `event` the new keys), `sort`, `filters`,
-  `rowTone` (each row's tone, which the client draws), `highlightKey`, `onActivate`, `empty` (the nodes shown in
+  `rowTone` (each row's tone, which the client draws), `selectColumn` (written only when `true`), `selectAllLabel`,
+  `rowLabel` (each row's name, in the row scope), `highlightKey`, `onActivate`, `empty` (the nodes shown in
   its place while its rows are an empty list), `valign`), and optionally a row-scope builder that returns the
   columns; `cells({...})` makes columns from cells alone. **`dataTable<A>(model, body, options)`**
   is the table of spec 7 declared from a list action, with `mode` (`TableMode::Server` or

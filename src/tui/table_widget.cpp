@@ -26,6 +26,10 @@ using ::core::tui::KeyCode;
 namespace {
 
 constexpr int kGutter = 2;
+/// The gutter with a select column: a check box, then the cursor mark and a space.
+constexpr int kSelectGutter = 5;
+/// The cells of a select column's box.
+constexpr int kBoxWidth = 3;
 constexpr int kColumnGap = 1;
 /// How soon a second click on a row must follow the first to make a double click.
 constexpr auto kDoubleClick = std::chrono::milliseconds{500};
@@ -69,6 +73,32 @@ void TableImpl::setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) {
     }
     base.applyRowTone(tone);
     refresh();
+}
+
+void TableImpl::setSelectColumn(bool shown) {
+    _selectColumn = shown;
+    refresh();
+}
+
+// A terminal has no accessibility tree to name the box or a row in.
+void TableImpl::setSelectAllLabel(std::string_view label) { static_cast<void>(label); }
+
+void TableImpl::setRowLabel(ui::Widget& row, std::string_view label) {
+    static_cast<void>(label);
+    if (WidgetBase::of(row).container() != this) {
+        throw std::logic_error{"morph::tui: setRowLabel of a widget that is not this table's row"};
+    }
+}
+
+int TableImpl::gutter() const noexcept { return _selectColumn ? kSelectGutter : kGutter; }
+
+std::string TableImpl::headerBox() const {
+    auto const rows = shownChildren();
+    auto const marked = std::ranges::count_if(rows, [this](WidgetBase const* row) { return isMarked(row); });
+    if (marked == 0) {
+        return "[ ]";
+    }
+    return std::cmp_equal(marked, rows.size()) ? "[x]" : "[-]";
 }
 
 void TableImpl::setSelection(std::vector<ui::Key> const& selection) {
@@ -137,12 +167,12 @@ std::vector<int> TableImpl::columnWidths(int width) const {
             column.width.kind == ui::Sizing::Kind::Fixed ? std::min(header, std::max(0, column.width.amount)) : header;
         items.push_back(layout::Item{.sizing = column.width, .natural = natural, .minimum = minimum});
     }
-    return layout::distribute(items, layout::Track{.length = std::max(0, width - kGutter), .gap = kColumnGap});
+    return layout::distribute(items, layout::Track{.length = std::max(0, width - gutter()), .gap = kColumnGap});
 }
 
 ::core::tui::Size TableImpl::naturalSize() const {
     auto const widths = naturalWidths();
-    int const width = kGutter + std::accumulate(widths.begin(), widths.end(), 0) +
+    int const width = gutter() + std::accumulate(widths.begin(), widths.end(), 0) +
                       (kColumnGap * std::max(0, static_cast<int>(widths.size()) - 1));
     int height = _showHeader ? 1 : 0;
     for (auto const* row : shownChildren()) {
@@ -267,10 +297,37 @@ std::vector<::core::tui::Rect> TableImpl::childAreas(::core::tui::Size size) con
             continue;
         }
         int const height = rowHeight(*row);
-        area = {.x = kGutter, .y = line, .width = std::max(0, size.width - kGutter), .height = height};
+        area = {.x = gutter(), .y = line, .width = std::max(0, size.width - gutter()), .height = height};
         line += height;
     }
     return areas;
+}
+
+void TableImpl::paintHeader(::core::tui::Canvas& canvas, std::vector<int> const& widths) const {
+    auto const& theme = canvas.theme();
+    if (_selectColumn) {
+        canvas.putString(0, 0, headerBox(), theme.textNormal);
+    }
+    int left = gutter();
+    for (auto const [column, width] : std::views::zip(_columns, widths)) {
+        auto label = canvas.subcanvas({.x = left, .y = 0, .width = width, .height = 1});
+        // Over its cells: a number column's header ends where its digits do.
+        label.putString(0, alignedOffset(column.align, displayWidth(column.label), width), column.label,
+                        theme.textBold);
+        left += width + kColumnGap;
+    }
+}
+
+std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
+    // With a select column the box shows the mark; without, `*` does.
+    std::string mark;
+    if (_selectColumn) {
+        mark = isMarked(row) ? "[x]" : "[ ]";
+    } else {
+        mark = isMarked(row) ? "*" : " ";
+    }
+    mark += cursor ? ">" : " ";
+    return mark;
 }
 
 void TableImpl::paint(::core::tui::Canvas& canvas) {
@@ -279,14 +336,7 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
     auto const widths = columnWidths(canvas.width());
 
     if (_showHeader) {
-        int left = kGutter;
-        for (auto const [column, width] : std::views::zip(_columns, widths)) {
-            auto label = canvas.subcanvas({.x = left, .y = 0, .width = width, .height = 1});
-            // Over its cells: a number column's header ends where its digits do.
-            label.putString(0, alignedOffset(column.align, displayWidth(column.label), width), column.label,
-                            theme.textBold);
-            left += width + kColumnGap;
-        }
+        paintHeader(canvas, widths);
     }
 
     auto const rows = shownChildren();
@@ -322,9 +372,7 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
             continue;
         }
         bool const cursor = focused && row == rows.at(_cursorPlace);
-        std::string gutter{isMarked(row) ? "*" : " "};
-        gutter += cursor ? ">" : " ";
-        canvas.putString(area.y, 0, gutter, cursor ? theme.listItemSelected : theme.textNormal);
+        canvas.putString(area.y, 0, rowMark(row, cursor), cursor ? theme.listItemSelected : theme.textNormal);
     }
 }
 
@@ -409,13 +457,22 @@ WidgetBase* TableImpl::rowAtLine(int line) const {
 }
 
 void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifiers) {
+    bool const onBox = _selectColumn && cell.x < kBoxWidth;
+    // The header box is Ctrl+A; it does nothing while the table shows no rows.
+    if (onBox && _showHeader && cell.y == 0) {
+        if (_mode == ui::SelectionMode::Multiple && !shownChildren().empty()) {
+            static_cast<void>(change(allOrNone(), ui::SelectionChange::Extend));
+        }
+        return;
+    }
     auto* const row = rowAtLine(cell.y);
     if (row == nullptr) {
         return;
     }
     auto const held = ::core::tui::withoutLockKeys(modifiers);
     ui::RowClick click = ui::RowClick::Only;
-    if (::core::tui::hasModifier(held, ::core::tui::Modifier::Ctrl)) {
+    // A row's box is a Ctrl-click on the row.
+    if (onBox || ::core::tui::hasModifier(held, ::core::tui::Modifier::Ctrl)) {
         click = ui::RowClick::Toggle;
     } else if (::core::tui::hasModifier(held, ::core::tui::Modifier::Shift)) {
         click = ui::RowClick::Range;

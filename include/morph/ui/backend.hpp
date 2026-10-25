@@ -500,6 +500,24 @@ public:
     /// @param tone The tone, or none.
     virtual void setRowTone(Widget& row, std::optional<Tone> tone) = 0;
 
+    /// @brief Draws the selection as a leading column of check boxes, one per row, under a header box; called once,
+    ///        before any row, and only to turn it on: a new table has none. A row's box is checked while the row is
+    ///        selected, and toggling it is a Ctrl-click on the row. The header box is checked while every row shown
+    ///        is selected, partly checked while some are, clear while none are, and disabled while there are no
+    ///        rows; toggling it is Ctrl+A. Neither box changes its own state: each shows the selection.
+    /// @param shown Whether the column is drawn.
+    virtual void setSelectColumn(bool shown) = 0;
+
+    /// @brief Sets the accessible name of the select column's header box.
+    /// @param label The name, UTF-8.
+    virtual void setSelectAllLabel(std::string_view label) = 0;
+
+    /// @brief Sets a row's accessible name, which its select box carries too; called after `setRowKey` for a row
+    ///        given a label, and on every change. A row with none is named by its key.
+    /// @param row   One of this table's rows.
+    /// @param label The name, UTF-8.
+    virtual void setRowLabel(Widget& row, std::string_view label) = 0;
+
     /// @brief Requests the rows with these keys, and marks those it has. Never calls the `onSelectionChange` handler.
     /// @param keys The selected keys.
     virtual void setSelection(std::vector<Key> const& keys) = 0;

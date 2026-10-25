@@ -149,7 +149,7 @@ reorders children, and only through this.
 | `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page |
 | `TabsWidget` | Page slots in the order first shown; the mount keeps exactly the selected page's slot visible, and `setSelected` moves the bar's highlight only |
 | `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included. `footer()` is a container the overlay owns and lays out after its content, showing nothing while it is empty; the mount puts the overlay's actions there. A `DrawerWidget` has the same footer |
-| `TableWidget` | Rows, each a horizontal stack of cells in column order; `setRowKey(row, key)` once per row, right after it is built, then `setRowTone(row, tone)` for a toned row, and again on every change. A hidden cell keeps its column: the cells after it stay under their own headers |
+| `TableWidget` | Rows, each a horizontal stack of cells in column order; `setSelectColumn(true)` once, before any row, for a table that draws its selection as check boxes; `setRowKey(row, key)` once per row, right after it is built, then `setRowTone(row, tone)` for a toned row and `setRowLabel(row, label)` for a named one, and again on every change. A hidden cell keeps its column: the cells after it stay under their own headers |
 
 **Spacing.** `setGap` and `setPadding` take a spacing step, 0 to `kMaxSpacingStep` (5); the mount clamps a document's
 value with `spacingStep`, so a backend never sees another. Each backend maps a step to its own distance: the theme's
@@ -229,7 +229,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `DialogWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `ToastWidget` | `show(text, tone)` (one call: shows the message and restarts the dismiss interval regardless of whether the toast is already on-screen) | — |
 | `BusyWidget` | `setActive`, `setLabel` | — |
-| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)`, `setExistingKeys(keys)` (every key, in row order, above the virtualization threshold) | `setOnSelectionChange(keys, SelectionChange)`, `setOnActivate(Key)` (Enter or a double click) |
+| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)`, `setSelectColumn(bool)`, `setSelectAllLabel(text)`, `setRowLabel(row, text)`, `setExistingKeys(keys)` (every key, in row order, above the virtualization threshold) | `setOnSelectionChange(keys, SelectionChange)`, `setOnActivate(Key)` (Enter or a double click) |
 | `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)` | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)`, `setOnCommit(value)` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
@@ -284,6 +284,12 @@ the list it refers to may arrive in either order.
   | Shift+Up, Shift+Down | as Up and Down | move the current row and select from the anchor to it | `Replace` |
   | Ctrl+A | goes on outwards | selects every row; with every row selected already, clears them | `Extend` |
   | Enter | activates the current row | activates the current row | — |
+
+  A **select column** (`setSelectColumn(true)`) draws the same selection as a leading column of check boxes. A row's
+  box is checked while the row is selected, and toggling it is a Ctrl-click on the row. The header box is checked
+  while every row shown is selected, partly checked while some are, clear while none are, and disabled while the
+  table shows no rows; toggling it is Ctrl+A. Neither box changes its own state, so a selection the document refuses
+  leaves both as the selection is. A row's box carries the row's name (`setRowLabel`, else its key).
 
   Only a plain click is half of a double click, so two quick Ctrl-clicks toggle a row twice. Shift with an arrow and
   no anchor starts the range at the row the current row leaves. A range and Ctrl+A run over the keys in row order,
@@ -555,6 +561,7 @@ contract are each backend's own tests to make:
 - that a read-only check box, select, date-time input, slider or file picker takes no change, and
   that a read-only text input takes no submit or commit — rule 31 checks typing only;
 - that rules 22 and 23 hold for handler kinds other than a click;
+- that a select column's boxes are drawn and named — case 43's Ctrl+A is the header box's operation;
 - that a Table column's `align` places a text's characters and the header's label at its end — layout case 8
   measures a badge's box only;
 - that a hidden Table cell's neighbours are drawn under their own headers — rule 21 checks the

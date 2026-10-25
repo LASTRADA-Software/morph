@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 
 // One row of a table: its cells placed by column, so a hidden cell keeps its column and the cells after it stay
@@ -15,6 +16,11 @@ MorphWidget {
     property bool selected: false
     // The row's key as text (`i:<int64>` or `s:<text>`).
     property string rowKey: ""
+    // The key as a person reads it, which names the row until the table gives it a label.
+    property string keyText: ""
+    // The row's accessible name, and its select box's; empty names it by its key.
+    property string rowLabel: ""
+    defaultName: rowLabel !== "" ? rowLabel : keyText
     readonly property var widths: table ? table.widths : []
     readonly property var columns: table ? table.columns : []
     readonly property Item content: cells
@@ -49,7 +55,7 @@ MorphWidget {
     // the row's top, centre or bottom by its column's `valign`; `stretch` fills the row's height.
     function place() {
         const inset = Theme.spaceOf(2)
-        let x = 0
+        let x = root.table ? root.table.lead : 0
         let tallest = 0
         for (let i = 0; i < cells.children.length; ++i) {
             const cell = cells.children[i]
@@ -156,6 +162,22 @@ MorphWidget {
         onChildrenChanged: root.place()
     }
 
+    // The row's select box: checked while the row is selected, and a click on it is a Ctrl-click on the row. It shows
+    // the selection and never changes its own state, as the select-all box does.
+    CheckBox {
+        id: selectBox
+        objectName: "selectBox"
+        visible: root.table ? root.table.selectColumn : false
+        x: Math.floor(((root.table ? root.table.lead : 0) - width) / 2)
+        anchors.verticalCenter: parent.verticalCenter
+        checked: root.selected
+        nextCheckState: function() {
+            return checkState
+        }
+        onClicked: root.fire("tap", {"ctrl": true})
+        Accessible.name: root.accessibleName
+    }
+
     TapHandler {
         id: tap
         onTapped: {
@@ -165,6 +187,9 @@ MorphWidget {
                 root.fire("activate", undefined)
                 return
             }
+            // A click on the select box is the box's own.
+            if (selectBox.visible && selectBox.contains(selectBox.mapFromItem(root, tap.point.position)))
+                return
             // The row takes the focus unless a control in one of its cells took it with the press.
             if (!root.holdsFocus(root.Window.activeFocusItem))
                 root.forceActiveFocus(Qt.MouseFocusReason)

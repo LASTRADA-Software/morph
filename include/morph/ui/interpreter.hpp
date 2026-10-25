@@ -7300,6 +7300,10 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
             out.front() = Node{owner, owner->first.get()};
         }
         TableRowView view{.cells = std::move(out), .tone = std::nullopt};
+        // The row's name, in its own scope: what its select box and assistive technology read.
+        if (ExprPtr const labelExpr = node.prop("rowLabel")) {
+            view.label = bindProp<std::string>(rowCtx, labelExpr, std::string{}, stringOf);
+        }
         if (ExprPtr const toneExpr = node.prop("rowTone")) {
             view.tone = slotProp<std::optional<Tone>>(
                 [this, scope, bindings = ctx.bindings, toneExpr, toneReported]() -> std::optional<Tone> {
@@ -7310,6 +7314,10 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     };
     TableOptions options;
     options.showHeader = node.prop("showHeader") ? boolOf(once(ctx, node.prop("showHeader")), format) : true;
+    options.selectColumn = node.flag("selectColumn");
+    if (ExprPtr const selectAll = node.prop("selectAllLabel")) {
+        options.selectAllLabel = bindProp<std::string>(ctx, selectAll, std::string{}, stringOf);
+    }
     if (ExprPtr const threshold = node.prop("virtualizeThreshold")) {
         options.virtualize.threshold =
             static_cast<std::size_t>(std::max<std::int64_t>(0, intOf(once(ctx, threshold), 2000)));

@@ -223,7 +223,11 @@ PageUp and PageDown move the focus between the shown rows, Shift with Up or Down
 when there is none and selects the range, Space toggles the current row, and Ctrl+A (`multiple` only) selects every
 row or clears them. A plain double click or Enter on a row activates it without toggling the selection. A range and
 Ctrl+A run over `setExistingKeys`' keys in row order when the table virtualizes, and over the realized rows
-otherwise. Selection is kept as the requested keys, marked on the
+otherwise. A select column takes `Theme.targetHeight` before the first column, which `columnWidths` leaves out of
+what it shares: the header draws a tri-state `CheckBox` there (`selectAll`, named `selectAllLabel`) and each row a
+`CheckBox` bound to `selected` (`selectBox`, named as its row). Each box's `nextCheckState` returns its current
+state, so its look follows the selection alone; its `clicked` fires the row's `tap` with Ctrl, or the table's
+`selectAll`, and a tap on a row's box is not also a tap on the row. A row is named by `rowLabel`, else its key. Selection is kept as the requested keys, marked on the
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
 

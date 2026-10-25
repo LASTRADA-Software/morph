@@ -426,6 +426,9 @@ public:
     void setSelectionMode(ui::SelectionMode mode) override;
     void setRowKey(ui::Widget& row, ui::Key const& key) override;
     void setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) override;
+    void setSelectColumn(bool shown) override;
+    void setSelectAllLabel(std::string_view label) override;
+    void setRowLabel(ui::Widget& row, std::string_view label) override;
     void setSelection(std::vector<ui::Key> const& keys) override;
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;

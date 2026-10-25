@@ -3,6 +3,8 @@
 // The table on the real Qt Quick engine: cells placed by column, selection by key in each mode, activation without
 // toggling, and keys that cross into QML as text, an int64 above 2^53 unchanged.
 
+#include <QAccessible>
+#include <QAccessibleInterface>
 #include <QColor>
 #include <QFont>
 #include <QList>
@@ -663,4 +665,117 @@ TEST_CASE("qt_quick table: Tab focuses a table of text cells, Down then Space se
     CHECK(detail::TableImpl::marked(*detail::baseOf(*table.rows.at(1))));
     scene.key(Qt::Key_Return);
     CHECK(activated == std::vector<ui::Key>{ui::Key{std::int64_t{2}}});
+}
+
+namespace {
+
+// The select column's box on a row, and the select-all box over the table.
+QQuickItem& selectBoxOf(ui::Widget const& row) {
+    auto* const box = Scene::itemOf(row).findChild<QQuickItem*>(QStringLiteral("selectBox"));
+    REQUIRE(box != nullptr);
+    return *box;
+}
+
+QQuickItem& selectAllOf(ui::Widget const& table) {
+    auto* const box = Scene::itemOf(table).findChild<QQuickItem*>(QStringLiteral("selectAll"));
+    REQUIRE(box != nullptr);
+    return *box;
+}
+
+// A multiple table of three rows with a select column, labelled by their samples.
+Rows selectTable(Scene& scene) {
+    Rows made;
+    made.table = scene.backend().createTable(nullptr);
+    made.table->setColumns({{.label = "Sample", .width = ui::Sizing::fixed(12)}});
+    made.table->setSelectionMode(ui::SelectionMode::Multiple);
+    made.table->setSelectColumn(true);
+    made.table->setSelectAllLabel("Select all on this page");
+    for (std::int64_t id = 1; id <= 3; ++id) {
+        auto row = scene.backend().createStack(made.table.get(), ui::Axis::Horizontal);
+        made.cells.push_back(scene.backend().createText(row.get()));
+        made.cells.back()->setText("S-" + std::to_string(id));
+        made.table->setRowKey(*row, ui::Key{id});
+        made.table->setRowLabel(*row, "S-" + std::to_string(id));
+        made.rows.push_back(std::move(row));
+    }
+    scene.settle();
+    return made;
+}
+
+}  // namespace
+
+// Mutation: drop setSelectColumn's write (the select-all box is not shown, nor a row's box).
+TEST_CASE("qt_quick table: the select column's boxes show and change the selection", "[qt_quick]") {
+    Scene scene;
+    Rows table = selectTable(scene);
+    std::vector<std::pair<std::vector<ui::Key>, ui::SelectionChange>> reported;
+    table.table->setOnSelectionChange([&reported](std::vector<ui::Key> keys, ui::SelectionChange change) {
+        reported.emplace_back(std::move(keys), change);
+    });
+    QQuickItem& selectAll = selectAllOf(*table.table);
+    REQUIRE(selectAll.isVisible());
+
+    table.table->setSelection({ui::Key{std::int64_t{1}}, ui::Key{std::int64_t{2}}});
+    scene.settle();
+    CHECK(selectAll.property("checkState").toInt() == Qt::PartiallyChecked);
+
+    scene.click(selectAll);
+    REQUIRE(!reported.empty());
+    CHECK(reported.back().second == ui::SelectionChange::Extend);
+    CHECK(selectAll.property("checkState").toInt() == Qt::Checked);
+    scene.click(selectAll);
+    CHECK(reported.back().first.empty());
+    CHECK(selectAll.property("checkState").toInt() == Qt::Unchecked);
+
+    // A row's box toggles its row and keeps the others.
+    table.table->setSelection({ui::Key{std::int64_t{1}}});
+    scene.settle();
+    scene.click(selectBoxOf(*table.rows.at(2)));
+    CHECK(reported.back().first == std::vector<ui::Key>{ui::Key{std::int64_t{1}}, ui::Key{std::int64_t{3}}});
+    CHECK(selectBoxOf(*table.rows.at(2)).property("checked").toBool());
+    CHECK(selectBoxOf(*table.rows.at(0)).property("checked").toBool());
+
+    // The box carries its row's name, and the select-all box the table's label.
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface* const rowBox = QAccessible::queryAccessibleInterface(&selectBoxOf(*table.rows.at(1)));
+    QAccessibleInterface* const allBox = QAccessible::queryAccessibleInterface(&selectAll);
+    REQUIRE(rowBox != nullptr);
+    REQUIRE(allBox != nullptr);
+    CHECK(rowBox->text(QAccessible::Name) == QStringLiteral("S-2"));
+    CHECK(allBox->text(QAccessible::Name) == QStringLiteral("Select all on this page"));
+    QAccessible::setActive(wasActive);
+}
+
+// Mutation: let the row's box keep its own state rather than show `selected` (it stays checked over a row the
+// document did not select).
+TEST_CASE("qt_quick table: a row's select box under a bound selection that refuses the click stays clear",
+          "[qt_quick]") {
+    Scene scene;
+    struct Sample {
+        std::int64_t id = 0;
+        bool operator==(Sample const&) const = default;
+    };
+    std::vector<Sample> const samples{{.id = 1}, {.id = 2}};
+    ui::Mounted const mounted{
+        scene.runtime(), scene.backend(),
+        ui::table<Sample>(
+            {{.label = "Sample"}}, [&samples] { return samples; },
+            [](Sample const& sample) { return ui::Key{sample.id}; },
+            [](morph::reactive::Signal<Sample> const&) { return std::vector<ui::Node>{ui::text({.text = "S"})}; },
+            {.selectionMode = ui::SelectionMode::Multiple,
+             .selection = [] { return std::vector<ui::Key>{}; },
+             .onSelectionChange = [](std::vector<ui::Key> const&, ui::SelectionChange) {},
+             .selectColumn = true})};
+    scene.settle();
+    auto const* const core = dynamic_cast<detail::ContainerCore const*>(&mounted.root());
+    REQUIRE(core != nullptr);
+    auto const& rows = core->children();
+    REQUIRE(rows.size() == 2);
+    auto* const box = rows.at(1)->item()->findChild<QQuickItem*>(QStringLiteral("selectBox"));
+    REQUIRE(box != nullptr);
+    scene.click(*box);
+    scene.settle();
+    CHECK_FALSE(box->property("checked").toBool());
+    CHECK_FALSE(detail::TableImpl::marked(*rows.at(1)));
 }

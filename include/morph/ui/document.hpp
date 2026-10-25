@@ -802,7 +802,7 @@ inline constexpr std::array<KeySpec, 5> kForEachKeys = {{{"rows", Shape::Expr, {
                                                          {"gap", Shape::Expr},
                                                          {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-inline constexpr std::array<KeySpec, 20> kTableKeys = {{{"rows", Shape::Expr},
+inline constexpr std::array<KeySpec, 23> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"key", Shape::Expr, {}, kInner},
                                                         {"model", Shape::Name},
                                                         {"action", Shape::Text},
@@ -815,6 +815,9 @@ inline constexpr std::array<KeySpec, 20> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"selectionMode", Shape::Expr},
                                                         {"selection", Shape::Expr},
                                                         {"onSelectionChange", Shape::Commands},
+                                                        {"selectColumn", Shape::Flag},
+                                                        {"selectAllLabel", Shape::Expr},
+                                                        {"rowLabel", Shape::Expr, {}, kInner},
                                                         {"sort", Shape::Expr},
                                                         {"filters", Shape::Expr},
                                                         {"rowTone", Shape::Expr, {}, kInner},
@@ -2990,6 +2993,28 @@ private:
         }
         if (node.kind == "table") {
             checkTableSelection(node);
+            checkSelectColumn(node);
+        }
+    }
+
+    // The select column draws a `multiple` table's selection, so it needs a literal `multiple`; its header's name
+    // needs the column.
+    static void checkSelectColumn(DocNode const& node) {
+        bool const drawn = node.flag("selectColumn");
+        if (drawn) {
+            ExprPtr const mode = node.prop("selectionMode");
+            std::string const* const literal =
+                mode != nullptr && mode->kind == ExprKind::Literal ? mode->literal.asString() : nullptr;
+            if (literal == nullptr || *literal != "multiple") {
+                refuse(pointerAppend(node.path, "selectColumn"),
+                       "a select column draws a table's selection of several rows; give it `selectionMode` "
+                       "`multiple`");
+            }
+        }
+        if (!drawn && node.prop("selectAllLabel") != nullptr) {
+            refuse(pointerAppend(node.path, "selectAllLabel"),
+                   "`selectAllLabel` names the select column's header "
+                   "box; give the table `selectColumn`");
         }
     }
 

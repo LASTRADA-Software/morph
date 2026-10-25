@@ -174,3 +174,22 @@ TEST_CASE("table: with no selection bound, or a literal null, the table keeps th
         CHECK(h.backend.prop(table, "selection") == R"(["b"])");
     }
 }
+
+// Mutation: drop the mount's setSelectColumn call (the table records no select column).
+TEST_CASE("table: a select column, its header's name and each row's label reach the backend", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "boxes",
+      "state": { "items": { "init": { "lit": [ { "id": "S-1" }, { "id": "S-2" } ] } } },
+      "view": { "kind": "table", "rows": { "ref": "items" }, "selectionMode": "multiple", "selectColumn": true,
+                "selectAllLabel": "Select all on this page", "rowLabel": { "row": "id" },
+                "columns": [ { "id": "id", "label": "Sample" } ] } })");
+    int const table = h.backend.all("Table").front();
+    CHECK(h.backend.prop(table, "selectColumn") == "true");
+    CHECK(h.backend.prop(table, "selectAllLabel") == "Select all on this page");
+    std::vector<std::string> labels;
+    for (int const row : h.backend.children(table)) {
+        labels.push_back(h.backend.prop(row, "label"));
+    }
+    CHECK(labels == std::vector<std::string>{"S-1", "S-2"});
+}
