@@ -43,29 +43,65 @@ MorphWidget {
     property int rowScans: 0
     readonly property var widths: root.columnWidths(width)
 
+    // No column is narrower than its header: a content column is at least its header and its widest cell, a stretch
+    // column at least its header (its cells are meant to take what is left, so they do not raise it), each with a
+    // unit of padding a side and never under 8 units. A stretch column takes its share of what the others leave, and
+    // a share under its floor is the floor, the rest shared among the others. Columns wider in sum than the table
+    // scroll sideways (`hflick`).
     function columnWidths(total: real): var {
         const out = []
+        const floors = []
         let used = 0
-        let weights = 0
+        let pending = []
         for (let i = 0; i < root.columns.length; ++i) {
             const column = root.columns[i]
+            const header = Math.max(headerMetrics.advanceWidth(column.label) + 2 * Theme.unitWidth, 8 * Theme.unitWidth)
             let w = 0
             if (column.kind === 1)
                 w = column.amount * Theme.unitWidth
             else if (column.kind === 0)
-                w = Math.max(Math.max(headerMetrics.advanceWidth(column.label), root.cachedWidth(i)) + 2 * Theme.unitWidth,
-                             8 * Theme.unitWidth)
+                w = Math.max(root.cachedWidth(i) + 2 * Theme.unitWidth, header)
             else
-                weights += Math.max(1, column.amount)
+                pending.push(i)
             out.push(w)
+            floors.push(header)
             used += w
         }
-        const left = Math.max(0, total - used)
-        for (let i = 0; i < root.columns.length; ++i) {
-            if (root.columns[i].kind === 2)
-                out[i] = weights > 0 ? left * Math.max(1, root.columns[i].amount) / weights : 0
+        let left = Math.max(0, total - used)
+        let floored = true
+        while (floored && pending.length > 0) {
+            floored = false
+            let weights = 0
+            for (const i of pending)
+                weights += Math.max(1, root.columns[i].amount)
+            const next = []
+            for (const i of pending) {
+                const share = left * Math.max(1, root.columns[i].amount) / weights
+                if (share < floors[i]) {
+                    out[i] = floors[i]
+                    floored = true
+                } else {
+                    out[i] = share
+                    next.push(i)
+                }
+            }
+            if (floored) {
+                for (const i of pending) {
+                    if (!next.includes(i))
+                        left = Math.max(0, left - floors[i])
+                }
+            }
+            pending = next
         }
         return out
+    }
+
+    // The columns' summed width: the rows' and the header's width, and what `hflick` scrolls across.
+    readonly property real columnsWidth: {
+        let sum = 0
+        for (const w of root.widths)
+            sum += w
+        return sum
     }
 
     // The cached widest-cell width for column `index`; 0 until seeded. This must never write to `columnCache` --
@@ -174,15 +210,30 @@ MorphWidget {
         font: Theme.strongFont
     }
 
-    ColumnLayout {
+    // The table's area, which scrolls sideways only while its columns are wider than the table: a table that fits
+    // takes no drag and no wheel event, so an ancestor's scroll keeps them, and a vertical wheel always passes on.
+    // It holds the header over the rows' own vertical area, `flick`.
+    Flickable {
+        id: hflick
+        objectName: "hflick"
         anchors.fill: parent
-        spacing: 0
+        contentWidth: Math.max(root.columnsWidth, width)
+        contentHeight: height
+        flickableDirection: Flickable.HorizontalFlick
+        interactive: root.columnsWidth > width
+        clip: interactive
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.horizontal: MorphScrollBar {
+            scheme: root.scheme
+            visible: hflick.interactive
+        }
 
         Item {
             id: headerArea
             visible: root.showHeader
+            width: hflick.contentWidth
             implicitWidth: header.implicitWidth
-            implicitHeight: root.showHeader ? header.implicitHeight : 0
+            height: root.showHeader ? header.implicitHeight : 0
 
             Loader {
                 id: headerBackgroundLoader
@@ -218,22 +269,20 @@ MorphWidget {
             }
         }
 
-        // Unvirtualized, flick is a transparent pass-through: its content height tracks body's own (grow to
-        // content, exactly as before this existed), nothing clips, and it never scrolls on its own -- an ancestor
-        // (a panel, a dialog's own ScrollView, the page) still does, exactly as today. Virtualized, flick is the
-        // table's own bounded viewport (see the design's "a virtualized table needs its own bounded viewport"):
-        // Layout.fillHeight claims whatever height the document gave the table (the new requirement, §4.2a), and
-        // flick clips to it, with topSpace/bottomSpace standing in for the rows not realized right now.
+        // Unvirtualized, flick is a transparent pass-through: its height is body's own, nothing clips, and it never
+        // scrolls on its own, so an ancestor (a panel, a dialog's ScrollView, the page) does. Virtualized, it is the
+        // table's own bounded viewport: it takes the height the document gave the table, less the header, and clips
+        // to it, with topSpace and bottomSpace standing in for the rows not realized right now.
         Flickable {
             id: flick
             objectName: "flick"
-            Layout.fillWidth: true
-            Layout.fillHeight: root.virtualized
-            Layout.preferredHeight: root.virtualized ? -1 : body.implicitHeight
-            implicitHeight: root.virtualized ? -1 : body.implicitHeight
+            y: headerArea.height
+            width: hflick.contentWidth
+            height: root.virtualized ? Math.max(0, hflick.height - headerArea.height) : body.implicitHeight
             clip: root.virtualized
             interactive: root.virtualized
-            contentWidth: body.implicitWidth
+            flickableDirection: Flickable.VerticalFlick
+            contentWidth: width
             contentHeight: topSpace.height + body.implicitHeight + bottomSpace.height
             boundsBehavior: Flickable.StopAtBounds
 

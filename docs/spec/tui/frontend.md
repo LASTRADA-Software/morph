@@ -87,7 +87,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Dialog | a centred box over everything; its footer is the box's bottom row, its children against the right edge, one cell apart, and stays last when the content mounts again | Esc dismisses |
 | Drawer | a box against its side, the screen's height; its footer as a dialog's | Esc dismisses |
 | Busy | a spinner and its label while active | — |
-| Table | a header and keyed rows, `*` on selected rows, `>` on the cursor; a toned row's cells draw in the tone's style, keeping any inverse | arrows, Space selects or toggles, Enter activates, click and double click |
+| Table | a header and keyed rows, `*` on selected rows, `>` on the cursor; a toned row's cells draw in the tone's style, keeping any inverse; the layout solver never squeezes a column below its header's width (a fixed column below its own width), and the columns past the table's edge are cut; a row's cells keep their own height and centre in it, rounded down | arrows, Space selects or toggles, Enter activates, click and double click |
 | DateTimeInput | `YYYY-MM-DD[ HH:MM]` in the display zone | typing; Up/Down step |
 | Slider | `[====\|----] value` | Left, Right, Home, End, press and drag on the track |
 | FilePicker | a path field, prompted `Open: ` or `Save: ` | typing; Enter |

@@ -674,3 +674,72 @@ TEST_CASE("tui table: a toned row's cells draw in the tone's style", "[tui][tabl
     CHECK_FALSE(harness.screen().renderedBuffer().at(1, 2).style.fg == theme.error.fg);
     CHECK_THROWS_AS(fruit.table->setRowTone(*fruit.cells.at(0), ui::Tone::Ok), std::logic_error);
 }
+
+namespace {
+
+/// A table of two fixed columns @p fixed wide and a stretch column headed `Analyte`, with one row.
+struct Overfull {
+    Overfull(Harness& harness, int fixed) : table{harness.make<TableImpl>(nullptr)} {
+        table->setColumns({{.label = "Sample", .width = ui::Sizing::fixed(fixed)},
+                           {.label = "Lot", .width = ui::Sizing::fixed(fixed)},
+                           {.label = "Analyte", .width = ui::Sizing::stretch(1)}});
+        row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+        for (auto const* const text : {"S-1", "L-1", "Assay"}) {
+            cells.push_back(harness.make<TextImpl>(row.get()));
+            cells.back()->setText(text);
+        }
+        table->setRowKey(*row, key(1));
+    }
+    ~Overfull() {
+        cells.clear();
+        row.reset();
+    }
+    Overfull(Overfull const&) = delete;
+    Overfull& operator=(Overfull const&) = delete;
+    Overfull(Overfull&&) = delete;
+    Overfull& operator=(Overfull&&) = delete;
+
+    std::unique_ptr<TableImpl> table;
+    std::unique_ptr<StackImpl> row;
+    std::vector<std::unique_ptr<TextImpl>> cells;
+};
+
+}  // namespace
+
+// Mutation: drop the header minimum in TableImpl::columnWidths (the stretch column gets what is left, 6 columns, and
+// its header is cut to `Analyt`; with less room, `Lot` is squeezed to nothing).
+TEST_CASE("tui table: no column is squeezed below its header, and an overfull table is cut at its edge",
+          "[tui][table][columns]") {
+    {
+        // The stretch column is floored at its header; the overflow that makes comes from the last fixed column.
+        Harness harness{30, 3};
+        Overfull const table{harness, 10};
+        CHECK(harness.draw() == Rows{"  Sample     Lot       Analyte", "  S-1        L-1       Assay"});
+    }
+    {
+        // Two fixed columns of 20 give way down to their headers, and the stretch column keeps its own.
+        Harness harness{30, 3};
+        Overfull const table{harness, 20};
+        CHECK(harness.draw() == Rows{"  Sample           Lot Analyte", "  S-1              L-1 Assay"});
+    }
+    {
+        // Narrower than the headers together: the columns past the edge are cut, not drawn at width 0.
+        Harness harness{12, 3};
+        Overfull const table{harness, 20};
+        CHECK(harness.draw() == Rows{"  Sample Lot", "  S-1    L-1"});
+    }
+}
+
+// Mutation: place a table row's cells by the row's own alignment (the short cell sits on the first line).
+TEST_CASE("tui table: a one-line cell beside a three-line cell is drawn on the middle line", "[tui][table]") {
+    Harness harness{30, 5};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name"}, {.label = "Notes"}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    auto const name = harness.make<TextImpl>(row.get());
+    name->setText("pH");
+    auto const notes = harness.make<TextImpl>(row.get());
+    notes->setText("one\ntwo\nthree");
+    table->setRowKey(*row, key(1));
+    CHECK(harness.draw() == Rows{"  Name Notes", "       one", "  pH   two", "       three"});
+}

@@ -35,27 +35,42 @@ MorphWidget {
         return false
     }
 
+    // Each cell sits inset by the same step as the header label's own padding (MorphTable.qml), so its text lines
+    // up under its header. A cell fills its column's width, except a kind whose width is its label (`fillsAcross`
+    // false: a badge, a check box, a button), which keeps its natural width at the column's start, as it does in a
+    // stack. Every cell keeps its own height, up to the row's, and is centred in the row.
     function place() {
-        // Each cell sits inset by the same step as the header label's own leftPadding/rightPadding
-        // (MorphTable.qml), so cell text lines up under its header instead of touching the column's edge.
         const inset = Theme.spaceOf(2)
         let x = 0
         let tallest = 0
         for (let i = 0; i < cells.children.length; ++i) {
             const cell = cells.children[i]
             const w = i < root.widths.length ? root.widths[i] : cell.implicitWidth
+            const room = Math.max(0, w - 2 * inset)
             cell.x = x + inset
-            cell.width = Math.max(0, w - 2 * inset)
+            cell.width = (cell as MorphWidget)?.fillsAcross === false ? Math.min(cell.implicitWidth, room) : room
             x += w
             tallest = Math.max(tallest, cell.implicitHeight)
         }
         cells.implicitWidth = x
         cells.implicitHeight = tallest
-        for (let i = 0; i < cells.children.length; ++i)
-            cells.children[i].height = tallest
+        const rowHeight = Math.max(tallest, root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
+        for (let i = 0; i < cells.children.length; ++i) {
+            const cell = cells.children[i]
+            cell.height = Math.min(cell.implicitHeight, tallest)
+            cell.y = Math.floor((rowHeight - cell.height) / 2)
+        }
     }
 
     onWidthsChanged: place()
+    onBackgroundItemChanged: place()
+    // The row is as tall as its background asks when that is more than the cells, and they centre in that height.
+    Connections {
+        target: root.backgroundItem
+        function onImplicitHeightChanged() {
+            root.place()
+        }
+    }
     Layout.fillWidth: true
     implicitWidth: cells.implicitWidth
     // The cells' height, or the background's when it asks for more: the stock one is a dense row.

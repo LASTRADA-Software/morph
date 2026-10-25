@@ -5,8 +5,13 @@
 
 #include <QColor>
 #include <QObject>
+#include <QPointF>
 #include <QQuickItem>
+#include <QSizeF>
+#include <QVariantList>
 #include <catch2/catch_test_macros.hpp>
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <morph/reactive/signal.hpp>
@@ -14,6 +19,7 @@
 #include <morph/ui/mount.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
+#include <ranges>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -447,4 +453,148 @@ TEST_CASE("qt_quick table: a virtualized table's column width never shrinks as a
     scene.settle();
     REQUIRE(tableItem.property("realizedFirst").toInt() > 0);
     CHECK(tableItem.property("widths").toList().at(0).toReal() == widthWithWideRow);
+}
+
+namespace {
+
+// The Theme singleton's unit width and height.
+QSizeF units(Scene& scene) {
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    return {theme->property("unitWidth").toReal(), theme->property("unitHeight").toReal()};
+}
+
+// The cell inset a row places its cells by: `Theme.spaceOf(2)`.
+constexpr qreal kCellInset = 8;
+
+}  // namespace
+
+// Mutation: give every cell its column's width in MorphTableRow.place (the badge stretches across its column).
+TEST_CASE("qt_quick table: a badge keeps its own width at its column's start", "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "State", .width = ui::Sizing::fixed(30)}, {.label = "Name"}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    auto badge = scene.backend().createBadge(row.get());
+    badge->setText("OK");
+    auto name = scene.backend().createText(row.get());
+    name->setText("pH");
+    scene.settle();
+
+    QQuickItem const& badgeItem = Scene::itemOf(*badge);
+    qreal const column = 30 * units(scene).width();
+    CHECK(badgeItem.width() < column - (2 * kCellInset));
+    CHECK(badgeItem.width() == badgeItem.implicitWidth());
+    CHECK(badgeItem.x() == kCellInset);
+}
+
+// Mutation: leave every cell at the row's top with the tallest cell's height (the text sits above the select's
+// centre).
+TEST_CASE("qt_quick table: a text cell beside a taller select is centred in its row", "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "Test"}, {.label = "When"}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    auto text = scene.backend().createText(row.get());
+    text->setText("Assay");
+    auto select = scene.backend().createSelect(row.get(), ui::SelectStyle::Dropdown);
+    select->setOptions({{.key = ui::Key{std::int64_t{1}}, .label = "Initial"}});
+    scene.settle();
+
+    QQuickItem const& textItem = Scene::itemOf(*text);
+    QQuickItem const& rowItem = Scene::itemOf(*row);
+    REQUIRE(Scene::itemOf(*select).implicitHeight() > textItem.implicitHeight());
+    qreal const above = textItem.y();
+    qreal const below = rowItem.height() - (textItem.y() + textItem.height());
+    CHECK(above > 0);
+    CHECK(std::abs(above - below) <= 1.0);
+}
+
+namespace {
+
+// A table @p width units wide: two fixed columns of 40 and a stretch column headed `Analyte`, with one row.
+struct WideTable {
+    WideTable(Scene& scene, int width) {
+        table = scene.backend().createTable(nullptr);
+        table->setLayout({.width = ui::Sizing::fixed(width), .height = {}});
+        table->setColumns({{.label = "Sample", .width = ui::Sizing::fixed(40)},
+                           {.label = "Lot", .width = ui::Sizing::fixed(40)},
+                           {.label = "Analyte", .width = ui::Sizing::stretch(1)}});
+        row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+        table->setRowKey(*row, ui::Key{std::int64_t{1}});
+        for (auto const* const label : {"S-1", "L-1", "Assay"}) {
+            cells.push_back(scene.backend().createText(row.get()));
+            cells.back()->setText(label);
+        }
+        scene.settle();
+    }
+
+    std::unique_ptr<ui::TableWidget> table;
+    std::unique_ptr<ui::StackWidget> row;
+    std::vector<std::unique_ptr<ui::TextWidget>> cells;
+};
+
+}  // namespace
+
+// Mutation: give a stretch column only what the others leave, with no floor (it is 0 wide and the cells overlap), or
+// make `hflick` never interactive.
+TEST_CASE("qt_quick table: a table wider than its area keeps every column and scrolls sideways", "[qt_quick]") {
+    Scene scene;
+    WideTable const wide{scene, 60};
+    QQuickItem const& tableItem = Scene::itemOf(*wide.table);
+    QVariantList const widths = tableItem.property("widths").toList();
+    REQUIRE(widths.size() == 3);
+    qreal const unit = units(scene).width();
+    CHECK(widths.at(2).toReal() >= 8 * unit);
+    CHECK(widths.at(2).toReal() >= tableItem.property("columnsWidth").toReal() - (80 * unit) - 1);
+    for (std::size_t index = 1; index < wide.cells.size(); ++index) {
+        QQuickItem const& before = Scene::itemOf(*wide.cells.at(index - 1));
+        QQuickItem const& after = Scene::itemOf(*wide.cells.at(index));
+        CHECK(after.mapToScene(QPointF{0, 0}).x() >= before.mapToScene(QPointF{before.width(), 0}).x());
+        CHECK(after.width() > 0);
+    }
+    auto const* const hflick = tableItem.findChild<QQuickItem*>(QStringLiteral("hflick"));
+    REQUIRE(hflick != nullptr);
+    CHECK(hflick->property("interactive").toBool());
+    qreal const sum = widths.at(0).toReal() + widths.at(1).toReal() + widths.at(2).toReal();
+    CHECK(std::abs(hflick->property("contentWidth").toReal() - sum) < 0.5);
+
+    Scene roomy;
+    WideTable const fits{roomy, 200};
+    auto const* const fitting = Scene::itemOf(*fits.table).findChild<QQuickItem*>(QStringLiteral("hflick"));
+    REQUIRE(fitting != nullptr);
+    CHECK_FALSE(fitting->property("interactive").toBool());
+}
+
+// Mutation: size `flick` to its rows whether or not the table is virtualized (the table's rows overflow its height
+// and `flick` cannot scroll).
+TEST_CASE("qt_quick table: a virtualized table keeps the height it is given, and its rows scroll inside it",
+          "[qt_quick]") {
+    Scene scene;
+    auto const many = std::views::iota(std::int64_t{0}, std::int64_t{40}) |
+                      std::views::transform([](std::int64_t index) {
+                          return VirtualRow{.id = index, .name = "row-" + std::to_string(index)};
+                      }) |
+                      std::ranges::to<std::vector>();
+    ui::Mounted const mounted{
+        scene.runtime(), scene.backend(),
+        ui::table<VirtualRow>(
+            {{.label = "Name"}}, [&many] { return std::vector<VirtualRow>{many}; },
+            [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+            {.virtualize = {.threshold = 5, .overscan = 1}, .common = {.layout = {.height = ui::Sizing::fixed(10)}}})};
+    scene.settle();
+
+    // The roots are a column, so the table is a fixed-height child of one.
+    QQuickItem const* const tableItem = &Scene::itemOf(mounted.root());
+    auto* const flick = tableItem->findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    qreal const given = 10 * units(scene).height();
+    CHECK(std::abs(tableItem->height() - given) < 1.0);
+    // The rows' viewport is what the header leaves of that height, whatever the realized rows measure.
+    CHECK(flick->y() > 0);
+    CHECK(std::abs(flick->y() + flick->height() - given) < 1.0);
+    CHECK(flick->property("contentHeight").toReal() > flick->height());
+    CHECK(flick->property("interactive").toBool());
 }

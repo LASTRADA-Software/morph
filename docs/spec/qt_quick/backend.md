@@ -194,8 +194,15 @@ order) — and each of those is one operation on the Qt side. Nothing re-creates
 
 **Tables.** A horizontal stack the mount makes inside a table is one of its rows (`MorphTableRow`). A row places its
 cells by column index at the table's column widths — fixed units, the widest of the header and the column's shown cells
-for content (as the terminal backend sizes it), a share of the rest for stretch — so a hidden cell keeps its column
-and the cells after it stay under their headers. A content column's width is cached per column rather than recomputed
+for content (as the terminal backend sizes it), a share of the rest for stretch but never less than its header (the
+header's width and a unit a side, at least 8 units, as an empty content column's), the share a floored column gives up
+taken from the others — so a hidden cell keeps its column and the cells after it stay under their headers. A cell is
+its column's width less `Theme.spaceOf(2)` a side, except one whose `fillsAcross` is false (a badge, a check box, a
+button), which is its implicit width at the column's start; every cell keeps its implicit height, up to the tallest,
+and is centred in the row's height. The header and the rows sit in a horizontal `Flickable` (`hflick`) as wide as the
+columns: while they are wider than the table it scrolls sideways, clips and shows a horizontal `MorphScrollBar`;
+otherwise it takes no drag or wheel event, and it never takes a vertical one. The rows' own vertical `Flickable`
+(`flick`) is, virtualized, what the header leaves of the table's height, and otherwise its rows' height. A content column's width is cached per column rather than recomputed
 by rescanning every row on every change: a cell growing only raises its column's cached width; a cell shrinking, a row
 leaving, or a cell's visibility flipping rescans that one column, since the cache alone cannot tell whether the row
 that set its current maximum is still contributing. Either way, every row still places its cells again once a

@@ -61,7 +61,9 @@ std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) con
                       StackSpec{.axis = _axis,
                                 .gap = _extents.empty() ? _gap : _extentGap,
                                 .extents = _extents,
-                                .align = _align,
+                                // A table row's cells keep their own height and centre in the row, whatever the
+                                // row's own alignment: a cell takes none.
+                                .align = _extents.empty() ? _align : ui::Align::Center,
                                 .justify = _justify});
 }
 

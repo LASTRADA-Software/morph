@@ -173,7 +173,14 @@ in a row as tall as the row; a grid cell, and the content of a panel, scroll are
 fills its width. A kind whose width is its label (a button, a badge, a checkbox) fills the line but draws at its
 natural width at the line's start, on Qt Quick as on the terminal. Along the axis a stack packs its children at the
 start, `setGap` apart; only a `stretch` child takes spare length. A content-sized splitter keeps each pane at its own
-size until the user drags. A splitter's panes and a table's cells are sized by the splitter and the table, not by this rule.
+size until the user drags. A splitter's panes are sized by the splitter, not by this rule.
+
+**Table cells.** A table sizes and places its cells itself. A cell fills its column's width, except a kind whose
+width is its label, which draws at its natural width at the column's start. Every cell keeps its own height and is
+centred in its row (rounded down on the terminal). No column is squeezed below its header: a content column is at
+least its header, a stretch column takes what the others leave but never less than its header, and a fixed column
+keeps its width (a fixed column narrower than its header cuts the header). A table whose columns are wider than the
+table scrolls sideways on Qt Quick; on the terminal the columns past its edge are cut and cannot be reached.
 
 **Alignment.** All of the above is the default, `Align::Stretch` and `Justify::Start`; the mount calls `setAlign` and
 `setJustify` only for another value, as it does `setEmphasis`, so a screen that says nothing of alignment records

@@ -128,7 +128,12 @@ std::vector<int> TableImpl::columnWidths(int width) const {
     std::vector<layout::Item> items;
     items.reserve(_columns.size());
     for (auto const [column, natural] : std::views::zip(_columns, naturalWidths())) {
-        items.push_back(layout::Item{.sizing = column.width, .natural = natural});
+        // No column is squeezed below its header, so none is drawn at width 0; a fixed column narrower than its
+        // header keeps the width the author gave it. A table whose columns still exceed its width is cut at its edge.
+        int const header = displayWidth(column.label);
+        int const minimum =
+            column.width.kind == ui::Sizing::Kind::Fixed ? std::min(header, std::max(0, column.width.amount)) : header;
+        items.push_back(layout::Item{.sizing = column.width, .natural = natural, .minimum = minimum});
     }
     return layout::distribute(items, layout::Track{.length = std::max(0, width - kGutter), .gap = kColumnGap});
 }
