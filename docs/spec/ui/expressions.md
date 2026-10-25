@@ -29,6 +29,7 @@ new `expr` version, not to `expr/1` (spec 5 §12). The shared corpus is
 | A JSON scalar, `{"lit": v}` | `Literal` | The constant; `lit` wraps a list or a record |
 | `{"ref": "name.path"}` | `Ref` | A name, then a path (record fields by name, list elements by index) |
 | `{"row": "path"}` | `Row` | A field of the innermost row; `""` is the whole row |
+| `{"get": e, "path": "a.b"}` | `Get` | A path read out of any expression's value, as `ref` reads below its name |
 | `{"query": "q"}` | `Query` | A query's value |
 | `{"pending": "x"}`, `{"error": "x"}`, `{"errorKind": "x"}` | `Pending`, `Error`, `ErrorKind` | A query's or mutation's flight, error text and error kind |
 | `{"result": "m"}` | `Result` | A mutation's last result |
@@ -50,10 +51,18 @@ Quick counts the window's width in `Theme.unitWidth`s. A document's breakpoints 
 its own units on both frontends.
 
 An expression object has one form key and only that form's companion keys (`fn` with `args`; `t`
-with `fallback` and `args`; `map` with `as` and `to`; `filter` with `as` and `where`). An array is
-not an expression — a list is `{"list": [...]}` or `{"lit": [...]}` — and a number with a fraction
-is refused: an exact value is `{"num", "den", "dp"}`. Every node carries its JSON Pointer, which
-refusals and diagnostics name.
+with `fallback` and `args`; `map` with `as` and `to`; `filter` with `as` and `where`; `get` with
+`path`). An array is not an expression — a list is `{"list": [...]}` or `{"lit": [...]}` — and a
+number with a fraction is refused: an exact value is `{"num", "den", "dp"}`. Every node carries its
+JSON Pointer, which refusals and diagnostics name.
+
+`get` reads its path with `walk` (see [The environment](#the-environment)), the reader `ref` and
+`row` use, so `{"get": e, "path": p}` means what a `ref` means after its head and the two never
+disagree on a path: `first(xs)`'s `lot.stock` is `{"get": {"fn": "first", ...}, "path":
+"lot.stock"}`. The path is a literal, non-empty string in `ref`'s dotted syntax, which keeps every
+read a document makes checkable; a path computed at run time is not in `expr/1`. `get` of `null`, a
+missing field, and a path through a scalar are `null` without a report. Its static type is `any`;
+an operand whose type is known to be neither a record nor a list is refused at load.
 
 **Size bound.** An expression of more than 256 nodes is refused (`kMaxExpressionNodes`). A node is
 one JSON expression: a literal, however large its value, is one node. The parser counts as it

@@ -317,9 +317,6 @@ TEST_CASE("handles read fields by member pointer below a name", "[ui][author]") 
     CHECK(text(ui::row<ResultView>().at(&ResultView::id)) == R"({"row":"id"})");
     CHECK(text(ui::row("inputs").at("mass")) == R"({"row":"inputs.mass"})");
     CHECK(text(ui::ref("x").at("y")) == R"({"ref":"x.y"})");
-    // A computed value has no name to read below.
-    CHECK_THROWS_AS((view.orElse(view)).at(&ResultView::id), ui::AuthoringError);
-    CHECK_THROWS_AS(ui::env("locale").at("x"), ui::AuthoringError);
     // A member glaze does not reflect has no JSON name.
     CHECK_THROWS_AS(ui::row(&author_test::Partial::hidden), ui::AuthoringError);
     CHECK(text(ui::row(&author_test::Partial::shown)) == R"({"row":"shown"})");
@@ -424,17 +421,9 @@ TEST_CASE("a button's style and selection are written, and the loader takes them
     CHECK(text(ui::button({.label = "P"}).json()) == R"({"kind":"button","label":"P"})");
 }
 
-// The checks are templates: a requires-expression outside one makes a deleted call a hard error.
-template <typename M>
-concept ResultReadsMember = requires(M mutation) { mutation.result().at(&ResultView::id); };
-template <typename M>
-concept ResultReadsField = requires(M mutation) { mutation.result().at("id"); };
 template <typename M>
 concept ResultBinds = requires(ui::Scope& screen, M mutation) { screen.let("r", mutation.result()); };
 
-// Mutation: drop the deleted `at` overloads of ResultHandle; the first two assertions stop holding.
-static_assert(!ResultReadsMember<ui::MutationHandle<CaptureConcentration>>, "a mutation's result has no member read");
-static_assert(!ResultReadsField<ui::MutationHandle<CaptureConcentration>>, "a mutation's result has no named read");
 static_assert(ResultBinds<ui::MutationHandle<CaptureConcentration>>, "a mutation's result binds with let");
 
 TEST_CASE("query and mutation handles read their state", "[ui][author]") {
@@ -447,8 +436,7 @@ TEST_CASE("query and mutation handles read their state", "[ui][author]") {
     CHECK(text(header.at(&Header::sampleNumber)) == R"({"ref":"header.sampleNumber"})");
     ui::MutationHandle<CaptureConcentration> const capture{"capture"};
     CHECK(text(capture.result()) == R"({"result":"capture"})");
-    // A result has no field reads at compile time; one built as a plain handle is refused when it is read.
-    CHECK_THROWS_AS(ui::Handle<ResultView>{capture.result()}.at(&ResultView::id), ui::AuthoringError);
+    CHECK(text(capture.result().at(&ResultView::id)) == R"({"get":{"result":"capture"},"path":"id"})");
     CHECK(text(capture.pending()) == R"({"pending":"capture"})");
     CHECK(text(capture.error()) == R"({"error":"capture"})");
     CHECK(text(capture.errorKind()) == R"({"errorKind":"capture"})");
@@ -867,14 +855,15 @@ TEST_CASE("every command matches its golden", "[ui][author][golden]") {
 }
 
 TEST_CASE("a builder error refuses the screen at its root", "[ui][author][registration]") {
+    // A field of a computed int is written as a `get`, which the loader refuses where it is read.
     auto const belowComputed = refusalOf(ui::screen("author.computed", [](ui::Scope& screen) {
         auto value = screen.state("value", std::int64_t{1});
         return ui::text({.text = (value + 1).at("x")});
     }));
     REQUIRE(belowComputed.has_value());
     CHECK(belowComputed->document == "author.computed");
-    CHECK(belowComputed->path.empty());
-    CHECK(belowComputed->reason.starts_with("a field is read below a name"));
+    CHECK(belowComputed->path == "/view/text");
+    CHECK(belowComputed->reason.contains("`get` reads a path out of a record or a list, not int"));
 
     auto const setComputed = refusalOf(ui::screen("author.setComputed", [](ui::Scope& screen) {
         auto value = screen.state("value", std::int64_t{1});
@@ -1207,11 +1196,22 @@ TEST_CASE("MORPH_REGISTER_SCREEN enrols at static initialisation and keeps refus
     CHECK(registry.refusals().front().path == "/view");
 }
 
-TEST_CASE("only a ref or row read has fields and names a target", "[ui][author]") {
-    // A form with companion keys, and a form whose value is not a name, are not named reads.
-    CHECK_THROWS_AS(ui::t("k", "Fallback").at("x"), ui::AuthoringError);
-    CHECK_THROWS_AS(ui::list({1}).at("x"), ui::AuthoringError);
-    CHECK_THROWS_AS(ui::AnyHandle{1}.at("x"), ui::AuthoringError);
+// Mutation: let fieldOf throw below a value that is not a named read, as it once did; every `get` case fails.
+TEST_CASE("a field of a computed value is read with get", "[ui][author]") {
+    auto const xs = ui::ref("xs");
+    auto const first = ui::call("first", {xs});
+    CHECK(text(first.at("date")) == R"({"get":{"fn":"first","args":[{"ref":"xs"}]},"path":"date"})");
+    // A field below a `get` extends its path: one node, not a `get` of a `get`.
+    CHECK(text(first.at("a").at("b")) == R"({"get":{"fn":"first","args":[{"ref":"xs"}]},"path":"a.b"})");
+    auto const view = ui::ref<ResultView>("view");
+    CHECK(text(view.orElse(view).at(&ResultView::id)) ==
+          R"({"get":{"fn":"coalesce","args":[{"ref":"view"},{"ref":"view"}]},"path":"id"})");
+    CHECK(text(ui::list({1}).at("0")) == R"({"get":{"list":[1]},"path":"0"})");
+    // A `t` carries companion keys, so it is not a `get` to extend.
+    CHECK(text(ui::t("k", "Fallback").at("x")) == R"({"get":{"t":"k","fallback":"Fallback"},"path":"x"})");
+}
+
+TEST_CASE("only a ref or row read names a target", "[ui][author]") {
     // A row field is read, but never written.
     CHECK_THROWS_AS(ui::set(ui::row("x"), 1), ui::AuthoringError);
     CHECK_THROWS_AS(ui::reset(ui::env("locale")), ui::AuthoringError);

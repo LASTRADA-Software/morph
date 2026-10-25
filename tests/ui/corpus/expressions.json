@@ -23,6 +23,11 @@
     { "name": "ref by an index past 2^64", "expr": { "ref": "xs.18446744073709551616" }, "env": { "names": { "xs": ["a", "b"] } }, "expect": null },
     { "name": "ref by an index past 2^64 + 1", "expr": { "ref": "xs.18446744073709551617" }, "env": { "names": { "xs": ["a", "b"] } }, "expect": null },
     { "name": "ref by the last index", "expr": { "ref": "xs.1" }, "env": { "names": { "xs": ["a", "b"] } }, "expect": "b" },
+    { "name": "get a field of the first record", "expr": { "get": { "fn": "first", "args": [{ "lit": [{ "date": "2026-12-03", "lot": "A" }, { "date": "2027-01-03", "lot": "B" }] }] }, "path": "date" }, "expect": "2026-12-03" },
+    { "name": "get through a list index", "expr": { "get": { "lit": { "items": [{ "name": "a" }, { "name": "b" }] } }, "path": "items.1.name" }, "expect": "b" },
+    { "name": "get of null", "expr": { "get": { "ref": "missing" }, "path": "a" }, "expect": null },
+    { "name": "get of a missing field", "expr": { "get": { "lit": { "a": 1 } }, "path": "b" }, "expect": null },
+    { "name": "get through a scalar", "expr": { "get": 5, "path": "a" }, "expect": null },
     { "name": "ref to a missing field", "expr": { "ref": "rec.nofield" }, "env": { "names": { "rec": { "a": 1 } } }, "expect": null },
     { "name": "ref through a scalar", "expr": { "ref": "a.b" }, "env": { "names": { "a": 1 } }, "expect": null },
     { "name": "row field", "expr": { "row": "id" }, "env": { "row": { "id": 7 } }, "expect": 7 },
@@ -336,7 +341,12 @@
     { "name": "too many arguments", "expr": { "fn": "not", "args": [true, false] }, "reason": "`not` takes 1 arguments, not 2", "at": "" },
     { "name": "a non-string can", "expr": { "can": 5 }, "reason": "takes the name of a mutation, query or `host:` command", "at": "/can" },
     { "name": "an empty message key", "expr": { "t": "", "fallback": "x" }, "reason": "message key", "at": "/t" },
-    { "name": "filter with an array condition", "expr": { "filter": { "lit": [1] }, "as": "x", "where": [1] }, "reason": "a list is written", "at": "/where" }
+    { "name": "filter with an array condition", "expr": { "filter": { "lit": [1] }, "as": "x", "where": [1] }, "reason": "a list is written", "at": "/where" },
+    { "name": "get without path", "expr": { "get": { "ref": "x" } }, "reason": "`get` needs `path`", "at": "" },
+    { "name": "get with an empty path", "expr": { "get": { "ref": "x" }, "path": "" }, "reason": "`get` reads a `path`", "at": "/path" },
+    { "name": "get with a non-string path", "expr": { "get": { "ref": "x" }, "path": 5 }, "reason": "`get` reads a `path`", "at": "/path" },
+    { "name": "get with a malformed path", "expr": { "get": { "ref": "x" }, "path": "a..b" }, "reason": "empty segment", "at": "/path" },
+    { "name": "get with a stray key", "expr": { "get": { "ref": "x" }, "path": "a", "as": "y" }, "reason": "does not belong", "at": "/as" }
   ],
   "check": [
     { "name": "an int literal", "expr": 1, "type": "int" },
@@ -377,6 +387,8 @@
     { "name": "query", "expr": { "query": "a" }, "type": "any" },
     { "name": "t", "expr": { "t": "k", "fallback": "x" }, "type": "string?" },
     { "name": "t with a computed fallback", "expr": { "fn": "t", "args": ["k", { "ref": "x" }] }, "type": "string?" },
+    { "name": "get", "expr": { "get": { "ref": "x" }, "path": "a" }, "type": "any" },
+    { "name": "get of a list", "expr": { "get": { "list": [1] }, "path": "0" }, "type": "any" },
 
     { "name": "a comprehension over lists of lists", "expr": { "map": { "map": { "lit": [1] }, "as": "a", "to": { "lit": [1] } }, "as": "x", "to": { "ref": "x.0" } }, "type": "list<any>" },
     { "name": "a nested comprehension reads the outer variable", "expr": { "map": { "lit": [1] }, "as": "x", "to": { "map": { "lit": [2] }, "as": "y", "to": { "ref": "x" } } }, "type": "list<list<any>>" },
@@ -402,6 +414,7 @@
     { "name": "map over a scalar", "expr": { "map": 5, "as": "x", "to": 1 }, "reason": "runs over a list", "at": "/map" },
     { "name": "a refused fallback", "expr": { "t": "k", "fallback": "{0} outside limits" }, "reason": "outside the ui/1 message subset", "at": "/fallback" },
     { "name": "a field of a scalar element", "expr": { "map": { "map": { "lit": [1] }, "as": "a", "to": 5 }, "as": "x", "to": { "ref": "x.f" } }, "reason": "`x` is int and has no field `f`", "at": "/to" },
+    { "name": "get of a scalar", "expr": { "get": 5, "path": "a" }, "reason": "`get` reads a path out of a record or a list, not int", "at": "" },
     { "name": "an error inside obj", "expr": { "obj": { "a": { "fn": "not", "args": [1] } } }, "reason": "argument 1 of `not`", "at": "/obj/a/args/0" },
     { "name": "an error inside list", "expr": { "list": [{ "fn": "not", "args": [1] }] }, "reason": "argument 1 of `not`", "at": "/list/0/args/0" },
     { "name": "an error in then", "expr": { "if": [true, { "fn": "not", "args": [1] }, 1] }, "reason": "argument 1", "at": "/if/1/args/0" },

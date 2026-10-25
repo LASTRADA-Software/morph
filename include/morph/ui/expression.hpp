@@ -81,6 +81,7 @@ enum class ExprKind : std::uint8_t {
     Env,        ///< `{"env": "name"}`: the client environment.
     Session,    ///< `{"session": "name"}`: a session attribute.
     Host,       ///< `{"host": "name"}`: a value the application registered with the client.
+    Get,        ///< `{"get": e, "path": "a.b"}`: a path read out of a computed value.
 };
 
 /// @brief The functions of the `expr/1` library.
@@ -145,12 +146,12 @@ struct Expr {
     /// @brief The name a form reads: a ref's head, a query or mutation, a pref's point, a comprehension's variable,
     ///        an `env`, `session` or `host` name.
     std::string name;
-    /// @brief The path after the head of a `Ref` or `Pref`, or the path of a `Row`.
+    /// @brief The path after the head of a `Ref` or `Pref`, or the path of a `Row` or `Get`.
     std::vector<std::string> fieldPath;
     /// @brief The function of a `Call`.
     FunctionId function = FunctionId::And;
     /// @brief Operands: a call's arguments; `if`'s condition, then and else; a list's items; a comprehension's
-    ///        source and body.
+    ///        source and body; the value a `get` reads from.
     std::vector<ExprPtr> args;
     /// @brief The fields of an `Object`, in the order written.
     std::vector<std::pair<std::string, ExprPtr>> fields;
@@ -325,7 +326,7 @@ public:
 
 private:
     // NOLINTBEGIN(modernize-use-designated-initializers): one row per form reads as a table.
-    static constexpr std::array<FormKeys, 20> kForms = {{
+    static constexpr std::array<FormKeys, 21> kForms = {{
         {"lit", ExprKind::Literal, {}},
         {"ref", ExprKind::Ref, {}},
         {"row", ExprKind::Row, {}},
@@ -346,6 +347,7 @@ private:
         {"env", ExprKind::Env, {}},
         {"session", ExprKind::Session, {}},
         {"host", ExprKind::Host, {}},
+        {"get", ExprKind::Get, {"path", ""}},
     }};
     // NOLINTEND(modernize-use-designated-initializers)
 
@@ -462,6 +464,8 @@ private:
                 return operands(made.args, primary, primaryPath, 0, "`list` takes an array of expressions");
             case ExprKind::Object:
                 return fields(made.fields, primary, primaryPath);
+            case ExprKind::Get:
+                return get(made, object, path);
             case ExprKind::Map:
             case ExprKind::Filter:
             default:
@@ -620,6 +624,29 @@ private:
             }
             made.args.push_back(std::move(record));
         }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<Refusal> get(Expr& made, Json::object_t const& object, std::string const& path) {
+        Json const* const fieldPath = member(object, "path");
+        if (fieldPath == nullptr) {
+            return refuse(path, "`get` needs `path`").error();
+        }
+        std::string const* const dottedPath = text(*fieldPath);
+        std::string const pathPointer = pointerAppend(path, "path");
+        if (dottedPath == nullptr || dottedPath->empty()) {
+            return refuse(pathPointer, "`get` reads a `path` written as a string `a.b.0`").error();
+        }
+        auto segments = splitPath(*dottedPath);
+        if (!segments) {
+            return refuse(pathPointer, segments.error()).error();
+        }
+        auto source = node(*member(object, "get"), pointerAppend(path, "get"));
+        if (!source) {
+            return std::move(source.error());
+        }
+        made.fieldPath = std::move(*segments);
+        made.args.push_back(std::move(*source));
         return std::nullopt;
     }
 
@@ -849,6 +876,16 @@ public:
             case ExprKind::Map:
             case ExprKind::Filter:
                 return comprehension(expr);
+            case ExprKind::Get: {
+                auto source = check(*expr.args.at(0));
+                if (!source) {
+                    return source;
+                }
+                if (!admitsKind(*source, kindBit(TypeKind::Record) | kindBit(TypeKind::List))) {
+                    return refuse(expr, "`get` reads a path out of a record or a list, not " + source->name());
+                }
+                return Type::any();
+            }
             case ExprKind::Call:
             default:
                 return call(expr);
@@ -1314,6 +1351,8 @@ public:
             case ExprKind::Map:
             case ExprKind::Filter:
                 return comprehension(expr);
+            case ExprKind::Get:
+                return walk(eval(*expr.args.at(0)), expr.fieldPath);
             case ExprKind::Call:
             default:
                 return call(expr);

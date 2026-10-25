@@ -2802,7 +2802,7 @@ private:
                    _doc->params.end();
         }
         if (expr.kind != ExprKind::Literal && expr.kind != ExprKind::Call && expr.kind != ExprKind::If &&
-            expr.kind != ExprKind::Object && expr.kind != ExprKind::List) {
+            expr.kind != ExprKind::Object && expr.kind != ExprKind::List && expr.kind != ExprKind::Get) {
             return false;
         }
         bool only = true;

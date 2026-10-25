@@ -56,7 +56,7 @@ by name.
 | `a < b`, `a <= b`, `a > b`, `a >= b`, `eq(a, b)`, `ne(a, b)` | `lt`, `le`, `gt`, `ge`, `eq`, `ne` |
 | `a && b`, `a \|\| b`, `!a` | `and`, `or`, `not` (both operands are written: a document has no short circuit) |
 | `x.orElse(y)` | `coalesce(x, y)` |
-| `x.at(&T::member)`, `x.at("name")` | A field read: `{"ref": "x.member"}`, `{"row": "member"}` |
+| `x.at(&T::member)`, `x.at("name")` | A field read: `{"ref": "x.member"}`, `{"row": "member"}`, and below a computed value `{"get": e, "path": "member"}` |
 | `ref<T>("name.path")`, `row(&T::member)`, `row("path")`, `row<T>()` | `{"ref": ...}`, `{"row": ...}` |
 | `cond(c, a, b)`, `obj({{"k", e}})`, `list({...})` | `{"if": [...]}`, `{"obj": ...}`, `{"list": ...}` |
 | `map(list, "x", fn)`, `filter(list, "x", fn)`, `filter(list, &T::flag)` | The comprehensions; `fn` receives the element's handle |
@@ -70,14 +70,12 @@ by name.
   converts to another when its value can: the same type, `Any` on either side, a `std::optional`
   of a type for the type (an expression propagates `null`), a C++ conversion, or a list of such
   elements. A wrong body type is therefore a compile error, as spec 5 §11 asks.
-- **Field reads.** `expr/1` reads a field only below a name, so `at` extends a `ref` or `row` path.
-  A mutation's `result()` is a `ResultHandle`, a handle whose `at` overloads are deleted: reading a
-  field of it in place is a compile error, and the screen binds it first,
-  `auto r = screen.let("r", m.result());`, then reads `r.at(...)`. It converts to `Handle<T>`
-  wherever a handle is taken. `at` on any other expression that is not a named read (a call, or a
-  `result` built through `raw`) throws `AuthoringError`. A member's JSON name is
-  glaze's, found by its address in a value-initialised object of its class: a member a `glz::meta`
-  leaves out has no name and throws as well. A renamed member is a compile error.
+- **Field reads.** `at` reads on any handle. Below a name it extends the `ref` or `row` path; below
+  a `get` it extends the `get`'s path, so `first(xs).at("lot").at("stock")` is one node; below any
+  other expression (a call, a mutation's `result()`, a constant) it writes `{"get": e, "path": ...}`.
+  A member's JSON name is glaze's, found by its address in a value-initialised object of its class:
+  a member a `glz::meta` leaves out has no name and throws `AuthoringError`. A renamed member is a
+  compile error.
 - **Absent handles.** A default-constructed handle is absent: an option left unset writes no key.
   Using an absent handle as an operand throws `AuthoringError`.
 - **`concatLists`** takes a list of `AnyHandle`s, or of `Handle<std::vector<T>>` for one element
