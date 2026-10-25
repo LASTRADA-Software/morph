@@ -63,7 +63,7 @@ by name.
 | `sorted(list, "x", by, order?)` | The `sort` form: `by` receives the element's handle and gives the value to order by; `order` is absent for ascending |
 | `runs(list, "x", by)` | The `runs` form: `by` receives the element's handle and gives the value a run shares |
 | `sortKey(column, SortOrder)` | One key of a table's `sort`, `{"column", "direction"}`; a `list` of them is a sort |
-| `call<R>(name, {...})` and `engaged`, `coalesce`, `concat`, `concatLists`, `slice(list, start, count?)`, `format`, `count`, `sum`, `includes`, `isEmpty`, `round`, `parseDecimal`, `quantity`, `t(key, fallback, {{"n", e}})` | Library calls, and `{"t": ...}` |
+| `call<R>(name, {...})` and `engaged`, `coalesce`, `concat`, `concatLists`, `slice(list, start, count?)`, `format`, `count`, `sum`, `includes`, `isEmpty`, `round(x, dp, Rounding)`, `decimal(x, dp, Rounding)`, `parseDecimal`, `quantity`, `t(key, fallback, {{"n", e}})` | Library calls, and `{"t": ...}`; a `Rounding` of `HalfUp` writes the mode `"halfUp"`, and the default `HalfEven` writes none, so documents written before the mode are unchanged |
 | `env(name)`, `session(name)`, `hostValue(name)`, `prop(name)`, `event()` | `{"env"}`, `{"session"}`, `{"host"}`, `{"ref": "props.name"}`, `{"ref": "event"}` |
 | `element("id")` and its `value()`, `draft()`, `checked()`, `selected()`, `selection()`, `open()`, `valid()`, `ready()`, `get(path)` | An element's values (spec 5 §6) |
 | A query handle's `value()`, `at(&Result::m)`, `pending()`, `error()`, `errorKind()`, `can()`; a mutation handle's `result()`, `pending()`, `error()`, `errorKind()`, `can()` | `{"ref": q}`, `{"pending": q}`, `{"result": m}`, … |

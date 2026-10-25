@@ -92,10 +92,18 @@ over the tree recurse, and a few hundred levels exhaust a 1 MB thread stack.
   operands' places. `div` keeps the exact quotient: an `int` when two `int`s divide, otherwise a
   decimal at the operands' places, which display rounds — so a document shows a quotient with
   `decimal(x, dp)`.
-- **Rounding** is half to even wherever `expr/1` rounds: `round`, `mean`, and every display. It is
-  one checked rounding, `math::checkedRoundToDecimalPlaces`: the value is scaled by `10^dp` and
-  divided in 128 bits, so it never saturates, and its result is empty only when the rounded
-  value's numerator does not fit an `int64`. `10/3` at 18 places is `3.333333333333333333`;
+- **Rounding** is half to even wherever `expr/1` rounds, unless the call names `"halfUp"`, which is
+  half away from zero: `round(0.125, 2)` is `0.12`, `round(0.125, 2, "halfUp")` is `0.13` and
+  `round(-0.125, 2, "halfUp")` is `-0.13`, as the pharmacopoeial rule (USP General Notices 7.20,
+  Ph. Eur. 1.2) and `HALF_UP` round a magnitude. The mode is the last, optional argument of
+  `round` and `decimal`; it is the document's word at the call, not a client setting, because a
+  rounded value is data a screen compares with a limit and submits. A literal mode other than
+  `"halfEven"` or `"halfUp"` is refused at load; a computed one is a reported mismatch, and a
+  `null` mode makes the result `null` like any absent argument. `mean`, `number`, `quantity`,
+  `money` and `format` round half to even. Every rounding is one checked rounding,
+  `math::checkedRoundToDecimalPlaces`: the value is scaled by `10^dp` and divided in 128 bits, so
+  it never saturates, and its result is empty only when the rounded value's numerator does not fit
+  an `int64`. `10/3` at 18 places is `3.333333333333333333`;
   `28/3` at 18 places is not representable, and every function that would round it (`round`,
   `mean`, `decimal`, `number`, `quantity`, `money`, `format`) is `null`, reported "the result
   overflows", rather than showing a clamped value. In a message the placeholder shows as `{$name}`
@@ -144,11 +152,11 @@ arithmetic, and `any` where it depends on data the document does not describe.
 | Group | Functions |
 |---|---|
 | Logic, comparison | `and`, `or` (one or more), `not`, `eq`, `ne`, `lt`, `le`, `gt`, `ge` |
-| Arithmetic | `add`, `sub`, `mul`, `div`, `neg`, `round(x, dp)` |
+| Arithmetic | `add`, `sub`, `mul`, `div`, `neg`, `round(x, dp, mode?)` |
 | Optional | `engaged(x)` (never `null`), `coalesce(x, ...)` (the first non-`null`) |
 | Strings | `concat(s, ...)`, `format(template, args...)`, `trim`, `length` (code points), `isEmpty` (a string or a list), `contains` |
 | Lists | `count`, `sum` (0 for an empty list), `mean`, `min`, `max`, `any`, `all`, `first`, `includes`, `indexOf`, `concatLists(list, ...)`, `slice(list, start, count?)` |
-| Display | `number`, `decimal(x, dp)`, `quantity(x, unit?)`, `money(x, currency)`, `date(x, style?)`, `dateTime(x, style?)` |
+| Display | `number`, `decimal(x, dp, mode?)`, `quantity(x, unit?)`, `money(x, currency)`, `date(x, style?)`, `dateTime(x, style?)` |
 | Entry | `parseDecimal(text, dp?)` |
 | Text | `t(key, fallback, args?)` |
 
@@ -157,6 +165,10 @@ arithmetic, and `any` where it depends on data the document does not describe.
   timestamp as `dateTime`.
 - `sum` and `mean` take numbers, or quantities in one dimension (converted to the first element's
   unit); `mean` is the exact sum over the count, rounded half to even at the elements' widest places.
+  A result reported to a rule that rounds once from the unrounded value, as the pharmacopoeias'
+  does, is the exact mean `div(sum(xs), count(xs))` rounded once with `round(…, dp, "halfUp")`:
+  `decimal(mean(xs), 1, "halfUp")` rounds twice, and for `99.6` and `99.3` shows `99.4` where the
+  exact `99.45` reports as `99.5`.
   `min` and `max` return the element itself.
 - `any` and `all` are Kleene over the elements: `any([])` is `false`, `all([])` is `true`.
 - `indexOf` is `null` when the value is absent; `includes` is `false`.

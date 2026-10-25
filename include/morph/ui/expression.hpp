@@ -234,7 +234,7 @@ inline constexpr std::array<FunctionSpec, 43> kFunctions = {{
     {"mul", 2, 2, {kNumeric, kNumeric, 0}, TypeKind::Any},
     {"div", 2, 2, {kNumeric, kNumeric, 0}, TypeKind::Any},
     {"neg", 1, 1, {kNumeric, 0, 0}, TypeKind::Any},
-    {"round", 2, 2, {kNumeric, kindBit(TypeKind::Int), 0}, TypeKind::Any},
+    {"round", 2, 3, {kNumeric, kindBit(TypeKind::Int), kindBit(TypeKind::String)}, TypeKind::Any},
     {"engaged", 1, 1, {kAllKinds, 0, 0}, TypeKind::Bool},
     {"coalesce", 1, 255, {kAllKinds, kAllKinds, kAllKinds}, TypeKind::Any},
     {"concat",
@@ -258,7 +258,7 @@ inline constexpr std::array<FunctionSpec, 43> kFunctions = {{
     {"includes", 2, 2, {kindBit(TypeKind::List), kAllKinds, 0}, TypeKind::Bool},
     {"indexOf", 2, 2, {kindBit(TypeKind::List), kAllKinds, 0}, TypeKind::Int},
     {"number", 1, 1, {kNumeric, 0, 0}, TypeKind::String},
-    {"decimal", 2, 2, {kNumeric, kindBit(TypeKind::Int), 0}, TypeKind::String},
+    {"decimal", 2, 3, {kNumeric, kindBit(TypeKind::Int), kindBit(TypeKind::String)}, TypeKind::String},
     {"quantity", 1, 2, {kindBit(TypeKind::Quantity), kindBit(TypeKind::String), 0}, TypeKind::String},
     {"money",
      2,
@@ -291,6 +291,30 @@ inline constexpr std::array<FunctionSpec, 43> kFunctions = {{
 /// @return Its entry in `kFunctions`.
 [[nodiscard]] constexpr FunctionSpec const& functionSpec(FunctionId function) {
     return kFunctions.at(static_cast<std::size_t>(function));
+}
+
+/// @brief The position of a function's optional rounding mode, `"halfEven"` or `"halfUp"`.
+/// @param function The function.
+/// @return The argument index of its mode, or empty for a function that does not round.
+[[nodiscard]] constexpr std::optional<std::size_t> modeArgument(FunctionId function) noexcept {
+    if (function == FunctionId::Round || function == FunctionId::DecimalText) {
+        return 2;
+    }
+    return std::nullopt;
+}
+
+/// @brief Reads a rounding mode: `"halfEven"`, ties to the even neighbour, or `"halfUp"`, ties away from zero.
+/// @param mode The mode's value.
+/// @return The mode, or empty for any other value.
+[[nodiscard]] inline std::optional<math::RoundingMode> roundingMode(Value const& mode) {
+    std::string const* const name = mode.asString();
+    if (name != nullptr && *name == "halfEven") {
+        return math::RoundingMode::HalfEven;
+    }
+    if (name != nullptr && *name == "halfUp") {
+        return math::RoundingMode::HalfAwayFromZero;
+    }
+    return std::nullopt;
 }
 
 /// @brief The names `{"env": ...}` reads.
@@ -1052,15 +1076,8 @@ private:
             }
             types.push_back(std::move(*type));
         }
-        if (expr.function == FunctionId::Translate) {
-            ExprPtr const& fallback = expr.args.at(1);
-            if (std::string const* const pattern = fallback->literal.asString();
-                fallback->kind == ExprKind::Literal && pattern != nullptr) {
-                auto parsed = parseMessage(*pattern);
-                if (!parsed) {
-                    return refuse(*fallback, "the fallback is outside the ui/1 message subset: " + parsed.error());
-                }
-            }
+        if (auto refused = literalRefusal(expr)) {
+            return std::unexpected(std::move(*refused));
         }
         if (spec.result != TypeKind::Any) {
             return Type::of(spec.result, true);
@@ -1073,6 +1090,32 @@ private:
             return Type::listOf(source.element ? *source.element : Type::any(), true);
         }
         return numericResult(expr.function, types);
+    }
+
+    /// The checks of an argument written as a literal: a rounding mode is checked at load, because a wrong mode is a
+    /// wrong value, not a wrong look; a `t` fallback must be in the message subset.
+    [[nodiscard]] static std::optional<Refusal> literalRefusal(Expr const& expr) {
+        auto const literalText = [&expr](std::size_t index) -> std::string const* {
+            if (index >= expr.args.size() || expr.args.at(index)->kind != ExprKind::Literal) {
+                return nullptr;
+            }
+            return expr.args.at(index)->literal.asString();
+        };
+        if (auto const position = modeArgument(expr.function)) {
+            std::string const* const mode = literalText(*position);
+            if (mode != nullptr && !roundingMode(Value{*mode})) {
+                return refuse(*expr.args.at(*position), "the rounding mode is `halfEven` or `halfUp`").error();
+            }
+        }
+        if (std::string const* const pattern = literalText(1);
+            expr.function == FunctionId::Translate && pattern != nullptr) {
+            auto parsed = parseMessage(*pattern);
+            if (!parsed) {
+                return refuse(*expr.args.at(1), "the fallback is outside the ui/1 message subset: " + parsed.error())
+                    .error();
+            }
+        }
+        return std::nullopt;
     }
 
     /// `concatLists`'s type: `list<T>` when every element type that is known is `T`, else `list<any>`.
@@ -1494,6 +1537,14 @@ private:
         ++_mismatches;
         _env->report(expr.path, reason);
         return Value{};
+    }
+
+    /// The rounding mode of a call whose mode is its third argument: half to even when it is absent.
+    static std::optional<math::RoundingMode> modeOf(std::vector<Value> const& args) {
+        if (args.size() < 3) {
+            return math::RoundingMode::HalfEven;
+        }
+        return roundingMode(args.at(2));
     }
 
     Value choice(Expr const& expr) {
@@ -2128,12 +2179,15 @@ private:
                     std::cmp_greater(*places, math::kMaxDecimalPlaces)) {
                     return mismatch(expr, "`round` takes a number and places from 0 to 18");
                 }
+                auto const mode = modeOf(args);
+                if (!mode) {
+                    return mismatch(expr, "the rounding mode is `halfEven` or `halfUp`");
+                }
                 if (number->integer) {
                     return args.at(0);
                 }
                 auto const rounded = math::checkedRoundToDecimalPlaces(
-                    number->value, math::DecimalPlaces{static_cast<std::uint32_t>(*places)},
-                    math::RoundingMode::HalfEven);
+                    number->value, math::DecimalPlaces{static_cast<std::uint32_t>(*places)}, *mode);
                 if (!rounded) {
                     return mismatch(expr, "the result overflows");
                 }
@@ -2237,7 +2291,11 @@ private:
                     std::cmp_greater(*places, math::kMaxDecimalPlaces)) {
                     return mismatch(expr, "`decimal` takes a number and places from 0 to 18");
                 }
-                auto const text = decimalText(number->value, static_cast<std::uint32_t>(*places));
+                auto const mode = modeOf(args);
+                if (!mode) {
+                    return mismatch(expr, "the rounding mode is `halfEven` or `halfUp`");
+                }
+                auto const text = decimalText(number->value, static_cast<std::uint32_t>(*places), *mode);
                 if (!text) {
                     return mismatch(expr, "the result overflows");
                 }
