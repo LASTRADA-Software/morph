@@ -153,7 +153,9 @@ place a kind is described.
 `minWidth`, `maxWidth`, `minHeight`, `maxHeight` (literal integers of 0 or more, in backend units: the node's extent
 on that axis is clamped into them, whatever its sizing), `alignSelf` (`start`, `center`, `end`, `stretch`: where the
 node sits across its `row`'s, `column`'s, `grid` row's or `forEach`'s axis, in place of the container's `align`),
-`autofocus`, `testId`, `surface` (strings), `a11y`
+`autofocus`, `testId` (strings), `surface` (an expression of a surface's name, so it follows the data; a plain
+string is a literal one: a value that names no surface draws as no surface does, `null` is no surface, and any other
+value that is not a string is reported once at the node's `surface` path and drawn as no surface), `a11y`
 (`{name, role}`), `drag` (`{payload}`), `drop` (`{accepts, onDrop}`) and `keys`. `sizing` is the width's —
 `"content"`, `{"lit": {"fixed": n}}` or `{"lit": {"stretch": w}}` — or both dimensions as a record of them, one
 left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {"stretch": 1}}}`. **Text and the inputs** also take `readonly`, `required`, `stale`

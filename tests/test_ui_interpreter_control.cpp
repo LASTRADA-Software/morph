@@ -671,6 +671,30 @@ TEST_CASE("interpreter control: a command chooses a tab through the state `selec
     CHECK(h.backend.prop(bar, "selected") == "1");
 }
 
+// Mutation: apply the surface once in the mount (the panel keeps `outOfSpec` after the flag clears).
+TEST_CASE("interpreter control: a surface follows the data", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "surfaces",
+      "state": { "flag": { "init": true } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "clear", "label": "Clear", "onClick": [ { "set": "flag", "value": false } ] },
+        { "kind": "panel", "testId": "card", "title": "Card",
+          "surface": { "if": [ { "ref": "flag" }, "outOfSpec", "" ] },
+          "children": [ { "kind": "text", "text": "x" } ] },
+        { "kind": "panel", "testId": "odd", "title": "Odd", "surface": { "if": [ { "ref": "flag" }, 3, null ] },
+          "children": [ { "kind": "text", "text": "y" } ] } ] } })");
+    int const card = h.byTestId("Panel", "card");
+    CHECK(h.backend.prop(card, "surface") == "outOfSpec");
+    h.backend.click(h.byTestId("Button", "clear"));
+    h.settle();
+    CHECK(h.backend.prop(card, "surface").empty());
+    // A value that is not a string is reported and drawn as no surface; `null` is no surface.
+    CHECK(h.backend.prop(h.byTestId("Panel", "odd"), "surface").empty());
+    REQUIRE(screen->diagnostics().size() == 1);
+    CHECK(screen->diagnostics().front().path == "/view/children/2/surface");
+}
+
 // Mutation: build the `forEach` without `commonOf` (no Column has the test id `rows`).
 TEST_CASE("interpreter control: a forEach honours its common properties", "[ui][interpreter]") {
     Harness h;

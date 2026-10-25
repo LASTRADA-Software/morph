@@ -144,7 +144,7 @@ Every node but `Custom` also carries `Common`:
 | `a11y` | `Accessibility{name, role}`: what assistive technology announces; `role` is set once |
 | `testId` | The stable identifier an automated test finds the widget by, set once |
 | `tooltip` | Text shown while the pointer rests on the widget |
-| `surface` | The named token set of the theme that styles the node and everything inside it, set once |
+| `surface` | The named token set of the theme that styles the node and everything inside it, a `Prop<std::string>`; the mount sets it again on each change |
 | `keys` | `KeyBinding{chord, onPress}`s: chords handled while focus is inside the node; the innermost node declaring a chord takes it, and for a chord listed twice the first entry is called. A focused widget's own chords come before its own keys, and its own keys before its ancestors' chords ([`backend_contract.md`](backend_contract.md), Chords) |
 | `autofocus` | The widget takes keyboard focus when the content it is part of mounts ([below](#focus)) |
 | `focusId` | The name `Mounted::focus` finds the widget by after mount, such as a document element's id; set once ([below](#focus)) |
@@ -241,7 +241,7 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
 2. `Common`, in this order. `visible` and `enabled` only when bound or `false`; `layout` only when
    it is not content × content and unbounded; `dragKey` only when bound or engaged; the drop handler only when
    `onDrop` is set, with an accept-everything predicate when `accepts` is empty; `a11y.name` and
-   `tooltip` only when bound or not empty; `a11y.role`, `testId` and `surface` only when not empty;
+   `tooltip` and `surface` only when bound or not empty; `a11y.role` and `testId` only when not empty;
    the chords only when `keys` is not empty, as one `setKeys` whose handler runs the first binding
    of the chord pressed as a widget callback. A new widget is already visible, enabled,
    content-sized, neither draggable nor a drop target, and has none of the rest, so a node that

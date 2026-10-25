@@ -317,6 +317,34 @@ TEST_CASE("qt_quick theme: a surface set after its children exist still colours 
     CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("late")) == QColor{"#c9ccd6"});
 }
 
+// Mutation: skip passSchemeDown in ItemBase::showSurface (the text keeps the first surface's colour).
+TEST_CASE("qt_quick theme: a surface changed after mount restyles the widget and its content", "[qt_quick]") {
+    Scene scene;
+    auto panel = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const nested = scene.backend().createStack(panel.get(), ui::Axis::Vertical);
+    auto inside = scene.backend().createText(nested.get());
+    inside->setText("changing");
+    panel->setSurface("sidebar");
+    scene.settle();
+    CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("changing")) == QColor{"#c9ccd6"});
+    QQuickItem const* const background = surfaceBackground(Scene::itemOf(*panel));
+    REQUIRE(background != nullptr);
+    CHECK(background->property("color").value<QColor>() == QColor{"#1f2430"});
+
+    panel->setSurface("card");
+    scene.settle();
+    CHECK(background->property("color").value<QColor>() == QColor{"#ffffff"});
+    CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("changing")) == QColor{"#1d1d1f"});
+
+    panel->setSurface("sidebar");
+    scene.settle();
+    CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("changing")) == QColor{"#c9ccd6"});
+    panel->setSurface("");
+    scene.settle();
+    CHECK_FALSE(background->isVisible());
+    CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("changing")) == QColor{"#1d1d1f"});
+}
+
 namespace {
 
 /// An installed family whose average character width at @p pixels differs from the platform font's, so a test can see

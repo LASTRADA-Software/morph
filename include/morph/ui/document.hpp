@@ -685,7 +685,7 @@ inline constexpr std::array<KeySpec, 18> kCommonKeys = {{
     {"alignSelf", Shape::Text},
     {"span", Shape::Expr},
     {"testId", Shape::Text},
-    {"surface", Shape::Text},
+    {"surface", Shape::Expr},
     {"autofocus", Shape::Expr},
     {"a11y", Shape::Part, "a11y"},
     {"drag", Shape::Part, "drag"},

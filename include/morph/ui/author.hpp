@@ -2047,6 +2047,17 @@ public:
     /// @return The node with it.
     [[nodiscard]] Node surface(std::string const& name) const { return withText("surface", name); }
 
+    /// @brief A named token set for the subtree, as a literal: the overload a string literal picks.
+    /// @param name The token set.
+    /// @return The node with it.
+    [[nodiscard]] Node surface(char const* name) const { return withText("surface", name); }
+
+    /// @brief A token set for the subtree that follows the data: the surface's name, or `""` for the theme's
+    ///        default.
+    /// @param name An expression of the surface's name.
+    /// @return The node with it.
+    [[nodiscard]] Node surface(AnyHandle const& name) const { return with("surface", name); }
+
     /// @brief The accessible name and role.
     /// @param name The name.
     /// @param role The role; empty for the kind's own.

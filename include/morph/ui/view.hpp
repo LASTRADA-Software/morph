@@ -396,8 +396,8 @@ struct Common {
     /// @brief Text shown while the pointer rests on the widget; empty shows none.
     Prop<std::string> tooltip;
     /// @brief The named token set of the theme that styles this node and everything inside it; empty is the
-    ///        theme's default. Set once.
-    std::string surface;
+    ///        theme's default. May be bound: the widget restyles itself and its content on each change.
+    Prop<std::string> surface;
     /// @brief Chords handled while focus is inside the node; the innermost node declaring a chord takes it. For a
     ///        chord listed twice, the first entry is the one called.
     std::vector<KeyBinding> keys;

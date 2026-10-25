@@ -149,7 +149,8 @@ options second. `tabs(tabs, TabsOptions{.selected, .onChoose})` takes `Tab{id, l
 `ActionButtonOptions`, run in its scope.
 
 The keys every node takes are member functions of `Node`, each returning a copy with the key set:
-`id(element)`, `visible`, `enabled`, `tooltip`, `sizing`, `span`, `autofocus`, `testId`, `surface`,
+`id(element)`, `visible`, `enabled`, `tooltip`, `sizing`, `span`, `autofocus`, `testId`, `surface` (a name, or an
+expression of one),
 `a11y(name, role)`, `drag(payload)`, `drop(accepts, commands)`, `key(chord, commands)`, the bounds `minWidth(n)`,
 `maxWidth(n)`, `minHeight(n)`, `maxHeight(n)`, `alignSelf(Align)`, and the input decorations `readonly`, `required`, `errors`, `stale`.
 `sizing(width, height)` writes both dimensions as a record, a literal one when both are literal. The free helpers

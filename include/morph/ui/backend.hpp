@@ -77,7 +77,8 @@ public:
     /// @param text The tooltip; empty shows none.
     virtual void setTooltip(std::string_view text) = 0;
 
-    /// @brief Styles the widget and everything inside it with a named token set of the theme.
+    /// @brief Styles the widget and everything inside it with a named token set of the theme. May be called again:
+    ///        each call restyles the widget and everything inside it.
     /// @param surface The surface's name; empty is the theme's default.
     virtual void setSurface(std::string_view surface) = 0;
 

@@ -563,8 +563,8 @@ private:
         if (common.tooltip.isBound() || !common.tooltip.constant().empty()) {
             bind(scope, common.tooltip, [&widget](std::string const& text) { widget.setTooltip(text); });
         }
-        if (!common.surface.empty()) {
-            widget.setSurface(common.surface);
+        if (common.surface.isBound() || !common.surface.constant().empty()) {
+            bind(scope, common.surface, [&widget](std::string const& surface) { widget.setSurface(surface); });
         }
         if (!common.keys.empty()) {
             applyKeys(widget, common.keys);

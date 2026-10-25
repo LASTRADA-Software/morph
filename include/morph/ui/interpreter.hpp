@@ -2683,6 +2683,11 @@ private:
     ///        name of no role is reported once for its path and drawn `Normal`.
     Prop<TextRole> roleProp(LowerCtx const& ctx, ExprPtr const& expr);
 
+    /// @brief A node's surface: the name of a theme surface, or empty for the default. A computed one is evaluated in
+    ///        its slot; `null` is no surface, and any other value that is not a string is reported for the node's
+    ///        `surface` path and drawn as no surface.
+    Prop<std::string> surfaceOf(DocNode const& node, LowerCtx const& ctx);
+
     /// @brief A property read through @p read, as a numbered slot.
     template <typename T, typename Read>
     Prop<T> slotProp(Read read) {
@@ -6152,6 +6157,25 @@ inline Prop<TextRole> ScreenCore::roleProp(LowerCtx const& ctx, ExprPtr const& e
     });
 }
 
+inline Prop<std::string> ScreenCore::surfaceOf(DocNode const& node, LowerCtx const& ctx) {
+    ExprPtr const expr = node.prop("surface");
+    auto nameOf = [this, path = pointerAppend(node.path, "surface")](Value const& value) -> std::string {
+        if (std::string const* const name = value.asString()) {
+            return *name;
+        }
+        if (!value.isNull()) {
+            report(path, "a surface is the name of one; " + canonicalJson(value) + " is not a string");
+        }
+        return {};
+    };
+    if (!expr || expr->kind == ExprKind::Literal) {
+        return expr ? Prop<std::string>{nameOf(expr->literal)} : Prop<std::string>{std::string{}};
+    }
+    return slotProp<std::string>([scope = ctx.scope, bindings = ctx.bindings, expr, nameOf = std::move(nameOf)] {
+        return nameOf(evalIn(*scope, bindings.get(), expr));
+    });
+}
+
 // The size request: `sizing` (the width, or both dimensions), `alignSelf`, and the bounds.
 inline void ScreenCore::layoutOf(DocNode const& node, LowerCtx const& ctx, LayoutHints& layout) {
     if (ExprPtr const sizing = node.prop("sizing")) {
@@ -6195,7 +6219,7 @@ inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, Eleme
     layoutOf(node, ctx, common.layout);
     common.testId = std::string{node.name("testId")};
     common.focusId = node.id;
-    common.surface = std::string{node.name("surface")};
+    common.surface = surfaceOf(node, ctx);
     if (ExprPtr const autofocus = node.prop("autofocus")) {
         common.autofocus = boolOf(once(ctx, autofocus), session.formatting());
     }
