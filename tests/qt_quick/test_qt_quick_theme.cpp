@@ -338,7 +338,59 @@ std::optional<QString> otherFamily(QFont const& platform, int pixels) {
     return std::nullopt;
 }
 
+// The first installed family that resolves to itself and draws every character at one width; none on a machine
+// without a monospace font. No font is bundled in the tree, and the CI image and a workstation ship different ones.
+std::optional<QString> fixedPitchFamily() {
+    for (QString const& family : QFontDatabase::families()) {
+        QFont candidate;
+        candidate.setFamilies({family});
+        QFontInfo const info{candidate};
+        if (info.family().compare(family, Qt::CaseInsensitive) == 0 && info.fixedPitch()) {
+            return family;
+        }
+    }
+    return std::nullopt;
+}
+
+// The font a text widget's label draws in.
+QFont labelFont(ui::Widget const& text) {
+    auto const* const control = Scene::itemOf(text).property("control").value<QQuickItem*>();
+    REQUIRE(control != nullptr);
+    return control->property("font").value<QFont>();
+}
+
 }  // namespace
+
+// Mutation: leave MorphText's font alone for Mono (the family and the fixed-pitch checks fail).
+TEST_CASE("qt_quick theme: a mono text draws in font.mono, else in the platform's fixed-pitch font", "[qt_quick]") {
+    Scene scene;
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto mono = scene.backend().createText(nullptr);
+    mono->setText("S-26-104170");
+    mono->setRole(ui::TextRole::Mono);
+    auto normal = scene.backend().createText(nullptr);
+    normal->setText("Sample");
+    scene.settle();
+
+    // With no font.mono, the platform's fixed-pitch font.
+    CHECK(QFontInfo{labelFont(*mono)}.fixedPitch());
+
+    std::optional<QString> const family = fixedPitchFamily();
+    REQUIRE(family.has_value());
+    ui::ThemeValues values = ui::themeValues();
+    values.families.insert_or_assign("font.mono", std::vector<std::string>{family->toStdString()});
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    scene.settle();
+    CHECK(theme->property("monoFamilies").toStringList().value(0) == *family);
+    CHECK(labelFont(*mono).family() == *family);
+    CHECK(labelFont(*normal).family() != *family);
+    CHECK(labelFont(*mono).pixelSize() == std::lround(theme->property("bodyPixels").toReal()));
+
+    values.families.insert_or_assign("font.mono", std::vector<std::string>{"NoSuchFont"});
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), values) ==
+          std::vector<std::string>{"font.mono: none of NoSuchFont is installed"});
+}
 
 // Mutation: bind the units' metrics to the platform font always (unitWidth keeps the platform font's width).
 TEST_CASE("qt_quick theme: font.family sets the body font and the units follow it; an unknown family is reported",

@@ -130,6 +130,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `control.touchHeight` (44, the common minimum touch target): a sibling of `control.height`, since a token's object is never read for tokens inside it | dimension, in px |
 | `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3) | dimension, in px |
 | `font.family` (none: the platform font) | font family: a name, or a list of names in order of preference |
+| `font.mono` (none: the platform's fixed-pitch font), the family of the `mono` text role: a sibling of `font.family`, since a token's object is never read for tokens inside it, so a `font.family.mono` beside a `font.family` would never be read | font family, as `font.family` |
 | `elevation.card` (`#00000014`, offsets 0 and 2, blur 10, spread 0) | shadow; of a list of layers, the first |
 
 `themeValues(resolved)` gives every path of the set the theme's value when the theme has it with the set's type, and
@@ -161,6 +162,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `radiusControl`, `radiusCard`, `controlHeight`, `touchHeight`, `bodySize`, `headingSize` | `radius.control`, `radius.card`, `control.height`, `control.touchHeight`, `font.size.body`, `font.size.heading` |
 | `cardShadowColor`, `cardShadowOffsetX`, `cardShadowOffsetY`, `cardShadowBlur`, `cardShadowSpread` | `elevation.card` |
 | `fontFamilies` | `font.family` |
+| `monoFontFamilies` | `font.mono` |
 
 **Touch targets follow the width class.** While the window's width class is `compact`, the backend sets
 `Theme.touchTargets`, and every control is drawn at `Theme.targetHeight`: at least `control.touchHeight`, else
@@ -176,6 +178,12 @@ muted, `headingFont` for a heading): the theme's
 families at the body size, or the platform font untouched while `fontFamilies` is empty. A family Qt cannot resolve
 falls back to Qt's own substitute, and `applyTheme` reports it (`font.family: none of <names> is installed`),
 comparing `QFontInfo`'s family against the list.
+
+A `mono` text draws in `Theme.monoFont`: `Theme.monoFamilies` at `bodyPixels`, regular weight. `monoFamilies` is the
+theme's `font.mono` (`monoFontFamilies`), or, while that is empty, the family of the platform's fixed-pitch font
+(`QFontDatabase::systemFont(QFontDatabase::FixedFont)`), which the backend writes as `Theme.platformMonoFamily` when
+it starts and on every `applyTheme`. A `font.mono` Qt cannot resolve is reported as `font.family`'s is
+(`font.mono: none of <names> is installed`). There is no `font.size.mono`: mono text is body sized.
 
 **Units follow the theme's font, opt-in.** `Theme.metrics`, which the units read, is the theme's families at
 `bodyPixels` while `fontFamilies` is set and the platform font otherwise, so the units and every `fixed(n)` are

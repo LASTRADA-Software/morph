@@ -22,7 +22,8 @@ namespace morph::tui::detail {
 
 namespace {
 
-// A section heading is the muted style, bold: a step below a heading, which is bold body text.
+// A section heading is the muted style, bold: a step below a heading, which is bold body text. `Mono` is body text:
+// a terminal draws every cell in one fixed-pitch font already.
 ::core::tui::Style roleStyle(::core::tui::Theme const& theme, ui::TextRole role) {
     if (role == ui::TextRole::Muted) {
         return theme.textMuted;

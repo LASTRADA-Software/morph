@@ -5571,7 +5571,7 @@ namespace detail {
 }
 
 /// @brief A text role by name.
-/// @param name `normal`, `muted`, `heading` (or `title`), `section`, `error`, `success`.
+/// @param name `normal`, `muted`, `heading` (or `title`), `section`, `error`, `success`, `mono`.
 /// @return The role; `nullopt` for any other name.
 [[nodiscard]] inline std::optional<TextRole> roleNamed(std::string_view name) {
     if (name == "normal") {
@@ -5592,8 +5592,14 @@ namespace detail {
     if (name == "success") {
         return TextRole::Success;
     }
+    if (name == "mono") {
+        return TextRole::Mono;
+    }
     return std::nullopt;
 }
+
+/// @brief What a role that names none is told: the names `roleNamed` reads.
+inline constexpr std::string_view kRoleNames = "a role is normal, muted, heading, section, error, success or mono";
 
 /// @brief A text role by name, as `roleNamed` reads it.
 /// @param value  The name.
@@ -5779,8 +5785,7 @@ inline Prop<TextRole> ScreenCore::roleProp(LowerCtx const& ctx, ExprPtr const& e
         Value const value = evalIn(*scope, bindings.get(), expr);
         std::optional<TextRole> const role = roleNamed(textOf(value, session.formatting()));
         if (!role) {
-            report(expr->path, "role is " + canonicalJson(value) +
-                                   "; a role is normal, muted, heading, section, error or success");
+            report(expr->path, "role is " + canonicalJson(value) + "; " + std::string{kRoleNames});
         }
         return role.value_or(TextRole::Normal);
     });
@@ -7185,7 +7190,16 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         ExprPtr const label = part->prop("label");
         ExprPtr const width = part->prop("width");
         ExprPtr const role = part->prop("role");
-        TextRole const columnRole = role ? roleOf(once(ctx, role), format) : TextRole::Normal;
+        TextRole columnRole = TextRole::Normal;
+        if (role) {
+            // Read once, with the rest of the column; a value that names no role is reported, as a text's is.
+            Value const value = once(ctx, role);
+            std::optional<TextRole> const named = roleNamed(textOf(value, format));
+            if (!named) {
+                report(role->path, "role is " + canonicalJson(value) + "; " + std::string{kRoleNames});
+            }
+            columnRole = named.value_or(TextRole::Normal);
+        }
         columns.push_back(TableColumn{.label = label ? textOf(once(ctx, label), format) : std::string{},
                                       .width = width ? sizingOf(once(ctx, width)) : Sizing::content(),
                                       .role = columnRole});

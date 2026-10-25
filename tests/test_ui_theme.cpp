@@ -170,6 +170,19 @@ TEST_CASE("theme: control.height and control.touchHeight are siblings, each read
     CHECK(values.dimensions.at("control.touchHeight") == 48.0);
 }
 
+// Mutation: name the mono token `font.family.mono` (readGroup reads `font.family` as a token and never descends into
+// it, so the mono family is the default).
+TEST_CASE("theme: font.mono is a sibling of font.family, and themeValues gives both family lists", "[ui][theme]") {
+    TokenSet const both = parsed(R"({"font": {"family": {"$type": "fontFamily", "$value": "Inter"},
+                                              "mono": {"$type": "fontFamily", "$value": ["JetBrains Mono", "Menlo"]}}})");
+    auto const resolved = morph::ui::resolveTokens({&both});
+    REQUIRE(resolved);
+    morph::ui::ThemeValues const values = morph::ui::themeValues(*resolved);
+    CHECK(values.families.at("font.family") == std::vector<std::string>{"Inter"});
+    CHECK(values.families.at("font.mono") == std::vector<std::string>{"JetBrains Mono", "Menlo"});
+    CHECK(morph::ui::themeValues().families.at("font.mono").empty());
+}
+
 TEST_CASE("theme: a missing token takes its default; an unknown path is ignored", "[ui][theme]") {
     morph::ui::ThemeValues const defaults = morph::ui::themeValues();
     CHECK(defaults.colors.at("color.text").hex() == "#1d1d1f");

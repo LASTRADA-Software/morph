@@ -77,6 +77,11 @@ Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
     QQmlEngine::setObjectOwnership(_holder, QQmlEngine::CppOwnership);
     _holder->setParentItem(&host);
     _holder->setParent(&host);
+    // The theme names a fixed-pitch family only when it sets `font.mono`; until then a mono text draws in the
+    // platform's.
+    if (auto* const theme = _engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))) {
+        static_cast<void>(writePlatformMonoFamily(*theme));
+    }
     _roots = std::make_unique<Roots>(qobject_cast<QQuickItem*>(_holder->property("content").value<QObject*>()));
     // The roots item reports its width in units, which follows both the host's width and the theme's font.
     relay->setParent(_holder);

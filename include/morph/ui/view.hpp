@@ -203,6 +203,7 @@ enum class TextRole : std::uint8_t {
     Error,    ///< An error message.
     Success,  ///< A confirmation.
     Section,  ///< The heading of a group within a list: body size, bold and muted, below a `Heading`.
+    Mono,     ///< An identifier: body size in the theme's fixed-pitch family (`font.mono`), the text colour.
 };
 
 /// @brief How a `TextInput` edits.

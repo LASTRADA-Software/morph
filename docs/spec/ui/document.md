@@ -161,7 +161,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 
 | Kind | Keys (a ⓘ key is in the node's own scope) | Element values beyond `visible`, `enabled`, `valid`, `errors`, `shownErrors` |
 |---|---|---|
-| `text` | `text`, `role` (`normal`, the default, `muted`, `heading` (`title` is accepted as its alias), `section`, `error`, `success`) | |
+| `text` | `text`, `role` (`normal`, the default, `muted`, `heading` (`title` is accepted as its alias), `section`, `error`, `success`, `mono`: an identifier, in the theme's fixed-pitch family at the body size) | |
 | `button` | `label`, `icon`, `emphasis` (`normal`, `primary`, `danger`, `ghost`), `style` (`push`, the default, or `item`: an entry of a list), `selected` (a condition, only with `style: item`: the entry is the current one), `onClick`, `onActivate` | |
 | `textInput` | `value`, `placeholder`, `mode`, `icon` (an icon of the theme's icon set, drawn at the leading edge; refused on a multiline input), `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
 | `checkbox` | `label`, `checked`, `onToggle`, `onChange` | `checked` |
@@ -177,7 +177,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | `dialog`, `drawer` | `open`, `title`, `showErrors`, `side`, `scope`, `children` ⓘ, `default` ⓘ, `cancel` ⓘ, `actions` ⓘ (parts `actionButton`, [The head](#the-head)), `onDismiss` | `open`, `ready`, `submitted` |
 | `busy` | `active`, `label` | |
 | `forEach` | `rows` (required), `key` ⓘ, `axis`, `gap`, `scope`, `children` ⓘ | |
-| `table` | `rows`, or `model` and `action` with `body` and `mode`; `key` ⓘ, `columns` (parts `{id, label, width, role ⓘ, cell ⓘ}`, or an expression — `role` styles the column's default cell and has no effect on one with its own `cell`), `selectionMode`, `selection`, `sort`, `filters`, `rowTone` ⓘ, `highlightKey`, `onActivate` ⓘ, `empty` (nodes: shown instead of the table while `rows` is an empty list), `scope` | `selection`, `activeKey`, `sort`, `filters`, `viewCount`, `sourceCount`, `selectedCount`, `pending`, `error`, `hoveredKey` |
+| `table` | `rows`, or `model` and `action` with `body` and `mode`; `key` ⓘ, `columns` (parts `{id, label, width, role ⓘ, cell ⓘ}`, or an expression — `role` styles the column's default cell and has no effect on one with its own `cell`; it takes a text's role names, and a literal one is checked the same way), `selectionMode`, `selection`, `sort`, `filters`, `rowTone` ⓘ, `highlightKey`, `onActivate` ⓘ, `empty` (nodes: shown instead of the table while `rows` is an empty list), `scope` | `selection`, `activeKey`, `sort`, `filters`, `viewCount`, `sourceCount`, `selectedCount`, `pending`, `error`, `hoveredKey` |
 | `dateTimeInput` | `value`, `mode`, `label`, `showLabel`, `onChange`, `onCommit` | as `textInput` |
 | `slider` | `value`, `min`, `max`, `step`, `label`, `onChange`, `onCommit` | as `textInput` |
 | `filePicker` | `accept`, `multiple`, `mode`, `label`, `onPick` | |

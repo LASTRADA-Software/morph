@@ -986,7 +986,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 41> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 42> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1028,6 +1028,9 @@ inline constexpr std::array<ThemeTokenSpec, 41> kThemeTokens = {{
     {.path = "font.size.body", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.size.heading", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.family", .kind = ThemeTokenKind::FontFamily, .color = "", .number = 0.0},
+    // The fixed-pitch family of the `mono` text role; none draws in the platform's fixed-pitch font. A sibling of
+    // `font.family`, not a child: a token's object is never read for tokens inside it.
+    {.path = "font.mono", .kind = ThemeTokenKind::FontFamily, .color = "", .number = 0.0},
     {.path = "elevation.card",
      .kind = ThemeTokenKind::Shadow,
      .color = "",
