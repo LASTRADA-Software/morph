@@ -630,7 +630,7 @@
 - **Workaround used:** narrower fixed columns and a stretched Change column, which fit at 1280 px.
 - **Weight:** Low
 
-### G55: No chart, and no way for a document to bring one
+### G55: No chart, and no way for a document to bring one — fixed in batch E
 - **Design(s):** 10
 - **Needs:** a Levey-Jennings control chart, meaning the last 20 runs plotted against the mean and ±1/2/3 SD lines, with the run that broke a rule marked. The same need covers trend charts on stability and result review.
 - **ui/1 today:** charts are not in the palette (`docs/spec/ui/view_tree.md:546`). A `custom` node needs a host-provided component, and the generic client passes none, so a document served to it can't draw one. The gallery couldn't supply one without changing `include/morph` or `src`. Read in the code; the lane's report says it checked that the client provides no components.
