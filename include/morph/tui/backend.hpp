@@ -73,6 +73,7 @@ public:
     [[nodiscard]] std::unique_ptr<ui::StepsWidget> createSteps(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::KeyValueWidget> createKeyValue(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::EmptyStateWidget> createEmptyState(ui::ContainerWidget* parent) override;
+    [[nodiscard]] std::unique_ptr<ui::ChartWidget> createChart(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::DrawerWidget> createDrawer(ui::ContainerWidget* parent, ui::Side side) override;
     [[nodiscard]] std::unique_ptr<ui::SplitterWidget> createSplitter(ui::ContainerWidget* parent,
                                                                      ui::Axis axis) override;

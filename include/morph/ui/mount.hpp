@@ -1531,6 +1531,13 @@ private:
         return widget;
     }
 
+    Widget& mountKind(reactive::Scope& scope, Chart const& spec, ContainerWidget* parent) {
+        ChartWidget& widget = scope.adopt(_backend->createChart(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.data, [&widget](ChartData const& data) { widget.setData(data); });
+        return widget;
+    }
+
     Widget& mountKind(reactive::Scope& scope, KeyValue const& spec, ContainerWidget* parent) {
         KeyValueWidget& widget = scope.adopt(_backend->createKeyValue(parent));
         applyCommon(scope, widget, spec.common);

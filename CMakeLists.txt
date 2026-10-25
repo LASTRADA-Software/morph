@@ -528,6 +528,7 @@ target_sources(morph
         include/morph/ui/preference_sync.hpp
         include/morph/ui/host_vocabulary.hpp
         include/morph/ui/catalogue.hpp
+        include/morph/ui/chart_scale.hpp
         include/morph/ui/theme.hpp
         include/morph/ui/testing/memory_history.hpp
         include/morph/ui/testing/recording_backend.hpp

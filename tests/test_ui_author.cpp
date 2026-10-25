@@ -582,6 +582,26 @@ ui::Screen declarationsScreen() {
     });
 }
 
+// Mutation: write `x` from the `xLabel` reader in `ui::chart` (the series' `x` then reads the run).
+TEST_CASE("author: a chart writes its series per point from the row, and its lines", "[ui][author]") {
+    ui::Node const node = ui::chart(
+        {.summary = ui::ref("trendSummary"),
+         .series = {{.label = "25 °C",
+                     .points = ui::ref("assay25"),
+                     .y = [](ui::AnyHandle const& point) { return point.at("value"); },
+                     .x = [](ui::AnyHandle const& point) { return point.at("month"); },
+                     .xLabel = [](ui::AnyHandle const& point) { return point.at("run"); },
+                     .joined = false}},
+         .lines = {{.value = 95, .label = "LSL 95.0", .tone = "err", .style = ui::LineStyle::Dashed}},
+         .yPlaces = 1,
+         .yLabel = "Assay, % LC"});
+    CHECK(text(node) ==
+          R"({"kind":"chart","summary":{"ref":"trendSummary"},"series":[{"label":"25 °C",)"
+          R"("points":{"ref":"assay25"},"y":{"row":"value"},"x":{"row":"month"},"xLabel":{"row":"run"},)"
+          R"("joined":false}],"lines":[{"value":95,"label":"LSL 95.0","tone":"err","style":"dashed"}],)"
+          R"("yPlaces":1,"yLabel":"Assay, % LC"})");
+}
+
 /// Every node kind of the palette, and the properties every node takes.
 ui::Screen paletteScreen() {
     return ui::screen("lims.palette", [](ui::Scope& screen) {
@@ -714,6 +734,11 @@ ui::Screen paletteScreen() {
              ui::banner({.text = "Bare", .action = ui::ActionPart{}}), ui::badge("New", "info", "star"),
              ui::badge("Plain"), ui::progress(ui::AnyHandle{nullptr}, "Working"), ui::progress(1),
              ui::steps(ui::list({}), 0), ui::steps(ui::list({})), ui::keyValue(ui::list({})),
+             ui::chart({.summary = "Runs within limits",
+                        .series = {{.points = ui::list({}), .y = [](ui::AnyHandle const& run) {
+                                        return run.at("value");
+                                    }}},
+                        .lines = {{.value = 100, .label = "mean"}}}),
              ui::emptyState({.title = "Nothing",
                              .text = "No rows",
                              .icon = "empty",

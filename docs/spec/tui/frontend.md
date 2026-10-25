@@ -102,9 +102,26 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Steps | a row per step: `[ ]` pending, `[>]` active, `[x]` done, `[!]` failed; the current one accented | — |
 | KeyValue | captions, then the values lined up after the widest | — |
 | EmptyState | the title, the explanation, `[ action ]` | Enter, click on the action |
+| Chart | points in cells, below; its summary, muted and wrapped, when smaller than 20 by 5 cells; content size 40 by 8 | — |
 | Splitter | the panes and a handle between each two | dragging a handle; the release reports every size |
 | Collapsible | `▾ title` with the header beside it, the body below while open | Enter, Space, click on the title; the header stays live while closed |
 | DropZone | a dashed frame around its children | a paste while it has the focus is a drop (see below) |
+
+**A chart in cells.** The plot fills the widget below `yLabel` (its own row, when given) and above the points'
+labels and the legend. A gutter at the left, at most 8 columns, holds the lines' labels when three or more label
+the axis and the ticks' otherwise, right-aligned; with ticks, a line's label is written at the right end of its row,
+over the line. A value lands on row `round((yMax − y) / (yMax − yMin) × (rows − 1))` of the plot, a position on
+column `round((x − xMin) / (xMax − xMin) × (columns − 1))`. A line is a row of `─` (solid), `╌` (dashed) or `┄`
+(dotted) in its tone's style, muted for neutral; two lines on one row draw the one of the more severe tone, and its
+label. A point is its series' glyph, `●`, `■`, `▲` or `◆` in token order, in the series colour (`color.chart.<n>`'s
+default as a true colour, since the terminal theme has no chart colours); a marked point is `✕` in its tone's style
+with its note two cells after it when it fits; a clipped point is `△` on the top row or `▽` on the bottom one. A
+point is drawn over a line in the same cell, and of two points in one cell the marked one, else the later. Points
+are not joined: a cell is about twice as tall as it is wide, and box characters between cells would draw slopes
+that are not there. The points' labels take the row below the plot, each skipped when it would overlap the last one
+drawn and the newest always drawn; the legend row (two or more series) is each glyph beside its label. At the
+content height a value is placed to within a fraction of the range, so the summary carries what a reader must not
+miss, and a document that needs the values shows a table too.
 
 A text input, select or date-time input whose caption is shown (`setCaption(label, true)`) draws it on its own row
 above the control, one row taller; without it nothing changes. A radio select's rows, and a dropdown's list, keep

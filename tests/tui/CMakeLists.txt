@@ -4,6 +4,7 @@ add_executable(morph_tui_tests
     test_tui_conformance.cpp
     test_tui_chord.cpp
     test_tui_display.cpp
+    test_tui_chart.cpp
     test_tui_regions.cpp
     test_tui_containers.cpp
     test_tui_fields.cpp

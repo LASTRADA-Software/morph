@@ -260,6 +260,20 @@ enum class StepState : std::uint8_t {
     Failed,   ///< Stopped by a failure.
 };
 
+/// @brief How a chart's reference line is stroked.
+enum class ChartLineStyle : std::uint8_t {
+    Solid,   ///< An unbroken line.
+    Dashed,  ///< Dashes.
+    Dotted,  ///< Dots.
+};
+
+/// @brief Whether a chart's point lies outside the value axis the document fixed, and on which side.
+enum class ChartClip : std::uint8_t {
+    None,   ///< Inside the axis.
+    Below,  ///< Below its lower end; drawn at that end, pointing down.
+    Above,  ///< Above its upper end; drawn at that end, pointing up.
+};
+
 /// @brief How many rows of a `Table` the user can select.
 enum class SelectionMode : std::uint8_t {
     None,      ///< Rows can be activated, not selected.
@@ -1047,6 +1061,109 @@ struct KeyValueItem {
     bool operator==(KeyValueItem const&) const = default;
 };
 
+/// @brief One point of a chart's series.
+struct ChartPoint {
+    /// @brief The position along the horizontal axis: the point's index, a number, or an instant's milliseconds
+    ///        since the epoch.
+    double x = 0.0;
+    /// @brief The value, or the axis end a clipped point is drawn at; `nullopt` is a gap, which no line joins
+    ///        across.
+    std::optional<double> y;
+    /// @brief Whether the value lies outside the axis the document fixed.
+    ChartClip clip = ChartClip::None;
+    /// @brief The point's label on the horizontal axis; empty for none.
+    std::string xLabel;
+    /// @brief Engaged: the point is marked, in this tone.
+    std::optional<Tone> tone;
+    /// @brief Text drawn beside the point; empty for none.
+    std::string note;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ChartPoint const&) const = default;
+};
+
+/// @brief One series of a chart: its points in order.
+struct ChartSeries {
+    /// @brief The series' name in the legend; empty for a chart's one series.
+    std::string label;
+    /// @brief Whether a line joins the points.
+    bool joined = true;
+    /// @brief The points, in order.
+    std::vector<ChartPoint> points;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ChartSeries const&) const = default;
+};
+
+/// @brief A horizontal reference line of a chart, such as a control or a specification limit.
+struct ChartLine {
+    /// @brief Where the line is drawn on the value axis.
+    double value = 0.0;
+    /// @brief Its label.
+    std::string label;
+    /// @brief Its colour.
+    Tone tone = Tone::Neutral;
+    /// @brief Its stroke.
+    ChartLineStyle style = ChartLineStyle::Solid;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ChartLine const&) const = default;
+};
+
+/// @brief One labelled tick of a chart's value axis.
+struct ChartTick {
+    /// @brief Where it is on the value axis.
+    double value = 0.0;
+    /// @brief Its label, formatted in the active locale.
+    std::string text;
+
+    /// @brief Memberwise equality.
+    /// @return Whether both members match.
+    bool operator==(ChartTick const&) const = default;
+};
+
+/// @brief Everything a chart draws, computed from exact values by the lowering: positions as doubles, and every
+///        text already formatted.
+///
+/// One value rather than a setter per part: the range depends on every point and line, so the parts change
+/// together, and one equality check keeps an unchanged chart from drawing again.
+struct ChartData {
+    /// @brief The left end of the horizontal axis, padding included.
+    double xMin = 0.0;
+    /// @brief The right end of the horizontal axis, padding included.
+    double xMax = 0.0;
+    /// @brief The lower end of the value axis, padding included.
+    double yMin = 0.0;
+    /// @brief The upper end of the value axis, padding included.
+    double yMax = 0.0;
+    /// @brief The value axis's unit or name, drawn above its labels; empty for none.
+    std::string yLabel;
+    /// @brief The value axis's ticks; empty when three or more reference lines label the axis.
+    std::vector<ChartTick> yTicks;
+    /// @brief The reference lines.
+    std::vector<ChartLine> lines;
+    /// @brief The series, in drawing order.
+    std::vector<ChartSeries> series;
+    /// @brief The text alternative: what a reader must know from the chart.
+    std::string summary;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ChartData const&) const = default;
+};
+
+/// @brief Points against a numeric axis, optionally joined, with horizontal reference lines. Takes no focus and
+///        calls no handler.
+struct Chart {
+    /// @brief What the chart draws.
+    Prop<ChartData> data;
+    /// @brief Visibility, enablement, layout, drag-and-drop.
+    Common common{};
+};
+
 /// @brief Captions beside their values, one pair per row.
 struct KeyValue {
     /// @brief The pairs, in order.
@@ -1172,7 +1289,7 @@ struct NodeData {
     /// @brief The node.
     std::variant<Text, Button, TextInput, Checkbox, Select, Menu, Column, Row, Grid, Spacer, Panel, Scroll, Switch,
                  Tabs, Dialog, Busy, ForEach, Table, DateTimeInput, Slider, FilePicker, Banner, Badge, Progress, Steps,
-                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar>
+                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar, Chart>
         kind;
 };
 
@@ -1303,6 +1420,11 @@ template <typename Kind>
 /// @param spec The node.
 /// @return The node.
 [[nodiscard]] inline Node steps(Steps spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief Points against a numeric axis, with reference lines.
+/// @param spec The node.
+/// @return The node.
+[[nodiscard]] inline Node chart(Chart spec) { return detail::makeNode(std::move(spec)); }
 
 /// @brief Captions beside their values.
 /// @param spec The node.

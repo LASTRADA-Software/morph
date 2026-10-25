@@ -232,6 +232,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)` | — |
 | `KeyValueWidget` | `setItems(vector<KeyValueItem>)` | — |
 | `EmptyStateWidget` | `setTitle`, `setText`, `setIcon` (once), `setActionLabel` | `setOnAction` |
+| `ChartWidget` | `setData(ChartData)`, at mount and on every change (`view_tree.md`, Chart data); it takes no focus | — |
 | `DrawerWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open drawer |
 | `SplitterWidget` | `setSizes(vector<int>)` | `setOnResize(sizes)` |
 | `CollapsibleWidget` | `setTitle`, `setHeader(child)` (at most once), `setOpen` | `setOnToggle(open)`, with the state the user asked for |
@@ -308,7 +309,9 @@ The headless reference backend and the test double for everything above the cont
   `tone`, `text`, `icon` (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
   (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title` (Drawer);
   `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
-  `accept`, `multiple` (DropZone); `component`, `minVersion` and each prop as `prop.<name>` (Custom).
+  `accept`, `multiple` (DropZone); `component`, `minVersion` and each prop as `prop.<name>` (Custom);
+  `yRange`, `xRange`, `yLabel`, `yTicks`, `lines`, `series`, `summary` (Chart, each set only when its text
+  changed, so a test sees which parts of the data moved).
 - **Components.** `createCustom` loads only the components named by `loadsComponents(names)`, none
   until it is called, so a custom node shows its fallback by default. A loaded one is a `Custom`
   widget, and `raiseEvent(id, event, payload)` raises its event as the component would.
@@ -318,13 +321,18 @@ The headless reference backend and the test double for everything above the cont
   `fixed(n)` or `stretch(n)`, a layout as `width/height`; lists as `[a,b]`; options as
   `[key:label,…]`; columns as `[label:sizing,…]`; a slider's range as `minimum..maximum/step`;
   a fraction in its shortest decimal form (`0.25`); steps as `[label:State,…]`; key-value pairs
-  as `[label:value,…]`; sizes as `[n,…]`; a
+  as `[label:value,…]`; sizes as `[n,…]`; a chart's ranges as `[lo,hi]`, its ticks as `[text@value,…]`, its lines
+  as `[label@value;tone;style,…]` (`err`, `dashed`), and its series as `[label;joined;[point|…],…]`, each point
+  `xLabel@x,y;tone;note` with `y` as a number, `gap` for none, or the axis end followed by `↑` or `↓` for a clipped
+  point, and the tone empty for an unmarked one; every chart number shortest-round-trip, so a log is the same on
+  every platform; a
   menu as `[label;attr=value…,…]`, where an entry's attributes follow its label only when they
   differ from the default (`;icon=`, `;keys=`, `;checked=true` or `false`, `;enabled=false`) and
   its submenu follows in brackets: `[File[Open;keys=Ctrl+O,Recent[a.txt]],Wrap;checked=true]`.
 - **Escaping.** Free text is escaped so that every value stays on its line and reads as one field:
   a line feed becomes `\n`, a carriage return `\r`, and a backslash or `=` is preceded by a
-  backslash. Text inside a list also escapes `,`, `[` and `]`, text inside a menu also `;`, and a
+  backslash. Text inside a list also escapes `,`, `[` and `]`, text inside a menu also `;`, text inside a chart
+  property also `;`, `@` and `|`, and a
   string key also escapes `"`.
 - **Lookups.** `find(kind, name, value)` is the first live widget, by id, of that kind whose
   property equals `value`, compared against the escaped form; `all(kind)` lists them in creation
@@ -402,6 +410,9 @@ the container it measures inside another, since a root fills the window or scree
 7. A `stretch` child capped at 20 in a 70-unit column with `alignSelf: center`, and one capped at 44 under the
    column's `align: center`, each have equal space either side.
 
+16. A content-sized chart in a 60-unit column with `align: start` is 40 units wide and 8 tall: wide and tall enough
+    to read before any sizing.
+
 ### The probe
 
 A backend author implements one `ConformanceProbe`. Its driving operations act as a user would,
@@ -413,7 +424,7 @@ after it; its reading operations report what the widget shows now.
 | `backend()` | The backend under test |
 | `runtime()` | The runtime the cases' signals and mounts belong to |
 | `settle()` | Runs posted flushes and pending native events until nothing is left |
-| `textOf(widget)` | A Text's or TextInput's text, a Button's or Checkbox's label, the label of the option a Select marks (empty when it marks none) |
+| `textOf(widget)` | A Text's or TextInput's text, a Button's or Checkbox's label, the label of the option a Select marks (empty when it marks none), a Chart's summary |
 | `visibleOf(widget)` | The widget's own flag as its last `setVisible` left it: a hidden ancestor, a collapsed panel or a closed dialog around it does not make it false |
 | `enabledOf(widget)` | The widget's own flag as its last `setEnabled` left it |
 | `childCount(container)` | How many children a container has |
@@ -461,7 +472,7 @@ Each case is named by the rule it checks:
     upper-cased one shows the upper case.
 16. A dismissal the application refuses leaves the dialog open, with its content reachable.
 17. No setter calls a handler: values, options, menu items, rows, selections, tab indices, opening
-    and collapsing, including a Select re-resolving its request after new options and a Table
+    and collapsing, a chart's data, including a Select re-resolving its request after new options and a Table
     re-marking rows that arrive or go.
 18. A Select marks the requested key whenever its options contain it, whichever arrives first, and
     remembers it across options that lack it.
@@ -499,6 +510,8 @@ Each case is named by the rule it checks:
     reaches `onToggle`, and once the application opens it the content takes clicks.
 40. A drop zone takes a drop of one accepted file, compared without case, and refuses a file it
     does not accept and several files when it takes one.
+
+54. A chart shows the summary of the data it was last given: set with summary `A`, then `B`, it reads `B`.
 
 ### What the probe cannot reach
 
