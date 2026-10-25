@@ -113,7 +113,42 @@ over the tree recurse, and a few hundred levels exhaust a 1 MB thread stack.
 - **Equality.** `eq` and `ne` compare numbers by value (an `int` and a decimal; quantities across
   units), lists and records element by element, and anything else by kind and value; values of
   kinds that cannot compare are unequal. `lt`, `le`, `gt` and `ge` order numbers, quantities,
-  timestamps and strings (by bytes); anything else is a mismatch.
+  timestamps and strings (by bytes); anything else is a mismatch. Two `yyyy-MM-dd` dates order
+  correctly as strings; ISO date-time text orders correctly only against text in the same spelling
+  (`…:00Z` sorts after `…:00.500Z`), so a document that orders instants holds timestamps. A date
+  and a timestamp do not compare: relating a calendar day to an instant needs a zone, which a
+  document states by converting one of them.
+- **Dates and instants** are two values. A **date** is `yyyy-MM-dd` text, a calendar day with no
+  time of day and no zone: a pull date or an expiry date is the same day in Basel and in Boston. An
+  **instant** is a timestamp, or ISO date-time text that `DateTime::fromIso8601` reads. `""` in any
+  date function is absence, `null` without a report: it is what a cleared date input writes. Other
+  text is a mismatch, and so is `yyyy-MM-dd` text that names no day (`2026-02-30`). The date
+  functions and a date input read a value through one reader, `readDateValue`.
+- **`dateAdd(x, n, unit)`** moves a date or an instant by `n` whole units, an `int`, negative to go
+  back: `days`, `weeks`, `months`, `years`, `hours` or `minutes`. The result keeps the value's
+  form: a date gives a date, a timestamp a timestamp, and ISO text the instant as
+  `DateTime::toIso8601` writes it (`yyyy-MM-ddTHH:MM:SS.mmmZ`, what a date input in `date-time`
+  mode writes).
+  - Days and weeks move a date's calendar day, and add 24 and 168 hours to an instant, which is the
+    same at a fixed offset. Hours and minutes add exact durations to an instant; on a date they are
+    a mismatch ("a date has no time of day").
+  - Months and years move the calendar month and keep the day, clamped to the month's last day:
+    `2026-01-31` plus one month is `2026-02-28`, and `2028-02-29` plus one year is `2029-02-28`. A
+    year is twelve months. On an instant the calendar is the one at the display offset: the instant
+    is shifted by `utcOffsetMinutes`, its civil date moved, and the offset taken off again, so the
+    wall-clock time at that offset is kept. The client holds an offset, not zone rules, so a month
+    added to `09:00 +01:00` in January is `09:00 +01:00` in July; a document that means a calendar
+    day holds a date, which no offset or daylight saving time can move.
+  - Clamping is not associative: `2026-01-31` plus one month, plus one month again, is
+    `2026-03-28`, while plus two months is `2026-03-31`. A schedule adds each timepoint to its
+    start, never to the previous one. This is the convention of `java.time`'s `plusMonths` and
+    .NET's `AddMonths`, not JavaScript's, which would put a month after 31 January on 3 March.
+  - A result outside years 1 to 9999, which ISO text cannot write, is `null`, reported "the date is
+    out of range". `n` is compared with the span of those years in its unit before any calendar
+    arithmetic, whose day and month counts are narrower than an `int`, so a huge `n` is reported
+    and never narrowed into a date.
+  - A literal `unit` other than the six, and an `n` whose type is known and is not `int`, are
+    refused at load. The static type is the first argument's (`timestamp` or `string`), else `any`.
 
 ## Static checking
 
@@ -135,6 +170,7 @@ arithmetic, and `any` where it depends on data the document does not describe.
 | Optional | `engaged(x)` (never `null`), `coalesce(x, ...)` (the first non-`null`) |
 | Strings | `concat(s, ...)`, `format(template, args...)`, `trim`, `length` (code points), `isEmpty` (a string or a list), `contains` |
 | Lists | `count`, `sum` (0 for an empty list), `mean`, `min`, `max`, `stdev(list, dp, mode?)` (sample, n − 1), `rsd(list, dp, mode?)` (in percent), `any`, `all`, `first`, `includes`, `indexOf`, `concatLists(list, ...)` |
+| Dates | `dateAdd(x, n, unit)` |
 | Display | `number`, `decimal(x, dp, mode?)`, `quantity(x, unit?)`, `money(x, currency)`, `date(x, style?)`, `dateTime(x, style?)` |
 | Entry | `parseDecimal(text, dp?)` |
 | Text | `t(key, fallback, args?)` |
@@ -208,9 +244,12 @@ the `render::TranslationProvider`, the `UnitTable`, the display zone's offset an
   `quantity(x, unit?)` the magnitude and the unit's display text, converted first when a unit is
   given; `money(x, currency)` at the currency's minor digits (0 for `JPY` and the like, 3 for `KWD`
   and the like, otherwise 2) followed by the code. All go through `render::formatCanonicalNumber`.
-- `date` and `dateTime` take a timestamp or ISO-8601 text, shift it to the display zone and format
-  it in a style (`short`, `medium`, the default, or `long`) through the `DateFormatter`; without one
-  they write `2026-10-11` and `2026-10-11 08:30` (`long` adds seconds).
+- `date` and `dateTime` take a date, a timestamp or ISO-8601 date-time text, and format it in a
+  style (`short`, `medium`, the default, or `long`) through the `DateFormatter`; without one they
+  write `2026-10-11` and `2026-10-11 08:30` (`long` adds seconds). An instant is shifted to the
+  display zone first. A date is that calendar day at any offset, and `dateTime` shows it as
+  midnight of that day in the display zone, as a date input does. `""` is `null` without a
+  report.
 
 ## Messages
 

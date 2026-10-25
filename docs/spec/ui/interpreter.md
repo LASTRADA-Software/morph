@@ -210,7 +210,8 @@ reply; `parallel` applies each. `pending` counts runs in flight and queued.
 - **Date inputs.** A date input holds its value as a `timestamp` or as a string. The loader records the
   static type of `value` when it is a `timestamp` or a `string`; a value whose type is `any` or `key`
   takes the type it holds at the edit, and an uncontrolled input holds a timestamp. A string field
-  shows a `yyyy-MM-dd` date as midnight in the display zone and an ISO-8601 date-time as its instant,
+  shows a `yyyy-MM-dd` date as midnight in the display zone and an ISO-8601 date-time as its instant
+  (it reads the value with `readDateValue`, as the date functions do),
   and writes `yyyy-MM-dd` in `date` mode or the ISO-8601 instant in `date-time` mode (`""` on
   clearing); a timestamp field writes the timestamp (`null` on clearing). A value that names no date
   shows empty and is reported once at the node's `value` path. A date input follows its bound value by

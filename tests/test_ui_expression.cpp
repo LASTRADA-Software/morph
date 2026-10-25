@@ -100,7 +100,9 @@ void fill(StaticEnvironment& env, Json const* spec, ValueRecord& translations) {
         env.format.locale = std::get<std::string>(locale->data);
     }
     if (Json const* const offset = optionalMember(*spec, "offset")) {
-        env.format.utcOffsetMinutes = static_cast<std::int32_t>(std::get<std::uint64_t>(offset->data));
+        auto const minutes = morph::ui::detail::jsonInt(*offset);
+        REQUIRE(minutes.has_value());
+        env.format.utcOffsetMinutes = static_cast<std::int32_t>(*minutes);
     }
     if (Json const* const units = optionalMember(*spec, "units")) {
         addUnits(env.format.units, *units);
@@ -244,7 +246,7 @@ TEST_CASE("ui expressions: the display functions use the client's formatting", "
     CHECK(run(R"({"fn": "decimal", "args": [{"lit": {"num": 3, "den": 2, "dp": 1}}, 2]})") == Value{"1,50"});
     CHECK(run(R"({"fn": "date", "args": [{"ref": "when"}, "long"]})") == Value{"long 2026"});
     CHECK(run(R"({"fn": "dateTime", "args": [{"ref": "when"}]})") == Value{"medium+time 2026"});
-    CHECK(morph::ui::functionNames().size() == 46);
+    CHECK(morph::ui::functionNames().size() == 47);
     CHECK(morph::ui::isName("a_1"));
     CHECK_FALSE(morph::ui::isName("1a"));
     CHECK_FALSE(morph::ui::isName(""));

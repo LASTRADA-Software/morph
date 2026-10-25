@@ -4215,38 +4215,27 @@ struct DateReading {
 
 /// @brief Reads what a date input shows for @p value, in a display zone @p offsetMinutes from UTC.
 ///
-/// A timestamp is its instant; a `yyyy-MM-dd` string is midnight of that date in the display zone; a string
-/// `DateTime::fromIso8601` reads is its instant; `null` and `""` are empty. Any other value is empty and
-/// unreadable.
+/// The value is read as the date functions read it (`readDateValue`): a timestamp is its instant; a `yyyy-MM-dd`
+/// string is midnight of that date in the display zone; a string `DateTime::fromIso8601` reads is its instant; `null`
+/// and `""` are empty. Any other value is empty and unreadable.
 /// @param value         The value.
 /// @param offsetMinutes The display zone's offset from UTC, in minutes.
 /// @return The instant, or nothing, and whether the value was readable.
 [[nodiscard]] inline DateReading dateInstantOf(Value const& value, std::int32_t offsetMinutes) {
-    if (value.isNull()) {
-        return {};
-    }
-    if (time::DateTime const* const instant = value.asTimestamp()) {
-        return {.instant = *instant};
-    }
-    std::string const* const text = value.asString();
-    if (text == nullptr) {
-        return {.instant = std::nullopt, .readable = false};
-    }
-    if (text->empty()) {
-        return {};
-    }
-    if (forms::detail::engine::isIsoDate(*text)) {
-        auto const wall = forms::detail::engine::parseWallClock(std::string{*text} + "T00:00");
-        if (!wall) {
+    DateValue const reading = readDateValue(value);
+    switch (reading.form) {
+        case DateForm::Absent:
+            return {};
+        case DateForm::Date:
+            return {.instant =
+                        time::DateTime{std::chrono::sys_days{reading.date} - std::chrono::minutes{offsetMinutes}}};
+        case DateForm::Timestamp:
+        case DateForm::InstantText:
+            return {.instant = reading.instant};
+        case DateForm::Unreadable:
+        default:
             return {.instant = std::nullopt, .readable = false};
-        }
-        auto const utc =
-            std::chrono::time_point_cast<std::chrono::milliseconds>(*wall - std::chrono::minutes{offsetMinutes});
-        return {.instant = time::DateTime{utc}};
     }
-    std::optional<time::DateTime> parsed = time::DateTime::fromIso8601(*text);
-    bool const readable = parsed.has_value();
-    return {.instant = std::move(parsed), .readable = readable};
 }
 
 /// @brief A date input's date text for @p instant in a display zone @p offsetMinutes from UTC.
