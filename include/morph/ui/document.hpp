@@ -802,7 +802,7 @@ inline constexpr std::array<KeySpec, 5> kForEachKeys = {{{"rows", Shape::Expr, {
                                                          {"gap", Shape::Expr},
                                                          {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-inline constexpr std::array<KeySpec, 18> kTableKeys = {{{"rows", Shape::Expr},
+inline constexpr std::array<KeySpec, 19> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"key", Shape::Expr, {}, kInner},
                                                         {"model", Shape::Name},
                                                         {"action", Shape::Text},
@@ -819,12 +819,15 @@ inline constexpr std::array<KeySpec, 18> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"rowTone", Shape::Expr, {}, kInner},
                                                         {"highlightKey", Shape::Expr},
                                                         {"onActivate", Shape::Commands, {}, kInner},
+                                                        {"valign", Shape::Text},
                                                         {"empty", Shape::Nodes}}};
 /// @brief The keys of a `table` column part.
-inline constexpr std::array<KeySpec, 5> kColumnKeys = {{{"id", Shape::Name},
+inline constexpr std::array<KeySpec, 7> kColumnKeys = {{{"id", Shape::Name},
                                                         {"label", Shape::Expr},
                                                         {"width", Shape::Expr},
                                                         {"role", Shape::Expr},
+                                                        {"align", Shape::Text},
+                                                        {"valign", Shape::Text},
                                                         {"cell", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `dateTimeInput`.
 inline constexpr std::array<KeySpec, 6> kDateTimeKeys = {{{"value", Shape::Expr},
@@ -3030,6 +3033,8 @@ private:
             checkChoice(node, "submit", kSubmitModes);
         } else if (node.kind == "text") {
             checkTextRole(node);
+        } else if (node.kind == "table") {
+            checkCellPlace(node, "valign");
         }
         if (node.kind == "form" || node.kind == "collection" || node.kind == "wizard") {
             checkFormColumns(node);
@@ -3247,8 +3252,25 @@ private:
         }
     }
 
-    // A table column's closed sets: its default cell's text role.
-    static void checkColumnPart(DocNode const& node) { checkTextRole(node); }
+    // A table cell's place across its column and down its row: `stretch`, which a stack takes, is no place for a
+    // cell.
+    static constexpr std::array<std::string_view, 3> kCellPlaces = {"start", "center", "end"};
+
+    // A table column's closed sets: its default cell's text role, and its cells' places.
+    static void checkColumnPart(DocNode const& node) {
+        checkTextRole(node);
+        checkCellPlace(node, "align");
+        checkCellPlace(node, "valign");
+    }
+
+    // A cell place, which names the three it may be.
+    static void checkCellPlace(DocNode const& node, std::string_view key) {
+        std::string_view const value = node.name(key);
+        if (!value.empty() && !listed(kCellPlaces, value)) {
+            refuse(pointerAppend(node.path, key), "`" + std::string{value} + "` is not one of the values of `" +
+                                                      std::string{key} + "`: start, center or end");
+        }
+    }
 
     // A form's `columns`: a literal integer, 1 to 12, the `x-colspan` convention's full row.
     static void checkFormColumns(DocNode const& node) {

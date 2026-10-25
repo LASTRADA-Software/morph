@@ -1830,13 +1830,101 @@ struct Measured {
     return checks.result();
 }
 
+/// @brief The cells of a table's row, in column order.
+/// @param probe The backend under test.
+/// @param table The table.
+/// @param row   The row's position among the table's rows.
+/// @return Its cells; empty when the table has no such row.
+[[nodiscard]] inline std::vector<Widget*> rowCells(ConformanceProbe& probe, Widget const& table, std::size_t row) {
+    std::vector<Widget*> cells;
+    ContainerWidget const* const rows = asContainer(table);
+    Widget const* const found = rows == nullptr ? nullptr : probe.childAt(*rows, row);
+    ContainerWidget const* const inside = found == nullptr ? nullptr : asContainer(*found);
+    for (std::size_t index = 0; inside != nullptr && index < probe.childCount(*inside); ++index) {
+        cells.push_back(probe.childAt(*inside, index));
+    }
+    return cells;
+}
+
+/// @brief Case: in a 30-unit column with `align: End`, a badge cell ends where the column's text ends: at the
+///        column's right edge, less the inset a backend gives every cell.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> endColumnPlacesBadge(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(),
+                                                    {{.id = 1, .label = "ok"}, {.id = 2, .label = "x"}}};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       insideColumn(ui::table<Entry>(
+                           {{.label = "State", .width = Sizing::fixed(30), .align = Align::End}},
+                           [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+                           [](reactive::Signal<Entry> const& entry) {
+                               // Row 1 holds a badge, row 2 a text; both are drawn at the column's end.
+                               Node cell = entry.peek().id == 1
+                                               ? ui::badge({.text = [&entry] { return entry.get().label; }})
+                                               : ui::text({.text = [&entry] { return entry.get().label; }});
+                               return std::vector<Node>{std::move(cell)};
+                           }))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Widget const* const table = probe.childAt(rootContainer(view), 0);
+    std::vector<Widget*> const badgeRow = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 0);
+    std::vector<Widget*> const textRow = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 1);
+    checks.that(badgeRow.size() == 1 && textRow.size() == 1, "the table holds two rows of one cell");
+    if (badgeRow.size() == 1 && textRow.size() == 1) {
+        WidgetBounds const outer = geometry.of(*table);
+        WidgetBounds const badge = geometry.of(*badgeRow.front());
+        WidgetBounds const text = geometry.of(*textRow.front());
+        geometry.near("the badge's right edge, against the column's text's", text.x + text.width,
+                      badge.x + badge.width);
+        checks.that(badge.x - outer.x > 15, "the badge is not at the end of its 30-unit column: it starts " +
+                                                std::to_string(badge.x - outer.x) + " units into the table");
+    }
+    return checks.result();
+}
+
+/// @brief Case: in a row where one cell is five lines tall, a one-line cell of a `valign: Start` column has its
+///        top at the row's top, and one of a `valign: End` column its bottom at the row's bottom. Five lines, so a
+///        centred cell is two lines from either, more than the unit a measure may be off by.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> columnPlacesCellsDownRow(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), {{.id = 1, .label = "x"}}};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       insideColumn(ui::table<Entry>(
+                           {{.label = "Tall", .width = Sizing::fixed(10)},
+                            {.label = "Top", .width = Sizing::fixed(10), .valign = Align::Start},
+                            {.label = "Bottom", .width = Sizing::fixed(10), .valign = Align::End}},
+                           [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+                           [](reactive::Signal<Entry> const& entry) {
+                               return std::vector<Node>{ui::text({.text = "one\ntwo\nthree\nfour\nfive"}),
+                                                        ui::text({.text = [&entry] { return entry.get().label; }}),
+                                                        ui::text({.text = [&entry] { return entry.get().label; }})};
+                           }))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Widget const* const table = probe.childAt(rootContainer(view), 0);
+    std::vector<Widget*> const cells = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 0);
+    checks.that(cells.size() == 3, "the row holds three cells");
+    if (cells.size() == 3) {
+        WidgetBounds const tall = geometry.of(*cells.at(0));
+        WidgetBounds const top = geometry.of(*cells.at(1));
+        WidgetBounds const bottom = geometry.of(*cells.at(2));
+        checks.that(tall.height >= 4.5, "the five-line cell is " + std::to_string(tall.height) + " units tall");
+        geometry.near("a valign Start cell's top, against the row's", tall.y, top.y);
+        geometry.near("a valign End cell's bottom, against the row's", tall.y + tall.height, bottom.y + bottom.height);
+    }
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 7> const cases{{
+    static std::array<ConformanceCase, 9> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -1846,6 +1934,9 @@ struct Measured {
         {.name = "a row centres a child across it", .run = detail::rowCentresAcross},
         {.name = "a column's justify places its spare height", .run = detail::columnJustifies},
         {.name = "a capped child is centred by its own alignment or its column's", .run = detail::cappedChildCentres},
+        {.name = "a table column's end alignment places a badge cell at its end", .run = detail::endColumnPlacesBadge},
+        {.name = "a table column's valign places a cell at its row's top or bottom",
+         .run = detail::columnPlacesCellsDownRow},
     }};
     return cases;
 }

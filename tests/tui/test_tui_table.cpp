@@ -743,3 +743,18 @@ TEST_CASE("tui table: a one-line cell beside a three-line cell is drawn on the m
     table->setRowKey(*row, key(1));
     CHECK(harness.draw() == Rows{"  Name Notes", "       one", "  pH   two", "       three"});
 }
+
+// Mutation: place every cell at its column's start (the digits start the column, and the header does too).
+TEST_CASE("tui table: an end column draws its text and its header label at its end", "[tui][table][columns]") {
+    Harness harness{30, 3};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name"}, {.label = "Area", .width = ui::Sizing::fixed(12), .align = ui::Align::End}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    auto const name = harness.make<TextImpl>(row.get());
+    name->setText("pH");
+    auto const area = harness.make<TextImpl>(row.get());
+    area->setText("0.21");
+    table->setRowKey(*row, key(1));
+    // The gutter's 2 cells, `Name` 4, a gap, then the 12-cell column: its last four cells hold the digits.
+    CHECK(harness.draw() == Rows{"  Name         Area", "  pH           0.21"});
+}

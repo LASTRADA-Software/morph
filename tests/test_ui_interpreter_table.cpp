@@ -49,3 +49,33 @@ TEST_CASE("table: a column's mono role reaches its default cell, and a computed 
     });
     CHECK(reports == 1);
 }
+
+// Mutation: take a column's valign from the column alone (the first column records no valign).
+TEST_CASE("table: a column's align and valign reach the view, the table's valign the columns that give none",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "places",
+      "state": { "items": { "init": { "lit": [ { "id": "S-1", "area": "0.21" } ] } } },
+      "view": { "kind": "table", "rows": { "ref": "items" }, "valign": "start",
+                "columns": [ { "id": "id", "label": "Sample" },
+                             { "id": "area", "label": "Area", "align": "end", "valign": "end" } ] } })");
+    int const table = h.backend.all("Table").front();
+    CHECK(h.backend.prop(table, "columns") == "[Sample:content;valign=start,Area:content;align=end;valign=end]");
+}
+
+TEST_CASE("table: a computed column's place that names none is reported once and takes the default",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "places",
+      "state": { "items": { "init": { "lit": [ { "id": "S-1" } ] } } },
+      "view": { "kind": "table", "rows": { "ref": "items" },
+                "columns": { "lit": [ { "id": "id", "label": "Sample", "align": "right" },
+                                      { "id": "n", "label": "N", "valign": "top", "align": "center" } ] } } })");
+    int const table = h.backend.all("Table").front();
+    CHECK(h.backend.prop(table, "columns") == "[Sample:content,N:content;align=center]");
+    auto const reports = std::ranges::count_if(
+        h.diagnostics, [](ui::Refusal const& refusal) { return refusal.reason.contains("a cell's place is"); });
+    CHECK(reports == 1);
+}

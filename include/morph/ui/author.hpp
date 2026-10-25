@@ -3678,6 +3678,13 @@ struct TableColumn {
     AnyHandle width;
     /// @brief The column's text role; absent writes no key, `Normal`.
     AnyHandle role;
+    /// @brief Where a cell's text, or a label-width cell, sits across the column, and the header label with it:
+    ///        `Start`, `Center` or `End`; absent writes no key, the start. `Stretch` writes `stretch`, which the
+    ///        loader refuses.
+    std::optional<Align> align;
+    /// @brief Where a cell sits down its row: `Start`, `Center` or `End`; absent writes no key and takes the table's
+    ///        `valign`, else the centre.
+    std::optional<Align> valign;
     /// @brief The cell, read in the row scope.
     Nodes cell;
 };
@@ -3738,9 +3745,41 @@ struct TableOptions {
     /// @brief Shown instead of the table while its rows are an empty list, in the table's scope; empty shows the
     ///        table always.
     Nodes empty;
+    /// @brief Where every cell sits down its row, for each column that gives no `valign`; absent writes no key, the
+    ///        centre.
+    std::optional<Align> valign;
 };
 
 namespace detail {
+
+/// @brief A table column part: the keys the column gives, each written only when present.
+/// @param column The column.
+/// @return The part's JSON.
+[[nodiscard]] inline Json columnPart(TableColumn const& column) {
+    Json part = Json::object_t{};
+    if (!column.name.empty()) {
+        detail::put(part, "id", column.name);
+    }
+    if (column.label.present()) {
+        detail::put(part, "label", column.label.json());
+    }
+    if (column.width.present()) {
+        detail::put(part, "width", column.width.json());
+    }
+    if (column.role.present()) {
+        detail::put(part, "role", column.role.json());
+    }
+    if (column.align) {
+        detail::put(part, "align", detail::alignName(*column.align));
+    }
+    if (column.valign) {
+        detail::put(part, "valign", detail::alignName(*column.valign));
+    }
+    if (!column.cell.empty()) {
+        detail::put(part, "cell", column.cell.json());
+    }
+    return part;
+}
 
 /// @brief Writes a table's options after its source.
 /// @param node    The table so far.
@@ -3756,24 +3795,10 @@ namespace detail {
         Json::array_t parts;
         parts.reserve(columns.size());
         for (TableColumn const& column : columns) {
-            Json part = Json::object_t{};
-            if (!column.name.empty()) {
-                detail::put(part, "id", column.name);
-            }
-            if (column.label.present()) {
-                detail::put(part, "label", column.label.json());
-            }
-            if (column.width.present()) {
-                detail::put(part, "width", column.width.json());
-            }
-            if (column.role.present()) {
-                detail::put(part, "role", column.role.json());
-            }
             if (!column.cell.empty()) {
-                detail::put(part, "cell", column.cell.json());
                 node.facts(column.cell.facts());
             }
-            parts.push_back(std::move(part));
+            parts.push_back(columnPart(column));
         }
         node.raw("columns", std::move(parts));
     }
@@ -3782,6 +3807,9 @@ namespace detail {
     }
     if (!options.showHeader) {
         node.raw("showHeader", false);
+    }
+    if (options.valign) {
+        node.raw("valign", detail::alignName(*options.valign));
     }
     if (options.virtualizeThreshold != 2000) {
         node.raw("virtualizeThreshold", static_cast<std::int64_t>(options.virtualizeThreshold));

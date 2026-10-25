@@ -413,6 +413,18 @@ TEST_CASE("align, justify and alignSelf are written by name, and a screen using 
     CHECK(refused.error().message().contains("`alignSelf` places a node in its row, column or grid"));
 }
 
+// Mutation: leave `align` out of tableNode's column parts (the column is written without it).
+TEST_CASE("a table column's align and valign and the table's valign are written by name", "[ui][author]") {
+    CHECK(text(ui::table(
+                   ui::ref("rows"),
+                   {.columns = {{.name = "area", .align = morph::ui::Align::End, .valign = morph::ui::Align::Start},
+                                {.name = "id"}},
+                    .valign = morph::ui::Align::End})
+                   .json()) ==
+          R"({"kind":"table","rows":{"ref":"rows"},"columns":[{"id":"area","align":"end","valign":"start"},)"
+          R"({"id":"id"}],"valign":"end"})");
+}
+
 // Mutation: leave `style` out of button() (the item is written as a push button).
 TEST_CASE("a button's style and selection are written, and the loader takes them", "[ui][author]") {
     auto const current = ui::ref<std::string>("current");

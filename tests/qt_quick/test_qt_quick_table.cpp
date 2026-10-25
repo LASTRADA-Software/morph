@@ -4,11 +4,14 @@
 // toggling, and keys that cross into QML as text, an int64 above 2^53 unchanged.
 
 #include <QColor>
+#include <QFont>
+#include <QList>
 #include <QObject>
 #include <QPointF>
 #include <QQuickItem>
 #include <QSizeF>
 #include <QVariantList>
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <cstddef>
@@ -487,6 +490,39 @@ TEST_CASE("qt_quick table: a badge keeps its own width at its column's start", "
     CHECK(badgeItem.width() < column - (2 * kCellInset));
     CHECK(badgeItem.width() == badgeItem.implicitWidth());
     CHECK(badgeItem.x() == kCellInset);
+}
+
+// Mutation: drop place()'s textAlign write (the text and the field read AlignLeft).
+TEST_CASE("qt_quick table: an end column draws its text, its field's text and its header label at its end",
+          "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "Area", .width = ui::Sizing::fixed(12), .align = ui::Align::End},
+                       {.label = "Result", .width = ui::Sizing::fixed(12), .align = ui::Align::End},
+                       {.label = "Name"}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    auto area = scene.backend().createText(row.get());
+    area->setText("0.21");
+    auto result = scene.backend().createTextInput(row.get(), ui::TextInputMode::SingleLine);
+    result->setText("7.4");
+    auto name = scene.backend().createText(row.get());
+    name->setText("pH");
+    scene.settle();
+
+    auto const alignment = [](QQuickItem const& item) {
+        return item.property("horizontalAlignment").toInt() & Qt::AlignHorizontal_Mask;
+    };
+    CHECK(alignment(Scene::controlOf(*area)) == Qt::AlignRight);
+    CHECK(alignment(Scene::controlOf(*result)) == Qt::AlignRight);
+    CHECK(alignment(Scene::controlOf(*name)) == Qt::AlignLeft);
+    // Tabular figures, so digits line up across rows.
+    CHECK(Scene::controlOf(*area).property("font").value<QFont>().featureValue(QFont::Tag{"tnum"}) == 1);
+    QList<QQuickItem*> const labels = Scene::itemsOf(Scene::itemOf(*table), "QQuickLabel");
+    auto const header = std::ranges::find_if(
+        labels, [](QQuickItem const* label) { return label->property("text").toString() == QStringLiteral("Area"); });
+    REQUIRE(header != labels.end());
+    CHECK(alignment(**header) == Qt::AlignRight);
 }
 
 // Mutation: leave every cell at the row's top with the tallest cell's height (the text sits above the select's

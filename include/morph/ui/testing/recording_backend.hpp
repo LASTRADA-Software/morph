@@ -1404,11 +1404,19 @@ public:
     FakeTable(FakeTable&&) = delete;
     FakeTable& operator=(FakeTable&&) = delete;
 
-    /// @brief Records property `columns`, each as its escaped caption, a colon and its width.
+    /// @brief Records property `columns`, each as its escaped caption, a colon and its width, then `;align=` and
+    ///        `;valign=` where the column's alignment is not the default (`Start` across, `Center` down).
     /// @param columns The columns, in order.
     void setColumns(std::vector<TableColumn> const& columns) override {
         set("columns", formatList(columns, [](TableColumn const& column) {
-                return formatItem(column.label) + ":" + formatSizing(column.width);
+                std::string text = formatItem(column.label) + ":" + formatSizing(column.width);
+                if (column.align != Align::Start) {
+                    text += ";align=" + formatAlign(column.align);
+                }
+                if (column.valign != Align::Center) {
+                    text += ";valign=" + formatAlign(column.valign);
+                }
+                return text;
             }));
     }
 

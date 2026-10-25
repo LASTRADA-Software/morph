@@ -882,6 +882,14 @@ struct TableColumn {
     /// @brief The text style of this column's default cell; `Normal` renders unchanged. Has no effect on a column
     ///        with its own `.cell`, or on a `Table` constructed directly without going through the interpreter.
     TextRole role = TextRole::Normal;
+    /// @brief Where a cell sits across the column: the text of a text cell or a text input cell, and a label-width
+    ///        cell (a badge, a check box, a push button) at its natural width, at the start, centre or end; the
+    ///        header label follows it. A container cell fills the column whatever this says. `Stretch` reads as
+    ///        `Start`.
+    Align align = Align::Start;
+    /// @brief Where a cell sits down its row when the row is taller than the cell: `Start` at the top, `Center`, or
+    ///        `End` at the bottom. `Stretch` fills the row's height.
+    Align valign = Align::Center;
 };
 
 /// @brief Keyed rows of cells under column headers. Each row's view is a `Row` whose children are the cells, one

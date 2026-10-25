@@ -280,7 +280,9 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
         int left = kGutter;
         for (auto const [column, width] : std::views::zip(_columns, widths)) {
             auto label = canvas.subcanvas({.x = left, .y = 0, .width = width, .height = 1});
-            label.putString(0, 0, column.label, theme.textBold);
+            // Over its cells: a number column's header ends where its digits do.
+            label.putString(0, alignedOffset(column.align, displayWidth(column.label), width), column.label,
+                            theme.textBold);
             left += width + kColumnGap;
         }
     }
@@ -299,9 +301,14 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
     _top = std::min(_top, lastTop(rows));
     _cursorPlace = cursorPlace(rows);
 
+    std::vector<CellPlace> places;
+    places.reserve(_columns.size());
+    for (auto const& column : _columns) {
+        places.push_back(CellPlace{.across = column.align, .down = column.valign});
+    }
     for (auto* row : children()) {
         if (auto* const stack = dynamic_cast<StackImpl*>(row)) {
-            stack->setColumnLayout(widths, kColumnGap);
+            stack->setColumnLayout(widths, kColumnGap, places);
         }
     }
     auto const areas = childAreas(_size);

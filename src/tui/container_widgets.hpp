@@ -33,9 +33,10 @@ public:
     [[nodiscard]] ui::Axis axis() const noexcept { return _axis; }
     /// The gap in cells along the axis: the spacing step `setGap` was given, mapped by `layout::stepCells`.
     [[nodiscard]] int gap() const noexcept { return _gap; }
-    /// Fixed main-axis extents and their gap, for a Table row, whose cells then centre across the axis; an empty list
-    /// returns the row to the solver and its own alignment.
-    void setColumnLayout(std::vector<int> extents, int gap);
+    /// Fixed main-axis extents, their gap and each cell's place, for a Table row, whose cells are then placed by
+    /// their column rather than by the row's own alignment; an empty list returns the row to the solver and its own
+    /// alignment.
+    void setColumnLayout(std::vector<int> extents, int gap, std::vector<CellPlace> places);
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     void paint(::core::tui::Canvas& canvas) override;
@@ -44,6 +45,7 @@ private:
     ui::Axis _axis;
     int _gap = 0;
     std::vector<int> _extents;
+    std::vector<CellPlace> _places;
     int _extentGap = 0;
     ui::Align _align = ui::Align::Stretch;
     ui::Justify _justify = ui::Justify::Start;

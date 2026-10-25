@@ -19,6 +19,7 @@ public:
     void setRole(ui::TextRole role) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::string probeText() const override { return _text; }
+    [[nodiscard]] bool placedAcrossColumn() const override { return true; }
     void paint(::core::tui::Canvas& canvas) override;
 
 private:
@@ -39,6 +40,8 @@ public:
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override { return _label; }
+    /// A push button keeps its label's width; a list item fills its slot.
+    [[nodiscard]] bool placedAcrossColumn() const override { return _style == ui::ButtonStyle::Push; }
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void activate() override;
@@ -64,6 +67,7 @@ public:
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override { return _label; }
+    [[nodiscard]] bool placedAcrossColumn() const override { return true; }
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void activate() override;

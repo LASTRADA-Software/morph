@@ -160,9 +160,10 @@ The keys every node takes are member functions of `Node`, each returning a copy 
 - **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, align, justify}`; an absent
   `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` is the grid's, and
   a grid's `justify` is written so the loader refuses it rather than dropped.
-- **`table`** takes its rows, its options (`key`, `columns`, `selection`, `sort`, `filters`,
+- **`table`** takes its rows, its options (`key`, `columns` (each `TableColumn{name, label, width, role, align,
+  valign, cell}`; an absent `align` or `valign` is left out and a present one is written by name), `selection`, `sort`, `filters`,
   `rowTone` (each row's tone, which the client draws), `highlightKey`, `onActivate`, `empty` (the nodes shown in
-  its place while its rows are an empty list)), and optionally a row-scope builder that returns the
+  its place while its rows are an empty list), `valign`), and optionally a row-scope builder that returns the
   columns; `cells({...})` makes columns from cells alone. **`dataTable<A>(model, body, options)`**
   is the table of spec 7 declared from a list action, with `mode` (`TableMode::Server` or
   `Client`).

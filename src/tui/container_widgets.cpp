@@ -40,9 +40,10 @@ void StackImpl::setJustify(ui::Justify justify) {
     refresh();
 }
 
-void StackImpl::setColumnLayout(std::vector<int> extents, int gap) {
+void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<CellPlace> places) {
     _extents = std::move(extents);
     _extentGap = gap;
+    _places = std::move(places);
 }
 
 ::core::tui::Size StackImpl::naturalSize() const {
@@ -61,8 +62,9 @@ std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) con
                       StackSpec{.axis = _axis,
                                 .gap = _extents.empty() ? _gap : _extentGap,
                                 .extents = _extents,
-                                // A table row's cells keep their own height and centre in the row, whatever the
-                                // row's own alignment: a cell takes none.
+                                .places = _places,
+                                // A table row's cells are placed by their columns, whatever the row's own
+                                // alignment: a cell takes none.
                                 .align = _extents.empty() ? _align : ui::Align::Center,
                                 .justify = _justify});
 }

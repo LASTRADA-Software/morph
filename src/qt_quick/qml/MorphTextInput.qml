@@ -22,6 +22,10 @@ MorphField {
     // Whether the widget has a submit handler. Only then does Enter stop at the field; otherwise the field commits
     // and Enter goes on to the ancestors' chords, a dialog's default among them.
     property bool submits: false
+    // Where the text sits across the field: a table sets it from its column's `align`.
+    property int textAlign: Qt.AlignLeft
+    // Whether digits take one width each, so a column of numbers lines up.
+    property bool tabularFigures: false
 
     // Return or Enter: the widget's own chord first; then a field that submits commits, submits and takes the key;
     // otherwise the TextField takes it, commits through `accepted` and lets it go on.
@@ -44,9 +48,10 @@ MorphField {
     defaultRole: Accessible.EditableText
 
     TextField {
-        font: Theme.bodyFont
+        font: Theme.figuresOf(Theme.bodyFont, Theme.families, root.tabularFigures)
         id: field
         width: root.controlWidth
+        horizontalAlignment: root.textAlign
         Keys.priority: Keys.BeforeItem
         Keys.onReturnPressed: event => root.enterPressed(event)
         Keys.onEnterPressed: event => root.enterPressed(event)

@@ -30,7 +30,9 @@ void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
     for (ui::TableColumn const& column : columns) {
         list.append(QVariantMap{{QStringLiteral("label"), toQString(column.label)},
                                 {QStringLiteral("kind"), static_cast<int>(column.width.kind)},
-                                {QStringLiteral("amount"), column.width.amount}});
+                                {QStringLiteral("amount"), column.width.amount},
+                                {QStringLiteral("align"), static_cast<int>(column.align)},
+                                {QStringLiteral("valign"), static_cast<int>(column.valign)}});
     }
     write("columns", list);
 }

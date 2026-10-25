@@ -123,6 +123,9 @@ public:
     [[nodiscard]] virtual bool focusesOnPress() const { return wantsFocus(); }
     /// Whether a Content main-axis size means Stretch(1) in a stack (a Spacer).
     [[nodiscard]] virtual bool expandsByDefault() const { return false; }
+    /// Whether a table column places this widget at its natural width (a text, a badge, a check box, a push
+    /// button) rather than filling the column with it.
+    [[nodiscard]] virtual bool placedAcrossColumn() const { return false; }
     /// The text a conformance probe reads.
     [[nodiscard]] virtual std::string probeText() const { return {}; }
     /// Draws the widget into its own area; a container also places its children here. The canvas is as large as
@@ -439,12 +442,20 @@ public:
     [[nodiscard]] ui::Widget const& asWidget() const noexcept override { return *this; }
 };
 
+/// Where a table cell sits in its slot: across its column and down its row.
+struct CellPlace {
+    ui::Align across = ui::Align::Start;  ///< Start, Center or End; Stretch reads as Start.
+    ui::Align down = ui::Align::Center;   ///< Start, Center or End; Stretch fills the row's height.
+};
+
 /// How `arrangeStack` places children.
 struct StackSpec {
-    ui::Axis axis = ui::Axis::Vertical;    ///< The main axis.
-    int gap = 0;                           ///< Cells between neighbours.
-    std::span<int const> extents;          ///< When non-empty, the main-axis extents to use, in order (table columns).
-    ui::Align align = ui::Align::Stretch;  ///< Where a child sits across the axis, unless its `alignSelf` says.
+    ui::Axis axis = ui::Axis::Vertical;  ///< The main axis.
+    int gap = 0;                         ///< Cells between neighbours.
+    std::span<int const> extents;        ///< When non-empty, the main-axis extents to use, in order (table columns).
+    /// With extents, each child's place in its slot, in order; a child past the last takes the default place.
+    std::span<CellPlace const> places;
+    ui::Align align = ui::Align::Stretch;      ///< Where a child sits across the axis, unless its `alignSelf` says.
     ui::Justify justify = ui::Justify::Start;  ///< Where the spare length goes while no shown child stretches.
 };
 

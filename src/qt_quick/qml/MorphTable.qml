@@ -10,7 +10,8 @@ import QtQuick.Layouts
 MorphWidget {
     id: root
 
-    // The columns: [{label, kind (0 content, 1 fixed, 2 stretch), amount}].
+    // The columns: [{label, kind (0 content, 1 fixed, 2 stretch), amount, align, valign}], the places an `Align`:
+    // 0 stretch, 1 start, 2 center, 3 end.
     property var columns: []
     property bool showHeader: true
     // Set by C++ (TableImpl::setRealizedWindow) only above a virtualized table's threshold; totalRows stays -1
@@ -263,6 +264,10 @@ MorphWidget {
                         bottomPadding: Theme.spaceOf(2)
                         leftPadding: Theme.spaceOf(2)
                         rightPadding: Theme.spaceOf(2)
+                        // Over its cells: a number column's header sits over its digits.
+                        horizontalAlignment: modelData.align === 3 ? Text.AlignRight
+                                                                   : modelData.align === 2 ? Text.AlignHCenter
+                                                                                           : Text.AlignLeft
                         elide: Text.ElideRight
                     }
                 }

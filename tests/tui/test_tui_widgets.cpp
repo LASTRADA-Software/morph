@@ -463,7 +463,7 @@ TEST_CASE("tui widgets: no handler runs after its widget was destroyed", "[tui][
 TEST_CASE("tui widgets: with column extents, a hidden child keeps its slot", "[tui][widgets]") {
     Harness harness{20, 1};
     auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
-    row->setColumnLayout({3, 3, 3}, 1);
+    row->setColumnLayout({3, 3, 3}, 1, {});
     auto const first = harness.make<TextImpl>(row.get());
     first->setText("a");
     auto const second = harness.make<TextImpl>(row.get());

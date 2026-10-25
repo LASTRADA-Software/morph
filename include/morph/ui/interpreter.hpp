@@ -5690,6 +5690,22 @@ inline constexpr std::string_view kRoleNames = "a role is normal, muted, heading
     return Align::Stretch;
 }
 
+/// @brief A table cell's place by name: across its column (`align`) or down its row (`valign`).
+/// @param name `start`, `center` or `end`.
+/// @return The place; `nullopt` for any other name, `stretch` included.
+[[nodiscard]] inline std::optional<Align> cellPlaceNamed(std::string_view name) {
+    if (name == "start") {
+        return Align::Start;
+    }
+    if (name == "center") {
+        return Align::Center;
+    }
+    if (name == "end") {
+        return Align::End;
+    }
+    return std::nullopt;
+}
+
 /// @brief A justification by name, as the loader checked it: `center`, `end`, `between`, or start for none.
 /// @param name The name; empty for none.
 /// @return The justification.
@@ -7172,15 +7188,35 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     // that outlives this function) so the default-cell closure can apply each column's role to its generated cell.
     std::vector<TextRole> roles;
     FormatContext const& format = session.formatting();
+    // The table's `valign` is the default of every column that gives none; the loader checked both names.
+    Align const tableValign = cellPlaceNamed(node.name("valign")).value_or(Align::Center);
     if (ExprPtr const derived = node.prop("columns")) {
         Value const list = once(ctx, derived);
+        // A computed place that names none is reported once for the table, whichever column and key it was.
+        bool placeReported = false;
+        auto const placeOf = [&](Value const& item, std::string_view key, Align fallback) {
+            Value const* const given = item.field(key);
+            if (given == nullptr || given->isNull()) {
+                return fallback;
+            }
+            std::string const* const name = given->asString();
+            std::optional<Align> const placed = name == nullptr ? std::nullopt : cellPlaceNamed(*name);
+            if (!placed && !placeReported) {
+                placeReported = true;
+                report(derived->path, "a column's `" + std::string{key} + "` is " + canonicalJson(*given) +
+                                          "; a cell's place is start, center or end");
+            }
+            return placed.value_or(fallback);
+        };
         if (ValueList const* const items = list.asList()) {
             for (Value const& item : *items) {
                 Value const* const field = item.field("id");
                 Value const* const label = item.field("label");
                 fields.push_back(field == nullptr ? std::string{} : textOf(*field, format));
                 columns.push_back(
-                    TableColumn{.label = textOf(label != nullptr ? *label : Value{fields.back()}, format)});
+                    TableColumn{.label = textOf(label != nullptr ? *label : Value{fields.back()}, format),
+                                .align = placeOf(item, "align", Align::Start),
+                                .valign = placeOf(item, "valign", tableValign)});
                 cells.push_back(nullptr);
                 roles.push_back(TextRole::Normal);
             }
@@ -7202,7 +7238,9 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         }
         columns.push_back(TableColumn{.label = label ? textOf(once(ctx, label), format) : std::string{},
                                       .width = width ? sizingOf(once(ctx, width)) : Sizing::content(),
-                                      .role = columnRole});
+                                      .role = columnRole,
+                                      .align = cellPlaceNamed(part->name("align")).value_or(Align::Start),
+                                      .valign = cellPlaceNamed(part->name("valign")).value_or(tableValign)});
         cells.push_back(part.get());
         fields.emplace_back(part->id);
         roles.push_back(columnRole);
@@ -7239,7 +7277,10 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                                         .role = roles.at(index)}));
         }
         if (!out.empty()) {
-            out.front() = holding({out.front()}, scope);
+            // The row's first cell owns the row's scope, which lives as long as the row's node: a cell is placed by
+            // its column, so the scope is not held by a wrapping container, which the column would place instead.
+            auto owner = std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(out.front(), scope);
+            out.front() = Node{owner, owner->first.get()};
         }
         TableRowView view{.cells = std::move(out), .tone = std::nullopt};
         if (ExprPtr const toneExpr = node.prop("rowTone")) {

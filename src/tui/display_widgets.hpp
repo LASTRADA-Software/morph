@@ -86,6 +86,7 @@ public:
     }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::string probeText() const override { return _text; }
+    [[nodiscard]] bool placedAcrossColumn() const override { return true; }
     void paint(::core::tui::Canvas& canvas) override;
 
 private:

@@ -121,6 +121,27 @@ QtObject {
         return Qt.font(spec)
     }
 
+    // @p base, drawn in @p families, with tabular figures when @p tabular: every digit one width, so numbers line up
+    // in a column.
+    function figuresOf(base: font, families: list<string>, tabular: bool): font {
+        if (!tabular)
+            return base
+        const spec = {
+            family: base.family,
+            families: families.length > 0 ? families : [base.family],
+            weight: base.weight,
+            italic: base.italic,
+            features: {
+                "tnum": 1
+            }
+        }
+        if (base.pixelSize > 0)
+            spec.pixelSize = base.pixelSize
+        else
+            spec.pointSize = base.pointSize
+        return Qt.font(spec)
+    }
+
     // The text font at a size and a weight, in the families text is drawn in.
     function fontOf(pixels: real, weight: int): font {
         return Qt.font({

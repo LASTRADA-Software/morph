@@ -176,8 +176,12 @@ start, `setGap` apart; only a `stretch` child takes spare length. A content-size
 size until the user drags. A splitter's panes are sized by the splitter, not by this rule.
 
 **Table cells.** A table sizes and places its cells itself. A cell fills its column's width, except a kind whose
-width is its label, which draws at its natural width at the column's start. Every cell keeps its own height and is
-centred in its row (rounded down on the terminal). No column is squeezed below its header: a content column is at
+width is its label (a badge, a check box, a push button), which draws at its natural width at the column's start,
+centre or end, as `TableColumn::align` says. The column's `align` also places the text of a text cell and of a text
+input cell (where the frontend can align an input's text), and the header's label; a container cell fills its
+column and places its own content. Every cell keeps its own height and is placed down its row by its column's
+`valign`: at the top, centred (the default; rounded down on the terminal) or at the bottom, or, for `Stretch`, at
+the row's whole height. No column is squeezed below its header: a content column is at
 least its header, a stretch column takes what the others leave but never less than its header, and a fixed column
 keeps its width (a fixed column narrower than its header cuts the header). A table whose columns are wider than the
 table scrolls sideways on Qt Quick; on the terminal the columns past its edge are cut and cannot be reached.
@@ -302,7 +306,8 @@ The headless reference backend and the test double for everything above the cont
   `selected` is the option it marks, else `none`); `items` (Menu, as below); `gap`, `align`, `justify` (Column, Row); `columns`,
   `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
   `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title` (Dialog); `active`, `label` (Busy);
-  `columns`, `selectionMode`, `selection` (the requested keys it marks, in the order requested),
+  `columns` (each `label:width`, then `;align=` and `;valign=` for a place other than the default),
+  `selectionMode`, `selection` (the requested keys it marks, in the order requested),
   and `rowKey` on a row (Table); `mode`, `offset`, `value` (DateTimeInput); `range`, `value`
   (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `actionLabel`, `dismissible` (Banner);
   `tone`, `text`, `icon` (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
@@ -401,6 +406,11 @@ the container it measures inside another, since a root fills the window or scree
    start and its last at the end.
 7. A `stretch` child capped at 20 in a 70-unit column with `alignSelf: center`, and one capped at 44 under the
    column's `align: center`, each have equal space either side.
+8. In a 30-unit table column with `align: End`, a badge cell's right edge is the column's text's right edge: the
+   column's right edge less the inset every cell has.
+9. In a table row where one cell is five lines tall, a one-line cell of a `valign: Start` column has its top at the
+   row's top, and one of a `valign: End` column its bottom at the row's bottom. Five lines, so a centred cell is two
+   lines from either, more than the unit a measure may be off by.
 
 ### The probe
 
@@ -511,6 +521,8 @@ contract are each backend's own tests to make:
 - that a read-only check box, select, date-time input, slider or file picker takes no change, and
   that a read-only text input takes no submit or commit — rule 31 checks typing only;
 - that rules 22 and 23 hold for handler kinds other than a click;
+- that a Table column's `align` places a text's characters and the header's label at its end — layout case 8
+  measures a badge's box only;
 - that a hidden Table cell's neighbours are drawn under their own headers — rule 21 checks the
   row's structure only;
 - that a controlled input other than a text field and a dialog snaps back — `RecordingBackend`'s own

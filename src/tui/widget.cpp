@@ -718,6 +718,7 @@ void solvedAreas(std::span<WidgetBase* const> children, Placement const& placeme
 void columnAreas(std::span<WidgetBase* const> children, Placement const& placement, StackSpec const& spec,
                  std::span<::core::tui::Rect> areas) {
     auto given = spec.extents.begin();
+    auto place = spec.places.begin();
     int offset = 0;
     for (auto const [child, area] : std::views::zip(children, areas)) {
         int extent = 0;
@@ -727,8 +728,18 @@ void columnAreas(std::span<WidgetBase* const> children, Placement const& placeme
         } else {
             extent = mainExtent(child->naturalSize(), placement.vertical);
         }
+        CellPlace const placed =
+            place != spec.places.end() ? *place++ : CellPlace{.across = ui::Align::Start, .down = spec.align};
         if (child->shown()) {
-            area = slotOf(*child, placement, offset, extent, spec.align);
+            area = slotOf(*child, placement, offset, extent, placed.down);
+            // A cell placed at its natural width sits where its column asks; a wider one fills the column.
+            if (!placement.vertical && child->placedAcrossColumn() &&
+                (placed.across == ui::Align::Center || placed.across == ui::Align::End)) {
+                int const space = extent;
+                int const natural = std::min(requestedSize(*child).width, space);
+                area.x += alignedOffset(placed.across, natural, space);
+                area.width = natural;
+            }
         }
         offset += extent + spec.gap;
     }

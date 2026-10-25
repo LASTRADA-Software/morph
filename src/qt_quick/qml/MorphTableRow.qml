@@ -15,6 +15,7 @@ MorphWidget {
     // The row's key as text (`i:<int64>` or `s:<text>`).
     property string rowKey: ""
     readonly property var widths: table ? table.widths : []
+    readonly property var columns: table ? table.columns : []
     readonly property Item content: cells
     // What draws under the cells: MorphTableRowBackground, or the `tableRow` restyle. C++ sets it when it makes the
     // row, and the row hands its state to the instance.
@@ -37,8 +38,10 @@ MorphWidget {
 
     // Each cell sits inset by the same step as the header label's own padding (MorphTable.qml), so its text lines
     // up under its header. A cell fills its column's width, except a kind whose width is its label (`fillsAcross`
-    // false: a badge, a check box, a button), which keeps its natural width at the column's start, as it does in a
-    // stack. Every cell keeps its own height, up to the row's, and is centred in the row.
+    // false: a badge, a check box, a button), which keeps its natural width at the column's start, centre or end.
+    // A cell that draws text (`textAlign`) draws it at the column's start, centre or end, and an end column's
+    // digits are tabular so they line up across rows. Every cell keeps its own height, up to the row's, and sits at
+    // the row's top, centre or bottom by its column's `valign`; `stretch` fills the row's height.
     function place() {
         const inset = Theme.spaceOf(2)
         let x = 0
@@ -47,8 +50,19 @@ MorphWidget {
             const cell = cells.children[i]
             const w = i < root.widths.length ? root.widths[i] : cell.implicitWidth
             const room = Math.max(0, w - 2 * inset)
-            cell.x = x + inset
-            cell.width = (cell as MorphWidget)?.fillsAcross === false ? Math.min(cell.implicitWidth, room) : room
+            const across = i < root.columns.length ? root.columns[i].align : 1
+            if ((cell as MorphWidget)?.fillsAcross === false) {
+                cell.width = Math.min(cell.implicitWidth, room)
+                const spare = room - cell.width
+                cell.x = x + inset + (across === 3 ? spare : across === 2 ? Math.floor(spare / 2) : 0)
+            } else {
+                cell.width = room
+                cell.x = x + inset
+            }
+            if (cell.textAlign !== undefined)
+                cell.textAlign = across === 3 ? Qt.AlignRight : across === 2 ? Qt.AlignHCenter : Qt.AlignLeft
+            if (cell.tabularFigures !== undefined)
+                cell.tabularFigures = across === 3
             x += w
             tallest = Math.max(tallest, cell.implicitHeight)
         }
@@ -57,12 +71,15 @@ MorphWidget {
         const rowHeight = Math.max(tallest, root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
         for (let i = 0; i < cells.children.length; ++i) {
             const cell = cells.children[i]
-            cell.height = Math.min(cell.implicitHeight, tallest)
-            cell.y = Math.floor((rowHeight - cell.height) / 2)
+            const down = i < root.columns.length ? root.columns[i].valign : 2
+            cell.height = down === 0 ? rowHeight : Math.min(cell.implicitHeight, tallest)
+            const spare = rowHeight - cell.height
+            cell.y = down === 3 ? spare : down === 2 ? Math.floor(spare / 2) : 0
         }
     }
 
     onWidthsChanged: place()
+    onColumnsChanged: place()
     onBackgroundItemChanged: place()
     // The row is as tall as its background asks when that is more than the cells, and they centre in that height.
     Connections {
