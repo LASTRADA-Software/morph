@@ -307,6 +307,8 @@ public:
     void setBarShown(bool shown) override;
     /// The highlighted tab, or -1.
     [[nodiscard]] int highlighted() const;
+    /// The highlighted tab's caption; empty when none is highlighted.
+    [[nodiscard]] std::string shownText() const override;
 };
 
 /// A dialog or a drawer: a modal overlay whose content is shown only while it is open.

@@ -391,7 +391,8 @@ class SlotWidget : public ContainerWidget {};
 /// slot visible. `setSelected` moves the bar's highlight only.
 class TabsWidget : public ContainerWidget {
 public:
-    /// @brief Replaces the tab captions.
+    /// @brief Replaces the tab captions. A call with as many captions as the last one replaces them in place and keeps
+    ///        the highlight, the shown page and the keyboard focus.
     /// @param labels One caption per tab, in order.
     virtual void setTabs(std::vector<std::string> const& labels) = 0;
 

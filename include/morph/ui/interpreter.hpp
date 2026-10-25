@@ -6681,9 +6681,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     if (kind == "tabs") {
         Tabs spec;
         for (DocNodePtr const& tab : node.partList("tabs")) {
-            ExprPtr const label = tab->prop("label");
             auto const nodes = tab->nodes("children");
-            spec.tabs.push_back(Tab{.label = label ? textOf(once(ctx, label), format) : std::string{},
+            spec.tabs.push_back(Tab{.label = bindProp<std::string>(ctx, tab->prop("label"), std::string{}, stringOf),
                                     .node = nodes.empty() ? Node{} : lowerAll(nodes, ctx)});
         }
         // A document names no index, so the node keeps the user's pick itself: a bound index is the controlled one,

@@ -113,7 +113,7 @@ lowers them to the kinds below.
 | `Panel` | `panel` | `title`, `header` (shown beside the title, usable while collapsed), `padding` (set once), `child`, `collapsible` (set once), `collapsed`, `onToggle` — a collapsible panel is an accordion section |
 | `Scroll` | `scroll` | `child`, `axis` (`Axis{Vertical, Horizontal}`, set once) |
 | `Switch` | `switchOf`, `switchOn<E>` | `selector` (`Prop<Key>`), `cases` (`SwitchCase{key, node}`; the first case with the key wins), `fallback` |
-| `Tabs` | `tabs` | `tabs` (`Tab{label, node}`, set once), `selected` (`Prop<std::size_t>`), `onSelect` |
+| `Tabs` | `tabs` | `tabs` (`Tab{label, node}`; the list is set once, each `label` is a `Prop<std::string>` the bar follows: the mount sends every caption again when one changes), `selected` (`Prop<std::size_t>`), `onSelect` |
 | `Dialog` | `dialog` | `open`, `title`, `child`, `onDismiss` |
 | `Busy` | `busy` | `active`, `label` |
 | `ForEach` | `forEach<RowT>` | rows, key function, row view, `axis`, `gap`, `common` (the row container's, as on every kind) ([below](#keyed-collections)) |

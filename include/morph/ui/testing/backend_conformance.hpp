@@ -516,6 +516,39 @@ struct Entry {
     return checks.result();
 }
 
+/// @brief Case: relabelled tabs keep the highlighted tab and its page. With B highlighted and its page shown, a new
+///        caption for B leaves B highlighted under the new caption, and B's page the one visible.
+///
+/// The tab count stays the same, so a backend must replace the captions in place: one that rebuilds its tab buttons
+/// loses the highlight, and one that ignores a second `setTabs` keeps the old caption.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> relabelledTabsKeepHighlight(ConformanceProbe& probe) {
+    reactive::Signal<std::size_t> selected{probe.runtime(), 0};
+    reactive::Signal<std::string> caption{probe.runtime(), "B"};
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::tabs({.tabs = {{.label = "A", .node = ui::text({.text = "first"})},
+                           {.label = [&caption] { return caption.get(); }, .node = ui::text({.text = "second"})}},
+                  .selected = [&selected] { return selected.get(); },
+                  .onSelect = [&selected](std::size_t index) { selected.set(index); }})};
+    probe.settle();
+    selected.set(1);
+    probe.settle();
+    ContainerWidget const& bar = rootContainer(view);
+    Checks checks;
+    checks.text("the highlighted tab before the relabel", "B", probe.textOf(bar));
+    caption.set("B \u00b7 3");
+    probe.settle();
+    checks.text("the highlighted tab after the relabel", "B \u00b7 3", probe.textOf(bar));
+    checks.that(probe.childCount(bar) == 2, "a relabel mounted or dropped a page");
+    Widget const* const first = probe.childAt(bar, 0);
+    Widget const* const second = probe.childAt(bar, 1);
+    checks.that(first != nullptr && !probe.visibleOf(*first), "a relabel showed the page of a tab not highlighted");
+    checks.that(second != nullptr && probe.visibleOf(*second), "a relabel hid the highlighted tab's page");
+    return checks.result();
+}
+
 /// @brief Case: a ForEach updates a row whose key stays in place, keeping its widget and not building its view
 ///        again.
 ///
@@ -2239,7 +2272,7 @@ struct SelectionReport {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 45> const cases{{
+    static std::array<ConformanceCase, 46> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -2305,6 +2338,7 @@ struct SelectionReport {
         {.name = "a click on a sortable header asks to sort by it, and no other header or setter does",
          .run = detail::headerClickAsksToSort},
         {.name = "a heading row is never selected, by Ctrl+A or a click", .run = detail::headingIsNeverSelected},
+        {.name = "relabelled tabs keep the highlighted tab and its page", .run = detail::relabelledTabsKeepHighlight},
     }};
     return cases;
 }

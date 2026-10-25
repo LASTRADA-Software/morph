@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <morph/reactive/runtime.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/testing/backend_conformance.hpp>
@@ -12,6 +14,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -109,6 +112,9 @@ public:
         std::string const kind = _backend.kindOf(widgetId);
         if (kind == "Select") {
             return markedLabel(widgetId);
+        }
+        if (kind == "Tabs") {
+            return highlightedLabel(widgetId);
         }
         return unescape(_backend.prop(widgetId, kind == "Button" || kind == "Checkbox" ? "label" : "text"));
     }
@@ -231,6 +237,18 @@ private:
         return {};
     }
 
+    // The label of the tab `selected` highlights, from `tabs`' elements; empty when it highlights none.
+    [[nodiscard]] std::string highlightedLabel(int tabsId) const {
+        std::string const selected = _backend.prop(tabsId, "selected");
+        std::size_t index = 0;
+        char const* const first = selected.data();
+        if (std::from_chars(first, std::next(first, std::ssize(selected)), index).ec != std::errc{}) {
+            return {};
+        }
+        std::vector<std::string> const labels = listItems(_backend.prop(tabsId, "tabs"));
+        return index < labels.size() ? unescape(labels.at(index)) : std::string{};
+    }
+
     Fault _fault;
     morph::testing::StepExecutor _owner;
     morph::testing::EchoingBackend _echoing;
@@ -288,7 +306,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 45);
+    REQUIRE(cases.size() == 46);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);

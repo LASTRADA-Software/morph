@@ -229,7 +229,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `SpacerWidget` | — | — |
 | `PanelWidget` | `setTitle`, `setHeader(Widget&)` (shown beside the title, called at most once), `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
 | `ScrollWidget`, `SlotWidget` | — | — |
-| `TabsWidget` | `setTabs(labels)`, `setSelected(index)` (past the last highlights none), `setBarShown(shown)` (whether the strip of tab buttons is drawn; the selected page shows either way, and a new tabs widget shows its strip) | `setOnSelect(index)` |
+| `TabsWidget` | `setTabs(labels)` (may be called again; a call with the same number of labels replaces the captions and keeps the highlight, the shown page and the keyboard focus), `setSelected(index)` (past the last highlights none), `setBarShown(shown)` (whether the strip of tab buttons is drawn; the selected page shows either way, and a new tabs widget shows its strip) | `setOnSelect(index)` |
 | `DialogWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `ToastWidget` | `show(text, tone)` (one call: shows the message and restarts the dismiss interval regardless of whether the toast is already on-screen) | — |
 | `BusyWidget` | `setActive`, `setLabel` | — |
@@ -564,6 +564,8 @@ Each case is named by the rule it checks:
     nothing, and showing a sort (`setSort`) reports nothing.
 45. In a table of a heading row and three data rows, Ctrl+A selects the three data rows and not the heading, and a
     click on the heading row changes nothing and reports nothing.
+46. Tabs labelled `A` and `B`, with `B` picked by the user, then relabelled `A` and `B · 3`, still highlight
+    `B · 3`, and `B`'s page is the one shown.
 
 ### What the probe cannot reach
 

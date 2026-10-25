@@ -173,7 +173,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | `panel` | `title`, `header` (nodes, shown beside the title, usable while collapsed), `padding`, `collapsible`, `collapsed`, `onToggle`, `children` | |
 | `scroll` | `axis`, `children` | |
 | `switch` | `on` (required), `cases`: parts `{when, scope, children ⓘ}`, `default` | |
-| `tabs` | `tabs`: parts `{label, children}`; the node keeps the user's pick, so picking a tab mounts and shows its page | |
+| `tabs` | `tabs`: parts `{label, children}`; a tab's `label` follows its expression, and the list of tabs is fixed; the node keeps the user's pick, so picking a tab mounts and shows its page, and a relabel keeps it | |
 | `dialog`, `drawer` | `open`, `title`, `showErrors`, `side`, `scope`, `children` ⓘ, `default` ⓘ, `cancel` ⓘ, `actions` ⓘ (parts `actionButton`, [The head](#the-head)), `onDismiss` | `open`, `ready`, `submitted` |
 | `busy` | `active`, `label` | |
 | `forEach` | `rows` (required), `key` ⓘ, `axis`, `gap`, `scope`, `children` ⓘ | |

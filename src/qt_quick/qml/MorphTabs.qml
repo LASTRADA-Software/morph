@@ -46,15 +46,16 @@ MorphWidget {
                 }
             }
 
+            // The model is the count, not the list: a relabel with the same count keeps every button, and with it
+            // the highlight and the keyboard focus; a list model would rebuild them all.
             Repeater {
-                model: root.labels
+                model: root.labels.length
 
                 TabButton {
                     font: Theme.bodyFont
                     id: tab
                     required property int index
-                    required property string modelData
-                    text: modelData
+                    text: index < root.labels.length ? root.labels[index] : ""
                     width: implicitWidth
                     // A touch target while the window is compact; its label keeps its own size.
                     implicitHeight: Math.max(implicitContentHeight + topPadding + bottomPadding,

@@ -925,12 +925,25 @@ private:
     Widget& mountKind(reactive::Scope& scope, Tabs const& spec, ContainerWidget* parent) {
         TabsWidget& widget = scope.adopt(_backend->createTabs(parent));
         applyCommon(scope, widget, spec.common);
-        std::vector<std::string> labels;
-        labels.reserve(spec.tabs.size());
+        // One prop over every caption, as a menu's entries: a bound caption re-sends them all. The count never
+        // changes, so the widget keeps its highlight, the shown page and the focus across a relabel.
+        std::vector<Prop<std::string>> captions;
+        captions.reserve(spec.tabs.size());
         for (Tab const& tab : spec.tabs) {
-            labels.push_back(tab.label);
+            captions.push_back(tab.label);
         }
-        widget.setTabs(labels);
+        auto labelsOf = [captions] {
+            std::vector<std::string> labels;
+            labels.reserve(captions.size());
+            for (Prop<std::string> const& caption : captions) {
+                labels.push_back(caption.evaluate());
+            }
+            return labels;
+        };
+        Prop<std::vector<std::string>> const labels = std::ranges::any_of(captions, &Prop<std::string>::isBound)
+                                                          ? Prop<std::vector<std::string>>(std::move(labelsOf))
+                                                          : Prop<std::vector<std::string>>(labelsOf());
+        bind(scope, labels, [&widget](std::vector<std::string> const& shown) { widget.setTabs(shown); });
         auto& pageScope = scope.child();
         auto& pages = scope.make<Pages>();
         pages.pageSlots.resize(spec.tabs.size(), nullptr);

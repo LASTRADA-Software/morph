@@ -618,6 +618,29 @@ TEST_CASE("interpreter control: picking a tab shows its page, mounted once and k
     CHECK(h.text("first") == "1");
 }
 
+// Mutation: read each tab's label once at lowering (the bar keeps `Comments · 0` after the click).
+TEST_CASE("interpreter control: a tab label follows the data, and the bar keeps the pick", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "labels",
+      "state": { "n": { "init": 0 } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "add", "label": "Add",
+          "onClick": [ { "set": "n", "value": { "fn": "add", "args": [ { "ref": "n" }, 1 ] } } ] },
+        { "kind": "tabs", "testId": "bar", "tabs": [
+          { "label": "Overview", "children": [ { "kind": "text", "text": "o" } ] },
+          { "label": { "fn": "format", "args": [ "Comments \u00b7 {0}", { "ref": "n" } ] },
+            "children": [ { "kind": "text", "text": "c" } ] } ] } ] } })");
+    int const bar = h.backend.find("Tabs", "testId", "bar").value();
+    CHECK(h.backend.prop(bar, "tabs") == "[Overview,Comments \u00b7 0]");
+    h.backend.chooseIndex(bar, 1);
+    h.settle();
+    h.backend.click(h.byTestId("Button", "add"));
+    h.settle();
+    CHECK(h.backend.prop(bar, "tabs") == "[Overview,Comments \u00b7 1]");
+    CHECK(h.backend.prop(bar, "selected") == "1");
+}
+
 // Mutation: build the `forEach` without `commonOf` (no Column has the test id `rows`).
 TEST_CASE("interpreter control: a forEach honours its common properties", "[ui][interpreter]") {
     Harness h;

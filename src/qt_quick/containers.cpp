@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <QMetaObject>
+#include <QStringList>
 #include <QUrl>
 #include <QVariantList>
 #include <algorithm>
 #include <cctype>
 #include <iterator>
+#include <string>
 #include <utility>
 
+#include "qt_quick/keys.hpp"
 #include "qt_quick/kinds.hpp"
 
 namespace morph::qt_quick::detail {
@@ -111,6 +114,12 @@ void TabsImpl::setOnSelect(std::function<void(std::size_t)> onSelect) {
 void TabsImpl::setBarShown(bool shown) { write("barShown", shown); }
 
 int TabsImpl::highlighted() const { return read("highlighted").toInt(); }
+
+std::string TabsImpl::shownText() const {
+    QStringList const labels = read("labels").toStringList();
+    int const index = highlighted();
+    return index >= 0 && index < labels.size() ? toUtf8(labels.at(index)) : std::string{};
+}
 
 // ── Splitter ──────────────────────────────────────────────────────────────
 

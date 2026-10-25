@@ -705,15 +705,15 @@ struct Switch {
 
 /// @brief One page of `Tabs`.
 struct Tab {
-    /// @brief The tab's caption; set once.
-    std::string label;
+    /// @brief The tab's caption; may be bound, and the bar follows it.
+    Prop<std::string> label;
     /// @brief The page content, mounted the first time the tab is selected.
     Node node;
 };
 
 /// @brief A tab bar over pages.
 struct Tabs {
-    /// @brief The pages, in order; set once.
+    /// @brief The pages, in order; the list is set once, each caption may be bound.
     std::vector<Tab> tabs;
     /// @brief The selected page's index; an index past the last page shows none.
     Prop<std::size_t> selected;
