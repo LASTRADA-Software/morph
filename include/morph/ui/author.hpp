@@ -574,25 +574,37 @@ inline void putSection(Json& object, std::string_view key, Json const& section) 
     return std::pair{form, *text};
 }
 
-/// @brief A field read below a named read.
-/// @param json  The named read.
-/// @param field The field.
-/// @return The read of `path.field`.
-/// @throws AuthoringError when @p json is not a named read: `expr/1` reads fields only below a name.
+/// @brief A field read out of a value: the named read's own path extended, a `get`'s path extended, or a `get` of
+///        any other expression.
+/// @param json  The value's expression.
+/// @param field The field, or a dotted path.
+/// @return The read of `path.field`, `{"ref": ...}` or `{"row": ...}` below a name and `{"get": e, "path": ...}`
+///         below a computed value.
 [[nodiscard]] inline Json fieldOf(Json const& json, std::string_view field) {
-    auto read = namedRead(json);
-    if (!read) {
-        throw AuthoringError{
-            "a field is read below a name -- a param, state, let, query, row, element or bound "
-            "name -- and not below a computed value; field `" +
-            std::string{field} + "`"};
+    if (auto read = namedRead(json)) {
+        std::string path = read->second;
+        if (!path.empty()) {
+            path += '.';
+        }
+        path += field;
+        return single(read->first, std::move(path));
     }
-    std::string path = read->second;
-    if (!path.empty()) {
-        path += '.';
+    auto const* const object = std::get_if<Json::object_t>(&json.data);
+    if (object != nullptr && object->size() == 2) {
+        auto const* const source = object->find("get");
+        auto const* const path = object->find("path");
+        std::string const* const text = path == object->end() ? nullptr : std::get_if<std::string>(&path->second.data);
+        if (source != object->end() && text != nullptr) {
+            Json extended = Json::object_t{};
+            put(extended, "get", source->second);
+            put(extended, "path", *text + "." + std::string{field});
+            return extended;
+        }
     }
-    path += field;
-    return single(read->first, std::move(path));
+    Json read = Json::object_t{};
+    put(read, "get", json);
+    put(read, "path", std::string{field});
+    return read;
 }
 
 /// @brief The name a named read reads.
@@ -696,8 +708,7 @@ public:
     /// @tparam Class  The class of the member, the value's type.
     /// @tparam Member The member's type.
     /// @param member The member.
-    /// @return The field read.
-    /// @throws AuthoringError when the handle is not a named read.
+    /// @return The field read: below a name, the name's path extended; below a computed value, a `get`.
     template <typename Class, typename Member>
         requires std::same_as<T, Any> || std::same_as<detail::UnwrappedT<T>, Class>
     [[nodiscard]] Handle<Member> at(Member Class::* member) const {
@@ -706,8 +717,7 @@ public:
 
     /// @brief A field of the value, by name.
     /// @param field The field, or a dotted path.
-    /// @return The field read.
-    /// @throws AuthoringError when the handle is not a named read.
+    /// @return The field read: below a name, the name's path extended; below a computed value, a `get`.
     [[nodiscard]] Handle<Any> at(std::string_view field) const {
         return Handle<Any>::raw(detail::fieldOf(json(), field));
     }
@@ -1454,36 +1464,6 @@ private:
     std::string _name;
 };
 
-/// @brief A mutation's result: a `Handle` with no field reads.
-///
-/// A result is not a named read, so a field of it cannot be read in place: the screen binds it first,
-/// `auto r = screen.let("r", m.result());`, and reads `r.at(...)`. The `at` overloads are deleted, so the mistake is
-/// a compile error at the call rather than a refusal when the screen is registered. It converts to `Handle<T>`
-/// wherever a handle is taken.
-/// @tparam T The result's C++ type.
-template <typename T>
-class ResultHandle : public Handle<T> {
-public:
-    /// @brief The result read.
-    /// @param handle The `{"result": name}` expression.
-    explicit ResultHandle(Handle<T> const& handle) : Handle<T>{handle} {}
-
-    /// @brief Not available: bind the result with `let` first, `auto r = screen.let("r", m.result());`, then read
-    ///        `r.at(...)`.
-    /// @tparam Class  The class of the member.
-    /// @tparam Member The member's type.
-    /// @param member The member.
-    /// @return Nothing; the overload is deleted.
-    template <typename Class, typename Member>
-    [[nodiscard]] Handle<Member> at(Member Class::* member) const = delete;
-
-    /// @brief Not available: bind the result with `let` first, `auto r = screen.let("r", m.result());`, then read
-    ///        `r.at(...)`.
-    /// @param field The field.
-    /// @return Nothing; the overload is deleted.
-    [[nodiscard]] Handle<Any> at(std::string_view field) const = delete;
-};
-
 /// @brief A mutation declared by a scope.
 /// @tparam Action The action it runs; `::morph::model::ActionTraits<Action>::Result` is the result's type.
 template <typename Action>
@@ -1500,11 +1480,9 @@ public:
     /// @return The name.
     [[nodiscard]] std::string const& name() const noexcept { return _name; }
 
-    /// @brief The last run's result; bind it with `let` to read its fields.
-    /// @return `{"result": name}`, with no `at`.
-    [[nodiscard]] ResultHandle<Result> result() const {
-        return ResultHandle<Result>{Handle<Result>::raw(detail::single("result", _name))};
-    }
+    /// @brief The last run's result.
+    /// @return `{"result": name}`; `at` on it reads a field with `get`.
+    [[nodiscard]] Handle<Result> result() const { return Handle<Result>::raw(detail::single("result", _name)); }
 
     /// @brief Whether a run is in flight.
     /// @return `{"pending": name}`.
