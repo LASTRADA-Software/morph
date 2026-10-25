@@ -276,6 +276,24 @@ enum class SelectionChange : std::uint8_t {
     Extend,   ///< The reported keys replace those the backend holds and keep the rest: a Ctrl-click, Space, Ctrl+A.
 };
 
+/// @brief Which way a table is sorted by a column.
+enum class SortDirection : std::uint8_t {
+    Ascending,   ///< Smallest first.
+    Descending,  ///< Largest first.
+};
+
+/// @brief The column a table's header marks as sorting the rows, and its direction.
+struct TableSort {
+    /// @brief The column's index among the columns `setColumns` gave.
+    std::size_t column = 0;
+    /// @brief The direction.
+    SortDirection direction = SortDirection::Ascending;
+    /// @brief Equal when both fields are.
+    /// @param other The other sort.
+    /// @return Whether they are equal.
+    [[nodiscard]] bool operator==(TableSort const& other) const = default;
+};
+
 /// @brief How much space a widget asks for along one dimension, in backend units (a character cell on the TUI).
 struct Sizing {
     /// @brief The sizing rule.
@@ -901,6 +919,8 @@ struct TableColumn {
     /// @brief Where a cell sits down its row when the row is taller than the cell: `Start` at the top, `Center`, or
     ///        `End` at the bottom. `Stretch` fills the row's height.
     Align valign = Align::Center;
+    /// @brief Whether a click on the column's header asks to sort by it (`Table::onSort`).
+    bool sortable = false;
 };
 
 /// @brief Keyed rows of cells under column headers. Each row's view is a `Row` whose children are the cells, one
@@ -929,6 +949,11 @@ struct Table {
     bool selectColumn = false;
     /// @brief The accessible name of the select column's header box.
     Prop<std::string> selectAllLabel = std::string{"Select all"};
+    /// @brief The column whose header shows the sort, and its direction; none marks no header. The table never
+    ///        orders its rows itself: they come in the order shown.
+    Prop<std::optional<TableSort>> sort;
+    /// @brief Called with a sortable column's index when the user asks to sort by it (a click on its header).
+    std::function<void(std::size_t)> onSort;
     /// @brief Called with a row's key when the user activates it (Enter or a double click).
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop.
@@ -1464,6 +1489,10 @@ struct TableOptions {
     bool selectColumn = false;
     /// @brief The accessible name of the select column's header box.
     Prop<std::string> selectAllLabel = std::string{"Select all"};
+    /// @brief The column whose header shows the sort, and its direction.
+    Prop<std::optional<TableSort>> sort;
+    /// @brief Called with a sortable column's index when the user asks to sort by it.
+    std::function<void(std::size_t)> onSort;
     /// @brief Called with a row's key when the user activates it.
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop of the table.
@@ -1553,6 +1582,8 @@ template <typename RowT>
     spec.onSelectionChange = std::move(options.onSelectionChange);
     spec.selectColumn = options.selectColumn;
     spec.selectAllLabel = std::move(options.selectAllLabel);
+    spec.sort = std::move(options.sort);
+    spec.onSort = std::move(options.onSort);
     spec.onActivate = std::move(options.onActivate);
     spec.common = std::move(options.common);
     return detail::makeNode(std::move(spec));

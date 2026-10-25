@@ -27,7 +27,9 @@ namespace morph::tui::detail {
 /// cells after it stay under their own headers. A two-cell gutter marks selected rows `*` and, while the table has
 /// focus, the cursor row `>`. With a select column the gutter is five cells: a `[x]` or `[ ]` box per row in place of
 /// the `*`, under a header box that reads `[x]`, `[-]` or `[ ]`; a click on a row's box toggles the row as Ctrl+click
-/// does, and a click on the header box is Ctrl+A.
+/// does, and a click on the header box is Ctrl+A. A click on a sortable column's header asks to sort by it
+/// (`setOnSort`), and the sorted column's label is followed by ` ▲` or ` ▼`; a sortable column's header keeps room
+/// for the mark, so the columns do not move when the sort does. The header takes no keyboard focus.
 ///
 /// Up, Down, Home and End move the cursor, and PageUp and PageDown by as many rows as fill the room below the header;
 /// Space selects the cursor row (Single) or toggles it and makes it the anchor (Multiple); Enter selects it in Single
@@ -69,6 +71,8 @@ public:
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
+    void setSort(std::optional<ui::TableSort> sort) override;
+    void setOnSort(std::function<void(std::size_t)> onSort) override;
     /// The positions among `children()` of the rows the table marks as selected, ascending.
     [[nodiscard]] std::vector<std::size_t> markedRows() const;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
@@ -87,6 +91,12 @@ private:
     [[nodiscard]] int gutter() const noexcept;
     /// The header's box: `[x]` while every shown row is selected, `[-]` while some are, `[ ]` while none are.
     [[nodiscard]] std::string headerBox() const;
+    /// The header text of the column at @p index: its label, then the sort mark when it is the sorted column.
+    [[nodiscard]] std::string headerText(std::size_t index) const;
+    /// The cells a column's header needs: its label, and room for the sort mark when it is sortable.
+    [[nodiscard]] static int headerWidth(ui::TableColumn const& column);
+    /// Calls onSort when the header click at column @p x lands on a sortable column.
+    void clickHeader(int x);
     /// Draws the header line: the header box, then each column's label at its alignment.
     void paintHeader(::core::tui::Canvas& canvas, std::vector<int> const& widths) const;
     /// The gutter of @p row: its selection mark, or its box, then the cursor mark when @p cursor.
@@ -160,6 +170,8 @@ private:
     LastClick _lastClick;
     std::function<void(std::vector<ui::Key>, ui::SelectionChange)> _onSelectionChange;
     std::function<void(ui::Key)> _onActivate;
+    std::optional<ui::TableSort> _sort;
+    std::function<void(std::size_t)> _onSort;
 };
 
 }  // namespace morph::tui::detail

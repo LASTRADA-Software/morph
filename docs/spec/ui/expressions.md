@@ -7,8 +7,10 @@ query body, condition and command argument of a document is an expression: a JSO
 document's names, and `evaluate` evaluates against an `Environment` — the interpreter's reactive
 reads, or a `StaticEnvironment` of plain values.
 
-Read this before adding a form or a function. A form or function is new vocabulary: it belongs to a
-new `expr` version, not to `expr/1` (spec 5 §12). The shared corpus is
+Read this before adding a form or a function. A new form or function joins the current version,
+`expr/1`, and a document that uses one needs a client that has it: an older client refuses the
+document at load, since an unknown form or function is a load error, so a server that serves older
+clients keeps such documents free of it. The shared corpus is
 `tests/ui/corpus/expressions.json`, and the message corpus `tests/ui/corpus/messages.json`.
 
 ## Contents
@@ -39,6 +41,7 @@ new `expr` version, not to `expr/1` (spec 5 §12). The shared corpus is
 | `{"if": [c, a, b]}` | `If` | |
 | `{"obj": {...}}`, `{"list": [...]}` | `Object`, `List` | Constructors |
 | `{"map": e, "as": "x", "to": e}`, `{"filter": e, "as": "x", "where": e}` | `Map`, `Filter` | Comprehensions over a list |
+| `{"sort": e, "as": "x", "by": e, "order": e}` | `Sort` | The list ordered by the value `by` gives each element; `order` is `"asc"` (also when absent or `null`) or `"desc"` |
 | `{"env": "name"}` | `Env` | `widthClass`, `locale`, `platform`, `online`, `backend` (see below) |
 | `{"session": "name"}` | `Session` | `principal`, `userName`, `displayName`, `userKey`, `tenant`, `authenticated` |
 | `{"host": "name"}` | `Host` | A value the application registered, `null` when absent |
@@ -50,7 +53,7 @@ Quick counts the window's width in `Theme.unitWidth`s. A document's breakpoints 
 its own units on both frontends.
 
 An expression object has one form key and only that form's companion keys (`fn` with `args`; `t`
-with `fallback` and `args`; `map` with `as` and `to`; `filter` with `as` and `where`). An array is
+with `fallback` and `args`; `map` with `as` and `to`; `filter` with `as` and `where`; `sort` with `as`, `by` and `order`). An array is
 not an expression — a list is `{"list": [...]}` or `{"lit": [...]}` — and a number with a fraction
 is refused: an exact value is `{"num", "den", "dp"}`. Every node carries its JSON Pointer, which
 refusals and diagnostics name.
@@ -90,7 +93,16 @@ over the tree recurse, and a few hundred levels exhaust a 1 MB thread stack.
   units), lists and records element by element, and anything else by kind and value; values of
   kinds that cannot compare are unequal. `lt`, `le`, `gt` and `ge` order numbers, quantities,
   timestamps and strings (by bytes); anything else is a mismatch.
-
+- **Sorting.** `sort`, and a table's sort, order values as `lt` does, except strings: those compare
+  case-folded as the table engine's default collator folds them (`table::CodePointCollator`: ASCII
+  `A`-`Z` and Latin-1 `À`-`Þ` but `×` lowered, other bytes as they are), and by their own bytes when
+  they fold the same, so `Paracetamol` comes before `paracetamol` whatever the source order. `null`
+  sorts last in both directions. The sort is stable, and descending reverses the comparison, not the
+  list, so equal values keep their source order either way; when every value is `null` the list
+  keeps its order. Values `lt` cannot order (a string against a number) are a mismatch: `sort`
+  yields `null` and reports it. `order` other than `"asc"` or `"desc"` is a mismatch too, and a
+  `null` list yields `null`. `by` reads the element as `x`; `order` is read once, outside it. Folding
+  covers ASCII and Latin-1 case only, not accents or other scripts, as the engine's collator does.
 ## Static checking
 
 `checkExpression(expr, resolver)` walks the tree once. Every name is resolved through the
@@ -98,7 +110,8 @@ over the tree recurse, and a few hundred levels exhaust a 1 MB thread stack.
 means and returns its type or why it does not resolve (`PermissiveResolver` accepts everything as
 `any`, for expressions outside a document). A function's arguments are checked against the kinds it
 takes when the argument's type is known; the condition of `if` and the `where` of `filter` must be
-`bool` when known; a literal `t` fallback must be in the message subset. The result is the
+`bool` when known; a `sort`'s `order` must be a string when known; a literal `t` fallback must be in the message
+subset. The result is the
 expression's static type: precise for literals, constructors, comparisons, formatting and integer
 arithmetic, and `any` where it depends on data the document does not describe.
 

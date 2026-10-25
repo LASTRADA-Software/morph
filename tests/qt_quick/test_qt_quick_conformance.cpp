@@ -151,6 +151,24 @@ public:
         mouseClick(children.at(row)->item(), modifiers);
     }
 
+    // A mouse click on the column's header label.
+    void clickHeader(ui::Widget& table, std::size_t column) override {
+        settle();
+        // The labels are a Repeater's delegates: items under the table's item, not QObject children of it.
+        QString const name = QStringLiteral("header%1").arg(column);
+        QList<QQuickItem const*> pending{Backend::itemOf(table)};
+        while (!pending.isEmpty()) {
+            QQuickItem const* const item = pending.takeLast();
+            if (item->objectName() == name) {
+                mouseClick(item, Qt::NoModifier);
+                return;
+            }
+            for (QQuickItem const* const child : item->childItems()) {
+                pending.append(child);
+            }
+        }
+    }
+
     std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         settle();
         std::vector<std::size_t> rows;

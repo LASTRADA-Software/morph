@@ -433,6 +433,8 @@ public:
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
+    void setSort(std::optional<ui::TableSort> sort) override;
+    void setOnSort(std::function<void(std::size_t)> onSort) override;
     void setExistingKeys(std::vector<ui::Key> const& keys) override;
     void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) override;
     void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override;
@@ -473,6 +475,7 @@ private:
     // Where a range starts: the row last clicked or toggled.
     std::optional<ui::Key> _anchor;
     std::function<void(ui::Key)> _onActivate;
+    std::function<void(std::size_t)> _onSort;
     // Every key the table's data has, realized or dewindowed; set only above a virtualized table's threshold
     // (mount.hpp never calls setExistingKeys below it). Empty below threshold, where existingSelection() falls
     // back to realized children alone, which is already exactly every key that exists at that size.

@@ -10,10 +10,17 @@ import QtQuick.Layouts
 MorphWidget {
     id: root
 
-    // The columns: [{label, kind (0 content, 1 fixed, 2 stretch), amount, align, valign}], the places an `Align`:
-    // 0 stretch, 1 start, 2 center, 3 end.
+    // The columns: [{label, kind (0 content, 1 fixed, 2 stretch), amount, align, valign, sortable}], the places an
+    // `Align`: 0 stretch, 1 start, 2 center, 3 end.
     property var columns: []
     property bool showHeader: true
+    // The column whose header marks the sort, -1 for none, and whether it is descending; C++ writes both.
+    property int sortColumn: -1
+    property bool sortDescending: false
+    // What follows a sortable header's label while it sorts, and the room every sortable header keeps for it, so the
+    // columns do not move when the sort does.
+    readonly property string ascendingMark: " ▲"
+    readonly property string descendingMark: " ▼"
     // Whether the user can select several rows; C++ writes it with the selection mode.
     property bool multiple: false
     // The row keyboard focus is on, or was on last; null before any.
@@ -75,7 +82,9 @@ MorphWidget {
         let pending = []
         for (let i = 0; i < root.columns.length; ++i) {
             const column = root.columns[i]
-            const header = Math.max(headerMetrics.advanceWidth(column.label) + 2 * Theme.unitWidth, 8 * Theme.unitWidth)
+            const mark = column.sortable ? headerMetrics.advanceWidth(root.ascendingMark) : 0
+            const header = Math.max(headerMetrics.advanceWidth(column.label) + mark + 2 * Theme.unitWidth,
+                                    8 * Theme.unitWidth)
             let w = 0
             if (column.kind === 1)
                 w = column.amount * Theme.unitWidth
@@ -371,12 +380,34 @@ MorphWidget {
                 Repeater {
                     model: root.columns
 
+                    // A sortable column's header is a Tab stop, and a click, Enter or Space on it asks to sort by
+                    // the column; the table shows the sort it is given, never one of its own.
                     Label {
+                        id: headerLabel
+                        objectName: "header" + index
                         font: Theme.strongFont
                         required property int index
                         required property var modelData
+                        readonly property bool sorted: root.sortColumn === index
                         width: root.widths[index] !== undefined ? root.widths[index] : 0
-                        text: modelData.label
+                        text: modelData.label + (sorted ? (root.sortDescending ? root.descendingMark
+                                                                               : root.ascendingMark) : "")
+                        activeFocusOnTab: modelData.sortable === true
+                        Accessible.role: Accessible.ColumnHeader
+                        Accessible.name: modelData.label
+                        Accessible.description: !sorted ? "" : root.sortDescending ? "Sorted descending"
+                                                                                   : "Sorted ascending"
+                        Keys.onPressed: event => {
+                            if (modelData.sortable === true && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+                                                                || event.key === Qt.Key_Space)) {
+                                root.fire("sort", index)
+                                event.accepted = true
+                            }
+                        }
+                        TapHandler {
+                            enabled: headerLabel.modelData.sortable === true
+                            onTapped: root.fire("sort", headerLabel.index)
+                        }
                         color: root.scheme.muted
                         topPadding: Theme.spaceOf(2)
                         bottomPadding: Theme.spaceOf(2)

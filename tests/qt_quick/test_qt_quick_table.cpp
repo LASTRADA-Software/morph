@@ -26,6 +26,7 @@
 #include <optional>
 #include <ranges>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -778,4 +779,60 @@ TEST_CASE("qt_quick table: a row's select box under a bound selection that refus
     scene.settle();
     CHECK_FALSE(box->property("checked").toBool());
     CHECK_FALSE(detail::TableImpl::marked(*rows.at(1)));
+}
+
+namespace {
+
+// A header label of a table, by its column: a Repeater's delegate, so found through the item tree.
+QQuickItem& headerOf(ui::Widget const& table, int column) {
+    QString const name = QStringLiteral("header%1").arg(column);
+    QList<QQuickItem*> pending{&Scene::itemOf(table)};
+    while (!pending.isEmpty()) {
+        QQuickItem* const item = pending.takeLast();
+        if (item->objectName() == name) {
+            return *item;
+        }
+        for (QQuickItem* const child : item->childItems()) {
+            pending.append(child);
+        }
+    }
+    FAIL("no header " << column);
+    throw std::logic_error{"unreachable"};
+}
+
+}  // namespace
+
+// Mutation: leave the label's text without the mark (the sorted header reads `Name`).
+TEST_CASE("qt_quick table: the sorted column's header shows and states its direction, and a click asks to sort",
+          "[qt_quick]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
+    table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(12), .sortable = true}, {.label = "Mass"}});
+    std::vector<std::size_t> asked;
+    table.table->setOnSort([&asked](std::size_t column) { asked.push_back(column); });
+    scene.settle();
+    QQuickItem& name = headerOf(*table.table, 0);
+    QQuickItem& mass = headerOf(*table.table, 1);
+    CHECK(name.property("text").toString() == QStringLiteral("Name"));
+    CHECK(name.property("activeFocusOnTab").toBool());
+    CHECK_FALSE(mass.property("activeFocusOnTab").toBool());
+
+    table.table->setSort(ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending});
+    scene.settle();
+    CHECK(name.property("text").toString() == QStringLiteral("Name ▼"));
+    CHECK(asked.empty());
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface* const header = QAccessible::queryAccessibleInterface(&name);
+    REQUIRE(header != nullptr);
+    CHECK(header->text(QAccessible::Description) == QStringLiteral("Sorted descending"));
+    CHECK(header->text(QAccessible::Name) == QStringLiteral("Name"));
+    QAccessible::setActive(wasActive);
+
+    scene.click(name);
+    scene.click(mass);
+    CHECK(asked == std::vector<std::size_t>{0});
+    table.table->setSort(std::nullopt);
+    scene.settle();
+    CHECK(name.property("text").toString() == QStringLiteral("Name"));
 }

@@ -175,6 +175,11 @@ public:
         ui::Key const key = parseKey(_backend.prop(_backend.children(tableId).at(row), "rowKey"));
         _backend.clickRow(tableId, key, _fault == Fault::NoModifiers ? ui::RowClick::Only : click);
     }
+    void clickHeader(ui::Widget& table, std::size_t column) override {
+        if (_fault != Fault::DeadInput) {
+            _backend.clickHeader(_backend.idOf(table), column);
+        }
+    }
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         int const tableId = _backend.idOf(table);
         std::vector<std::string> const marked = listItems(_backend.prop(tableId, "selection"));
@@ -251,6 +256,7 @@ public:
     void dismiss(ui::Widget&) override {}
     void selectRows(ui::Widget&, std::vector<std::size_t> const&) override {}
     void clickRow(ui::Widget&, std::size_t, ui::RowClick) override {}
+    void clickHeader(ui::Widget&, std::size_t) override {}
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const&) override { return {}; }
     void moveCursor(ui::Widget&, std::size_t) override {}
     [[nodiscard]] std::size_t cursorOf(ui::Widget const&) override { return 0; }
@@ -282,7 +288,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 43);
+    REQUIRE(cases.size() == 44);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -347,7 +353,8 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
           "a menu reports only an enabled entry without a submenu", "a read-only input takes no edit",
           "a dismissed banner reports it and stays shown",
           "a closed collapsible's content takes no input, its header does",
-          "a drop zone takes a drop whole or refuses it whole"}) {
+          "a drop zone takes a drop whole or refuses it whole",
+          "a click on a sortable header asks to sort by it, and no other header or setter does"}) {
         INFO(name);
         CHECK(deadInput.contains(name));
     }

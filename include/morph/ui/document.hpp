@@ -802,7 +802,7 @@ inline constexpr std::array<KeySpec, 5> kForEachKeys = {{{"rows", Shape::Expr, {
                                                          {"gap", Shape::Expr},
                                                          {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-inline constexpr std::array<KeySpec, 23> kTableKeys = {{{"rows", Shape::Expr},
+inline constexpr std::array<KeySpec, 24> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"key", Shape::Expr, {}, kInner},
                                                         {"model", Shape::Name},
                                                         {"action", Shape::Text},
@@ -819,6 +819,7 @@ inline constexpr std::array<KeySpec, 23> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"selectAllLabel", Shape::Expr},
                                                         {"rowLabel", Shape::Expr, {}, kInner},
                                                         {"sort", Shape::Expr},
+                                                        {"onSortChange", Shape::Commands},
                                                         {"filters", Shape::Expr},
                                                         {"rowTone", Shape::Expr, {}, kInner},
                                                         {"highlightKey", Shape::Expr},
@@ -826,12 +827,14 @@ inline constexpr std::array<KeySpec, 23> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"valign", Shape::Text},
                                                         {"empty", Shape::Nodes}}};
 /// @brief The keys of a `table` column part.
-inline constexpr std::array<KeySpec, 7> kColumnKeys = {{{"id", Shape::Name},
+inline constexpr std::array<KeySpec, 9> kColumnKeys = {{{"id", Shape::Name},
                                                         {"label", Shape::Expr},
                                                         {"width", Shape::Expr},
                                                         {"role", Shape::Expr},
                                                         {"align", Shape::Text},
                                                         {"valign", Shape::Text},
+                                                        {"sortable", Shape::Flag},
+                                                        {"sortBy", Shape::Expr, {}, kInner},
                                                         {"cell", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `dateTimeInput`.
 inline constexpr std::array<KeySpec, 6> kDateTimeKeys = {{{"value", Shape::Expr},
@@ -2994,6 +2997,80 @@ private:
         if (node.kind == "table") {
             checkTableSelection(node);
             checkSelectColumn(node);
+            checkTableSort(node);
+            checkRowsTableKeys(node);
+        }
+    }
+
+    // A sortable column is named by its id, which a sort key gives; `sortBy` says how a sortable column orders. A
+    // literal `sort` names sortable columns, each once, with a direction, and `onSortChange` needs a header that
+    // sorts. A model-backed table's engine sorts, so none of these belongs on one.
+    static void checkTableSort(DocNode const& node) {
+        bool const modelBacked = !node.name("model").empty();
+        std::set<std::string, std::less<>> sortable;
+        for (DocNodePtr const& column : node.partList("columns")) {
+            bool const sorts = column->flag("sortable");
+            if (sorts && modelBacked) {
+                refuse(pointerAppend(column->path, "sortable"),
+                       "a model-backed table's engine sorts; `sortable` is for a table over `rows`");
+            }
+            if (sorts && column->id.empty()) {
+                refuse(pointerAppend(column->path, "sortable"), "a sortable column needs an `id`, which a sort names");
+            }
+            if (column->prop("sortBy") != nullptr && !sorts) {
+                refuse(pointerAppend(column->path, "sortBy"),
+                       "`sortBy` says how a sortable column orders the rows; give the column `sortable`");
+            }
+            if (sorts) {
+                sortable.insert(column->id);
+            }
+        }
+        if (node.event("onSortChange") != nullptr && sortable.empty()) {
+            refuse(pointerAppend(node.path, "onSortChange"),
+                   "`onSortChange` runs when a header sorts the table; give a column `sortable`");
+        }
+        ExprPtr const sort = node.prop("sort");
+        if (sort != nullptr && sort->kind == ExprKind::Literal && !modelBacked && !sort->literal.isNull()) {
+            checkLiteralSort(sort->literal, pointerAppend(node.path, "sort"), sortable);
+        }
+    }
+
+    // A literal sort: a list of keys, each naming one of @p sortable once, with a direction.
+    static void checkLiteralSort(Value const& sort, std::string const& where,
+                                 std::set<std::string, std::less<>> const& sortable) {
+        ValueList const* const keys = sort.asList();
+        if (keys == nullptr) {
+            refuse(where, R"(a table's sort is a list of keys, each {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
+        }
+        std::set<std::string, std::less<>> named;
+        for (Value const& key : *keys) {
+            Value const* const column = key.field("column");
+            Value const* const direction = key.field("direction");
+            std::string const* const columnId = column == nullptr ? nullptr : column->asString();
+            std::string const* const way = direction == nullptr ? nullptr : direction->asString();
+            if (columnId == nullptr || way == nullptr || (*way != "asc" && *way != "desc")) {
+                refuse(where, R"(a sort key is {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
+            }
+            if (!sortable.contains(*columnId)) {
+                refuse(where, "the sort names `" + *columnId + "`, which is not a sortable column");
+            }
+            if (!named.insert(*columnId).second) {
+                refuse(where, "the sort names `" + *columnId + "` twice");
+            }
+        }
+    }
+
+    // The keys of a model-backed table that a table over `rows` would accept and ignore.
+    static void checkRowsTableKeys(DocNode const& node) {
+        if (!node.prop("rows")) {
+            return;
+        }
+        if (node.prop("filters") != nullptr) {
+            refuse(pointerAppend(node.path, "filters"),
+                   "`filters` belongs to a model-backed table; filter `rows` with `filter`");
+        }
+        if (node.prop("highlightKey") != nullptr) {
+            refuse(pointerAppend(node.path, "highlightKey"), "`highlightKey` links a model-backed table to a chart");
         }
     }
 
@@ -3487,9 +3564,10 @@ private:
         if (entry.category == NameCategory::Element) {
             KindSpec const* const spec = findKind(entry.element->kind, false);
             if ((spec->flags & kWritable) == 0) {
-                // A table's state is the document's: it binds its `selection` to state, and the state is set.
+                // A table's state is the document's: it binds its `selection` or `sort` to state, and the state is
+                // set.
                 std::string const hint =
-                    entry.element->kind == "table" ? ": bind its `selection` to state and set that" : "";
+                    entry.element->kind == "table" ? ": bind its `selection` or `sort` to state and set that" : "";
                 refuse(cmd.path,
                        "`set` writes state or an input's draft; `" + head + "` is a " + entry.element->kind + hint);
             }
@@ -3514,7 +3592,7 @@ private:
                 reads(*entry->derivedFrom, entry->scope, out, inner, seenLets);
             }
         }
-        bool const binds = expr.kind == ExprKind::Map || expr.kind == ExprKind::Filter;
+        bool const binds = bindsElement(expr.kind);
         for (std::size_t index = 0; index < expr.args.size(); ++index) {
             if (binds && index == 1) {
                 locals.push_back(expr.name);
@@ -3687,7 +3765,7 @@ private:
                 }
             }
         }
-        bool const binds = expr.kind == ExprKind::Map || expr.kind == ExprKind::Filter;
+        bool const binds = bindsElement(expr.kind);
         for (std::size_t index = 0; index < expr.args.size(); ++index) {
             if (binds && index == 1) {
                 locals.push_back(expr.name);

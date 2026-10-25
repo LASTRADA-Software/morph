@@ -819,3 +819,27 @@ TEST_CASE("tui table: the select column's header box shows a partial selection, 
     CHECK(reports.back().first == std::vector<ui::Key>{key(2)});
     CHECK(harness.draw() == Rows{"[-]  Name  Qty", "[ ]> apple 3", "[x]  kiwi  12"});
 }
+
+// Mutation: drop the mark from `headerText` (the header reads `Name` alone).
+TEST_CASE("tui table: the sorted column's header shows its direction, and a click on a sortable header asks to sort",
+          "[tui][table][sort]") {
+    Harness harness{30, 3};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name", .sortable = true}, {.label = "Qty", .width = ui::Sizing::fixed(5)}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    auto const name = harness.make<TextImpl>(row.get());
+    name->setText("apple");
+    auto const quantity = harness.make<TextImpl>(row.get());
+    quantity->setText("3");
+    table->setRowKey(*row, key(1));
+    std::vector<std::size_t> asked;
+    table->setOnSort([&asked](std::size_t column) { asked.push_back(column); });
+    // A sortable header keeps room for its mark, so the columns stay where they are when the sort comes.
+    CHECK(harness.draw() == Rows{"  Name   Qty", "  apple  3"});
+    table->setSort(ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending});
+    CHECK(harness.draw() == Rows{"  Name ▼ Qty", "  apple  3"});
+    CHECK(asked.empty());
+    CHECK(harness.click({.x = 3, .y = 0}) == EventResult::Handled);
+    CHECK(harness.click({.x = 9, .y = 0}) == EventResult::Handled);
+    CHECK(asked == std::vector<std::size_t>{0});
+}

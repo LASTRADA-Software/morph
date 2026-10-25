@@ -12,6 +12,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <ranges>
 #include <set>
@@ -23,6 +24,7 @@
 
 #include "../render/i18n.hpp"
 #include "../render/locale_format.hpp"
+#include "../table/data_source.hpp"
 #include "../util/datetime.hpp"
 #include "../util/rational.hpp"
 #include "message.hpp"
@@ -76,6 +78,7 @@ enum class ExprKind : std::uint8_t {
     List,       ///< `{"list": [...]}`.
     Map,        ///< `{"map": e, "as": "x", "to": e}`.
     Filter,     ///< `{"filter": e, "as": "x", "where": e}`.
+    Sort,       ///< `{"sort": e, "as": "x", "by": e, "order": e}`.
     Env,        ///< `{"env": "name"}`: the client environment.
     Session,    ///< `{"session": "name"}`: a session attribute.
     Host,       ///< `{"host": "name"}`: a value the application registered with the client.
@@ -148,11 +151,18 @@ struct Expr {
     /// @brief The function of a `Call`.
     FunctionId function = FunctionId::And;
     /// @brief Operands: a call's arguments; `if`'s condition, then and else; a list's items; a comprehension's
-    ///        source and body.
+    ///        source and body (and a `sort`'s `order`, when given).
     std::vector<ExprPtr> args;
     /// @brief The fields of an `Object`, in the order written.
     std::vector<std::pair<std::string, ExprPtr>> fields;
 };
+
+/// @brief Whether a form names each element of its list with `as`, for its second operand alone.
+/// @param kind The form.
+/// @return True for `map`, `filter` and `sort`.
+[[nodiscard]] constexpr bool bindsElement(ExprKind kind) noexcept {
+    return kind == ExprKind::Map || kind == ExprKind::Filter || kind == ExprKind::Sort;
+}
 
 namespace detail {
 
@@ -310,7 +320,7 @@ public:
         /// @brief The form.
         ExprKind kind;
         /// @brief The keys allowed beside it.
-        std::array<std::string_view, 2> companions;
+        std::array<std::string_view, 3> companions;
     };
 
     /// @brief Parses @p json, whose JSON Pointer is @p path.
@@ -323,7 +333,7 @@ public:
 
 private:
     // NOLINTBEGIN(modernize-use-designated-initializers): one row per form reads as a table.
-    static constexpr std::array<FormKeys, 20> kForms = {{
+    static constexpr std::array<FormKeys, 21> kForms = {{
         {"lit", ExprKind::Literal, {}},
         {"ref", ExprKind::Ref, {}},
         {"row", ExprKind::Row, {}},
@@ -341,6 +351,7 @@ private:
         {"list", ExprKind::List, {}},
         {"map", ExprKind::Map, {"as", "to"}},
         {"filter", ExprKind::Filter, {"as", "where"}},
+        {"sort", ExprKind::Sort, {"as", "by", "order"}},
         {"env", ExprKind::Env, {}},
         {"session", ExprKind::Session, {}},
         {"host", ExprKind::Host, {}},
@@ -415,7 +426,7 @@ private:
         }
         for (auto const& [key, value] : object) {
             static_cast<void>(value);
-            if (key != chosen->key && key != chosen->companions.at(0) && key != chosen->companions.at(1)) {
+            if (key != chosen->key && !std::ranges::contains(chosen->companions, key)) {
                 return refuse(pointerAppend(path, key),
                               "`" + key + "` does not belong to the `" + std::string{chosen->key} + "` form")
                     .error();
@@ -462,6 +473,7 @@ private:
                 return fields(made.fields, primary, primaryPath);
             case ExprKind::Map:
             case ExprKind::Filter:
+            case ExprKind::Sort:
             default:
                 return comprehension(made, object, path);
         }
@@ -623,9 +635,15 @@ private:
 
     [[nodiscard]] std::optional<Refusal> comprehension(Expr& made, Json::object_t const& object,
                                                        std::string const& path) {
-        bool const isMap = made.kind == ExprKind::Map;
-        std::string_view const sourceKey = isMap ? "map" : "filter";
-        std::string_view const bodyKey = isMap ? "to" : "where";
+        std::string_view sourceKey = "filter";
+        std::string_view bodyKey = "where";
+        if (made.kind == ExprKind::Map) {
+            sourceKey = "map";
+            bodyKey = "to";
+        } else if (made.kind == ExprKind::Sort) {
+            sourceKey = "sort";
+            bodyKey = "by";
+        }
         Json const* const variable = member(object, "as");
         Json const* const body = member(object, bodyKey);
         std::string const* const name = variable == nullptr ? nullptr : text(*variable);
@@ -647,6 +665,13 @@ private:
         }
         made.args.push_back(std::move(*source));
         made.args.push_back(std::move(*each));
+        if (Json const* const order = member(object, "order"); order != nullptr && made.kind == ExprKind::Sort) {
+            auto direction = node(*order, pointerAppend(path, "order"));
+            if (!direction) {
+                return std::move(direction.error());
+            }
+            made.args.push_back(std::move(*direction));
+        }
         return std::nullopt;
     }
 
@@ -846,6 +871,7 @@ public:
             }
             case ExprKind::Map:
             case ExprKind::Filter:
+            case ExprKind::Sort:
                 return comprehension(expr);
             case ExprKind::Call:
             default:
@@ -910,20 +936,34 @@ private:
         if (!source) {
             return source;
         }
+        std::string_view form = "filter";
+        if (expr.kind == ExprKind::Map) {
+            form = "map";
+        } else if (expr.kind == ExprKind::Sort) {
+            form = "sort";
+        }
         if (!admitsKind(*source, kindBit(TypeKind::List))) {
-            return refuse(*expr.args.at(0), "`" + std::string{expr.kind == ExprKind::Map ? "map" : "filter"} +
-                                                "` runs over a list, not " + source->name());
+            return refuse(*expr.args.at(0), "`" + std::string{form} + "` runs over a list, not " + source->name());
         }
         Type element = source->element ? *source->element : Type::any();
         _locals.emplace_back(expr.name, element);
-        auto body = expr.kind == ExprKind::Map ? check(*expr.args.at(1))
-                                               : condition(*expr.args.at(1), "the `where` of `filter`");
+        auto body = expr.kind == ExprKind::Filter ? condition(*expr.args.at(1), "the `where` of `filter`")
+                                                  : check(*expr.args.at(1));
         _locals.pop_back();
         if (!body) {
             return body;
         }
         if (expr.kind == ExprKind::Map) {
             return Type::listOf(*body);
+        }
+        if (expr.kind == ExprKind::Sort && expr.args.size() > 2) {
+            auto order = check(*expr.args.at(2));
+            if (!order) {
+                return order;
+            }
+            if (!admitsKind(*order, kindBit(TypeKind::String))) {
+                return refuse(*expr.args.at(2), "the `order` of `sort` is " + order->name() + "; expected string");
+            }
         }
         return Type::listOf(std::move(element));
     }
@@ -1314,10 +1354,58 @@ public:
             case ExprKind::Map:
             case ExprKind::Filter:
                 return comprehension(expr);
+            case ExprKind::Sort:
+                return sorted(expr);
             case ExprKind::Call:
             default:
                 return call(expr);
         }
+    }
+
+    /// @brief Orders two values as sorting does: as `lt` orders them, except that strings compare case-folded as
+    ///        the table engine's default collator folds them, and by their own bytes when they fold the same, so
+    ///        the order never depends on the source order.
+    /// @param lhs A value, not `null`.
+    /// @param rhs A value, not `null`.
+    /// @return The ordering; `nullopt` when the two are not of one comparable kind.
+    [[nodiscard]] std::optional<std::strong_ordering> sortOrder(Value const& lhs, Value const& rhs) {
+        std::string const* const lhsText = lhs.asString();
+        std::string const* const rhsText = rhs.asString();
+        if (lhsText != nullptr && rhsText != nullptr) {
+            table::CodePointCollator const collator;
+            std::strong_ordering const folded = collator.fold(*lhsText) <=> collator.fold(*rhsText);
+            return folded != std::strong_ordering::equal ? folded : *lhsText <=> *rhsText;
+        }
+        return order(lhs, rhs);
+    }
+
+    /// @brief A stable order of rows by their sort keys: by each key in turn, `null` last in either direction, and
+    ///        a descending key reversing the comparison, not the rows, so rows with equal keys keep their order.
+    /// @param keys       Each row's keys, most significant first; every row has one per entry of @p descending.
+    /// @param descending Whether each key sorts descending.
+    /// @return The rows' indices in sorted order; `nullopt` when a key's values are not of one comparable kind.
+    [[nodiscard]] std::optional<std::vector<std::size_t>> sortRows(std::vector<std::vector<Value>> const& keys,
+                                                                   std::vector<bool> const& descending) {
+        // Every value of a key is checked against the key's first value, so the comparison below never meets a
+        // pair it cannot order and the sort's ordering is strict and weak.
+        for (std::size_t level = 0; level < descending.size(); ++level) {
+            if (!orderable(keys, level)) {
+                return std::nullopt;
+            }
+        }
+        std::vector<std::size_t> indices(keys.size());
+        std::ranges::iota(indices, std::size_t{0});
+        std::ranges::stable_sort(indices, [&](std::size_t left, std::size_t right) {
+            for (std::size_t level = 0; level < descending.size(); ++level) {
+                std::strong_ordering const ordering =
+                    keyOrder(keys.at(left).at(level), keys.at(right).at(level), descending.at(level));
+                if (ordering != std::strong_ordering::equal) {
+                    return ordering == std::strong_ordering::less;
+                }
+            }
+            return false;
+        });
+        return indices;
     }
 
 private:
@@ -1363,6 +1451,77 @@ private:
             if (keep != nullptr && *keep) {
                 out.push_back(item);
             }
+        }
+        return out;
+    }
+
+    /// Whether every value of one sort key orders against the key's first value; `null`s aside.
+    bool orderable(std::vector<std::vector<Value>> const& keys, std::size_t level) {
+        Value const* first = nullptr;
+        for (std::vector<Value> const& row : keys) {
+            Value const& value = row.at(level);
+            if (value.isNull()) {
+                continue;
+            }
+            if (first == nullptr) {
+                first = &value;
+            } else if (!sortOrder(*first, value)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// Where @p lhs sorts against @p rhs for one key: `null` last either way, and a descending key reverses the
+    /// comparison, so equal values compare equal and keep their order.
+    std::strong_ordering keyOrder(Value const& lhs, Value const& rhs, bool descending) {
+        if (lhs.isNull() || rhs.isNull()) {
+            if (lhs.isNull() == rhs.isNull()) {
+                return std::strong_ordering::equal;
+            }
+            return lhs.isNull() ? std::strong_ordering::greater : std::strong_ordering::less;
+        }
+        std::strong_ordering const ordering = sortOrder(lhs, rhs).value_or(std::strong_ordering::equal);
+        if (!descending || ordering == std::strong_ordering::equal) {
+            return ordering;
+        }
+        return ordering == std::strong_ordering::less ? std::strong_ordering::greater : std::strong_ordering::less;
+    }
+
+    /// `sort`: the list ordered by `by`, ascending unless `order` is `"desc"`.
+    Value sorted(Expr const& expr) {
+        Value const source = eval(*expr.args.at(0));
+        if (source.isNull()) {
+            return Value{};
+        }
+        ValueList const* const items = source.asList();
+        if (items == nullptr) {
+            return mismatch(expr, "`sort` runs over a list");
+        }
+        bool descending = false;
+        if (expr.args.size() > 2) {
+            Value const given = eval(*expr.args.at(2));
+            std::string const* const direction = given.asString();
+            if (!given.isNull() && (direction == nullptr || (*direction != "asc" && *direction != "desc"))) {
+                return mismatch(expr, R"(the `order` of `sort` is "asc" or "desc")");
+            }
+            descending = direction != nullptr && *direction == "desc";
+        }
+        std::vector<std::vector<Value>> keys;
+        keys.reserve(items->size());
+        for (Value const& item : *items) {
+            _locals.emplace_back(expr.name, item);
+            keys.emplace_back(1, eval(*expr.args.at(1)));
+            _locals.pop_back();
+        }
+        auto const ranked = sortRows(keys, {descending});
+        if (!ranked) {
+            return mismatch(expr, "the `by` values of `sort` are not of one comparable kind");
+        }
+        ValueList out;
+        out.reserve(items->size());
+        for (std::size_t const index : *ranked) {
+            out.push_back(items->at(index));
         }
         return out;
     }

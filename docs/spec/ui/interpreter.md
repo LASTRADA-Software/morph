@@ -346,8 +346,25 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   runs `onSelectionChange` in the table's scope with `event` the new keys, as a user event, in one batch.
   The mount re-asserts the slot after the handler, so a bound selection the document does not write back
   snaps back, and a literal one never changes. The element values `selection` and `selectedCount` read the
-  bound value when there is one and the table's own otherwise. `sort`, `filters` and `hoveredKey` are not
-  lowered. With `empty`,
+  bound value when there is one and the table's own otherwise.
+  **The rows' pipeline.** The table's element holds a computed made when the element is wired, beside its
+  `rows`, so every reader of its element values (a pager drawn before the table included) and the table's own
+  lowering see one order, and `rows` is evaluated once per change. It evaluates `rows`, then sorts the list by
+  the table's sort: the bound `sort`, or the table's own (starting at `[]`) when no key binds one. Each key
+  names a sortable column; the column's `sortBy`, or the row's field of the column's `id`, is read once per row
+  with the row bound, in the table's scope, and the rows are ordered by those values as `sort` orders
+  (`expressions.md`, Sorting), key by key. A sort of `null` or `[]` keeps the source order; one that is not a
+  list of `{column, direction}` records naming sortable columns, or whose values cannot be ordered, keeps the
+  source order and is reported once at the table's `sort` path, so a data error does not blank the screen.
+  `sortBy` runs before any row's scope exists, as `key` does, so a row-scope name in it reads `null`. A table
+  lowered where names are bound (a component's `props`) sorts its own copy with those names, which its element
+  values cannot see. The mount's keyed reconciliation moves the sorted rows, so each keeps its widget, its
+  native state and its selection. The header marks the sort's first key (`Table::sort`); a header click on a
+  sortable column (`Table::onSort`) makes that column the single key, `desc` when it already is the first key
+  and `asc`, `asc` otherwise, sets the table's own sort when no key binds one, and runs `onSortChange` with
+  `event` the new sort, as a user event, in one batch. The element value `sort` reads the bound sort or the
+  table's own, and `viewCount` the rows the table orders. `filters` and `hoveredKey` are not lowered: the
+  loader refuses `filters` and `highlightKey` on a table over `rows`. With `empty`,
   the table lowers to a `Column` holding the table and the lowered `empty` content, in the table's own scope:
   while `rows` evaluates to an empty list the table is hidden and the content shown; while it is a non-empty
   list, or `null` (a query not answered yet), the reverse. The column takes the node's `visible` and its layout,

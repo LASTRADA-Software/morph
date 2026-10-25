@@ -532,6 +532,19 @@ public:
     /// @param onActivate The handler; empty does nothing.
     virtual void setOnActivate(std::function<void(Key)> onActivate) = 0;
 
+    /// @brief Marks a column's header with the direction the rows are sorted by it, or marks none. The table never
+    ///        reorders its rows: they arrive sorted. Never calls the `onSort` handler; the mount calls it only for a
+    ///        table with a sortable column.
+    /// @param sort The column and direction, or none.
+    virtual void setSort(std::optional<TableSort> sort) = 0;
+
+    /// @brief Sets what a user's request to sort calls: a click on a sortable column's header (or Enter or Space on
+    ///        it, where the header takes focus) calls it with the column's index among the columns `setColumns` gave,
+    ///        which the select column is not one of. A header that is not sortable reports nothing. What the request
+    ///        means is the caller's to decide; the backend only shows `setSort`.
+    /// @param onSort The handler; empty does nothing.
+    virtual void setOnSort(std::function<void(std::size_t)> onSort) = 0;
+
     /// @brief Tells the backend how many of the table's rows are realized, where, and how many exist in total, so
     ///        it can size a scrollbar and place leading/trailing space for the rows that are not realized. A
     ///        backend that never virtualizes (the default for every implementer but a windowed Qt Quick table)

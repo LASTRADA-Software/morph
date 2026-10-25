@@ -262,6 +262,16 @@ template <typename T, typename F>
 /// @return The enumerator's name.
 [[nodiscard]] inline std::string enumName(ButtonStyle style) { return style == ButtonStyle::Item ? "Item" : "Push"; }
 
+/// @brief A table's sort as the dump shows it: the column's index and the direction, or `none`.
+/// @param sort The sort.
+/// @return `<index>:Ascending`, `<index>:Descending` or `none`.
+[[nodiscard]] inline std::string formatSort(std::optional<TableSort> const& sort) {
+    if (!sort) {
+        return "none";
+    }
+    return std::to_string(sort->column) + (sort->direction == SortDirection::Ascending ? ":Ascending" : ":Descending");
+}
+
 /// @brief A text role's name.
 /// @param role The role.
 /// @return The enumerator's name.
@@ -468,6 +478,8 @@ struct Callbacks {
     std::function<void(std::vector<Key>, SelectionChange)> selection;
     /// @brief From `TableWidget::setOnActivate`.
     std::function<void(Key)> activate;
+    /// @brief From `TableWidget::setOnSort`.
+    std::function<void(std::size_t)> sort;
     /// @brief The drop handler's predicate, from `Widget::setDropHandler`.
     std::function<bool(Key const&)> accepts;
     /// @brief The drop handler, from `Widget::setDropHandler`.
@@ -1370,8 +1382,8 @@ public:
     }
 };
 
-/// @brief A fake `TableWidget`: properties `columns`, `selectionMode`, `selection`, `selectColumn`, `selectAllLabel`,
-///        and `rowKey`, `tone` and `label` on a row.
+/// @brief A fake `TableWidget`: properties `columns`, `selectionMode`, `selection`, `sort`, `selectColumn`,
+///        `selectAllLabel`, and `rowKey`, `tone` and `label` on a row.
 ///
 /// `selection` shows the rows the widget marks: the requested keys, in the order requested, that one of its current
 /// rows has. The requested keys are kept, so a row that arrives with one of them is marked and a row that goes is
@@ -1406,9 +1418,14 @@ public:
     FakeTable& operator=(FakeTable&&) = delete;
 
     /// @brief Records property `columns`, each as its escaped caption, a colon and its width, then `;align=` and
-    ///        `;valign=` where the column's alignment is not the default (`Start` across, `Center` down).
+    ///        `;valign=` where the column's alignment is not the default (`Start` across, `Center` down), and
+    ///        `;sortable=true` for a sortable column, which `RecordingBackend::clickHeader` reports.
     /// @param columns The columns, in order.
     void setColumns(std::vector<TableColumn> const& columns) override {
+        _sortable.clear();
+        for (TableColumn const& column : columns) {
+            _sortable.push_back(column.sortable);
+        }
         set("columns", formatList(columns, [](TableColumn const& column) {
                 std::string text = formatItem(column.label) + ":" + formatSizing(column.width);
                 if (column.align != Align::Start) {
@@ -1416,6 +1433,9 @@ public:
                 }
                 if (column.valign != Align::Center) {
                     text += ";valign=" + formatAlign(column.valign);
+                }
+                if (column.sortable) {
+                    text += ";sortable=true";
                 }
                 return text;
             }));
@@ -1494,6 +1514,19 @@ public:
     /// @brief Stores the handler `RecordingBackend::activateRow` calls.
     /// @param onActivate The handler.
     void setOnActivate(std::function<void(Key)> onActivate) override { callbacks().activate = std::move(onActivate); }
+
+    /// @brief Records property `sort`: the column's index and direction, or `none`.
+    /// @param sort The sort shown.
+    void setSort(std::optional<TableSort> sort) override { set("sort", formatSort(sort)); }
+
+    /// @brief Stores the handler `RecordingBackend::clickHeader` calls.
+    /// @param onSort The handler.
+    void setOnSort(std::function<void(std::size_t)> onSort) override { callbacks().sort = std::move(onSort); }
+
+    /// @brief Whether the column at @p column is sortable, as `setColumns` gave it.
+    /// @param column The column's index.
+    /// @return False for an index past the last column.
+    [[nodiscard]] bool sortable(std::size_t column) const { return column < _sortable.size() && _sortable.at(column); }
 
     /// @brief Records property `realizedWindow` as `<first>+<count>/<total>`.
     /// @param first The view index of the first realized row.
@@ -1630,6 +1663,7 @@ private:
     }
 
     SelectionMode _mode = SelectionMode::None;
+    std::vector<bool> _sortable;  // per column, as setColumns gave them
     std::map<int, Key> _rowKeys;  // row id -> key, as setRowKey told it
     // Engaged once `setSelection` ran or the user selected.
     std::optional<std::vector<Key>> _requested;
@@ -2248,6 +2282,20 @@ public:
         auto [keys, change] = table->clicked(key, click);
         table->select(keys);
         invoke(record.callbacks.selection, std::move(keys), change);
+    }
+
+    /// @brief Clicks a column's header as the user would: a sortable column's reaches `onSort` with its index; any
+    ///        other header does nothing, since a user can click it.
+    /// @param widgetId The table.
+    /// @param column The column's index among the columns `setColumns` gave.
+    /// @throws std::logic_error when the widget is not a table.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+    void clickHeader(int widgetId, std::size_t column) {
+        detail::Record const& record = expectKind(widgetId, "clickHeader", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        if (table != nullptr && table->sortable(column) && reachable(record)) {
+            invoke(record.callbacks.sort, column);
+        }
     }
 
     /// @brief Activates a row of a table (Enter or a double click).

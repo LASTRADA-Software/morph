@@ -31,6 +31,8 @@ constexpr int kSelectGutter = 5;
 /// The cells of a select column's box.
 constexpr int kBoxWidth = 3;
 constexpr int kColumnGap = 1;
+/// The cells of a sort mark after a header label: a space and an arrow.
+constexpr int kSortMark = 2;
 /// How soon a second click on a row must follow the first to make a double click.
 constexpr auto kDoubleClick = std::chrono::milliseconds{500};
 
@@ -113,6 +115,39 @@ void TableImpl::setOnSelectionChange(
 
 void TableImpl::setOnActivate(std::function<void(ui::Key)> onActivate) { _onActivate = std::move(onActivate); }
 
+void TableImpl::setSort(std::optional<ui::TableSort> sort) {
+    _sort = sort;
+    refresh();
+}
+
+void TableImpl::setOnSort(std::function<void(std::size_t)> onSort) { _onSort = std::move(onSort); }
+
+std::string TableImpl::headerText(std::size_t index) const {
+    std::string text = _columns.at(index).label;
+    if (_sort && _sort->column == index) {
+        text += _sort->direction == ui::SortDirection::Ascending ? " ▲" : " ▼";
+    }
+    return text;
+}
+
+int TableImpl::headerWidth(ui::TableColumn const& column) {
+    return displayWidth(column.label) + (column.sortable ? kSortMark : 0);
+}
+
+void TableImpl::clickHeader(int x) {
+    int left = gutter();
+    for (auto const [index, width] : std::views::zip(std::views::iota(std::size_t{0}), columnWidths(_size.width))) {
+        if (x >= left && x < left + width) {
+            auto const handler = _onSort;
+            if (_columns.at(index).sortable && handler) {
+                handler(index);
+            }
+            return;
+        }
+        left += width + kColumnGap;
+    }
+}
+
 // The cursor goes to the row that took the removed one's place, or to the last row.
 void TableImpl::childForgotten(WidgetBase& child) {
     _keys.erase(&child);
@@ -142,7 +177,7 @@ std::vector<int> TableImpl::naturalWidths() const {
     std::vector<int> widths;
     widths.reserve(_columns.size());
     for (auto const& column : _columns) {
-        widths.push_back(displayWidth(column.label));
+        widths.push_back(headerWidth(column));
     }
     for (auto const* row : children()) {
         auto const* const cells = dynamic_cast<ContainerBase const*>(row);
@@ -162,7 +197,7 @@ std::vector<int> TableImpl::columnWidths(int width) const {
     for (auto const [column, natural] : std::views::zip(_columns, naturalWidths())) {
         // No column is squeezed below its header, so none is drawn at width 0; a fixed column narrower than its
         // header keeps the width the author gave it. A table whose columns still exceed its width is cut at its edge.
-        int const header = displayWidth(column.label);
+        int const header = headerWidth(column);
         int const minimum =
             column.width.kind == ui::Sizing::Kind::Fixed ? std::min(header, std::max(0, column.width.amount)) : header;
         items.push_back(layout::Item{.sizing = column.width, .natural = natural, .minimum = minimum});
@@ -309,11 +344,11 @@ void TableImpl::paintHeader(::core::tui::Canvas& canvas, std::vector<int> const&
         canvas.putString(0, 0, headerBox(), theme.textNormal);
     }
     int left = gutter();
-    for (auto const [column, width] : std::views::zip(_columns, widths)) {
+    for (auto const [index, column, width] : std::views::zip(std::views::iota(std::size_t{0}), _columns, widths)) {
         auto label = canvas.subcanvas({.x = left, .y = 0, .width = width, .height = 1});
         // Over its cells: a number column's header ends where its digits do.
-        label.putString(0, alignedOffset(column.align, displayWidth(column.label), width), column.label,
-                        theme.textBold);
+        std::string const text = headerText(index);
+        label.putString(0, alignedOffset(column.align, displayWidth(text), width), text, theme.textBold);
         left += width + kColumnGap;
     }
 }
@@ -463,6 +498,10 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
         if (_mode == ui::SelectionMode::Multiple && !shownChildren().empty()) {
             static_cast<void>(change(allOrNone(), ui::SelectionChange::Extend));
         }
+        return;
+    }
+    if (_showHeader && cell.y == 0) {
+        clickHeader(cell.x);
         return;
     }
     auto* const row = rowAtLine(cell.y);

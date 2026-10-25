@@ -1143,6 +1143,10 @@ private:
             bind(scope, spec.selectAllLabel, [&widget](std::string const& label) { widget.setSelectAllLabel(label); });
         }
         widget.setOnActivate(event(spec.onActivate));
+        if (std::ranges::any_of(spec.columns, &TableColumn::sortable)) {
+            bind(scope, spec.sort, [&widget](std::optional<TableSort> const& sort) { widget.setSort(sort); });
+            widget.setOnSort(event(spec.onSort));
+        }
         mountRows(
             scope, spec.rows, widget,
             [this, &widget](reactive::Scope& rowScope, Node const& node, Widget& rowWidget, Key const& key) {

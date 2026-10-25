@@ -1193,6 +1193,45 @@ template <typename E = Any>
     return AnyHandle::raw(std::move(json));
 }
 
+/// @brief Which way a sort orders.
+enum class SortOrder : std::uint8_t {
+    Ascending,   ///< Smallest first: `"asc"`.
+    Descending,  ///< Largest first: `"desc"`.
+};
+
+/// @brief A sort over a list, `{"sort": e, "as": "x", "by": e, "order": e}`: the list ordered by the value @p by
+///        gives each element, strings case-folded, `null` last, equal values in their source order.
+/// @tparam E The element type.
+/// @param source The list.
+/// @param name   The element's name inside @p orderBy.
+/// @param orderBy Builds the value to order by from the element's handle.
+/// @param order  `"asc"` or `"desc"`; absent sorts ascending.
+/// @return The sorted list.
+template <typename E = Any>
+[[nodiscard]] AnyHandle sorted(AnyHandle const& source, std::string const& name,
+                               std::type_identity_t<std::function<AnyHandle(Handle<E> const&)>> const& orderBy,
+                               AnyHandle const& order = {}) {
+    Json json = Json::object_t{};
+    detail::put(json, "sort", source.json());
+    detail::put(json, "as", name);
+    detail::put(json, "by", orderBy(author::ref<E>(name)).json());
+    if (order.present()) {
+        detail::put(json, "order", order.json());
+    }
+    return AnyHandle::raw(std::move(json));
+}
+
+/// @brief One key of a table's `sort`, `{"column": id, "direction": "asc" | "desc"}`; a `list` of them, most
+///        significant first, is a sort.
+/// @param column The id of a sortable column.
+/// @param order  The direction.
+/// @return The key, a constant.
+[[nodiscard]] inline AnyHandle sortKey(std::string const& column, SortOrder order = SortOrder::Ascending) {
+    return AnyHandle::raw(detail::constant(Value{ValueRecord{
+        {"column", Value{column}},
+        {"direction", Value{std::string{order == SortOrder::Ascending ? "asc" : "desc"}}}}}));
+}
+
 /// @brief The elements of a list whose boolean member is true.
 /// @tparam Class The element type.
 /// @param source The list.
@@ -3686,6 +3725,11 @@ struct TableColumn {
     std::optional<Align> valign;
     /// @brief The cell, read in the row scope.
     Nodes cell;
+    /// @brief Whether a click on the header sorts the table by the column; the column needs a `name`.
+    bool sortable = false;
+    /// @brief The value a sortable column orders the rows by, read per row as `key` is; absent: the row's field
+    ///        named by the column's `name`.
+    AnyHandle sortBy;
 };
 
 /// @brief Columns from cells alone, without ids or labels.
@@ -3743,8 +3787,12 @@ struct TableOptions {
     AnyHandle rowLabel;
     /// @brief Where a model-backed table works; ignored by a table over rows.
     std::optional<TableMode> mode;
-    /// @brief The sort.
+    /// @brief The sort, a list of `sortKey`s, most significant first: bound, the table shows it and a header click
+    ///        comes back only through `onSortChange`. Absent: the table keeps the user's sort itself. A model-backed
+    ///        table's engine reads it as its own.
     AnyHandle sort;
+    /// @brief Commands run after a header click asks to sort, with `event` the new sort.
+    Commands onSortChange;
     /// @brief The filters.
     AnyHandle filters;
     /// @brief A row's tone, read in the row scope.
@@ -3785,6 +3833,12 @@ namespace detail {
     }
     if (column.valign) {
         detail::put(part, "valign", detail::alignName(*column.valign));
+    }
+    if (column.sortable) {
+        detail::put(part, "sortable", true);
+    }
+    if (column.sortBy.present()) {
+        detail::put(part, "sortBy", column.sortBy.json());
     }
     if (!column.cell.empty()) {
         detail::put(part, "cell", column.cell.json());
@@ -3834,6 +3888,7 @@ namespace detail {
         node.raw("virtualizeOverscan", static_cast<std::int64_t>(options.virtualizeOverscan));
     }
     return node.put("sort", options.sort)
+        .put("onSortChange", options.onSortChange)
         .put("filters", options.filters)
         .put("rowTone", options.rowTone)
         .put("highlightKey", options.highlightKey)

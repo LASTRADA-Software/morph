@@ -231,6 +231,13 @@ state, so its look follows the selection alone; its `clicked` fires the row's `t
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
 
+A sortable column's header label (`header<index>`) is a Tab stop, and a tap, Enter or Space on it fires `sort` with
+the column's index, which reaches `setOnSort`; another header takes neither. The table never sorts: `setSort` writes
+`sortColumn` (−1 for none) and `sortDescending`, and the sorted column's label shows ` ▲` or ` ▼` after its text.
+Every sortable header keeps room for the mark in its column's floor, so the columns do not move when the sort does.
+Qt's accessibility has no sort state, so the header (a `ColumnHeader` named by its label) states the order in its
+`Accessible.description`, "Sorted ascending" or "Sorted descending".
+
 A row draws its background part (`background`, the `tableRow` part restyle) under its cells and hands it its state:
 `selected`, `hovered` (the pointer over the row), `current` (keyboard focus within the row), `alternate` (an odd
 position, which C++ writes on every row after each append, destroy and move), `tone` (`setRowTone`: −1 for none,

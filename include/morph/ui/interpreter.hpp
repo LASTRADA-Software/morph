@@ -1527,6 +1527,16 @@ struct TransferState {
     reactive::Signal<Value> error;
 };
 
+/// @brief A table's rows as the table shows them: every row `rows` gave, in the order of the table's sort.
+struct TableView {
+    /// @brief The rows, sorted.
+    std::vector<Value> rows;
+    /// @brief Equal when the rows are.
+    /// @param other The other view.
+    /// @return Whether they are equal.
+    [[nodiscard]] bool operator==(TableView const& other) const = default;
+};
+
 /// @brief An element's live values (spec 5 §6).
 struct ElementState {
     /// @brief The element's state before any user action.
@@ -1540,6 +1550,7 @@ struct ElementState {
           open{runtime, false},
           submitted{runtime, false},
           selection{runtime, Value{ValueList{}}},
+          sort{runtime, Value{ValueList{}}},
           activeKey{runtime},
           checksVersion{runtime, 0},
           inner{runtime, nullptr} {}
@@ -1565,6 +1576,8 @@ struct ElementState {
     reactive::Signal<bool> submitted;
     /// @brief A table's selected keys.
     reactive::Signal<Value> selection;
+    /// @brief A table's own sort, a list of keys, while no `sort` key binds one.
+    reactive::Signal<Value> sort;
     /// @brief A table's last activated key.
     reactive::Signal<Value> activeKey;
     /// @brief Bumped when a check targeting it comes or goes.
@@ -1581,6 +1594,11 @@ struct ElementState {
     reactive::Computed<Value>* errors = nullptr;
     /// @brief A table's rows or a select's options, for its counts and `selectedOption`.
     reactive::Computed<Value>* rows = nullptr;
+    /// @brief A table's bound `sort`; `nullptr` while the table holds its own.
+    reactive::Computed<Value>* sortBound = nullptr;
+    /// @brief A table's rows as it shows them, made beside `rows` so that every reader of the table's element
+    ///        values, the table's own lowering included, sees one order; `nullptr` for a table without `rows`.
+    reactive::Computed<TableView>* view = nullptr;
     /// @brief A `form`'s session (spec 2), made when the element is wired; null when its schema is unknown.
     std::unique_ptr<forms::FormSession> form;
     /// @brief A `collection`'s session (spec 2), made when the element is wired; null when its view document is
@@ -2553,6 +2571,10 @@ public:
 private:
     void wireElement(ElementState& element);
     void wireErrors(ElementState& element);
+    /// A table's rows in the order of its sort, read in the table's scope with @p bindings. A sort that is not a
+    /// list of the table's sortable columns, or whose values cannot be ordered, is reported and leaves the source
+    /// order.
+    TableView tableView(ElementState const& element, Bindings const* bindings);
     void collect(DocNode const& node, RtScope& scope, std::vector<Commands const*>& commands);
     Node lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element);
@@ -4405,7 +4427,128 @@ inline void ScreenCore::wireElement(ElementState& element) {
         if (selection && (selection->kind != ExprKind::Literal || !selection->literal.isNull())) {
             element.bound = &scope.nodes.computed([&scope, selection] { return evalIn(scope, nullptr, selection); });
         }
+        // A bound sort is controlled as the selection is.
+        ExprPtr const sort = node.prop("sort");
+        if (sort && (sort->kind != ExprKind::Literal || !sort->literal.isNull())) {
+            element.sortBound = &scope.nodes.computed([&scope, sort] { return evalIn(scope, nullptr, sort); });
+        }
+        element.view = &scope.nodes.computed([this, &element] { return tableView(element, nullptr); });
     }
+}
+
+/// @brief A table's sort as its element value reads it: the bound `sort` when the key binds one, else the table's
+///        own.
+/// @param element The table's element.
+/// @return The sort. Tracked.
+[[nodiscard]] inline Value tableSort(ElementState const& element) {
+    return element.sortBound != nullptr ? element.sortBound->get() : element.sort.get();
+}
+
+/// @brief The sortable column part of a table with the id @p columnId.
+/// @param table    The table.
+/// @param columnId The column's id.
+/// @return The part, or `nullptr` when no sortable column has that id.
+[[nodiscard]] inline DocNode const* sortableColumn(DocNode const& table, std::string_view columnId) {
+    for (DocNodePtr const& column : table.partList("columns")) {
+        if (column->id == columnId && column->flag("sortable")) {
+            return column.get();
+        }
+    }
+    return nullptr;
+}
+
+/// @brief One key of a table's sort: the column part that orders the rows, and whether it is descending.
+struct SortKey {
+    /// @brief The sortable column.
+    DocNode const* column = nullptr;
+    /// @brief Whether the key sorts descending.
+    bool descending = false;
+};
+
+/// @brief A table's sort read as its keys: a list of `{"column", "direction"}` records naming sortable columns.
+/// @param table The table.
+/// @param sort  The sort; `null` is the source order, as `[]` is.
+/// @return The keys, most significant first; `nullopt` when @p sort is not such a list.
+[[nodiscard]] inline std::optional<std::vector<SortKey>> sortKeysOf(DocNode const& table, Value const& sort) {
+    std::vector<SortKey> keys;
+    if (sort.isNull()) {
+        return keys;
+    }
+    ValueList const* const items = sort.asList();
+    if (items == nullptr) {
+        return std::nullopt;
+    }
+    for (Value const& item : *items) {
+        Value const* const column = item.field("column");
+        Value const* const direction = item.field("direction");
+        std::string const* const columnId = column == nullptr ? nullptr : column->asString();
+        std::string const* const way = direction == nullptr ? nullptr : direction->asString();
+        DocNode const* const part = columnId == nullptr ? nullptr : sortableColumn(table, *columnId);
+        if (part == nullptr || way == nullptr || (*way != "asc" && *way != "desc")) {
+            return std::nullopt;
+        }
+        keys.push_back(SortKey{.column = part, .descending = *way == "desc"});
+    }
+    return keys;
+}
+
+inline TableView ScreenCore::tableView(ElementState const& element, Bindings const* bindings) {
+    DocNode const& node = *element.node;
+    RtScope const& scope = *element.scope;
+    Value const source = bindings == nullptr ? element.rows->get() : evalIn(scope, bindings, node.prop("rows"));
+    ValueList const* const items = source.asList();
+    TableView view;
+    if (items == nullptr) {
+        return view;
+    }
+    view.rows = *items;
+    Value const sort = tableSort(element);
+    std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, sort);
+    std::string const sortPath = pointerAppend(node.path, "sort");
+    if (!keys) {
+        report(sortPath, "sort is " + canonicalJson(sort) +
+                             R"(; a table's sort is a list of {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
+        return view;
+    }
+    if (keys->empty()) {
+        return view;
+    }
+    // Each row's keys are read once, then the rows are ordered by them: a change to the sort, the rows, or anything
+    // a `sortBy` reads sorts again.
+    std::vector<std::vector<Value>> rowKeys;
+    rowKeys.reserve(view.rows.size());
+    for (Value const& row : view.rows) {
+        ScopeEnv const env{scope, bindings, &row};
+        std::vector<Value> values;
+        values.reserve(keys->size());
+        for (SortKey const& key : *keys) {
+            if (ExprPtr const sortBy = key.column->prop("sortBy")) {
+                values.push_back(evaluate(*sortBy, env));
+            } else {
+                Value const* const field = row.field(key.column->id);
+                values.push_back(field == nullptr ? Value{} : *field);
+            }
+        }
+        rowKeys.push_back(std::move(values));
+    }
+    std::vector<bool> descending;
+    descending.reserve(keys->size());
+    for (SortKey const& key : *keys) {
+        descending.push_back(key.descending);
+    }
+    ScopeEnv const env{scope, bindings};
+    std::optional<std::vector<std::size_t>> const order = Evaluator{env}.sortRows(rowKeys, descending);
+    if (!order) {
+        report(sortPath, "the rows' values for the sort are not of one comparable kind; the rows keep their order");
+        return view;
+    }
+    std::vector<Value> sorted;
+    sorted.reserve(view.rows.size());
+    for (std::size_t const index : *order) {
+        sorted.push_back(view.rows.at(index));
+    }
+    view.rows = std::move(sorted);
+    return view;
 }
 
 /// @brief A table's selection as its element value reads it: the bound `selection` when the key binds one, else
@@ -4563,7 +4706,14 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
         if (name == "selectedCount") {
             return count(tableSelection(element));
         }
-        if (name == "viewCount" || name == "sourceCount") {
+        if (name == "sort") {
+            return tableSort(element);
+        }
+        if (name == "viewCount") {
+            return element.view == nullptr ? Value{std::int64_t{0}}
+                                           : Value{static_cast<std::int64_t>(element.view->get().rows.size())};
+        }
+        if (name == "sourceCount") {
             return element.rows == nullptr ? Value{std::int64_t{0}} : count(element.rows->get());
         }
         ExprPtr const rows = node.prop("rows");
@@ -7163,7 +7313,7 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         report(node.path, "a model-backed `table` needs the table engine, which this interpreter does not lower yet");
         return ui::text(Text{.text = std::string{"table"}, .role = TextRole::Muted});
     }
-    auto rows = [scope = ctx.scope, bindings = ctx.bindings, rowsExpr] {
+    std::function<std::vector<Value>()> rows = [scope = ctx.scope, bindings = ctx.bindings, rowsExpr] {
         Value const value = evalIn(*scope, bindings.get(), rowsExpr);
         ValueList const* const items = value.asList();
         return items == nullptr ? std::vector<Value>{} : std::vector<Value>{items->begin(), items->end()};
@@ -7198,6 +7348,16 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         return ui::forEach<Value>(std::move(rows), std::move(keyFn), std::move(rowView),
                                   axis ? axisOf(once(ctx, axis)) : Axis::Vertical,
                                   gap ? static_cast<int>(intOf(once(ctx, gap), 0)) : 0, common);
+    }
+    // The table's rows, sorted: the element's own view, which its element values read too, unless names bound
+    // where the table is lowered (a component's `props`) reach its rows, which the element cannot see.
+    reactive::Computed<TableView> const* view = element == nullptr ? nullptr : element->view;
+    if (view != nullptr && ctx.bindings != nullptr && !ctx.bindings->empty()) {
+        view = &ctx.scope->nodes.computed(
+            [this, element, bindings = ctx.bindings] { return tableView(*element, bindings.get()); });
+    }
+    if (view != nullptr) {
+        rows = [view] { return view->get().rows; };
     }
     std::vector<TableColumn> columns;
     std::vector<DocNode const*> cells;
@@ -7241,6 +7401,8 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
             }
         }
     }
+    // A part's column index, which a header click reports, counts the derived columns before it.
+    std::size_t const derivedCount = columns.size();
     for (DocNodePtr const& part : node.partList("columns")) {
         ExprPtr const label = part->prop("label");
         ExprPtr const width = part->prop("width");
@@ -7259,7 +7421,8 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                                       .width = width ? sizingOf(once(ctx, width)) : Sizing::content(),
                                       .role = columnRole,
                                       .align = cellPlaceNamed(part->name("align")).value_or(Align::Start),
-                                      .valign = cellPlaceNamed(part->name("valign")).value_or(tableValign)});
+                                      .valign = cellPlaceNamed(part->name("valign")).value_or(tableValign),
+                                      .sortable = part->flag("sortable")});
         cells.push_back(part.get());
         fields.emplace_back(part->id);
         roles.push_back(columnRole);
@@ -7375,6 +7538,57 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                 });
             }
             runEvent(commands, ctx, selected);
+        });
+    };
+    // The header marks the sort's first key; a sort that names no sortable column marks none.
+    auto const columnIndex = [&node, derivedCount](std::string_view columnId) -> std::optional<std::size_t> {
+        auto const parts = node.partList("columns");
+        auto const found =
+            std::ranges::find_if(parts, [columnId](DocNodePtr const& part) { return part->id == columnId; });
+        if (found == parts.end()) {
+            return std::nullopt;
+        }
+        return derivedCount + static_cast<std::size_t>(std::distance(parts.begin(), found));
+    };
+    options.sort = slotProp<std::optional<TableSort>>([element, &node, columnIndex]() -> std::optional<TableSort> {
+        std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, tableSort(*element));
+        if (!keys || keys->empty()) {
+            return std::nullopt;
+        }
+        std::optional<std::size_t> const index = columnIndex(keys->front().column->id);
+        if (!index) {
+            return std::nullopt;
+        }
+        return TableSort{.column = *index,
+                         .direction = keys->front().descending ? SortDirection::Descending : SortDirection::Ascending};
+    });
+    // A header click makes its column the single key: descending when it already is the first key ascending,
+    // ascending otherwise. The table's own sort takes it when no key binds one, then `onSortChange` runs with
+    // `event` the new sort.
+    options.onSort = [this, ctx, element, &node, derivedCount, commands = node.event("onSortChange")](
+                         std::size_t index) {
+        auto const parts = node.partList("columns");
+        if (index < derivedCount || index - derivedCount >= parts.size() ||
+            !parts.subspan(index - derivedCount).front()->flag("sortable")) {
+            return;
+        }
+        std::string const& columnId = parts.subspan(index - derivedCount).front()->id;
+        Value const current = runtime().untracked([&] { return tableSort(*element); });
+        std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, current);
+        bool const descending =
+            keys && !keys->empty() && keys->front().column->id == columnId && !keys->front().descending;
+        ValueRecord key;
+        key.insert_or_assign("column", Value{columnId});
+        key.insert_or_assign("direction", Value{std::string{descending ? "desc" : "asc"}});
+        Value const next{ValueList{Value{std::move(key)}}};
+        runtime().batch([&] {
+            if (element->sortBound == nullptr) {
+                session.asUser([&] {
+                    session.noteWrite();
+                    element->sort.set(next);
+                });
+            }
+            runEvent(commands, ctx, next);
         });
     };
     options.onActivate = [this, ctx, element, registry, commands = node.event("onActivate")](Key const& key) {

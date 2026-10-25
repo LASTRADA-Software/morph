@@ -197,6 +197,22 @@ public:
             .type = Type::Release, .button = 0, .x = cell->x + 1, .y = cell->y + 1, .modifiers = modifiers});
         settle();
     }
+    // A mouse click on the header line, over the column's first cell: the header sits on the line above the rows.
+    void clickHeader(ui::Widget& table, std::size_t column) override {
+        settle();
+        auto const* const container = dynamic_cast<ui::ContainerWidget*>(&table);
+        ui::Widget const* const firstRow = container == nullptr ? nullptr : childAt(*container, 0);
+        auto const* const rowContainer = dynamic_cast<ui::ContainerWidget const*>(firstRow);
+        ui::Widget const* const cell = rowContainer == nullptr ? nullptr : childAt(*rowContainer, column);
+        auto const at = cell == nullptr ? std::nullopt : drawnCell(*cell);
+        auto const top = drawnCell(table);
+        if (!at || !top || _fault == Fault::DeadInput) {
+            return;
+        }
+        send(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = at->x + 1, .y = top->y + 1});
+        send(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = at->x + 1, .y = top->y + 1});
+        settle();
+    }
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         return tableOf(table).markedRows();
     }

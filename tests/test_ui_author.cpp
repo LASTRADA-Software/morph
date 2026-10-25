@@ -335,6 +335,11 @@ TEST_CASE("the library and reading forms have builders", "[ui][author]") {
     ui::Handle<std::vector<std::int64_t>> const typed =
         ui::concatLists(std::vector{ui::ref<std::vector<std::int64_t>>("a"), ui::ref<std::vector<std::int64_t>>("b")});
     CHECK(text(typed) == R"({"fn":"concatLists","args":[{"ref":"a"},{"ref":"b"}]})");
+    CHECK(text(ui::sorted(ui::ref("a"), "x", [](ui::AnyHandle const& item) { return item.at("due"); })) ==
+          R"({"sort":{"ref":"a"},"as":"x","by":{"ref":"x.due"}})");
+    CHECK(text(ui::sorted(ui::ref("a"), "x", [](ui::AnyHandle const& item) { return item; }, "desc")) ==
+          R"({"sort":{"ref":"a"},"as":"x","by":{"ref":"x"},"order":"desc"})");
+    CHECK(text(ui::sortKey("due", ui::SortOrder::Descending)) == R"({"lit":{"column":"due","direction":"desc"}})");
     CHECK(text(ui::format("{0} of {1}", {1, 2})) == R"({"fn":"format","args":["{0} of {1}",1,2]})");
     CHECK(text(ui::count(items)) == R"({"fn":"count","args":[{"ref":"items"}]})");
     CHECK(text(ui::sum(items)) == R"({"fn":"sum","args":[{"ref":"items"}]})");
@@ -697,18 +702,25 @@ ui::Screen paletteScreen() {
              ui::table(
                  results.value(),
                  {.key = ui::row(&ResultView::id),
-                  .columns = {{.name = "id", .label = "Id", .width = 80, .cell = ui::text({.text = ui::row("id")})},
+                  .columns = {{.name = "id",
+                               .label = "Id",
+                               .width = 80,
+                               .cell = ui::text({.text = ui::row("id")}),
+                               .sortable = true,
+                               .sortBy = ui::row("id")},
                               {.name = "flag"}},
                   .selectionMode = ui::Selection::Multiple,
-                  .sort = ui::list({}),
-                  .filters = ui::list({}),
+                  .sort = ui::list({ui::sortKey("id", ui::SortOrder::Descending)}),
+                  .onSortChange = ui::set(choice, "sorted"),
                   .rowTone = "neutral",
-                  .highlightKey = ui::ref("choice"),
                   .onActivate = ui::set(choice, ui::row("id"))})
                  .a11y("Results"),
              ui::dataTable<ListProjects>(sample, {{&ListProjects::page, 0}},
                                          {.selectionMode = ui::Selection::Single,
                                           .mode = ui::TableMode::Server,
+                                          .sort = ui::list({}),
+                                          .filters = ui::list({}),
+                                          .highlightKey = ui::ref("choice"),
                                           .onActivate = ui::run(pick, {{&LoadSample::id, ui::row("id")}})})
                  .a11y("Projects"),
              ui::dataTable<ListProjects>(sample, {.selectionMode = ui::Selection::None, .mode = ui::TableMode::Client})

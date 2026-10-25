@@ -60,6 +60,8 @@ by name.
 | `ref<T>("name.path")`, `row(&T::member)`, `row("path")`, `row<T>()` | `{"ref": ...}`, `{"row": ...}` |
 | `cond(c, a, b)`, `obj({{"k", e}})`, `list({...})` | `{"if": [...]}`, `{"obj": ...}`, `{"list": ...}` |
 | `map(list, "x", fn)`, `filter(list, "x", fn)`, `filter(list, &T::flag)` | The comprehensions; `fn` receives the element's handle |
+| `sorted(list, "x", by, order?)` | The `sort` form: `by` receives the element's handle and gives the value to order by; `order` is absent for ascending |
+| `sortKey(column, SortOrder)` | One key of a table's `sort`, `{"column", "direction"}`; a `list` of them is a sort |
 | `call<R>(name, {...})` and `engaged`, `coalesce`, `concat`, `concatLists`, `format`, `count`, `sum`, `includes`, `isEmpty`, `round`, `parseDecimal`, `quantity`, `t(key, fallback, {{"n", e}})` | Library calls, and `{"t": ...}` |
 | `env(name)`, `session(name)`, `hostValue(name)`, `prop(name)`, `event()` | `{"env"}`, `{"session"}`, `{"host"}`, `{"ref": "props.name"}`, `{"ref": "event"}` |
 | `element("id")` and its `value()`, `draft()`, `checked()`, `selected()`, `selection()`, `open()`, `valid()`, `ready()`, `get(path)` | An element's values (spec 5 §6) |
@@ -161,11 +163,13 @@ The keys every node takes are member functions of `Node`, each returning a copy 
   `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` is the grid's, and
   a grid's `justify` is written so the loader refuses it rather than dropped.
 - **`table`** takes its rows, its options (`key`, `columns` (each `TableColumn{name, label, width, role, align,
-  valign, cell}`; an absent `align` or `valign` is left out and a present one is written by name), `selectionMode` (a
+  valign, cell, sortable, sortBy}`; an absent `align` or `valign` is left out and a present one is written by name,
+  `sortable` only when `true`), `selectionMode` (a
   `Selection`, written as `selectionMode`), `selection` (the selected keys, controlled when given), `onSelectionChange`
-  (with `event` the new keys), `sort`, `filters`,
+  (with `event` the new keys), `sort` (a list of `sortKey`s, controlled when given), `onSortChange` (with `event` the
+  new sort), `filters` and `highlightKey` (which the loader takes on a `dataTable` only),
   `rowTone` (each row's tone, which the client draws), `selectColumn` (written only when `true`), `selectAllLabel`,
-  `rowLabel` (each row's name, in the row scope), `highlightKey`, `onActivate`, `empty` (the nodes shown in
+  `rowLabel` (each row's name, in the row scope), `onActivate`, `empty` (the nodes shown in
   its place while its rows are an empty list), `valign`), and optionally a row-scope builder that returns the
   columns; `cells({...})` makes columns from cells alone. **`dataTable<A>(model, body, options)`**
   is the table of spec 7 declared from a list action, with `mode` (`TableMode::Server` or

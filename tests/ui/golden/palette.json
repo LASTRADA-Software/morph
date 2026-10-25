@@ -525,6 +525,10 @@
                         "id": "id",
                         "label": "Id",
                         "width": 80,
+                        "sortable": true,
+                        "sortBy": {
+                           "row": "id"
+                        },
                         "cell": [
                            {
                               "kind": "text",
@@ -540,15 +544,22 @@
                   ],
                   "selectionMode": "multiple",
                   "sort": {
-                     "list": []
+                     "list": [
+                        {
+                           "lit": {
+                              "column": "id",
+                              "direction": "desc"
+                           }
+                        }
+                     ]
                   },
-                  "filters": {
-                     "list": []
-                  },
+                  "onSortChange": [
+                     {
+                        "set": "choice",
+                        "value": "sorted"
+                     }
+                  ],
                   "rowTone": "neutral",
-                  "highlightKey": {
-                     "ref": "choice"
-                  },
                   "onActivate": [
                      {
                         "set": "choice",
@@ -572,6 +583,15 @@
                   },
                   "mode": "server",
                   "selectionMode": "single",
+                  "sort": {
+                     "list": []
+                  },
+                  "filters": {
+                     "list": []
+                  },
+                  "highlightKey": {
+                     "ref": "choice"
+                  },
                   "onActivate": [
                      {
                         "run": "pick",

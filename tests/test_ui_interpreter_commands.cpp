@@ -414,7 +414,7 @@ TEST_CASE("interpreter commands: a table's element values, and onActivate in the
           "onActivate": [ { "set": "picked", "value": { "ref": "label" } } ] },
         { "kind": "text", "testId": "values", "text": { "fn": "format", "args": [ "{0}/{1}/{2}/{3}",
             { "ref": "t.viewCount" }, { "ref": "t.sourceCount" }, { "ref": "t.pending" }, { "ref": "t.selectedCount" } ] } },
-        { "kind": "text", "testId": "error", "text": { "fn": "coalesce", "args": [ { "ref": "t.error" }, { "ref": "t.sort" }, "-" ] } } ] } })");
+        { "kind": "text", "testId": "error", "text": { "fn": "coalesce", "args": [ { "ref": "t.error" }, { "ref": "t.hoveredKey" }, "-" ] } } ] } })");
     CHECK(h.text("values") == "0/0/true/0");
     h.reply(0, R"([{"id":1,"name":"a"},{"id":2,"name":"b"}])");
     CHECK(h.text("values") == "2/2/false/0");
@@ -427,6 +427,7 @@ TEST_CASE("interpreter commands: a table's element values, and onActivate in the
     h.settle();
     CHECK(h.text("values") == "2/2/false/1");
     CHECK(readJson(*screen, R"({"ref": "t.selection"})") == "[1]");
+    CHECK(readJson(*screen, R"({"ref": "t.sort"})") == "[]");
     CHECK(h.text("error") == "-");
 }
 

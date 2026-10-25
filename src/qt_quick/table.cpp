@@ -28,6 +28,13 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
                  static_cast<std::size_t>(std::max<qlonglong>(0, map.value(QStringLiteral("count")).toLongLong())));
     });
     relay().on(QStringLiteral("selectAll"), [this](QVariant const&) { selectAll(); });
+    relay().on(QStringLiteral("sort"), [this](QVariant const& payload) {
+        if (_onSort && payload.toLongLong() >= 0) {
+            // A copy: the handler may destroy this table.
+            auto const handler = _onSort;
+            handler(static_cast<std::size_t>(payload.toLongLong()));
+        }
+    });
 }
 
 void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
@@ -37,7 +44,8 @@ void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
                                 {QStringLiteral("kind"), static_cast<int>(column.width.kind)},
                                 {QStringLiteral("amount"), column.width.amount},
                                 {QStringLiteral("align"), static_cast<int>(column.align)},
-                                {QStringLiteral("valign"), static_cast<int>(column.valign)}});
+                                {QStringLiteral("valign"), static_cast<int>(column.valign)},
+                                {QStringLiteral("sortable"), column.sortable}});
     }
     write("columns", list);
 }
@@ -87,6 +95,14 @@ void TableImpl::setOnSelectionChange(
 }
 
 void TableImpl::setOnActivate(std::function<void(ui::Key)> onActivate) { _onActivate = std::move(onActivate); }
+
+// MorphTable's `sortColumn` is -1 for none.
+void TableImpl::setSort(std::optional<ui::TableSort> sort) {
+    write("sortDescending", sort && sort->direction == ui::SortDirection::Descending);
+    write("sortColumn", sort ? static_cast<int>(sort->column) : -1);
+}
+
+void TableImpl::setOnSort(std::function<void(std::size_t)> onSort) { _onSort = std::move(onSort); }
 
 void TableImpl::setExistingKeys(std::vector<ui::Key> const& keys) {
     _existingKeys = std::unordered_set<ui::Key>{keys.begin(), keys.end()};

@@ -233,7 +233,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `DialogWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `ToastWidget` | `show(text, tone)` (one call: shows the message and restarts the dismiss interval regardless of whether the toast is already on-screen) | — |
 | `BusyWidget` | `setActive`, `setLabel` | — |
-| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)`, `setSelectColumn(bool)`, `setSelectAllLabel(text)`, `setRowLabel(row, text)`, `setExistingKeys(keys)` (every key, in row order, above the virtualization threshold) | `setOnSelectionChange(keys, SelectionChange)`, `setOnActivate(Key)` (Enter or a double click) |
+| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)`, `setSelectColumn(bool)`, `setSelectAllLabel(text)`, `setRowLabel(row, text)`, `setExistingKeys(keys)` (every key, in row order, above the virtualization threshold), `setSort(optional<TableSort>)` (marks the column's header with the direction, or none; only for a table with a sortable column) | `setOnSelectionChange(keys, SelectionChange)`, `setOnActivate(Key)` (Enter or a double click), `setOnSort(column)` (a click on a sortable column's header, or Enter or Space on it where the header takes focus; the index counts the columns `setColumns` gave, which the select column is not one of; another header reports nothing). The backend never reorders rows for a sort: it shows `setSort`, and what a click means is the lowering's |
 | `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)` | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)`, `setOnCommit(value)` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
@@ -378,7 +378,8 @@ The headless reference backend and the test double for everything above the cont
   collapsible section), `dismiss` (a dialog, a drawer or a dismissible banner), `resize(id,
   sizes)`, `dropFiles(id, paths)` (true when the zone took the drop), `selectRows` (reported as `Replace`, its last
   key the anchor), `clickRow(id, key, RowClick)` (a click with its modifiers, as the selection model has it),
-  `activateRow`,
+  `clickHeader(id, column)` (a sortable column's index reaches `onSort`; another header does nothing, as a
+  user's click on it does), `activateRow`,
   `setDateTime`, `slide`, `pick` and `drag`. A helper first changes what the native widget would
   change by itself — the field's text and cursor, the box's check mark, the marked option or rows,
   the highlighted tab, the collapsed or open state, a dismissed dialog's or drawer's `open`, the
@@ -470,6 +471,7 @@ after it; its reading operations report what the widget shows now.
 | `dismiss(dialog)` | Dismisses a dialog or drawer (Esc on the TUI), or a dismissible banner |
 | `selectRows(table, rows)` | Selects rows by position, in the order the user picks them — at least one, and only one in a `Single` table — so the user's selection is exactly those rows |
 | `clickRow(table, row, click)` | Clicks a row by position as a user would, plain (`RowClick::Only`), with Ctrl (`Toggle`) or with Shift (`Range`) |
+| `clickHeader(table, column)` | Clicks a column's header as a user would |
 | `selectedRows(table)` | The positions of the rows the table shows as selected, ascending |
 | `moveCursor(field, position)` | Moves a text field's cursor as the arrow keys or a click would, without changing the text |
 | `cursorOf(field)` | Where a text field's cursor is, as a byte offset into its text |
@@ -507,8 +509,8 @@ Each case is named by the rule it checks:
 15. A text field shows what the application makes of an edit: a refused edit snaps back, an
     upper-cased one shows the upper case.
 16. A dismissal the application refuses leaves the dialog open, with its content reachable.
-17. No setter calls a handler: values, options, menu items, rows, selections, tab indices, opening
-    and collapsing, including a Select re-resolving its request after new options and a Table
+17. No setter calls a handler: values, options, menu items, rows, selections, a table's sort, tab indices,
+    opening and collapsing, including a Select re-resolving its request after new options and a Table
     re-marking rows that arrive or go.
 18. A Select marks the requested key whenever its options contain it, whichever arrives first, and
     remembers it across options that lack it.
@@ -553,6 +555,8 @@ Each case is named by the rule it checks:
 43. On a focused table of text cells, Ctrl+A in `Multiple` mode selects every row and pressed again clears them,
     each as `Extend`; in `Single` mode it selects nothing and reaches the enclosing column's chord, and after a click
     on row 1, Enter activates row 1.
+44. A click on a sortable column's header reports its index once, a click on another column's header reports
+    nothing, and showing a sort (`setSort`) reports nothing.
 
 ### What the probe cannot reach
 
@@ -566,6 +570,7 @@ contract are each backend's own tests to make:
   that a read-only text input takes no submit or commit — rule 31 checks typing only;
 - that rules 22 and 23 hold for handler kinds other than a click;
 - that a select column's boxes are drawn and named — case 43's Ctrl+A is the header box's operation;
+- that the header marks the sorted column and its direction — case 44 checks the click alone;
 - that a Table column's `align` places a text's characters and the header's label at its end — layout case 8
   measures a badge's box only;
 - that a hidden Table cell's neighbours are drawn under their own headers — rule 21 checks the

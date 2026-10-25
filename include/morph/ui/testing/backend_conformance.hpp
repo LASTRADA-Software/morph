@@ -134,6 +134,11 @@ public:
     /// @param click How the click is modified.
     virtual void clickRow(Widget& table, std::size_t row, RowClick click) = 0;
 
+    /// @brief Clicks a column's header of a table as a user would.
+    /// @param table  The table.
+    /// @param column The column's index among the table's columns.
+    virtual void clickHeader(Widget& table, std::size_t column) = 0;
+
     /// @brief The rows a table shows as selected.
     /// @param table The table.
     /// @return Their positions among the table's current rows, ascending.
@@ -261,10 +266,13 @@ struct Entry {
 /// @brief A one-column Table of entries, keyed by id, whose cell is a Text of the label.
 /// @param rows The entries; must outlive the node's mounts.
 /// @param options Selection, activation and `Common`.
+/// @param sortable Whether the column is sortable.
 /// @return The node.
-[[nodiscard]] inline Node entryTable(reactive::Signal<std::vector<Entry>> const& rows, TableOptions options) {
+[[nodiscard]] inline Node entryTable(reactive::Signal<std::vector<Entry>> const& rows, TableOptions options,
+                                     bool sortable = false) {
     return ui::table<Entry>(
-        {{.label = "Name"}}, [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+        {{.label = "Name", .sortable = sortable}}, [&rows] { return rows.get(); },
+        [](Entry const& entry) { return Key{entry.id}; },
         [](reactive::Signal<Entry> const& entry) {
             return std::vector<Node>{ui::text({.text = [&entry] { return entry.get().label; }})};
         },
@@ -885,7 +893,15 @@ struct Entry {
                                                       : std::vector<Key>{Key{std::int64_t{1}}, Key{std::int64_t{2}}};
                                        },
                                    .onSelectionChange = note("Table onSelectionChange"),
-                                   .onActivate = note("Table onActivate")}),
+                                   .sort =
+                                       [odd] {
+                                           return odd() ? std::optional<TableSort>{TableSort{
+                                                              .column = 0, .direction = SortDirection::Descending}}
+                                                        : std::nullopt;
+                                       },
+                                   .onSort = note("Table onSort"),
+                                   .onActivate = note("Table onActivate")},
+                            true),
              }})};
     probe.settle();
     for (int next = 1; next <= 3; ++next) {
@@ -2085,6 +2101,40 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: a click on a sortable column's header reports its index once, a click on another column's header
+///        reports nothing, and showing a sort reports nothing.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> headerClickAsksToSort(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    reactive::Signal<std::optional<TableSort>> shown{probe.runtime(), std::nullopt};
+    std::vector<std::size_t> asked;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::table<Entry>(
+            {{.label = "Name", .sortable = true}, {.label = "Id"}}, [&rows] { return rows.get(); },
+            [](Entry const& entry) { return Key{entry.id}; },
+            [](reactive::Signal<Entry> const& entry) {
+                return std::vector<Node>{ui::text({.text = [&entry] { return entry.get().label; }}),
+                                         ui::text({.text = [&entry] { return std::to_string(entry.get().id); }})};
+            },
+            TableOptions{.sort = [&shown] { return shown.get(); },
+                         .onSort = [&asked](std::size_t column) { asked.push_back(column); }})};
+    probe.settle();
+    Checks checks;
+    shown.set(TableSort{.column = 0, .direction = SortDirection::Descending});
+    probe.settle();
+    checks.that(asked.empty(), "showing a sort asked to sort");
+    probe.clickHeader(view.root(), 0);
+    probe.settle();
+    checks.that(asked == std::vector<std::size_t>{0},
+                "a click on the sortable header asked " + std::to_string(asked.size()) + " times");
+    probe.clickHeader(view.root(), 1);
+    probe.settle();
+    checks.that(asked.size() == 1, "a click on a header that is not sortable asked to sort");
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
@@ -2114,7 +2164,7 @@ struct SelectionReport {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 43> const cases{{
+    static std::array<ConformanceCase, 44> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -2177,6 +2227,8 @@ struct SelectionReport {
          .run = detail::shiftClickSelectsRange},
         {.name = "a focused table takes Ctrl+A in multiple mode, passes it on in single mode, and Enter activates",
          .run = detail::tableTakesItsKeys},
+        {.name = "a click on a sortable header asks to sort by it, and no other header or setter does",
+         .run = detail::headerClickAsksToSort},
     }};
     return cases;
 }
