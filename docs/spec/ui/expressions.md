@@ -175,8 +175,11 @@ language subtag decides, so `pl-PL` uses Polish.
 
 `Environment` is what the interpreter implements: `ref`, `row`, `control` (the query and mutation
 forms), `pref`, `client` (`env`, `session`, `host`), `formatting` and `report`. A name it does not
-hold reads `null`. `walk(value, path)` reads a path out of a value. `StaticEnvironment` holds its
-values in public members and records diagnostics once per path.
+hold reads `null`. `walk(value, path)` reads a path out of a value: a record's field by name, a
+list's element by a decimal index. A segment that names nothing reads `null`, with no report: a
+missing field, a segment of a list that is not all digits, and an index past the end, including
+one too large for any list to reach, which is never wrapped onto an element that exists.
+`StaticEnvironment` holds its values in public members and records diagnostics once per path.
 
 ## Design decisions
 

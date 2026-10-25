@@ -3,6 +3,7 @@
 #pragma once
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <chrono>
 #include <compare>
 #include <cstddef>
@@ -18,6 +19,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -1119,13 +1121,11 @@ public:
     Value const* current = &value;
     for (std::string const& segment : path) {
         if (ValueList const* const items = current->asList()) {
+            // A segment past the largest index is out of range, not wrapped onto an element that exists.
             std::size_t index = 0;
-            bool digits = !segment.empty();
-            for (char const chr : segment) {
-                digits = digits && chr >= '0' && chr <= '9';
-                index = digits ? (index * 10) + static_cast<std::size_t>(chr - '0') : index;
-            }
-            if (!digits || index >= items->size()) {
+            char const* const end = std::to_address(segment.end());
+            auto const [stop, error] = std::from_chars(std::to_address(segment.begin()), end, index);
+            if (error != std::errc{} || stop != end || index >= items->size()) {
                 return Value{};
             }
             current = &items->at(index);
