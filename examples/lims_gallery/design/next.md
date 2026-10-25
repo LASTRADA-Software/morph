@@ -9,28 +9,26 @@ open separate PRs.
 |---|---|
 | Ten gallery designs (01–10) | done |
 | Batch A: defects and responsive layout | landed; the gallery dropped its workarounds |
-| Batch B: tables | designed and reviewed (`docs/superpowers/specs/2026-10-25-lims-gallery-batch-b-design.md`); part 1 in progress, see below |
+| Batch B: tables | designed and reviewed (`docs/superpowers/specs/2026-10-25-lims-gallery-batch-b-design.md`); part 1 landed, the gallery dropped its workarounds; part 2 next |
 | Batch C: text, fields and small controls | designed and reviewed (`docs/superpowers/specs/2026-10-25-lims-gallery-batch-c-design.md`); lands after batch B |
 | Batch D: layout, overlays and navigation | designed, not reviewed yet (`docs/superpowers/specs/2026-10-25-lims-gallery-batch-d-design.md`); four parts |
 | Batch E: expressions and charts | not designed yet |
 
-**Batch B part 1 is half done.** The top commit is "WIP: batch B part 1, G2 monospace role", which holds an
-unfinished G2: the loader, interpreter, view tree, recording backend, theme reader, specs and tests have their
-changes. The Qt Quick theme (`src/qt_quick/theme.cpp`, `context.cpp`) was still being written: `setFamilies` has to
-handle both `font.family` and `font.mono`, and the Qt context has to publish `platformMonoFamily`. It has not been
-built. Finish G2, build, test, and reword the commit into a proper one (amend it; the branch is not merged).
+**Batch B part 1 ("columns and the selection") has landed:** G2 (the `mono` role and `font.mono`), G47 with a
+column's `align` and `valign`, G29 (a bound selection and `onSelectionChange`), G43 (one selection model with
+`SelectionChange` reports and a keyboard on every backend) and G30 (the select column), with conformance cases 41 to
+43 and layout cases 8 and 9. The gallery's samples, results, review, audit and console screens use them. The plate's
+well labels stay proportional: they are button labels, which take no text role.
 
 ## How to continue
 
-1. **Batch B part 1** ("columns and the selection"), one commit per item in the design's order: G2, G47 with vertical
-   alignment, G29 (`Closes #1053`), G43 (`Closes #1059`; its conformance case 43 must run on Qt Quick), G30. Then one
-   commit where the gallery screens drop the workarounds these items replace, and `gaps.md` marks them
-   "— fixed in batch B".
-2. **Batch B part 2** ("the row pipeline"): G41, G31, G28, G44, G46, as the design orders them.
-3. **Batch C**, in the order its design gives (plain text first: #1058).
-4. **Review batch D's design** once, by a separate agent on the default model, then implement it in its four parts.
+1. **Batch B part 2** ("the row pipeline"): G41, G31, G28, G44, G46, as the design orders them, with G30's paged
+   Ctrl+A test. A table over `rows` ignores the kind of a selection report today, since it holds every row; G28's
+   paging is where an `Extend` starts keeping the keys of other pages.
+2. **Batch C**, in the order its design gives (plain text first: #1058).
+3. **Review batch D's design** once, by a separate agent on the default model, then implement it in its four parts.
    **Design batch E** (`batches.md` lists its gaps) and review it the same way. Batch E's chart should need no new Qt module and needs a terminal fallback.
-5. When everything has landed, take the PR out of draft.
+4. When everything has landed, take the PR out of draft.
 
 Two corrections to `gaps.md` from the batch C design, to apply when batch C lands: G10 says a field is outlined while
 it has errors, but no Qt Quick input is outlined for errors at all; G13's date formatting hook is never set by any

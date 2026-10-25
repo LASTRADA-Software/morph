@@ -13,10 +13,12 @@ namespace {
 
 constexpr char const* kScreen = "lims-gallery.samples";
 
-// The check box that selects @p sample.
+// The check box that selects @p sample on a card.
 std::optional<int> selectBox(GalleryScreen& screen, std::string_view sample) {
     return screen.backend().find("Checkbox", "a11yName", "Select " + std::string{sample});
 }
+
+morph::ui::Key sampleKey(std::string_view sample) { return morph::ui::Key{std::string{sample}}; }
 
 bool showsText(GalleryScreen& screen, std::string_view text) {
     return screen.backend().find("Text", "text", text).has_value();
@@ -29,14 +31,14 @@ TEST_CASE("samples, expanded: the table, its out-of-spec tone, and three rows se
     screen.requireNoProblems();
     CHECK(screen.shows("Table", "samples"));
     CHECK(screen.prop("Table", "samples", "columns") ==
-          "[:fixed(4),Sample:fixed(12),Product · lot:stretch(1),Tests:fixed(16),Priority:fixed(8),Status:fixed(12),"
+          "[Sample:fixed(12),Product · lot:stretch(1),Tests:fixed(16),Priority:fixed(8),Status:fixed(12),"
           "Due ▲:fixed(13),Specification:fixed(14)]");
     CHECK(showsText(screen, "Paracetamol 500 mg · L-26-0377"));
     CHECK(showsText(screen, "22 min overdue"));
-    auto const first = selectBox(screen, "S-26-104170");
-    REQUIRE(first.has_value());
-    CHECK(screen.backend().prop(*first, "checked") == "true");
-    CHECK(screen.backend().prop(*selectBox(screen, "S-26-104198"), "checked") == "false");
+    // The table draws the selection as its own check-box column, over the selected state.
+    CHECK(screen.prop("Table", "samples", "selectColumn") == "true");
+    CHECK(screen.prop("Table", "samples", "selectAllLabel") == "Select all on this page");
+    CHECK(screen.prop("Table", "samples", "selection") == R"(["S-26-104170","S-26-104221","S-26-104176"])");
     CHECK(screen.shows("Panel", "bulk"));
     CHECK(screen.text("selected") == "3 selected on this page");
     CHECK(screen.prop("Button", "select-all", "label") == "Select all 312");
@@ -49,7 +51,8 @@ TEST_CASE("samples, expanded: selecting rows drives the bulk bar, and changing p
     GalleryScreen screen{kScreen, "expanded"};
     screen.click("clear");
     CHECK(screen.waitFor([&screen] { return !screen.shows("Panel", "bulk"); }));
-    screen.backend().toggle(*selectBox(screen, "S-26-104198"));
+    int const table = screen.find("Table", "samples").value_or(0);
+    screen.backend().clickRow(table, sampleKey("S-26-104198"), morph::ui::RowClick::Toggle);
     CHECK(screen.waitFor([&screen] { return screen.text("selected") == "1 selected on this page"; }));
     screen.click("change-priority");
     REQUIRE(screen.waitFor([&screen] { return screen.find("Select", "new-priority").has_value(); }));
@@ -63,7 +66,8 @@ TEST_CASE("samples, expanded: selecting rows drives the bulk bar, and changing p
         stat += screen.backend().prop(badge, "text") == "STAT" ? 1U : 0U;
     }
     CHECK(stat == 2);
-    screen.toggle("select-page");
+    // The header box is Ctrl+A: every row on the page.
+    CHECK(screen.backend().press(table, "Ctrl+A"));
     CHECK(screen.waitFor([&screen] { return screen.text("selected") == "8 selected on this page"; }));
     screen.click("select-all");
     CHECK(screen.waitFor([&screen] { return screen.text("selected") == "All 312 samples selected"; }));

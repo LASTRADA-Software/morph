@@ -485,17 +485,13 @@ ui::Node showChoice(Review const& review) {
                    {.gap = 1, .align = Align::Center});
 }
 
-ui::Node endCell(ui::AnyHandle const& text, ui::AnyHandle const& role = {}) {
-    return ui::row({ui::text({.text = text, .role = role})}, {.justify = layout::Justify::End});
-}
-
 ui::Node resultTable(Review const& review) {
     std::vector<ui::TableColumn> const columns{
-        {.name = "sample", .label = "Sample", .width = ui::fixed(12)},
+        {.name = "sample", .label = "Sample", .width = ui::fixed(12), .role = "mono"},
         {.name = "analyte", .label = "Analyte", .width = ui::stretch()},
-        {.name = "value", .label = "Result", .width = ui::fixed(9), .cell = endCell(ui::row("value"))},
+        {.name = "value", .label = "Result", .width = ui::fixed(9), .align = Align::End},
         {.name = "spec", .label = "Specification", .width = ui::fixed(11)},
-        {.name = "previous", .label = "Previous lot", .width = ui::fixed(10), .cell = endCell(ui::row("previous"))},
+        {.name = "previous", .label = "Previous lot", .width = ui::fixed(10), .align = Align::End},
         {.name = "evaluation",
          .label = "Evaluation",
          .width = ui::fixed(28),
@@ -558,8 +554,8 @@ ui::Node lotTable(Review const& review) {
     std::vector<ui::TableColumn> const columns{
         {.name = "lot", .label = "Lot", .width = ui::stretch()},
         {.name = "made", .label = "Made", .width = ui::fixed(12)},
-        {.name = "assay", .label = "Assay, mean", .width = ui::fixed(12), .cell = endCell(ui::row("assay"))},
-        {.name = "impurityB", .label = "Impurity B", .width = ui::fixed(11), .cell = endCell(ui::row("impurityB"))}};
+        {.name = "assay", .label = "Assay, mean", .width = ui::fixed(12), .align = Align::End},
+        {.name = "impurityB", .label = "Impurity B", .width = ui::fixed(11), .align = Align::End}};
     return ui::column(
         {ui::table(ofSelected(review, review.lots),
                    {.key = ui::row("lot"),

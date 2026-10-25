@@ -249,15 +249,6 @@ ui::Node selectBox(Samples const& list) {
         .testId("select-row");
 }
 
-ui::Node selectPage(Samples const& list) {
-    return ui::checkbox({.label = "Select all on this page",
-                         .checked = list.allOnPage,
-                         .onToggle = {ui::set(list.selected, ui::cond(ui::Handle<bool>{ui::event()}, ids(list.shown),
-                                                                      ui::AnyHandle{std::vector<std::string>{}})),
-                                      ui::set(list.everySelected, false)}})
-        .testId("select-page");
-}
-
 // ── The tags ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
 ui::AnyHandle priorityTone(ui::AnyHandle const& priority) {
@@ -416,8 +407,7 @@ ui::Node samplesTable(Samples const& list) {
     return ui::table(
                list.shown,
                {.key = ui::row("id"),
-                .columns = {{.name = "select", .label = "", .width = ui::fixed(4), .cell = selectBox(list)},
-                            {.name = "id", .label = "Sample", .width = ui::fixed(12)},
+                .columns = {{.name = "id", .label = "Sample", .width = ui::fixed(12), .role = "mono"},
                             {.name = "product",
                              .label = "Product · lot",
                              .width = ui::stretch(),
@@ -434,6 +424,13 @@ ui::Node samplesTable(Samples const& list) {
                             // The rows come sorted by due time; a table over rows does not sort.
                             {.name = "due", .label = "Due ▲", .width = ui::fixed(13), .cell = dueText()},
                             {.name = "spec", .label = "Specification", .width = ui::fixed(14), .cell = specCell()}},
+                // The table draws the selection the cards share: its own boxes, and a header box for the page.
+                .selectionMode = ui::Selection::Multiple,
+                .selection = list.selected,
+                .onSelectionChange = {ui::set(list.selected, ui::event()), ui::set(list.everySelected, false)},
+                .selectColumn = true,
+                .selectAllLabel = "Select all on this page",
+                .rowLabel = ui::row("id"),
                 .rowTone = ui::cond(ui::eq(ui::row("specTone"), "err"), ui::AnyHandle{"err"}, ui::AnyHandle{nullptr}),
                 .empty = noSamples(list)})
         .a11y("Samples")
@@ -454,7 +451,7 @@ ui::Node pageFooter() {
 
 ui::Node expandedLayout(Samples const& list) {
     auto const toolbar =
-        ui::row({selectPage(list), ui::spacer().sizing(ui::stretch()), searchField(list).sizing(ui::fixed(30)),
+        ui::row({ui::spacer().sizing(ui::stretch()), searchField(list).sizing(ui::fixed(30)),
                  statusFilter(list).sizing(ui::fixed(19)), priorityFilter(list).sizing(ui::fixed(18))},
                 {.gap = 1, .align = Align::Center});
     return ui::column(

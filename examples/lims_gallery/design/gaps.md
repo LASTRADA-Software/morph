@@ -18,7 +18,7 @@
   width.
 - **Weight:** High
 
-### G2: Monospace text for identifiers
+### G2: Monospace text for identifiers — fixed in batch B (in tables and texts; inline spans wait for batch C)
 - **Design(s):** 01, 02, 03, 04, 05, 07, 08, 09
 - **Needs:** record, lot, sample, equipment and investigation ids (`WS-2026-0412`, `L-26-0381`, `OOS-2026-031`) set
   in a monospace face, the LIMS convention that makes ids scannable and unambiguous (0/O, 1/l).
@@ -302,7 +302,7 @@
   one page. 07 lists all fourteen samples to place.
 - **Weight:** Medium
 
-### G29: A table's selection cannot be bound or set — filed as #1053
+### G29: A table's selection cannot be bound or set — filed as #1053 — fixed in batch B
 - **Design(s):** 05
 - **Needs:** the sample table opens with three rows selected; "Clear", "Select all 312" and the header's "select all on
   this page" box change the selection; a bulk action clears it when done.
@@ -317,7 +317,7 @@
   place of the header's.
 - **Weight:** High
 
-### G30: A control in a column header
+### G30: A control in a column header — fixed in batch B (the table's own select column)
 - **Design(s):** 05
 - **Needs:** a "select all on this page" check box as the selection column's header.
 - **ui/1 today:** a column part is `{id, label, width, role, cell}` (`docs/spec/ui/document.md:175`); the header is its
@@ -488,7 +488,7 @@
 - **Workaround used:** none; the binding is kept as the design asks.
 - **Weight:** Medium
 
-### G43: A click cannot tell its modifiers
+### G43: A click cannot tell its modifiers — tables fixed in batch B; a button's modifiers stay out of ui/1
 - **Design(s):** 07
 - **Needs:** Shift-click selects the range of wells from the last one clicked.
 - **ui/1 today:** `onClick` carries no `event` payload and no modifiers (`docs/spec/ui/document.md:165`); a chord
@@ -533,7 +533,7 @@
   row, not as a heading across the table.
 - **Weight:** Low
 
-### G47: Numeric columns aligned to the end
+### G47: Numeric columns aligned to the end — fixed in batch B
 - **Design(s):** 08
 - **Needs:** the Peak area and Result columns right-aligned, header and cells, so the digits line up.
 - **ui/1 today:** a column part has no alignment (`docs/spec/ui/document.md:180`; `author::TableColumn` has `name`,

@@ -270,7 +270,7 @@ ui::Node trailTable(Audit const& audit) {
                       .label = "Record",
                       .width = ui::fixed(13),
                       .cell =
-                          ui::column({ui::text({.text = ui::row("record")}),
+                          ui::column({ui::text({.text = ui::row("record"), .role = "mono"}),
                                       ui::text({.text = ui::row("detail")}).visible(!ui::isEmpty(ui::row("detail")))},
                                      {.gap = 0})},
                      {.name = "field", .label = "Field", .width = ui::fixed(12)},
@@ -281,7 +281,9 @@ ui::Node trailTable(Audit const& audit) {
                       .width = ui::stretch(2),
                       .cell = ui::text({.text = ui::cond(noReason, ui::AnyHandle{"—"}, reason),
                                         .role = ui::cond(noReason, Text{"muted"}, Text{"normal"})})}},
-                .empty = noEntries(audit)})
+                .empty = noEntries(audit),
+                // The When and Record cells are two lines tall; every cell starts at the row's top.
+                .valign = Align::Start})
         .a11y("Audit trail")
         .testId("trail");
 }

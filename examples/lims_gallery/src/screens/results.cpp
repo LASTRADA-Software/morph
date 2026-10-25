@@ -432,11 +432,6 @@ ui::Node suitability() {
     return ui::panel({ui::row(checks, {.gap = 4, .align = Align::Center})}, {.padding = 1}).testId("suitability");
 }
 
-// A number in a table cell, at the cell's end: a column has no alignment of its own.
-ui::Node numberCell(ui::AnyHandle const& text) {
-    return ui::row({ui::text({.text = text})}, {.justify = layout::Justify::End});
-}
-
 ui::Node resultInput(Worksheet const& sheet, Evaluation const& evaluation, Field const& field) {
     Text const unreadableMessage = ui::format("Enter to {0} decimal places.", {field("places")});
     return ui::textInput({.value = evaluation.shown,
@@ -475,12 +470,13 @@ ui::Node resultTable(Worksheet const& sheet) {
         {.name = "sample",
          .label = "Sample",
          .width = ui::fixed(13),
-         .cell = ui::text({.text = ui::cond(group, Text{ui::row("sample")}, Text{""}), .role = "section"})},
+         .cell = ui::text({.text = ui::cond(group, Text{ui::row("sample")}, Text{""}), .role = "mono"})},
         {.name = "analyte", .label = "Analyte", .width = ui::stretch(), .cell = analyteCell(evaluation)},
-        {.name = "area", .label = "Peak area", .width = ui::fixed(10), .cell = numberCell(ui::row("area"))},
+        {.name = "area", .label = "Peak area", .width = ui::fixed(10), .align = Align::End},
         {.name = "result",
          .label = "Result",
          .width = ui::fixed(10),
+         .align = Align::End,
          .cell = resultInput(sheet, evaluation, field).visible(!group)},
         {.name = "unit", .label = "Unit", .width = ui::fixed(6), .cell = ui::text({.text = ui::row("unit")})},
         {.name = "spec",

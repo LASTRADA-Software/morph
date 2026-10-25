@@ -592,7 +592,7 @@ ui::Node dueCell() {
 
 ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::string const& testId) {
     std::vector<ui::TableColumn> const columns{
-        {.name = "id", .label = "Sample", .width = ui::fixed(12)},
+        {.name = "id", .label = "Sample", .width = ui::fixed(12), .role = "mono"},
         {.name = "test", .label = "Test", .width = ui::stretch()},
         {.name = "priority",
          .label = "Priority",
@@ -603,12 +603,25 @@ ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::s
          .label = "Status",
          .width = ui::fixed(12),
          .cell = layout::tag(ui::row("status"), ui::row("statusTone"))}};
-    return ui::table(rows, {.key = ui::row("id"),
-                            .columns = columns,
-                            // The sample in the pane: a table over rows has no bound selection.
-                            .rowTone = ui::cond(ui::eq(ui::row("index"), console.current), ui::AnyHandle{"info"},
-                                                ui::AnyHandle{nullptr}),
-                            .onActivate = ui::set(console.current, ui::row("index"))})
+    // The sample in the pane is the table's selection: the id of the row at `current`, and a click on a row makes it
+    // current.
+    auto const atCurrent = ui::filter(rows, "entry", [&console](ui::AnyHandle const& entry) -> ui::AnyHandle {
+        return ui::eq(entry.at("index"), console.current);
+    });
+    auto const picked = ui::filter(rows, "entry", [](ui::AnyHandle const& entry) -> ui::AnyHandle {
+        return ui::includes(ui::event(), entry.at("id"));
+    });
+    return ui::table(
+               rows,
+               {.key = ui::row("id"),
+                .columns = columns,
+                .selectionMode = ui::Selection::Single,
+                .selection = ui::map(atCurrent, "entry", [](ui::AnyHandle const& entry) { return entry.at("id"); }),
+                .onSelectionChange = ui::set(
+                    console.current,
+                    ui::call("first", {ui::map(picked, "entry",
+                                               [](ui::AnyHandle const& entry) { return entry.at("index"); })})),
+                .onActivate = ui::set(console.current, ui::row("index"))})
         .a11y("Worklist")
         .testId(testId);
 }
