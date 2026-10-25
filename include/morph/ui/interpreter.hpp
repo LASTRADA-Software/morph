@@ -6085,6 +6085,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         }
         if (node.name("style") == "item") {
             spec.style = ButtonStyle::Item;
+        }
+        if (node.prop("selected")) {
             spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
         }
         Commands const* const onClick = node.event("onClick");

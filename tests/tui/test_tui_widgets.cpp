@@ -700,6 +700,32 @@ TEST_CASE("tui widgets: an item button paints its label unbracketed across its l
     CHECK_FALSE(same(theme.listItemSelected, theme.textNormal));
 }
 
+// Mutation: draw a selected push button's caption in the button's own style.
+TEST_CASE("tui widgets: a selected push button draws its caption in the list's selected style, as wide as another",
+          "[tui][widgets]") {
+    Harness harness{20, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const plain = harness.make<ButtonImpl>(column.get());
+    plain->setLabel("A1");
+    auto const picked = harness.make<ButtonImpl>(column.get());
+    picked->setLabel("A2");
+    picked->setSelected(true);
+    Rows const rows = harness.draw();
+    REQUIRE(rows.size() == 2);
+    CHECK(rows.at(0).starts_with("[ A1 ]"));
+    CHECK(rows.at(1).starts_with("[ A2 ]"));
+    CHECK(plain->naturalSize().width == picked->naturalSize().width);
+    auto const& buffer = harness.screen().renderedBuffer();
+    auto const& theme = harness.screen().theme();
+    auto const same = [](::core::tui::Style const& lhs, ::core::tui::Style const& rhs) {
+        return lhs.fg == rhs.fg && lhs.bg == rhs.bg && lhs.bold == rhs.bold && lhs.inverse == rhs.inverse;
+    };
+    CHECK(same(buffer.at(1, 2).style, theme.listItemSelected));
+    CHECK(same(buffer.at(1, 3).style, theme.listItemSelected));
+    CHECK_FALSE(same(buffer.at(1, 0).style, theme.listItemSelected));
+    CHECK_FALSE(same(buffer.at(0, 2).style, theme.listItemSelected));
+}
+
 TEST_CASE("tui widgets: a sidebar surface draws its subtree inverse; a card draws nothing", "[tui][widgets]") {
     Harness harness{20, 3};
     auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);

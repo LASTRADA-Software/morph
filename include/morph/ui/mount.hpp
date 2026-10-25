@@ -724,9 +724,6 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, Button const& spec, ContainerWidget* parent) {
-        if (spec.style == ButtonStyle::Push && (spec.selected.isBound() || spec.selected.constant())) {
-            throw std::logic_error{"morph::ui: `selected` marks a list item; give the button ButtonStyle::Item"};
-        }
         ButtonWidget& widget = scope.adopt(_backend->createButton(parent));
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.label, [&widget](std::string const& label) { widget.setLabel(label); });
@@ -738,9 +735,9 @@ private:
         }
         if (spec.style == ButtonStyle::Item) {
             widget.setStyle(spec.style);
-            if (spec.selected.isBound() || spec.selected.constant()) {
-                bind(scope, spec.selected, [&widget](bool selected) { widget.setSelected(selected); });
-            }
+        }
+        if (spec.selected.isBound() || spec.selected.constant()) {
+            bind(scope, spec.selected, [&widget](bool selected) { widget.setSelected(selected); });
         }
         widget.setOnClick(event(spec.onClick));
         return widget;

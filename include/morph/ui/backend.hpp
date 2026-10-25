@@ -168,9 +168,10 @@ public:
     /// @param style The style.
     virtual void setStyle(ButtonStyle style) = 0;
 
-    /// @brief Marks a list entry as the current one, or clears the mark. A new button is not selected; the mount
-    ///        calls it only for an `Item`, when bound or `true`.
-    /// @param selected Whether it is the current one.
+    /// @brief Marks the button selected, or clears the mark: an `Item` is the current entry of its list, a push
+    ///        button is pressed in (a well picked on a plate). A new button is not selected; the mount calls it for
+    ///        either style, only when `selected` is bound or `true`.
+    /// @param selected Whether it is selected.
     virtual void setSelected(bool selected) = 0;
 };
 

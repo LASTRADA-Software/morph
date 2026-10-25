@@ -700,3 +700,76 @@ TEST_CASE("qt_quick theme: controls are touch targets while the window is compac
     resizeToUnits(scene, 60);
     CHECK(controlHeight(*controls.button) == 48.0);
 }
+
+namespace {
+
+/// The attached `Accessible` object of @p item, which QML parents to the item it is attached to.
+QObject const* accessibleOf(QQuickItem const& item) {
+    for (QObject const* const child : item.children()) {
+        if (QByteArrayView{child->metaObject()->className()} == QByteArrayView{"QQuickAccessibleAttached"}) {
+            return child;
+        }
+    }
+    FAIL("no Accessible attached to the item");
+    return nullptr;
+}
+
+/// The background item of a button widget's control.
+QQuickItem const& buttonBackground(ui::ButtonWidget const& button) {
+    auto const* const control = Scene::itemOf(button).property("focusTarget").value<QQuickItem*>();
+    REQUIRE(control != nullptr);
+    auto const* const background = control->property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    return *background;
+}
+
+}  // namespace
+
+// Mutations: drop the ring's `selected` condition (the unselected button's ring shows); leave a selected push
+// button's fill alone (no tint); make the control `checkable` (a click flips `Accessible.checked`).
+TEST_CASE("qt_quick theme: a selected push button keeps its size, rings in the accent, tints and reads checked",
+          "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), brandTheme()).empty());
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto plain = scene.backend().createButton(column.get());
+    plain->setLabel("A1");
+    plain->setSelected(false);
+    plain->setOnClick([] {});
+    auto picked = scene.backend().createButton(column.get());
+    picked->setLabel("A2");
+    picked->setSelected(true);
+    picked->setOnClick([] {});
+    scene.settle();
+    QQuickItem const& plainItem = Scene::itemOf(*plain);
+    QQuickItem const& pickedItem = Scene::itemOf(*picked);
+    CHECK(pickedItem.implicitWidth() == plainItem.implicitWidth());
+    CHECK(pickedItem.implicitHeight() == plainItem.implicitHeight());
+
+    QColor const accent{"#aa0055"};
+    auto const* const ring = buttonBackground(*picked).findChild<QQuickItem*>(QStringLiteral("selectionRing"));
+    REQUIRE(ring != nullptr);
+    CHECK(ring->isVisible());
+    CHECK(ring->property("border").value<QObject*>()->property("color").value<QColor>() == accent);
+    auto const* const plainRing = buttonBackground(*plain).findChild<QQuickItem*>(QStringLiteral("selectionRing"));
+    REQUIRE(plainRing != nullptr);
+    CHECK_FALSE(plainRing->isVisible());
+
+    QColor tint = accent;
+    tint.setAlphaF(0.12F);
+    QColor const shown = buttonBackground(*picked).property("color").value<QColor>();
+    CHECK(shown.rgb() == tint.rgb());
+    CHECK(std::abs(shown.alphaF() - 0.12F) < 0.01F);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(buttonBackground(*plain).property("color").value<QColor>() ==
+          theme->property("surface").value<QColor>());
+
+    CHECK(accessibleOf(pickedItem)->property("checkable").toBool());
+    CHECK(accessibleOf(pickedItem)->property("checked").toBool());
+    CHECK_FALSE(accessibleOf(plainItem)->property("checked").toBool());
+    scene.click(pickedItem);
+    scene.settle();
+    CHECK(accessibleOf(pickedItem)->property("checked").toBool());
+    CHECK(buttonBackground(*picked).findChild<QQuickItem*>(QStringLiteral("selectionRing"))->isVisible());
+}

@@ -3147,8 +3147,7 @@ struct ButtonOptions {
     Commands onActivate;
     /// @brief A push button or a list entry; absent writes no key, a push button.
     std::optional<ButtonStyle> style;
-    /// @brief Whether a list entry is the current one, a condition; only with `ButtonStyle::Item`, which the loader
-    ///        checks.
+    /// @brief A condition: whether a list entry is the current one, or a push button is pressed in.
     AnyHandle selected;
 };
 

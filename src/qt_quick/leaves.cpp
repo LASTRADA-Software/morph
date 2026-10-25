@@ -77,7 +77,10 @@ void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
 // MorphButton's `style`: 0 push, 1 item.
 void ButtonImpl::setStyle(ui::ButtonStyle style) { write("style", style == ui::ButtonStyle::Item ? 1 : 0); }
 
-void ButtonImpl::setSelected(bool selected) { write("selected", selected); }
+void ButtonImpl::setSelected(bool selected) {
+    write("selectable", true);
+    write("selected", selected);
+}
 
 void ButtonImpl::setOnClick(ui::Action onClick) {
     relay().on(QStringLiteral("click"), actionHandler(std::move(onClick)));

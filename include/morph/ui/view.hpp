@@ -438,8 +438,7 @@ struct Button {
     std::string icon;
     /// @brief A push button or a list entry; set once.
     ButtonStyle style = ButtonStyle::Push;
-    /// @brief Whether a list entry is the current one. Only an `Item` takes it: the mount refuses a bound or `true`
-    ///        value on a push button.
+    /// @brief Whether the button is selected: a list entry is the current one, a push button is pressed in.
     Prop<bool> selected = false;
 };
 

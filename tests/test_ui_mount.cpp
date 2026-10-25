@@ -245,7 +245,7 @@ TEST_CASE("ui::Mounted: an alignment reaches the backend only when it is not the
 }
 
 // Mutation: drop the setStyle call in the button's mountKind (the item records no style).
-TEST_CASE("ui::Mounted: an item button records its style and its selection; a push button neither", "[ui]") {
+TEST_CASE("ui::Mounted: an item button records its style and its selection; a plain button neither", "[ui]") {
     Owner owner;
     Runtime runtime{owner};
     RecordingBackend backend;
@@ -269,10 +269,20 @@ TEST_CASE("ui::Mounted: an item button records its style and its selection; a pu
         owner.runAll();
         CHECK(backend.prop(4, "selected") == "true");
     }
-    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::button({.label = "x", .selected = true})}),
-                      Catch::Matchers::ContainsSubstring("`selected` marks a list item"));
-    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::button({.label = "x", .selected = [] { return false; }})}),
-                      Catch::Matchers::ContainsSubstring("`selected` marks a list item"));
+}
+
+// Mutation: tell `selected` to an item only (the push button records none).
+TEST_CASE("ui::Mounted: a push button with a bound selection records it and follows it", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<bool> picked{runtime, true};
+    ui::Mounted const view{runtime, backend,
+                           ui::button({.label = "A1", .selected = [&picked] { return picked.get(); }})};
+    CHECK(backend.dump() == "Button#1 label=A1 selected=true\n");
+    picked.set(false);
+    owner.runAll();
+    CHECK(backend.prop(1, "selected") == "false");
 }
 
 // Mutation: skip checkPlacement (the panel's child mounts).

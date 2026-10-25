@@ -78,7 +78,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Widget | Shows | Input |
 |---|---|---|
 | Text | one row per line, styled by role: a heading bold, a section bold in the muted style, muted, error and success in their theme styles; mono as normal text, since every cell is drawn in one fixed-pitch font | — |
-| Button | `[ label ]`, a framework icon's glyph before the label; a list item ` label`, unbracketed and padded to its slot's width, in the list's selected-item style while selected and the focus style while focused | Enter, Space, click |
+| Button | `[ label ]`, a framework icon's glyph before the label, the caption in the list's selected-item style while selected (the brackets keep the button's style, so a selected push button is as wide as another); a list item ` label`, unbracketed and padded to its slot's width, in the list's selected-item style while selected and the focus style while focused | Enter, Space, click |
 | TextInput | `core::tui::InputField`; single-line, multiline or masked; a unit is drawn muted at the right edge before the field marks, and the editable width ends one cell before it | typing; Enter submits a single-line field after its commit, and a field without a submit handler commits and passes Enter on; the focus leaving after an edit commits |
 | Checkbox | `[x] label` | Space, click; Enter passes on |
 | Select | radio: a row per option, `(•)` marking; dropdown: `[label ▾]` opening a list overlay | Enter, Space, click; arrows in the list |

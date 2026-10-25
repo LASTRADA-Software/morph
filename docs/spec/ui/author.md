@@ -156,7 +156,7 @@ The keys every node takes are member functions of `Node`, each returning a copy 
 `withText(key, text)` set any other key, and `Node{json}` wraps a node no builder spells.
 
 - **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected}`: an absent `style`
-  writes no key, and `selected`, a condition, is written as given and refused at load without `ButtonStyle::Item`.
+  writes no key, and `selected`, a condition, is written as given: an item's current entry, a push button pressed in.
 - **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, align, justify}`; an absent
   `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` is the grid's, and
   a grid's `justify` is written so the loader refuses it rather than dropped.

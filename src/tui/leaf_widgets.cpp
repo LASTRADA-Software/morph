@@ -164,7 +164,12 @@ void ButtonImpl::paint(::core::tui::Canvas& canvas) {
         canvas.putString(0, 0, text, line);
         return;
     }
-    canvas.putString(0, 0, "[ " + caption() + " ]", style);
+    // A selected push button draws its caption in the list's selected style and keeps its brackets, so it is as wide
+    // as an unselected one and still reads as a button.
+    canvas.putString(0, 0, "[ ", style);
+    std::string const shown = caption();
+    canvas.putString(0, 2, shown, _selected ? canvas.theme().listItemSelected : style);
+    canvas.putString(0, 2 + displayWidth(shown), " ]", style);
 }
 
 ::core::tui::EventResult ButtonImpl::key(::core::tui::KeyEvent const& key) {

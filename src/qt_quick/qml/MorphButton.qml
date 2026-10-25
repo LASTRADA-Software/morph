@@ -19,8 +19,12 @@ MorphWidget {
     property int emphasis: 0
     // 0 push, 1 item; set once.
     property int style: 0
-    // Whether an item is the current entry of its list; a push button is never told.
+    // Whether an item is the current entry of its list, or a push button is pressed in.
     property bool selected: false
+    // Whether the document gave the button a selection: set with the first `selected`. Such a push button is a toggle
+    // to assistive technology. The control is not `checkable`, since a click would flip `checked` whatever the
+    // document answers.
+    property bool selectable: false
     readonly property bool ghost: emphasis === 3
     readonly property color fill: emphasis === 1 ? root.scheme.accent
                                  : emphasis === 2 ? root.scheme.error
@@ -31,6 +35,8 @@ MorphWidget {
     // label as its name and the press action, and the control inside it is not a second node.
     defaultName: label
     defaultRole: Accessible.Button
+    Accessible.checkable: root.selectable && root.style === 0
+    Accessible.checked: root.selectable && root.style === 0 && root.selected
     Accessible.onPressAction: root.fire("click", undefined)
 
     focusTarget: button

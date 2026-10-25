@@ -3066,10 +3066,6 @@ private:
             checkChoice(node, "emphasis", kEmphasis);
             static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
             checkChoice(node, "style", kStyles);
-            if (node.prop("selected") != nullptr && node.name("style") != "item") {
-                refuse(pointerAppend(node.path, "selected"),
-                       "`selected` marks a list item; give the button `style: item`");
-            }
         } else if (node.kind == "grid" && !node.name("justify").empty()) {
             refuse(pointerAppend(node.path, "justify"),
                    "a grid's columns share its width; there is no spare length to justify");

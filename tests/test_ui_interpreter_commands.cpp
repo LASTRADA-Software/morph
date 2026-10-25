@@ -883,6 +883,24 @@ TEST_CASE("button: style item draws a list entry, and selected follows its condi
     CHECK(h.diagnostics.empty());
 }
 
+// Mutation: bind `selected` for an item alone (the push button records no selection).
+TEST_CASE("button: a push button's selected follows its condition", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "wells", "state": { "on": { "init": true } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "well", "label": "A1", "selected": { "ref": "on" },
+          "onClick": [ { "set": "on", "value": false } ] },
+        { "kind": "button", "testId": "plain", "label": "P" } ] } })");
+    int const well = h.byTestId("Button", "well");
+    CHECK(h.backend.prop(well, "selected") == "true");
+    CHECK(h.backend.prop(well, "style").empty());
+    CHECK_FALSE(h.backend.hasProp(h.byTestId("Button", "plain"), "selected"));
+    h.backend.click(well);
+    h.settle();
+    CHECK(h.backend.prop(well, "selected") == "false");
+}
+
 // Mutation: lower a computed role through roleOf (an unknown name is drawn Normal, unreported).
 TEST_CASE("text: a computed role of no known name is reported once for its path and drawn Normal",
           "[ui][interpreter]") {

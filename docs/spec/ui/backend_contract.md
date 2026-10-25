@@ -166,9 +166,13 @@ in the error colour, and falls back to `Normal`'s plain style for `Ghost`.
 **Button style and selection.** `ButtonWidget::setStyle(ButtonStyle)` makes a button an entry of a list (`Item`): it
 behaves as a push button (activation, enablement, tooltip, hover) and is drawn as a line, as wide as its line, its
 label at the start and unframed. The mount calls it once, only for `Item`. `setSelected(bool)` marks an item as the
-current entry, or clears the mark; the mount calls it only for an item whose `selected` is bound or `true`, and a new
-button is a push button and not selected. Qt Quick tints the current item in the accent with a bar at its leading
-edge; the terminal draws it in the list's selected-item style.
+current entry, or a push button as pressed in (a well picked on a plate), or clears the mark; the mount calls it for
+either style, only when `selected` is bound or `true`, and a new button is a push button and not selected. Qt Quick
+tints the current item in the accent with a bar at its leading edge, and draws a selected push button with its frame
+and size unchanged, a 2 px accent ring outside its border and, unless it is filled (primary, danger), the item's
+accent tint, so selection reads apart from focus, whose border sits inside; assistive technology hears a selected push
+button as checked. The terminal draws an item, and a push button's caption inside its brackets, in the list's
+selected-item style.
 
 **The cross axis.** A child sized `content` fills its container across the container's axis; `fixed(n)` gets `n`
 units, at most the space there is; `stretch` is unchanged. In a column every content child is as wide as the column,
