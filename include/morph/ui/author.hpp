@@ -1104,6 +1104,26 @@ namespace detail {
     return call("rsd", detail::roundingArgs(list, places, mode));
 }
 
+/// @brief The unit `dateAdd` adds.
+enum class DateUnit : std::uint8_t {
+    Days,     ///< `"days"`: calendar days on a date, 24 hours on an instant.
+    Weeks,    ///< `"weeks"`: seven days.
+    Months,   ///< `"months"`: calendar months, the day clamped to the month's last.
+    Years,    ///< `"years"`: twelve months.
+    Hours,    ///< `"hours"`: exact hours, on an instant only.
+    Minutes,  ///< `"minutes"`: exact minutes, on an instant only.
+};
+
+/// @brief `dateAdd(value, amount, unit)`: a date or an instant moved by whole units, in the value's own form.
+/// @param value  A `yyyy-MM-dd` date, a timestamp or ISO date-time text.
+/// @param amount The amount, an `int`; negative to go back.
+/// @param unit   The unit.
+/// @return The moved date or instant.
+[[nodiscard]] inline AnyHandle dateAdd(AnyHandle const& value, Handle<std::int64_t> const& amount, DateUnit unit) {
+    constexpr std::array<std::string_view, 6> kNames = {"days", "weeks", "months", "years", "hours", "minutes"};
+    return call("dateAdd", {value, amount, std::string{kNames.at(static_cast<std::size_t>(unit))}});
+}
+
 /// @brief `parseDecimal(text)`: typed text, in the client's locale, as an exact decimal; `null` while it does not
 /// spell one.
 /// @param text The text, typically a text input's `event`.

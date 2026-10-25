@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <format>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -138,6 +139,7 @@ enum class FunctionId : std::uint8_t {
     Sqrt,
     Stdev,
     Rsd,
+    DateAdd,
 };
 
 struct Expr;
@@ -224,7 +226,7 @@ struct FunctionSpec {
 
 /// @brief The library, indexed by `FunctionId`.
 // NOLINTBEGIN(modernize-use-designated-initializers): one row per function reads as a table; names on every field would not.
-inline constexpr std::array<FunctionSpec, 47> kFunctions = {{
+inline constexpr std::array<FunctionSpec, 48> kFunctions = {{
     {"and", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"or", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"not", 1, 1, {kindBit(TypeKind::Bool), 0, 0}, TypeKind::Bool},
@@ -296,6 +298,11 @@ inline constexpr std::array<FunctionSpec, 47> kFunctions = {{
      TypeKind::Decimal},
     {"stdev", 2, 3, {kindBit(TypeKind::List), kindBit(TypeKind::Int), kindBit(TypeKind::String)}, TypeKind::Any},
     {"rsd", 2, 3, {kindBit(TypeKind::List), kindBit(TypeKind::Int), kindBit(TypeKind::String)}, TypeKind::Decimal},
+    {"dateAdd",
+     3,
+     3,
+     {kindBit(TypeKind::Timestamp) | kindBit(TypeKind::String), kindBit(TypeKind::Int), kindBit(TypeKind::String)},
+     TypeKind::Any},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
 
@@ -330,6 +337,9 @@ inline constexpr std::array<FunctionSpec, 47> kFunctions = {{
     }
     return std::nullopt;
 }
+
+/// @brief The units `dateAdd` adds.
+inline constexpr std::array<std::string_view, 6> kDateUnits = {"days", "weeks", "months", "years", "hours", "minutes"};
 
 /// @brief The names `{"env": ...}` reads.
 inline constexpr std::array<std::string_view, 5> kEnvNames = {"widthClass", "locale", "platform", "online", "backend"};
@@ -1106,8 +1116,8 @@ private:
         return numericResult(expr.function, types);
     }
 
-    /// The checks of an argument written as a literal: a rounding mode is checked at load, because a wrong mode is a
-    /// wrong value, not a wrong look; a `t` fallback must be in the message subset.
+    /// The checks of an argument written as a literal: a rounding mode and a `dateAdd` unit are checked at load,
+    /// because a wrong one is a wrong value, not a wrong look; a `t` fallback must be in the message subset.
     [[nodiscard]] static std::optional<Refusal> literalRefusal(Expr const& expr) {
         auto const literalText = [&expr](std::size_t index) -> std::string const* {
             if (index >= expr.args.size() || expr.args.at(index)->kind != ExprKind::Literal) {
@@ -1120,6 +1130,11 @@ private:
             if (mode != nullptr && !roundingMode(Value{*mode})) {
                 return refuse(*expr.args.at(*position), "the rounding mode is `halfEven` or `halfUp`").error();
             }
+        }
+        if (std::string const* const unit = literalText(2);
+            expr.function == FunctionId::DateAdd && unit != nullptr && !oneOf(kDateUnits, *unit)) {
+            return refuse(*expr.args.at(2), "the unit is `days`, `weeks`, `months`, `years`, `hours` or `minutes`")
+                .error();
         }
         if (std::string const* const pattern = literalText(1);
             expr.function == FunctionId::Translate && pattern != nullptr) {
@@ -1153,6 +1168,12 @@ private:
             function == FunctionId::Min || function == FunctionId::Max || function == FunctionId::First ||
             function == FunctionId::Stdev) {
             return Type::any();
+        }
+        if (function == FunctionId::DateAdd) {
+            // The result keeps the value's form: a timestamp stays one, a date or ISO text stays text.
+            Type const& value = types.front();
+            bool const known = value.kind == TypeKind::Timestamp || value.kind == TypeKind::String;
+            return known ? Type::of(value.kind, true) : Type::any();
         }
         if (function == FunctionId::Neg || function == FunctionId::Round || function == FunctionId::Abs) {
             return Type::of(types.front().kind, true);
@@ -1307,6 +1328,75 @@ public:
     return *current;
 }
 
+/// @brief The form of a value the date functions read.
+enum class DateForm : std::uint8_t {
+    Absent,       ///< `null` or `""`: a date not given yet, such as a cleared date input.
+    Date,         ///< `yyyy-MM-dd` text: a calendar day, with no time of day and no zone.
+    Timestamp,    ///< A timestamp: an instant.
+    InstantText,  ///< ISO-8601 date-time text that `DateTime::fromIso8601` reads: an instant.
+    Unreadable,   ///< Any other value.
+};
+
+/// @brief A value as the date functions read it.
+struct DateValue {
+    /// @brief Its form.
+    DateForm form = DateForm::Absent;
+    /// @brief The calendar day of a `Date`.
+    std::chrono::year_month_day date{};
+    /// @brief The instant of a `Timestamp` or `InstantText`.
+    time::DateTime instant{};
+};
+
+/// @brief Reads a value as a date, an instant or nothing: the one reading the date functions and a date input share.
+///
+/// A `yyyy-MM-dd` string is a date when its ten characters are digits and dashes and name a day that exists, so
+/// `2026-02-30` is unreadable. A timestamp is an instant, and so is text `DateTime::fromIso8601` reads. `null` and
+/// `""` are absent.
+/// @param value The value.
+/// @return The reading.
+[[nodiscard]] inline DateValue readDateValue(Value const& value) {
+    if (value.isNull()) {
+        return {};
+    }
+    if (time::DateTime const* const instant = value.asTimestamp()) {
+        return {.form = DateForm::Timestamp, .date = {}, .instant = *instant};
+    }
+    std::string const* const text = value.asString();
+    if (text == nullptr) {
+        return {.form = DateForm::Unreadable, .date = {}, .instant = {}};
+    }
+    if (text->empty()) {
+        return {};
+    }
+    if (text->size() == 10 && text->at(4) == '-' && text->at(7) == '-') {
+        auto const field = [&text](std::size_t offset, std::size_t count) -> std::optional<unsigned> {
+            unsigned parsed = 0;
+            std::string_view const digits = std::string_view{*text}.substr(offset, count);
+            char const* const end = std::to_address(digits.end());
+            auto const [stop, error] = std::from_chars(std::to_address(digits.begin()), end, parsed);
+            if (error != std::errc{} || stop != end) {
+                return std::nullopt;
+            }
+            return parsed;
+        };
+        auto const year = field(0, 4);
+        auto const month = field(5, 2);
+        auto const day = field(8, 2);
+        if (year && month && day) {
+            std::chrono::year_month_day const date{std::chrono::year{static_cast<int>(*year)},
+                                                   std::chrono::month{*month}, std::chrono::day{*day}};
+            if (date.ok()) {
+                return {.form = DateForm::Date, .date = date, .instant = {}};
+            }
+            return {.form = DateForm::Unreadable, .date = {}, .instant = {}};
+        }
+    }
+    if (auto const parsed = time::DateTime::fromIso8601(*text)) {
+        return {.form = DateForm::InstantText, .date = {}, .instant = *parsed};
+    }
+    return {.form = DateForm::Unreadable, .date = {}, .instant = {}};
+}
+
 namespace detail {
 
 /// @brief A number taken apart for arithmetic: its exact value, whether it is an `int`, and its unit.
@@ -1423,6 +1513,42 @@ struct Number {
         return 0;
     }
     return oneOf(kThree, currency) ? 3U : 2U;
+}
+
+/// @brief A calendar day moved by whole months, its day of the month clamped to the target month's last day.
+/// @param date   The day.
+/// @param months The months, negative to go back; bounded by the caller to the span of years 1 to 9999.
+/// @return The moved day: `2026-01-31` plus one month is `2026-02-28`.
+[[nodiscard]] inline std::chrono::year_month_day addMonths(std::chrono::year_month_day const& date,
+                                                           std::int64_t months) {
+    std::chrono::year_month_day const moved = date + std::chrono::months{static_cast<int>(months)};
+    if (moved.ok()) {
+        return moved;
+    }
+    return std::chrono::year_month_day{
+        std::chrono::year_month_day_last{moved.year(), std::chrono::month_day_last{moved.month()}}};
+}
+
+/// @brief The largest amount of each `dateAdd` unit that can stay within years 1 to 9999, in `kDateUnits` order.
+///
+/// Compared with the amount before any `std::chrono` arithmetic, whose day and month counts are narrower than
+/// `int64`, so a huge amount is reported rather than narrowed into a date.
+inline constexpr std::array<std::int64_t, 6> kDateSpans = {3'652'059, 521'723,    119'988,
+                                                           9'999,     87'649'416, 5'258'964'960};
+
+/// @brief Whether a calendar day lies in years 1 to 9999, the years ISO text can write.
+/// @param date The day.
+/// @return Whether it is in range.
+[[nodiscard]] inline bool inIsoRange(std::chrono::year_month_day const& date) {
+    return date.year() >= std::chrono::year{1} && date.year() <= std::chrono::year{9999};
+}
+
+/// @brief A calendar day as ISO text.
+/// @param date The day.
+/// @return `yyyy-MM-dd`.
+[[nodiscard]] inline std::string isoDate(std::chrono::year_month_day const& date) {
+    return std::format("{:04}-{:02}-{:02}", static_cast<int>(date.year()), static_cast<unsigned>(date.month()),
+                       static_cast<unsigned>(date.day()));
 }
 
 /// @brief A sample's exact moments over one denominator: the elements as integers `X = x * D`, their sum and the sum
@@ -1696,6 +1822,65 @@ private:
         ++_mismatches;
         _env->report(expr.path, reason);
         return Value{};
+    }
+
+    /// `dateAdd(value, amount, unit)`: a date or an instant moved by whole units, in the value's own form.
+    Value addToDate(Expr const& expr, std::vector<Value> const& args) {
+        DateValue const reading = readDateValue(args.at(0));
+        if (reading.form == DateForm::Absent) {
+            return Value{};
+        }
+        std::int64_t const* const amount = args.at(1).asInt();
+        std::string const* const unit = args.at(2).asString();
+        auto const unitIndex = unit == nullptr ? kDateUnits.size()
+                                               : static_cast<std::size_t>(std::ranges::distance(
+                                                     kDateUnits.begin(), std::ranges::find(kDateUnits, *unit)));
+        if (reading.form == DateForm::Unreadable || amount == nullptr || unitIndex == kDateUnits.size()) {
+            return mismatch(expr, "`dateAdd` takes a date, a timestamp or ISO text, an int and a unit");
+        }
+        bool const clock = unitIndex >= 4;
+        if (reading.form == DateForm::Date && clock) {
+            return mismatch(expr, "a date has no time of day; add hours to a timestamp");
+        }
+        std::string_view const outOfRange = "the date is out of range";
+        if (*amount > kDateSpans.at(unitIndex) || *amount < -kDateSpans.at(unitIndex)) {
+            return mismatch(expr, outOfRange);
+        }
+        bool const calendar = unitIndex == 2 || unitIndex == 3;
+        std::int64_t const months = unitIndex == 3 ? *amount * 12 : *amount;
+        std::int64_t const days = unitIndex == 1 ? *amount * 7 : *amount;
+        if (reading.form == DateForm::Date) {
+            std::chrono::year_month_day const moved =
+                calendar ? addMonths(reading.date, months)
+                         : std::chrono::year_month_day{std::chrono::sys_days{reading.date} +
+                                                       std::chrono::days{static_cast<int>(days)}};
+            if (!inIsoRange(moved)) {
+                return mismatch(expr, outOfRange);
+            }
+            return isoDate(moved);
+        }
+        time::DateTime moved = reading.instant;
+        if (calendar) {
+            // The calendar is the one at the display offset: the wall-clock time there is kept.
+            std::chrono::minutes const offset{_env->formatting().utcOffsetMinutes};
+            auto const local = reading.instant.value + offset;
+            auto const day = std::chrono::floor<std::chrono::days>(local);
+            std::chrono::year_month_day const date = addMonths(std::chrono::year_month_day{day}, months);
+            moved = time::DateTime{std::chrono::sys_days{date} + (local - day) - offset};
+        } else if (unitIndex == 4) {
+            moved = time::DateTime{reading.instant.value + std::chrono::hours{*amount}};
+        } else if (unitIndex == 5) {
+            moved = time::DateTime{reading.instant.value + std::chrono::minutes{*amount}};
+        } else {
+            moved = time::DateTime{reading.instant.value + std::chrono::days{static_cast<int>(days)}};
+        }
+        if (!inIsoRange(std::chrono::year_month_day{std::chrono::floor<std::chrono::days>(moved.value)})) {
+            return mismatch(expr, outOfRange);
+        }
+        if (reading.form == DateForm::Timestamp) {
+            return moved;
+        }
+        return moved.toIso8601();
     }
 
     /// `sqrt(x, dp, mode?)`: the root of a plain number, correctly rounded at `dp` places.
@@ -2087,11 +2272,15 @@ private:
     }
 
     std::optional<std::string> dateText(time::DateTime instant, std::string_view style, bool withTime) {
+        return localDateText(instant + std::chrono::minutes{_env->formatting().utcOffsetMinutes}, style, withTime);
+    }
+
+    /// The text of a wall-clock time already in the display zone.
+    std::optional<std::string> localDateText(time::DateTime local, std::string_view style, bool withTime) {
         if (style != "short" && style != "medium" && style != "long") {
             return std::nullopt;
         }
         FormatContext const& context = _env->formatting();
-        time::DateTime const local = instant + std::chrono::minutes{context.utcOffsetMinutes};
         if (context.dates) {
             return context.dates(local, style, withTime);
         }
@@ -2554,23 +2743,30 @@ private:
             }
             case FunctionId::Date:
             case FunctionId::DateTime: {
-                std::optional<time::DateTime> instant;
-                if (time::DateTime const* const held = args.at(0).asTimestamp()) {
-                    instant = *held;
-                } else if (std::string const* const text = args.at(0).asString()) {
-                    instant = time::DateTime::fromIso8601(*text);
+                DateValue const reading = readDateValue(args.at(0));
+                // `""` is a date not given yet, as a cleared date input writes: nothing to show, nothing to report.
+                if (reading.form == DateForm::Absent) {
+                    return Value{};
                 }
                 std::string const* const style = args.size() > 1 ? args.at(1).asString() : nullptr;
+                std::string_view const shownStyle = style == nullptr ? std::string_view{"medium"} : *style;
+                bool const withTime = expr.function == FunctionId::DateTime;
                 std::optional<std::string> text;
-                if (instant && (args.size() == 1 || style != nullptr)) {
-                    text = dateText(*instant, style == nullptr ? std::string_view{"medium"} : *style,
-                                    expr.function == FunctionId::DateTime);
+                if (args.size() > 1 && style == nullptr) {
+                    text = std::nullopt;
+                } else if (reading.form == DateForm::Date) {
+                    // A date is that calendar day at any offset: its midnight is already local.
+                    text = localDateText(time::DateTime{std::chrono::sys_days{reading.date}}, shownStyle, withTime);
+                } else if (reading.form != DateForm::Unreadable) {
+                    text = dateText(reading.instant, shownStyle, withTime);
                 }
                 if (!text) {
-                    return mismatch(expr, "the date functions take a timestamp and a style");
+                    return mismatch(expr, "the date functions take a date, a timestamp or ISO text, and a style");
                 }
                 return std::move(*text);
             }
+            case FunctionId::DateAdd:
+                return addToDate(expr, args);
             case FunctionId::ParseDecimal: {
                 std::string const* const text = args.at(0).asString();
                 std::optional<std::uint32_t> declared;

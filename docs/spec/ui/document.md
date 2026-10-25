@@ -202,7 +202,9 @@ A `dateTimeInput`'s `value` is a `timestamp` or an ISO-8601 date or date-time st
 `yyyy-MM-ddTHH:MM:SS[.fff][Z]`); the loader refuses any other type at `value`. The field keeps the type the
 document declares and writes it back: a string field writes `yyyy-MM-dd` in `date` mode and the ISO-8601 instant
 in `date-time` mode, and `""` on clearing; a timestamp field writes the timestamp, or `null` on clearing. A value
-whose type the document leaves undecided is written as the type it holds at the edit.
+whose type the document leaves undecided is written as the type it holds at the edit. The input reads its value as
+the expression language's date functions do ([`expressions.md`](expressions.md#semantics), "Dates and instants"):
+a `yyyy-MM-dd` string is a date, which it shows as midnight in the display zone, and `""` is a date not given yet.
 
 A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 

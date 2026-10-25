@@ -355,6 +355,10 @@ TEST_CASE("the library and reading forms have builders", "[ui][author]") {
     CHECK(text(ui::decimal(ui::ref("x"), 1, ui::Rounding::HalfUp)) ==
           R"({"fn":"decimal","args":[{"ref":"x"},1,"halfUp"]})");
     CHECK(text(ui::abs(ui::ref("x"))) == R"({"fn":"abs","args":[{"ref":"x"}]})");
+    CHECK(text(ui::dateAdd(ui::ref("start"), 3, ui::DateUnit::Months)) ==
+          R"({"fn":"dateAdd","args":[{"ref":"start"},3,"months"]})");
+    CHECK(text(ui::dateAdd(ui::ref("start"), ui::ref<std::int64_t>("n"), ui::DateUnit::Minutes)) ==
+          R"({"fn":"dateAdd","args":[{"ref":"start"},{"ref":"n"},"minutes"]})");
     CHECK(text(ui::sqrt(ui::ref("x"), 4)) == R"({"fn":"sqrt","args":[{"ref":"x"},4]})");
     CHECK(text(ui::stdev(items, 3)) == R"({"fn":"stdev","args":[{"ref":"items"},3]})");
     CHECK(text(ui::rsd(items, 2, ui::Rounding::HalfUp)) == R"({"fn":"rsd","args":[{"ref":"items"},2,"halfUp"]})");
