@@ -5,7 +5,6 @@
 // assay control chart, the instruments, and the worklist beside a non-modal sample pane that steps through it. The
 // held sample cannot be submitted, and the pane says why.
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -534,37 +533,51 @@ ui::Node kpis(bool compact) {
     return ui::grid(tiles, {.gap = 1, .columns = compact ? 2 : 4}).testId("kpis");
 }
 
-// The Levey-Jennings chart, approximated: a grid of the 20 runs across and the control lines down, each run a dot
-// in the line it is nearest to; a run beyond 3 SD is drawn in the error colour in the 3 SD line.
-ui::Node controlChart() {
-    constexpr std::array<char const*, 7> kLines{"+3SD", "+2SD", "+1SD", "mean", "−1SD", "−2SD", "−3SD"};
-    std::vector<ui::Node> labels;
-    std::vector<ui::Node> cells;
-    for (std::int64_t line = 3; line >= -3; --line) {
-        labels.push_back(ui::text({.text = kLines.at(static_cast<std::size_t>(3 - line)),
-                                   .role = line == 3 || line == -3 ? "error" : "muted"}));
-        for (std::int64_t const tenths : kControlRuns) {
-            // Nearest whole SD, clamped to the 3 SD lines.
-            std::int64_t const nearest =
-                std::clamp((tenths + (tenths < 0 ? -5 : 5)) / 10, std::int64_t{-3}, std::int64_t{3});
-            bool const beyond = tenths > 30 || tenths < -30;
-            if (nearest == line) {
-                cells.push_back(ui::text({.text = "●", .role = beyond ? "error" : "success"}));
-            } else {
-                cells.push_back(ui::text({.text = line == 0 ? "—" : "·", .role = "muted"}));
-            }
-        }
+// The assay control's runs as % LC values, 100.00 + 0.04 per tenth of an SD, each with the rule it broke.
+ui::AnyHandle controlRuns() {
+    std::vector<ui::AnyHandle> runs;
+    for (std::size_t index = 0; index < kControlRuns.size(); ++index) {
+        bool const latest = index + 1 == kControlRuns.size();
+        runs.push_back(ui::obj({{"run", static_cast<std::int64_t>(index + 1)},
+                                {"value", limit(10000 + (4 * kControlRuns.at(index)), 2)},
+                                {"tone", latest ? ui::AnyHandle{"err"} : ui::AnyHandle{nullptr}},
+                                {"violation", latest ? ui::AnyHandle{"+3.4SD, rule 1-3s"} : ui::AnyHandle{nullptr}}}));
     }
+    return ui::list(runs);
+}
+
+// A control line @p sds standard deviations from the mean, 100.0 % with an SD of 0.4.
+ui::ReferenceLine controlLine(std::int64_t sds, char const* label, char const* tone, ui::LineStyle style) {
+    return {.value = limit(1000 + (4 * sds), 1),
+            .label = label,
+            .tone = *tone == '\0' ? ui::AnyHandle{} : ui::AnyHandle{tone},
+            .style = style};
+}
+
+// The Levey-Jennings chart: the 20 runs against the mean and the ±1, 2 and 3 SD lines, the run that broke a rule
+// marked with the rule. Twelve units tall, so each of the seven lines has a row of its own on the terminal.
+ui::Node controlChart() {
+    using ui::LineStyle;
     return ui::column(
         {ui::row({layout::section("Assay control, HPLC-02 · last 20 runs").sizing(ui::stretch()),
                   layout::muted("mean 100.0 % · SD 0.4")},
                  {.gap = 1, .align = Align::Center}),
-         ui::row({ui::column(labels, {.gap = 0}).sizing(ui::fixed(6)),
-                  ui::grid(cells, {.gap = 0, .columns = static_cast<std::int64_t>(kControlRuns.size())})
-                      .sizing(ui::stretch())},
-                 {.gap = 1})
-             .a11y("Levey-Jennings chart: 19 runs within 2 SD, the latest run at plus 3.4 SD, beyond the 3 SD limit",
-                   "img")
+         ui::chart({.summary = "Levey-Jennings chart: 19 runs within 2 SD, the latest run at plus 3.4 SD, beyond the 3 SD "
+                               "limit",
+                    .series = {{.points = controlRuns(),
+                                .y = [](ui::AnyHandle const& run) { return run.at("value"); },
+                                .xLabel = [](ui::AnyHandle const& run) { return run.at("run"); },
+                                .tone = [](ui::AnyHandle const& run) { return run.at("tone"); },
+                                .note = [](ui::AnyHandle const& run) { return run.at("violation"); }}},
+                    .lines = {controlLine(3, "+3SD", "err", LineStyle::Dashed),
+                              controlLine(2, "+2SD", "warn", LineStyle::Dashed),
+                              controlLine(1, "+1SD", "", LineStyle::Dotted), controlLine(0, "mean", "", LineStyle::Solid),
+                              controlLine(-1, "−1SD", "", LineStyle::Dotted),
+                              controlLine(-2, "−2SD", "warn", LineStyle::Dashed),
+                              controlLine(-3, "−3SD", "err", LineStyle::Dashed)},
+                    .yPlaces = 1,
+                    .yLabel = "% LC"})
+             .sizing(ui::stretch(), ui::fixed(12))
              .testId("chart"),
          ui::text({.text = "Run 20: 101.4 % LC, +3.4 SD, rule 1-3s", .role = "error"}).testId("chart-violation")},
         {.gap = 1});
