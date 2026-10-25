@@ -1069,6 +1069,41 @@ namespace detail {
     return call<std::string>("decimal", detail::roundingArgs(value, places, mode));
 }
 
+/// @brief `abs(x)`: a number's magnitude, of the same kind, places and unit.
+/// @param value The number or quantity.
+/// @return The magnitude.
+[[nodiscard]] inline AnyHandle abs(AnyHandle const& value) { return call("abs", {value}); }
+
+/// @brief `sqrt(x, dp, mode?)`: the square root of a plain number of 0 or more, exact until it is rounded once at
+/// @p places.
+/// @param value  The number.
+/// @param places The places of the result, 0 to 18.
+/// @param mode   The tie-breaking rule; half to even unless given.
+/// @return The root, a decimal at @p places.
+[[nodiscard]] inline AnyHandle sqrt(AnyHandle const& value, std::int64_t places, Rounding mode = Rounding::HalfEven) {
+    return call("sqrt", detail::roundingArgs(value, places, mode));
+}
+
+/// @brief `stdev(list, dp, mode?)`: the sample standard deviation (n - 1) of numbers, or of quantities in the first
+/// element's unit, rounded once at @p places; `null` for fewer than two values.
+/// @param list   The values.
+/// @param places The places of the result, 0 to 18.
+/// @param mode   The tie-breaking rule; half to even unless given.
+/// @return The standard deviation, a decimal or a quantity.
+[[nodiscard]] inline AnyHandle stdev(AnyHandle const& list, std::int64_t places, Rounding mode = Rounding::HalfEven) {
+    return call("stdev", detail::roundingArgs(list, places, mode));
+}
+
+/// @brief `rsd(list, dp, mode?)`: the relative standard deviation in percent, 100 * SD / |mean|, rounded once at
+/// @p places; `null` for fewer than two values.
+/// @param list   The values.
+/// @param places The places of the result, 0 to 18.
+/// @param mode   The tie-breaking rule; half to even unless given.
+/// @return The RSD, a plain decimal.
+[[nodiscard]] inline AnyHandle rsd(AnyHandle const& list, std::int64_t places, Rounding mode = Rounding::HalfEven) {
+    return call("rsd", detail::roundingArgs(list, places, mode));
+}
+
 /// @brief `parseDecimal(text)`: typed text, in the client's locale, as an exact decimal; `null` while it does not
 /// spell one.
 /// @param text The text, typically a text input's `event`.

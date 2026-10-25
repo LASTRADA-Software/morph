@@ -446,25 +446,76 @@ struct U128Division {
         return U128Division{.quotient = U128{.hi = 0, .lo = dividend.lo / divisor.lo},
                             .remainder = U128{.hi = 0, .lo = dividend.lo % divisor.lo}};
     }
-    // Restoring binary long division, one bit of the dividend at a time. The remainder stays below the divisor, so
-    // after a shift it is below twice the divisor: when the shift drops a set top bit, the true remainder is past
-    // 2^128 and therefore past the divisor, and the wrapping subtraction lands on the exact difference.
+    // Restoring binary long division, one bit of the dividend at a time. After j bits the remainder is below both
+    // the divisor and 2^j, so shifting the next bit in never drops a set top bit.
     U128 quotient{};
     U128 remainder{};
     for (std::uint32_t step = 0; step < 128U; ++step) {
         std::uint32_t const bit = 127U - step;
         std::uint64_t const limb = bit >= 64U ? dividend.hi : dividend.lo;
         std::uint64_t const incoming = (limb >> (bit % 64U)) & 1U;
-        bool const carried = (remainder.hi >> 63U) != 0;
         remainder = shiftLeftOneU128(remainder);
         remainder.lo |= incoming;
         quotient = shiftLeftOneU128(quotient);
-        if (carried || remainder >= divisor) {
+        if (remainder >= divisor) {
             remainder = wrappingSubU128(remainder, divisor);
             quotient.lo |= 1U;
         }
     }
     return U128Division{.quotient = quotient, .remainder = remainder};
+}
+
+/// @brief A 128-bit integer shifted right.
+/// @param value The integer.
+/// @param count The bits to shift by, below 128.
+/// @return `value / 2^count`, truncated.
+[[nodiscard]] constexpr U128 shiftRightU128(U128 value, std::uint32_t count) noexcept {
+    if (count == 0) {
+        return value;
+    }
+    if (count >= 64U) {
+        return U128{.hi = 0, .lo = value.hi >> (count - 64U)};
+    }
+    return U128{.hi = value.hi >> count, .lo = (value.lo >> count) | (value.hi << (64U - count))};
+}
+
+/// @brief The integer square root of a 128-bit integer.
+///
+/// Digit by digit in base 4: each step decides one bit of the root from the remainder, with no division and no
+/// rounding, so the result is exactly the floor.
+/// @param value The integer.
+/// @return `floor(sqrt(value))`, which fits 64 bits.
+[[nodiscard]] constexpr std::uint64_t isqrtU128(U128 value) noexcept {
+    U128 remainder = value;
+    U128 root{};
+    U128 bit{.hi = std::uint64_t{1} << 62U, .lo = 0};
+    while (bit > remainder) {
+        bit = shiftRightU128(bit, 2);
+    }
+    while (bit != U128{}) {
+        // `root + bit` fits: `root` is the root found so far shifted left by one bit past `bit`'s half position,
+        // below 2^65, and `bit` is at most 2^126.
+        U128 const trial = checkedAddU128(root, bit).value_or(U128{});
+        if (remainder >= trial) {
+            remainder = wrappingSubU128(remainder, trial);
+            root = checkedAddU128(shiftRightU128(root, 1), bit).value_or(U128{});
+        } else {
+            root = shiftRightU128(root, 1);
+        }
+        bit = shiftRightU128(bit, 2);
+    }
+    return root.lo;
+}
+
+/// @brief `10^exponent` as a 128-bit integer.
+/// @param exponent The exponent.
+/// @return The power, or empty past 10^38, the largest that fits.
+[[nodiscard]] constexpr std::optional<U128> powerOfTenU128(std::uint32_t exponent) noexcept {
+    std::optional<U128> power = U128{.hi = 0, .lo = 1};
+    for (std::uint32_t digit = 0; digit < exponent && power; ++digit) {
+        power = checkedMulU128(*power, U128{.hi = 0, .lo = 10});
+    }
+    return power;
 }
 
 /// @brief Magnitude of a signed 64-bit value as u64; well-defined for INT64_MIN.
@@ -1599,6 +1650,49 @@ struct ScaledRounding {
 }
 
 namespace detail {
+
+/// @brief The square root of a fraction, correctly rounded at a number of places.
+///
+/// The root is of `M = numerator / denominator`, where @p numerator is the fraction's numerator already scaled by
+/// `10^(2 * places)`; the result is `q / 10^places` with `q = floor(sqrt(floor(M)))`, which is `floor(sqrt(M))`,
+/// raised by one when `M > (q + 1/2)^2`, or when `M = (q + 1/2)^2` and @p mode is half away from zero or `q` is odd.
+/// The tie reads the remainder of `M`, not only its integer part: an integer part alone never equals
+/// `(q + 1/2)^2` and misses every value just above one (`sqrt(6.3)` at 0 places would be 2). With
+/// `M = F + R / B`, `M` passes `q^2 + q + 1/4` when `F - q^2 > q`, or when `F - q^2 = q` and `4R > B`, which reads
+/// as `R > floor(B / 4)`; it equals it when `F - q^2 = q`, `B` is a multiple of 4 and `R = B / 4`. Every step is an
+/// integer operation in 128 bits.
+/// @param numerator   The scaled numerator.
+/// @param denominator The denominator, not zero.
+/// @param places      The places of the result, at most `kMaxDecimalPlaces`.
+/// @param mode        The tie-breaking rule.
+/// @return The root at @p places, or empty when its numerator does not fit an `int64`.
+[[nodiscard]] constexpr std::optional<Rational> roundSqrtOfFraction(U128 numerator, U128 denominator,
+                                                                    std::uint32_t places, RoundingMode mode) noexcept {
+    auto const division = divModU128(numerator, denominator);
+    if (!division || places > kMaxDecimalPlaces) {
+        return std::nullopt;
+    }
+    std::uint64_t root = isqrtU128(division->quotient);
+    // F - q^2 >= 0, since q is the floor of F's root.
+    U128 const excess = wrappingSubU128(division->quotient, mulU64(root, root));
+    U128 const rootWide{.hi = 0, .lo = root};
+    U128 const quarter = shiftRightU128(denominator, 2);
+    bool const exactQuarter = (denominator.lo & 3U) == 0;
+    bool raise = excess > rootWide;
+    if (excess == rootWide) {
+        bool const tie = exactQuarter && division->remainder == quarter;
+        raise = division->remainder > quarter || (tie && (mode == RoundingMode::HalfAwayFromZero || (root & 1U) != 0));
+    }
+    constexpr auto maxNumerator = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+    if (root > maxNumerator || (raise && root == maxNumerator)) {
+        return std::nullopt;
+    }
+    if (raise) {
+        ++root;
+    }
+    return Rational{Numerator{static_cast<std::int64_t>(root)}, Denominator{powerOfTen(places)},
+                    DecimalPlaces{places}};
+}
 
 /// @brief The decimal digits of a 128-bit integer.
 /// @param value The integer.

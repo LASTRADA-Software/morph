@@ -460,9 +460,10 @@ TEST_CASE("mulWouldOverflow answers false for a 0/0 operand built by writing its
     CHECK_FALSE(zero.mulWouldOverflow(broken));
 }
 
-namespace {
-
 using morph::math::detail::U128;
+
+#ifdef __SIZEOF_INT128__
+namespace {
 
 /// A deterministic 64-bit sequence (splitmix64), so a failure names a reproducible case.
 struct Sequence {
@@ -493,6 +494,7 @@ struct Sequence {
 };
 
 }  // namespace
+#endif
 
 TEST_CASE("The 128-bit integer adds, subtracts, multiplies and divides exactly", "[rational][checked][u128]") {
     using morph::math::detail::checkedAddU128;
@@ -513,7 +515,7 @@ TEST_CASE("The 128-bit integer adds, subtracts, multiplies and divides exactly",
     CHECK_FALSE(checkedMulU128(U128{.hi = 1, .lo = 0}, U128{.hi = 1, .lo = 0}).has_value());
     CHECK_FALSE(checkedMulU128(U128{.hi = 2, .lo = 0}, U128{.hi = 0, .lo = kAll}).has_value());
     CHECK_FALSE(divModU128(kTop, U128{}).has_value());
-    // A divisor past 2^127 makes the shifted remainder drop its top bit: the wrapping subtraction still lands exactly.
+    // A divisor past 2^127, which the remainder reaches only at the last bit.
     auto const large = divModU128(kTop, U128{.hi = 0x8000000000000000ULL, .lo = 1});
     REQUIRE(large.has_value());
     CHECK(large->quotient == U128{.hi = 0, .lo = 1});
@@ -522,8 +524,7 @@ TEST_CASE("The 128-bit integer adds, subtracts, multiplies and divides exactly",
 }
 
 #ifdef __SIZEOF_INT128__
-// Mutation: drop the carry in checkedAddU128, or the carried-bit branch in divModU128's loop -> the native
-// comparison fails on the first case that needs it.
+// Mutation: drop the carry in checkedAddU128 -> the native comparison fails on the first sum that needs it.
 TEST_CASE("The 128-bit integer agrees with unsigned __int128", "[rational][checked][u128]") {
     using morph::math::detail::checkedAddU128;
     using morph::math::detail::checkedMulU128;
@@ -613,4 +614,81 @@ TEST_CASE("checkedRoundToDecimalPlaces rounds as roundToDecimalPlaces does, and 
     CHECK(checkedRoundToDecimalPlaces(Rational{Numerator{1}, Denominator{8}, DecimalPlaces{3}}, DecimalPlaces{99},
                                       RoundingMode::HalfEven)
               ->decimalPlaces == DecimalPlaces{18});
+}
+
+// Mutation: let isqrtU128 round to the nearest root instead of down -> `squares - 1` fails.
+TEST_CASE("The 128-bit integer square root is the floor of the root", "[rational][checked][u128]") {
+    using morph::math::detail::isqrtU128;
+    using morph::math::detail::mulU64;
+    constexpr auto kAll = std::numeric_limits<std::uint64_t>::max();
+    for (std::uint64_t const root :
+         {std::uint64_t{0}, std::uint64_t{1}, std::uint64_t{2}, std::uint64_t{3}, std::uint64_t{1'000'000'007},
+          std::uint64_t{0xffffffffULL}, std::uint64_t{0x100000000ULL}, std::uint64_t{3'037'000'499},
+          std::uint64_t{9'223'372'036'854'775'807ULL}, kAll}) {
+        CAPTURE(root);
+        U128 const square = mulU64(root, root);
+        CHECK(isqrtU128(square) == root);
+        if (root > 0) {
+            // One below a square is below the root: the floor, not the nearest.
+            U128 const below = morph::math::detail::wrappingSubU128(square, U128{.hi = 0, .lo = 1});
+            CHECK(isqrtU128(below) == root - 1);
+        }
+        // One above a square of 1 or more is still below the next square.
+        if (root > 0 && root < kAll) {
+            U128 const above = morph::math::detail::checkedAddU128(square, U128{.hi = 0, .lo = 1}).value_or(square);
+            CHECK(isqrtU128(above) == root);
+        }
+    }
+    CHECK(isqrtU128(U128{.hi = std::uint64_t{1} << 62U, .lo = 0}) == std::uint64_t{1} << 63U);  // 2^126
+    CHECK(isqrtU128(U128{.hi = kAll, .lo = kAll}) == kAll);
+}
+
+#ifdef __SIZEOF_INT128__
+TEST_CASE("The 128-bit integer square root agrees with unsigned __int128", "[rational][checked][u128]") {
+    using morph::math::detail::isqrtU128;
+    __extension__ using Native = unsigned __int128;
+    Sequence sequence{.state = 1065};
+    for (int round = 0; round < 20000; ++round) {
+        U128 const value = sequence.wide();
+        CAPTURE(value.hi, value.lo);
+        Native const native = (static_cast<Native>(value.hi) << 64U) | value.lo;
+        Native const root = isqrtU128(value);
+        CHECK(root * root <= native);
+        // (root + 1)^2 is past 2^128 only when root is 2^64 - 1, and then it is past every value.
+        Native const next = root + 1;
+        if (root < std::numeric_limits<std::uint64_t>::max()) {
+            CHECK(next * next > native);
+        }
+    }
+}
+#endif
+
+// Mutation: drop the tie test (raise only when strictly above) -> sqrt(6.25) at 0 places gives 3 half to even; read
+// the tie from the truncated quotient alone -> sqrt(6.3) gives 2.
+TEST_CASE("A square root of a fraction is rounded once, correctly, at its places", "[rational][checked][sqrt]") {
+    using morph::math::RoundingMode;
+    using morph::math::detail::roundSqrtOfFraction;
+    auto const root = [](std::uint64_t numerator, std::uint64_t denominator, std::uint32_t places, RoundingMode mode) {
+        // The numerator is scaled by 10^(2 * places) here, as the statistics scale theirs.
+        U128 scaled{.hi = 0, .lo = numerator};
+        for (std::uint32_t digit = 0; digit < 2 * places; ++digit) {
+            scaled = morph::math::detail::checkedMulU128(scaled, U128{.hi = 0, .lo = 10}).value_or(U128{});
+        }
+        return roundSqrtOfFraction(scaled, U128{.hi = 0, .lo = denominator}, places, mode);
+    };
+    auto const decimal = [](std::int64_t numerator, std::int64_t denominator, std::uint32_t places) {
+        return Rational{Numerator{numerator}, Denominator{denominator}, DecimalPlaces{places}};
+    };
+    CHECK(root(2, 1, 4, RoundingMode::HalfEven) == decimal(14142, 10000, 4));
+    CHECK(root(2025, 10000, 1, RoundingMode::HalfEven) == decimal(4, 10, 1));
+    CHECK(root(2025, 10000, 1, RoundingMode::HalfAwayFromZero) == decimal(5, 10, 1));
+    CHECK(root(625, 100, 0, RoundingMode::HalfEven) == decimal(2, 1, 0));
+    CHECK(root(625, 100, 0, RoundingMode::HalfAwayFromZero) == decimal(3, 1, 0));
+    CHECK(root(1225, 100, 0, RoundingMode::HalfEven) == decimal(4, 1, 0));
+    CHECK(root(63, 10, 0, RoundingMode::HalfEven) == decimal(3, 1, 0));
+    // A root whose numerator does not fit an int64 is empty: sqrt(10^38) at 0 places is 10^19.
+    U128 const big = morph::math::detail::checkedMulU128(U128{.hi = 0, .lo = 10'000'000'000'000'000'000ULL},
+                                                         U128{.hi = 0, .lo = 10'000'000'000'000'000'000ULL})
+                         .value_or(U128{});
+    CHECK_FALSE(roundSqrtOfFraction(big, U128{.hi = 0, .lo = 1}, 0, RoundingMode::HalfEven).has_value());
 }
