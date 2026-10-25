@@ -15,6 +15,7 @@
 #include <QTemporaryDir>
 #include <QUrl>
 #include <QVariant>
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <functional>
@@ -29,6 +30,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include "qt_quick_harness.hpp"
@@ -427,4 +429,70 @@ TEST_CASE("qt_quick theme: a bundle's icon set draws the icons it names, and a n
     plain->setIcon("glow");
     scene.settle();
     CHECK(reported.size() == 1);
+}
+
+namespace {
+
+/// The brand theme with a card surface, border and radius of its own, so a dialog's colours are the theme's and not
+/// the defaults.
+ui::ThemeValues cardTheme() {
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color",
+        "text": {"$value": "#336699"},
+        "surface": {"$value": "#fafaf0"},
+        "border": {"$value": "#a0a0b0"}},
+      "radius": {"$type": "dimension", "card": {"$value": {"value": 14, "unit": "px"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    return ui::themeValues(*resolved);
+}
+
+/// The Popup or Drawer an overlay widget's root item hosts.
+QObject* overlayPopupOf(QQuickItem const& overlayItem) {
+    for (QObject* const child : overlayItem.children()) {
+        if (child->inherits("QQuickPopup")) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Mutation: drop the overlay's `background` (the Basic style's palette.window draws), or have OverlayImpl::scheme()
+// return the item's own scheme (the text reads the sidebar's colour).
+TEMPLATE_TEST_CASE("qt_quick theme: a dialog and a drawer draw on the theme's card, whatever surface declares them",
+                   "[qt_quick]", ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), cardTheme()).empty());
+    auto sidebar = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    sidebar->setSurface("sidebar");
+    std::unique_ptr<TestType> overlay;
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(sidebar.get());
+    } else {
+        overlay = scene.backend().createDrawer(sidebar.get(), ui::Side::End);
+    }
+    overlay->setTitle("Sign");
+    auto inside = scene.backend().createText(overlay.get());
+    inside->setText("inside");
+    overlay->setOpen(true);
+    scene.settle();
+
+    QObject const* const popup = overlayPopupOf(Scene::itemOf(*overlay));
+    REQUIRE(popup != nullptr);
+    auto const* const background = popup->property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    CHECK(background->property("color").value<QColor>() == QColor{"#fafaf0"});
+    CHECK(background->property("border").value<QObject*>()->property("color").value<QColor>() == QColor{"#a0a0b0"});
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        CHECK(background->property("radius").toReal() == 14.0);
+    } else {
+        CHECK(background->property("radius").toReal() == 0.0);
+    }
+    CHECK(popup->property("leftPadding").toReal() == 16.0);
+    // The content and the title read the card's text colour, not the sidebar's light one.
+    CHECK(labelColor(Scene::itemOf(*inside), QStringLiteral("inside")) == QColor{"#336699"});
+    CHECK(labelColor(*popup->property("contentItem").value<QQuickItem*>(), QStringLiteral("Sign")) ==
+          QColor{"#336699"});
 }

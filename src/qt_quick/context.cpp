@@ -35,6 +35,13 @@ namespace morph::qt_quick::detail {
 
 namespace {
 
+/// The `Theme` singleton's object property @p name in @p engine, or null.
+QObject* themeObjectOf(QQmlEngine& engine, char const* name) {
+    QObject const* const theme =
+        engine.singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    return theme != nullptr ? theme->property(name).value<QObject*>() : nullptr;
+}
+
 /// The backend's roots, top to bottom in the column the `MorphRoots` item holds.
 class Roots final : public ContainerCore {
 public:
@@ -48,10 +55,7 @@ protected:
     // The roots draw with the theme's own scheme.
     [[nodiscard]] QObject* scheme() const override {
         QQmlEngine* const engine = _column != nullptr ? qmlEngine(_column) : nullptr;
-        QObject const* const theme =
-            engine != nullptr ? engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))
-                              : nullptr;
-        return theme != nullptr ? theme->property("themeScheme").value<QObject*>() : nullptr;
+        return engine != nullptr ? themeObjectOf(*engine, "themeScheme") : nullptr;
     }
 
 private:
@@ -91,6 +95,8 @@ Context::~Context() {
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the holder is the context's, made in its constructor.
     delete _holder.data();
 }
+
+QObject* Context::themeObject(char const* name) const { return themeObjectOf(*_engine, name); }
 
 void Context::widthChanged() {
     QQuickItem const* const host = _holder != nullptr ? _holder->parentItem() : nullptr;

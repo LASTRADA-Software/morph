@@ -360,6 +360,8 @@ protected:
         static_cast<void>(child);
         return qobject_cast<QQuickItem*>(this->part(_makingFooter ? "footer" : "content"));
     }
+    // The content draws on the card the overlay is, whatever surface encloses the node that declares it.
+    [[nodiscard]] QObject* scheme() const override { return this->context().themeObject("cardScheme"); }
 
 private:
     std::unique_ptr<ContainerItemWidget<ui::SlotWidget>> _footer;

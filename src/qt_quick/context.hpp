@@ -49,6 +49,9 @@ public:
     /// The engine.
     [[nodiscard]] QQmlEngine& engine() const noexcept { return *_engine; }
 
+    /// The engine's `Theme` singleton's object property @p name (`"cardScheme"`), or null when there is none.
+    [[nodiscard]] QObject* themeObject(char const* name) const;
+
     /// The components and the restyle map, or null.
     [[nodiscard]] Components* components() const noexcept { return _options.components; }
 

@@ -64,6 +64,26 @@ MorphWidget {
             if (!root.programmatic)
                 root.fire("dismiss", undefined)
         }
+        // Drawn as the theme's card whatever surface encloses the node, as its content's colours are (the C++ side
+        // hands the content the card's scheme).
+        padding: Theme.spaceOf(4)
+        background: Rectangle {
+            color: Theme.cardScheme.surface
+            border.width: 1
+            border.color: Theme.cardScheme.border
+            radius: Theme.radiusCard
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.leftMargin: Theme.cardShadowOffsetX - Theme.cardShadowSpread
+                anchors.rightMargin: -Theme.cardShadowOffsetX - Theme.cardShadowSpread
+                anchors.topMargin: Theme.cardShadowOffsetY - Theme.cardShadowSpread
+                anchors.bottomMargin: -Theme.cardShadowOffsetY - Theme.cardShadowSpread
+                z: -1
+                radius: parent.radius + Theme.cardShadowBlur / 4
+                color: Theme.cardShadowColor
+            }
+        }
 
         contentItem: ColumnLayout {
             id: contentColumn
@@ -82,6 +102,7 @@ MorphWidget {
             Label {
                 id: titleLabel
                 font: Theme.strongFont
+                color: Theme.cardScheme.text
                 visible: root.title !== ""
                 text: root.title
             }

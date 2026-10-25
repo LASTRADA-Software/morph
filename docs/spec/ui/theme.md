@@ -110,7 +110,8 @@ to ignore the bundle's theme (`FrontendConfig::bundleTheme`), for an application
 density is chosen yet.
 
 A theme's surface is resolved with its layer over the theme (`resolveTheme(…, surface)`), so a role it does not set
-is the theme's. Surfaces do not nest their colours: a card inside a sidebar is a card. A surface name that is neither
+is the theme's. Surfaces do not nest their colours: a card inside a sidebar is a card. A dialog and a drawer draw on
+`card`, whatever surface encloses the node that declares them. A surface name that is neither
 built in nor in the theme draws nothing and changes no colour.
 
 ## The closed set

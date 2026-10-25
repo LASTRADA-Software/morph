@@ -67,12 +67,36 @@ MorphWidget {
         // is a full-height side panel) -- only its width is at issue here.
         width: root.widthKind === 1
             ? Math.min(root.widthAmount * Theme.unitWidth, (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
-            : Math.min(Math.max(column.implicitWidth + 2 * Theme.unitWidth, 30 * Theme.unitWidth),
+            : Math.min(Math.max(column.implicitWidth + drawer.leftPadding + drawer.rightPadding, 30 * Theme.unitWidth),
                        (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
         height: Overlay.overlay ? Overlay.overlay.height : 0
         onAboutToHide: {
             if (!root.programmatic)
                 root.fire("dismiss", undefined)
+        }
+        // Drawn as the theme's card whatever surface encloses the node, as its content's colours are (the C++ side
+        // hands the content the card's scheme).
+        // Each side set itself: the style sets a one-pixel side padding along the edge for its own border line.
+        leftPadding: Theme.spaceOf(4)
+        rightPadding: Theme.spaceOf(4)
+        topPadding: Theme.spaceOf(4)
+        bottomPadding: Theme.spaceOf(4)
+        background: Rectangle {
+            color: Theme.cardScheme.surface
+            border.width: 1
+            border.color: Theme.cardScheme.border
+            // Square: the drawer lies against the window's edge.
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.leftMargin: Theme.cardShadowOffsetX - Theme.cardShadowSpread
+                anchors.rightMargin: -Theme.cardShadowOffsetX - Theme.cardShadowSpread
+                anchors.topMargin: Theme.cardShadowOffsetY - Theme.cardShadowSpread
+                anchors.bottomMargin: -Theme.cardShadowOffsetY - Theme.cardShadowSpread
+                z: -1
+                radius: parent.radius + Theme.cardShadowBlur / 4
+                color: Theme.cardShadowColor
+            }
         }
 
         contentItem: ColumnLayout {
@@ -81,6 +105,7 @@ MorphWidget {
             Label {
                 id: titleLabel
                 font: Theme.strongFont
+                color: Theme.cardScheme.text
                 visible: root.title !== ""
                 text: root.title
             }
