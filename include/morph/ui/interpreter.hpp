@@ -1843,9 +1843,10 @@ private:
     if (bool const* const flag = value.asBool()) {
         return *flag ? "true" : "false";
     }
+    // A number that cannot be rounded at its own places shows as its exact JSON rather than as a clamped value.
     if (Quantity const* const quantity = value.asQuantity()) {
-        return formatNumber(value, format.numeric).value_or(std::string{}) + " " +
-               unitDisplay(quantity->unit, format.units);
+        auto number = formatNumber(value, format.numeric);
+        return number ? *number + " " + unitDisplay(quantity->unit, format.units) : canonicalJson(value);
     }
     if (auto number = formatNumber(value, format.numeric)) {
         return *std::move(number);
@@ -5490,13 +5491,15 @@ namespace detail {
         if (std::int64_t const* const whole = value.asInt()) {
             return std::to_string(*whole);
         }
+        // A value that cannot be rounded at its own places is written as its exact JSON, never clamped.
         if (Decimal const* const number = value.asDecimal()) {
-            return detail::decimalText(number->value, static_cast<std::uint32_t>(number->value.decimalPlaces.value));
+            return detail::decimalText(number->value, static_cast<std::uint32_t>(number->value.decimalPlaces.value))
+                .value_or(canonicalJson(value));
         }
         if (Quantity const* const quantity = value.asQuantity()) {
-            return detail::decimalText(quantity->value,
-                                       static_cast<std::uint32_t>(quantity->value.decimalPlaces.value)) +
-                   " " + quantity->unit;
+            auto const text =
+                detail::decimalText(quantity->value, static_cast<std::uint32_t>(quantity->value.decimalPlaces.value));
+            return text ? *text + " " + quantity->unit : canonicalJson(value);
         }
     }
     return textOf(value, format);
