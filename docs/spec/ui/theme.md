@@ -123,6 +123,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `color.surface`, `color.text`, `color.muted`, `color.accent`, `color.focus`, `color.border`, `color.neutral`, `color.selection` | colour |
 | `color.ok`, `color.warn`, `color.err`, `color.info`, each with `.bg`, `.border` and `.dot` | colour |
 | `color.table.header` (transparent) | colour |
+| `color.chart.1` … `color.chart.4` (`#0072b2`, `#c25400`, `#00805e`, `#a8508a`): a chart's series colours, in drawing order | colour |
 | `opacity.stale` | number |
 | `space.0` … `space.5`, defaults 0, 4, 8, 12, 16, 24 | dimension, in px |
 | `color.background` (`#f2f3f7`) | colour |
@@ -156,6 +157,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `errorBg`, `errorBorder`, `errorDot` | `color.err.bg`, `color.err.border`, `color.err.dot` |
 | `infoBg`, `infoBorder`, `infoDot` | `color.info.bg`, `color.info.border`, `color.info.dot` |
 | `tableHeader` | `color.table.header` |
+| `chart1` … `chart4` | `color.chart.1` … `color.chart.4` |
 | `staleOpacity` | `opacity.stale` |
 | `space` (six px lengths) | `space.0` … `space.5` |
 | `background` | `color.background` |

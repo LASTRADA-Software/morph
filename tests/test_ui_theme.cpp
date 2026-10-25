@@ -187,6 +187,8 @@ TEST_CASE("theme: a missing token takes its default; an unknown path is ignored"
     morph::ui::ThemeValues const defaults = morph::ui::themeValues();
     CHECK(defaults.colors.at("color.text").hex() == "#1d1d1f");
     CHECK(defaults.numbers.at("opacity.stale") == 0.55);
+    CHECK(defaults.colors.at("color.chart.1").hex() == "#0072b2");
+    CHECK(defaults.colors.at("color.chart.4").hex() == "#a8508a");
 
     TokenSet const base = parsed(kBase);
     auto const resolved = morph::ui::resolveTokens({&base});
