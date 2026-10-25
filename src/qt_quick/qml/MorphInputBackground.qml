@@ -11,7 +11,7 @@ Rectangle {
     property bool focused: false
     property bool readOnly: false
 
-    implicitHeight: Theme.controlHeight
+    implicitHeight: Theme.targetHeight
     implicitWidth: Theme.unitWidth * 20
     radius: Theme.radiusControl
     color: readOnly ? Theme.background : scheme.surface

@@ -56,6 +56,9 @@ MorphWidget {
                     required property string modelData
                     text: modelData
                     width: implicitWidth
+                    // A touch target while the window is compact; its label keeps its own size.
+                    implicitHeight: Math.max(implicitContentHeight + topPadding + bottomPadding,
+                                             Theme.touchTargets ? Theme.targetHeight : 0)
                     leftPadding: Theme.spaceOf(4)
                     rightPadding: Theme.spaceOf(4)
                     contentItem: Text {

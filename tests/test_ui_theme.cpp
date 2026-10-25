@@ -156,6 +156,20 @@ TEST_CASE("theme: the shell's tokens have defaults, and a shadow is read and che
     CHECK_THAT(malformed.error(), Catch::Matchers::ContainsSubstring("shadow"));
 }
 
+// Mutation: name the touch token `control.height.touch`, inside the `control.height` token (it is never read, and
+// the default 44 stands).
+TEST_CASE("theme: control.height and control.touchHeight are siblings, each read from one file", "[ui][theme]") {
+    CHECK(morph::ui::themeValues().dimensions.at("control.touchHeight") == 44.0);
+    TokenSet const tokens = parsed(R"({"control": {"$type": "dimension",
+        "height": {"$value": {"value": 30, "unit": "px"}},
+        "touchHeight": {"$value": {"value": 48, "unit": "px"}}}})");
+    auto const resolved = morph::ui::resolveTokens({&tokens});
+    REQUIRE(resolved);
+    morph::ui::ThemeValues const values = morph::ui::themeValues(*resolved);
+    CHECK(values.dimensions.at("control.height") == 30.0);
+    CHECK(values.dimensions.at("control.touchHeight") == 48.0);
+}
+
 TEST_CASE("theme: a missing token takes its default; an unknown path is ignored", "[ui][theme]") {
     morph::ui::ThemeValues const defaults = morph::ui::themeValues();
     CHECK(defaults.colors.at("color.text").hex() == "#1d1d1f");

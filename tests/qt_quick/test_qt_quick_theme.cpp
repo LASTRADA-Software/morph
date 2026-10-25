@@ -581,3 +581,70 @@ TEST_CASE("qt_quick theme: a read-only input draws on the page's background, an 
     scene.settle();
     CHECK(backgroundOf(*readOnly) == QColor{"#fefefe"});
 }
+
+namespace {
+
+/// A button, a text input and a check box in a column, on @p scene.
+struct Controls {
+    explicit Controls(Scene& scene)
+        : column{scene.backend().createStack(nullptr, ui::Axis::Vertical)},
+          button{scene.backend().createButton(column.get())},
+          input{scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine)},
+          box{scene.backend().createCheckbox(column.get())} {
+        button->setLabel("Book");
+        box->setLabel("Signed");
+    }
+
+    std::unique_ptr<ui::StackWidget> column;
+    std::unique_ptr<ui::ButtonWidget> button;
+    std::unique_ptr<ui::TextInputWidget> input;
+    std::unique_ptr<ui::CheckboxWidget> box;
+};
+
+/// Resizes @p scene's window to @p units of its theme's unit width.
+void resizeToUnits(Scene& scene, double units) {
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    scene.window().resize(static_cast<int>(std::ceil(units * theme->property("unitWidth").toDouble())), 600);
+    scene.settle();
+}
+
+/// The height of a field's control, or of a button's own item.
+qreal controlHeight(ui::Widget const& widget) {
+    QQuickItem const& item = Scene::itemOf(widget);
+    auto const* const control = item.property("control").value<QQuickItem*>();
+    return control != nullptr ? control->height() : item.height();
+}
+
+}  // namespace
+
+// Mutation: have the backend not write Theme.touchTargets for its width class (a compact window's controls stay 32).
+TEST_CASE("qt_quick theme: controls are touch targets while the window is compact", "[qt_quick]") {
+    Scene scene;
+    Controls const controls{scene};
+    resizeToUnits(scene, 60);
+    CHECK(controlHeight(*controls.button) == 44.0);
+    CHECK(controlHeight(*controls.input) == 44.0);
+    CHECK(controlHeight(*controls.box) >= 44.0);
+
+    resizeToUnits(scene, 180);
+    CHECK(controlHeight(*controls.button) == 32.0);
+    CHECK(controlHeight(*controls.input) == 32.0);
+
+    // The touch height is the theme's, beside its control height.
+    auto const tokens = ui::parseTokens(R"({"control": {"$type": "dimension",
+        "height": {"$value": {"value": 30, "unit": "px"}},
+        "touchHeight": {"$value": {"value": 48, "unit": "px"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("controlHeight").toReal() == 30.0);
+    CHECK(theme->property("touchHeight").toReal() == 48.0);
+    scene.settle();
+    CHECK(controlHeight(*controls.button) == 30.0);
+    resizeToUnits(scene, 60);
+    CHECK(controlHeight(*controls.button) == 48.0);
+}

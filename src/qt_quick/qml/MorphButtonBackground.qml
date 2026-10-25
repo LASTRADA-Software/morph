@@ -22,7 +22,7 @@ Rectangle {
     // A ghost button: no border or fill, no accent-bar "current" concept, just a neutral tint on hover or press.
     property bool ghost: false
 
-    implicitHeight: Theme.controlHeight
+    implicitHeight: Theme.targetHeight
     implicitWidth: ghost ? 0 : Theme.unitWidth * 8
     radius: Theme.radiusControl
     color: item ? (selected ? Qt.alpha(scheme.accent, 0.12) : hovered || pressed ? scheme.neutral : "transparent")

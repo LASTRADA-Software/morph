@@ -80,6 +80,12 @@ QtObject {
     property real radiusControl: 6
     property real radiusCard: 10
     property real controlHeight: 32
+    // The least height of a control while `touchTargets` holds: `control.touchHeight`.
+    property real touchHeight: 44
+    // Whether controls are sized as touch targets: the backend sets it while the window's width class is compact.
+    property bool touchTargets: false
+    // The height every control is drawn at: `controlHeight`, or at least `touchHeight` while `touchTargets` holds.
+    readonly property real targetHeight: touchTargets ? Math.max(controlHeight, touchHeight) : controlHeight
     property real bodySize: 0
     property real headingSize: 0
     readonly property real bodyPixels: bodySize > 0 ? bodySize : platformMetrics.font.pixelSize > 0

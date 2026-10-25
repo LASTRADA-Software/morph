@@ -102,6 +102,11 @@ void Context::widthChanged(double units) {
         return;
     }
     _widthClass = std::move(next);
+    // Controls are touch targets while the window is compact. The theme is one per engine, so the last class
+    // written holds for every backend in it.
+    if (auto* const theme = _engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))) {
+        theme->setProperty("touchTargets", _widthClass == "compact");
+    }
     if (_onWidthClass) {
         // A copy: the listener re-renders, which may replace it.
         auto const listener = _onWidthClass;

@@ -127,6 +127,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `space.0` … `space.5`, defaults 0, 4, 8, 12, 16, 24 | dimension, in px |
 | `color.background` (`#f2f3f7`) | colour |
 | `radius.control` (6), `radius.card` (10), `control.height` (32) | dimension, in px |
+| `control.touchHeight` (44, the common minimum touch target): a sibling of `control.height`, since a token's object is never read for tokens inside it | dimension, in px |
 | `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3) | dimension, in px |
 | `font.family` (none: the platform font) | font family: a name, or a list of names in order of preference |
 | `elevation.card` (`#00000014`, offsets 0 and 2, blur 10, spread 0) | shadow; of a list of layers, the first |
@@ -157,9 +158,16 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `staleOpacity` | `opacity.stale` |
 | `space` (six px lengths) | `space.0` … `space.5` |
 | `background` | `color.background` |
-| `radiusControl`, `radiusCard`, `controlHeight`, `bodySize`, `headingSize` | `radius.control`, `radius.card`, `control.height`, `font.size.body`, `font.size.heading` |
+| `radiusControl`, `radiusCard`, `controlHeight`, `touchHeight`, `bodySize`, `headingSize` | `radius.control`, `radius.card`, `control.height`, `control.touchHeight`, `font.size.body`, `font.size.heading` |
 | `cardShadowColor`, `cardShadowOffsetX`, `cardShadowOffsetY`, `cardShadowBlur`, `cardShadowSpread` | `elevation.card` |
 | `fontFamilies` | `font.family` |
+
+**Touch targets follow the width class.** While the window's width class is `compact`, the backend sets
+`Theme.touchTargets`, and every control is drawn at `Theme.targetHeight`: at least `control.touchHeight`, else
+`control.height`. A button's and an input's background, a text area (twice it) and a table row (8 px less) read it;
+a check box and a tab button take it as their least height while `touchTargets` holds, their indicator and label
+keeping their size. The width class stands in for touch input, and is not a density layer: it is a fact about the
+window, not a choice. The terminal is unchanged: a cell is the target.
 
 `Theme.bodyPixels` and `Theme.headingPixels` are the font sizes the components use: a size of 0 derives from the
 platform font (`Theme.platformMetrics`), the body its size and a heading 1.3 times the body. Every `MorphUi` text and

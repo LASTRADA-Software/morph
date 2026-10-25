@@ -21,7 +21,7 @@ Item {
     property MorphScheme scheme: Theme.themeScheme
 
     // A dense row: the control height less 8 px.
-    implicitHeight: Theme.controlHeight - 8
+    implicitHeight: Theme.targetHeight - 8
 
     // A tone's fill and marker in the scheme: `color.<tone>.bg` and `.dot`; neutral is the muted colour, faint.
     function toneBg(index: int): color {

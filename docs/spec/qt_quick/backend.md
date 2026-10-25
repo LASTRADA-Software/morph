@@ -43,8 +43,9 @@ auto screen = interpreter.mount(document, params, backend);   // or ui::Mounted{
 - `BackendOptions::components` is the restyle map and the custom components.
 - `Backend::widthClass()` is the host's width in `Theme.unitWidth`s, classed by `ui::widthClassOf`. `MorphRoots`
   reports that width in units (`widthUnits`) through its relay whenever it changes, from a resize or a theme with
-  another font, and the context re-classes it there, on the GUI thread and never inside polish; a change calls the
-  `setOnWidthClass` listener.
+  another font, and the context re-classes it there, on the GUI thread and never inside polish; a change sets
+  `Theme.touchTargets` (true while `compact`) and calls the `setOnWidthClass` listener. `Theme` is one per engine,
+  so two backends of different widths in one engine share whichever class was written last.
 
 ## Several mounts
 
@@ -218,7 +219,7 @@ A row draws its background part (`background`, the `tableRow` part restyle) unde
 position, which C++ writes on every row after each append, destroy and move), `tone` (`setRowTone`: −1 for none,
 else the `ui::Tone` index) and its `scheme`. The row's
 height is the larger of its cells' and the background's `implicitHeight`; the stock background draws the selection
-fill and the hairline between rows, and its implicit height is a dense row's, `Theme.controlHeight - 8`. A toned
+fill and the hairline between rows, and its implicit height is a dense row's, `Theme.targetHeight - 8`. A toned
 row fills with the tone's `bg` colour and draws a 3 px leading bar in its `dot` colour; a selected toned row shows
 the selection colour and keeps the bar.
 
@@ -318,7 +319,8 @@ field's errors show under it in the error colour; a required field is marked. Th
 roles every component reads, with the `ui-theme/1` defaults; `applyTheme(engine, values)` sets them from a theme's
 tokens, and a host component that imports `MorphUi` reads the same instance ([`../ui/theme.md`](../ui/theme.md)).
 The controls are Qt Quick Controls' `Basic` ones, drawn from the theme rather than with that style's look: an input
-(`MorphInputBackground`) and a button (`MorphButtonBackground`) are `Theme.controlHeight` tall with
+(`MorphInputBackground`) and a button (`MorphButtonBackground`) are `Theme.targetHeight` tall (`controlHeight`, or
+at least `touchHeight` while the window is compact, [`../ui/theme.md`](../ui/theme.md)) with
 `Theme.radiusControl` corners and a border that takes the focus colour; a read-only input (`readOnly`, which every
 input passes its background) draws on `Theme.background` rather than its scheme's surface; a check box's indicator is accent-filled when
 checked; a tab bar underlines the current tab in the accent; a progress bar is the scheme's accent on its `neutral` track,

@@ -986,7 +986,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 40> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 41> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1022,6 +1022,9 @@ inline constexpr std::array<ThemeTokenSpec, 40> kThemeTokens = {{
     {.path = "radius.control", .kind = ThemeTokenKind::Dimension, .color = "", .number = 6.0},
     {.path = "radius.card", .kind = ThemeTokenKind::Dimension, .color = "", .number = 10.0},
     {.path = "control.height", .kind = ThemeTokenKind::Dimension, .color = "", .number = 32.0},
+    // The least height of a control while the window is compact: the common minimum touch target. A sibling of
+    // `control.height`, not a child: a token's object is never read for tokens inside it.
+    {.path = "control.touchHeight", .kind = ThemeTokenKind::Dimension, .color = "", .number = 44.0},
     {.path = "font.size.body", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.size.heading", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.family", .kind = ThemeTokenKind::FontFamily, .color = "", .number = 0.0},
