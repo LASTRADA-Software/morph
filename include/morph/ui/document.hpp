@@ -709,6 +709,8 @@ inline constexpr std::array<std::string_view, 5> kInputValues = {"value", "draft
 inline constexpr std::array<std::string_view, 1> kCheckboxValues = {"checked"};
 /// @brief The element values of a select.
 inline constexpr std::array<std::string_view, 2> kSelectValues = {"selected", "selectedOption"};
+/// @brief The element values of a tabs node: the id of the tab shown.
+inline constexpr std::array<std::string_view, 1> kTabsValues = {"selected"};
 /// @brief The element values of a table.
 inline constexpr std::array<std::string_view, 14> kTableValues = {
     "selection",     "activeKey", "sort",  "filters",   "viewCount", "sourceCount", "selectedCount",
@@ -789,9 +791,11 @@ inline constexpr std::array<KeySpec, 3> kSwitchKeys = {
 inline constexpr std::array<KeySpec, 2> kCaseKeys = {
     {{"when", Shape::Expr, {}, kRequired}, {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `tabs`.
-inline constexpr std::array<KeySpec, 1> kTabsKeys = {{{"tabs", Shape::Parts, "tab"}}};
+inline constexpr std::array<KeySpec, 3> kTabsKeys = {
+    {{"tabs", Shape::Parts, "tab"}, {"selected", Shape::Expr}, {"onChoose", Shape::Commands}}};
 /// @brief The keys of a `tabs` page part.
-inline constexpr std::array<KeySpec, 2> kTabKeys = {{{"label", Shape::Expr}, {"children", Shape::Nodes}}};
+inline constexpr std::array<KeySpec, 3> kTabKeys = {
+    {{"id", Shape::Name}, {"label", Shape::Expr}, {"children", Shape::Nodes}}};
 /// @brief The keys of `dialog` and `drawer`.
 inline constexpr std::array<KeySpec, 9> kDialogKeys = {{{"open", Shape::Condition},
                                                         {"title", Shape::Expr},
@@ -971,7 +975,7 @@ inline constexpr std::array<KindSpec, 49> kKinds = {{
     {"panel", kPanelKeys},
     {"scroll", kScrollKeys},
     {"switch", kSwitchKeys},
-    {"tabs", kTabsKeys},
+    {"tabs", kTabsKeys, 0, kTabsValues},
     {"dialog", kDialogKeys, kScope, kDialogValues},
     {"drawer", kDialogKeys, kScope, kDialogValues},
     {"busy", kBusyKeys},
@@ -2997,6 +3001,8 @@ private:
     void checkKindRules(DocNode const& node, CheckContext const& context) {
         if (node.kind == "custom") {
             checkCustomProps(node);
+        } else if (node.kind == "tabs") {
+            checkTabIds(node);
         } else if (node.kind == "customize" && !_doc->customize.contains(node.name("point"))) {
             refuse(pointerAppend(node.path, "point"),
                    "`" + std::string{node.name("point")} + "` is not a customization point of this document");
@@ -3163,6 +3169,33 @@ private:
         if (mode == nullptr || (literal != nullptr && *literal == "none")) {
             refuse(where, "a table with `" + std::string{key} +
                               "` selects rows; give it `selectionMode` `single` or `multiple`");
+        }
+    }
+
+    // A tabs node that names its shown tab, or reports a pick, keys every tab by a unique id; a literal `selected`
+    // names one of them. A literal `null` is no binding.
+    static void checkTabIds(DocNode const& node) {
+        ExprPtr const selected = node.prop("selected");
+        bool const bound = selected != nullptr && (selected->kind != ExprKind::Literal || !selected->literal.isNull());
+        bool const keyed = bound || node.event("onChoose") != nullptr;
+        std::set<std::string, std::less<>> ids;
+        for (DocNodePtr const& tab : node.partList("tabs")) {
+            if (tab->id.empty()) {
+                if (keyed) {
+                    refuse(tab->path, "a tab of a tabs node with `selected` or `onChoose` has an `id`");
+                }
+                continue;
+            }
+            if (!ids.insert(tab->id).second) {
+                refuse(pointerAppend(tab->path, "id"),
+                       "the tab id `" + tab->id + "` is used twice; each tab has its own");
+            }
+        }
+        if (bound && selected->kind == ExprKind::Literal) {
+            std::string const* const named = selected->literal.asString();
+            if (named == nullptr || !ids.contains(*named)) {
+                refuse(pointerAppend(node.path, "selected"), "`selected` names no tab of this node");
+            }
         }
     }
 

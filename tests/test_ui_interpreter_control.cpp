@@ -641,6 +641,36 @@ TEST_CASE("interpreter control: a tab label follows the data, and the bar keeps 
     CHECK(h.backend.prop(bar, "selected") == "1");
 }
 
+// Mutation: lower `selected` from the node's own pick again (the button's write moves nothing).
+TEST_CASE("interpreter control: a command chooses a tab through the state `selected` reads", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "record",
+      "state": { "tab": { "init": "overview" }, "chose": { "init": "" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "book", "label": "Book", "onClick": [ { "set": "tab", "value": "bookings" } ] },
+        { "kind": "text", "testId": "chose", "text": { "ref": "chose" } },
+        { "kind": "text", "testId": "shown", "text": { "ref": "record.selected" } },
+        { "kind": "tabs", "id": "record", "testId": "bar", "selected": { "ref": "tab" },
+          "onChoose": [ { "set": "chose", "value": { "ref": "event" } } ],
+          "tabs": [
+            { "id": "overview", "label": "Overview", "children": [ { "kind": "text", "testId": "first", "text": "1" } ] },
+            { "id": "bookings", "label": "Bookings", "children": [ { "kind": "text", "testId": "second", "text": "2" } ] } ] } ] } })");
+    int const bar = h.backend.find("Tabs", "testId", "bar").value();
+    CHECK(h.backend.prop(bar, "selected") == "0");
+    CHECK(h.text("shown") == "overview");
+    h.backend.click(h.byTestId("Button", "book"));
+    h.settle();
+    CHECK(h.backend.prop(bar, "selected") == "1");
+    REQUIRE(h.backend.find("Text", "testId", "second").has_value());
+    CHECK(h.text("shown") == "bookings");
+    // A pick runs onChoose with the tab's id; `tab` is not written, so the bar goes back to the tab it names.
+    h.backend.chooseIndex(bar, 0);
+    h.settle();
+    CHECK(h.text("chose") == "overview");
+    CHECK(h.backend.prop(bar, "selected") == "1");
+}
+
 // Mutation: build the `forEach` without `commonOf` (no Column has the test id `rows`).
 TEST_CASE("interpreter control: a forEach honours its common properties", "[ui][interpreter]") {
     Harness h;

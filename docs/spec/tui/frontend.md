@@ -88,7 +88,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Spacer | nothing; stretches in a stack | — |
 | Panel | a box with a title; a collapsible one folds to its title line | Enter, Space, click on the title |
 | Scroll | a viewport that follows the focus | arrows, PageUp/PageDown, Home/End, wheel |
-| Tabs | a one-row bar over the page slots, with no blank row under it (a terminal row costs more than the separation earns); a hidden bar gives its row to the pages and takes no focus | Left, Right, click on a label |
+| Tabs | a one-row bar over the page slots, with no blank row under it (a terminal row costs more than the separation earns); a bar narrower than its labels draws whole labels from a first visible one, which painting moves so the highlighted label fits, with `‹` at the start and `›` at the end while labels are cut there; a hidden bar gives its row to the pages and takes no focus | Left, Right, click on a label; a click on `‹` or `›` selects the previous or next tab |
 | Dialog | a centred box over everything; its footer is the box's bottom row, its children against the right edge, one cell apart, and stays last when the content mounts again | Esc dismisses |
 | Drawer | a box against its side, the screen's height; its footer as a dialog's | Esc dismisses |
 | Busy | a spinner and its label while active | — |

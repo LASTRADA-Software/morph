@@ -3661,27 +3661,46 @@ private:
 
 /// @brief A page of a `tabs` node.
 struct Tab {
-    /// @brief The label.
+    /// @brief The tab's key, which `selected` and `onChoose` name; empty for none. Every tab has one when the node
+    ///        gives `selected` or `onChoose`.
+    std::string id;
+    /// @brief The label; it may follow the data.
     AnyHandle label;
     /// @brief The page's nodes.
     Nodes children;
 };
 
+/// @brief Options of a `tabs` node.
+struct TabsOptions {
+    /// @brief The id of the tab shown, controlled: the user's pick comes back through `onChoose`, and the shown tab
+    ///        follows this alone. Absent: the node keeps the user's pick itself.
+    AnyHandle selected;
+    /// @brief Commands run when the user picks a tab, with the tab's id as `event`.
+    Commands onChoose;
+};
+
 /// @brief A `tabs` node.
-/// @param tabs The pages.
+/// @param tabs    The pages.
+/// @param options The tab shown and what a pick runs.
 /// @return The node.
-[[nodiscard]] inline Node tabs(std::vector<Tab> const& tabs) {
+[[nodiscard]] inline Node tabs(std::vector<Tab> const& tabs, TabsOptions const& options = {}) {
     detail::NodeWriter node{"tabs"};
     Json::array_t parts;
     parts.reserve(tabs.size());
     for (Tab const& tab : tabs) {
         Json part = Json::object_t{};
+        if (!tab.id.empty()) {
+            detail::put(part, "id", tab.id);
+        }
         detail::put(part, "label", tab.label.json());
         detail::put(part, "children", tab.children.json());
         node.facts(tab.children.facts());
         parts.push_back(std::move(part));
     }
-    return node.raw("tabs", std::move(parts)).done();
+    return node.raw("tabs", std::move(parts))
+        .put("selected", options.selected)
+        .put("onChoose", options.onChoose)
+        .done();
 }
 
 /// @brief Options of `dialog` and `drawer`.

@@ -742,15 +742,58 @@ std::vector<::core::tui::Rect> TabsImpl::childAreas(::core::tui::Size size) cons
                       StackSpec{.axis = ui::Axis::Vertical});
 }
 
+// The width of the labels from @p first to @p last, both included.
+int TabsImpl::labelsWidth(std::size_t first, std::size_t last) const {
+    int width = 0;
+    for (std::size_t index = first; index <= last && index < _labels.size(); ++index) {
+        width += displayWidth(labelText(index));
+    }
+    return width;
+}
+
+// Moves the first drawn label so the highlighted one fits in @p width columns with its markers: `‹` while a label is
+// cut before the first, `›` while one is cut after the highlighted.
+void TabsImpl::scrollToSelected(int width) {
+    if (_labels.empty() || labelsWidth(0, _labels.size() - 1) <= width) {
+        _first = 0;
+        return;
+    }
+    std::size_t const target = std::min(_selected, _labels.size() - 1);
+    _first = std::min(_first, target);
+    int const after = target + 1 < _labels.size() ? 1 : 0;
+    while (_first < target && (_first > 0 ? 1 : 0) + labelsWidth(_first, target) + after > width) {
+        ++_first;
+    }
+}
+
 void TabsImpl::paint(::core::tui::Canvas& canvas) {
     auto const& theme = canvas.theme();
     auto const* marked = &theme.textMuted;
     if (actionable()) {
         marked = hasFocus() ? &theme.buttonFocused : &theme.textBold;
     }
-    int column = 0;
-    for (std::size_t index = 0; _barShown && index < _labels.size(); ++index) {
-        column += canvas.putString(0, column, labelText(index), index == _selected ? *marked : theme.textMuted);
+    _spans.clear();
+    if (_barShown) {
+        int const width = canvas.size().width;
+        scrollToSelected(width);
+        int column = 0;
+        if (_first > 0) {
+            column += canvas.putString(0, 0, "\u2039", theme.textMuted);
+            _spans.push_back(Span{.start = 0, .end = column, .index = 0, .step = -1});
+        }
+        for (std::size_t index = _first; index < _labels.size(); ++index) {
+            std::string const text = labelText(index);
+            int const reserve = index + 1 < _labels.size() ? 1 : 0;
+            if (column + displayWidth(text) + reserve > width && index != _first) {
+                int const marker = std::max(column, width - 1);
+                canvas.putString(0, marker, "\u203a", theme.textMuted);
+                _spans.push_back(Span{.start = marker, .end = marker + 1, .index = 0, .step = 1});
+                break;
+            }
+            int const start = column;
+            column += canvas.putString(0, column, text, index == _selected ? *marked : theme.textMuted);
+            _spans.push_back(Span{.start = start, .end = column, .index = index, .step = 0});
+        }
     }
     placeChildren(childAreas(canvas.size()));
 }
@@ -786,15 +829,22 @@ void TabsImpl::click(::core::tui::Point cell) {
     if (!_barShown || cell.y != 0 || !focusable()) {
         return;
     }
-    int right = 0;
-    for (std::size_t index = 0; index < _labels.size(); ++index) {
-        right += displayWidth(labelText(index));
-        if (cell.x < right) {
-            if (focusWidget(context(), this)) {
-                select(index);
-            }
+    // Through what the last paint drew: a marker moves the highlight one tab, as Left and Right do.
+    for (Span const& span : _spans) {
+        if (cell.x < span.start || cell.x >= span.end) {
+            continue;
+        }
+        if (!focusWidget(context(), this)) {
             return;
         }
+        if (span.step < 0 && _selected > 0 && _selected < _labels.size()) {
+            select(_selected - 1);
+        } else if (span.step > 0 && _selected + 1 < _labels.size()) {
+            select(_selected + 1);
+        } else if (span.step == 0) {
+            select(span.index);
+        }
+        return;
     }
 }
 

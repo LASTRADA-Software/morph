@@ -203,6 +203,10 @@ reply; `parallel` applies each. `pending` counts runs in flight and queued.
 
 ## Relations
 
+- **Tabs.** The tab ids map to indices once. A bound `selected` is the controlled index: a pick runs `onChoose`
+  with the tab's id as a user event and leaves the highlight on the tab `selected` names until it changes. A value
+  that names no tab shows the first and is reported once at the node's `selected` path. Without `selected` the node
+  keeps the pick itself, which is its element value `selected`.
 - **Inputs.** A text input, date-time input or slider whose `value` is bound (a checkbox's `checked`,
   a select's `selected`) is controlled: its draft follows the bound value while the user has not edited
   it, and keeps the user's edit until the bound value equals it. An input whose value is not bound keeps

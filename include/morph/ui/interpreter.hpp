@@ -2635,6 +2635,7 @@ private:
     void wireComposite(ElementState& element);
     Node lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     void presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options);
+    Node lowerTabs(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     std::shared_ptr<RtScope> rowScope(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
                                       std::vector<DocNode const*> const& content);
     void commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common);
@@ -4883,6 +4884,21 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
         }
         return name == "pending" ? Value{false} : Value{};
     }
+    if (kind == "tabs") {
+        // The shown tab's id: the bound one, else the user's own pick, else the first tab's.
+        ExprPtr const selected = node.prop("selected");
+        if (name != "selected") {
+            return Value{};
+        }
+        if (selected && (selected->kind != ExprKind::Literal || !selected->literal.isNull())) {
+            return evalIn(scope, nullptr, selected);
+        }
+        if (Value picked = element.draft.get(); !picked.isNull()) {
+            return picked;
+        }
+        auto const tabs = node.partList("tabs");
+        return tabs.empty() || tabs.front()->id.empty() ? Value{} : Value{tabs.front()->id};
+    }
     if (kind == "form") {
         return formValue(element, name);
     }
@@ -6679,19 +6695,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         return lowerSwitch(node, ctx);
     }
     if (kind == "tabs") {
-        Tabs spec;
-        for (DocNodePtr const& tab : node.partList("tabs")) {
-            auto const nodes = tab->nodes("children");
-            spec.tabs.push_back(Tab{.label = bindProp<std::string>(ctx, tab->prop("label"), std::string{}, stringOf),
-                                    .node = nodes.empty() ? Node{} : lowerAll(nodes, ctx)});
-        }
-        // A document names no index, so the node keeps the user's pick itself: a bound index is the controlled one,
-        // whose page follows the pick, where a constant would move only the bar's highlight.
-        auto const picked = std::make_shared<reactive::Signal<std::size_t>>(runtime(), std::size_t{0});
-        spec.selected = [picked] { return picked->get(); };
-        spec.onSelect = [picked](std::size_t index) { picked->set(index); };
-        commonOf(node, ctx, element, spec.common);
-        return ui::tabs(std::move(spec));
+        return lowerTabs(node, ctx, element);
     }
     if (kind == "dialog" || kind == "drawer") {
         return lowerDialog(node, ctx, element);
@@ -7457,6 +7461,57 @@ inline Node ScreenCore::lowerSwitch(DocNode const& node, LowerCtx const& ctx) {
     spec.fallback = fallback.empty() ? Node{} : lowerAll(fallback, ctx);
     commonOf(node, ctx, nullptr, spec.common);
     return ui::switchOf(std::move(spec));
+}
+
+// A document names tabs by id; the view tree by index, so the ids map to indices once. A bound `selected` is the
+// controlled index: a pick runs `onChoose` and the page follows `selected` alone. Without it the node keeps the
+// user's pick itself, as a bound index too, whose page follows the pick: a constant would move only the highlight.
+inline Node ScreenCore::lowerTabs(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    Tabs spec;
+    auto ids = std::make_shared<std::vector<std::string>>();
+    for (DocNodePtr const& tab : node.partList("tabs")) {
+        auto const nodes = tab->nodes("children");
+        ids->push_back(tab->id);
+        spec.tabs.push_back(Tab{.label = bindProp<std::string>(ctx, tab->prop("label"), std::string{}, stringOf),
+                                .node = nodes.empty() ? Node{} : lowerAll(nodes, ctx)});
+    }
+    ExprPtr const selected = node.prop("selected");
+    Commands const* const onChoose = node.event("onChoose");
+    bool const controlled = selected && (selected->kind != ExprKind::Literal || !selected->literal.isNull());
+    auto const picked = std::make_shared<reactive::Signal<std::size_t>>(runtime(), std::size_t{0});
+    if (controlled) {
+        // A value that names no tab shows the first, and is unknownReported once.
+        auto const unknownReported = std::make_shared<bool>(false);
+        spec.selected = [this, scope = ctx.scope, bindings = ctx.bindings, selected, ids, unknownReported,
+                         path = pointerAppend(node.path, "selected")]() -> std::size_t {
+            Value const value = evalIn(*scope, bindings.get(), selected);
+            std::string const* const named = value.asString();
+            auto const found = named == nullptr ? ids->end() : std::ranges::find(*ids, *named);
+            if (found != ids->end()) {
+                return static_cast<std::size_t>(std::distance(ids->begin(), found));
+            }
+            if (!*unknownReported) {
+                *unknownReported = true;
+                report(path, canonicalJson(value) + " names no tab; the first is shown");
+            }
+            return 0;
+        };
+    } else {
+        spec.selected = [picked] { return picked->get(); };
+    }
+    spec.onSelect = [this, ctx, onChoose, ids, picked, controlled, element](std::size_t index) {
+        if (!controlled) {
+            picked->set(index);
+            if (element != nullptr && index < ids->size()) {
+                element->draft.set(Value{ids->at(index)});
+            }
+        }
+        if (onChoose != nullptr && index < ids->size()) {
+            runEvent(onChoose, ctx, Value{ids->at(index)});
+        }
+    };
+    commonOf(node, ctx, element, spec.common);
+    return ui::tabs(std::move(spec));
 }
 
 inline std::shared_ptr<RtScope> ScreenCore::rowScope(DocNode const& node, LowerCtx const& ctx,

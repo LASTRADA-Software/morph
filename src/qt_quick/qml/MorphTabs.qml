@@ -18,6 +18,19 @@ MorphWidget {
     // Highlights tab `index`; past the last highlights none.
     function select(index: int) {
         bar.currentIndex = index < bar.count ? index : -1
+        keepChosenInView()
+    }
+
+    // The chosen tab lies wholly inside the bar however it was chosen: placed once the bar has been laid out, since a
+    // tab chosen before the first layout has no position yet, and again whenever the bar's width changes.
+    function keepChosenInView() {
+        Qt.callLater(root.placeChosen)
+    }
+
+    function placeChosen() {
+        if (bar.currentIndex >= 0 && bar.contentItem instanceof ListView) {
+            bar.contentItem.positionViewAtIndex(bar.currentIndex, ListView.Contain)
+        }
     }
 
     // A hidden bar never holds the focus: the workspace's chords must reach a page when a second tab arrives.
@@ -35,6 +48,7 @@ MorphWidget {
             visible: root.barShown
             Layout.fillWidth: true
             currentIndex: -1
+            onWidthChanged: root.keepChosenInView()
             background: Rectangle {
                 color: "transparent"
 

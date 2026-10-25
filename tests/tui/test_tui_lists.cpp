@@ -200,6 +200,28 @@ TEST_CASE("tui lists: tabs draw a bar over the pages the mount leaves visible; R
     CHECK(selected.size() == 1);
 }
 
+// Mutation: paint the bar from the first label always (the chosen `[Training]` is cut off past column 40).
+TEST_CASE("tui lists: a narrow tab bar scrolls to the chosen tab and marks the labels it cuts", "[tui][lists]") {
+    Harness harness{40, 3};
+    auto const tabs = harness.make<TabsImpl>(nullptr);
+    std::vector<std::size_t> picked;
+    tabs->setTabs({"Overview", "Calibration", "Maintenance", "Bookings", "Audit trail", "Documents", "Training"});
+    tabs->setOnSelect([&](std::size_t index) { picked.push_back(index); });
+    tabs->setSelected(6);
+    std::vector<std::string> rows = harness.draw();
+    REQUIRE_FALSE(rows.empty());
+    CHECK(rows.front() == "\u2039 Audit trail  Documents [Training]");
+    // Back at the start, the bar draws from the first label again, and marks the cut end.
+    tabs->setSelected(0);
+    rows = harness.draw();
+    REQUIRE_FALSE(rows.empty());
+    CHECK(rows.front().starts_with("[Overview]"));
+    CHECK(rows.front().ends_with("\u203a"));
+    // A click on the end marker moves the highlight to the next tab, as Right does.
+    harness.click({.x = 39, .y = 0});
+    CHECK(picked == std::vector<std::size_t>{1});
+}
+
 // Mutation: keep the bar's row whatever setBarShown says (the page stays on row 1).
 TEST_CASE("tui lists: a hidden tab bar gives its row to the page, and a shown one keeps one row", "[tui][lists]") {
     Harness harness{20, 3};

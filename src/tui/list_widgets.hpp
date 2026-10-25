@@ -194,6 +194,10 @@ private:
 /// hides every page but the selected one through its own visible flag, so `setSelected` moves the bar's highlight
 /// only. A selection past the last tab highlights none, and Right then selects the first, Left the last.
 ///
+/// A bar narrower than its labels scrolls: it draws whole labels from a first visible one, which painting moves so
+/// the highlighted label fits, with `‹` at the start and `›` at the end while labels are cut there. A click on a label
+/// maps through that offset, and a click on `‹` or `›` selects the previous or next tab, as Left and Right do.
+///
 /// A hidden bar gives its row to the body and takes no focus: there is no strip to choose a tab on.
 class TabsImpl final : public TuiContainer<ui::TabsWidget> {
 public:
@@ -214,10 +218,25 @@ public:
 
 private:
     [[nodiscard]] std::string labelText(std::size_t index) const;
+    [[nodiscard]] int labelsWidth(std::size_t first, std::size_t last) const;
+    void scrollToSelected(int width);
     void select(std::size_t index);
+
+    // The columns a painted label or marker covers, and what a click there chooses: a label its own tab, a marker
+    // the tab before or after the highlighted one (`step` -1 or 1).
+    struct Span {
+        int start = 0;
+        int end = 0;
+        std::size_t index = 0;
+        int step = 0;
+    };
 
     std::vector<std::string> _labels;
     std::size_t _selected = 0;
+    // The first label the bar draws; moved by painting so the highlighted one fits.
+    std::size_t _first = 0;
+    // What the last paint drew, left to right, for clicks.
+    std::vector<Span> _spans;
     std::function<void(std::size_t)> _onSelect;
     bool _barShown = true;
 };

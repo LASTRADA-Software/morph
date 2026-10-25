@@ -144,7 +144,8 @@ Every kind of the kind table has a builder whose options struct holds the kind's
 `dataTable`, `dateTimeInput`, `slider`, `filePicker`, `banner`, `badge`, `progress`, `steps`,
 `keyValue`, `emptyState`, `splitter`, `collapsible`, `dropZone`, `customize`, `boundary`, `form`,
 `collection`, `wizard` and `custom`. Children come first, as a `Nodes` list (`{a, b}`, or one node),
-options second. `DialogOptions::actions` (a `dialog`'s or `drawer`'s) lists its footer buttons as
+options second. `tabs(tabs, TabsOptions{.selected, .onChoose})` takes `Tab{id, label, children}` pages.
+`DialogOptions::actions` (a `dialog`'s or `drawer`'s) lists its footer buttons as
 `ActionButtonOptions`, run in its scope.
 
 The keys every node takes are member functions of `Node`, each returning a copy with the key set:

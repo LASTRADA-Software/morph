@@ -13,6 +13,7 @@
 #include <QSizeF>
 #include <QString>
 #include <QStringList>
+#include <QTest>
 #include <QVariantList>
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -181,6 +182,53 @@ TEST_CASE("qt_quick containers: tabs show their labels, highlight on request and
     CHECK(picks == std::vector<std::size_t>{0});
     CHECK(impl.highlighted() == 0);
     CHECK(containerCore(*tabs).children().size() == 1);
+}
+
+namespace {
+
+// Where a tab button lies in the window, read once the bar's view has stopped moving: a read taken during the bar's
+// own scroll animation finds the button on its way and proves nothing.
+QRectF settledButton(Scene& scene, ui::TabsWidget& tabs, qsizetype index) {
+    QRectF last;
+    int still = 0;
+    for (int round = 0; round < 60 && still < 4; ++round) {
+        scene.settle();
+        QTest::qWait(50);
+        QList<QQuickItem*> const buttons = Scene::itemsOf(Scene::itemOf(tabs), "QQuickTabButton");
+        REQUIRE(buttons.size() > index);
+        QQuickItem const& button = *buttons.at(index);
+        QRectF const now{button.mapToScene(QPointF{0, 0}), QSizeF{button.width(), button.height()}};
+        still = now == last ? still + 1 : 0;
+        last = now;
+    }
+    return last;
+}
+
+}  // namespace
+
+// Mutation: drop the positionViewAtIndex call in MorphTabs (the tab chosen before the first layout stays past the
+// window's right edge).
+TEST_CASE("qt_quick containers: a narrow tab bar keeps the chosen tab wholly in view", "[qt_quick]") {
+    std::vector<std::string> const labels{"Overview",    "Calibration", "Maintenance", "Bookings",
+                                          "Audit trail", "Documents",   "Training"};
+    for (bool const beforeLayout : {true, false}) {
+        INFO((beforeLayout ? "chosen before the first layout" : "chosen after it"));
+        Scene scene;
+        scene.window().resize(360, 400);
+        auto tabs = scene.backend().createTabs(nullptr);
+        tabs->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+        tabs->setTabs(labels);
+        if (beforeLayout) {
+            tabs->setSelected(6);
+        } else {
+            scene.settle();
+            tabs->setSelected(6);
+        }
+        QRectF const chosen = settledButton(scene, *tabs, 6);
+        INFO("x " << chosen.x() << " width " << chosen.width());
+        CHECK(chosen.x() >= -0.5);
+        CHECK(chosen.x() + chosen.width() <= 360.5);
+    }
 }
 
 // Mutation: never bind the TabBar's visible to barShown (it shows with one tab); or keep `focusTarget: bar`, so a

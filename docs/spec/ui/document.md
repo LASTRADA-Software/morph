@@ -173,7 +173,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | `panel` | `title`, `header` (nodes, shown beside the title, usable while collapsed), `padding`, `collapsible`, `collapsed`, `onToggle`, `children` | |
 | `scroll` | `axis`, `children` | |
 | `switch` | `on` (required), `cases`: parts `{when, scope, children ⓘ}`, `default` | |
-| `tabs` | `tabs`: parts `{label, children}`; a tab's `label` follows its expression, and the list of tabs is fixed; the node keeps the user's pick, so picking a tab mounts and shows its page, and a relabel keeps it | |
+| `tabs` | `tabs`: parts `{id, label, children}`, `selected`, `onChoose`; a tab's `label` follows its expression, and the list of tabs is fixed (a tab takes no `visible`). `selected` is the id of the tab shown, controlled as a select's: a pick runs `onChoose` with the tab's id as `event`, and the page follows `selected` alone; a literal `null` is no binding. Without it the node keeps the user's pick, so picking a tab mounts and shows its page. A relabel keeps the pick. A command chooses a tab by setting the state `selected` reads; `set` never names a tabs node | `selected` (the shown tab's id: the bound one, else the pick, else the first tab's) |
 | `dialog`, `drawer` | `open`, `title`, `showErrors`, `side`, `scope`, `children` ⓘ, `default` ⓘ, `cancel` ⓘ, `actions` ⓘ (parts `actionButton`, [The head](#the-head)), `onDismiss` | `open`, `ready`, `submitted` |
 | `busy` | `active`, `label` | |
 | `forEach` | `rows` (required), `key` ⓘ, `axis`, `gap`, `scope`, `children` ⓘ | |
@@ -257,7 +257,8 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   a `dialog`); and the `column` or `row` an `arrange` point orders takes no `align` or `justify`, since it is drawn as
   a list. An `actionButton` has an `id` and a `label`, and its
   id is used once in its list (a screen's `actions`, a dialog's or drawer's); `subtitle`, `status` and `actions` are
-  refused on the app document.
+  refused on the app document. A tab's `id` is used once among its node's tabs; every tab has one when the node
+  gives `selected` or `onChoose`; and a literal `selected` names one of them.
 - **Expressions.** Each parses and has at most 256 nodes; each name resolves as above; a function's
   statically known argument kinds are ones it takes; `visible`, `enabled`, `readonly`, `required`,
   `stale`, `open`, `when`, `dirty`, a check's `assert` and every `if` condition are `bool` where
