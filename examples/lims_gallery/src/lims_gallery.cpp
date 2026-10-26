@@ -25,7 +25,8 @@ constexpr char const* kThemeIndex = R"({
   "base": "theme/base.tokens.json",
   "surfaces": { "selected": "theme/selected.tokens.json", "outOfSpec": "theme/out-of-spec.tokens.json",
                 "standard": "theme/standard.tokens.json", "control": "theme/control.tokens.json",
-                "blank": "theme/blank.tokens.json" },
+                "blank": "theme/blank.tokens.json", "sample": "theme/sample.tokens.json",
+                "empty": "theme/empty.tokens.json" },
   "icons": { "scan": "icon/scan.svg" }
 })";
 
@@ -71,6 +72,17 @@ constexpr char const* kStandardSurface = R"({
 constexpr char const* kControlSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#FFF1D6" }, "border": { "$value": "#D19100" },
              "text": { "$value": "#6B4100" } }
+})";
+
+// A well that holds a sample, outlined solid, and an empty one, muted: no surface draws a dashed outline.
+constexpr char const* kSampleSurface = R"({
+  "color": { "$type": "color", "surface": { "$value": "#FFFFFF" }, "border": { "$value": "#4D5461" },
+             "text": { "$value": "#1C1E21" } }
+})";
+
+constexpr char const* kEmptySurface = R"({
+  "color": { "$type": "color", "surface": { "$value": "#F6F7F9" }, "border": { "$value": "#DDE1E6" },
+             "text": { "$value": "#7A828F" } }
 })";
 
 constexpr char const* kBlankSurface = R"({
@@ -133,6 +145,8 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
                                        std::tuple{"theme", "theme/standard.tokens.json", kStandardSurface},
                                        std::tuple{"theme", "theme/control.tokens.json", kControlSurface},
                                        std::tuple{"theme", "theme/blank.tokens.json", kBlankSurface},
+                                       std::tuple{"theme", "theme/sample.tokens.json", kSampleSurface},
+                                       std::tuple{"theme", "theme/empty.tokens.json", kEmptySurface},
                                        std::tuple{"icon", "icon/scan.svg", kScanIcon}}) {
         if (auto added = served.addFile(morph::ui::BundleFile{.kind = kind, .id = fileId, .bytes = bytes}); !added) {
             return std::unexpected(std::move(added.error()));

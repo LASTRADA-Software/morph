@@ -47,6 +47,8 @@ struct Instrument {
     ui::Handle<bool> bookingOpen;
     ui::Handle<bool> qualificationOpen;
     ui::Handle<bool> eventsOpen;
+    // The record tab shown, by its id; Book chooses `bookings`.
+    ui::Handle<std::string> tab;
 };
 
 Instrument declare(ui::Scope& screen) {
@@ -71,10 +73,16 @@ Instrument declare(ui::Scope& screen) {
     instrument.bookingOpen = screen.state("bookingOpen", true);
     instrument.qualificationOpen = screen.state("qualificationOpen", false);
     instrument.eventsOpen = screen.state("eventsOpen", false);
+    instrument.tab = screen.state("tab", std::string{"overview"});
     return instrument;
 }
 
 // ── The head ─────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// Book shows the Bookings tab and opens the booking dialog over it.
+ui::Commands book(Instrument const& instrument) {
+    return {ui::set(instrument.tab, std::string{"bookings"}), ui::open(instrument.bookDialog)};
+}
 
 void declareHead(ui::Scope& screen, Instrument const& instrument) {
     auto const compact = instrument.compact;
@@ -97,7 +105,7 @@ void declareHead(ui::Scope& screen, Instrument const& instrument) {
                    .label = "Book",
                    .emphasis = ButtonEmphasis::Primary,
                    .visible = !compact && instrument.inService,
-                   .onClick = ui::open(instrument.bookDialog)});
+                   .onClick = book(instrument)});
 }
 
 // The overflow menu: the actions the head has no room for.
@@ -262,11 +270,12 @@ ui::Node undrawn(char const* what) {
 }
 
 ui::Node recordTabs(Instrument const& instrument, ui::Node const& overview) {
-    return ui::tabs({{.label = "Overview", .children = overview},
-                     {.label = "Calibration", .children = undrawn("Calibration")},
-                     {.label = "Maintenance", .children = undrawn("Maintenance")},
-                     {.label = "Bookings", .children = bookingsTable(instrument)},
-                     {.label = "Audit trail", .children = undrawn("Audit trail")}})
+    return ui::tabs({{.id = "overview", .label = "Overview", .children = overview},
+                     {.id = "calibration", .label = "Calibration", .children = undrawn("Calibration")},
+                     {.id = "maintenance", .label = "Maintenance", .children = undrawn("Maintenance")},
+                     {.id = "bookings", .label = "Bookings", .children = bookingsTable(instrument)},
+                     {.id = "audit", .label = "Audit trail", .children = undrawn("Audit trail")}},
+                    {.selected = instrument.tab, .onChoose = ui::set(instrument.tab, ui::event())})
         .testId("tabs");
 }
 
@@ -306,7 +315,7 @@ ui::Node compactDetails() {
 
 ui::Node compactLayout(Instrument const& instrument) {
     auto const actions = ui::row(
-        {ui::button({.label = "Book", .emphasis = ButtonEmphasis::Primary, .onClick = ui::open(instrument.bookDialog)})
+        {ui::button({.label = "Book", .emphasis = ButtonEmphasis::Primary, .onClick = book(instrument)})
              .enabled(instrument.inService)
              .sizing(ui::stretch())
              .testId("book"),

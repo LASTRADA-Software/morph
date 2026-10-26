@@ -163,13 +163,15 @@
 - **Workaround used:** the badge wrapped in a `row` (`layout::cellTag`), inside which it keeps its width.
 - **Weight:** Low
 
-### G16: A bottom action bar that stays in view on compact
+### G16: A bottom action bar that stays in view on compact — fixed in batch D
 - **Design(s):** 02, 05, 06, 08, 09
 - **Needs:** "Reject…" and "Receive, next" pinned to the bottom of the phone screen while the form above scrolls.
 - **ui/1 today:** no screen-level footer or sticky region; the only footer is a dialog's or drawer's (`actions`,
   `docs/spec/ui/document.md:177`; `ActionBar` mounts only inside one, `docs/spec/ui/view_tree.md:131`). Inferred
   from reading; not tried on a short window.
-- **Workaround used:** the buttons as the last row of the screen's column, scrolling with it.
+- **Workaround used:** the buttons as the last row of the screen's column, scrolling with it. Receipt, samples, results
+  and review now pin their compact action row with `pinned`; stability's footer is its `stepper`'s own row, which
+  scrolls with the step.
 - **Weight:** Medium
 
 ### G17: A group of checkboxes with a legend and a required mark
@@ -206,7 +208,7 @@
 - **Workaround used:** none; the head is the seam the design maps to, so the screen keeps it.
 - **Weight:** Medium
 
-### G20: Choosing a tab from a command, and tab overflow on compact
+### G20: Choosing a tab from a command, and tab overflow on compact — fixed in batch D
 - **Design(s):** 03
 - **Needs:** compact shows three tabs and a "More ▾" tab that holds the rest; an action such as Book could open the
   Bookings tab.
@@ -337,7 +339,7 @@
   is disabled.
 - **Weight:** Medium
 
-### G32: `surface` cannot follow the data
+### G32: `surface` cannot follow the data — fixed in batch D
 - **Design(s):** 05, 07
 - **Needs:** a compact sample card tinted while its sample has a result out of specification, the tint the table row
   gets from `rowTone`; a plate well drawn by what it holds, a solid outline while it holds a sample and a dashed one
@@ -395,7 +397,7 @@
   the containers value take the `error` role (G39).
 - **Weight:** Medium
 
-### G35: A command cannot name an element inside a `switch` case from outside it
+### G35: A command cannot name an element inside a `switch` case from outside it — fixed in batch D
 - **Design(s):** 06, 08
 - **Needs:** the wizard footer's Continue, outside the step's content, moving focus to the field that blocks it
   (Containers per pull).
@@ -408,7 +410,8 @@
 - **Also (08):** "Enter moves to the next result". A result field is a table cell, declared once in the row scope, so
   each row has its own element and no command in one row names the next row's; `focus` takes an element name, not a
   row key (`docs/spec/ui/document.md:267-269`). Inferred from reading; not tried. 08 leaves focus where it is after
-  Enter and drops the sentence from its help line.
+  Enter and drops the sentence from its help line. `focus` now takes a `row`; 08's "next row" still waits for batch B part 2's
+  `slice`, which computes the next row's key, so 08 keeps this workaround until then.
 - **Weight:** Medium
 
 ### G36: A field of a computed value cannot be read — fixed in batch E
@@ -429,7 +432,7 @@
   dates do not follow a new T0.
 - **Weight:** Medium
 
-### G38: A wizard over screen state
+### G38: A wizard over screen state — fixed in batch D
 - **Design(s):** 06
 - **Needs:** a four-step wizard (Product and lot, Conditions and timepoints, Tests per timepoint, Review and sign) with
   Back, Continue blocked by the step's errors, and Save draft.
@@ -588,7 +591,7 @@
   screen takes no worksheet param, so it always signs WS-2026-0412.
 - **Weight:** Medium
 
-### G51: A tab label cannot follow the data
+### G51: A tab label cannot follow the data — fixed in batch D
 - **Design(s):** 09
 - **Needs:** "Audit trail · 3", "Comments · 1" counting the selected worksheet's entries.
 - **ui/1 today:** the lowering evaluates each tab's `label` once (`include/morph/ui/interpreter.hpp:6268-6275`), and

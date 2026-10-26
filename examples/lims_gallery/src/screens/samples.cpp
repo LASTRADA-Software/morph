@@ -536,12 +536,12 @@ ui::Node expandedLayout(Samples const& list) {
         ui::row({ui::spacer().sizing(ui::stretch()), searchField(list).sizing(ui::fixed(30)),
                  statusFilter(list).sizing(ui::fixed(19)), priorityFilter(list).sizing(ui::fixed(18))},
                 {.gap = 1, .align = Align::Center});
-    return ui::column(
+    return ui::pinned(ui::column(
         {toolbar, bulkBar(list), ui::panel({samplesTable(list), pageFooter(list)}, {.padding = 0}),
          layout::muted("Rows with a tinted background have a result out of specification. A checked box marks a "
                        "row as selected."),
          assignDialog(list), priorityDialog(list)},
-        {.gap = 2});
+        {.gap = 2}));
 }
 
 // ── Compact: rows become cards, same selection ───────────────────────────────────────────────────────────────────
@@ -561,12 +561,10 @@ ui::Node cardContent(Samples const& list) {
         {.gap = 2, .align = Align::Start});
 }
 
-// A card is tinted while its sample is out of specification. A surface is a literal, so the tint is a second card
-// shown in its place.
+// A card is tinted while its sample is out of specification.
 ui::Node sampleCard(Samples const& list) {
     Flag const outOfSpec = ui::eq(ui::row("specTone"), "err");
-    return ui::column({ui::panel({cardContent(list)}, {.padding = 2}).surface("outOfSpec").visible(outOfSpec),
-                       ui::panel({cardContent(list)}, {.padding = 2}).visible(!outOfSpec)});
+    return ui::panel({cardContent(list)}, {.padding = 2}).surface(ui::cond(outOfSpec, Text{"outOfSpec"}, Text{""}));
 }
 
 ui::Node compactFilters(Samples const& list) {
@@ -637,23 +635,27 @@ ui::Node compactLayout(Samples const& list) {
     auto const active =
         ui::cond(ui::eq(list.status, "open"), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1}) +
         ui::cond(ui::eq(list.priority, "any"), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1});
-    return ui::column(
-        {searchField(list),
-         ui::row({ui::button({.label = ui::format("Filters · {0}", {active}), .onClick = ui::open(list.filtersDrawer)})
+    // The bulk bar stays at the bottom of the phone screen while the cards scroll above it.
+    return ui::pinned(
+        ui::column(
+            {searchField(list),
+             ui::row(
+                 {ui::button({.label = ui::format("Filters · {0}", {active}), .onClick = ui::open(list.filtersDrawer)})
                       .sizing(ui::stretch())
                       .testId("open-filters"),
                   sortChoice(list).sizing(ui::stretch())},
                  {.gap = 1}),
-         ui::forEach(ui::slice(cardOrder(list), std::int64_t{0}, list.cardCount), {.key = ui::row("id"), .gap = 1},
-                     [&list](ui::DeclScope&) { return ui::Nodes{sampleCard(list)}; })
-             .testId("cards"),
-         ui::column(noSamples(list)).visible(ui::Handle<bool>{ui::isEmpty(list.shown)}),
-         ui::button({.label = ui::format("Load more · {0} of {1}", {list.cardCount, shownCount}),
-                     .onClick = ui::set(list.cardCount, list.cardCount + 25)})
-             .visible(list.cardCount < shownCount)
-             .testId("load-more"),
-         compactBulkBar(list), compactFilters(list), assignDialog(list), priorityDialog(list)},
-        {.gap = 2});
+             ui::forEach(ui::slice(cardOrder(list), std::int64_t{0}, list.cardCount), {.key = ui::row("id"), .gap = 1},
+                         [&list](ui::DeclScope&) { return ui::Nodes{sampleCard(list)}; })
+                 .testId("cards"),
+             ui::column(noSamples(list)).visible(ui::Handle<bool>{ui::isEmpty(list.shown)}),
+             ui::button({.label = ui::format("Load more · {0} of {1}", {list.cardCount, shownCount}),
+                         .onClick = ui::set(list.cardCount, list.cardCount + 25)})
+                 .visible(list.cardCount < shownCount)
+                 .testId("load-more"),
+             compactFilters(list), assignDialog(list), priorityDialog(list)},
+            {.gap = 2}),
+        {.bottom = compactBulkBar(list)});
 }
 
 }  // namespace
@@ -666,7 +668,8 @@ ui::Screen samplesScreen() {
                        .label = ui::cond(list.compact, Text{"Register"}, Text{"Register samples"}),
                        .emphasis = ButtonEmphasis::Primary,
                        .onClick = ui::notify("Registering samples opens the registration form")});
-        return layout::byWidth(list.width, compactLayout(list), expandedLayout(list));
+        return layout::byWidth(list.width, compactLayout(list), expandedLayout(list))
+            .sizing(ui::stretch(), ui::stretch());
     });
 }
 

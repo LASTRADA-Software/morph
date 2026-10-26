@@ -583,25 +583,17 @@ ui::Node auditList(Review const& review) {
         .testId("audit");
 }
 
-// The record's tabs. The tab labels are read once when the tabs mount, so the tabs are mounted again, under a
-// switch, for each worksheet the reviewer picks.
+// The record's tabs, whose counts follow the selected worksheet; the reviewer's pick is kept across worksheets.
 ui::Node recordTabs(Review const& review, bool compact) {
     ui::Nodes const resultsPage{showChoice(review), compact ? resultCards(review) : resultTable(review),
                                 commentCards(review), reviewComment(review)};
-    std::vector<ui::Case> cases;
-    for (Sheet const& sheet : sheets()) {
-        cases.emplace_back(
-            ui::AnyHandle{sheet.id},
-            ui::Nodes{
-                ui::tabs({{.label = "Results", .children = resultsPage},
-                          {.label = compact ? "Previous" : "Previous lots", .children = lotTable(review)},
-                          {.label = ui::format(compact ? "Audit {0}" : "Audit trail · {0}", {review.auditCount}),
-                           .children = auditList(review)},
-                          {.label = ui::format(compact ? "Comments {0}" : "Comments · {0}", {review.commentCount}),
-                           .children = commentCards(review)}})
-                    .testId("record-tabs")});
-    }
-    return ui::switchOn(review.selected, cases);
+    return ui::tabs({{.label = "Results", .children = resultsPage},
+                     {.label = compact ? "Previous" : "Previous lots", .children = lotTable(review)},
+                     {.label = ui::format(compact ? "Audit {0}" : "Audit trail · {0}", {review.auditCount}),
+                      .children = auditList(review)},
+                     {.label = ui::format(compact ? "Comments {0}" : "Comments · {0}", {review.commentCount}),
+                      .children = commentCards(review)}})
+        .testId("record-tabs");
 }
 
 ui::Node sheetHead(Review const& review, bool compact) {
@@ -718,29 +710,31 @@ ui::Node worksheetPane(Review const& review) {
 ui::Node expandedLayout(Review const& review) {
     // The design's 280 px queue beside the worksheet, in the frontend's character widths.
     auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{37, 96}};
-    return ui::column({ui::splitter({queuePane(review), worksheetPane(review)}, ui::AnyHandle{"horizontal"}, sizes)
+    return ui::pinned({ui::splitter({queuePane(review), worksheetPane(review)}, ui::AnyHandle{"horizontal"}, sizes)
                            .a11y("Queue and worksheet")
                            .testId("split"),
-                       decisionDialog(review)},
-                      {.gap = 0});
+                       decisionDialog(review)});
 }
 
+// The decisions stay at the bottom of the phone screen while the worksheet scrolls above them.
 ui::Node compactWorksheet(Review const& review) {
-    return ui::column({ui::button({.label = ui::format("‹ Awaiting review · {0}", {review.waiting}),
-                                   .emphasis = ButtonEmphasis::Ghost,
-                                   .onClick = ui::set(review.showQueue, true)})
-                           .testId("back"),
-                       sheetHead(review, true), selfBanner(review), recordTabs(review, true),
-                       ui::row({returnButton(review, "Return…").sizing(ui::stretch()),
-                                rejectButton(review, "Reject…").sizing(ui::stretch()),
-                                approveButton(review, "Approve…").sizing(ui::stretch(2))},
-                               {.gap = 1}),
-                       decisionDialog(review)},
-                      {.gap = 2});
+    return ui::pinned(
+        {ui::column({ui::button({.label = ui::format("‹ Awaiting review · {0}", {review.waiting}),
+                                 .emphasis = ButtonEmphasis::Ghost,
+                                 .onClick = ui::set(review.showQueue, true)})
+                         .testId("back"),
+                     sheetHead(review, true), selfBanner(review), recordTabs(review, true), decisionDialog(review)},
+                    {.gap = 2})},
+        {.bottom = ui::row({returnButton(review, "Return…").sizing(ui::stretch()),
+                            rejectButton(review, "Reject…").sizing(ui::stretch()),
+                            approveButton(review, "Approve…").sizing(ui::stretch(2))},
+                           {.gap = 1})});
 }
 
 ui::Node compactLayout(Review const& review) {
-    return ui::switchOn(review.showQueue, {ui::Case{true, {queuePane(review)}}}, {compactWorksheet(review)});
+    return ui::switchOn(review.showQueue, {ui::Case{true, {ui::pinned(queuePane(review))}}},
+                        {compactWorksheet(review)})
+        .sizing(ui::stretch(), ui::stretch());
 }
 
 }  // namespace
@@ -749,7 +743,8 @@ ui::Screen reviewScreen() {
     return ui::screen("lims-gallery.review", [](ui::Scope& screen) {
         Review const review = declare(screen);
         screen.title("Review and approval");
-        return layout::byWidth(review.width, compactLayout(review), expandedLayout(review));
+        return layout::byWidth(review.width, compactLayout(review), expandedLayout(review))
+            .sizing(ui::stretch(), ui::stretch());
     });
 }
 

@@ -115,7 +115,10 @@ ui::AnyHandle testList() {
 }
 
 struct Study {
+    // The per-pull field of each layout: the two layouts' steppers are separate switches, and a focus that reaches
+    // into switch cases may name only one switch's.
     ui::Element perPullField = ui::element("perPullInput");
+    ui::Element perPullCompact = ui::element("perPullCompact");
     ui::AnyHandle width;
     Flag compact;
     Count step;
@@ -136,7 +139,6 @@ struct Study {
     Flag enough;
     ui::AnyHandle runs;
     ui::AnyHandle testCount;
-    Flag canContinue;
     ui::AnyHandle firstDate;
     ui::AnyHandle firstPull;
     ui::AnyHandle lastPull;
@@ -202,8 +204,6 @@ Study declare(ui::Scope& screen) {
     study.testCount = screen.let(
         "testCount",
         ui::call("count", {ui::filter(study.tests, "test", [](ui::AnyHandle const& test) { return test.at("on"); })}));
-    study.canContinue = screen.let("canContinue", (ui::ne(study.step, 2) || Count{study.testCount} > 0) &&
-                                                      (ui::ne(study.step, 3) || study.confirmed));
     auto const pulled = screen.let("pulledMonths", pulledMonths(study));
     auto const first = screen.let("firstMonth", ui::call("min", {pulled}));
     auto const last = screen.let("lastMonth", ui::call("max", {pulled}));
@@ -312,16 +312,18 @@ ui::Node perPullField(Study const& study, bool compact) {
     return layout::captioned(ui::textInput({.value = study.perPull,
                                             .label = compact ? "Per pull, units" : "Containers per pull, units",
                                             .onChange = ui::set(study.perPull, ui::event())}))
-        .id(study.perPullField)
+        .id(compact ? study.perPullCompact : study.perPullField)
         .required(true)
         .errors(errors)
         .testId("per-pull");
 }
 
-ui::Node attention(Study const& study) {
-    return ui::banner({.tone = "err",
-                       .text = "1 field needs attention: Containers per pull.",
-                       .action = ui::ActionPart{.label = "Go to the field", .onClick = ui::focus(study.perPullField)}})
+ui::Node attention(Study const& study, bool compact) {
+    return ui::banner(
+               {.tone = "err",
+                .text = "1 field needs attention: Containers per pull.",
+                .action = ui::ActionPart{.label = "Go to the field",
+                                         .onClick = ui::focus(compact ? study.perPullCompact : study.perPullField)}})
         .visible(study.attempted && !study.enough)
         .testId("attention");
 }
@@ -535,44 +537,26 @@ ui::Node reviewStep(Study const& study) {
         .testId("review-step");
 }
 
-ui::Node stepPage(Study const& study, bool compact, ui::Node const& conditionsStep) {
-    return ui::switchOn(study.step,
-                        {ui::Case{ui::AnyHandle{std::int64_t{0}}, {productStep(study, compact)}},
-                         ui::Case{ui::AnyHandle{std::int64_t{1}}, conditionsStep},
-                         ui::Case{ui::AnyHandle{std::int64_t{2}}, {testsStep(study, compact)}}},
-                        {reviewStep(study)});
-}
-
-ui::AnyHandle stepItems(Study const& study, bool labelled) {
-    std::vector<ui::AnyHandle> items;
-    std::int64_t index = 0;
-    for (char const* const label : kSteps) {
-        auto const state = ui::cond(study.step > index, Text{"done"},
-                                    ui::cond(ui::eq(study.step, index), Text{"active"}, Text{"pending"}));
-        items.push_back(ui::obj({{"label", labelled ? label : ""}, {"state", state}}));
-        ++index;
-    }
-    return ui::list(items);
-}
-
-ui::Commands next(Study const& study) {
-    return ui::ifThen(ui::eq(study.step, 1) && !study.enough,
-                      // The field is in the step's switch case, a scope the footer cannot name, so Continue cannot
-                      // focus it; the banner's action, inside the case, does.
-                      ui::set(study.attempted, true),
-                      {ui::ifThen(study.step < 3, ui::set(study.step, study.step + 1),
-                                  ui::notify("Study STB-2026-014 is signed and created; its pulls are booked"))});
-}
-
-ui::Node backButton(Study const& study) {
-    return ui::button({.label = "Back", .onClick = ui::set(study.step, study.step - 1)})
-        .enabled(study.step > 0)
-        .testId("back");
-}
-
-ui::AnyHandle continueLabel(Study const& study) {
-    return ui::cond(ui::eq(study.step, 1), Text{"Continue to tests"},
-                    ui::cond(ui::eq(study.step, 3), Text{"Sign and create"}, Text{"Continue"}));
+// The wizard: Continue on Conditions focuses the per-pull field while the lot cannot cover the pulls, and shows the
+// banner that says why.
+ui::Node wizard(Study const& study, bool compact, ui::Node const& conditionsStep, ui::Nodes const& extra) {
+    Flag const hasTests = Count{study.testCount} > 0;
+    return ui::stepper(
+        {.step = study.step,
+         .steps = {{.label = kSteps.at(0), .children = productStep(study, compact)},
+                   {.label = kSteps.at(1),
+                    .children = conditionsStep,
+                    .canContinue = study.enough,
+                    .blocking = compact ? study.perPullCompact : study.perPullField,
+                    .onBlocked = ui::set(study.attempted, true)},
+                   {.label = kSteps.at(2), .children = testsStep(study, compact), .canContinue = hasTests},
+                   {.label = kSteps.at(3), .children = reviewStep(study), .canContinue = study.confirmed}},
+         .continueLabel = "Continue",
+         .finishLabel = "Sign and create",
+         .onFinish = ui::notify("Study STB-2026-014 is signed and created; its pulls are booked"),
+         .extra = extra,
+         .labelled = !compact,
+         .testIdPrefix = std::string{}});
 }
 
 // ── Expanded ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -595,24 +579,16 @@ ui::Node expandedConditions(Study const& study) {
                            // The design's 250 px summary.
                            .sizing(ui::fixed(33))
                            .a11y("Summary");
-    return ui::row({ui::column({attention(study), fields, conditions}, {.gap = 2}).sizing(ui::stretch()), aside},
-                   {.gap = 2, .align = Align::Start});
+    return ui::row(
+        {ui::column({attention(study, false), fields, conditions}, {.gap = 2}).sizing(ui::stretch()), aside},
+        {.gap = 2, .align = Align::Start});
 }
 
 ui::Node expandedLayout(Study const& study) {
-    return ui::column(
-        {ui::steps(stepItems(study, true), study.step).testId("steps"),
-         stepPage(study, false, expandedConditions(study)),
-         ui::row(
-             {backButton(study), ui::spacer().sizing(ui::stretch()),
-              ui::button({.label = "Save draft",
-                          .emphasis = ButtonEmphasis::Ghost,
-                          .onClick = ui::notify("The study draft is saved")}),
-              ui::button({.label = continueLabel(study), .emphasis = ButtonEmphasis::Primary, .onClick = next(study)})
-                  .enabled(study.canContinue)
-                  .testId("continue")},
-             {.gap = 1})},
-        {.gap = 3});
+    return ui::pinned(wizard(study, false, expandedConditions(study),
+                             ui::button({.label = "Save draft",
+                                         .emphasis = ButtonEmphasis::Ghost,
+                                         .onClick = ui::notify("The study draft is saved")})));
 }
 
 // ── Compact: one condition at a time, every field kept ───────────────────────────────────────────────────────────
@@ -634,7 +610,7 @@ ui::Node conditionSection(Study const& study) {
 
 ui::Node compactConditions(Study const& study) {
     return ui::column(
-        {attention(study), startField(study),
+        {attention(study, true), startField(study),
          ui::grid({windowField(study), perPullField(study, true)}, {.gap = 2, .columns = 2}),
          ui::forEach(study.conditions, {.key = ui::row("id"), .gap = 1},
                      [&study](ui::DeclScope&) { return ui::Nodes{conditionSection(study)}; })
@@ -646,19 +622,9 @@ ui::Node compactConditions(Study const& study) {
 }
 
 ui::Node compactLayout(Study const& study) {
-    return ui::column(
-        {layout::muted(ui::format("Step {0} of 4 · Paracetamol 500 mg", {study.step + 1})),
-         ui::steps(stepItems(study, false), study.step).testId("steps"),
-         stepPage(study, true, compactConditions(study)),
-         ui::row({backButton(study).sizing(ui::fixed(12)),
-                  ui::button({.label = ui::cond(ui::eq(study.step, 3), Text{"Sign and create"}, Text{"Continue"}),
-                              .emphasis = ButtonEmphasis::Primary,
-                              .onClick = next(study)})
-                      .sizing(ui::stretch())
-                      .enabled(study.canContinue)
-                      .testId("continue")},
-                 {.gap = 1})},
-        {.gap = 2});
+    return ui::pinned({ui::column({layout::muted(ui::format("Step {0} of 4 · Paracetamol 500 mg", {study.step + 1})),
+                                   wizard(study, true, compactConditions(study), {})},
+                                  {.gap = 2})});
 }
 
 }  // namespace
@@ -672,7 +638,8 @@ ui::Screen stabilityScreen() {
                               ui::cond(ui::eq(study.step, 2), Text{kSteps.at(2)}, Text{kSteps.at(3)})));
         screen.title(ui::cond(study.compact, stepName, Text{"New stability study · Paracetamol 500 mg tablets"}));
         screen.showErrors(ui::ShowErrors::Always);
-        return layout::byWidth(study.width, compactLayout(study), expandedLayout(study));
+        return layout::byWidth(study.width, compactLayout(study), expandedLayout(study))
+            .sizing(ui::stretch(), ui::stretch());
     });
 }
 

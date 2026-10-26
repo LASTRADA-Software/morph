@@ -53,7 +53,7 @@ TEST_CASE("stability, expanded: step 2 of the wizard, the matrix and the summary
     CHECK(screen.prop("TextInput", "per-pull", "errors") ==
           "[15 pulls × 12 \\= 180 units needed\\, 150 in stock for lot L-26-0381.]");
     CHECK(screen.shows("Banner", "attention"));
-    CHECK(screen.prop("Button", "continue", "label") == "Continue to tests");
+    CHECK(screen.prop("Button", "continue", "label") == "Continue");
 }
 
 TEST_CASE("stability, expanded: a timepoint changes the summary, and enough containers lets the wizard go on",

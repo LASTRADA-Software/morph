@@ -365,6 +365,7 @@ ui::Node sampleWell(Plate const& plate, Well const& well) {
             .drop(ui::map(plate.toPlace, "item", [](ui::AnyHandle const& item) { return item.at("n"); }),
                   place(plate, name, ui::event()))
             .key("Enter", openAssign(plate, name, firstToPlace(plate)))
+            .surface(ui::cond(ui::engaged(sample), Text{"sample"}, Text{"empty"}))
             .testId("well-" + well.name);
     return withArrowKeys(node, plate, well);
 }
@@ -397,7 +398,7 @@ ui::Node chip(char const* label, char const* surface, char const* meaning) {
 
 ui::Node legend() {
     return ui::row({chip("STD", "standard", "Standard"), chip("QC", "control", "Control"), chip("B", "blank", "Blank"),
-                    chip("S", "card", "Sample"), chip("·", "card", "Empty")},
+                    chip("S", "sample", "Sample"), chip("·", "empty", "Empty")},
                    {.gap = 3, .align = Align::Center})
         .testId("legend");
 }

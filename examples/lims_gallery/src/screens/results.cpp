@@ -525,7 +525,7 @@ ui::Node changeDialog(Worksheet const& sheet) {
 }
 
 ui::Node expandedLayout(Worksheet const& sheet) {
-    return ui::column(
+    return ui::pinned(ui::column(
         {suitability(),
          ui::panel({resultTable(sheet),
                     layout::muted("Results are entered and reported to the decimal places of their specification.")},
@@ -534,7 +534,7 @@ ui::Node expandedLayout(Worksheet const& sheet) {
                   saveButton(), submitButton(sheet)},
                  {.gap = 1, .align = Align::Center}),
          changeDialog(sheet)},
-        {.gap = 2});
+        {.gap = 2}));
 }
 
 // ── Compact: one sample at a time ────────────────────────────────────────────────────────────────────────────────
@@ -593,27 +593,30 @@ ui::Node compactLayout(Worksheet const& sheet) {
         return ui::eq(line.at("sample"), sample);
     });
     auto const last = static_cast<std::int64_t>(kSamples.size()) - 1;
-    return ui::column(
-        {ui::text({.text = ui::format("Sample {0} of {1} · {2}",
-                                      {sheet.current + 1, static_cast<std::int64_t>(kSamples.size()), sample}),
-                   .role = "heading"})
-             .testId("sample"),
-         ui::row({ui::button({.label = "‹ Previous", .onClick = ui::set(sheet.current, sheet.current - 1)})
-                      .enabled(sheet.current > 0)
-                      .sizing(ui::stretch())
-                      .testId("previous"),
-                  ui::button({.label = "Next ›", .onClick = ui::set(sheet.current, sheet.current + 1)})
-                      .enabled(sheet.current < last)
-                      .sizing(ui::stretch())
-                      .testId("next")},
-                 {.gap = 1}),
-         layout::tag("System suitability passed", "ok").testId("suitability"),
-         ui::forEach(shown, {.key = ui::row("id"), .gap = 3},
-                     [&sheet](ui::DeclScope&) { return ui::Nodes{resultField(sheet)}; })
-             .testId("fields"),
-         ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).testId("oos"),
-         ui::row({saveButton().sizing(ui::stretch()), submitButton(sheet).sizing(ui::stretch())}, {.gap = 1})},
-        {.gap = 3});
+    // Save and Submit stay at the bottom of the phone screen while the sample's results scroll above them.
+    return ui::pinned(
+        ui::column(
+            {ui::text({.text = ui::format("Sample {0} of {1} · {2}",
+                                          {sheet.current + 1, static_cast<std::int64_t>(kSamples.size()), sample}),
+                       .role = "heading"})
+                 .testId("sample"),
+             ui::row({ui::button({.label = "‹ Previous", .onClick = ui::set(sheet.current, sheet.current - 1)})
+                          .enabled(sheet.current > 0)
+                          .sizing(ui::stretch())
+                          .testId("previous"),
+                      ui::button({.label = "Next ›", .onClick = ui::set(sheet.current, sheet.current + 1)})
+                          .enabled(sheet.current < last)
+                          .sizing(ui::stretch())
+                          .testId("next")},
+                     {.gap = 1}),
+             layout::tag("System suitability passed", "ok").testId("suitability"),
+             ui::forEach(shown, {.key = ui::row("id"), .gap = 3},
+                         [&sheet](ui::DeclScope&) { return ui::Nodes{resultField(sheet)}; })
+                 .testId("fields"),
+             ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).testId("oos")},
+            {.gap = 3}),
+        {.bottom =
+             ui::row({saveButton().sizing(ui::stretch()), submitButton(sheet).sizing(ui::stretch())}, {.gap = 1})});
 }
 
 }  // namespace
@@ -627,7 +630,8 @@ ui::Screen resultsScreen() {
                                  Text{"Worksheet WS-2026-0412 · HPLC-02 · method TM-ASSAY-07 v3"}));
         screen.status({.text = "In progress", .tone = "info"});
         screen.showErrors(ui::ShowErrors::Always);
-        return layout::byWidth(sheet.width, compactLayout(sheet), expandedLayout(sheet));
+        return layout::byWidth(sheet.width, compactLayout(sheet), expandedLayout(sheet))
+            .sizing(ui::stretch(), ui::stretch());
     });
 }
 

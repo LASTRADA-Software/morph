@@ -384,7 +384,8 @@ ui::Node expandedLayout(Receipt const& receipt) {
             // The design's 300 px column, in the frontend's character widths.
             .sizing(ui::fixed(40))
             .testId("session-panel");
-    return ui::column({ui::row({left, session}, {.gap = 2, .align = Align::Start}), rejectDialog(receipt)});
+    return ui::pinned(
+        ui::column({ui::row({left, session}, {.gap = 2, .align = Align::Start}), rejectDialog(receipt)}));
 }
 
 ui::Node compactLayout(Receipt const& receipt) {
@@ -398,16 +399,19 @@ ui::Node compactLayout(Receipt const& receipt) {
             .visible(ui::engaged(receipt.sample))
             .testId("sample");
     auto const scans = ui::format("This session · {0} scans", {receipt.received + receipt.rejected});
-    return ui::column(
-        {scanField(receipt, true), notices(receipt), sample,
-         ui::collapsible(
-             {sessionTable(receipt), layout::muted(receipt.lastRejection)},
-             {.title = scans, .open = receipt.sessionOpen, .onToggle = ui::set(receipt.sessionOpen, ui::event())})
-             .testId("session-panel"),
-         ui::row({rejectButton(receipt, "Reject…"), receiveButton(receipt, "Receive, next").sizing(ui::stretch())},
-                 {.gap = 1}),
-         rejectDialog(receipt)},
-        {.gap = 2});
+    // Reject and Receive stay at the bottom of the phone screen while the form scrolls above them.
+    return ui::pinned(
+        ui::column(
+            {scanField(receipt, true), notices(receipt), sample,
+             ui::collapsible(
+                 {sessionTable(receipt), layout::muted(receipt.lastRejection)},
+                 {.title = scans, .open = receipt.sessionOpen, .onToggle = ui::set(receipt.sessionOpen, ui::event())})
+                 .testId("session-panel"),
+             rejectDialog(receipt)},
+            {.gap = 2}),
+        {.bottom =
+             ui::row({rejectButton(receipt, "Reject…"), receiveButton(receipt, "Receive, next").sizing(ui::stretch())},
+                     {.gap = 1})});
 }
 
 }  // namespace
@@ -425,7 +429,8 @@ ui::Screen receiptScreen() {
                                         ui::format("{0} rejected", {receipt.rejected})),
                        .tone = "err"});
         screen.showErrors(ui::ShowErrors::Always);
-        return layout::byWidth(receipt.width, compactLayout(receipt), expandedLayout(receipt));
+        return layout::byWidth(receipt.width, compactLayout(receipt), expandedLayout(receipt))
+            .sizing(ui::stretch(), ui::stretch());
     });
 }
 
