@@ -7668,7 +7668,7 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         return view;
     };
     TableOptions options;
-    options.showHeader = node.prop("showHeader") ? boolOf(once(ctx, node.prop("showHeader")), format) : true;
+    options.showHeader = node.flag("showHeader", true);
     options.selectColumn = node.flag("selectColumn");
     if (ExprPtr const selectAll = node.prop("selectAllLabel")) {
         options.selectAllLabel = bindProp<std::string>(ctx, selectAll, std::string{}, stringOf);

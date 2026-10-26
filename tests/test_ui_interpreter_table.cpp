@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "ui_interpreter_support.hpp"
@@ -611,4 +612,20 @@ TEST_CASE("table: groups A, B, A give three headings and no duplicate key", "[ui
     int const table = h.backend.all("Table").front();
     CHECK(entryOrder(h, table) == "[A · lot L · 1] 1 [B · lot L · 1] 2 [A · lot L · 1] 3");
     CHECK(h.diagnostics.empty());
+}
+
+// Mutation: read `showHeader` as an expression again (it is a literal flag, so the table always shows its header).
+TEST_CASE("table: showHeader false hides the header, and absent shows it", "[ui][interpreter]") {
+    for (auto const& [flag, shown] : {std::pair{std::string_view{R"(, "showHeader": false)"}, "false"},
+                                      std::pair{std::string_view{R"(, "showHeader": true)"}, "true"},
+                                      std::pair{std::string_view{""}, "true"}}) {
+        Harness h;
+        auto screen = h.mount(std::string{R"({
+          "vocab": "ui/1", "id": "header",
+          "state": { "items": { "init": { "lit": [ { "id": "a" } ] } } },
+          "view": { "kind": "table", "rows": { "ref": "items" })"} +
+                              std::string{flag} + R"(, "columns": [ { "id": "id", "label": "Id" } ] } })");
+        INFO(flag);
+        CHECK(h.backend.prop(h.backend.all("Table").front(), "showHeader") == shown);
+    }
 }

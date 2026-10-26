@@ -464,6 +464,15 @@ struct DocNode {
         auto const found = flags.find(key);
         return found != flags.end() && found->second;
     }
+
+    /// @brief A literal flag whose absence means something other than `false`.
+    /// @param key    The key.
+    /// @param absent The value when the key is absent.
+    /// @return Its value; @p absent when the key is absent.
+    [[nodiscard]] bool flag(std::string_view key, bool absent) const {
+        auto const found = flags.find(key);
+        return found == flags.end() ? absent : found->second;
+    }
 };
 
 /// @brief A custom component declaration (spec 5 §10).
