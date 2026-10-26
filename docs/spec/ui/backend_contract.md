@@ -93,6 +93,9 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   face, and every run's text as its characters. The mount calls `setSpans` in place of `setText` for a node that has
   spans. Both are pure, so a backend cannot drop the emphasis silently. What a probe and assistive technology read
   of such a widget is the runs' text joined (`spansText`).
+- **Key-values.** Each caption sits beside its value, or above it once `setCaptionPlacement(Above)` is called. A
+  toned value (`KeyValueItem::tone` other than `Neutral`) is drawn in the tone's colour and the strong weight, and a
+  value with spans draws them as a text does; its accessible text is the runs' text joined.
 - **Text is characters.** Every setter's text is shown as the characters it holds: a backend never interprets a
   document's or a value's text as markup, so a name or a comment that holds `<b>` or `<a href=…>` shows those
   characters.
@@ -262,7 +265,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `BadgeWidget` | `setTone`, `setText`, `setIcon` (once) | `setOnRemove(onRemove, label)`: only for a removable badge, which then draws a remove control after its text (the framework icon `close`) named `label`, and takes the focus; Delete, Backspace, Enter or Space on it, or a click on its control, calls `onRemove`. A badge without it takes no focus |
 | `ProgressWidget` | `setValue(optional<double>)`, `setLabel` | — |
 | `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)` | — |
-| `KeyValueWidget` | `setItems(vector<KeyValueItem>)` | — |
+| `KeyValueWidget` | `setItems(vector<KeyValueItem>)`, `setCaptionPlacement` (once, only for `Above`) | — |
 | `EmptyStateWidget` | `setTitle`, `setText`, `setIcon` (once), `setActionLabel` | `setOnAction` |
 | `ChartWidget` | `setData(ChartData)`, at mount and on every change (`view_tree.md`, Chart data); it takes no focus | — |
 | `DrawerWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open drawer |
@@ -369,7 +372,7 @@ The headless reference backend and the test double for everything above the cont
   and `rowKey` on a row (Table); `mode`, `offset`, `value` (DateTimeInput); `range`, `value`
   (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `spans`, `actionLabel`, `dismissible` (Banner);
   `tone`, `text`, `icon`, and `removable` (the remove control's name) of a removable one (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
-  (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title` (Drawer);
+  and `captions` (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title` (Drawer);
   `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
   `accept`, `multiple` (DropZone); `component`, `minVersion` and each prop as `prop.<name>` (Custom);
   `yRange`, `xRange`, `yLabel`, `yTicks`, `lines`, `series`, `summary` (Chart, each set only when its text
@@ -383,7 +386,9 @@ The headless reference backend and the test double for everything above the cont
   `fixed(n)` or `stretch(n)`, a layout as `width/height`; lists as `[a,b]`; options as
   `[key:label,…]`; columns as `[label:sizing,…]`; a slider's range as `minimum..maximum/step`;
   a fraction in its shortest decimal form (`0.25`); steps as `[label:State,…]`; key-value pairs
-  as `[label:value,…]`; sizes as `[n,…]`; a chart's ranges as `[lo,hi]`, its ticks as `[text@value,…]`, its lines
+  as `[label:value,…]`, a value with spans as its runs in brackets and a tone other than `Neutral` following as
+  `;tone=<Tone>` (`[Serial number:[DEAB-902114;mono],Containers:180 needed;tone=Err]`), with `;` escaped in a caption
+  or value so it cannot forge a tone; sizes as `[n,…]`; a chart's ranges as `[lo,hi]`, its ticks as `[text@value,…]`, its lines
   as `[label@value;tone;style,…]` (`err`, `dashed`), and its series as `[label;joined;[point|…],…]`, each point
   `xLabel@x,y;tone;note` with `y` as a number, `gap` for none, or the axis end followed by `↑` or `↓` for a clipped
   point, and the tone empty for an unmarked one; every chart number shortest-round-trip, so a log is the same on

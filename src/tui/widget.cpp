@@ -802,9 +802,7 @@ std::vector<std::string_view> splitLines(std::string_view text) {
 int displayWidth(std::string_view text) { return ::core::tui::stringWidth(text); }
 
 void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& runs, ::core::tui::Style const& style,
-               bool multiline) {
-    int row = 0;
-    int column = 0;
+               bool multiline, int row, int column) {
     for (ui::TextSpan const& run : runs) {
         ::core::tui::Style runStyle = style;
         runStyle.bold = style.bold || run.strong;

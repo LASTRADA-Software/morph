@@ -100,7 +100,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Badge | `[text]` in its tone, a framework icon's glyph before the text; a removable one `[text ×]`, inverse while focused | a removable one: Delete, Backspace, Enter or Space while focused, or a click on the `×`, removes it; a click elsewhere on it focuses it |
 | Progress | `[####......] 40%` and the label; `<=>` when indeterminate | — |
 | Steps | a row per step: `[ ]` pending, `[>]` active, `[x]` done, `[!]` failed; the current one accented | — |
-| KeyValue | captions, then the values lined up after the widest | — |
+| KeyValue | captions, then the values lined up after the widest; stacked, each pair two rows, the caption muted over its value, with no rule, since a rule would cost a row per pair and the muted caption already separates them. A toned value draws in its tone's style, bold; a value with spans draws them as a text's | — |
 | EmptyState | the title, the explanation, `[ action ]` | Enter, click on the action |
 | Chart | points in cells, below; its summary, muted and wrapped, when smaller than 20 by 5 cells; content size 40 by 8 | — |
 | Splitter | the panes and a handle between each two | dragging a handle; the release reports every size |

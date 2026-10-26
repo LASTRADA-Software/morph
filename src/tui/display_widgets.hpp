@@ -179,6 +179,7 @@ class KeyValueImpl final : public TuiWidget<ui::KeyValueWidget> {
 public:
     explicit KeyValueImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
     void setItems(std::vector<ui::KeyValueItem> const& items) override;
+    void setCaptionPlacement(ui::CaptionPlacement placement) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::string probeText() const override;
     void paint(::core::tui::Canvas& canvas) override;
@@ -187,6 +188,7 @@ private:
     [[nodiscard]] int captionWidth() const;
 
     std::vector<ui::KeyValueItem> _items;
+    ui::CaptionPlacement _captions = ui::CaptionPlacement::Beside;
 };
 
 /// Empty state: the title in bold, the explanation muted, then `[ action ]` when it has an action label, which takes

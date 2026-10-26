@@ -1422,14 +1422,24 @@ private:
     }
 };
 
-/// @brief A fake `KeyValueWidget`: property `items` (`[label:value,…]`).
+/// @brief A fake `KeyValueWidget`: properties `items` (`[label:value,…]`, a value with spans as its runs in brackets,
+///        then `;tone=<Tone>` for a toned one) and `captions`.
 class FakeKeyValue final : public FakeLeaf<KeyValueWidget> {
 public:
     using FakeLeaf<KeyValueWidget>::FakeLeaf;
     void setItems(std::vector<KeyValueItem> const& items) override {
-        set("items", formatList(items, [](KeyValueItem const& item) {
-                return formatItem(item.label) + ":" + formatItem(item.value);
+        // `;` is escaped too, so a caption or a value cannot forge a tone.
+        auto const text = [](std::string_view value) {
+            return escape(value, [](char character) { return std::string_view{"=,[];"}.contains(character); });
+        };
+        set("items", formatList(items, [&text](KeyValueItem const& item) {
+                std::string const formatted =
+                    text(item.label) + ":" + (item.spans.empty() ? text(item.value) : formatSpans(item.spans));
+                return item.tone == Tone::Neutral ? formatted : formatted + ";tone=" + enumName(item.tone);
             }));
+    }
+    void setCaptionPlacement(CaptionPlacement placement) override {
+        set("captions", placement == CaptionPlacement::Above ? "Above" : "Beside");
     }
 };
 

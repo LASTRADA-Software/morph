@@ -4702,6 +4702,27 @@ struct ChartOptions {
     return detail::NodeWriter{"keyValue"}.put("items", items).done();
 }
 
+/// @brief Options of `keyValue`.
+struct KeyValueOptions {
+    /// @brief The pairs: a list of `{label, value, spans, tone}` records.
+    AnyHandle items;
+    /// @brief Where each caption sits: `Inline`, beside its value, or `Stacked`, above it; absent writes no key, which
+    ///        is inline.
+    std::optional<::morph::forms::FieldLayout> fieldLayout;
+};
+
+/// @brief A `keyValue` node with its options.
+/// @param options The pairs and where their captions sit.
+/// @return The node.
+[[nodiscard]] inline Node keyValue(KeyValueOptions const& options) {
+    detail::NodeWriter node{"keyValue"};
+    node.put("items", options.items);
+    if (options.fieldLayout) {
+        node.text("fieldLayout", *options.fieldLayout == ::morph::forms::FieldLayout::Stacked ? "stacked" : "inline");
+    }
+    return node.done();
+}
+
 /// @brief Options of `emptyState`.
 struct EmptyStateOptions {
     /// @brief The title.

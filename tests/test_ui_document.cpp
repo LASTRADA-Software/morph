@@ -328,3 +328,19 @@ TEST_CASE("ui document: a text's spans load beside or in place of its text, and 
     REQUIRE_FALSE(number.has_value());
     CHECK(number.error().reason == "a run is a string or a record with `text`");
 }
+
+// Mutation: drop the keyValue's fieldLayout check (the grid layout loads).
+TEST_CASE("ui document: a key-value's fieldLayout is inline or stacked, and its items' spans are checked",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "k", "view": {"kind": "keyValue", "fieldLayout": "stacked",
+        "items": {"list": [{"obj": {"label": "Serial", "spans": {"list": [{"obj": {"text": "D-9", "mono": true}}]}}}]}}})")
+              .has_value());
+    auto const grid = loadDocumentText(R"({"vocab": "ui/1", "id": "k", "view": {"kind": "keyValue",
+        "fieldLayout": "grid", "items": {"list": []}}})");
+    REQUIRE_FALSE(grid.has_value());
+    CHECK(grid.error().path == "/view/fieldLayout");
+    auto const run = loadDocumentText(R"({"vocab": "ui/1", "id": "k", "view": {"kind": "keyValue",
+        "items": {"list": [{"obj": {"label": "Serial", "spans": {"list": [{"obj": {"mono": true}}]}}}]}}})");
+    REQUIRE_FALSE(run.has_value());
+    CHECK(run.error().reason == "a run's record gives its `text`");
+}

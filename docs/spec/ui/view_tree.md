@@ -125,7 +125,7 @@ lowers them to the kinds below.
 | `Badge` | `badge` | `tone`, `text`, `icon` (set once), `onRemove` (set once; given, the badge is removable and takes the focus), `removeLabel` (the remove control's accessible name; empty: `Remove ` and the text) |
 | `Progress` | `progress` | `value` (`std::optional<double>`, 0 to 1; `nullopt` is indeterminate), `label` |
 | `Steps` | `steps` | `items` (`Step{label, state}`, `StepState{Pending, Active, Done, Failed}`), `current` (`std::optional<std::size_t>`) |
-| `KeyValue` | `keyValue` | `items` (`KeyValueItem{label, value}`) |
+| `KeyValue` | `keyValue` | `items` (`KeyValueItem{label, value, spans, tone}`: `spans` not empty is shown in place of `value`; `tone` `Neutral` is none), `captions` (`CaptionPlacement{Beside, Above}`, set once) |
 | `EmptyState` | `emptyState` | `title`, `text`, `icon` (set once), `action` |
 | `Drawer` | `drawer` | A `Dialog`'s fields and rules, plus `side` (`Side{Start, End}`, set once) |
 | `ActionBar` | `actionBar` | `children` (a null child is skipped). It mounts as a horizontal stack, spacing step 2, in the footer of the Dialog or Drawer whose content holds it, at any depth, including content a Switch, Tabs or row mounts later; anywhere else the mount throws `std::logic_error`. The footer is asked for only when an `ActionBar` mounts |

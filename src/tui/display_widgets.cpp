@@ -336,8 +336,22 @@ void StepsImpl::paint(::core::tui::Canvas& canvas) {
     }
 }
 
+namespace {
+
+// The characters an item's value shows: its runs joined, or its text.
+std::string shownValue(ui::KeyValueItem const& item) {
+    return item.spans.empty() ? item.value : ui::spansText(item.spans);
+}
+
+}  // namespace
+
 void KeyValueImpl::setItems(std::vector<ui::KeyValueItem> const& items) {
     _items = items;
+    refresh();
+}
+
+void KeyValueImpl::setCaptionPlacement(ui::CaptionPlacement placement) {
+    _captions = placement;
     refresh();
 }
 
@@ -349,29 +363,48 @@ int KeyValueImpl::captionWidth() const {
     return widest;
 }
 
+// Stacked, each pair is two rows and no rule: a rule would cost a row per pair on a 24-row screen, and the muted
+// caption already separates the pairs.
 ::core::tui::Size KeyValueImpl::naturalSize() const {
     int widest = 0;
     for (auto const& item : _items) {
-        widest = std::max(widest, displayWidth(item.value));
+        widest = std::max(widest, displayWidth(shownValue(item)));
     }
-    return {.width = _items.empty() ? 0 : captionWidth() + 2 + widest, .height = static_cast<int>(_items.size())};
+    auto const pairs = static_cast<int>(_items.size());
+    if (_captions == ui::CaptionPlacement::Above) {
+        return {.width = std::max(widest, captionWidth()), .height = 2 * pairs};
+    }
+    return {.width = _items.empty() ? 0 : captionWidth() + 2 + widest, .height = pairs};
 }
 
 std::string KeyValueImpl::probeText() const {
     std::string text;
     for (auto const& item : _items) {
-        text += (text.empty() ? "" : "\n") + item.label + ": " + item.value;
+        text += (text.empty() ? "" : "\n") + item.label + ": " + shownValue(item);
     }
     return text;
 }
 
+// A toned value draws in its tone's style, bold.
 void KeyValueImpl::paint(::core::tui::Canvas& canvas) {
     auto const& theme = canvas.theme();
-    int const values = captionWidth() + 2;
-    for (std::size_t index = 0; index < _items.size() && static_cast<int>(index) < canvas.height(); ++index) {
-        auto const row = static_cast<int>(index);
-        canvas.putString(row, 0, _items.at(index).label + ":", theme.textMuted);
-        canvas.putString(row, values, _items.at(index).value, theme.textNormal);
+    bool const above = _captions == ui::CaptionPlacement::Above;
+    int const values = above ? 0 : captionWidth() + 2;
+    for (std::size_t index = 0; index < _items.size(); ++index) {
+        ui::KeyValueItem const& item = _items.at(index);
+        int const row = above ? 2 * static_cast<int>(index) : static_cast<int>(index);
+        int const valueRow = above ? row + 1 : row;
+        if (valueRow >= canvas.height()) {
+            break;
+        }
+        canvas.putString(row, 0, above ? item.label : item.label + ":", theme.textMuted);
+        ::core::tui::Style style = item.tone == ui::Tone::Neutral ? theme.textNormal : toneStyle(theme, item.tone);
+        style.bold = style.bold || item.tone != ui::Tone::Neutral;
+        if (item.spans.empty()) {
+            canvas.putString(valueRow, values, item.value, style);
+        } else {
+            paintRuns(canvas, item.spans, style, false, valueRow, values);
+        }
     }
 }
 

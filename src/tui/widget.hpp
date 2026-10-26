@@ -494,11 +494,11 @@ void arrangeStack(std::span<WidgetBase* const> children, ::core::tui::Rect area,
 [[nodiscard]] std::vector<std::string_view> splitLines(std::string_view text);
 /// The display width of @p text in cells.
 [[nodiscard]] int displayWidth(std::string_view text);
-/// Draws @p runs one after another from the canvas's top left in @p style, a strong run bold; every cell is
-/// monospace already, so a mono run is drawn as the others. A run's '\n' starts the next row while @p multiline,
-/// and is drawn as a space otherwise.
+/// Draws @p runs one after another from row @p row, column @p column, in @p style, a strong run bold; every cell is
+/// monospace already, so a mono run is drawn as the others. A run's '\n' starts the next row at column 0 while
+/// @p multiline, and is drawn as a space otherwise.
 void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& runs, ::core::tui::Style const& style,
-               bool multiline);
+               bool multiline, int row = 0, int column = 0);
 /// Enter, or Space, with no modifier.
 [[nodiscard]] bool isActivation(::core::tui::KeyEvent const& key) noexcept;
 /// Appends the view of every focusable widget at or below @p root, depth first in `children()` order: Tab order.

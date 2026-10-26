@@ -788,12 +788,18 @@ public:
     virtual void setCurrent(std::optional<std::size_t> index) = 0;
 };
 
-/// @brief Captions beside their values.
+/// @brief Captions beside, or above, their values. A toned value is drawn in the tone's colour and the strong weight;
+///        a value with spans draws them as a text does.
 class KeyValueWidget : public Widget {
 public:
     /// @brief Replaces the pairs.
     /// @param items The pairs, in order.
     virtual void setItems(std::vector<KeyValueItem> const& items) = 0;
+
+    /// @brief Sets where each caption sits. A new list draws them beside their values; the mount calls it once, only
+    ///        for `Above`.
+    /// @param placement Where the captions sit.
+    virtual void setCaptionPlacement(CaptionPlacement placement) = 0;
 };
 
 /// @brief Points against a numeric axis, with reference lines. It takes no focus and calls no handler.

@@ -171,3 +171,18 @@ TEST_CASE("tui banner: a banner's runs draw on its row, a strong run bold", "[tu
     CHECK_FALSE(buffer.at(0, 10).style.bold);
     CHECK(banner->probeText() == "Refused. 3 left");
 }
+
+// Mutation: ignore the placement (the stacked pair takes one row).
+TEST_CASE("tui key-value: a stacked pair takes two rows, and a toned value is bold in its tone", "[tui][display]") {
+    Harness harness{30, 5};
+    auto const kv = harness.make<KeyValueImpl>(nullptr);
+    kv->setCaptionPlacement(ui::CaptionPlacement::Above);
+    kv->setItems({{.label = "Serial", .spans = {{.text = "D-9", .mono = true}}},
+                  {.label = "Containers", .value = "180 needed", .tone = ui::Tone::Err}});
+    CHECK(harness.draw() == Rows{"Serial", "D-9", "Containers", "180 needed"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(3, 0).style.bold);
+    CHECK(buffer.at(3, 0).style.fg == harness.screen().theme().error.fg);
+    CHECK_FALSE(buffer.at(1, 0).style.bold);
+    CHECK(kv->probeText() == "Serial: D-9\nContainers: 180 needed");
+}

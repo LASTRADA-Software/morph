@@ -2754,6 +2754,8 @@ private:
     /// @brief A text's role: a literal one as the loader checked it; a computed one evaluated in its slot, where a
     ///        name of no role is reported once for its path and drawn `Normal`.
     Prop<TextRole> roleProp(LowerCtx const& ctx, ExprPtr const& expr);
+    /// A key-value item: its caption, its value or spans, and its tone, each problem reported once at @p path.
+    KeyValueItem keyValueItemOf(Value const& item, std::string const& path);
     /// A text's or a banner's `spans`, reported once at its path when it drops a run.
     Prop<std::vector<TextSpan>> spansProp(LowerCtx const& ctx, ExprPtr const& expr);
 
@@ -6101,6 +6103,36 @@ inline constexpr std::string_view kSpansReason =
     "spans is a list of runs, each a value or a record with `text`; a list, a null or a record without `text` is "
     "dropped";
 
+/// @brief A tone by its exact name, the strict reading of a value's evaluation: a table row's and a key-value item's
+///        tone, which unlike `toneOf` takes no alias, so a misspelt name can be reported.
+/// @param value `neutral`, `info`, `ok`, `warn` or `err`; `null` is `Neutral`.
+/// @return The tone; `nullopt` for anything else.
+[[nodiscard]] inline std::optional<Tone> toneNamed(Value const& value) {
+    if (value.isNull()) {
+        return Tone::Neutral;
+    }
+    static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {{
+        {"neutral", Tone::Neutral},
+        {"info", Tone::Info},
+        {"ok", Tone::Ok},
+        {"warn", Tone::Warn},
+        {"err", Tone::Err},
+    }};
+    if (std::string const* const text = value.asString()) {
+        // A loop, not std::ranges::find: an array's iterator is a pointer on some standard libraries and not on
+        // others, so `auto` there reads differently to each.
+        for (auto const& [name, tone] : kTones) {
+            if (name == *text) {
+                return tone;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+/// @brief What a tone of no known name is told.
+inline constexpr std::string_view kToneNames = "a tone is neutral, info, ok, warn or err, or null for none";
+
 /// @brief A splitter's `sizes`: a list of numbers, each read as `intOf` reads it.
 /// @param value The value.
 /// @return The sizes; `nullopt` for anything but a list whose every item is an `int` or a decimal.
@@ -6295,6 +6327,29 @@ inline Prop<std::string> ScreenCore::surfaceOf(DocNode const& node, LowerCtx con
     return slotProp<std::string>([scope = ctx.scope, bindings = ctx.bindings, expr, nameOf = std::move(nameOf)] {
         return nameOf(evalIn(*scope, bindings.get(), expr));
     });
+}
+
+inline KeyValueItem ScreenCore::keyValueItemOf(Value const& item, std::string const& path) {
+    FormatContext const& format = session.formatting();
+    Value const* const label = item.field("label");
+    Value const* const value = item.field("value");
+    KeyValueItem out{.label = label == nullptr ? std::string{} : textOf(*label, format),
+                     .value = value == nullptr ? std::string{} : textOf(*value, format)};
+    if (Value const* const spans = item.field("spans")) {
+        bool dropped = false;
+        out.spans = spansOf(*spans, format, dropped);
+        if (dropped) {
+            report(path, kSpansReason);
+        }
+    }
+    if (Value const* const tone = item.field("tone")) {
+        std::optional<Tone> const named = toneNamed(*tone);
+        if (!named) {
+            report(path, "an item's tone is " + canonicalJson(*tone) + "; " + std::string{kToneNames});
+        }
+        out.tone = named.value_or(Tone::Neutral);
+    }
+    return out;
 }
 
 inline Prop<std::vector<TextSpan>> ScreenCore::spansProp(LowerCtx const& ctx, ExprPtr const& expr) {
@@ -7015,17 +7070,14 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     }
     if (kind == "keyValue") {
         KeyValue spec;
+        spec.captions = node.name("fieldLayout") == "stacked" ? CaptionPlacement::Above : CaptionPlacement::Beside;
         spec.items = slotProp<std::vector<KeyValueItem>>(
             [this, scope = ctx.scope, bindings = ctx.bindings, expr = node.prop("items")] {
                 std::vector<KeyValueItem> out;
                 Value const items = evalIn(*scope, bindings.get(), expr);
                 if (ValueList const* const list = items.asList()) {
                     for (Value const& item : *list) {
-                        Value const* const label = item.field("label");
-                        Value const* const value = item.field("value");
-                        out.push_back(KeyValueItem{
-                            .label = label == nullptr ? std::string{} : textOf(*label, session.formatting()),
-                            .value = value == nullptr ? std::string{} : textOf(*value, session.formatting())});
+                        out.push_back(keyValueItemOf(item, expr->path));
                     }
                 }
                 return out;
@@ -8501,21 +8553,8 @@ inline std::optional<Tone> ScreenCore::rowToneOf(Value const& value, std::string
     if (value.isNull()) {
         return std::nullopt;
     }
-    static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {{
-        {"neutral", Tone::Neutral},
-        {"info", Tone::Info},
-        {"ok", Tone::Ok},
-        {"warn", Tone::Warn},
-        {"err", Tone::Err},
-    }};
-    if (std::string const* const text = value.asString()) {
-        // A loop, not std::ranges::find: an array's iterator is a pointer on some standard libraries and not on
-        // others, so `auto` there reads differently to each.
-        for (auto const& [name, tone] : kTones) {
-            if (name == *text) {
-                return tone;
-            }
-        }
+    if (std::optional<Tone> const tone = toneNamed(value)) {
+        return tone;
     }
     if (!noted) {
         noted = true;

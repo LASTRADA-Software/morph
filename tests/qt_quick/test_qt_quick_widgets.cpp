@@ -1206,3 +1206,54 @@ TEST_CASE("qt_quick widgets: a text's runs are escaped rich text that keeps thei
     CHECK(Scene::controlOf(*markup).property("textFormat").toInt() == 0);
     CHECK(Scene::controlOf(*markup).property("text").toString() == QStringLiteral("<b>y</b>"));
 }
+
+namespace {
+
+/// Every item named @p name under @p root, depth first.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+void namedItems(QQuickItem const& root, QString const& name, QList<QQuickItem*>& found) {
+    for (QQuickItem* const child : root.childItems()) {
+        if (child->objectName() == name) {
+            found.append(child);
+        }
+        namedItems(*child, name, found);
+    }
+}
+
+QList<QQuickItem*> named(QQuickItem const& root, QString const& name) {
+    QList<QQuickItem*> found;
+    namedItems(root, name, found);
+    return found;
+}
+
+}  // namespace
+
+// Mutation: ignore `captionsAbove` in MorphKeyValue (the caption sits level with its value, and no rule shows).
+TEST_CASE("qt_quick widgets: a stacked key-value puts each caption over its value with a rule between pairs",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const kv = scene.backend().createKeyValue(column.get());
+    kv->setCaptionPlacement(ui::CaptionPlacement::Above);
+    kv->setItems({{.label = "Serial number", .spans = {{.text = "DEAB-902114", .mono = true}}},
+                  {.label = "Containers", .value = "180 needed", .tone = ui::Tone::Err}});
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*kv);
+    QList<QQuickItem*> const captions = named(item, QStringLiteral("caption"));
+    QList<QQuickItem*> const values = named(item, QStringLiteral("value"));
+    REQUIRE(captions.size() == 2);
+    REQUIRE(values.size() == 2);
+    QPointF const firstValue = values.at(0)->mapToItem(&item, QPointF{0, 0});
+    CHECK(captions.at(1)->mapToItem(&item, QPointF{0, 0}).y() > firstValue.y() + values.at(0)->height());
+    CHECK(values.at(0)->mapToItem(&item, QPointF{0, 0}).y() >=
+          captions.at(0)->mapToItem(&item, QPointF{0, 0}).y() + captions.at(0)->height());
+    QList<QQuickItem*> const rules = named(item, QStringLiteral("rule"));
+    REQUIRE(rules.size() == 2);
+    CHECK(rules.at(0)->isVisible());
+    CHECK_FALSE(rules.at(1)->isVisible());
+    QObject const* const scheme = item.property("scheme").value<QObject*>();
+    REQUIRE(scheme != nullptr);
+    CHECK(values.at(1)->property("color").value<QColor>() == scheme->property("error").value<QColor>());
+    CHECK(values.at(0)->property("color").value<QColor>() == scheme->property("text").value<QColor>());
+    CHECK(values.at(0)->property("textFormat").toInt() == 1);  // the run, as rich text
+}

@@ -940,7 +940,7 @@ inline constexpr std::array<KeySpec, 2> kProgressKeys = {{{"value", Shape::Expr}
 /// @brief The keys of `steps`.
 inline constexpr std::array<KeySpec, 2> kStepsKeys = {{{"items", Shape::Expr}, {"current", Shape::Expr}}};
 /// @brief The keys of `keyValue`.
-inline constexpr std::array<KeySpec, 1> kKeyValueKeys = {{{"items", Shape::Expr}}};
+inline constexpr std::array<KeySpec, 2> kKeyValueKeys = {{{"items", Shape::Expr}, {"fieldLayout", Shape::Text}}};
 /// @brief The keys of `emptyState`.
 inline constexpr std::array<KeySpec, 4> kEmptyStateKeys = {
     {{"title", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}, {"action", Shape::Part, "action"}}};
@@ -3487,6 +3487,10 @@ private:
             checkSpans(node.prop("spans"));
         } else if (node.kind == "banner") {
             checkSpans(node.prop("spans"));
+        } else if (node.kind == "keyValue") {
+            static constexpr std::array<std::string_view, 2> kCaptionPlaces = {"inline", "stacked"};
+            checkChoice(node, "fieldLayout", kCaptionPlaces);
+            checkItemSpans(node.prop("items"));
         } else if (node.kind == "table") {
             checkCellPlace(node, "valign");
         }
@@ -3730,6 +3734,23 @@ private:
                 checkLiteralRun(run->literal, run->path);
             } else if (run->kind == ExprKind::Object) {
                 checkRunRecord(*run);
+            }
+        }
+    }
+
+    // The spans of each key-value item written as an `obj` in a `list`.
+    static void checkItemSpans(ExprPtr const& items) {
+        if (items == nullptr || items->kind != ExprKind::List) {
+            return;
+        }
+        for (ExprPtr const& item : items->args) {
+            if (item->kind != ExprKind::Object) {
+                continue;
+            }
+            for (auto const& [key, value] : item->fields) {
+                if (key == "spans") {
+                    checkSpans(value);
+                }
             }
         }
     }

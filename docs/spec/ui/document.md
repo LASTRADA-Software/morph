@@ -192,7 +192,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | `badge` | `tone`, `text`, `icon`, `onRemove` (commands: the badge draws a remove control after its text and takes the focus, and removing it runs them; a removable badge is a filter chip), `removeLabel` (the control's accessible name, only with `onRemove`; default `Remove ` and the text, translated with `t`) | |
 | `progress` | `value` (0 to 1; a decimal is read exactly, at whatever places it carries), `label` | |
 | `steps` | `items`, `current` | |
-| `keyValue` | `items` | |
+| `keyValue` | `items` (a list of `{label, value, spans, tone}` records: `spans` as on `text`, shown in place of `value` by a client that knows them; `tone` (`ok`, `warn`, `err`, `info`; `neutral` or `null` for none) draws the value in the tone's colour and strong weight, and a name that is none of them is reported once and drawn as none), `fieldLayout` (`inline`, the default: each caption beside its value; `stacked`: each caption above it, as a `form`'s) | |
 | `emptyState` | `title`, `text`, `icon`, `action` | |
 | `chart` | `summary` (required: the text alternative), `series` (required, 1 to 4 parts `{points, y ⓘ, x ⓘ, xLabel ⓘ, tone ⓘ, note ⓘ, label, joined}`), `lines` (0 to 16 parts `{value, label, tone, style}`), `yMin`, `yMax`, `yPlaces` (a literal integer, 0 to 18), `yLabel`; see [Charts](#charts) | |
 | `splitter` | `orientation`, `sizes` (a list of integers in units, one per pane; a list of another length shares the space equally), `children` | |

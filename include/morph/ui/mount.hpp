@@ -1669,6 +1669,9 @@ private:
     Widget& mountKind(reactive::Scope& scope, KeyValue const& spec, ContainerWidget* parent) {
         KeyValueWidget& widget = scope.adopt(_backend->createKeyValue(parent));
         applyCommon(scope, widget, spec.common);
+        if (spec.captions != CaptionPlacement::Beside) {
+            widget.setCaptionPlacement(spec.captions);
+        }
         bind(scope, spec.items, [&widget](std::vector<KeyValueItem> const& items) { widget.setItems(items); });
         return widget;
     }

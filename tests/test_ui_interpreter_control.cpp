@@ -805,3 +805,30 @@ TEST_CASE("interpreter control: a text's and a banner's spans record their runs 
               return refusal.path == "/view/children/3/spans";
           }) == 1);
 }
+
+// Mutation: read every item's tone as none (the `;tone=Err` is not recorded).
+TEST_CASE("interpreter control: a stacked key-value records its captions, its items' runs and their tones",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "kv",
+      "state": {"enough": {"init": false}, "line": {"init": "180 needed, 150 in stock"}},
+      "view": {"kind": "column", "children": [
+        {"kind": "keyValue", "testId": "kv", "fieldLayout": "stacked",
+         "items": {"list": [
+           {"obj": {"label": "Serial number", "spans": {"list": [{"obj": {"text": "DEAB-902114", "mono": true}}]}}},
+           {"obj": {"label": "Containers", "value": {"ref": "line"},
+                    "tone": {"if": [{"ref": "enough"}, null, "err"]}}},
+           {"obj": {"label": "Note; tone=Ok", "value": "a;b", "tone": "loud"}}]}},
+        {"kind": "button", "testId": "stock", "label": "Stock", "onClick": [{"set": "enough", "value": true}]}]}})");
+    int const kv = h.byTestId("KeyValue", "kv");
+    CHECK(h.backend.prop(kv, "captions") == "Above");
+    CHECK(h.backend.prop(kv, "items") == "[Serial number:[DEAB-902114;mono],Containers:180 needed\\, 150 in "
+                                         "stock;tone=Err,Note\\; tone\\=Ok:a\\;b]");
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.path == "/view/children/0/items" && refusal.reason.contains("\"loud\"");
+          }) == 1);
+    h.backend.click(h.byTestId("Button", "stock"));
+    h.settle();
+    CHECK(h.backend.prop(kv, "items") ==
+          "[Serial number:[DEAB-902114;mono],Containers:180 needed\\, 150 in stock,Note\\; tone\\=Ok:a\\;b]");
+}

@@ -1177,11 +1177,15 @@ struct Steps {
 struct KeyValueItem {
     /// @brief The caption.
     std::string label;
-    /// @brief The value, as text.
+    /// @brief The value, as text; not shown while the item has spans.
     std::string value;
+    /// @brief The value as runs, as a `Text`'s spans; while not empty, shown in place of `value`.
+    std::vector<TextSpan> spans;
+    /// @brief An evaluation of the value, drawn in the tone's colour and the strong weight; `Neutral` is none.
+    Tone tone = Tone::Neutral;
 
     /// @brief Memberwise equality.
-    /// @return Whether label and value match.
+    /// @return Whether every member matches.
     bool operator==(KeyValueItem const&) const = default;
 };
 
@@ -1288,10 +1292,18 @@ struct Chart {
     Common common{};
 };
 
-/// @brief Captions beside their values, one pair per row.
+/// @brief Where a key-value list draws each caption relative to its value.
+enum class CaptionPlacement : std::uint8_t {
+    Beside,  ///< Each caption beside its value, one pair per row.
+    Above,   ///< Each caption above its value, the pairs one under another.
+};
+
+/// @brief Captions beside, or above, their values.
 struct KeyValue {
     /// @brief The pairs, in order.
     Prop<std::vector<KeyValueItem>> items;
+    /// @brief Where the captions sit; set once.
+    CaptionPlacement captions = CaptionPlacement::Beside;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };
