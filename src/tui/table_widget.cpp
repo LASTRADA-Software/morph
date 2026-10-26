@@ -92,15 +92,49 @@ void TableImpl::setRowLabel(ui::Widget& row, std::string_view label) {
     }
 }
 
+void TableImpl::setRowHeading(ui::Widget& row) {
+    auto& base = WidgetBase::of(row);
+    if (base.container() != this) {
+        throw std::logic_error{"morph::tui: setRowHeading of a widget that is not this table's row"};
+    }
+    _headings.insert(&base);
+    refresh();
+}
+
+std::size_t TableImpl::dataPlace(std::span<WidgetBase* const> rows, std::size_t place, Direction direction) const {
+    auto const data = [&](std::size_t candidate) {
+        return candidate < rows.size() && !isHeading(rows.subspan(candidate).front());
+    };
+    for (std::size_t index = place; index < rows.size(); direction == Direction::Forward ? ++index : --index) {
+        if (data(index)) {
+            return index;
+        }
+        if (direction == Direction::Backward && index == 0) {
+            break;
+        }
+    }
+    Direction const other = direction == Direction::Forward ? Direction::Backward : Direction::Forward;
+    for (std::size_t index = place; index < rows.size(); other == Direction::Forward ? ++index : --index) {
+        if (data(index)) {
+            return index;
+        }
+        if (other == Direction::Backward && index == 0) {
+            break;
+        }
+    }
+    return place;
+}
+
 int TableImpl::gutter() const noexcept { return _selectColumn ? kSelectGutter : kGutter; }
 
 std::string TableImpl::headerBox() const {
     auto const rows = shownChildren();
+    auto const data = std::ranges::count_if(rows, [this](WidgetBase const* row) { return !isHeading(row); });
     auto const marked = std::ranges::count_if(rows, [this](WidgetBase const* row) { return isMarked(row); });
     if (marked == 0) {
         return "[ ]";
     }
-    return std::cmp_equal(marked, rows.size()) ? "[x]" : "[-]";
+    return marked == data ? "[x]" : "[-]";
 }
 
 void TableImpl::setSelection(std::vector<ui::Key> const& selection) {
@@ -151,6 +185,7 @@ void TableImpl::clickHeader(int x) {
 // The cursor goes to the row that took the removed one's place, or to the last row.
 void TableImpl::childForgotten(WidgetBase& child) {
     _keys.erase(&child);
+    _headings.erase(&child);
     if (_lastClick.row == &child) {
         _lastClick = {};
     }
@@ -181,7 +216,8 @@ std::vector<int> TableImpl::naturalWidths() const {
     }
     for (auto const* row : children()) {
         auto const* const cells = dynamic_cast<ContainerBase const*>(row);
-        if (cells == nullptr || !row->shown()) {
+        // A heading's one cell spans every column, so it widens none.
+        if (cells == nullptr || !row->shown() || isHeading(row)) {
             continue;
         }
         for (auto const [width, cell] : std::views::zip(widths, cells->children())) {
@@ -230,6 +266,9 @@ WidgetBase* TableImpl::rowWith(ui::Key const& key) const {
 }
 
 bool TableImpl::isMarked(WidgetBase const* row) const {
+    if (isHeading(row)) {
+        return false;
+    }
     auto const rowKey = keyOf(row);
     return rowKey && std::ranges::find(_selection, *rowKey) != _selection.end();
 }
@@ -242,13 +281,15 @@ std::size_t TableImpl::cursorPlace(std::span<WidgetBase* const> rows) const {
     if (found != rows.end()) {
         return static_cast<std::size_t>(std::distance(rows.begin(), found));
     }
-    return _cursor == nullptr ? 0 : std::min(_cursorPlace, rows.size() - 1);
+    return dataPlace(rows, _cursor == nullptr ? 0 : std::min(_cursorPlace, rows.size() - 1), Direction::Forward);
 }
 
+// The cursor passes over a heading, on in the way it moved, or back when no data row is that way.
 void TableImpl::moveCursor(std::span<WidgetBase* const> rows, std::size_t place) {
     if (place >= rows.size()) {
         return;
     }
+    place = dataPlace(rows, place, place < _cursorPlace ? Direction::Backward : Direction::Forward);
     _cursor = rows.subspan(place).front();
     _cursorPlace = place;
     _follow = true;
@@ -356,6 +397,10 @@ void TableImpl::paintHeader(::core::tui::Canvas& canvas, std::vector<int> const&
 std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
     // With a select column the box shows the mark; without, `*` does.
     std::string mark;
+    if (isHeading(row)) {
+        mark.assign(static_cast<std::size_t>(gutter()), ' ');
+        return mark;
+    }
     if (_selectColumn) {
         mark = isMarked(row) ? "[x]" : "[ ]";
     } else {
@@ -393,9 +438,16 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
     for (auto const& column : _columns) {
         places.push_back(CellPlace{.across = column.align, .down = column.valign});
     }
+    // A heading's one cell takes every column's width and the gaps between them.
+    int const across = std::accumulate(widths.begin(), widths.end(), 0) +
+                       (kColumnGap * std::max(0, static_cast<int>(widths.size()) - 1));
     for (auto* row : children()) {
         if (auto* const stack = dynamic_cast<StackImpl*>(row)) {
-            stack->setColumnLayout(widths, kColumnGap, places);
+            if (isHeading(row)) {
+                stack->setColumnLayout({across}, kColumnGap, {CellPlace{.across = ui::Align::Start}});
+            } else {
+                stack->setColumnLayout(widths, kColumnGap, places);
+            }
         }
     }
     auto const areas = childAreas(_size);
@@ -505,7 +557,7 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
         return;
     }
     auto* const row = rowAtLine(cell.y);
-    if (row == nullptr) {
+    if (row == nullptr || isHeading(row)) {
         return;
     }
     auto const held = ::core::tui::withoutLockKeys(modifiers);
@@ -552,7 +604,7 @@ bool TableImpl::pick(WidgetBase const& row) {
 
 bool TableImpl::choose(WidgetBase const& row, ui::RowClick click) {
     auto const rowKey = keyOf(&row);
-    if (_mode == ui::SelectionMode::None || !rowKey || !row.actionable()) {
+    if (_mode == ui::SelectionMode::None || !rowKey || !row.actionable() || isHeading(&row)) {
         return true;
     }
     if (_mode == ui::SelectionMode::Single || click == ui::RowClick::Only) {
@@ -592,7 +644,7 @@ std::vector<ui::Key> TableImpl::rangeTo(WidgetBase const& row) const {
     auto const [low, high] = std::minmax(from, target);
     std::vector<ui::Key> keys;
     for (auto const* const between : std::ranges::subrange(low, std::next(high))) {
-        if (auto const betweenKey = keyOf(between); betweenKey && between->actionable()) {
+        if (auto const betweenKey = keyOf(between); betweenKey && between->actionable() && !isHeading(between)) {
             keys.push_back(*betweenKey);
         }
     }
@@ -602,7 +654,7 @@ std::vector<ui::Key> TableImpl::rangeTo(WidgetBase const& row) const {
 std::vector<ui::Key> TableImpl::allOrNone() const {
     std::vector<ui::Key> keys;
     for (auto const* const row : shownChildren()) {
-        if (auto const rowKey = keyOf(row); rowKey && row->actionable()) {
+        if (auto const rowKey = keyOf(row); rowKey && row->actionable() && !isHeading(row)) {
             keys.push_back(*rowKey);
         }
     }
@@ -635,7 +687,7 @@ bool TableImpl::report(std::vector<ui::Key> keys, ui::SelectionChange change) {
 
 void TableImpl::activateRow(ui::Key const& key) {
     auto const* const row = rowWith(key);
-    if (row == nullptr || !row->actionable()) {
+    if (row == nullptr || !row->actionable() || isHeading(row)) {
         return;
     }
     auto const handler = _onActivate;

@@ -149,7 +149,7 @@ reorders children, and only through this.
 | `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page |
 | `TabsWidget` | Page slots in the order first shown; the mount keeps exactly the selected page's slot visible, and `setSelected` moves the bar's highlight only |
 | `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included. `footer()` is a container the overlay owns and lays out after its content, showing nothing while it is empty; the mount puts the overlay's actions there. A `DrawerWidget` has the same footer |
-| `TableWidget` | Rows, each a horizontal stack of cells in column order; `setSelectColumn(true)` once, before any row, for a table that draws its selection as check boxes; `setRowKey(row, key)` once per row, right after it is built, then `setRowTone(row, tone)` for a toned row and `setRowLabel(row, label)` for a named one, and again on every change. A hidden cell keeps its column: the cells after it stay under their own headers |
+| `TableWidget` | Rows, each a horizontal stack of cells in column order; `setSelectColumn(true)` once, before any row, for a table that draws its selection as check boxes; `setRowKey(row, key)` once per row, right after it is built, then `setRowHeading(row)` for a heading row, whose one cell spans every column and the select column, then `setRowTone(row, tone)` for a toned row and `setRowLabel(row, label)` for a named one, and again on every change. A hidden cell keeps its column: the cells after it stay under their own headers |
 
 **Spacing.** `setGap` and `setPadding` take a spacing step, 0 to `kMaxSpacingStep` (5); the mount clamps a document's
 value with `spacingStep`, so a backend never sees another. Each backend maps a step to its own distance: the theme's
@@ -233,7 +233,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `DialogWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `ToastWidget` | `show(text, tone)` (one call: shows the message and restarts the dismiss interval regardless of whether the toast is already on-screen) | — |
 | `BusyWidget` | `setActive`, `setLabel` | — |
-| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)`, `setSelectColumn(bool)`, `setSelectAllLabel(text)`, `setRowLabel(row, text)`, `setExistingKeys(keys)` (every key, in row order, above the virtualization threshold), `setSort(optional<TableSort>)` (marks the column's header with the direction, or none; only for a table with a sortable column) | `setOnSelectionChange(keys, SelectionChange)`, `setOnActivate(Key)` (Enter or a double click), `setOnSort(column)` (a click on a sortable column's header, or Enter or Space on it where the header takes focus; the index counts the columns `setColumns` gave, which the select column is not one of; another header reports nothing). The backend never reorders rows for a sort: it shows `setSort`, and what a click means is the lowering's |
+| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)`, `setSelectColumn(bool)`, `setSelectAllLabel(text)`, `setRowLabel(row, text)`, `setRowHeading(row)` (once, after `setRowKey`: the row is never marked, reported or activated), `setExistingKeys(keys)` (every key, in row order, above the virtualization threshold), `setSort(optional<TableSort>)` (marks the column's header with the direction, or none; only for a table with a sortable column) | `setOnSelectionChange(keys, SelectionChange)`, `setOnActivate(Key)` (Enter or a double click), `setOnSort(column)` (a click on a sortable column's header, or Enter or Space on it where the header takes focus; the index counts the columns `setColumns` gave, which the select column is not one of; another header reports nothing). The backend never reorders rows for a sort: it shows `setSort`, and what a click means is the lowering's |
 | `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)` | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)`, `setOnCommit(value)` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
@@ -269,7 +269,8 @@ the list it refers to may arrive in either order.
   marks the current rows that have one of them. A key with no row marks nothing and stays
   requested, so a row that arrives with it later is marked, a row that goes is unmarked, and a
   reorder keeps the marks. The selection mode limits what the user can select, not what
-  `setSelection` marks.
+  `setSelection` marks. A heading row is never marked: a click on it does nothing, the current row
+  skips it, and Ctrl+A, a range and the select-all box pass over it.
 - A Table shows the user's selection whether or not the application binds `selection`. A user's
   selection replaces the requested keys, and `onSelectionChange` then gets exactly the keys of the
   existing rows now selected, in any mode: a key still waiting for its row is dropped by a user's
@@ -450,6 +451,8 @@ the container it measures inside another, since a root fills the window or scree
 9. In a table row where one cell is five lines tall, a one-line cell of a `valign: Start` column has its top at the
    row's top, and one of a `valign: End` column its bottom at the row's bottom. Five lines, so a centred cell is two
    lines from either, more than the unit a measure may be off by.
+10. A heading row's one cell, in a table of a 10-unit and a 20-unit column whose cells are containers, starts where
+    the first column's cell starts and ends where the second's ends.
 
 ### The probe
 
@@ -559,6 +562,8 @@ Each case is named by the rule it checks:
     on row 1, Enter activates row 1.
 44. A click on a sortable column's header reports its index once, a click on another column's header reports
     nothing, and showing a sort (`setSort`) reports nothing.
+45. In a table of a heading row and three data rows, Ctrl+A selects the three data rows and not the heading, and a
+    click on the heading row changes nothing and reports nothing.
 
 ### What the probe cannot reach
 

@@ -615,6 +615,9 @@ struct Row {
     /// @brief A table row's accessible name, and its select box's: disengaged when none was given, which names the
     ///        row by its key. Only `table`'s row view sets it; the mount refuses it on a row outside a table.
     std::optional<Prop<std::string>> label;
+    /// @brief Whether a table row is a heading: one cell spanning every column, never selected or activated. Only
+    ///        `table`'s row view sets it; the mount refuses it on a row outside a table.
+    bool heading = false;
     /// @brief Where the children sit across the row (vertically); set once.
     Align align = Align::Stretch;
     /// @brief Where the spare width goes while no shown child stretches; set once.
@@ -1508,6 +1511,8 @@ struct TableRowView {
     /// @brief The row's accessible name, and its select box's, bound in the row's own scope; disengaged names the row
     ///        by its key.
     std::optional<Prop<std::string>> label = std::nullopt;
+    /// @brief Whether the row is a heading: exactly one cell, spanning every column, never selected or activated.
+    bool heading = false;
 };
 
 /// @brief A table of keyed rows: one `Row` of cells per row, under the column headers.
@@ -1563,12 +1568,16 @@ template <typename RowT>
     std::function<Node(reactive::Signal<RowT> const&)> rowNode =
         [viewOf = std::move(rowView), count = columns.size()](reactive::Signal<RowT> const& entry) {
             TableRowView made = viewOf(entry);
-            if (made.cells.size() != count ||
+            std::size_t const wanted = made.heading ? 1 : count;
+            if (made.cells.size() != wanted ||
                 std::ranges::any_of(made.cells, [](Node const& cell) { return cell == nullptr; })) {
-                throw std::invalid_argument{"ui::table: a row needs exactly one non-null cell per column"};
+                throw std::invalid_argument{
+                    "ui::table: a row needs exactly one non-null cell per column, and a heading row one cell"};
             }
-            return row(
-                Row{.children = std::move(made.cells), .tone = std::move(made.tone), .label = std::move(made.label)});
+            return row(Row{.children = std::move(made.cells),
+                           .tone = std::move(made.tone),
+                           .label = std::move(made.label),
+                           .heading = made.heading});
         };
     Table spec{
         .rows =

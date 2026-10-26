@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "tui/context.hpp"
@@ -29,7 +30,9 @@ namespace morph::tui::detail {
 /// the `*`, under a header box that reads `[x]`, `[-]` or `[ ]`; a click on a row's box toggles the row as Ctrl+click
 /// does, and a click on the header box is Ctrl+A. A click on a sortable column's header asks to sort by it
 /// (`setOnSort`), and the sorted column's label is followed by ` ▲` or ` ▼`; a sortable column's header keeps room
-/// for the mark, so the columns do not move when the sort does. The header takes no keyboard focus.
+/// for the mark, so the columns do not move when the sort does. The header takes no keyboard focus. A heading row
+/// (`setRowHeading`) is one cell across every column; it draws no mark or box, the cursor passes over it, a click on
+/// it does nothing, and Ctrl+A, a range and the header box leave it out.
 ///
 /// Up, Down, Home and End move the cursor, and PageUp and PageDown by as many rows as fill the room below the header;
 /// Space selects the cursor row (Single) or toggles it and makes it the anchor (Multiple); Enter selects it in Single
@@ -67,6 +70,8 @@ public:
     void setSelectAllLabel(std::string_view label) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowLabel(ui::Widget& row, std::string_view label) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowHeading(ui::Widget& row) override;
     void setSelection(std::vector<ui::Key> const& selection) override;
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
@@ -109,6 +114,10 @@ private:
     /// The row with @p key, or null.
     [[nodiscard]] WidgetBase* rowWith(ui::Key const& key) const;
     [[nodiscard]] bool isMarked(WidgetBase const* row) const;
+    [[nodiscard]] bool isHeading(WidgetBase const* row) const { return _headings.contains(row); }
+    /// The first place from @p place among @p rows, toward the end (or the start when there is none there), that is
+    /// not a heading; @p place itself when every row is one.
+    [[nodiscard]] std::size_t dataPlace(std::span<WidgetBase* const> rows, std::size_t place, Direction direction) const;
     /// The cursor's position among @p rows (the shown rows); 0 when there are none.
     [[nodiscard]] std::size_t cursorPlace(std::span<WidgetBase* const> rows) const;
     /// Puts the cursor on the row at @p place of @p rows, and has the next frame bring it into view.
@@ -151,6 +160,7 @@ private:
     bool _selectColumn = false;
     ui::SelectionMode _mode = ui::SelectionMode::None;
     std::unordered_map<WidgetBase const*, ui::Key> _keys;
+    std::unordered_set<WidgetBase const*> _headings;
     std::vector<ui::Key> _selection;  ///< The keys requested or selected by the user, in that order.
     WidgetBase* _cursor = nullptr;    ///< The cursor row; null for the first shown row.
     std::optional<ui::Key> _anchor;   ///< Where a range starts: the row last clicked or toggled.

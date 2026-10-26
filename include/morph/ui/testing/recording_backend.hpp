@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -1383,7 +1384,7 @@ public:
 };
 
 /// @brief A fake `TableWidget`: properties `columns`, `selectionMode`, `selection`, `sort`, `selectColumn`,
-///        `selectAllLabel`, and `rowKey`, `tone` and `label` on a row.
+///        `selectAllLabel`, and `rowKey`, `tone`, `label` and `heading` on a row.
 ///
 /// `selection` shows the rows the widget marks: the requested keys, in the order requested, that one of its current
 /// rows has. The requested keys are kept, so a row that arrives with one of them is marked and a row that goes is
@@ -1398,6 +1399,7 @@ public:
         : FakeContainer<TableWidget>{std::move(store), std::move(kind), parent} {
         this->store().at(id()).onChildDestroyed = [this](int childId) {
             _rowKeys.erase(childId);
+            _headings.erase(childId);
             remark();
         };
     }
@@ -1464,6 +1466,27 @@ public:
         store().set(rowId, "rowKey", formatKey(key));
         _rowKeys.insert_or_assign(rowId, key);
         remark();
+    }
+
+    /// @brief Records the row's property `heading`; a heading row is never marked, selected or activated.
+    /// @param row One of this table's rows.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowHeading(Widget& row) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowHeading of a widget that is not this table's row"};
+        }
+        store().set(rowId, "heading", "true");
+        _headings.insert(rowId);
+        remark();
+    }
+
+    /// @brief Whether the current row with @p key is a heading.
+    /// @param key The key.
+    /// @return False when no current row has it, or the row is a data row.
+    [[nodiscard]] bool headingKey(Key const& key) const {
+        std::optional<int> const row = rowOf(key);
+        return row.has_value() && _headings.contains(*row);
     }
 
     /// @brief Records the row's property `tone` (`none` for no tone).
@@ -1626,12 +1649,12 @@ public:
         return every ? std::vector<Key>{} : rows;
     }
 
-    /// @brief The keys of the current rows, in row order.
+    /// @brief The keys of the current data rows, in row order: a heading row is not one.
     /// @return The keys.
     [[nodiscard]] std::vector<Key> rowKeys() const {
         std::vector<Key> keys;
         for (int const child : store().at(id()).children) {
-            if (auto const found = _rowKeys.find(child); found != _rowKeys.end()) {
+            if (auto const found = _rowKeys.find(child); found != _rowKeys.end() && !_headings.contains(child)) {
                 keys.push_back(found->second);
             }
         }
@@ -1644,7 +1667,7 @@ public:
     [[nodiscard]] std::vector<Key> markedKeys() const {
         std::vector<Key> keys;
         for (Key const& key : _requested.value_or(std::vector<Key>{})) {
-            if (rowOf(key).has_value()) {
+            if (rowOf(key).has_value() && !headingKey(key)) {
                 keys.push_back(key);
             }
         }
@@ -1664,6 +1687,7 @@ private:
 
     SelectionMode _mode = SelectionMode::None;
     std::vector<bool> _sortable;  // per column, as setColumns gave them
+    std::set<int> _headings;      // the heading rows' ids
     std::map<int, Key> _rowKeys;  // row id -> key, as setRowKey told it
     // Engaged once `setSelection` ran or the user selected.
     std::optional<std::vector<Key>> _requested;
@@ -2233,7 +2257,8 @@ public:
     /// @param widgetId The table.
     /// @param keys The keys of every row the user now selects, in the order selected.
     /// @throws std::logic_error when the widget is not a table, or the selection is not one a user could make: a key
-    ///         that names no current row, a row twice, any row in a `None` table, or more than one in a `Single` one.
+    ///         that names no current data row (a heading is not one), a row twice, any row in a `None` table, or more
+    ///         than one in a `Single` one.
     void selectRows(int widgetId, std::vector<Key> keys) {
         detail::Record const& record = expectKind(widgetId, "selectRows", {"Table"});
         auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
@@ -2246,7 +2271,7 @@ public:
         }
         std::unordered_set<Key> seen;
         for (Key const& key : keys) {
-            if (!table->rowOf(key).has_value() || !seen.insert(key).second) {
+            if (!table->rowOf(key).has_value() || table->headingKey(key) || !seen.insert(key).second) {
                 throw std::logic_error{"RecordingBackend: selectRows of " + detail::formatKey(key) + where +
                                        ", which has no such row or selects it twice"};
             }
@@ -2259,7 +2284,8 @@ public:
 
     /// @brief Clicks a row of a table as the user would with the click's modifiers: the table marks what the click
     ///        selects (`TableWidget`'s selection model), then `onSelectionChange` gets the keys and the kind of
-    ///        change, `Replace` for a plain click or a range and `Extend` for a toggle.
+    ///        change, `Replace` for a plain click or a range and `Extend` for a toggle. A click on a heading row
+    ///        does nothing, as a user's does.
     /// @param widgetId The table.
     /// @param key The row's key.
     /// @param click How the click is modified.
@@ -2276,7 +2302,8 @@ public:
             throw std::logic_error{"RecordingBackend: clickRow of " + detail::formatKey(key) + where +
                                    ", which has no such row"};
         }
-        if (!reachable(record) || !reachable(_store->at(*rowId))) {
+        // A click on a heading row selects nothing, as a user's does.
+        if (!reachable(record) || !reachable(_store->at(*rowId)) || table->headingKey(key)) {
             return;
         }
         auto [keys, change] = table->clicked(key, click);
@@ -2301,14 +2328,14 @@ public:
     /// @brief Activates a row of a table (Enter or a double click).
     /// @param widgetId The table.
     /// @param key The row's key.
-    /// @throws std::logic_error when the widget is not a table, or none of its current rows has @p key.
+    /// @throws std::logic_error when the widget is not a table, or none of its current data rows has @p key.
     void activateRow(int widgetId, Key key) {
         detail::Record const& record = expectKind(widgetId, "activateRow", {"Table"});
         auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
         std::optional<int> const rowId = table == nullptr ? std::nullopt : table->rowOf(key);
-        if (!rowId.has_value()) {
+        if (!rowId.has_value() || table->headingKey(key)) {
             throw std::logic_error{"RecordingBackend: activateRow of " + detail::formatKey(key) + ", which Table#" +
-                                   std::to_string(widgetId) + " has no row for"};
+                                   std::to_string(widgetId) + " has no data row for"};
         }
         if (reachable(_store->at(*rowId))) {
             invoke(record.callbacks.activate, std::move(key));

@@ -802,7 +802,7 @@ inline constexpr std::array<KeySpec, 5> kForEachKeys = {{{"rows", Shape::Expr, {
                                                          {"gap", Shape::Expr},
                                                          {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-inline constexpr std::array<KeySpec, 26> kTableKeys = {{{"rows", Shape::Expr},
+inline constexpr std::array<KeySpec, 27> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"key", Shape::Expr, {}, kInner},
                                                         {"model", Shape::Name},
                                                         {"action", Shape::Text},
@@ -822,6 +822,7 @@ inline constexpr std::array<KeySpec, 26> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"onSortChange", Shape::Commands},
                                                         {"pageSize", Shape::Expr},
                                                         {"page", Shape::Expr},
+                                                        {"group", Shape::Part, "group"},
                                                         {"filters", Shape::Expr},
                                                         {"rowTone", Shape::Expr, {}, kInner},
                                                         {"highlightKey", Shape::Expr},
@@ -838,6 +839,10 @@ inline constexpr std::array<KeySpec, 9> kColumnKeys = {{{"id", Shape::Name},
                                                         {"sortable", Shape::Flag},
                                                         {"sortBy", Shape::Expr, {}, kInner},
                                                         {"cell", Shape::Nodes, {}, kInner}}};
+/// @brief The keys of a `table` group part: the value its rows are grouped by, and the heading drawn before each
+///        group, both read in the row scope.
+inline constexpr std::array<KeySpec, 2> kGroupKeys = {
+    {{"by", Shape::Expr, {}, kInner | kRequired}, {"heading", Shape::Nodes, {}, kInner | kRequired}}};
 /// @brief The keys of `dateTimeInput`.
 inline constexpr std::array<KeySpec, 6> kDateTimeKeys = {{{"value", Shape::Expr},
                                                           {"mode", Shape::Expr},
@@ -943,7 +948,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 48> kKinds = {{
+inline constexpr std::array<KindSpec, 49> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -985,6 +990,7 @@ inline constexpr std::array<KindSpec, 48> kKinds = {{
     {"case", kCaseKeys, kPart | kScope},
     {"tab", kTabKeys, kPart},
     {"column", kColumnKeys, kPart},
+    {"group", kGroupKeys, kPart},
     {"action", kActionKeys, kPart},
     {"a11y", kA11yKeys, kPart},
     {"drag", kDragKeys, kPart},
@@ -3001,6 +3007,7 @@ private:
             checkSelectColumn(node);
             checkTableSort(node);
             checkTablePaging(node);
+            checkTableGroup(node);
             checkRowsTableKeys(node);
         }
     }
@@ -3060,6 +3067,14 @@ private:
             if (!named.insert(*columnId).second) {
                 refuse(where, "the sort names `" + *columnId + "` twice");
             }
+        }
+    }
+
+    // A table over `rows` draws its own group headings; a model-backed table's engine shapes its rows.
+    static void checkTableGroup(DocNode const& node) {
+        if (!node.name("model").empty() && !node.partList("group").empty()) {
+            refuse(pointerAppend(node.path, "group"),
+                   "a model-backed table's engine shapes its rows; `group` is for a table over `rows`");
         }
     }
 

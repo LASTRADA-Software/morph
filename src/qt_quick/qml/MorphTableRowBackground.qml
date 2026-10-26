@@ -17,6 +17,8 @@ Item {
     property bool alternate: false
     // The row's tone: -1 for none, else a tone index (Neutral, Info, Ok, Warn, Err).
     property int tone: -1
+    // Whether the row is a group heading, filled as the header row is.
+    property bool heading: false
     // The colour roles of the table the row is in.
     property MorphScheme scheme: Theme.themeScheme
 
@@ -57,7 +59,9 @@ Item {
     Rectangle {
         objectName: "fill"
         anchors.fill: parent
-        color: root.selected ? root.scheme.selection : root.tone >= 0 ? root.toneBg(root.tone) : "transparent"
+        color: root.heading ? root.scheme.tableHeader
+                            : root.selected ? root.scheme.selection
+                                            : root.tone >= 0 ? root.toneBg(root.tone) : "transparent"
     }
     // A toned row's leading bar, kept while the row is selected.
     Rectangle {

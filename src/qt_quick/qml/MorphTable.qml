@@ -162,7 +162,8 @@ MorphWidget {
         for (let r = 0; r < body.children.length; ++r) {
             ++root.rowScans
             const row = body.children[r]
-            if (!row.visible || !row.content || index >= row.content.children.length)
+            // A heading's one cell spans every column, so it widens none.
+            if (!row.visible || row.heading || !row.content || index >= row.content.children.length)
                 continue
             const cell = row.content.children[index]
             if (cell.visible)
@@ -233,12 +234,12 @@ MorphWidget {
     }
     ownKey: event => root.tableKey(event)
 
-    // The rows the user can see, in order.
+    // The data rows the user can see, in order: a heading row is never current, selected or counted.
     function shownRows(): var {
         const shown = []
         for (let i = 0; i < body.children.length; ++i) {
             const row = body.children[i]
-            if (row.visible && row.table === root)
+            if (row.visible && row.table === root && !row.heading)
                 shown.push(row)
         }
         return shown

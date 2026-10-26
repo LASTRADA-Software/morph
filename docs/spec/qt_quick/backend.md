@@ -231,6 +231,13 @@ state, so its look follows the selection alone; its `clicked` fires the row's `t
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
 
+A heading row (`setRowHeading`, the row's `heading`) places its one cell from the first inset across the select
+column and every column, less two insets; its `TapHandler`, Enter and select box are off, and `shownRows` (the rows the
+current row, Ctrl+A and the select-all box run over) leaves it out, as does a content column's width scan. Its
+background gets `heading` only when the part declares it, so a `tableRow` restyle that draws no headings still loads;
+the stock `MorphTableRowBackground` fills a heading with `scheme.tableHeader`, as the header row is filled, which is
+clear until a theme sets `color.table.header`, so in the stock theme a heading stands out by its content alone.
+
 A sortable column's header label (`header<index>`) is a Tab stop, and a tap, Enter or Space on it fires `sort` with
 the column's index, which reaches `setOnSort`; another header takes neither. The table never sorts: `setSort` writes
 `sortColumn` (−1 for none) and `sortDescending`, and the sorted column's label shows ` ▲` or ` ▼` after its text.

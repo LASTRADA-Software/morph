@@ -365,7 +365,18 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   user's change of the selection, an `Extend` report keeps the selected keys of the rows on other pages, in their
   order, before the reported keys; a `Replace` report is the whole new selection, so a plain click or a range
   clears the other pages' keys as it clears the rest of its own, and every `Single` change is one. A key whose row
-  `rows` no longer has drops on any user change. `empty` shows while `rows` is empty, not while a page is. A table
+  `rows` no longer has drops on any user change. `empty` shows while `rows` is empty, not while a page is.
+  **Groups.** With `group`, the pipeline splits the source rows into runs by `by` (read per row as `sortBy` is,
+  adjacent rows with equal values, `null` equal to `null`), gives each row its run's index, and sorts by that index
+  first and the sort's keys second, so every group keeps its place and its rows are ordered inside it. It pages the
+  data rows, and puts a heading entry before the first row of each run the page holds: the run record of the whole
+  group, computed before paging, so a group split across pages reads the same `count`, `first` and `last` on both,
+  with its key in a reserved field. The row view lowers `heading` for that entry as one cell, in a row scope of its
+  own whose row is the record, and the table makes it a heading row (`TableRowView::heading`). A heading's key is
+  `"\u001Fgroup:"`, the canonical JSON of the run's key, `":"` and its ordinal among runs with an equal key, so
+  groups A, B, A get three headings; a data key equal to one is reported as a duplicate by the mount. Heading keys
+  never reach `onSelectionChange`: the lowering drops them from a report, since a virtualized backend's Ctrl+A or
+  range can name a row it has not realized. `viewCount`, `selectedCount` and the page positions count data rows. A table
   lowered where names are bound (a component's `props`) sorts its own copy with those names, which its element
   values cannot see. The mount's keyed reconciliation moves the sorted rows, so each keeps its widget, its
   native state and its selection. The header marks the sort's first key (`Table::sort`); a header click on a

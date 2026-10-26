@@ -429,6 +429,7 @@ public:
     void setSelectColumn(bool shown) override;
     void setSelectAllLabel(std::string_view label) override;
     void setRowLabel(ui::Widget& row, std::string_view label) override;
+    void setRowHeading(ui::Widget& row) override;
     void setSelection(std::vector<ui::Key> const& keys) override;
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
@@ -453,6 +454,8 @@ public:
     void scrolled(std::size_t first, std::size_t count) const;
     /// Whether a row is marked selected.
     [[nodiscard]] static bool marked(ItemBase const& row);
+    /// Whether a row is a group heading.
+    [[nodiscard]] static bool heading(ItemBase const& row);
 
 protected:
     void adopted(ItemBase& child) override;

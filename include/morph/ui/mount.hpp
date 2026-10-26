@@ -823,8 +823,9 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, Row const& spec, ContainerWidget* parent) {
-        if ((spec.tone || spec.label) && dynamic_cast<TableWidget*>(parent) == nullptr) {
-            throw std::logic_error{"morph::ui: a row's tone and label are a table row's; this row is not in a table"};
+        if ((spec.tone || spec.label || spec.heading) && dynamic_cast<TableWidget*>(parent) == nullptr) {
+            throw std::logic_error{
+                "morph::ui: a row's tone, label and heading are a table row's; this row is not in a table"};
         }
         return mountStack(scope, Axis::Horizontal, spec.children, spec.gap, spec.common, parent, spec.align,
                           spec.justify);
@@ -1151,8 +1152,11 @@ private:
             scope, spec.rows, widget,
             [this, &widget](reactive::Scope& rowScope, Node const& node, Widget& rowWidget, Key const& key) {
                 widget.setRowKey(rowWidget, key);
-                // A row's tone binds in the row's scope, after its key.
+                // A row's tone binds in the row's scope, after its key and whether it is a heading.
                 Row const* const view = node ? std::get_if<Row>(&node->kind) : nullptr;
+                if (view != nullptr && view->heading) {
+                    widget.setRowHeading(rowWidget);
+                }
                 if (view != nullptr && view->tone) {
                     bind(rowScope, *view->tone, [&widget, &rowWidget](std::optional<Tone> const& tone) {
                         widget.setRowTone(rowWidget, tone);

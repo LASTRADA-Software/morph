@@ -524,3 +524,91 @@ TEST_CASE("table: Ctrl+A selects the page's rows and keeps a key selected on ano
     }
     CHECK(readJson(*screen, R"({"ref":"selected"})") == expected + "]");
 }
+
+namespace {
+
+// A table's rows in order: a data row as its key, a heading row as `[<its text>]`.
+std::string entryOrder(Harness const& h, int table) {
+    std::string order;
+    for (int const row : h.backend.children(table)) {
+        std::string shown;
+        if (h.backend.prop(row, "heading") == "true") {
+            int cell = row;
+            while (h.backend.kindOf(cell) != "Text" && !h.backend.children(cell).empty()) {
+                cell = h.backend.children(cell).front();
+            }
+            shown = "[" + h.backend.prop(cell, "text") + "]";
+        } else {
+            shown = h.backend.prop(row, "rowKey");
+        }
+        order += (order.empty() ? "" : " ") + shown;
+    }
+    return order;
+}
+
+// Results of samples grouped by sample: S-1 holds results 1 to 3, S-2 results 4 to 5; @p extra goes after the
+// table's `rows`, and @p results replaces the rows.
+std::string groupedTable(std::string_view extra = "", std::string_view results = "") {
+    std::string const rows = results.empty() ? std::string{R"([ { "id": 1, "sample": "S-1", "lot": "L-1", "area": 30 },
+        { "id": 2, "sample": "S-1", "lot": "L-1", "area": 10 }, { "id": 3, "sample": "S-1", "lot": "L-1", "area": 20 },
+        { "id": 4, "sample": "S-2", "lot": "L-2", "area": 5 }, { "id": 5, "sample": "S-2", "lot": "L-2", "area": 1 } ])"}
+                                             : std::string{results};
+    return std::string{R"({
+      "vocab": "ui/1", "id": "grouped",
+      "state": { "items": { "init": { "lit": )"} + rows + R"( } } },
+      "view": { "kind": "column", "children": [
+        { "kind": "table", "id": "t", "rows": { "ref": "items" }, "selectionMode": "multiple")" + std::string{extra} + R"(,
+          "group": { "by": { "row": "sample" },
+                     "heading": { "kind": "text", "text": { "fn": "format", "args": [ "{0} · lot {1} · {2}",
+                         { "row": "key" }, { "row": "first.lot" }, { "row": "count" } ] } } },
+          "columns": [ { "id": "area", "label": "Peak area", "sortable": true } ] },
+        { "kind": "text", "testId": "count", "text": { "ref": "t.selectedCount" } } ] } })";
+}
+
+}  // namespace
+
+TEST_CASE("table: a group draws a heading row before each sample's results, reading the group", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(groupedTable());
+    int const table = h.backend.all("Table").front();
+    CHECK(entryOrder(h, table) == "[S-1 · lot L-1 · 3] 1 2 3 [S-2 · lot L-2 · 2] 4 5");
+    CHECK(readJson(*screen, R"({"ref":"t.viewCount"})") == "5");
+}
+
+TEST_CASE("table: Ctrl+A selects the data rows, not the headings", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(groupedTable());
+    int const table = h.backend.all("Table").front();
+    CHECK(h.backend.press(table, "Ctrl+A"));
+    h.settle();
+    CHECK(h.text("count") == "5");
+    CHECK(readJson(*screen, R"({"ref":"t.selection"})") == "[1,2,3,4,5]");
+}
+
+// Mutation: sort the whole list before grouping (a group's rows leave its heading).
+TEST_CASE("table: a sorted grouped table sorts within each group, which keeps its place", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(groupedTable(R"(, "sort": { "lit": [ { "column": "area", "direction": "asc" } ] })"));
+    int const table = h.backend.all("Table").front();
+    CHECK(entryOrder(h, table) == "[S-1 · lot L-1 · 3] 2 3 1 [S-2 · lot L-2 · 2] 5 4");
+}
+
+// Mutation: make the runs over the page's rows instead of every row (the second page's heading reads 1).
+TEST_CASE("table: a group split across pages has its heading on both, reading the whole group", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(groupedTable(R"(, "pageSize": 2, "page": 1)"));
+    int const table = h.backend.all("Table").front();
+    CHECK(entryOrder(h, table) == "[S-1 · lot L-1 · 3] 3 [S-2 · lot L-2 · 2] 4");
+    CHECK(readJson(*screen, R"({"ref":"t.pageFirst"})") == "3");
+    CHECK(readJson(*screen, R"({"ref":"t.pageLast"})") == "4");
+}
+
+// Mutation: key a heading by its run's key alone (the third run's heading is a duplicate key and left out).
+TEST_CASE("table: groups A, B, A give three headings and no duplicate key", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(groupedTable("", R"([ { "id": 1, "sample": "A", "lot": "L", "area": 1 },
+        { "id": 2, "sample": "B", "lot": "L", "area": 1 }, { "id": 3, "sample": "A", "lot": "L", "area": 1 } ])"));
+    int const table = h.backend.all("Table").front();
+    CHECK(entryOrder(h, table) == "[A · lot L · 1] 1 [B · lot L · 1] 2 [A · lot L · 1] 3");
+    CHECK(h.diagnostics.empty());
+}

@@ -1527,11 +1527,20 @@ struct TransferState {
     reactive::Signal<Value> error;
 };
 
+/// @brief The field of a table's heading entry that holds the heading row's key; the rest of the entry is the run
+///        record its heading reads. A data row with this field would be taken for a heading.
+inline constexpr std::string_view kGroupHeadingField = "\x1Fgroup";
+
 /// @brief A table's rows as the table shows them: every row `rows` gave, in the order of the table's sort, and the
 ///        page of them it shows.
 struct TableView {
     /// @brief The rows, sorted: every page.
     std::vector<Value> rows;
+    /// @brief With `group`, each row's group: its index in `runs`; empty without.
+    std::vector<std::size_t> runOf;
+    /// @brief With `group`, each group's heading entry: the run record of the whole group, in source order, and its
+    ///        heading key in `kGroupHeadingField`.
+    std::vector<Value> runs;
     /// @brief The position in `rows` of the page's first row.
     std::size_t first = 0;
     /// @brief The position in `rows` past the page's last row.
@@ -2583,7 +2592,10 @@ private:
     /// A table's rows in the order of its sort, read in the table's scope with @p bindings. A sort that is not a
     /// list of the table's sortable columns, or whose values cannot be ordered, is reported and leaves the source
     /// order.
-    std::vector<Value> sortedRows(ElementState const& element, Bindings const* bindings);
+    void sortedRows(ElementState const& element, Bindings const* bindings, TableView& view);
+    /// A grouped table's runs of its source rows by its `group`'s `by`: each row's run index and each run's heading
+    /// entry, into @p view.
+    static void groupRows(ElementState const& element, Bindings const* bindings, TableView& view);
     /// A table's sorted rows and the page of them it shows, by its `pageSize` and `page`.
     TableView tableView(ElementState const& element, Bindings const* bindings);
     void collect(DocNode const& node, RtScope& scope, std::vector<Commands const*>& commands);
@@ -2591,6 +2603,9 @@ private:
     Node lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerSwitch(DocNode const& node, LowerCtx const& ctx);
     Node lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A grouped table's heading row: its `group`'s `heading`, lowered as one cell in a row scope of its own whose
+    /// row is the group's run record.
+    TableRowView headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row);
     /// A `rowTone` value as a tone: `neutral`, `info`, `ok`, `warn`, `err`, or `null` for none. Another value is
     /// reported, at @p path, while @p noted is still false, and shows no tone.
     std::optional<Tone> rowToneOf(Value const& value, std::string const& path, bool& noted);
@@ -4555,34 +4570,79 @@ struct SortKey {
     return keys;
 }
 
-inline std::vector<Value> ScreenCore::sortedRows(ElementState const& element, Bindings const* bindings) {
+inline void ScreenCore::groupRows(ElementState const& element, Bindings const* bindings, TableView& view) {
+    auto const parts = element.node->partList("group");
+    if (parts.empty()) {
+        return;
+    }
+    ExprPtr const groupBy = parts.front()->prop("by");
+    RtScope const& scope = *element.scope;
+    ScopeEnv const tableEnv{scope, bindings};
+    Evaluator runs{tableEnv};
+    // A heading's key is its run's key and its ordinal among the runs with an equal key, since adjacent grouping
+    // can give two runs one key (samples A, B, A); the ordinal stays put across a sort, which moves no run.
+    std::map<std::string, std::size_t, std::less<>> ordinals;
+    Value key;
+    ValueList run;
+    auto const close = [&] {
+        std::string const json = canonicalJson(key);
+        Value const record = runRecord(key, std::exchange(run, {}));
+        ValueRecord entry = *record.asRecord();
+        entry.insert_or_assign(std::string{kGroupHeadingField},
+                               Value{"\x1Fgroup:" + json + ":" + std::to_string(ordinals[json]++)});
+        view.runs.emplace_back(std::move(entry));
+    };
+    for (Value const& row : view.rows) {
+        Value value = evaluate(*groupBy, ScopeEnv{scope, bindings, &row});
+        if (!run.empty() && !runs.sameRun(key, value)) {
+            close();
+        }
+        if (run.empty()) {
+            key = std::move(value);
+        }
+        run.push_back(row);
+        view.runOf.push_back(view.runs.size());
+    }
+    if (!run.empty()) {
+        close();
+    }
+}
+
+inline void ScreenCore::sortedRows(ElementState const& element, Bindings const* bindings, TableView& view) {
     DocNode const& node = *element.node;
     RtScope const& scope = *element.scope;
     Value const source = bindings == nullptr ? element.rows->get() : evalIn(scope, bindings, node.prop("rows"));
     ValueList const* const items = source.asList();
     if (items == nullptr) {
-        return {};
+        return;
     }
-    std::vector<Value> rows{items->begin(), items->end()};
+    view.rows.assign(items->begin(), items->end());
+    groupRows(element, bindings, view);
     Value const sort = tableSort(element);
     std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, sort);
     std::string const sortPath = pointerAppend(node.path, "sort");
     if (!keys) {
         report(sortPath, "sort is " + canonicalJson(sort) +
                              R"(; a table's sort is a list of {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
-        return rows;
+        return;
     }
     if (keys->empty()) {
-        return rows;
+        return;
     }
     // Each row's keys are read once, then the rows are ordered by them: a change to the sort, the rows, or anything
-    // a `sortBy` reads sorts again.
+    // a `sortBy` reads sorts again. A grouped table orders by the group first, so every group keeps its place in
+    // the source order and its rows are sorted within it.
+    bool const grouped = !view.runOf.empty();
     std::vector<std::vector<Value>> rowKeys;
-    rowKeys.reserve(rows.size());
-    for (Value const& row : rows) {
+    rowKeys.reserve(view.rows.size());
+    for (std::size_t index = 0; index < view.rows.size(); ++index) {
+        Value const& row = view.rows.at(index);
         ScopeEnv const env{scope, bindings, &row};
         std::vector<Value> values;
-        values.reserve(keys->size());
+        values.reserve(keys->size() + 1);
+        if (grouped) {
+            values.emplace_back(static_cast<std::int64_t>(view.runOf.at(index)));
+        }
         for (SortKey const& key : *keys) {
             if (ExprPtr const sortBy = key.column->prop("sortBy")) {
                 values.push_back(evaluate(*sortBy, env));
@@ -4594,7 +4654,10 @@ inline std::vector<Value> ScreenCore::sortedRows(ElementState const& element, Bi
         rowKeys.push_back(std::move(values));
     }
     std::vector<bool> descending;
-    descending.reserve(keys->size());
+    descending.reserve(keys->size() + 1);
+    if (grouped) {
+        descending.push_back(false);
+    }
     for (SortKey const& key : *keys) {
         descending.push_back(key.descending);
     }
@@ -4602,20 +4665,26 @@ inline std::vector<Value> ScreenCore::sortedRows(ElementState const& element, Bi
     std::optional<std::vector<std::size_t>> const order = Evaluator{env}.sortRows(rowKeys, descending);
     if (!order) {
         report(sortPath, "the rows' values for the sort are not of one comparable kind; the rows keep their order");
-        return rows;
+        return;
     }
     std::vector<Value> sorted;
-    sorted.reserve(rows.size());
+    std::vector<std::size_t> runOf;
+    sorted.reserve(view.rows.size());
     for (std::size_t const index : *order) {
-        sorted.push_back(rows.at(index));
+        sorted.push_back(view.rows.at(index));
+        if (grouped) {
+            runOf.push_back(view.runOf.at(index));
+        }
     }
-    return sorted;
+    view.rows = std::move(sorted);
+    view.runOf = std::move(runOf);
 }
 
 inline TableView ScreenCore::tableView(ElementState const& element, Bindings const* bindings) {
     DocNode const& node = *element.node;
     RtScope const& scope = *element.scope;
-    TableView view{.rows = sortedRows(element, bindings)};
+    TableView view;
+    sortedRows(element, bindings, view);
     view.last = view.rows.size();
     ExprPtr const sizeExpr = node.prop("pageSize");
     if (!sizeExpr) {
@@ -7420,6 +7489,9 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         return items == nullptr ? std::vector<Value>{} : std::vector<Value>{items->begin(), items->end()};
     };
     auto keyFn = [scope = ctx.scope, bindings = ctx.bindings, keyExpr = node.prop("key")](Value const& row) -> Key {
+        if (Value const* const heading = row.field(kGroupHeadingField); heading != nullptr && heading->asString()) {
+            return Key{*heading->asString()};
+        }
         if (!keyExpr) {
             Value const rowKey = rowId(row);
             return keyOf(rowKey.isNull() ? row : rowKey);
@@ -7458,11 +7530,20 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
             [this, element, bindings = ctx.bindings] { return tableView(*element, bindings.get()); });
     }
     if (view != nullptr) {
+        // The page's rows, each group's heading entry before the first of its rows the page holds, so a group split
+        // across pages gets its heading on both.
         rows = [view] {
             TableView const& shown = view->get();
-            auto const first = shown.rows.begin();
-            return std::vector<Value>{first + static_cast<std::ptrdiff_t>(shown.first),
-                                      first + static_cast<std::ptrdiff_t>(shown.last)};
+            std::vector<Value> entries;
+            entries.reserve(shown.last - shown.first);
+            for (std::size_t index = shown.first; index < shown.last; ++index) {
+                if (!shown.runOf.empty() &&
+                    (index == shown.first || shown.runOf.at(index) != shown.runOf.at(index - 1))) {
+                    entries.push_back(shown.runs.at(shown.runOf.at(index)));
+                }
+                entries.push_back(shown.rows.at(index));
+            }
+            return entries;
         };
     }
     std::vector<TableColumn> columns;
@@ -7538,6 +7619,9 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     auto toneReported = std::make_shared<bool>(false);
     auto cellsOf = [this, ctx, &node, cells, fields, roles, registry, keyFn,
                     toneReported](reactive::Signal<Value> const& row) {
+        if (row.peek().field(kGroupHeadingField) != nullptr) {
+            return headingRow(node, ctx, row);
+        }
         std::vector<DocNode const*> content;
         for (DocNode const* const column : cells) {
             if (column != nullptr) {
@@ -7636,7 +7720,13 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         if (change == SelectionChange::Extend && view != nullptr) {
             items = runtime().untracked([&] { return selectedOffPage(view->get(), tableSelection(*element), keyFn); });
         }
+        // A heading is never selected. A virtualized backend knows the keys of rows it has not realized but not
+        // which of them are headings, so its Ctrl+A or range can name one.
         for (Key const& key : keys) {
+            if (std::string const* const text = std::get_if<std::string>(&key);
+                text != nullptr && text->starts_with("\x1Fgroup:")) {
+                continue;
+            }
             items.push_back(valueOfKey(key));
         }
         Value const selected{std::move(items)};
@@ -7736,6 +7826,21 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                                                 std::move(cellsOf), std::move(options)));
     wrapper.children.push_back(ui::column(std::move(content)));
     return ui::column(std::move(wrapper));
+}
+
+inline TableRowView ScreenCore::headingRow(DocNode const& node, LowerCtx const& ctx,
+                                            reactive::Signal<Value> const& row) {
+    auto const heading = node.partList("group").front()->nodes("heading");
+    std::vector<DocNode const*> content;
+    content.reserve(heading.size());
+    for (DocNodePtr const& child : heading) {
+        content.push_back(child.get());
+    }
+    auto scope = rowScope(node, ctx, row, content);
+    LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
+    // The cell owns the heading's scope, for as long as the row's node lives, as a data row's first cell does.
+    auto owner = std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(lowerAll(heading, rowCtx), scope);
+    return TableRowView{.cells = {Node{owner, owner->first.get()}}, .tone = std::nullopt, .heading = true};
 }
 
 inline std::optional<Tone> ScreenCore::rowToneOf(Value const& value, std::string const& path, bool& noted) {

@@ -1907,6 +1907,44 @@ struct Measured {
     return checks.result();
 }
 
+/// @brief Case: a heading row's one cell spans both columns of a table: it starts where the first column's cell does
+///        and ends where the second's does, within a unit. Every cell is a container, which fills its column.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> headingSpansColumns(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(),
+                                                    {{.id = 0, .label = "group"}, {.id = 1, .label = "x"}}};
+    auto const filled = [](std::string text) { return ui::column({.children = {ui::text({.text = std::move(text)})}}); };
+    Mounted const view{probe.runtime(), probe.backend(),
+                       insideColumn(ui::table<Entry>(
+                           {{.label = "First", .width = Sizing::fixed(10)},
+                            {.label = "Second", .width = Sizing::fixed(20)}},
+                           [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+                           std::function<TableRowView(reactive::Signal<Entry> const&)>{
+                               [filled](reactive::Signal<Entry> const& entry) {
+                                   if (entry.peek().id == 0) {
+                                       return TableRowView{.cells = {filled("group")}, .heading = true};
+                                   }
+                                   return TableRowView{.cells = {filled("a"), filled("b")}};
+                               }}))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Widget const* const table = probe.childAt(rootContainer(view), 0);
+    std::vector<Widget*> const heading = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 0);
+    std::vector<Widget*> const data = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 1);
+    checks.that(heading.size() == 1 && data.size() == 2, "the table holds a heading of one cell and a row of two");
+    if (heading.size() == 1 && data.size() == 2) {
+        WidgetBounds const across = geometry.of(*heading.front());
+        WidgetBounds const first = geometry.of(*data.front());
+        WidgetBounds const second = geometry.of(*data.back());
+        geometry.near("the heading cell's left edge, against the first column's cell's", first.x, across.x);
+        geometry.near("the heading cell's right edge, against the second column's cell's", second.x + second.width,
+                      across.x + across.width);
+    }
+    return checks.result();
+}
+
 /// @brief Case: in a row where one cell is five lines tall, a one-line cell of a `valign: Start` column has its
 ///        top at the row's top, and one of a `valign: End` column its bottom at the row's bottom. Five lines, so a
 ///        centred cell is two lines from either, more than the unit a measure may be off by.
@@ -2101,6 +2139,42 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: a table of a heading row and three data rows. Ctrl+A selects the three data rows and not the
+///        heading, and a click on the heading row changes nothing and reports nothing.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> headingIsNeverSelected(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), {{.id = 0, .label = "group"}, {.id = 1, .label = "a"},
+                                                                      {.id = 2, .label = "b"}, {.id = 3, .label = "c"}}};
+    std::vector<SelectionReport> reports;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::table<Entry>(
+            {{.label = "Name"}}, [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+            std::function<TableRowView(reactive::Signal<Entry> const&)>{[](reactive::Signal<Entry> const& entry) {
+                return TableRowView{.cells = {ui::text({.text = [&entry] { return entry.get().label; }})},
+                                    .heading = entry.peek().id == 0};
+            }},
+            TableOptions{.selectionMode = SelectionMode::Multiple,
+                         .onSelectionChange =
+                             [&reports](std::vector<Key> keys, SelectionChange change) {
+                                 std::ranges::sort(keys);
+                                 reports.push_back({.keys = std::move(keys), .change = change});
+                             }})};
+    probe.settle();
+    Checks checks;
+    probe.press(view.root(), "Ctrl+A");
+    probe.settle();
+    checks.text("the rows Ctrl+A selects beside a heading", "1,2,3", rowTexts(probe.selectedRows(view.root())));
+    checks.text("Ctrl+A's report", "1,2,3/extend", lastReport(reports));
+    std::size_t const before = reports.size();
+    probe.clickRow(view.root(), 0, RowClick::Only);
+    probe.settle();
+    checks.text("the rows selected after a click on the heading", "1,2,3", rowTexts(probe.selectedRows(view.root())));
+    checks.that(reports.size() == before, "a click on the heading row reported a selection");
+    return checks.result();
+}
+
 /// @brief Case: a click on a sortable column's header reports its index once, a click on another column's header
 ///        reports nothing, and showing a sort reports nothing.
 /// @param probe The backend under test.
@@ -2141,7 +2215,7 @@ struct SelectionReport {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 9> const cases{{
+    static std::array<ConformanceCase, 10> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -2154,6 +2228,7 @@ struct SelectionReport {
         {.name = "a table column's end alignment places a badge cell at its end", .run = detail::endColumnPlacesBadge},
         {.name = "a table column's valign places a cell at its row's top or bottom",
          .run = detail::columnPlacesCellsDownRow},
+        {.name = "a table's heading row spans every column", .run = detail::headingSpansColumns},
     }};
     return cases;
 }
@@ -2164,7 +2239,7 @@ struct SelectionReport {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 44> const cases{{
+    static std::array<ConformanceCase, 45> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -2229,6 +2304,7 @@ struct SelectionReport {
          .run = detail::tableTakesItsKeys},
         {.name = "a click on a sortable header asks to sort by it, and no other header or setter does",
          .run = detail::headerClickAsksToSort},
+        {.name = "a heading row is never selected, by Ctrl+A or a click", .run = detail::headingIsNeverSelected},
     }};
     return cases;
 }

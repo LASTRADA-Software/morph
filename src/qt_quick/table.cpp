@@ -72,6 +72,15 @@ void TableImpl::setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) {
     tableRow->write("tone", tone ? static_cast<int>(*tone) : -1);
 }
 
+void TableImpl::setRowHeading(ui::Widget& row) {
+    auto const* const tableRow = dynamic_cast<TableRowImpl const*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setRowHeading of a widget that is not this table's row"};
+    }
+    tableRow->write("heading", true);
+    mark();
+}
+
 void TableImpl::setSelectColumn(bool shown) { write("selectColumn", shown); }
 
 void TableImpl::setSelectAllLabel(std::string_view label) { write("selectAllLabel", toQString(label)); }
@@ -170,6 +179,8 @@ void TableImpl::stripe(ItemBase const* leaving) const noexcept {
 
 bool TableImpl::marked(ItemBase const& row) { return row.read("selected").toBool(); }
 
+bool TableImpl::heading(ItemBase const& row) { return row.read("heading").toBool(); }
+
 void TableImpl::mark() const {
     // Every child of a table is one of its rows; the mount makes nothing else in one.
     for (ItemBase const* const child : children()) {
@@ -177,7 +188,8 @@ void TableImpl::mark() const {
         if (row == nullptr) {
             continue;
         }
-        bool const selected = row->key() && std::ranges::find(_requested, *row->key()) != _requested.end();
+        bool const selected = row->key() && !heading(*row) &&
+                              std::ranges::find(_requested, *row->key()) != _requested.end();
         row->write("selected", selected);
     }
 }
@@ -210,7 +222,7 @@ std::vector<ui::Key> TableImpl::rowKeys() const {
     std::vector<ui::Key> keys;
     for (ItemBase const* const child : children()) {
         auto const* const row = dynamic_cast<TableRowImpl const*>(child);
-        if (row != nullptr && row->key()) {
+        if (row != nullptr && row->key() && !heading(*row)) {
             keys.push_back(*row->key());
         }
     }
@@ -218,7 +230,7 @@ std::vector<ui::Key> TableImpl::rowKeys() const {
 }
 
 void TableImpl::tapped(TableRowImpl const& row, ui::RowClick click) {
-    if (_mode == ui::SelectionMode::None || !row.key() || !row.reachable()) {
+    if (_mode == ui::SelectionMode::None || !row.key() || !row.reachable() || heading(row)) {
         return;
     }
     ui::Key const key = *row.key();
@@ -279,7 +291,7 @@ void TableImpl::select(std::vector<ui::Key> next, ui::SelectionChange change) {
 }
 
 void TableImpl::activated(TableRowImpl const& row) const {
-    if (!row.key() || !row.reachable() || !_onActivate) {
+    if (!row.key() || !row.reachable() || !_onActivate || heading(row)) {
         return;
     }
     auto const handler = _onActivate;

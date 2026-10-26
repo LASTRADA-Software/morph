@@ -7,7 +7,8 @@ import QtQuick.Layouts
 // One row of a table: its cells placed by column, so a hidden cell keeps its column and the cells after it stay
 // under their own headers, over its background part. A click selects it alone, Ctrl+click toggles it, Shift+click
 // selects the range from the anchor, and each makes it the table's current row; a double click or Enter activates
-// it. C++ calls `place` again whenever a cell's implicit size changes.
+// it. C++ calls `place` again whenever a cell's implicit size changes. A heading row has one cell across every column
+// and the select column, takes no click or key, and is never the table's current row.
 MorphWidget {
     id: root
 
@@ -37,6 +38,8 @@ MorphWidget {
     property bool alternate: false
     // The row's tone: -1 for none, else a tone index (Neutral, Info, Ok, Warn, Err).
     property int tone: -1
+    // Whether the row is a group heading; C++ sets it once, right after the row's key.
+    property bool heading: false
     readonly property Item backgroundItem: backgroundLoader.item as Item
 
     function holdsFocus(focused: Item): bool {
@@ -55,6 +58,27 @@ MorphWidget {
     // the row's top, centre or bottom by its column's `valign`; `stretch` fills the row's height.
     function place() {
         const inset = Theme.spaceOf(2)
+        if (root.heading) {
+            let across = root.table ? root.table.lead : 0
+            for (const w of root.widths)
+                across += w
+            let tall = 0
+            for (let i = 0; i < cells.children.length; ++i) {
+                const cell = cells.children[i]
+                cell.x = inset
+                cell.width = Math.max(0, across - 2 * inset)
+                tall = Math.max(tall, cell.implicitHeight)
+            }
+            cells.implicitWidth = across
+            cells.implicitHeight = tall
+            const headingHeight = Math.max(tall, root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
+            for (let i = 0; i < cells.children.length; ++i) {
+                const cell = cells.children[i]
+                cell.height = Math.min(cell.implicitHeight, tall)
+                cell.y = Math.floor((headingHeight - cell.height) / 2)
+            }
+            return
+        }
         let x = root.table ? root.table.lead : 0
         let tallest = 0
         for (let i = 0; i < cells.children.length; ++i) {
@@ -90,6 +114,7 @@ MorphWidget {
     }
 
     onWidthsChanged: place()
+    onHeadingChanged: place()
     onColumnsChanged: place()
     onBackgroundItemChanged: place()
     // The row is as tall as its background asks when that is more than the cells, and they centre in that height.
@@ -108,11 +133,11 @@ MorphWidget {
 
     // A chord the table declares comes before the row's activation.
     Keys.onReturnPressed: event => {
-        if (!(root.table && root.table.takeOwnChord(event)))
+        if (!root.heading && !(root.table && root.table.takeOwnChord(event)))
             root.fire("activate", undefined)
     }
     Keys.onEnterPressed: event => {
-        if (!(root.table && root.table.takeOwnChord(event)))
+        if (!root.heading && !(root.table && root.table.takeOwnChord(event)))
             root.fire("activate", undefined)
     }
 
@@ -146,6 +171,13 @@ MorphWidget {
         property: "tone"
         value: root.tone
     }
+    // Only a background that declares `heading`: a `tableRow` restyle that draws no headings still loads.
+    Binding {
+        target: backgroundLoader.item
+        property: "heading"
+        value: root.heading
+        when: backgroundLoader.item !== null && backgroundLoader.item.heading !== undefined
+    }
     Binding {
         target: backgroundLoader.item
         property: "scheme"
@@ -167,7 +199,7 @@ MorphWidget {
     CheckBox {
         id: selectBox
         objectName: "selectBox"
-        visible: root.table ? root.table.selectColumn : false
+        visible: root.table && !root.heading ? root.table.selectColumn : false
         x: Math.floor(((root.table ? root.table.lead : 0) - width) / 2)
         anchors.verticalCenter: parent.verticalCenter
         checked: root.selected
@@ -180,6 +212,7 @@ MorphWidget {
 
     TapHandler {
         id: tap
+        enabled: !root.heading
         onTapped: {
             const held = tap.point.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)
             // Only plain clicks make a double click, so two quick Ctrl-clicks toggle a row twice.

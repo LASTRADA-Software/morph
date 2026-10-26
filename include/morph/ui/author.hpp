@@ -3787,6 +3787,15 @@ enum class TableMode : std::uint8_t {
     Server,  ///< In the server, through the action's table query.
 };
 
+/// @brief A table's groups: a heading row before each run of adjacent rows that share a value.
+struct TableGroup {
+    /// @brief The value the rows are grouped by, read per row as `key` is.
+    AnyHandle by;
+    /// @brief The heading row's content, read in a row scope whose row is the group's run record (`key`, `count`,
+    ///        `first`, `last`, `items`).
+    Nodes heading;
+};
+
 /// @brief Options of `table` and `dataTable`.
 struct TableOptions {
     /// @brief The row key, read in the row scope.
@@ -3827,6 +3836,8 @@ struct TableOptions {
     AnyHandle pageSize;
     /// @brief The page shown, from 0; needs `pageSize`; absent, the first page.
     AnyHandle page;
+    /// @brief A heading row before each group of adjacent rows; absent, none.
+    std::optional<TableGroup> group;
     /// @brief The filters.
     AnyHandle filters;
     /// @brief A row's tone, read in the row scope.
@@ -3900,6 +3911,13 @@ namespace detail {
             parts.push_back(columnPart(column));
         }
         node.raw("columns", std::move(parts));
+    }
+    if (options.group) {
+        node.facts(options.group->heading.facts());
+        Json part = Json::object_t{};
+        detail::put(part, "by", options.group->by.json());
+        detail::put(part, "heading", options.group->heading.json());
+        node.raw("group", std::move(part));
     }
     if (options.selectionMode) {
         node.raw("selectionMode", std::string{kSelections.at(static_cast<std::size_t>(*options.selectionMode))});

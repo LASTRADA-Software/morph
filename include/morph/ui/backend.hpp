@@ -519,6 +519,13 @@ public:
     /// @param label The name, UTF-8.
     virtual void setRowLabel(Widget& row, std::string_view label) = 0;
 
+    /// @brief Makes a row a heading; called once, right after `setRowKey`, for a heading row. Its one cell spans every
+    ///        column and the select column. It is never selected (`setSelection` with its key marks nothing), never
+    ///        reported, and never activated: a click on it does nothing, the current row skips it, and Ctrl+A, a
+    ///        range and the select-all box pass over it.
+    /// @param row One of this table's rows.
+    virtual void setRowHeading(Widget& row) = 0;
+
     /// @brief Requests the rows with these keys, and marks those it has. Never calls the `onSelectionChange` handler.
     /// @param keys The selected keys.
     virtual void setSelection(std::vector<Key> const& keys) = 0;
