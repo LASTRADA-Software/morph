@@ -462,6 +462,18 @@ TEST_CASE("an arrange point names the column whose children it orders, and the s
     CHECK((*added)->text.contains(R"("tiles":{"kind":"arrange","of":"board"})"));
 }
 
+// Mutation: drop the separator branch of menuItem (the separator is then written as an empty entry).
+TEST_CASE("a menu button writes its style and trigger, and a separator writes nothing else", "[ui][author]") {
+    CHECK(text(ui::menuButton({.label = "More", .icon = "more", .emphasis = morph::ui::ButtonEmphasis::Ghost},
+                              {{.label = "Print"},
+                               ui::menuSeparator(),
+                               {.label = "Retire", .description = "needs reason", .visible = false}})
+                   .json()) ==
+          R"({"kind":"menu","items":[{"label":"Print"},{"separator":true},)"
+          R"({"label":"Retire","description":"needs reason","visible":false}],"style":"button","label":"More",)"
+          R"("icon":"more","emphasis":"ghost"})");
+}
+
 // Mutation: drop the tracks branch of grid (no `tracks` is written).
 TEST_CASE("a grid's tracks are written as parts, each key only when given", "[ui][author]") {
     CHECK(text(ui::grid(ui::Nodes{}, {.tracks = {{.width = ui::fixed(3)},

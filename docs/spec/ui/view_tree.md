@@ -106,7 +106,7 @@ lowers them to the kinds below.
 | `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once), `unit` (the unit the input shows; empty: none), `decimals` (a number's entry places, set once; −1: not a number), `icon` (an icon of the theme's icon set, drawn at the leading edge; empty: none; set once — the mount refuses a multiline input with one, as it does `unit`/`decimals`), `label` and `showLabel` (below) |
 | `Checkbox` | `checkbox` | `label`, `checked`, `onToggle` |
 | `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `onOpen` (the user opened the dropdown, also with no options; a hint a backend may not report), `style` (`SelectStyle{Dropdown, Radio}`, set once), `label` and `showLabel` (below) |
-| `Menu` | `menu` | `items` (`MenuItem{label, onSelect, icon, keys, checked, enabled, items}`: each label beside its handler, so there are no parallel lists. `icon` and `keys` are set once, and `keys` only shows a chord; `checked` engaged makes the entry checkable, and its mark follows the binding alone; an entry with `items` opens a submenu and is not itself chosen. The tree is set once; each entry's `label`, `checked` and `enabled` may be bound) |
+| `Menu` | `menu` | `items` (`MenuItem{label, onSelect, icon, keys, checked, enabled, items, separator, description, visible}`: each label beside its handler, so there are no parallel lists. `icon` and `keys` are set once, and `keys` only shows a chord; `checked` engaged makes the entry checkable, and its mark follows the binding alone; an entry with `items` opens a submenu and is not itself chosen; a `separator` is a line between entries; a hidden entry is not sent. The tree is set once; each entry's `label`, `description`, `checked`, `enabled` and `visible` may be bound), `style` (`MenuStyle::Bar`, or `Button`: one button that opens the entries), and a button-style menu's trigger: `label` (may be bound), `icon` and `emphasis` (set once) |
 | `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap`, `align` (an `Align`: `Stretch`, the default, `Start`, `Center`, `End`) and `justify` (a `Justify`: `Start`, the default, `Center`, `End`, `Between`), all set once; a Row's `tone` (`std::optional<Prop<std::optional<Tone>>>`), which only `table`'s row view sets: disengaged when no tone was given, an engaged `Prop` whose value is `nullopt` for no tone at the moment. The mount refuses (`std::logic_error`) a Row whose `tone` is engaged outside a table |
 | `Grid` | `grid` | `columns`, `tracks` (`GridTrack{width, align}`: a `Sizing` and where a text's text or a label-width cell sits across the column; given, the column count is their number and `columns` is ignored), `cells` (`GridCell{node, span}`; a null node leaves no cell), `gap`, `align` (each cell's content in its row) — all set once |
 | `Spacer` | `spacer` | none |
@@ -271,11 +271,14 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
      has each prop bound to `setTextProp`, `setBoolProp` or `setNumberProp` and gets `onEvent`
      through `setOnEvent`; when the backend loads nothing, the fallback is mounted under the parent
      and its widget returned;
-   - a Menu sends its whole tree through one `setItems`, as `MenuEntry` values; when any entry at
-     any depth has a bound `label`, `checked` or `enabled`, one binding over all of them sends the
-     tree again whenever one changes. The backend reports a choice as the entry's path, its index
-     at each level from the top, and the dispatcher runs that entry's `onSelect`; a path that
-     names no entry runs nothing. Which entries can be chosen — enabled ones without a submenu,
+   - a Menu sends its whole tree through one `setItems`, as `MenuEntry` values, its visible entries
+     only: a separator that hidden entries leave first or last in a level, or next to another
+     separator, is not sent either. When any entry at any depth has a bound `label`, `description`,
+     `checked`, `enabled` or `visible`, one binding over all of them sends the tree again whenever
+     one changes. A button-style menu's trigger is sent through `setTrigger` at mount and whenever
+     its label changes. The backend reports a choice as the entry's path, its index at each level
+     from the top among the entries last sent, and the dispatcher maps it back through them and
+     runs that entry's `onSelect`; a path that names no entry, or a separator, runs nothing. Which entries can be chosen — enabled ones without a submenu,
      inside enabled entries — is the backend's to enforce, as it is for a disabled widget.
 4. Its children, appended in order.
 

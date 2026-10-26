@@ -8,6 +8,10 @@
 #include <core/tui/Screen.hpp>
 #include <core/tui/Theme.hpp>
 #include <iterator>
+#include <morph/ui/theme.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 
@@ -100,9 +104,14 @@ struct RowsLook {
     return highlighted && look.focused ? theme.listItemSelected : theme.listItem;
 }
 
+/// The `filterText` of a menu's separator row, which `paintRows` draws as a line; no label can be it, since a label
+/// is never filtered by it.
+constexpr std::string_view kSeparatorRow = "\x1f-separator";
+
 /// Draws the items of @p list from item @p top on, one per row, `▶ ` before the highlighted item and two blanks before
-/// the others. core::tui::List draws rows too, but it shortens a label by its bytes, which cuts off a label that
-/// would fit and can cut a character in two.
+/// the others, and an item's description after its label, muted. A separator row is a line across the list.
+/// core::tui::List draws rows too, but it shortens a label by its bytes, which cuts off a label that would fit and can
+/// cut a character in two.
 void paintRows(::core::tui::List const& list, std::size_t top, RowsLook look, ::core::tui::Canvas& canvas) {
     auto const& theme = canvas.theme();
     auto const& items = list.items();
@@ -112,11 +121,21 @@ void paintRows(::core::tui::List const& list, std::size_t top, RowsLook look, ::
         if (index >= items.size()) {
             return;
         }
+        auto const& item = items.at(index);
+        if (item.filterText == kSeparatorRow) {
+            for (int column = 0; column < canvas.width(); ++column) {
+                canvas.put(row, column, "─", theme.listItemDisabled);
+            }
+            continue;
+        }
         bool const highlighted = index == highlight;
-        auto const& style = items.at(index).enabled ? rowStyle(theme, look, highlighted) : theme.listItemDisabled;
+        auto const& style = item.enabled ? rowStyle(theme, look, highlighted) : theme.listItemDisabled;
         canvas.fill({.x = 0, .y = row, .width = canvas.width(), .height = 1}, ' ', style);
         int const marker = canvas.putString(row, 0, highlighted ? "▶ " : "  ", style);
-        canvas.putString(row, marker, items.at(index).label, style);
+        int const labelEnd = marker + canvas.putString(row, marker, item.label, style);
+        if (!item.description.empty()) {
+            canvas.putString(row, labelEnd + 2, item.description, theme.textMuted);
+        }
     }
 }
 
@@ -526,13 +545,75 @@ std::string menuRowLabel(ui::MenuEntry const& entry) {
     return label;
 }
 
+// A row's label and, two cells after it, its description.
+int menuRowWidth(ui::MenuEntry const& entry) {
+    int const label = displayWidth(menuRowLabel(entry));
+    return entry.description.empty() ? label : label + 2 + displayWidth(entry.description);
+}
+
 // NOLINTNEXTLINE(misc-no-recursion): one level per submenu, as deep as the document nests them.
 int widestMenuRow(std::vector<ui::MenuEntry> const& entries) {
     int widest = 0;
     for (auto const& entry : entries) {
-        widest = std::max({widest, displayWidth(menuRowLabel(entry)), widestMenuRow(entry.items)});
+        widest = std::max({widest, menuRowWidth(entry), widestMenuRow(entry.items)});
     }
     return widest;
+}
+
+// The entries of the level @p path names; empty when it names none.
+std::vector<ui::MenuEntry> const& menuLevel(std::vector<ui::MenuEntry> const& entries,
+                                            std::vector<std::size_t> const& path) {
+    static std::vector<ui::MenuEntry> const kNone;
+    std::vector<ui::MenuEntry> const* level = &entries;
+    for (std::size_t const index : path) {
+        if (index >= level->size()) {
+            return kNone;
+        }
+        level = &level->at(index).items;
+    }
+    return *level;
+}
+
+// Whether every entry on @p path is enabled.
+bool menuPathEnabled(std::vector<ui::MenuEntry> const& entries, std::vector<std::size_t> const& path) {
+    std::vector<ui::MenuEntry> const* level = &entries;
+    for (std::size_t const index : path) {
+        if (index >= level->size() || !level->at(index).enabled) {
+            return false;
+        }
+        level = &level->at(index).items;
+    }
+    return true;
+}
+
+// The rows of one level: a separator a row the cursor skips, an entry disabled when it or the level is.
+std::vector<::core::tui::ListItem> menuRows(std::vector<ui::MenuEntry> const& level, bool enabled) {
+    std::vector<::core::tui::ListItem> rows;
+    rows.reserve(level.size());
+    for (auto const& entry : level) {
+        if (entry.separator) {
+            rows.push_back(::core::tui::ListItem{.filterText = std::string{kSeparatorRow}, .enabled = false});
+        } else {
+            rows.push_back(::core::tui::ListItem{.label = menuRowLabel(entry),
+                                                 .description = entry.description,
+                                                 .enabled = enabled && entry.enabled});
+        }
+    }
+    return rows;
+}
+
+// The path to choose for the entry at @p index of the level @p path shows: none for a separator, an entry with a
+// submenu, or an entry that is disabled or inside a disabled one.
+std::optional<std::vector<std::size_t>> menuChoice(std::vector<ui::MenuEntry> const& entries,
+                                                   std::vector<std::size_t> const& path, std::size_t index) {
+    auto const& level = menuLevel(entries, path);
+    if (index >= level.size() || level.at(index).separator || !level.at(index).items.empty() ||
+        !level.at(index).enabled || !menuPathEnabled(entries, path)) {
+        return std::nullopt;
+    }
+    auto chosen = path;
+    chosen.push_back(index);
+    return chosen;
 }
 
 }  // namespace
@@ -553,36 +634,18 @@ void MenuImpl::setItems(std::vector<ui::MenuEntry> const& entries) {
     showLevel(_list->selectedIndex());
 }
 
+void MenuImpl::setTrigger(ui::MenuTrigger const& trigger) { static_cast<void>(trigger); }
+
 void MenuImpl::setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) {
     _onActivate = std::move(onActivate);
 }
 
-std::vector<ui::MenuEntry> const& MenuImpl::shown() const {
-    std::vector<ui::MenuEntry> const* level = &_entries;
-    for (std::size_t const index : _path) {
-        level = &level->at(index).items;
-    }
-    return *level;
-}
+std::vector<ui::MenuEntry> const& MenuImpl::shown() const { return menuLevel(_entries, _path); }
 
-bool MenuImpl::levelEnabled() const {
-    std::vector<ui::MenuEntry> const* level = &_entries;
-    for (std::size_t const index : _path) {
-        if (!level->at(index).enabled) {
-            return false;
-        }
-        level = &level->at(index).items;
-    }
-    return true;
-}
+bool MenuImpl::levelEnabled() const { return menuPathEnabled(_entries, _path); }
 
 void MenuImpl::showLevel(std::size_t highlighted) {
-    bool const enabled = levelEnabled();
-    std::vector<::core::tui::ListItem> rows;
-    rows.reserve(shown().size());
-    for (auto const& entry : shown()) {
-        rows.push_back(::core::tui::ListItem{.label = menuRowLabel(entry), .enabled = enabled && entry.enabled});
-    }
+    std::vector<::core::tui::ListItem> rows = menuRows(shown(), levelEnabled());
     auto const count = rows.size();
     _list->setItems(std::move(rows));
     if (count > 0) {
@@ -642,11 +705,11 @@ void MenuImpl::activate() {
         enter(index);
         return;
     }
-    if (!entry.enabled || !levelEnabled()) {
+    auto choice = menuChoice(_entries, _path, index);
+    if (!choice) {
         return;
     }
-    auto path = _path;
-    path.push_back(index);
+    auto path = std::move(*choice);
     // Choosing closes the submenus, as a menu does: the next choice starts from the top, at the entry it went
     // down from.
     if (!_path.empty()) {
@@ -665,7 +728,7 @@ void MenuImpl::click(::core::tui::Point cell) {
         return;
     }
     auto const index = _top + static_cast<std::size_t>(cell.y);
-    if (index < shown().size()) {
+    if (index < shown().size() && !shown().at(index).separator) {
         _list->setSelectedIndex(index);
         activate();
     }
@@ -693,6 +756,328 @@ std::optional<EventResult> MenuImpl::listKey(::core::tui::KeyEvent const& key) {
     }
     return std::nullopt;
 }
+
+/// The button-style menu's entry list, shown as an overlay. It has no parent, so the keys it leaves go no further.
+class MenuButtonImpl::Popup final : public ::core::tui::List {
+public:
+    explicit Popup(MenuButtonImpl& owner) : _owner{&owner} {}
+
+    void render(::core::tui::Canvas& canvas) override {
+        _owner->_popupTop = scrolledTop(*this, {.top = _owner->_popupTop, .rows = canvas.height()});
+        paintRows(*this, _owner->_popupTop, {.reachable = true, .focused = true}, canvas);
+    }
+
+    [[nodiscard]] ::core::tui::Size preferredSize() const override { return _owner->popupSize(); }
+
+    /// Not drawn, and not hit by the pointer, while the list cannot be used; it closes at the next input that
+    /// reaches it, as the dropdown select's does.
+    [[nodiscard]] bool visible() const noexcept override { return List::visible() && _owner->listUsable(); }
+
+    /// Choosing may end in a handler that destroys the owner and this list with it, so nothing is touched after it.
+    [[nodiscard]] EventResult onEvent(::core::tui::InputEvent const& event) override {
+        auto* const owner = _owner;
+        if (escapeEndsDrag(owner->context(), event)) {
+            return EventResult::Handled;
+        }
+        if (!owner->listUsable()) {
+            owner->close();
+            return EventResult::Ignored;
+        }
+        if (auto const* mouse = std::get_if<::core::tui::MouseEvent>(&event)) {
+            return pointer(*mouse);
+        }
+        if (auto const* key = std::get_if<::core::tui::KeyEvent>(&event)) {
+            if (auto const handled = levelKey(*key)) {
+                return *handled;
+            }
+        }
+        return List::onEvent(event);
+    }
+
+    /// The focus left for another place, which took it: the list closes and leaves the focus there.
+    void onBlur() override { _owner->close(); }
+
+private:
+    [[nodiscard]] std::optional<EventResult> levelKey(::core::tui::KeyEvent const& key) {
+        auto* const owner = _owner;
+        if (isActivation(key)) {
+            owner->pick(selectedIndex());
+            return EventResult::Handled;
+        }
+        if (isKey(key, KeyCode::Escape)) {
+            owner->close();
+            return EventResult::Handled;
+        }
+        if (isKey(key, KeyCode::Tab)) {
+            owner->close();
+            return EventResult::Ignored;
+        }
+        if (!isPlain(key)) {
+            return std::nullopt;
+        }
+        auto const& level = menuLevel(owner->_entries, owner->_path);
+        if (isKey(key, KeyCode::Right) && selectedIndex() < level.size() && !level.at(selectedIndex()).items.empty()) {
+            owner->enter(selectedIndex());
+            return EventResult::Handled;
+        }
+        if ((isKey(key, KeyCode::Left) || isKey(key, KeyCode::Backspace)) && !owner->_path.empty()) {
+            owner->leave();
+            return EventResult::Handled;
+        }
+        return std::nullopt;
+    }
+
+    // A press here ends a gesture elsewhere whose release never arrived; the release of a left press that started
+    // here picks the entry under it.
+    [[nodiscard]] EventResult pointer(::core::tui::MouseEvent const& mouse) {
+        using Type = ::core::tui::MouseEvent::Type;
+        if (mouse.type == Type::ScrollUp || mouse.type == Type::ScrollDown) {
+            if (mouse.type == Type::ScrollUp) {
+                selectPrevious();
+            } else {
+                selectNext();
+            }
+            invalidate();
+            return EventResult::Handled;
+        }
+        if (mouse.type == Type::Press) {
+            _owner->context().endPress();
+            _pressed = mouse.button == 0;
+            return EventResult::Handled;
+        }
+        if (mouse.type != Type::Release || !std::exchange(_pressed, false)) {
+            return EventResult::Handled;
+        }
+        auto const bounds = screenBounds();
+        ::core::tui::Point const cell{.x = mouse.x - 1, .y = mouse.y - 1};
+        if (cell.x >= 0 && cell.y >= 0 && cell.x < bounds.width && cell.y < bounds.height) {
+            _owner->pick(_owner->_popupTop + static_cast<std::size_t>(cell.y));
+        }
+        return EventResult::Handled;
+    }
+
+    MenuButtonImpl* _owner;
+    bool _pressed = false;
+};
+
+std::unique_ptr<::core::tui::List> MenuButtonImpl::makePopup() { return std::make_unique<Popup>(*this); }
+
+MenuButtonImpl::~MenuButtonImpl() {
+    if (!_open) {
+        return;
+    }
+    _open = false;
+    std::erase(context().popups, this);
+    if (context().screen->focusedComponent() == _popup.get()) {
+        static_cast<void>(focusWidget(context(), nullptr));
+    }
+    context().screen->hideOverlay(*_popup);
+}
+
+// The level shown is kept while it still exists in the new tree, so a binding that relabels an entry does not throw
+// the user out of the submenu they are in.
+void MenuButtonImpl::setItems(std::vector<ui::MenuEntry> const& entries) {
+    _entries = entries;
+    std::size_t depth = 0;
+    for (std::vector<ui::MenuEntry> const* level = &_entries; depth < _path.size(); ++depth) {
+        if (_path.at(depth) >= level->size() || level->at(_path.at(depth)).items.empty()) {
+            break;
+        }
+        level = &level->at(_path.at(depth)).items;
+    }
+    _path.resize(depth);
+    if (_open && _entries.empty()) {
+        close();
+    } else if (_open) {
+        fillPopup(_popup->selectedIndex());
+    }
+    refresh();
+}
+
+void MenuButtonImpl::setTrigger(ui::MenuTrigger const& trigger) {
+    _trigger = trigger;
+    refresh();
+}
+
+void MenuButtonImpl::setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) {
+    _onActivate = std::move(onActivate);
+}
+
+// The label and a `▾`; an icon-only trigger its icon's glyph, else its accessible name, so it is never blank.
+std::string MenuButtonImpl::triggerText() const {
+    if (!_trigger.label.empty()) {
+        return _trigger.label + " ▾";
+    }
+    std::string_view const glyph = ui::iconGlyph(_trigger.icon);
+    if (!glyph.empty()) {
+        return std::string{glyph};
+    }
+    return accessibleName().empty() ? std::string{"▾"} : accessibleName();
+}
+
+::core::tui::Size MenuButtonImpl::naturalSize() const {
+    return {.width = displayWidth(triggerText()) + 2, .height = 1};
+}
+
+// The list follows the trigger when it moves: the trigger is drawn before the overlays.
+void MenuButtonImpl::paint(::core::tui::Canvas& canvas) {
+    auto const& theme = canvas.theme();
+    ::core::tui::Style style = theme.buttonDisabled;
+    if (actionable()) {
+        style = hasFocus() || _open ? theme.buttonFocused : theme.buttonNormal;
+        // As a push button: primary is bold, danger bold in the error colour, ghost plain.
+        if (_trigger.emphasis == ui::ButtonEmphasis::Primary || _trigger.emphasis == ui::ButtonEmphasis::Danger) {
+            style.bold = true;
+        }
+        if (_trigger.emphasis == ui::ButtonEmphasis::Danger) {
+            style.fg = theme.error.fg;
+        }
+    }
+    canvas.putString(0, 0, "[" + triggerText() + "]", style);
+    if (_open) {
+        placePopup();
+    }
+}
+
+EventResult MenuButtonImpl::key(::core::tui::KeyEvent const& key) {
+    if (isActivation(key) || (isPlain(key) && isKey(key, KeyCode::Down))) {
+        return open() ? EventResult::Handled : EventResult::Ignored;
+    }
+    return EventResult::Ignored;
+}
+
+void MenuButtonImpl::activate() { static_cast<void>(open()); }
+
+void MenuButtonImpl::closePopup() { close(); }
+
+// The list takes the focus last: the focus leaving its old place may run a handler, which may destroy this menu.
+bool MenuButtonImpl::open() {
+    if (_open || !actionable() || !triggerDrawn() || _entries.empty()) {
+        return false;
+    }
+    _path.clear();
+    _popupTop = 0;
+    auto const place = placement();
+    if (place.rows == 0) {
+        return false;
+    }
+    fillPopup(0);
+    _popupRows = place.rows;
+    _popupAt = place.origin;
+    _open = true;
+    context().popups.push_back(this);
+    context().screen->showOverlay(*_popup, place.origin);
+    refresh();
+    return focusPopup(context(), *this, *_popup);
+}
+
+// Nothing here runs a handler: the focus going back to the trigger leaves only the list, whose blur ends here at once.
+void MenuButtonImpl::close() {
+    if (!_open) {
+        return;
+    }
+    _open = false;
+    _path.clear();
+    std::erase(context().popups, this);
+    auto& screen = *context().screen;
+    bool const hadFocus = screen.focusedComponent() == _popup.get();
+    screen.hideOverlay(*_popup);
+    refresh();
+    if (hadFocus) {
+        static_cast<void>(focusWidget(context(), view().screen() != nullptr ? this : nullptr));
+    }
+}
+
+void MenuButtonImpl::pick(std::size_t index) {
+    auto const& level = menuLevel(_entries, _path);
+    if (index >= level.size() || !actionable()) {
+        return;
+    }
+    if (!level.at(index).items.empty()) {
+        if (level.at(index).enabled) {
+            enter(index);
+        }
+        return;
+    }
+    auto choice = menuChoice(_entries, _path, index);
+    if (!choice) {
+        return;
+    }
+    close();
+    auto const handler = _onActivate;
+    if (handler) {
+        handler(std::move(*choice));
+    }
+}
+
+void MenuButtonImpl::enter(std::size_t index) {
+    _path.push_back(index);
+    _popupTop = 0;
+    fillPopup(0);
+    placePopup();
+}
+
+void MenuButtonImpl::leave() {
+    if (_path.empty()) {
+        return;
+    }
+    auto const from = _path.back();
+    _path.pop_back();
+    _popupTop = 0;
+    fillPopup(from);
+    placePopup();
+}
+
+// The highlight starts on @p highlighted, or the first entry after it the cursor can rest on.
+void MenuButtonImpl::fillPopup(std::size_t highlighted) {
+    auto rows = menuRows(menuLevel(_entries, _path), menuPathEnabled(_entries, _path));
+    auto const count = rows.size();
+    _popup->setItems(std::move(rows));
+    if (count > 0) {
+        _popup->setSelectedIndex(std::min(highlighted, count - 1));
+        if (!_popup->items().at(_popup->selectedIndex()).enabled) {
+            _popup->selectNext();
+        }
+    }
+    refresh();
+}
+
+MenuButtonImpl::Placement MenuButtonImpl::placement() const {
+    auto const trigger = view().screenBounds();
+    auto const viewport = context().screen->viewportArea();
+    int const count = static_cast<int>(menuLevel(_entries, _path).size());
+    int const below = std::max(0, viewport.y + viewport.height - (trigger.y + 1));
+    int const above = std::max(0, trigger.y - viewport.y);
+    int const width = popupSize().width;
+    Placement place{
+        .origin = {.x = std::max(viewport.x, std::min(trigger.x, viewport.x + viewport.width - width)),
+                   .y = trigger.y + 1},
+        .rows = std::min(count, below)};
+    if (below < count && above > below) {
+        place.rows = std::min(count, above);
+        place.origin.y = trigger.y - place.rows;
+    }
+    return place;
+}
+
+void MenuButtonImpl::placePopup() {
+    auto& screen = *context().screen;
+    auto const place = placement();
+    _popupRows = place.rows;
+    if (place.origin != _popupAt || !screen.isOverlayVisible(*_popup)) {
+        _popupAt = place.origin;
+        screen.showOverlay(*_popup, place.origin);
+    }
+}
+
+// As wide as the widest entry of any level and the marker before it, or as the trigger.
+::core::tui::Size MenuButtonImpl::popupSize() const {
+    return {.width = std::max(widestMenuRow(_entries) + 2, view().screenBounds().width), .height = _popupRows};
+}
+
+bool MenuButtonImpl::triggerDrawn() const { return view().screen() != nullptr && !view().screenBounds().empty(); }
+
+bool MenuButtonImpl::listUsable() const { return actionable() && triggerDrawn() && _popupRows > 0; }
 
 void TabsImpl::setTabs(std::vector<std::string> const& tabs) {
     _labels = tabs;

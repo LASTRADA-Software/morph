@@ -775,16 +775,23 @@ inline constexpr std::array<KeySpec, 8> kSelectKeys = {{{"options", Shape::Expr}
                                                         {"onStale", Shape::Text},
                                                         {"onChoose", Shape::Commands},
                                                         {"onChange", Shape::Commands}}};
-/// @brief The keys of `menu`.
-inline constexpr std::array<KeySpec, 1> kMenuKeys = {{{"items", Shape::Parts, "menuItem"}}};
+/// @brief The keys of `menu`; `label`, `icon` and `emphasis` are a button-style menu's trigger.
+inline constexpr std::array<KeySpec, 5> kMenuKeys = {{{"items", Shape::Parts, "menuItem"},
+                                                      {"style", Shape::Text},
+                                                      {"label", Shape::Expr},
+                                                      {"icon", Shape::Expr},
+                                                      {"emphasis", Shape::Text}}};
 /// @brief The keys of a menu item part.
-inline constexpr std::array<KeySpec, 7> kMenuItemKeys = {{{"label", Shape::Expr},
-                                                          {"icon", Shape::Expr},
-                                                          {"keys", Shape::Text},
-                                                          {"checked", Shape::Expr},
-                                                          {"enabled", Shape::Condition},
-                                                          {"onClick", Shape::Commands},
-                                                          {"items", Shape::Parts, "menuItem"}}};
+inline constexpr std::array<KeySpec, 10> kMenuItemKeys = {{{"label", Shape::Expr},
+                                                           {"icon", Shape::Expr},
+                                                           {"keys", Shape::Text},
+                                                           {"checked", Shape::Expr},
+                                                           {"enabled", Shape::Condition},
+                                                           {"onClick", Shape::Commands},
+                                                           {"items", Shape::Parts, "menuItem"},
+                                                           {"separator", Shape::Flag},
+                                                           {"description", Shape::Expr},
+                                                           {"visible", Shape::Condition}}};
 /// @brief The keys of `column` and `row`.
 inline constexpr std::array<KeySpec, 4> kContainerKeys = {
     {{"children", Shape::Nodes}, {"gap", Shape::Expr}, {"align", Shape::Text}, {"justify", Shape::Text}}};
@@ -3095,6 +3102,8 @@ private:
             checkColumnPart(node);
         } else if (part && node.kind == "track") {
             checkCellPlace(node, "align");
+        } else if (part && node.kind == "menuItem") {
+            checkMenuItem(node);
         }
         if (!part) {
             checkFlags(node);
@@ -3361,6 +3370,8 @@ private:
             checkChoice(node, "style", kStyles);
         } else if (node.kind == "grid") {
             checkGrid(node);
+        } else if (node.kind == "menu") {
+            checkMenu(node);
         } else if (node.kind == "textInput") {
             static constexpr std::array<std::string_view, 3> kCommit = {"change", "blur", "enter"};
             checkChoice(node, "commitOn", kCommit);
@@ -3622,6 +3633,49 @@ private:
         }
         if (tracks->second.empty()) {
             refuse(pointerAppend(node.path, "tracks"), "`tracks` lists at least one track");
+        }
+    }
+
+    // A menu's style, and its trigger's keys, which only a button-style menu has. An icon-only trigger needs a name
+    // for assistive technology, so a button-style menu has a `label` or an `a11y` name.
+    static void checkMenu(DocNode const& node) {
+        static constexpr std::array<std::string_view, 2> kStyles = {"bar", "button"};
+        checkChoice(node, "style", kStyles);
+        static constexpr std::array<std::string_view, 4> kEmphasis = {"normal", "primary", "danger", "ghost"};
+        checkChoice(node, "emphasis", kEmphasis);
+        if (node.name("style") != "button") {
+            for (std::string_view const key : {"label", "icon"}) {
+                if (node.prop(key) != nullptr) {
+                    refuse(pointerAppend(node.path, key),
+                           "`" + std::string{key} + "` is a button-style menu's trigger; give the menu `style: button`");
+                }
+            }
+            if (!node.name("emphasis").empty()) {
+                refuse(pointerAppend(node.path, "emphasis"),
+                       "`emphasis` is a button-style menu's trigger; give the menu `style: button`");
+            }
+            return;
+        }
+        auto const a11y = node.partList("a11y");
+        bool const named = !a11y.empty() && a11y.front()->prop("name") != nullptr;
+        if (node.prop("label") == nullptr && !named) {
+            refuse(node.path, "a button-style menu has a `label` or an `a11y` name, so its trigger has a name for "
+                              "assistive technology");
+        }
+    }
+
+    // A separator is a line between entries: `true`, and nothing else beside it.
+    static void checkMenuItem(DocNode const& node) {
+        if (!node.flags.contains("separator")) {
+            return;
+        }
+        if (!node.flag("separator")) {
+            refuse(pointerAppend(node.path, "separator"), "`separator` is `true`; leave it out for an entry");
+        }
+        bool const alone = node.props.empty() && node.events.empty() && node.parts.empty() && node.names.empty() &&
+                           node.keys.empty() && node.flags.size() == 1;
+        if (!alone) {
+            refuse(node.path, "a separator is a line between entries and takes no other key");
         }
     }
 

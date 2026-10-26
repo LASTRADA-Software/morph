@@ -116,7 +116,8 @@ public:
         if (kind == "Tabs") {
             return highlightedLabel(widgetId);
         }
-        return unescape(_backend.prop(widgetId, kind == "Button" || kind == "Checkbox" ? "label" : "text"));
+        return unescape(
+            _backend.prop(widgetId, kind == "Button" || kind == "Checkbox" || kind == "Menu" ? "label" : "text"));
     }
     [[nodiscard]] bool visibleOf(ui::Widget const& widget) override {
         return _backend.prop(_backend.idOf(widget), "visible") != "false";
@@ -306,7 +307,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 46);
+    REQUIRE(cases.size() == 47);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -348,7 +349,8 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
     for (std::string_view const name :
          {"a Text shows its constant text", "a bound Text updates once per batch and not for an equal write",
           "a Switch shows the selected case and nothing for a key without one",
-          "a text field shows what the document makes of an edit"}) {
+          "a text field shows what the document makes of an edit",
+          "a button-style menu reports the entry past a separator, and never the separator"}) {
         INFO(name);
         CHECK(wrongText.contains(name));
     }
@@ -372,7 +374,8 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
           "a dismissed banner reports it and stays shown",
           "a closed collapsible's content takes no input, its header does",
           "a drop zone takes a drop whole or refuses it whole",
-          "a click on a sortable header asks to sort by it, and no other header or setter does"}) {
+          "a click on a sortable header asks to sort by it, and no other header or setter does",
+          "a button-style menu reports the entry past a separator, and never the separator"}) {
         INFO(name);
         CHECK(deadInput.contains(name));
     }

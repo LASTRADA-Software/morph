@@ -445,6 +445,57 @@ TEST_CASE("ui::Mounted: a menu entry inside a submenu runs its own action", "[ui
     CHECK(ran == Lines{"b", "open"});
 }
 
+// A hidden entry is not sent, and a path counts only what was sent. Mutation: map the path through every item, not
+// only the shown ones (choosing the entry after the hidden one then runs the hidden one).
+TEST_CASE("ui::Mounted: a hidden menu entry is not sent, and the shown one after it runs its own action", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<bool> shown{runtime, false};
+    Lines ran;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::menu({.items = {{.label = "Undo", .onSelect = [&] { ran.emplace_back("undo"); }},
+                            {.label = "Redo",
+                             .onSelect = [&] { ran.emplace_back("redo"); },
+                             .visible = [&] { return shown.get(); }},
+                            {.label = "Cut", .onSelect = [&] { ran.emplace_back("cut"); }}}})};
+    CHECK(backend.prop(1, "items") == "[Undo,Cut]");
+    backend.chooseMenuEntry(1, {1});
+    CHECK(ran == Lines{"cut"});
+    shown.set(true);
+    owner.runAll();
+    CHECK(backend.prop(1, "items") == "[Undo,Redo,Cut]");
+    backend.chooseMenuEntry(1, {1});
+    CHECK(ran == Lines{"cut", "redo"});
+}
+
+// Mutation: send every separator (the line the hidden first entry leaves is then sent first).
+TEST_CASE("ui::Mounted: a separator hidden entries leave at an end or beside another is not sent", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Lines ran;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::menu({.items = {{.label = "Hidden", .visible = false},
+                            {.separator = true},
+                            {.label = "Print", .onSelect = [&] { ran.emplace_back("print"); }},
+                            {.separator = true},
+                            {.label = "Gone", .visible = false},
+                            {.separator = true},
+                            {.label = "Export", .description = std::string{"as PDF"}},
+                            {.separator = true}},
+                  .style = ui::MenuStyle::Button,
+                  .label = std::string{"More"}})};
+    CHECK(backend.prop(1, "items") == "[Print,;separator,Export;description=as PDF]");
+    CHECK(backend.prop(1, "style") == "Button");
+    CHECK(backend.prop(1, "label") == "More");
+    backend.chooseMenuEntry(1, {1});  // the separator: nothing runs
+    backend.chooseMenuEntry(1, {0});
+    CHECK(ran == Lines{"print"});
+}
+
 // Mutations: skip the enabled check (on the entry, or on an entry above it) in RecordingBackend::chooseMenuEntry.
 TEST_CASE("ui::Mounted: a disabled menu entry, or one inside a disabled entry, runs nothing", "[ui]") {
     Owner owner;

@@ -1544,6 +1544,36 @@ private:
     return checks.result();
 }
 
+/// @brief Case: a button-style menu labelled `More` over `[A, separator, B, C]` shows `More`, reports the entry past
+///        the separator by its path `[2]`, and never reports the separator. A backend that leaves the separator out of
+///        its rows runs C and then B.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> buttonMenuSkipsSeparator(ConformanceProbe& probe) {
+    std::vector<std::string> chosen;
+    auto const choose = [&chosen](std::string name) {
+        return [&chosen, name = std::move(name)] { chosen.push_back(name); };
+    };
+    Menu menu{.items = {{.label = "A", .onSelect = choose("A")},
+                        {.separator = true},
+                        {.label = "B", .onSelect = choose("B")},
+                        {.label = "C", .onSelect = choose("C")}},
+              .style = MenuStyle::Button,
+              .label = std::string{"More"}};
+    Mounted const view{probe.runtime(), probe.backend(), ui::menu(std::move(menu))};
+    probe.settle();
+    Checks checks;
+    checks.text("a button-style menu's trigger", "More", probe.textOf(view.root()));
+    probe.chooseMenuEntry(view.root(), {2});
+    probe.settle();
+    probe.chooseMenuEntry(view.root(), {1});  // the separator
+    probe.settle();
+    checks.that(chosen == std::vector<std::string>{"B"},
+                "choosing [2] and then the separator [1] ran " + std::to_string(chosen.size()) +
+                    " handlers, not B's alone");
+    return checks.result();
+}
+
 /// @brief Case: typing into a read-only input reaches no handler; once editable again, it does.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -2408,7 +2438,7 @@ struct SelectionReport {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 46> const cases{{
+    static std::array<ConformanceCase, 47> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -2475,6 +2505,8 @@ struct SelectionReport {
          .run = detail::headerClickAsksToSort},
         {.name = "a heading row is never selected, by Ctrl+A or a click", .run = detail::headingIsNeverSelected},
         {.name = "relabelled tabs keep the highlighted tab and its page", .run = detail::relabelledTabsKeepHighlight},
+        {.name = "a button-style menu reports the entry past a separator, and never the separator",
+         .run = detail::buttonMenuSkipsSeparator},
     }};
     return cases;
 }

@@ -171,6 +171,10 @@ expression of one),
 `{"lit": {"stretch": w}}`), which the loader checks; a record built with `obj` is evaluated at mount. `with(key, handle)` and
 `withText(key, text)` set any other key, and `Node{json}` wraps a node no builder spells.
 
+- **`menu`** takes `MenuItem{label, icon, keys, checked, enabled, onClick, items, separator, description, visible}`
+  entries, each key written only when given; `menuSeparator()` is an entry with `separator`, which writes nothing else.
+  `menuButton(MenuButtonOptions{label, icon, emphasis}, items)` writes a `style: button` menu; an icon-only one names
+  itself with `.a11y(...)`.
 - **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected}`: an absent `style`
   writes no key, and `selected`, a condition, is written as given: an item's current entry, a push button pressed in.
 - **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, tracks, align, justify}`; an

@@ -271,7 +271,8 @@
     { "name": "a table's select column", "doc": { "vocab": "ui/1", "id": "t", "view": { "kind": "table", "rows": { "lit": [] }, "selectionMode": "multiple", "selectColumn": true, "selectAllLabel": { "t": "samples.selectAll", "fallback": "Select all" }, "rowLabel": { "row": "id" } } } },
     { "name": "a table's cell places", "doc": { "vocab": "ui/1", "id": "t", "view": { "kind": "table", "rows": { "lit": [] }, "valign": "start", "columns": [ { "id": "a", "align": "end", "valign": "end" }, { "id": "b", "align": "center" } ] } } },
     { "name": "a mono text and a mono column", "doc": { "vocab": "ui/1", "id": "t", "view": { "kind": "column", "children": [ { "kind": "text", "text": "S-1", "role": "mono" }, { "kind": "table", "rows": { "lit": [] }, "columns": [ { "id": "id", "label": "Sample", "role": "mono" } ] } ] } } },
-    { "name": "a table's empty content", "doc": { "vocab": "ui/1", "id": "t", "state": { "rows": { "init": { "lit": [] } } }, "view": { "kind": "table", "rows": { "ref": "rows" }, "empty": [ { "kind": "emptyState", "title": "Nothing yet", "action": { "label": "Add", "onClick": [ { "set": "rows", "value": { "lit": [ 1 ] } } ] } } ] } } }
+    { "name": "a table's empty content", "doc": { "vocab": "ui/1", "id": "t", "state": { "rows": { "init": { "lit": [] } } }, "view": { "kind": "table", "rows": { "ref": "rows" }, "empty": [ { "kind": "emptyState", "title": "Nothing yet", "action": { "label": "Add", "onClick": [ { "set": "rows", "value": { "lit": [ 1 ] } } ] } } ] } } },
+    { "name": "a button-style menu with separators, descriptions and hidden entries", "doc": { "vocab": "ui/1", "id": "menus", "state": { "on": { "init": true } }, "view": { "kind": "menu", "style": "button", "icon": "more", "emphasis": "ghost", "a11y": { "name": "More actions" }, "items": [ { "label": "Print" }, { "separator": true }, { "label": "Retire", "description": "needs reason", "visible": { "ref": "on" } } ] } } }
   ],
   "invalid": [
     { "name": "not an object", "raw": [1], "at": "", "reason": "a document is a JSON object" },
@@ -535,6 +536,11 @@
     { "name": "an unknown justify", "doc": { "view": { "kind": "column", "justify": "around", "children": [] } }, "at": "/view/justify", "reason": "`around` is not one of the values of `justify`" },
     { "name": "an unknown alignSelf", "doc": { "view": { "kind": "row", "children": [ { "kind": "text", "text": "x", "alignSelf": "middle" } ] } }, "at": "/view/children/0/alignSelf", "reason": "`middle` is not one of the values of `alignSelf`" },
     { "name": "an unknown grid align", "doc": { "view": { "kind": "grid", "align": "baseline", "children": [] } }, "at": "/view/align", "reason": "`baseline` is not one of the values of `align`" },
+    { "name": "an icon-only button-style menu without a name", "doc": { "view": { "kind": "menu", "style": "button", "icon": "more", "items": [ { "label": "A" } ] } }, "at": "/view", "reason": "has a `label` or an `a11y` name" },
+    { "name": "a separator with a label", "doc": { "view": { "kind": "menu", "items": [ { "label": "A" }, { "separator": true, "label": "B" } ] } }, "at": "/view/items/1", "reason": "takes no other key" },
+    { "name": "a separator that is false", "doc": { "view": { "kind": "menu", "items": [ { "separator": false } ] } }, "at": "/view/items/0/separator", "reason": "`separator` is `true`" },
+    { "name": "a trigger label on a bar menu", "doc": { "view": { "kind": "menu", "label": "More", "items": [] } }, "at": "/view/label", "reason": "is a button-style menu's trigger" },
+    { "name": "an unknown menu style", "doc": { "view": { "kind": "menu", "style": "pill", "items": [] } }, "at": "/view/style", "reason": "not one of the values of `style`" },
     { "name": "a grid with columns and tracks", "doc": { "view": { "kind": "grid", "columns": 2, "tracks": [ {} ], "children": [] } }, "at": "/view/tracks", "reason": "a grid takes `columns` or `tracks`, not both" },
     { "name": "a grid with no tracks", "doc": { "view": { "kind": "grid", "tracks": [], "children": [] } }, "at": "/view/tracks", "reason": "lists at least one track" },
     { "name": "a track aligned stretch", "doc": { "view": { "kind": "grid", "tracks": [ { "align": "stretch" } ], "children": [] } }, "at": "/view/tracks/0/align", "reason": "start, center or end" },

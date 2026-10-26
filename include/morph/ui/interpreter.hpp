@@ -6331,7 +6331,14 @@ inline std::vector<MenuItem> ScreenCore::menuItems(std::span<DocNodePtr const> p
     std::vector<MenuItem> items;
     for (DocNodePtr const& part : parts) {
         MenuItem item;
+        if (part->flag("separator")) {
+            item.separator = true;
+            items.push_back(std::move(item));
+            continue;
+        }
         item.label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf);
+        item.description = bindProp<std::string>(ctx, part->prop("description"), std::string{}, stringOf);
+        item.visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf);
         if (Commands const* const commands = part->event("onClick")) {
             item.onSelect = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
         }
@@ -6712,6 +6719,18 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     }
     if (kind == "menu") {
         Menu spec{.items = menuItems(node.partList("items"), ctx)};
+        if (node.name("style") == "button") {
+            spec.style = MenuStyle::Button;
+            spec.label = textProp("label");
+            spec.icon = onceText("icon");
+            if (node.name("emphasis") == "primary") {
+                spec.emphasis = ButtonEmphasis::Primary;
+            } else if (node.name("emphasis") == "danger") {
+                spec.emphasis = ButtonEmphasis::Danger;
+            } else if (node.name("emphasis") == "ghost") {
+                spec.emphasis = ButtonEmphasis::Ghost;
+            }
+        }
         commonOf(node, ctx, element, spec.common);
         return ui::menu(std::move(spec));
     }

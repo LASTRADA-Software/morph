@@ -207,7 +207,8 @@ file the bundle lacks or one that is not an `icon` file, naming the index and th
 - **Framework names.** The built-in components draw `empty` (an empty state without an icon of its own),
   `tone.info`, `tone.ok`, `tone.warn`, `tone.err` (a banner's tone), `nav.expand` and `nav.collapse` (a collapsible's
   and a panel's chevron, and a select's dropdown indicator), `close` (a dismissible banner's close button) and
-  `date.pick` (a date input's calendar button), from the set when it names them, and as today's glyph or nothing
+  `date.pick` (a date input's calendar button) and `more` (an overflow menu's trigger, `⋯`), from the set when it
+  names them, and as today's glyph or nothing
   otherwise, so a bundle without a set keeps today's look. `nav.back` and `nav.forward` are framework names no
   built-in component draws yet (`kFrameworkIcons`).
 - **On Qt Quick.** `applyBundleTheme(engine, themes, icons)` hands the set to `Theme.icons` (name to a

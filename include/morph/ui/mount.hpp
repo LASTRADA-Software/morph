@@ -645,47 +645,109 @@ private:
         return widget;
     }
 
-    // The entries as the widget shows them, each binding read once; called inside the menu's one binding.
-    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
-    [[nodiscard]] static std::vector<MenuEntry> entriesOf(std::vector<MenuItem> const& items) {
+    // A path through a menu tree: an index at each level from the top.
+    using MenuPath = std::vector<std::size_t>;
+
+    // What a menu sent its widget: the entries, and for each the path of the item it shows, so a reported path maps
+    // back to the item that was on screen even after a binding has hidden or shown another.
+    struct ShownMenu {
         std::vector<MenuEntry> entries;
-        entries.reserve(items.size());
-        for (MenuItem const& item : items) {
+        std::map<MenuPath, MenuPath> sources;
+
+        bool operator==(ShownMenu const&) const = default;
+    };
+
+    // Where a level of a menu is: its path among the entries sent, and among the items.
+    struct MenuLevelAt {
+        MenuPath shown;
+        MenuPath source;
+    };
+
+    // The visible entries of one level as the widget shows them, each binding read once, recording each one's item
+    // path under its shown path in @p sources. A separator that hidden entries leave first, last or next to another
+    // separator is left out.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static std::vector<MenuEntry> shownLevel(std::vector<MenuItem> const& items, MenuLevelAt const& where,
+                                                           std::map<MenuPath, MenuPath>& sources) {
+        std::vector<MenuEntry> entries;
+        auto const record = [&](std::size_t source) {
+            MenuPath shownPath = where.shown;
+            shownPath.push_back(entries.size() - 1);
+            MenuPath sourcePath = where.source;
+            sourcePath.push_back(source);
+            sources.insert_or_assign(std::move(shownPath), std::move(sourcePath));
+        };
+        for (std::size_t source = 0; source < items.size(); ++source) {
+            MenuItem const& item = items.at(source);
+            if (item.separator) {
+                if (!entries.empty() && !entries.back().separator) {
+                    entries.push_back(MenuEntry{.separator = true});
+                    record(source);
+                }
+                continue;
+            }
+            if (!item.visible.evaluate()) {
+                continue;
+            }
+            MenuLevelAt child = where;
+            child.shown.push_back(entries.size());
+            child.source.push_back(source);
             entries.push_back(MenuEntry{.label = item.label.evaluate(),
                                         .icon = item.icon,
                                         .keys = item.keys,
                                         .checked = item.checked.evaluate(),
                                         .enabled = item.enabled.evaluate(),
-                                        .items = entriesOf(item.items)});
+                                        .items = shownLevel(item.items, child, sources),
+                                        .description = item.description.evaluate()});
+            record(source);
+        }
+        if (!entries.empty() && entries.back().separator) {
+            MenuPath last = where.shown;
+            last.push_back(entries.size() - 1);
+            sources.erase(last);
+            entries.pop_back();
         }
         return entries;
     }
 
-    // Whether any entry, at any depth, has a bound label, check mark or enablement.
+    // The visible entries as the widget shows them; called inside the menu's one binding.
+    [[nodiscard]] static ShownMenu shownOf(std::vector<MenuItem> const& items) {
+        ShownMenu shown;
+        shown.entries = shownLevel(items, MenuLevelAt{}, shown.sources);
+        return shown;
+    }
+
+    // Whether any entry, at any depth, has a bound label, description, check mark, enablement or visibility.
     // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
     [[nodiscard]] static bool anyBound(std::vector<MenuItem> const& items) {
         return std::ranges::any_of(items, entryBound);
     }
 
-    // Whether this entry, or one in its submenu, has a bound label, check mark or enablement.
+    // Whether this entry, or one in its submenu, has a bound label, description, check mark, enablement or
+    // visibility.
     // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
     [[nodiscard]] static bool entryBound(MenuItem const& item) {
-        return item.label.isBound() || item.checked.isBound() || item.enabled.isBound() || anyBound(item.items);
+        return item.label.isBound() || item.description.isBound() || item.checked.isBound() ||
+               item.enabled.isBound() || item.visible.isBound() || anyBound(item.items);
     }
 
-    // The entry a path names, or null when the path names none.
+    // The item a path through the shown entries names, or null when it names none or a separator.
     [[nodiscard]] static MenuItem const* itemAt(std::vector<MenuItem> const& items,
-                                                std::vector<std::size_t> const& path) {
+                                                std::map<MenuPath, MenuPath> const& sources, MenuPath const& path) {
+        auto const found = sources.find(path);
+        if (found == sources.end()) {
+            return nullptr;
+        }
         std::vector<MenuItem> const* level = &items;
-        MenuItem const* found = nullptr;
-        for (std::size_t const index : path) {
-            if (level == nullptr || index >= level->size()) {
+        MenuItem const* item = nullptr;
+        for (std::size_t const index : found->second) {
+            if (index >= level->size()) {
                 return nullptr;
             }
-            found = &level->at(index);
-            level = &found->items;
+            item = &level->at(index);
+            level = &item->items;
         }
-        return found;
+        return item == nullptr || item->separator ? nullptr : item;
     }
 
     /// An input's label and whether it shows it: only when it has a label or shows one, so an input without a label
@@ -798,18 +860,26 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, Menu const& spec, ContainerWidget* parent) {
-        MenuWidget& widget = scope.adopt(_backend->createMenu(parent));
+        MenuWidget& widget = scope.adopt(_backend->createMenu(parent, spec.style));
         applyCommon(scope, widget, spec.common);
+        if (spec.style == MenuStyle::Button) {
+            bind(scope, spec.label, [&widget, icon = spec.icon, emphasis = spec.emphasis](std::string const& label) {
+                widget.setTrigger(MenuTrigger{.label = label, .icon = icon, .emphasis = emphasis});
+            });
+        }
         std::vector<MenuItem> const& items = spec.items;
-        // One prop for the whole tree: a bound label, mark or enablement anywhere re-sends every entry, which keeps
-        // setItems the one setter.
-        Prop<std::vector<MenuEntry>> const entries =
-            anyBound(items) ? Prop<std::vector<MenuEntry>>([items = items] { return entriesOf(items); })
-                            : Prop<std::vector<MenuEntry>>(entriesOf(items));
-        bind(scope, entries, [&widget](std::vector<MenuEntry> const& shown) { widget.setItems(shown); });
-        widget.setOnActivate(
-            event(std::function<void(std::vector<std::size_t>)>{[items = items](std::vector<std::size_t> const& path) {
-                MenuItem const* const item = itemAt(items, path);
+        // One prop for the whole tree: a bound label, description, mark, enablement or visibility anywhere re-sends
+        // every entry, which keeps setItems the one setter. A reported path is read against what was last sent.
+        auto sent = std::make_shared<std::map<MenuPath, MenuPath>>();
+        Prop<ShownMenu> const shown = anyBound(items) ? Prop<ShownMenu>([items = items] { return shownOf(items); })
+                                                      : Prop<ShownMenu>(shownOf(items));
+        bind(scope, shown, [&widget, sent](ShownMenu const& menu) {
+            *sent = menu.sources;
+            widget.setItems(menu.entries);
+        });
+        widget.setOnActivate(event(std::function<void(std::vector<std::size_t>)>{
+            [items = items, sent](std::vector<std::size_t> const& path) {
+                MenuItem const* const item = itemAt(items, *sent, path);
                 if (item != nullptr && item->onSelect) {
                     item->onSelect();
                 }

@@ -12,6 +12,7 @@
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "tui/widget.hpp"
@@ -150,12 +151,15 @@ private:
 /// Menu: the entries of one level as a list, which drills down into submenus. Enter, Space, Right or a click on an
 /// entry with a submenu opens it; Left or Backspace goes back to the level above. Enter, Space or a click on an
 /// entry without one chooses it, when it and every entry above it are enabled, and shows the top level again. A
-/// checkable entry shows its mark, an entry with a submenu a `>`, and an entry's chord shows after its label. A list
-/// with fewer rows than entries scrolls to keep the highlighted one in view.
+/// checkable entry shows its mark, an entry with a submenu a `>`, and an entry's chord shows after its label, then its
+/// description, muted. A separator is a `─` row the cursor skips and a click on it does nothing. A list with fewer
+/// rows than entries scrolls to keep the highlighted one in view.
 class MenuImpl final : public TuiWidget<ui::MenuWidget>, private ListOwner {
 public:
     explicit MenuImpl(Context& context) : TuiWidget{context}, _list{&adopt(makeListView(*this, *this))} {}
     void setItems(std::vector<ui::MenuEntry> const& entries) override;
+    /// A bar-style menu has no trigger; the mount never calls it.
+    void setTrigger(ui::MenuTrigger const& trigger) override;
     void setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
@@ -184,6 +188,77 @@ private:
     std::vector<ui::MenuEntry> _entries;
     std::vector<std::size_t> _path;
     std::function<void(std::vector<std::size_t>)> _onActivate;
+};
+
+/// Menu, button style: one row `[label ▾]`, or for an icon-only trigger its icon's glyph (`[⋯]` for `more`) or else
+/// its accessible name. Enter, Space, Down or a click opens the entries as a list overlay below the trigger (above
+/// it, when there is more room there), which takes the focus and drills into submenus as a bar-style menu does:
+/// Right, Enter, Space or a click opens one, Left or Backspace goes up. Choosing an entry, Esc, or the focus leaving
+/// closes the list and hands the focus back to the trigger; Tab closes it and leaves the key to the frontend. A
+/// separator is a `─` row the cursor skips. Like the dropdown select, the list opens only from a trigger drawn in the
+/// last frame, and closes when the user can no longer reach the menu.
+class MenuButtonImpl final : public TuiWidget<ui::MenuWidget> {
+public:
+    explicit MenuButtonImpl(Context& context) : TuiWidget{context}, _popup{makePopup()} { adopt(makeView(*this)); }
+    /// @brief Closes the list, if open, taking the focus off it first.
+    ~MenuButtonImpl() override;
+    MenuButtonImpl(MenuButtonImpl const&) = delete;
+    MenuButtonImpl& operator=(MenuButtonImpl const&) = delete;
+    MenuButtonImpl(MenuButtonImpl&&) = delete;
+    MenuButtonImpl& operator=(MenuButtonImpl&&) = delete;
+
+    /// Replaces the entries; an open list keeps the level shown while it still exists, and closes when there are none.
+    void setItems(std::vector<ui::MenuEntry> const& entries) override;
+    void setTrigger(ui::MenuTrigger const& trigger) override;
+    void setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) override;
+    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] bool wantsFocus() const override { return true; }
+    /// The trigger's label.
+    [[nodiscard]] std::string probeText() const override { return _trigger.label; }
+    void paint(::core::tui::Canvas& canvas) override;
+    [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
+    void activate() override;
+    void closePopup() override;
+    [[nodiscard]] ::core::tui::Component const* openPopup() const override { return _open ? _popup.get() : nullptr; }
+    /// Whether the entry list is open.
+    [[nodiscard]] bool isOpen() const noexcept { return _open; }
+    /// The path of the level the list shows, an index per level from the top; empty at the top.
+    [[nodiscard]] std::vector<std::size_t> const& level() const noexcept { return _path; }
+
+private:
+    class Popup;
+    /// Where the list goes: its top left corner, in screen cells, and how many rows it may take there.
+    struct Placement {
+        ::core::tui::Point origin{};  ///< The top left corner.
+        int rows = 0;                 ///< The rows it may take; none when there is no room.
+    };
+    [[nodiscard]] std::unique_ptr<::core::tui::List> makePopup();
+    /// What the trigger shows between its brackets.
+    [[nodiscard]] std::string triggerText() const;
+    /// Opens the list at the top level; whether it is open and has the focus afterwards.
+    bool open();
+    void close();
+    /// Opens the submenu of, or chooses, the entry at @p index of the level shown. Choosing may destroy this menu.
+    void pick(std::size_t index);
+    void enter(std::size_t index);
+    void leave();
+    /// Gives the list the level shown, highlighting @p highlighted.
+    void fillPopup(std::size_t highlighted);
+    [[nodiscard]] Placement placement() const;
+    void placePopup();
+    [[nodiscard]] ::core::tui::Size popupSize() const;
+    [[nodiscard]] bool triggerDrawn() const;
+    [[nodiscard]] bool listUsable() const;
+
+    std::vector<ui::MenuEntry> _entries;
+    std::vector<std::size_t> _path;
+    std::function<void(std::vector<std::size_t>)> _onActivate;
+    ui::MenuTrigger _trigger;
+    std::unique_ptr<::core::tui::List> _popup;  ///< A Popup, shown as an overlay while open.
+    ::core::tui::Point _popupAt{};              ///< Where the open list is shown, in screen cells.
+    int _popupRows = 0;                         ///< How many rows the open list may take where it is shown.
+    std::size_t _popupTop = 0;                  ///< The first entry the open list shows, as of the last frame.
+    bool _open = false;
 };
 
 /// Tabs: a bar above the body. Left and Right while the tabs hold the focus select the previous and the next tab,

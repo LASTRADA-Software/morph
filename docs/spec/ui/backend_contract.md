@@ -77,11 +77,17 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   the field's date or on today in the display zone. A day chosen produces the same text an edit
   would and reaches `onChange` the same way, so the field's text is the one source of the value.
   The terminal offers typed text only. A read-only date input shows no calendar.
-- **Menus.** `setItems` replaces the whole tree of `MenuEntry{label, icon, keys, checked, enabled,
-  items}`. `keys` is only shown beside the label; `checked` engaged shows a check mark that only
-  `setItems` moves; an entry with `items` opens its submenu. `onActivate` receives the chosen
-  entry's path, its index at each level from the top, and only for an enabled entry without a
-  submenu whose ancestors are all enabled.
+- **Menus.** `createMenu(parent, style)` makes a bar of top-level entries (`MenuStyle::Bar`) or one
+  button that opens the top level as a popup (`MenuStyle::Button`), whose trigger `setTrigger(MenuTrigger{label,
+  icon, emphasis})` sets: the label is its text and accessible name; an icon-only trigger draws its
+  icon from the theme's set, `more` as `⋯` when the set does not name it, and another icon the set
+  does not name as the widget's accessible name, so a trigger is never blank. `setItems` replaces
+  the whole tree of `MenuEntry{label, icon, keys, checked, enabled, items, separator, description}`.
+  `keys` is only shown beside the label; `checked` engaged shows a check mark that only `setItems`
+  moves; an entry with `items` opens its submenu; a `separator` is a line between entries, never
+  chosen or opened; a `description` is a muted line of help with its entry. `onActivate` receives
+  the chosen entry's path, its index at each level from the top with separators counted, and only
+  for an enabled entry without a submenu whose ancestors are all enabled.
 - Every setter takes UTF-8. **A setter called with the value the widget already shows changes
   nothing**: in particular a text input keeps its cursor, its selection and an input method's
   composition. A controlled input's re-assertion, or another renderer, may make such a call.
@@ -229,7 +235,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only), `setIcon` (an icon of the theme's icon set, drawn at the leading edge; single-line and password only, called once), `setCaption(label, shown)` (the field's label, and whether the input draws it as a visible caption above its control) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)` | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
-| `MenuWidget` | `setItems(entries)` | `setOnActivate(path)` |
+| `MenuWidget` | `setItems(entries)`, `setTrigger(MenuTrigger{label, icon, emphasis})` (a button-style menu's) | `setOnActivate(path)` |
 | `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)` | — |
 | `GridWidget` | `setColumns` (at least one), `setTracks(tracks)` (at least one, in place of `setColumns`), `setGap`, `setSpan(child, span)`, `setAlign(Align)` | — |
 | `SpacerWidget` | — | — |
@@ -346,7 +352,7 @@ The headless reference backend and the test double for everything above the cont
   `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run; text and the six
   inputs record `readonly`, `required`, `errors` and `stale`; and each kind its own: `text`, `role` (Text); `label`, `emphasis`, `icon`, `style`, `selected` (Button); `mode`, `text`, `placeholder`
   (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
-  `selected` is the option it marks, else `none`); `items` (Menu, as below); `gap`, `align`, `justify` (Column, Row); `columns`,
+  `selected` is the option it marks, else `none`); `items` (Menu, as below), and a button-style menu's `style=Button` (at creation), `label`, `icon` and `emphasis`; `gap`, `align`, `justify` (Column, Row); `columns`,
   `tracks` (each width, then `;align=` where it is not `start`), `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
   `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title` (Dialog); `active`, `label` (Busy);
   `columns` (each `label:width`, then `;align=` and `;valign=` for a place other than the default),
@@ -368,8 +374,9 @@ The headless reference backend and the test double for everything above the cont
   a fraction in its shortest decimal form (`0.25`); steps as `[label:State,…]`; key-value pairs
   as `[label:value,…]`; sizes as `[n,…]`; a
   menu as `[label;attr=value…,…]`, where an entry's attributes follow its label only when they
-  differ from the default (`;icon=`, `;keys=`, `;checked=true` or `false`, `;enabled=false`) and
-  its submenu follows in brackets: `[File[Open;keys=Ctrl+O,Recent[a.txt]],Wrap;checked=true]`.
+  differ from the default (`;icon=`, `;keys=`, `;checked=true` or `false`, `;enabled=false`,
+  `;description=`), a separator is `;separator` alone, and
+  its submenu follows in brackets: `[File[Open;keys=Ctrl+O,Recent[a.txt]],;separator,Wrap;checked=true]`.
 - **Escaping.** Free text is escaped so that every value stays on its line and reads as one field:
   a line feed becomes `\n`, a carriage return `\r`, and a backslash or `=` is preceded by a
   backslash. Text inside a list also escapes `,`, `[` and `]`, text inside a menu also `;`, and a
@@ -401,8 +408,8 @@ The headless reference backend and the test double for everything above the cont
     `activateRow` asks that of the row, `drag` of both widgets.
   - A read-only field also ignores `edit`, `submit`, `commit`, `toggle`, `choose`, `setDateTime`,
     `slide` and `pick`.
-  - `chooseMenuEntry` and `chooseIndex` on a menu run nothing for a path that names no entry, an
-    entry with a submenu, or an entry that is disabled or inside a disabled one.
+  - `chooseMenuEntry` and `chooseIndex` on a menu run nothing for a path that names no entry, a
+    separator, an entry with a submenu, or an entry that is disabled or inside a disabled one.
   - `press(id, chord)` presses a chord with focus on widget `id`, in the key order of **Chords** above: a chord
     `id` declares; then the built-in keys of its kind (a `Button`'s `Enter` or `Space` clicks it; a single-line or
     password `TextInput`'s `Enter` commits, then submits and stops when the field has a submit handler, and goes on
@@ -479,7 +486,7 @@ after it; its reading operations report what the widget shows now.
 | `backend()` | The backend under test |
 | `runtime()` | The runtime the cases' signals and mounts belong to |
 | `settle()` | Runs posted flushes and pending native events until nothing is left |
-| `textOf(widget)` | A Text's or TextInput's text, a Button's or Checkbox's label, the label of the option a Select marks (empty when it marks none) |
+| `textOf(widget)` | A Text's or TextInput's text, a Button's or Checkbox's label, a button-style menu's trigger label, the label of the option a Select marks (empty when it marks none) |
 | `visibleOf(widget)` | The widget's own flag as its last `setVisible` left it: a hidden ancestor, a collapsed panel or a closed dialog around it does not make it false |
 | `enabledOf(widget)` | The widget's own flag as its last `setEnabled` left it |
 | `childCount(container)` | How many children a container has |
@@ -496,7 +503,7 @@ after it; its reading operations report what the widget shows now.
 | `cursorOf(field)` | Where a text field's cursor is, as a byte offset into its text |
 | `press(focused, chord)` | Presses a chord with focus on a widget, moving focus there first if the probe must |
 | `hasFocus(widget)` | Whether the widget has keyboard focus |
-| `chooseMenuEntry(menu, path)` | Chooses a menu entry by its path, opening each submenu on the way |
+| `chooseMenuEntry(menu, path)` | Chooses a menu entry by its path, opening a button-style menu through its trigger and each submenu on the way |
 | `expand(section, open)` | Opens or closes a collapsible section with its own control |
 | `dropFiles(zone, paths)` | Drops files from the operating system onto a drop zone |
 | `boundsOf(widget)` | Where the widget is drawn, in the backend's units, for the layout cases; none by default, for a probe that reads no geometry |
@@ -580,6 +587,8 @@ Each case is named by the rule it checks:
     click on the heading row changes nothing and reports nothing.
 46. Tabs labelled `A` and `B`, with `B` picked by the user, then relabelled `A` and `B · 3`, still highlight
     `B · 3`, and `B`'s page is the one shown.
+47. A button-style menu labelled `More` over `[A, separator, B, C]` reads `More`; choosing `[2]` runs `B`, and
+    choosing the separator `[1]` then runs nothing.
 
 ### What the probe cannot reach
 

@@ -3451,7 +3451,17 @@ struct MenuItem {
     Commands onClick;
     /// @brief A submenu.
     std::vector<MenuItem> items;
+    /// @brief Whether the item is a line between entries; a separator writes no other key.
+    bool separator = false;
+    /// @brief A muted line of help with the entry.
+    AnyHandle description;
+    /// @brief Whether the entry is shown, a condition; absent shows it.
+    AnyHandle visible;
 };
+
+/// @brief A line between menu entries.
+/// @return The item.
+[[nodiscard]] inline MenuItem menuSeparator() { return MenuItem{.separator = true}; }
 
 namespace detail {
 
@@ -3461,6 +3471,10 @@ namespace detail {
 // NOLINTNEXTLINE(misc-no-recursion): a submenu is written item by item; the nesting is the document's own.
 [[nodiscard]] inline Json menuItem(MenuItem const& item) {
     Json json = Json::object_t{};
+    if (item.separator) {
+        detail::put(json, "separator", true);
+        return json;
+    }
     auto put = [&json](char const* key, AnyHandle const& value) {
         if (value.present()) {
             detail::put(json, key, value.json());
@@ -3473,6 +3487,8 @@ namespace detail {
     }
     put("checked", item.checked);
     put("enabled", item.enabled);
+    put("description", item.description);
+    put("visible", item.visible);
     if (!item.onClick.empty()) {
         detail::put(json, "onClick", item.onClick.json());
     }
@@ -3499,6 +3515,41 @@ namespace detail {
         array.push_back(detail::menuItem(item));
     }
     return detail::NodeWriter{"menu"}.raw("items", std::move(array)).done();
+}
+
+/// @brief Options of `menuButton`: the trigger.
+struct MenuButtonOptions {
+    /// @brief The trigger's text and accessible name; an icon-only trigger names itself with `.a11y(...)` instead.
+    AnyHandle label;
+    /// @brief An icon of the theme's icon map; `more` draws `⋯` when the map does not name it.
+    std::string icon;
+    /// @brief The trigger's emphasis, as a button's.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
+};
+
+/// @brief A `menu` node with `style: button`: one button that opens the items as a popup.
+/// @param options The trigger.
+/// @param items   The items.
+/// @return The node.
+[[nodiscard]] inline Node menuButton(MenuButtonOptions const& options, std::vector<MenuItem> const& items) {
+    Json::array_t array;
+    array.reserve(items.size());
+    for (MenuItem const& item : items) {
+        array.push_back(detail::menuItem(item));
+    }
+    detail::NodeWriter writer{"menu"};
+    writer.raw("items", std::move(array)).text("style", "button").put("label", options.label);
+    if (!options.icon.empty()) {
+        writer.text("icon", options.icon);
+    }
+    if (options.emphasis == ButtonEmphasis::Primary) {
+        writer.text("emphasis", "primary");
+    } else if (options.emphasis == ButtonEmphasis::Danger) {
+        writer.text("emphasis", "danger");
+    } else if (options.emphasis == ButtonEmphasis::Ghost) {
+        writer.text("emphasis", "ghost");
+    }
+    return writer.done();
 }
 
 /// @brief One column track of a `grid`.

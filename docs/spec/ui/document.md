@@ -173,7 +173,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | `textInput` | `value`, `placeholder`, `mode`, `icon` (an icon of the theme's icon set, drawn at the leading edge; refused on a multiline input), `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
 | `checkbox` | `label`, `checked`, `onToggle`, `onChange` | `checked` |
 | `select` | `options`, `selected`, `style`, `label`, `showLabel`, `onStale` (`clear`, `keep`), `onChoose`, `onChange` | `selected`, `selectedOption` |
-| `menu` | `items`: parts `{label, icon, keys, checked, enabled, onClick, items}` | |
+| `menu` | `items`: parts `{label, icon, keys, checked, enabled, onClick, items, description, visible}` (`description` a muted line of help with the entry; `visible` a condition, a hidden entry left out), or `{separator: true}` alone, a line between entries; `style` (`bar`, the default, or `button`: one button that opens the entries); for `style: button`, the trigger's `label`, `icon` and `emphasis` (as a button's) | |
 | `column`, `row` | `children`, `gap`, `align` (across the axis: `start`, `center`, `end`, `stretch`, the default), `justify` (the spare length along the axis while no shown child stretches: `start`, the default, `center`, `end`, `between`, in equal gaps never less than `gap`) | |
 | `grid` | `children`, `gap`, `columns` (columns sharing the width), `tracks` (in place of `columns`; parts `{width, align}`, one per column: `width` a sizing, default `{"stretch": 1}`, as a table column's; `align` `start`, the default, `center` or `end`, where a text's text and a label-width cell sit across the column, as a table column's `align`; a container cell fills it), `align` (each cell's content in its row, as a row's) | |
 | `spacer` | | |
@@ -258,7 +258,9 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   one of its forms, and a literal fixed amount lies inside its dimension's bounds (a fixed size has no room to
   bound); a `sizing` that is not literal (a `record`, `cond` or `obj` expression) is read at mount, and one that
   evaluates to none of the forms is reported once and lowers to content. A literal text `role` is one of its names; a computed one is read at mount, and one that evaluates to no role is
-  reported once for its path and drawn `normal`. A `grid` takes no `justify` (its columns
+  reported once for its path and drawn `normal`. A `menu`'s `label`, `icon` and `emphasis` need `style: button`, and a
+  button-style menu has a `label` or an `a11y` name (its trigger's accessible name); a menu entry's `separator` is
+  `true` and takes no other key. A `grid` takes no `justify` (its columns
   are sized by their count or tracks; there is no spare length to justify), and `columns` or `tracks`, not both, with
   at least one track; a track's `align` is `start`, `center` or `end`; `alignSelf` is given only on a child of a `row`, `column`,
   `grid` or `forEach`, not on the view root, a component's fallback root or the content of another kind (a `panel`,

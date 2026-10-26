@@ -7,6 +7,10 @@
 #include <QJsonValue>
 #include <QVariantList>
 #include <QVariantMap>
+#include <algorithm>
+#include <morph/ui/theme.hpp>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include "qt_quick/kinds.hpp"
@@ -41,6 +45,8 @@ QVariantList menuEntries(std::vector<ui::MenuEntry> const& entries) {
             {QStringLiteral("checked"), checked},
             {QStringLiteral("enabled"), entry.enabled},
             {QStringLiteral("items"), menuEntries(entry.items)},
+            {QStringLiteral("separator"), entry.separator},
+            {QStringLiteral("description"), toQString(entry.description)},
         });
     }
     return list;
@@ -94,7 +100,7 @@ bool choosable(std::vector<ui::MenuEntry> const& entries, std::vector<std::size_
     std::vector<ui::MenuEntry> const* level = &entries;
     for (std::size_t depth = 0; depth < path.size(); ++depth) {
         std::size_t const index = path.at(depth);
-        if (index >= level->size() || !level->at(index).enabled) {
+        if (index >= level->size() || !level->at(index).enabled || level->at(index).separator) {
             return false;
         }
         ui::MenuEntry const& entry = level->at(index);
@@ -106,8 +112,36 @@ bool choosable(std::vector<ui::MenuEntry> const& entries, std::vector<std::size_
     return false;
 }
 
-MenuImpl::MenuImpl(Context& context, ui::ContainerWidget* parent)
-    : ItemWidget{context, QStringLiteral("MorphMenu"), parent} {}
+MenuImpl::MenuImpl(Context& context, ui::ContainerWidget* parent, ui::MenuStyle style)
+    : ItemWidget{context, QStringLiteral("MorphMenu"), parent} {
+    if (style == ui::MenuStyle::Button) {
+        write("buttonStyle", true);
+    }
+}
+
+void MenuImpl::setTrigger(ui::MenuTrigger const& trigger) {
+    // A framework name is drawn from the set when it names it and by the menu's own glyph otherwise, so only another
+    // name the set lacks is reported.
+    if (!std::ranges::contains(ui::kFrameworkIcons, std::string_view{trigger.icon})) {
+        context().checkIcon(trigger.icon);
+    }
+    write("triggerLabel", toQString(trigger.label));
+    write("triggerIcon", toQString(trigger.icon));
+    // MorphMenu's `triggerEmphasis`: 0 normal, 1 primary, 2 danger, 3 ghost.
+    int shown = 0;
+    if (trigger.emphasis == ui::ButtonEmphasis::Primary) {
+        shown = 1;
+    } else if (trigger.emphasis == ui::ButtonEmphasis::Danger) {
+        shown = 2;
+    } else if (trigger.emphasis == ui::ButtonEmphasis::Ghost) {
+        shown = 3;
+    }
+    write("triggerEmphasis", shown);
+}
+
+std::string MenuImpl::shownText() const {
+    return read("buttonStyle").toBool() ? toUtf8(read("triggerLabel").toString()) : std::string{};
+}
 
 void MenuImpl::setItems(std::vector<ui::MenuEntry> const& entries) {
     if (entries == _entries) {

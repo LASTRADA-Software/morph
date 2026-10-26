@@ -83,8 +83,8 @@ std::unique_ptr<ui::SelectWidget> Backend::createSelect(ui::ContainerWidget* par
     return std::make_unique<detail::SelectImpl>(*_context, parent, style);
 }
 
-std::unique_ptr<ui::MenuWidget> Backend::createMenu(ui::ContainerWidget* parent) {
-    return std::make_unique<detail::MenuImpl>(*_context, parent);
+std::unique_ptr<ui::MenuWidget> Backend::createMenu(ui::ContainerWidget* parent, ui::MenuStyle style) {
+    return std::make_unique<detail::MenuImpl>(*_context, parent, style);
 }
 
 std::unique_ptr<ui::StackWidget> Backend::createStack(ui::ContainerWidget* parent, ui::Axis axis) {

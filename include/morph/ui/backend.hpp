@@ -288,10 +288,28 @@ struct MenuEntry {
     bool enabled = true;
     /// @brief The submenu; empty for an entry that is chosen.
     std::vector<MenuEntry> items;
+    /// @brief Whether the entry is a line between entries: never chosen, never opened, and its other fields empty.
+    bool separator = false;
+    /// @brief A muted line of help shown with the entry; empty shows none.
+    std::string description;
 
     /// @brief Memberwise equality, submenus included.
     /// @return Whether every field matches.
     bool operator==(MenuEntry const&) const = default;
+};
+
+/// @brief The trigger of a button-style menu.
+struct MenuTrigger {
+    /// @brief The trigger's text and accessible name; empty for an icon-only trigger.
+    std::string label;
+    /// @brief The trigger's icon name in the theme's icon map; empty for none.
+    std::string icon;
+    /// @brief The trigger's emphasis, as a button's.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every field matches.
+    bool operator==(MenuTrigger const&) const = default;
 };
 
 /// @brief A menu of commands, with nested submenus.
@@ -301,9 +319,19 @@ public:
     /// @param entries The entries, in order, each with its submenu.
     virtual void setItems(std::vector<MenuEntry> const& entries) = 0;
 
+    /// @brief Sets a button-style menu's trigger; the mount calls it only for a menu created with
+    ///        `MenuStyle::Button`, at mount and whenever the label changes.
+    ///
+    /// The label, when not empty, is the trigger's text and its accessible name. An icon-only trigger draws its icon
+    /// from the theme's set; `more`, a framework name, draws `⋯` when the set does not name it, and another icon the
+    /// set does not name draws the widget's accessible name as the label, so the trigger is never blank.
+    /// @param trigger The trigger's label, icon and emphasis.
+    virtual void setTrigger(MenuTrigger const& trigger) = 0;
+
     /// @brief Sets what choosing an entry calls, with its path.
     ///
-    /// Only an enabled entry without a submenu, inside enabled entries, can be chosen.
+    /// Only an enabled entry without a submenu, inside enabled entries, can be chosen; a separator never can. A path
+    /// counts separators, so it names the same entry whichever backend reports it.
     /// @param onActivate The handler, given the entry's index at each level from the top; empty does nothing.
     virtual void setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) = 0;
 };
@@ -924,8 +952,9 @@ public:
 
     /// @brief Makes a command list.
     /// @param parent The container to append to, or null for a root.
+    /// @param style A bar of top-level entries, or one button that opens them.
     /// @return The widget.
-    [[nodiscard]] virtual std::unique_ptr<MenuWidget> createMenu(ContainerWidget* parent) = 0;
+    [[nodiscard]] virtual std::unique_ptr<MenuWidget> createMenu(ContainerWidget* parent, MenuStyle style) = 0;
 
     /// @brief Makes a stack.
     /// @param parent The container to append to, or null for a root.

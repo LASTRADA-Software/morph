@@ -69,7 +69,10 @@ std::unique_ptr<ui::SelectWidget> Backend::createSelect(ui::ContainerWidget* par
     return make<detail::DropdownSelectImpl>(_impl->context, parent);
 }
 
-std::unique_ptr<ui::MenuWidget> Backend::createMenu(ui::ContainerWidget* parent) {
+std::unique_ptr<ui::MenuWidget> Backend::createMenu(ui::ContainerWidget* parent, ui::MenuStyle style) {
+    if (style == ui::MenuStyle::Button) {
+        return make<detail::MenuButtonImpl>(_impl->context, parent);
+    }
     return make<detail::MenuImpl>(_impl->context, parent);
 }
 

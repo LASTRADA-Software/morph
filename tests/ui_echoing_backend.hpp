@@ -86,9 +86,10 @@ public:
         created();
         return std::make_unique<EchoingSelect>(_recording.createSelect(parent, style));
     }
-    std::unique_ptr<::morph::ui::MenuWidget> createMenu(::morph::ui::ContainerWidget* parent) override {
+    std::unique_ptr<::morph::ui::MenuWidget> createMenu(::morph::ui::ContainerWidget* parent,
+                                                        ::morph::ui::MenuStyle style) override {
         created();
-        return _recording.createMenu(parent);
+        return _recording.createMenu(parent, style);
     }
     std::unique_ptr<::morph::ui::StackWidget> createStack(::morph::ui::ContainerWidget* parent,
                                                           ::morph::ui::Axis axis) override {

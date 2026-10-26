@@ -130,7 +130,7 @@ TEST_CASE("RecordingBackend: the interaction helpers call what the widget was gi
     auto choice = backend.createSelect(nullptr, ui::SelectStyle::Dropdown);
     choice->setOnSelect([&](ui::Key key) { chosen.push_back(std::move(key)); });
     choice->setOptions({{.key = intKey(5), .label = "Five"}});
-    auto menu = backend.createMenu(nullptr);
+    auto menu = backend.createMenu(nullptr, ui::MenuStyle::Bar);
     menu->setItems({{.label = "First"}, {.label = "Second"}});
     menu->setOnActivate([&](std::vector<std::size_t> const& path) { activated.push_back(path.back()); });
     auto panel = backend.createPanel(nullptr);
@@ -395,7 +395,7 @@ TEST_CASE("RecordingBackend: text in a value cannot pass for another line, field
     RecordingBackend backend;
     auto label = backend.createText(nullptr);
     label->setText("a\nText#9 b=c\\d");
-    auto menu = backend.createMenu(nullptr);
+    auto menu = backend.createMenu(nullptr, ui::MenuStyle::Bar);
     menu->setItems({{.label = "x,y"}, {.label = "[z]"}});
     auto choice = backend.createSelect(nullptr, ui::SelectStyle::Dropdown);
     choice->setOptions({{.key = ui::Key{std::string{"q\"r"}}, .label = "s:t"}});
@@ -418,7 +418,7 @@ TEST_CASE("RecordingBackend: every kind's setters show in the dump", "[ui]") {
     auto gap = backend.createSpacer(grid.get());
     auto row = backend.createStack(nullptr, ui::Axis::Horizontal);
     row->setGap(2);
-    auto menu = backend.createMenu(row.get());
+    auto menu = backend.createMenu(row.get(), ui::MenuStyle::Bar);
     menu->setItems({{.label = "Open"}, {.label = "Quit"}});
     auto busy = backend.createBusy(row.get());
     busy->setActive(true);

@@ -783,7 +783,7 @@ TEST_CASE("qt_quick widgets: a banner's action and dismissal reach their handler
 
 TEST_CASE("qt_quick widgets: a menu reports the path of a choosable entry and nothing else", "[qt_quick]") {
     Scene scene;
-    auto menu = scene.backend().createMenu(nullptr);
+    auto menu = scene.backend().createMenu(nullptr, ui::MenuStyle::Bar);
     std::vector<std::vector<std::size_t>> paths;
     menu->setOnActivate([&paths](std::vector<std::size_t> path) { paths.push_back(std::move(path)); });
     menu->setItems(

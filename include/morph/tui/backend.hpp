@@ -49,7 +49,7 @@ public:
     [[nodiscard]] std::unique_ptr<ui::CheckboxWidget> createCheckbox(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::SelectWidget> createSelect(ui::ContainerWidget* parent,
                                                                  ui::SelectStyle style) override;
-    [[nodiscard]] std::unique_ptr<ui::MenuWidget> createMenu(ui::ContainerWidget* parent) override;
+    [[nodiscard]] std::unique_ptr<ui::MenuWidget> createMenu(ui::ContainerWidget* parent, ui::MenuStyle style) override;
     [[nodiscard]] std::unique_ptr<ui::StackWidget> createStack(ui::ContainerWidget* parent, ui::Axis axis) override;
     [[nodiscard]] std::unique_ptr<ui::GridWidget> createGrid(ui::ContainerWidget* parent) override;
     [[nodiscard]] std::unique_ptr<ui::SpacerWidget> createSpacer(ui::ContainerWidget* parent) override;

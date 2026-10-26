@@ -97,6 +97,10 @@ template <typename Special>
     std::string formatted = "[";
     for (MenuEntry const& entry : entries) {
         formatted += formatted.size() == 1 ? "" : ",";
+        if (entry.separator) {
+            formatted += ";separator";
+            continue;
+        }
         formatted += text(entry.label);
         if (!entry.icon.empty()) {
             formatted += ";icon=" + text(entry.icon);
@@ -109,6 +113,9 @@ template <typename Special>
         }
         if (!entry.enabled) {
             formatted += ";enabled=false";
+        }
+        if (!entry.description.empty()) {
+            formatted += ";description=" + text(entry.description);
         }
         if (!entry.items.empty()) {
             formatted += formatMenu(entry.items);
@@ -1046,13 +1053,25 @@ private:
     std::optional<std::optional<Key>> _requested;
 };
 
-/// @brief A fake `MenuWidget`: property `items`.
+/// @brief A fake `MenuWidget`: property `items`, and `style`, `label`, `icon` and `emphasis` of a button-style menu.
 class FakeMenu final : public FakeLeaf<MenuWidget> {
 public:
     using FakeLeaf<MenuWidget>::FakeLeaf;
     void setItems(std::vector<MenuEntry> const& entries) override {
         store().at(id()).menu = entries;
         set("items", formatMenu(entries));
+    }
+
+    /// @brief Records properties `label`, `icon` (when given) and `emphasis` (when not `Normal`) of the trigger.
+    /// @param trigger The trigger.
+    void setTrigger(MenuTrigger const& trigger) override {
+        set("label", formatText(trigger.label));
+        if (!trigger.icon.empty()) {
+            set("icon", formatText(trigger.icon));
+        }
+        if (trigger.emphasis != ButtonEmphasis::Normal) {
+            set("emphasis", enumName(trigger.emphasis));
+        }
     }
     void setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) override {
         callbacks().path = std::move(onActivate);
@@ -1749,8 +1768,14 @@ public:
         return std::make_unique<detail::FakeSelect>(_store, "Select", parent,
                                                     detail::PropList{{"style", detail::enumName(style)}});
     }
-    [[nodiscard]] std::unique_ptr<MenuWidget> createMenu(ContainerWidget* parent) override {
-        return std::make_unique<detail::FakeMenu>(_store, "Menu", parent);
+    /// @brief A fake menu; one of `MenuStyle::Button` records property `style=Button` at creation.
+    /// @param parent The container to append to, or null for a root.
+    /// @param style  A bar or one button.
+    /// @return The widget.
+    [[nodiscard]] std::unique_ptr<MenuWidget> createMenu(ContainerWidget* parent, MenuStyle style) override {
+        return std::make_unique<detail::FakeMenu>(
+            _store, "Menu", parent,
+            style == MenuStyle::Button ? detail::PropList{{"style", "Button"}} : detail::PropList{});
     }
     [[nodiscard]] std::unique_ptr<StackWidget> createStack(ContainerWidget* parent, Axis axis) override {
         return std::make_unique<detail::FakeStack>(_store, axis == Axis::Vertical ? "Column" : "Row", parent);
@@ -2149,8 +2174,8 @@ public:
 
     /// @brief Chooses an entry of a menu by its path, as a user opening each submenu on the way would.
     ///
-    /// Nothing happens for a path that names no entry, an entry with a submenu (it opens rather than runs), or an
-    /// entry that is disabled or inside a disabled entry.
+    /// Nothing happens for a path that names no entry, a separator, an entry with a submenu (it opens rather than
+    /// runs), or an entry that is disabled or inside a disabled entry.
     /// @param widgetId The menu.
     /// @param path The entry's index at each level, from the top.
     /// @throws std::logic_error when the widget is not a menu.
@@ -2162,7 +2187,8 @@ public:
         std::vector<MenuEntry> const* level = &record->menu;
         MenuEntry const* entry = nullptr;
         for (std::size_t const index : path) {
-            if (level == nullptr || index >= level->size() || !level->at(index).enabled) {
+            if (level == nullptr || index >= level->size() || !level->at(index).enabled ||
+                level->at(index).separator) {
                 return;
             }
             entry = &level->at(index);

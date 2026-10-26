@@ -248,6 +248,27 @@ public:
     // Backspace back to the top level, then a click on each level's row: a submenu's opens it, a leaf's chooses it.
     void chooseMenuEntry(ui::Widget& menu, std::vector<std::size_t> const& path) override {
         settle();
+        // A button-style menu: a click on the trigger opens the list, from its top, and each index is a click on that
+        // row of the list. A list left open by an earlier path is closed first.
+        if (auto const* const button = dynamic_cast<morph::tui::detail::MenuButtonImpl const*>(&WidgetBase::of(menu))) {
+            if (button->isOpen()) {
+                send(special(KeyCode::Escape));
+                settle();
+            }
+            click(menu);
+            for (std::size_t const index : path) {
+                auto const* const popup = button->openPopup();
+                if (popup == nullptr) {
+                    return;
+                }
+                auto const area = popup->screenBounds();
+                int const row = area.y + static_cast<int>(index);
+                send(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = area.x + 1, .y = row + 1});
+                send(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = area.x + 1, .y = row + 1});
+                settle();
+            }
+            return;
+        }
         auto const* const impl = dynamic_cast<morph::tui::detail::MenuImpl const*>(&WidgetBase::of(menu));
         if (impl != nullptr && !impl->level().empty() && focus(menu)) {
             for (std::size_t depth = impl->level().size(); depth > 0; --depth) {

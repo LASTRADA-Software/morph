@@ -219,6 +219,12 @@ enum class SelectStyle : std::uint8_t {
     Radio,     ///< Every option visible, one marked.
 };
 
+/// @brief How a `Menu` presents its entries.
+enum class MenuStyle : std::uint8_t {
+    Bar,     ///< One control per top-level entry.
+    Button,  ///< One button that opens the entries as a popup.
+};
+
 /// @brief The direction a stack arranges, or a scroll area scrolls, its content.
 enum class Axis : std::uint8_t {
     Vertical,    ///< Top to bottom.
@@ -567,15 +573,31 @@ struct MenuItem {
     Prop<bool> enabled = true;
     /// @brief The submenu's entries; empty: the entry is chosen rather than opened.
     std::vector<MenuItem> items;
+    /// @brief Whether the entry is a line between entries, which is never chosen and shows no other field. Set once.
+    bool separator = false;
+    /// @brief A muted line of help with the entry; empty shows none.
+    Prop<std::string> description;
+    /// @brief Whether the entry is shown; a hidden entry is not sent at all, and a separator a hidden entry leaves
+    ///        at the start or end of its level, or next to another separator, is not sent either.
+    Prop<bool> visible = true;
 };
 
-/// @brief A vertical list of commands.
+/// @brief A menu of commands: a bar of top-level entries, or one button that opens them.
 struct Menu {
-    /// @brief The entries, in order; the list itself is set once, each entry's label, check mark and enablement
-    ///        may be bound.
+    /// @brief The entries, in order; the list itself is set once, each entry's label, description, check mark,
+    ///        enablement and visibility may be bound.
     std::vector<MenuItem> items;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief How the entries are presented; set once.
+    MenuStyle style = MenuStyle::Bar;
+    /// @brief The trigger's label, for `MenuStyle::Button`; empty draws the icon alone.
+    Prop<std::string> label;
+    /// @brief The trigger's icon, for `MenuStyle::Button`: a name in the theme's icon map; empty shows none. Set
+    ///        once.
+    std::string icon;
+    /// @brief The trigger's emphasis, for `MenuStyle::Button`; set once.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
 };
 
 /// @brief The largest spacing step: a `gap` or `padding` names a step from 0 (none) to this, which each backend maps

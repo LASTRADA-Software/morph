@@ -149,8 +149,11 @@ public:
 
 class MenuImpl final : public ItemWidget<ui::MenuWidget> {
 public:
-    MenuImpl(Context& context, ui::ContainerWidget* parent);
+    MenuImpl(Context& context, ui::ContainerWidget* parent, ui::MenuStyle style);
     void setItems(std::vector<ui::MenuEntry> const& entries) override;
+    void setTrigger(ui::MenuTrigger const& trigger) override;
+    /// A button-style menu's trigger label; a bar's is empty.
+    [[nodiscard]] std::string shownText() const override;
     void setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) override;
     /// Chooses the entry at @p path as the user would, opening each submenu on the way.
     void choose(std::vector<std::size_t> const& path) const;
@@ -161,7 +164,8 @@ private:
     std::vector<ui::MenuEntry> _entries;
 };
 
-/// Whether @p path names an entry the user can choose: enabled, without a submenu, inside enabled entries.
+/// Whether @p path names an entry the user can choose: not a separator, enabled, without a submenu, inside enabled
+/// entries.
 [[nodiscard]] bool choosable(std::vector<ui::MenuEntry> const& entries, std::vector<std::size_t> const& path);
 
 class SpacerImpl final : public ItemWidget<ui::SpacerWidget> {

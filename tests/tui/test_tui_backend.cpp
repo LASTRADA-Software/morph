@@ -133,7 +133,7 @@ TEST_CASE("tui::Backend: every factory appends one widget to its parent", "[tui]
     made.push_back(backend.createCheckbox(column.get()));
     made.push_back(backend.createSelect(column.get(), ui::SelectStyle::Radio));
     made.push_back(backend.createSelect(column.get(), ui::SelectStyle::Dropdown));
-    made.push_back(backend.createMenu(column.get()));
+    made.push_back(backend.createMenu(column.get(), ui::MenuStyle::Bar));
     made.push_back(backend.createStack(column.get(), ui::Axis::Horizontal));
     made.push_back(backend.createGrid(column.get()));
     made.push_back(backend.createSpacer(column.get()));
