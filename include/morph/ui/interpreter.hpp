@@ -1527,10 +1527,19 @@ struct TransferState {
     reactive::Signal<Value> error;
 };
 
-/// @brief A table's rows as the table shows them: every row `rows` gave, in the order of the table's sort.
+/// @brief A table's rows as the table shows them: every row `rows` gave, in the order of the table's sort, and the
+///        page of them it shows.
 struct TableView {
-    /// @brief The rows, sorted.
+    /// @brief The rows, sorted: every page.
     std::vector<Value> rows;
+    /// @brief The position in `rows` of the page's first row.
+    std::size_t first = 0;
+    /// @brief The position in `rows` past the page's last row.
+    std::size_t last = 0;
+    /// @brief The page shown, 0-based, clamped to the last page.
+    std::int64_t page = 0;
+    /// @brief How many pages there are; at least 1.
+    std::int64_t pageCount = 1;
     /// @brief Equal when the rows are.
     /// @param other The other view.
     /// @return Whether they are equal.
@@ -2574,6 +2583,8 @@ private:
     /// A table's rows in the order of its sort, read in the table's scope with @p bindings. A sort that is not a
     /// list of the table's sortable columns, or whose values cannot be ordered, is reported and leaves the source
     /// order.
+    std::vector<Value> sortedRows(ElementState const& element, Bindings const* bindings);
+    /// A table's sorted rows and the page of them it shows, by its `pageSize` and `page`.
     TableView tableView(ElementState const& element, Bindings const* bindings);
     void collect(DocNode const& node, RtScope& scope, std::vector<Commands const*>& commands);
     Node lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element);
@@ -4444,6 +4455,58 @@ inline void ScreenCore::wireElement(ElementState& element) {
     return element.sortBound != nullptr ? element.sortBound->get() : element.sort.get();
 }
 
+/// @brief A table's page values: `viewCount` (the rows it orders, every page), `page`, `pageCount`, and
+///        `pageFirst` and `pageLast`, the 1-based positions of the page's first and last rows, both 0 when there are
+///        none. A table that does not page reads page 0 of 1, over every row.
+/// @param element The table's element.
+/// @param name    The value's name.
+/// @return The value. Tracked.
+[[nodiscard]] inline Value tablePageValue(ElementState const& element, std::string_view name) {
+    if (element.view == nullptr) {
+        return name == "pageCount" ? std::int64_t{1} : std::int64_t{0};
+    }
+    TableView const& view = element.view->get();
+    if (name == "viewCount") {
+        return static_cast<std::int64_t>(view.rows.size());
+    }
+    if (name == "page") {
+        return view.page;
+    }
+    if (name == "pageCount") {
+        return view.pageCount;
+    }
+    bool const none = view.first == view.last;
+    if (name == "pageFirst") {
+        return none ? std::int64_t{0} : static_cast<std::int64_t>(view.first + 1);
+    }
+    return static_cast<std::int64_t>(view.last);
+}
+
+/// @brief The selected keys of the rows a table holds on pages other than the one shown, in their order: what an
+///        `Extend` report keeps, since the backend holds the shown page alone.
+/// @param view      The table's rows and page.
+/// @param selection The selection, a list of keys.
+/// @param rowKey    A row's key.
+/// @return The keys.
+[[nodiscard]] inline ValueList selectedOffPage(TableView const& view, Value const& selection,
+                                               std::function<Key(Value const&)> const& rowKey) {
+    std::unordered_set<Key> onPage;
+    std::unordered_set<Key> offPage;
+    for (std::size_t index = 0; index < view.rows.size(); ++index) {
+        (index >= view.first && index < view.last ? onPage : offPage).insert(rowKey(view.rows.at(index)));
+    }
+    ValueList kept;
+    if (ValueList const* const selected = selection.asList()) {
+        for (Value const& item : *selected) {
+            Key const key = keyOf(item);
+            if (offPage.contains(key) && !onPage.contains(key)) {
+                kept.push_back(item);
+            }
+        }
+    }
+    return kept;
+}
+
 /// @brief The sortable column part of a table with the id @p columnId.
 /// @param table    The table.
 /// @param columnId The column's id.
@@ -4492,32 +4555,31 @@ struct SortKey {
     return keys;
 }
 
-inline TableView ScreenCore::tableView(ElementState const& element, Bindings const* bindings) {
+inline std::vector<Value> ScreenCore::sortedRows(ElementState const& element, Bindings const* bindings) {
     DocNode const& node = *element.node;
     RtScope const& scope = *element.scope;
     Value const source = bindings == nullptr ? element.rows->get() : evalIn(scope, bindings, node.prop("rows"));
     ValueList const* const items = source.asList();
-    TableView view;
     if (items == nullptr) {
-        return view;
+        return {};
     }
-    view.rows = *items;
+    std::vector<Value> rows{items->begin(), items->end()};
     Value const sort = tableSort(element);
     std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, sort);
     std::string const sortPath = pointerAppend(node.path, "sort");
     if (!keys) {
         report(sortPath, "sort is " + canonicalJson(sort) +
                              R"(; a table's sort is a list of {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
-        return view;
+        return rows;
     }
     if (keys->empty()) {
-        return view;
+        return rows;
     }
     // Each row's keys are read once, then the rows are ordered by them: a change to the sort, the rows, or anything
     // a `sortBy` reads sorts again.
     std::vector<std::vector<Value>> rowKeys;
-    rowKeys.reserve(view.rows.size());
-    for (Value const& row : view.rows) {
+    rowKeys.reserve(rows.size());
+    for (Value const& row : rows) {
         ScopeEnv const env{scope, bindings, &row};
         std::vector<Value> values;
         values.reserve(keys->size());
@@ -4540,14 +4602,53 @@ inline TableView ScreenCore::tableView(ElementState const& element, Bindings con
     std::optional<std::vector<std::size_t>> const order = Evaluator{env}.sortRows(rowKeys, descending);
     if (!order) {
         report(sortPath, "the rows' values for the sort are not of one comparable kind; the rows keep their order");
-        return view;
+        return rows;
     }
     std::vector<Value> sorted;
-    sorted.reserve(view.rows.size());
+    sorted.reserve(rows.size());
     for (std::size_t const index : *order) {
-        sorted.push_back(view.rows.at(index));
+        sorted.push_back(rows.at(index));
     }
-    view.rows = std::move(sorted);
+    return sorted;
+}
+
+inline TableView ScreenCore::tableView(ElementState const& element, Bindings const* bindings) {
+    DocNode const& node = *element.node;
+    RtScope const& scope = *element.scope;
+    TableView view{.rows = sortedRows(element, bindings)};
+    view.last = view.rows.size();
+    ExprPtr const sizeExpr = node.prop("pageSize");
+    if (!sizeExpr) {
+        return view;
+    }
+    // A `pageSize` of `null` does not page; one that is no positive integer is reported and does not page either.
+    Value const size = evalIn(scope, bindings, sizeExpr);
+    std::int64_t const* const perPage = size.asInt();
+    if (size.isNull() || perPage == nullptr || *perPage < 1) {
+        if (!size.isNull()) {
+            report(pointerAppend(node.path, "pageSize"),
+                   "pageSize is " + canonicalJson(size) + "; a page holds a positive whole number of rows");
+        }
+        return view;
+    }
+    // A `page` of `null` is the first; one that is negative or not a whole number is reported and shows the first.
+    // One past the last is the last: a filter that shrinks the rows under the user is normal, not an error.
+    std::int64_t asked = 0;
+    if (ExprPtr const pageExpr = node.prop("page")) {
+        Value const page = evalIn(scope, bindings, pageExpr);
+        std::int64_t const* const index = page.asInt();
+        if (index != nullptr && *index >= 0) {
+            asked = *index;
+        } else if (!page.isNull()) {
+            report(pointerAppend(node.path, "page"),
+                   "page is " + canonicalJson(page) + "; a page is a whole number from 0");
+        }
+    }
+    auto const total = static_cast<std::int64_t>(view.rows.size());
+    view.pageCount = std::max<std::int64_t>(1, (total + *perPage - 1) / *perPage);
+    view.page = std::min(asked, view.pageCount - 1);
+    view.first = static_cast<std::size_t>(std::min(total, view.page * *perPage));
+    view.last = static_cast<std::size_t>(std::min(total, (view.page + 1) * *perPage));
     return view;
 }
 
@@ -4709,9 +4810,9 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
         if (name == "sort") {
             return tableSort(element);
         }
-        if (name == "viewCount") {
-            return element.view == nullptr ? Value{std::int64_t{0}}
-                                           : Value{static_cast<std::int64_t>(element.view->get().rows.size())};
+        if (name == "viewCount" || name == "page" || name == "pageCount" || name == "pageFirst" ||
+            name == "pageLast") {
+            return tablePageValue(element, name);
         }
         if (name == "sourceCount") {
             return element.rows == nullptr ? Value{std::int64_t{0}} : count(element.rows->get());
@@ -7357,7 +7458,12 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
             [this, element, bindings = ctx.bindings] { return tableView(*element, bindings.get()); });
     }
     if (view != nullptr) {
-        rows = [view] { return view->get().rows; };
+        rows = [view] {
+            TableView const& shown = view->get();
+            auto const first = shown.rows.begin();
+            return std::vector<Value>{first + static_cast<std::ptrdiff_t>(shown.first),
+                                      first + static_cast<std::ptrdiff_t>(shown.last)};
+        };
     }
     std::vector<TableColumn> columns;
     std::vector<DocNode const*> cells;
@@ -7521,11 +7627,15 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         return keys;
     });
     // A user's change: the table's own selection takes it when no key binds one, then `onSelectionChange` runs with
-    // `event` the new selection, in the table's scope, in the same batch.
-    // The backend holds every row of a table over `rows`, so a report of either kind is the whole selection.
-    options.onSelectionChange = [this, ctx, element, commands = node.event("onSelectionChange")](
-                                    std::vector<Key> const& keys, SelectionChange /*change*/) {
+    // `event` the new selection, in the table's scope, in the same batch. The backend holds one page: a `Replace`
+    // is the whole new selection, and an `Extend` keeps the selected keys of the rows on other pages, before the
+    // reported ones. A key whose row `rows` no longer has drops on any user change.
+    options.onSelectionChange = [this, ctx, element, view, keyFn, commands = node.event("onSelectionChange")](
+                                    std::vector<Key> const& keys, SelectionChange change) {
         ValueList items;
+        if (change == SelectionChange::Extend && view != nullptr) {
+            items = runtime().untracked([&] { return selectedOffPage(view->get(), tableSelection(*element), keyFn); });
+        }
         for (Key const& key : keys) {
             items.push_back(valueOfKey(key));
         }

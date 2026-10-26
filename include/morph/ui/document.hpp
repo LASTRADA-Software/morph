@@ -701,9 +701,9 @@ inline constexpr std::array<std::string_view, 1> kCheckboxValues = {"checked"};
 /// @brief The element values of a select.
 inline constexpr std::array<std::string_view, 2> kSelectValues = {"selected", "selectedOption"};
 /// @brief The element values of a table.
-inline constexpr std::array<std::string_view, 10> kTableValues = {
-    "selection",   "activeKey",     "sort",    "filters", "viewCount",
-    "sourceCount", "selectedCount", "pending", "error",   "hoveredKey"};
+inline constexpr std::array<std::string_view, 14> kTableValues = {
+    "selection",     "activeKey", "sort",  "filters",   "viewCount", "sourceCount", "selectedCount",
+    "pending",       "error",     "hoveredKey", "page", "pageCount", "pageFirst",   "pageLast"};
 /// @brief The element values of a dialog or drawer.
 inline constexpr std::array<std::string_view, 3> kDialogValues = {"open", "ready", "submitted"};
 /// @brief The element values of a form, beside its fields.
@@ -802,7 +802,7 @@ inline constexpr std::array<KeySpec, 5> kForEachKeys = {{{"rows", Shape::Expr, {
                                                          {"gap", Shape::Expr},
                                                          {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-inline constexpr std::array<KeySpec, 24> kTableKeys = {{{"rows", Shape::Expr},
+inline constexpr std::array<KeySpec, 26> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"key", Shape::Expr, {}, kInner},
                                                         {"model", Shape::Name},
                                                         {"action", Shape::Text},
@@ -820,6 +820,8 @@ inline constexpr std::array<KeySpec, 24> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"rowLabel", Shape::Expr, {}, kInner},
                                                         {"sort", Shape::Expr},
                                                         {"onSortChange", Shape::Commands},
+                                                        {"pageSize", Shape::Expr},
+                                                        {"page", Shape::Expr},
                                                         {"filters", Shape::Expr},
                                                         {"rowTone", Shape::Expr, {}, kInner},
                                                         {"highlightKey", Shape::Expr},
@@ -2998,6 +3000,7 @@ private:
             checkTableSelection(node);
             checkSelectColumn(node);
             checkTableSort(node);
+            checkTablePaging(node);
             checkRowsTableKeys(node);
         }
     }
@@ -3056,6 +3059,25 @@ private:
             }
             if (!named.insert(*columnId).second) {
                 refuse(where, "the sort names `" + *columnId + "` twice");
+            }
+        }
+    }
+
+    // A table over `rows` pages itself by `pageSize`, at `page`; a model-backed table's engine pages.
+    static void checkTablePaging(DocNode const& node) {
+        ExprPtr const size = node.prop("pageSize");
+        ExprPtr const page = node.prop("page");
+        if (!node.name("model").empty() && (size != nullptr || page != nullptr)) {
+            refuse(pointerAppend(node.path, size != nullptr ? "pageSize" : "page"),
+                   "a model-backed table's engine pages; `pageSize` and `page` are for a table over `rows`");
+        }
+        if (page != nullptr && size == nullptr) {
+            refuse(pointerAppend(node.path, "page"), "`page` picks a page of `pageSize` rows; give the table `pageSize`");
+        }
+        if (size != nullptr && size->kind == ExprKind::Literal && !size->literal.isNull()) {
+            std::int64_t const* const rows = size->literal.asInt();
+            if (rows == nullptr || *rows < 1) {
+                refuse(pointerAppend(node.path, "pageSize"), "a page holds a positive whole number of rows");
             }
         }
     }
@@ -3564,10 +3586,11 @@ private:
         if (entry.category == NameCategory::Element) {
             KindSpec const* const spec = findKind(entry.element->kind, false);
             if ((spec->flags & kWritable) == 0) {
-                // A table's state is the document's: it binds its `selection` or `sort` to state, and the state is
-                // set.
-                std::string const hint =
-                    entry.element->kind == "table" ? ": bind its `selection` or `sort` to state and set that" : "";
+                // A table's state is the document's: it binds its `selection`, `sort` or `page` to state, and the
+                // state is set.
+                std::string const hint = entry.element->kind == "table"
+                                             ? ": bind its `selection`, `sort` or `page` to state and set that"
+                                             : "";
                 refuse(cmd.path,
                        "`set` writes state or an input's draft; `" + head + "` is a " + entry.element->kind + hint);
             }

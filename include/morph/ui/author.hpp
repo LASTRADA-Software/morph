@@ -1193,6 +1193,19 @@ template <typename E = Any>
     return AnyHandle::raw(std::move(json));
 }
 
+/// @brief `slice`: @p count elements of a list from @p start, or every element from it; past the end, none.
+/// @param list  The list.
+/// @param start The first element's position, from 0.
+/// @param count How many; absent takes the rest.
+/// @return The slice.
+[[nodiscard]] inline AnyHandle slice(AnyHandle const& list, AnyHandle const& start, AnyHandle const& count = {}) {
+    std::vector<AnyHandle> args{list, start};
+    if (count.present()) {
+        args.push_back(count);
+    }
+    return call("slice", args);
+}
+
 /// @brief Which way a sort orders.
 enum class SortOrder : std::uint8_t {
     Ascending,   ///< Smallest first: `"asc"`.
@@ -3793,6 +3806,10 @@ struct TableOptions {
     AnyHandle sort;
     /// @brief Commands run after a header click asks to sort, with `event` the new sort.
     Commands onSortChange;
+    /// @brief How many rows a page holds, a positive integer; absent, the table does not page.
+    AnyHandle pageSize;
+    /// @brief The page shown, from 0; needs `pageSize`; absent, the first page.
+    AnyHandle page;
     /// @brief The filters.
     AnyHandle filters;
     /// @brief A row's tone, read in the row scope.
@@ -3889,6 +3906,8 @@ namespace detail {
     }
     return node.put("sort", options.sort)
         .put("onSortChange", options.onSortChange)
+        .put("pageSize", options.pageSize)
+        .put("page", options.page)
         .put("filters", options.filters)
         .put("rowTone", options.rowTone)
         .put("highlightKey", options.highlightKey)

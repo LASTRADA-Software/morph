@@ -275,7 +275,9 @@ the list it refers to may arrive in either order.
   existing rows now selected, in any mode: a key still waiting for its row is dropped by a user's
   change, while `setSelection` keeps it waiting. A backend may report each step of the user's
   picking (a click, then a Ctrl-click); the last report is the whole selection, and no report names
-  a key without a row.
+  a key without a row. A paged table's backend sees one page: the interpreter keeps the selected keys
+  of the rows on other pages when a report is an `Extend`, so a backend reports only the keys it
+  holds, by the same drop rule.
 - **The table's selection model** is the same on every backend; the document says nothing of it:
 
   | Input | `Single` | `Multiple` | Reports |

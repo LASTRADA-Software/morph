@@ -123,7 +123,7 @@ arithmetic, and `any` where it depends on data the document does not describe.
 | Arithmetic | `add`, `sub`, `mul`, `div`, `neg`, `round(x, dp)` |
 | Optional | `engaged(x)` (never `null`), `coalesce(x, ...)` (the first non-`null`) |
 | Strings | `concat(s, ...)`, `format(template, args...)`, `trim`, `length` (code points), `isEmpty` (a string or a list), `contains` |
-| Lists | `count`, `sum` (0 for an empty list), `mean`, `min`, `max`, `any`, `all`, `first`, `includes`, `indexOf`, `concatLists(list, ...)` |
+| Lists | `count`, `sum` (0 for an empty list), `mean`, `min`, `max`, `any`, `all`, `first`, `includes`, `indexOf`, `concatLists(list, ...)`, `slice(list, start, count?)` |
 | Display | `number`, `decimal(x, dp)`, `quantity(x, unit?)`, `money(x, currency)`, `date(x, style?)`, `dateTime(x, style?)` |
 | Entry | `parseDecimal(text, dp?)` |
 | Text | `t(key, fallback, args?)` |
@@ -141,6 +141,10 @@ arithmetic, and `any` where it depends on data the document does not describe.
   else `list<any>`. A `null` argument makes the result `null`, as every strict function's does (a
   list that is still loading reads `coalesce(q, [])`), and any other value that is not a list is a
   reported mismatch. `concat` stays strings-only.
+- `slice` answers `count` elements of the list from `start`, or every element from `start` without a
+  count; a start past the end answers `[]`. The list is checked as `concatLists`' are, and `start` and
+  `count` as integers, where their types are known; a negative one, or one that is not an integer, is
+  a reported mismatch. A `null` argument makes the result `null`.
 - `parseDecimal` reads text typed in the active locale (its separators, sign and digits, through
   `render::parseDecimal`) as an exact decimal, at `dp` places when given and otherwise at the places
   typed. Text that does not spell a number, or has more fraction digits than `dp`, is `null` and not

@@ -356,14 +356,24 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   (`expressions.md`, Sorting), key by key. A sort of `null` or `[]` keeps the source order; one that is not a
   list of `{column, direction}` records naming sortable columns, or whose values cannot be ordered, keeps the
   source order and is reported once at the table's `sort` path, so a data error does not blank the screen.
-  `sortBy` runs before any row's scope exists, as `key` does, so a row-scope name in it reads `null`. A table
+  `sortBy` runs before any row's scope exists, as `key` does, so a row-scope name in it reads `null`. Then it
+  pages the sorted list, so page 2 holds the second page of the whole sorted list: `pageSize` and `page` are read
+  in the table's scope; a `pageSize` of `null` does not page, and one that is no positive integer is reported once
+  at its path and does not page either; a `page` of `null` is the first, one that is negative or no integer is
+  reported once and shows the first, and one past the last shows the last, unreported, since a filter that shrinks
+  the rows under the user is normal. The backend holds the page's rows alone, as it would a short table. On a
+  user's change of the selection, an `Extend` report keeps the selected keys of the rows on other pages, in their
+  order, before the reported keys; a `Replace` report is the whole new selection, so a plain click or a range
+  clears the other pages' keys as it clears the rest of its own, and every `Single` change is one. A key whose row
+  `rows` no longer has drops on any user change. `empty` shows while `rows` is empty, not while a page is. A table
   lowered where names are bound (a component's `props`) sorts its own copy with those names, which its element
   values cannot see. The mount's keyed reconciliation moves the sorted rows, so each keeps its widget, its
   native state and its selection. The header marks the sort's first key (`Table::sort`); a header click on a
   sortable column (`Table::onSort`) makes that column the single key, `desc` when it already is the first key
   and `asc`, `asc` otherwise, sets the table's own sort when no key binds one, and runs `onSortChange` with
   `event` the new sort, as a user event, in one batch. The element value `sort` reads the bound sort or the
-  table's own, and `viewCount` the rows the table orders. `filters` and `hoveredKey` are not lowered: the
+  table's own, `viewCount` the rows the table orders (every page), and `page`, `pageCount`, `pageFirst` and
+  `pageLast` the page. `filters` and `hoveredKey` are not lowered: the
   loader refuses `filters` and `highlightKey` on a table over `rows`. With `empty`,
   the table lowers to a `Column` holding the table and the lowered `empty` content, in the table's own scope:
   while `rows` evaluates to an empty list the table is hidden and the content shown; while it is a non-empty

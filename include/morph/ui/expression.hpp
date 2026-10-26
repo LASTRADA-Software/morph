@@ -128,6 +128,7 @@ enum class FunctionId : std::uint8_t {
     Translate,
     ParseDecimal,
     ConcatLists,
+    Slice,
 };
 
 struct Expr;
@@ -199,7 +200,7 @@ struct FunctionSpec {
 
 /// @brief The library, indexed by `FunctionId`.
 // NOLINTBEGIN(modernize-use-designated-initializers): one row per function reads as a table; names on every field would not.
-inline constexpr std::array<FunctionSpec, 42> kFunctions = {{
+inline constexpr std::array<FunctionSpec, 43> kFunctions = {{
     {"and", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"or", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"not", 1, 1, {kindBit(TypeKind::Bool), 0, 0}, TypeKind::Bool},
@@ -262,6 +263,7 @@ inline constexpr std::array<FunctionSpec, 42> kFunctions = {{
      255,
      {kindBit(TypeKind::List), kindBit(TypeKind::List), kindBit(TypeKind::List)},
      TypeKind::Any},
+    {"slice", 2, 3, {kindBit(TypeKind::List), kindBit(TypeKind::Int), kindBit(TypeKind::Int)}, TypeKind::Any},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
 
@@ -1000,6 +1002,10 @@ private:
         if (expr.function == FunctionId::ConcatLists) {
             return concatenated(types);
         }
+        if (expr.function == FunctionId::Slice) {
+            Type const& source = types.front();
+            return Type::listOf(source.element ? *source.element : Type::any(), true);
+        }
         return numericResult(expr.function, types);
     }
 
@@ -1524,6 +1530,23 @@ private:
             out.push_back(items->at(index));
         }
         return out;
+    }
+
+    /// `slice`: `count` elements of the list from `start`, or every element from it.
+    Value sliced(Expr const& expr, std::vector<Value> const& args) {
+        ValueList const* const items = args.at(0).asList();
+        std::int64_t const* const start = args.at(1).asInt();
+        std::int64_t const* const count = args.size() > 2 ? args.at(2).asInt() : nullptr;
+        bool const badCount = args.size() > 2 && (count == nullptr || *count < 0);
+        if (items == nullptr || start == nullptr || *start < 0 || badCount) {
+            return mismatch(expr, "`slice` takes a list, a start and a count of 0 or more");
+        }
+        auto const from = static_cast<std::size_t>(std::min<std::int64_t>(*start, std::ssize(*items)));
+        std::size_t const left = items->size() - from;
+        std::size_t const taken =
+            count == nullptr ? left : std::min(left, static_cast<std::size_t>(*count));
+        auto const first = items->begin() + static_cast<std::ptrdiff_t>(from);
+        return ValueList{first, first + static_cast<std::ptrdiff_t>(taken)};
     }
 
     /// Three-valued `and` / `or`: the dominant value wins over `null`.
@@ -2175,6 +2198,8 @@ private:
                 }
                 return out;
             }
+            case FunctionId::Slice:
+                return sliced(expr, args);
             case FunctionId::Translate:
                 if (args.at(0).asString() == nullptr || args.at(1).asString() == nullptr) {
                     return mismatch(expr, "`t` takes a key and a fallback string");

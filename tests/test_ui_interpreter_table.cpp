@@ -361,3 +361,166 @@ TEST_CASE("table: text sorts case-folded, and by its bytes when it folds the sam
     int const table = h.backend.all("Table").front();
     CHECK(rowOrder(h, table) == "Lactose lactose Paracetamol");
 }
+
+namespace {
+
+// A table over 57 rows keyed 1 to 57, whose `n` runs from 57 down to 1, 25 rows a page, at the state `page`, its
+// selection bound to `selected` and written back; a pager text placed before it, and buttons that turn to pages 0,
+// 1, 2 and 9 and select row 51. @p extra goes after the table's `rows`.
+std::string pagedTable(std::string_view mode, std::string_view extra = "", std::string_view pageSize = "25") {
+    std::string rows;
+    for (int id = 1; id <= 57; ++id) {
+        rows += (id == 1 ? "" : ", ") + std::string{R"({ "id": )"} + std::to_string(id) + R"(, "n": )" +
+                std::to_string(58 - id) + " }";
+    }
+    std::string buttons;
+    for (int const page : {0, 1, 2, 9}) {
+        buttons += R"(, { "kind": "button", "testId": "to)" + std::to_string(page) + R"(", "label": "go",
+          "onClick": [ { "set": "page", "value": )" + std::to_string(page) + " } ] }";
+    }
+    return std::string{R"({
+      "vocab": "ui/1", "id": "paged",
+      "state": { "page": { "init": 0 }, "size": { "init": )"} + std::string{pageSize} + R"( },
+                 "selected": { "init": { "lit": [] } }, "items": { "init": { "lit": [ )" + rows + R"( ] } } },
+      "view": { "kind": "column", "children": [
+        { "kind": "text", "testId": "pager", "text": { "fn": "format", "args": [ "{0}-{1} of {2}, page {3} of {4}",
+            { "ref": "t.pageFirst" }, { "ref": "t.pageLast" }, { "ref": "t.viewCount" }, { "ref": "t.page" },
+            { "ref": "t.pageCount" } ] } },
+        { "kind": "table", "id": "t", "rows": { "ref": "items" })" + std::string{extra} + R"(,
+          "selectionMode": ")" + std::string{mode} + R"(", "selection": { "ref": "selected" },
+          "onSelectionChange": [ { "set": "selected", "value": { "ref": "event" } } ],
+          "pageSize": { "ref": "size" }, "page": { "ref": "page" },
+          "columns": [ { "id": "n", "label": "N", "sortable": true } ] },
+        { "kind": "button", "testId": "pick51", "label": "51",
+          "onClick": [ { "set": "selected", "value": { "lit": [ 51 ] } } ] })" + buttons + R"( ] } })";
+}
+
+void turnTo(Harness& h, int page) {
+    h.backend.click(h.byTestId("Button", "to" + std::to_string(page)));
+    h.settle();
+}
+
+ui::Key id(std::int64_t value) { return ui::Key{value}; }
+
+}  // namespace
+
+// Mutations: page before sorting (the last page holds rows 51 to 57 of the source order); compute the page bounds in
+// the lowering instead of on the element (the pager, drawn first, reads the defaults).
+TEST_CASE("table: a table pages its sorted rows, and a pager drawn before it reads the pages", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(pagedTable("multiple", R"(, "sort": { "lit": [ { "column": "n", "direction": "asc" } ] })"));
+    int const table = h.backend.all("Table").front();
+    CHECK(h.text("pager") == "1-25 of 57, page 0 of 3");
+    CHECK(h.backend.children(table).size() == 25);
+    turnTo(h, 1);
+    CHECK(h.backend.children(table).size() == 25);
+    CHECK(h.text("pager") == "26-50 of 57, page 1 of 3");
+    turnTo(h, 2);
+    CHECK(h.text("pager") == "51-57 of 57, page 2 of 3");
+    CHECK(rowOrder(h, table) == "7 6 5 4 3 2 1");
+}
+
+// Mutation: clamp nothing (page 9 shows no rows and reads 9).
+TEST_CASE("table: a page past the last shows the last, and the element reads it", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(pagedTable("multiple"));
+    turnTo(h, 9);
+    int const table = h.backend.all("Table").front();
+    CHECK(rowOrder(h, table) == "51 52 53 54 55 56 57");
+    CHECK(readJson(*screen, R"({"ref":"t.page"})") == "2");
+    CHECK(h.diagnostics.empty());
+}
+
+TEST_CASE("table: a computed pageSize of 0 is reported once and shows every row", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(pagedTable("multiple", "", "0"));
+    int const table = h.backend.all("Table").front();
+    CHECK(h.backend.children(table).size() == 57);
+    CHECK(h.text("pager") == "1-57 of 57, page 0 of 1");
+    auto const reports = std::ranges::count_if(
+        h.diagnostics, [](ui::Refusal const& refusal) { return refusal.path.ends_with("/pageSize"); });
+    CHECK(reports == 1);
+}
+
+// Mutation: skip the merge (the Ctrl-click on page 1 reports only row 26).
+TEST_CASE("table: a Ctrl-click on another page keeps the keys selected on the first", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(pagedTable("multiple"));
+    int const table = h.backend.all("Table").front();
+    h.backend.clickRow(table, id(1), ui::RowClick::Only);
+    h.settle();
+    h.backend.clickRow(table, id(2), ui::RowClick::Toggle);
+    h.settle();
+    turnTo(h, 1);
+    h.backend.clickRow(table, id(26), ui::RowClick::Toggle);
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref":"selected"})") == "[1,2,26]");
+    CHECK(h.text("pager") == "26-50 of 57, page 1 of 3");
+}
+
+// Mutations: merge on every report, ignoring its kind (the plain click keeps row 51); never merge (the last
+// Ctrl-click drops row 51).
+TEST_CASE("table: a plain click replaces the selection on every page, a Ctrl-click keeps the other pages'",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(pagedTable("multiple"));
+    int const table = h.backend.all("Table").front();
+    h.backend.click(h.byTestId("Button", "pick51"));
+    h.settle();
+    h.backend.clickRow(table, id(3), ui::RowClick::Only);
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref":"selected"})") == "[3]");
+    h.backend.clickRow(table, id(4), ui::RowClick::Toggle);
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref":"selected"})") == "[3,4]");
+    h.backend.click(h.byTestId("Button", "pick51"));
+    h.settle();
+    h.backend.clickRow(table, id(4), ui::RowClick::Toggle);
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref":"selected"})") == "[51,4]");
+}
+
+// Mutation: merge on every report (the single table holds two keys).
+TEST_CASE("table: a single table's pick on another page is its whole selection", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(pagedTable("single"));
+    int const table = h.backend.all("Table").front();
+    h.backend.clickRow(table, id(3), ui::RowClick::Only);
+    h.settle();
+    turnTo(h, 1);
+    h.backend.clickRow(table, id(30), ui::RowClick::Only);
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref":"selected"})") == "[30]");
+}
+
+TEST_CASE("table: a selected key whose row is gone drops on the next user change", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "gone",
+      "state": { "selected": { "init": { "lit": [ 99, 1 ] } },
+                 "items": { "init": { "lit": [ { "id": 1 }, { "id": 2 }, { "id": 3 } ] } } },
+      "view": { "kind": "table", "id": "t", "rows": { "ref": "items" }, "selectionMode": "multiple",
+                "selection": { "ref": "selected" }, "pageSize": 2, "page": 1,
+                "onSelectionChange": [ { "set": "selected", "value": { "ref": "event" } } ],
+                "columns": [ { "id": "id", "label": "Id" } ] } })");
+    int const table = h.backend.all("Table").front();
+    h.backend.clickRow(table, id(3), ui::RowClick::Toggle);
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref":"selected"})") == "[1,3]");
+}
+
+// Mutation: skip the merge (Ctrl+A on the first page drops row 51).
+TEST_CASE("table: Ctrl+A selects the page's rows and keeps a key selected on another page", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(pagedTable("multiple"));
+    int const table = h.backend.all("Table").front();
+    h.backend.click(h.byTestId("Button", "pick51"));
+    h.settle();
+    CHECK(h.backend.press(table, "Ctrl+A"));
+    h.settle();
+    std::string expected = "[51";
+    for (int row = 1; row <= 25; ++row) {
+        expected += "," + std::to_string(row);
+    }
+    CHECK(readJson(*screen, R"({"ref":"selected"})") == expected + "]");
+}

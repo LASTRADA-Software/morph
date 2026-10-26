@@ -335,6 +335,8 @@ TEST_CASE("the library and reading forms have builders", "[ui][author]") {
     ui::Handle<std::vector<std::int64_t>> const typed =
         ui::concatLists(std::vector{ui::ref<std::vector<std::int64_t>>("a"), ui::ref<std::vector<std::int64_t>>("b")});
     CHECK(text(typed) == R"({"fn":"concatLists","args":[{"ref":"a"},{"ref":"b"}]})");
+    CHECK(text(ui::slice(ui::ref("a"), 0, 5)) == R"({"fn":"slice","args":[{"ref":"a"},0,5]})");
+    CHECK(text(ui::slice(ui::ref("a"), 5)) == R"({"fn":"slice","args":[{"ref":"a"},5]})");
     CHECK(text(ui::sorted(ui::ref("a"), "x", [](ui::AnyHandle const& item) { return item.at("due"); })) ==
           R"({"sort":{"ref":"a"},"as":"x","by":{"ref":"x.due"}})");
     CHECK(text(ui::sorted(ui::ref("a"), "x", [](ui::AnyHandle const& item) { return item; }, "desc")) ==
