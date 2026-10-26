@@ -148,6 +148,22 @@ public:
         return unescape(
             _backend.prop(widgetId, kind == "Button" || kind == "Checkbox" || kind == "Menu" ? "label" : "text"));
     }
+    // A field's messages, then its description, as assistive technology would read them.
+    [[nodiscard]] std::optional<std::string> descriptionOf(ui::Widget const& widget) override {
+        int const widgetId = _backend.idOf(widget);
+        std::vector<std::string> lines;
+        for (std::string const& error : listItems(_backend.prop(widgetId, "errors"))) {
+            lines.push_back(unescape(error));
+        }
+        if (std::string const description = unescape(_backend.prop(widgetId, "description")); !description.empty()) {
+            lines.push_back(description);
+        }
+        std::string joined;
+        for (std::string const& line : lines) {
+            joined += (joined.empty() ? "" : "\n") + line;
+        }
+        return joined;
+    }
     [[nodiscard]] bool visibleOf(ui::Widget const& widget) override {
         return _backend.prop(_backend.idOf(widget), "visible") != "false";
     }
@@ -336,7 +352,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 50);
+    REQUIRE(cases.size() == 51);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);

@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls
 
 // The root of text and the six inputs: the field state, with the messages shown under the control in the error
-// colour and a stale value dimmed. While `labelShown`, the field's `caption` is drawn above the control; otherwise
+// colour, then the description, muted or in the tone's colour, and a stale value dimmed. While `labelShown`, the field's `caption` is drawn above the control; otherwise
 // the caption is drawn elsewhere (a form's cell), and a restyle reads `caption` knowing that.
 MorphWidget {
     id: root
@@ -13,6 +13,13 @@ MorphWidget {
     property bool required: false
     property list<string> errors: []
     property bool stale: false
+    // A line that describes the field, shown under the messages.
+    property string description: ""
+    // An evaluation of the value, as the `Tone` index (0 none): it outlines the control and colours the description.
+    property int tone: 0
+    // The tone the control is outlined in: `Err` while the field has errors, whatever its own tone, so errors and an
+    // evaluation share one outline.
+    readonly property int shownTone: errors.length > 0 ? 4 : tone
     // The control the kind shows; the field lays it out above its messages.
     property Item control: null
     // The field's label, and whether the field draws it as a visible caption above the control.
@@ -30,8 +37,9 @@ MorphWidget {
     readonly property real markerRoom: Theme.spaceOf(1) + marker.implicitWidth
     readonly property real controlWidth: width - (!required || markerAfterCaption ? 0
                                                   : markerFollowsText ? markerRoom : marker.implicitWidth)
-    // What assistive technology reads as the field's description: its messages.
-    readonly property string accessibleDescription: errors.join("\n")
+    // What assistive technology reads as the field's description: its messages, then its description.
+    readonly property string accessibleDescription: description === "" ? errors.join("\n")
+                                                                       : errors.concat([description]).join("\n")
 
     focusTarget: control ? control : root
     implicitWidth: Math.max(captionLabel.visible ? captionLabel.implicitWidth + (required ? markerRoom : 0) : 0,
@@ -39,7 +47,8 @@ MorphWidget {
                                                                      : markerFollowsText ? markerRoom
                                                                                          : marker.implicitWidth))
     implicitHeight: captionHeight + (control ? control.implicitHeight : 0) +
-                    (messages.visible ? messages.implicitHeight : 0)
+                    (messages.visible ? messages.implicitHeight : 0) +
+                    (descriptionLabel.visible ? descriptionLabel.implicitHeight : 0)
     opacity: stale ? Theme.staleOpacity : 1.0
     Accessible.description: accessibleDescription
 
@@ -88,6 +97,19 @@ MorphWidget {
         visible: root.errors.length > 0
         text: root.errors.join("\n")
         color: root.scheme.error
+        wrapMode: Text.Wrap
+    }
+
+    Label {
+        id: descriptionLabel
+        objectName: "description"
+        textFormat: Text.PlainText
+        font: Theme.bodyFont
+        y: messages.y + (messages.visible ? messages.height : 0)
+        width: root.width
+        visible: root.description !== ""
+        text: root.description
+        color: root.tone !== 0 ? root.toneOf(root.tone) : root.scheme.muted
         wrapMode: Text.Wrap
     }
 }

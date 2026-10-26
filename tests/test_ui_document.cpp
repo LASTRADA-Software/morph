@@ -344,3 +344,15 @@ TEST_CASE("ui document: a key-value's fieldLayout is inline or stacked, and its 
     REQUIRE_FALSE(run.has_value());
     CHECK(run.error().reason == "a run's record gives its `text`");
 }
+
+// Mutation: drop the text's refusal of `description` (the text loads).
+TEST_CASE("ui document: an input takes a description and a tone, and a text refuses them", "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "d", "view": {"kind": "textInput",
+        "description": "Required range 2–8 °C", "tone": {"if": [true, "err", null]}}})")
+              .has_value());
+    auto const text = loadDocumentText(R"({"vocab": "ui/1", "id": "d", "view": {"kind": "text", "text": "x",
+        "description": "y"}})");
+    REQUIRE_FALSE(text.has_value());
+    CHECK(text.error().path == "/view/description");
+    CHECK(text.error().reason == "a text is not described; put the line in the text");
+}

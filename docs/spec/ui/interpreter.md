@@ -234,7 +234,7 @@ reply; `parallel` applies each. `pending` counts runs in flight and queued.
 - **Errors.** An element's `errors` are, in order: `Required` when `required` is true and the value is
   not engaged (`null`, `""` or an empty list), the node's own `errors`, the field errors of a reply in
   its scope (a query's or mutation's value `errors.<id>`), and each failing check's message. `valid` is
-  `errors` empty.
+  `errors` empty. A field's `tone` is not an error: it changes the field's look and nothing of `valid` or `ready`.
 - **`shownErrors`** follows the `showErrors` of the innermost dialog, else the screen: `always`;
   `submit` once submitted; `touched` (the default) once touched or submitted.
 - **`ready`** of a dialog or drawer holds when every visible element of its content is valid and no

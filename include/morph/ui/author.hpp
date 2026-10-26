@@ -2130,6 +2130,18 @@ public:
     /// @return The node with it.
     [[nodiscard]] Node stale(AnyHandle const& condition) const { return with("stale", condition); }
 
+    /// @brief A line that describes an input, drawn under it and announced as its accessible description; a text
+    ///        refuses it.
+    /// @param text The line.
+    /// @return The node with it.
+    [[nodiscard]] Node description(AnyHandle const& text) const { return with("description", text); }
+
+    /// @brief An evaluation of an input's value that does not make it invalid (`ok`, `warn`, `err`, `info`; `null`
+    ///        for none): it outlines the input and colours its description. A text refuses it.
+    /// @param tone The tone's name.
+    /// @return The node with it.
+    [[nodiscard]] Node tone(AnyHandle const& tone) const { return with("tone", tone); }
+
 private:
     Json _json = Json::object_t{};
     CatalogFacts _facts;

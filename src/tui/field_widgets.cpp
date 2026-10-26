@@ -329,7 +329,7 @@ void TextInputImpl::setIcon(std::string_view icon) {
     refresh();
 }
 
-::core::tui::Size TextInputImpl::naturalSize() const {
+::core::tui::Size TextInputImpl::controlSize() const {
     int const unit = _unit.empty() ? 0 : displayWidth(_unit) + 1;
     std::string_view const glyph = ui::iconGlyph(_icon);
     int const icon = glyph.empty() ? 0 : displayWidth(glyph) + 1;
@@ -340,7 +340,7 @@ void TextInputImpl::setIcon(std::string_view icon) {
 
 std::string TextInputImpl::probeText() const { return std::string{_field->text()}; }
 
-void TextInputImpl::paint(::core::tui::Canvas& canvas) {
+void TextInputImpl::paintControl(::core::tui::Canvas& canvas) {
     auto control = paintCaption(canvas);
     std::string_view const glyph = ui::iconGlyph(_icon);
     int const iconWidth = glyph.empty() ? 0 : displayWidth(glyph) + 1;
@@ -412,13 +412,13 @@ void DateTimeInputImpl::setOnChange(std::function<void(std::optional<morph::time
     _onChange = std::move(onChange);
 }
 
-::core::tui::Size DateTimeInputImpl::naturalSize() const {
+::core::tui::Size DateTimeInputImpl::controlSize() const {
     return withCaption({.width = _mode == ui::DateMode::Date ? 12 : 18, .height = 1});
 }
 
 std::string DateTimeInputImpl::probeText() const { return std::string{_field->text()}; }
 
-void DateTimeInputImpl::paint(::core::tui::Canvas& canvas) {
+void DateTimeInputImpl::paintControl(::core::tui::Canvas& canvas) {
     auto control = paintCaption(canvas);
     paintField(*_field, *this, actionable(), control);
     paintMarks(control);
@@ -518,13 +518,13 @@ void FilePickerImpl::setPath(std::string_view path) {
 
 void FilePickerImpl::setOnPicked(std::function<void(std::string)> onPicked) { _onPicked = std::move(onPicked); }
 
-::core::tui::Size FilePickerImpl::naturalSize() const {
+::core::tui::Size FilePickerImpl::controlSize() const {
     return {.width = std::max(30, displayWidth(_field->prompt()) + displayWidth(_field->text()) + 1), .height = 1};
 }
 
 std::string FilePickerImpl::probeText() const { return std::string{_field->text()}; }
 
-void FilePickerImpl::paint(::core::tui::Canvas& canvas) {
+void FilePickerImpl::paintControl(::core::tui::Canvas& canvas) {
     paintField(*_field, *this, actionable(), canvas);
     paintMarks(canvas);
 }

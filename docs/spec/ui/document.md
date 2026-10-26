@@ -164,7 +164,11 @@ value that is not a string is reported once at the node's `surface` path and dra
 (`{name, role}`), `drag` (`{payload}`), `drop` (`{accepts, onDrop}`) and `keys`. `sizing` is the width's —
 `"content"`, `{"lit": {"fixed": n}}` or `{"lit": {"stretch": w}}` — or both dimensions as a record of them, one
 left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {"stretch": 1}}}`. **Text and the inputs** also take `readonly`, `required`, `stale`
-(conditions) and `errors`.
+(conditions) and `errors`. **The six inputs** also take `description`, a line drawn under the control and announced
+as its accessible description, and `tone` (`ok`, `warn`, `err`, `info`; `neutral` or `null` for none), an evaluation
+of the value that outlines the control and colours the description and, unlike `errors`, does not make the value
+invalid; a tone of no known name is reported once and drawn as none. A `text` refuses both: a text is not described,
+so the line goes in the text.
 
 | Kind | Keys (a ⓘ key is in the node's own scope) | Element values beyond `visible`, `enabled`, `valid`, `errors`, `shownErrors` |
 |---|---|---|

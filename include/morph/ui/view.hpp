@@ -443,6 +443,12 @@ struct FieldState {
     Prop<std::vector<std::string>> errors;
     /// @brief Whether the value shown is the last known one while a newer one is computed.
     Prop<bool> stale = false;
+    /// @brief A line that describes the field, under its control and announced as its accessible description; empty
+    ///        shows none. Not on a text.
+    Prop<std::string> description;
+    /// @brief An evaluation of the value that does not make it invalid, drawn as the control's outline and the
+    ///        description's colour; `Neutral` is none. Not on a text.
+    Prop<Tone> tone = Tone::Neutral;
 };
 
 /// @brief A run of text inside a sentence, drawn in the node's role with its own weight and face.

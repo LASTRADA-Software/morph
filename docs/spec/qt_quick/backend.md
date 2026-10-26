@@ -202,6 +202,14 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
   when the name is not, so a screen reader reads it once. `shownText()`, the probe's `textOf`, is the summary. A
   `Canvas` paints at the device pixel ratio, and the chart's tests run again at `QT_SCALE_FACTOR=2`
   (`qt_quick_chart_scale_2`).
+- **Description and tone.** `MorphField` carries `description` and `tone` (the `Tone` index, 0 none). A `description`
+  label under the messages wraps, is muted or `toneOf(tone)`, and counts in the field's height; the field's
+  `accessibleDescription`, which every control declares as `Accessible.description`, is the messages and then the
+  description. `shownTone` is `Err` while the field has errors, else its tone, and outlines the control:
+  `MorphInputBackground` takes `tone`, draws its border in the tone's colour focused or not (focus shows as the 2 px
+  width), and a 2 px ring of the tone's fill outside it as a sibling `Rectangle`, since a `Rectangle` draws nothing
+  outside itself. A check box draws its indicator's border in the tone, a radio select each indicator's, and a slider
+  its handle's.
 - **Required mark.** While a caption is drawn, `MorphField`'s mark sits on the caption's line, a space step after its
   `contentWidth`, the caption elides short of it, and the control takes the field's whole width. `MorphText` sets
   `markerFollowsText` and gives the end of its last line (`textEndX`, `textEndY`, recorded from `lineLaidOut`; rich

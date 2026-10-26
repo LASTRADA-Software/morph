@@ -98,10 +98,10 @@ public:
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     /// Where the cursor is, as a byte offset into the text shown.
     [[nodiscard]] std::size_t cursor() const noexcept { return _field->cursor(); }
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override;
-    void paint(::core::tui::Canvas& canvas) override;
+    void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
     void edited() override;
@@ -140,10 +140,10 @@ public:
     void setValue(std::optional<morph::time::Timestamp> const& value) override;
     void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override;
-    void paint(::core::tui::Canvas& canvas) override;
+    void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
     void edited() override;
@@ -177,10 +177,10 @@ public:
     }
     void setPath(std::string_view path) override;
     void setOnPicked(std::function<void(std::string)> onPicked) override;
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override;
-    void paint(::core::tui::Canvas& canvas) override;
+    void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
     void edited() override {}

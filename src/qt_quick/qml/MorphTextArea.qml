@@ -36,6 +36,7 @@ MorphField {
         placeholderTextColor: root.scheme.muted
         padding: Theme.spaceOf(3)
         background: MorphInputBackground {
+            tone: root.shownTone
             scheme: root.scheme
             focused: area.activeFocus
             readOnly: root.readOnly

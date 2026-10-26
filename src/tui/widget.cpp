@@ -389,6 +389,19 @@ void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks) {
     canvas.putString(0, canvas.width() - width, marks, canvas.theme().warning);
 }
 
+void paintFieldDescription(::core::tui::Canvas& canvas, std::string_view description, ui::Tone tone) {
+    ::core::tui::Style const& style =
+        tone == ui::Tone::Neutral ? canvas.theme().textMuted : toneStyle(canvas.theme(), tone);
+    int row = 0;
+    for (auto const line : splitLines(description)) {
+        if (row >= canvas.height()) {
+            return;
+        }
+        canvas.putString(row, 0, line, style);
+        ++row;
+    }
+}
+
 ::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption, bool required) {
     if (caption.empty()) {
         return canvas.subcanvas({.x = 0, .y = 0, .width = canvas.width(), .height = canvas.height()});

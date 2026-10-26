@@ -827,3 +827,53 @@ TEST_CASE("qt_quick theme: a selected push button keeps its size, rings in the a
     CHECK(accessibleOf(pickedItem)->property("checked").toBool());
     CHECK(buttonBackground(*picked).findChild<QQuickItem*>(QStringLiteral("selectionRing"))->isVisible());
 }
+
+// Mutation: drop `tone` from MorphInputBackground's border (the toned and the refused inputs read `color.border`).
+TEST_CASE("qt_quick theme: a toned or refused input is outlined in the tone, with a ring, focused or not",
+          "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color", "border": {"$value": "#999999"},
+        "err": {"bg": {"$value": "#ffe0e0"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const toned = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    toned->setTone(ui::Tone::Err);
+    toned->setDescription("Out of spec: above 0.20");
+    auto const refused = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    refused->setErrors({"Password incorrect."});
+    auto const plain = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    scene.settle();
+    auto const backgroundOf = [](ui::Widget const& widget) {
+        auto* const background = Scene::controlOf(widget).property("background").value<QQuickItem*>();
+        REQUIRE(background != nullptr);
+        return background;
+    };
+    auto const borderOf = [&backgroundOf](ui::Widget const& widget) {
+        return backgroundOf(widget)->property("border").value<QObject*>()->property("color").value<QColor>();
+    };
+    auto const ringOf = [&backgroundOf](ui::Widget const& widget) {
+        QQuickItem const* const ring = backgroundOf(widget)->findChild<QQuickItem*>(QStringLiteral("toneRing"));
+        REQUIRE(ring != nullptr);
+        return ring->isVisible() ? ring->property("color").value<QColor>() : QColor{};
+    };
+    CHECK(borderOf(*toned) == QColor{"#c62828"});
+    CHECK(ringOf(*toned) == QColor{"#ffe0e0"});
+    CHECK(borderOf(*refused) == QColor{"#c62828"});
+    CHECK(ringOf(*refused) == QColor{"#ffe0e0"});
+    CHECK(borderOf(*plain) == QColor{"#999999"});
+    CHECK_FALSE(ringOf(*plain).isValid());
+    toned->focus();
+    scene.settle();
+    CHECK(borderOf(*toned) == QColor{"#c62828"});
+    CHECK(backgroundOf(*toned)->property("border").value<QObject*>()->property("width").toInt() == 2);
+    // The description is drawn under the control in the tone's colour, and is the control's accessible description.
+    QQuickItem const* const description =
+        Scene::itemOf(*toned).findChild<QQuickItem*>(QStringLiteral("description"));
+    REQUIRE(description != nullptr);
+    CHECK(description->property("color").value<QColor>() == QColor{"#c62828"});
+    CHECK(Scene::itemOf(*toned).property("accessibleDescription").toString() ==
+          QStringLiteral("Out of spec: above 0.20"));
+}

@@ -779,9 +779,20 @@ private:
         if (field.stale.isBound() || field.stale.constant()) {
             bind(scope, field.stale, [&widget](bool stale) { widget.setStale(stale); });
         }
+        if (field.description.isBound() || !field.description.constant().empty()) {
+            bind(scope, field.description,
+                 [&widget](std::string const& description) { widget.setDescription(description); });
+        }
+        if (field.tone.isBound() || field.tone.constant() != Tone::Neutral) {
+            bind(scope, field.tone, [&widget](Tone tone) { widget.setTone(tone); });
+        }
     }
 
     Widget& mountKind(reactive::Scope& scope, Text const& spec, ContainerWidget* parent) {
+        if (spec.field.description.isBound() || !spec.field.description.constant().empty() ||
+            spec.field.tone.isBound() || spec.field.tone.constant() != Tone::Neutral) {
+            throw std::logic_error{"morph::ui: a text is not described or toned; put the line in the text"};
+        }
         TextWidget& widget = scope.adopt(_backend->createText(parent));
         applyCommon(scope, widget, spec.common);
         applyField(scope, widget, spec.field);

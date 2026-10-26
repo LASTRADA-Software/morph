@@ -39,6 +39,8 @@ public:
     void setRequired(bool required) override { _inner->setRequired(required); }
     void setErrors(std::vector<std::string> const& errors) override { _inner->setErrors(errors); }
     void setStale(bool stale) override { _inner->setStale(stale); }
+    void setDescription(std::string_view description) override { _inner->setDescription(description); }
+    void setTone(::morph::ui::Tone tone) override { _inner->setTone(tone); }
     void setOptions(std::vector<::morph::ui::SelectOption> const& options) override {
         _inner->setOptions(options);
         if (auto const echo = _onSelect; echo && !options.empty()) {

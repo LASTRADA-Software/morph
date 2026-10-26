@@ -93,6 +93,12 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   face, and every run's text as its characters. The mount calls `setSpans` in place of `setText` for a node that has
   spans. Both are pure, so a backend cannot drop the emphasis silently. What a probe and assistive technology read
   of such a widget is the runs' text joined (`spansText`).
+- **Description and tone.** `setDescription` shows a line under the control, after the messages, and makes it the
+  control's accessible description after the messages (`aria-describedby`). `setTone` evaluates the value without
+  making it invalid: the control is outlined in the tone and the description drawn in the tone's colour instead of
+  muted. A field with errors is drawn as `Err`, so errors and an evaluation share one outline, and only errors block.
+  On the terminal, which draws no outline, an `err` or `warn` field's control row adds the `!` mark. A text takes
+  neither: the mount never calls them on one, and every backend refuses them there (`std::logic_error`).
 - **Required mark.** `setRequired(true)` marks a field that must be given. The mark follows the caption, on the
   caption's line, while the field draws one (`setCaption(label, true)`), so the control keeps the field's whole
   width; without a caption it sits beside the control. A required text's mark follows the end of its last line.
@@ -243,7 +249,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 |---|---|---|
 | `Widget` | `setVisible`, `setEnabled`, `setLayout(LayoutHints)`, `setDragKey(optional<Key>)`, `setAccessibleName`, `setAccessibleRole`, `setTestId`, `setTooltip`, `setSurface` (may be called again, and restyles the widget and everything inside it; empty is the theme's default), `focus()` | `setDropHandler(accepts, onDrop)`, `setKeys(chords, onChord)` (the chord pressed) |
 | `ContainerWidget` | `moveChild(child, index)` | — |
-| `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale` | — |
+| `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale`, `setDescription`, `setTone` (a text refuses the last two) | — |
 | `TextWidget` | `setText`, `setRole`, `setSpans` | — |
 | `ButtonWidget` | `setLabel`, `setEmphasis`, `setIcon` (once, for a button with an icon), `setStyle` (once, for an item), `setSelected` | `setOnClick` (Enter, Space or a click) |
 | `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only), `setIcon` (an icon of the theme's icon set, drawn at the leading edge; single-line and password only, called once), `setCaption(label, shown)` (the field's label, and whether the input draws it as a visible caption above its control) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
@@ -365,7 +371,7 @@ The headless reference backend and the test double for everything above the cont
 - **Properties.** Every kind records `visible`, `enabled`, `layout` (as `width/height`, each followed by ` min=<n>`
   and ` max=<n>` for its bounds, then ` self=<align>` for an `alignSelf`), `dragKey`, `drop`, `a11yName`,
   `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run; text and the six
-  inputs record `readonly`, `required`, `errors` and `stale`; and each kind its own: `text`, `spans`, `role` (Text); `label`, `emphasis`, `icon`, `style`, `selected` (Button); `mode`, `text`, `placeholder`
+  inputs record `readonly`, `required`, `errors`, `stale`, `description` and `tone`; and each kind its own: `text`, `spans`, `role` (Text); `label`, `emphasis`, `icon`, `style`, `selected` (Button); `mode`, `text`, `placeholder`
   (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
   `selected` is the option it marks, else `none`); `items` (Menu, as below), and a button-style menu's `style=Button` (at creation), `label`, `icon` and `emphasis`; `gap`, `align`, `justify` (Column, Row); `columns`,
   `tracks` (each width, then `;align=` where it is not `start`), `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
@@ -620,6 +626,8 @@ Each case is named by the rule it checks:
 49. A chart shows the summary of the data it was last given: set with summary `A`, then `B`, it reads `B`.
 50. A Text given spans `Lot `, a mono `L-26-0381` and a strong ` <b>x</b>` reads `Lot L-26-0381 <b>x</b>`: its
     runs' characters joined in order, a run's markup shown as characters.
+51. A text input described `Required range 2–8 °C` reads that as its accessible description; given the error
+    `Outside 2–8 °C` it reads the error, a line feed and the description; the error cleared, the description again.
 
 ### What the probe cannot reach
 

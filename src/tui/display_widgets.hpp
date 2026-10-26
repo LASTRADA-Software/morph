@@ -17,7 +17,6 @@
 namespace morph::tui::detail {
 
 /// The theme's style for @p tone: info, success, warning, error, or normal text for a neutral tone.
-[[nodiscard]] ::core::tui::Style const& toneStyle(::core::tui::Theme const& theme, ui::Tone tone);
 
 /// Banner: one row in its tone, `text`, then `[ action ]` when it has an action label and `[x]` when dismissible.
 /// It takes the focus when it has either. Enter or Space, or a click on the action, calls `onAction`; Esc or Delete,

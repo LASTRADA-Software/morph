@@ -6505,6 +6505,20 @@ inline void ScreenCore::fieldOf(DocNode const& node, LowerCtx const& ctx, Elemen
             return stringsOf(evalIn(*scope, bindings.get(), errors));
         });
     }
+    // A tone evaluates the value and is not an error: it changes the field's look and nothing of `valid`.
+    if (node.prop("description")) {
+        field.description = bindProp<std::string>(ctx, node.prop("description"), std::string{}, stringOf);
+    }
+    if (ExprPtr const tone = node.prop("tone")) {
+        field.tone = slotProp<Tone>([this, scope = ctx.scope, bindings = ctx.bindings, tone] {
+            Value const value = evalIn(*scope, bindings.get(), tone);
+            std::optional<Tone> const named = toneNamed(value);
+            if (!named) {
+                report(tone->path, "tone is " + canonicalJson(value) + "; " + std::string{kToneNames});
+            }
+            return named.value_or(Tone::Neutral);
+        });
+    }
 }
 
 inline std::vector<MenuItem> ScreenCore::menuItems(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {

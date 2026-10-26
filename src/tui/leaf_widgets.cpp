@@ -12,6 +12,7 @@
 #include <limits>
 #include <memory>
 #include <morph/ui/theme.hpp>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -87,12 +88,22 @@ void TextImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
     refresh();
 }
 
+void TextImpl::setDescription(std::string_view description) {
+    static_cast<void>(description);
+    throw std::logic_error{"morph::tui: a text is not described"};
+}
+
+void TextImpl::setTone(ui::Tone tone) {
+    static_cast<void>(tone);
+    throw std::logic_error{"morph::tui: a text is not toned"};
+}
+
 void TextImpl::setRole(ui::TextRole role) {
     _role = role;
     refresh();
 }
 
-::core::tui::Size TextImpl::naturalSize() const {
+::core::tui::Size TextImpl::controlSize() const {
     auto const lines = splitLines(_text);
     int width = 0;
     for (auto const line : lines) {
@@ -106,7 +117,7 @@ void TextImpl::setRole(ui::TextRole role) {
     return {.width = width, .height = static_cast<int>(lines.size())};
 }
 
-void TextImpl::paint(::core::tui::Canvas& canvas) {
+void TextImpl::paintControl(::core::tui::Canvas& canvas) {
     ::core::tui::Style const style = roleStyle(canvas.theme(), _role);
     if (!_runs.empty()) {
         paintRuns(canvas, _runs, style, true);
@@ -226,9 +237,9 @@ void CheckboxImpl::setChecked(bool checked) {
 
 void CheckboxImpl::setOnToggle(std::function<void(bool)> onToggle) { _onToggle = std::move(onToggle); }
 
-::core::tui::Size CheckboxImpl::naturalSize() const { return {.width = displayWidth(_label) + 4, .height = 1}; }
+::core::tui::Size CheckboxImpl::controlSize() const { return {.width = displayWidth(_label) + 4, .height = 1}; }
 
-void CheckboxImpl::paint(::core::tui::Canvas& canvas) {
+void CheckboxImpl::paintControl(::core::tui::Canvas& canvas) {
     canvas.putString(0, 0, std::string{_checked ? "[x] " : "[ ] "} + _label,
                      checkboxStyle(canvas.theme(), actionable(), hasFocus()));
     paintMarks(canvas);
@@ -354,7 +365,7 @@ int SliderImpl::knobCell(int cells) const {
     return static_cast<int>(std::min(cell, scale));
 }
 
-void SliderImpl::paint(::core::tui::Canvas& canvas) {
+void SliderImpl::paintControl(::core::tui::Canvas& canvas) {
     auto const label = std::to_string(_value);
     int const track = std::max(3, canvas.width() - static_cast<int>(label.size()) - 3);
     _track = track;

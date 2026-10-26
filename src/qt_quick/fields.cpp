@@ -56,6 +56,16 @@ void TextImpl::setText(std::string_view text) {
     write("text", toQString(text));
 }
 
+void TextImpl::setDescription(std::string_view description) {
+    static_cast<void>(description);
+    throw std::logic_error{"morph::qt_quick: a text is not described"};
+}
+
+void TextImpl::setTone(ui::Tone tone) {
+    static_cast<void>(tone);
+    throw std::logic_error{"morph::qt_quick: a text is not toned"};
+}
+
 void TextImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
     write("text", toQString(ui::spansText(spans)));
     write("richText", richTextOf(spans, monoFamiliesOf(context())));

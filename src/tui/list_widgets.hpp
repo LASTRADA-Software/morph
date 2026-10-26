@@ -52,11 +52,11 @@ public:
     void setSelected(std::optional<ui::Key> const& selected) override;
     void setOnSelect(std::function<void(ui::Key)> onSelect) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     /// The label of the marked option; empty when none is marked.
     [[nodiscard]] std::string probeText() const override;
-    void paint(::core::tui::Canvas& canvas) override;
+    void paintControl(::core::tui::Canvas& canvas) override;
     void activate() override;
     void click(::core::tui::Point cell) override;
 
@@ -100,11 +100,11 @@ public:
     /// Calls @p onOpen when the user opens the list, also when there are no options and so no list to show.
     void setOnOpen(ui::Action onOpen) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     /// The label of the marked option; empty when none is marked.
     [[nodiscard]] std::string probeText() const override;
-    void paint(::core::tui::Canvas& canvas) override;
+    void paintControl(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void activate() override;
     void closePopup() override;

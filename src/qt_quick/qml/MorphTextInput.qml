@@ -67,6 +67,7 @@ MorphField {
         // The text stops before the unit.
         rightPadding: Theme.spaceOf(3) + (unitLabel.visible ? unitLabel.implicitWidth + Theme.spaceOf(1) : 0)
         background: MorphInputBackground {
+            tone: root.shownTone
             scheme: root.scheme
             focused: field.activeFocus
             readOnly: root.readOnly

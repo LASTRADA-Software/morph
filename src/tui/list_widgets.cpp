@@ -200,7 +200,7 @@ void RadioSelectImpl::setSelected(std::optional<ui::Key> const& selected) {
 
 void RadioSelectImpl::setOnSelect(std::function<void(ui::Key)> onSelect) { _onSelect = std::move(onSelect); }
 
-::core::tui::Size RadioSelectImpl::naturalSize() const {
+::core::tui::Size RadioSelectImpl::controlSize() const {
     // "▶ " or "  ", then "(•) " or "( ) ", then the label.
     return withCaption(
         {.width = widestLabel(_options) + 6, .height = std::max(1, static_cast<int>(_options.size()))});
@@ -208,7 +208,7 @@ void RadioSelectImpl::setOnSelect(std::function<void(ui::Key)> onSelect) { _onSe
 
 std::string RadioSelectImpl::probeText() const { return labelOf(_options, _selected); }
 
-void RadioSelectImpl::paint(::core::tui::Canvas& canvas) {
+void RadioSelectImpl::paintControl(::core::tui::Canvas& canvas) {
     auto rows = paintCaption(canvas);
     _top = scrolledTop(*_list, {.top = _top, .rows = rows.height()});
     paintRows(*_list, _top, {.reachable = actionable(), .focused = hasFocus()}, rows);
@@ -380,14 +380,14 @@ void DropdownSelectImpl::setOnSelect(std::function<void(ui::Key)> onSelect) { _o
 
 void DropdownSelectImpl::setOnOpen(ui::Action onOpen) { _onOpen = std::move(onOpen); }
 
-::core::tui::Size DropdownSelectImpl::naturalSize() const {
+::core::tui::Size DropdownSelectImpl::controlSize() const {
     return withCaption({.width = widestLabel(_options) + 4, .height = 1});
 }
 
 std::string DropdownSelectImpl::probeText() const { return labelOf(_options, _selected); }
 
 // The list follows the field when it moves (a scroll, a resized terminal): the field is drawn before the overlays.
-void DropdownSelectImpl::paint(::core::tui::Canvas& canvas) {
+void DropdownSelectImpl::paintControl(::core::tui::Canvas& canvas) {
     auto const& theme = canvas.theme();
     auto const* style = &theme.buttonDisabled;
     if (actionable()) {

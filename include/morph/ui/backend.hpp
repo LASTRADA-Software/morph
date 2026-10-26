@@ -132,6 +132,18 @@ public:
     /// @brief Shows or clears the mark of a value that is being recomputed.
     /// @param stale Whether the value shown is the last known one.
     virtual void setStale(bool stale) = 0;
+
+    /// @brief Shows a line that describes the field under its control, after its messages, and makes it the
+    ///        control's accessible description, after the messages. A text takes none: the mount never calls it on
+    ///        one, and a backend refuses it there.
+    /// @param description The line, UTF-8; empty shows none.
+    virtual void setDescription(std::string_view description) = 0;
+
+    /// @brief Evaluates the value without making it invalid: outlines the control in the tone and draws the
+    ///        description in the tone's colour. A field with errors is drawn as `Err` whatever its tone. A text takes
+    ///        none: the mount never calls it on one, and a backend refuses it there.
+    /// @param tone The tone; `Neutral` is none.
+    virtual void setTone(Tone tone) = 0;
 };
 
 /// @brief Read-only text.

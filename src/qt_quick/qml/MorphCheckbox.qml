@@ -43,7 +43,10 @@ MorphField {
             radius: Theme.radiusControl / 2
             color: box.checked ? root.scheme.accent : root.scheme.surface
             border.width: box.visualFocus ? 2 : 1
-            border.color: box.visualFocus ? root.scheme.focus : box.checked ? root.scheme.accent : root.scheme.border
+            // A toned box keeps its tone's border while focused; focus shows as the border's width.
+            border.color: root.shownTone !== 0 ? root.toneOf(root.shownTone)
+                                               : box.visualFocus ? root.scheme.focus
+                                                                 : box.checked ? root.scheme.accent : root.scheme.border
 
             Text {
                 textFormat: Text.PlainText

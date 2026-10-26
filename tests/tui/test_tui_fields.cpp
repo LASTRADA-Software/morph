@@ -1012,3 +1012,23 @@ TEST_CASE("tui fields: a captioned required input draws its mark after the capti
     REQUIRE_FALSE(bare.empty());
     CHECK(bare.at(0).ends_with('*'));
 }
+
+// Mutation: leave the tone out of the control's marks (the control row then ends in no `!`).
+TEST_CASE("tui fields: a description takes the row under the control, in the tone's style, and a toned err field "
+          "is marked",
+          "[tui][fields]") {
+    Harness harness{30, 2};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    input->setText("0.31");
+    input->setDescription("Out of spec");
+    input->setTone(ui::Tone::Err);
+    Rows const rows = harness.draw();
+    REQUIRE(rows.size() == 2);
+    CHECK(rows.at(0).ends_with('!'));
+    CHECK(rows.at(1) == "Out of spec");
+    CHECK(harness.screen().renderedBuffer().at(1, 0).style.fg == harness.screen().theme().error.fg);
+    CHECK(input->accessibleDescription() == "Out of spec");
+    input->setErrors({"Not a number"});
+    CHECK(input->accessibleDescription() == "Not a number\nOut of spec");
+    CHECK(input->hoverText() == "Not a number\nOut of spec");
+}

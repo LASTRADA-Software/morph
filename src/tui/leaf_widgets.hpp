@@ -18,10 +18,14 @@ public:
     void setText(std::string_view text) override;
     void setRole(ui::TextRole role) override;
     void setSpans(std::vector<ui::TextSpan> const& spans) override;
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    /// A text is not described; the mount never asks.
+    void setDescription(std::string_view description) override;
+    /// A text is not toned; the mount never asks.
+    void setTone(ui::Tone tone) override;
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] std::string probeText() const override { return _text; }
     [[nodiscard]] bool placedAcrossColumn() const override { return true; }
-    void paint(::core::tui::Canvas& canvas) override;
+    void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
     // The characters shown: the text, or the runs joined.
@@ -68,11 +72,11 @@ public:
     void setLabel(std::string_view label) override;
     void setChecked(bool checked) override;
     void setOnToggle(std::function<void(bool)> onToggle) override;
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override { return _label; }
     [[nodiscard]] bool placedAcrossColumn() const override { return true; }
-    void paint(::core::tui::Canvas& canvas) override;
+    void paintControl(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void activate() override;
 
@@ -126,10 +130,10 @@ public:
     void setValue(std::int64_t value) override;
     void setOnChange(std::function<void(std::int64_t)> onChange) override;
     void setOnCommit(std::function<void(std::int64_t)> onCommit) override;
-    [[nodiscard]] ::core::tui::Size naturalSize() const override { return {.width = 24, .height = 1}; }
+    [[nodiscard]] ::core::tui::Size controlSize() const override { return {.width = 24, .height = 1}; }
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override;
-    void paint(::core::tui::Canvas& canvas) override;
+    void paintControl(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void pressAt(::core::tui::Point cell) override;
     void dragTo(::core::tui::Point cell) override;

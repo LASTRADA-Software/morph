@@ -96,6 +96,7 @@ MorphField {
         // The text stops before the calendar button.
         rightPadding: Theme.spaceOf(3) + (pickerButton.visible ? pickerButton.implicitWidth : 0)
         background: MorphInputBackground {
+            tone: root.shownTone
             scheme: root.scheme
             focused: field.activeFocus
             readOnly: root.readOnly

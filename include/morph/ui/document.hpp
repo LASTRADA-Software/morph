@@ -714,12 +714,14 @@ inline constexpr std::array<KeySpec, 18> kCommonKeys = {{
     {"keys", Shape::Keys},
 }};
 
-/// @brief The input decorations text and the inputs take.
-inline constexpr std::array<KeySpec, 4> kFieldKeys = {{
+/// @brief The input decorations text and the inputs take; a text refuses `description` and `tone`.
+inline constexpr std::array<KeySpec, 6> kFieldKeys = {{
     {"readonly", Shape::Condition},
     {"required", Shape::Condition},
     {"errors", Shape::Expr},
     {"stale", Shape::Condition},
+    {"description", Shape::Expr},
+    {"tone", Shape::Expr},
 }};
 
 /// @brief The element values every element has.
@@ -3485,6 +3487,11 @@ private:
         } else if (node.kind == "text") {
             checkTextRole(node);
             checkSpans(node.prop("spans"));
+            for (std::string_view const key : {std::string_view{"description"}, std::string_view{"tone"}}) {
+                if (node.prop(key) != nullptr) {
+                    refuse(pointerAppend(node.path, key), "a text is not described; put the line in the text");
+                }
+            }
         } else if (node.kind == "banner") {
             checkSpans(node.prop("spans"));
         } else if (node.kind == "keyValue") {

@@ -832,3 +832,51 @@ TEST_CASE("interpreter control: a stacked key-value records its captions, its it
     CHECK(h.backend.prop(kv, "items") ==
           "[Serial number:[DEAB-902114;mono],Containers:180 needed\\, 150 in stock,Note\\; tone\\=Ok:a\\;b]");
 }
+
+namespace {
+
+constexpr char const* kToned = R"({"vocab": "ui/1", "id": "toned",
+  "models": {"sample": {"type": "Lims_SampleModel"}},
+  "view": {"kind": "column", "children": [
+    {"kind": "button", "testId": "open", "label": "open", "onClick": {"open": "dlg"}},
+    {"kind": "text", "testId": "ready", "text": {"fn": "format", "args": ["{0}", {"ref": "dlg.ready"}]}},
+    {"kind": "dialog", "id": "dlg", "title": "Result",
+     "scope": {"mutations": {"save": {"model": "sample", "action": "Lims_Save", "body": {"obj": {}}}}},
+     "children": [
+       {"kind": "textInput", "id": "impurity", "testId": "impurity", "required": true,
+        "description": "Out of spec: above 0.20", "tone": "err" EXTRA},
+       {"kind": "button", "testId": "save", "label": "save", "onClick": {"run": "save"}}]}]}})";
+
+std::string toned(std::string const& extra) {
+    std::string text = kToned;
+    text.replace(text.find("EXTRA"), 5, extra);
+    return text;
+}
+
+}  // namespace
+
+// Mutation: route `tone` into `errors` in fieldOf (the toned field is then invalid, and the run is refused).
+TEST_CASE("interpreter control: a field's tone evaluates its value without making it invalid", "[ui][interpreter]") {
+    {
+        Harness h;
+        auto const screen = h.mount(toned(""));
+        h.backend.click(h.byTestId("Button", "open"));
+        h.settle();
+        int const input = h.byTestId("TextInput", "impurity");
+        CHECK(h.backend.prop(input, "tone") == "Err");
+        CHECK(h.backend.prop(input, "description") == "Out of spec: above 0.20");
+        h.backend.edit(input, "0.31");
+        h.settle();
+        CHECK(h.text("ready") == "true");
+        h.backend.click(h.byTestId("Button", "save"));
+        h.settle();
+        CHECK(h.dispatcher.count("Lims_Save") == 1);
+    }
+    Harness h;
+    auto const screen = h.mount(toned(R"(, "errors": {"list": ["x"]})"));
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    h.backend.edit(h.byTestId("TextInput", "impurity"), "0.31");
+    h.settle();
+    CHECK(h.text("ready") == "false");
+}

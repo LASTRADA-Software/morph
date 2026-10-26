@@ -180,6 +180,16 @@ public:
     /// @param paths The files' paths, in the order dropped; not empty.
     virtual void dropFiles(Widget& zone, std::vector<std::string> const& paths) = 0;
 
+    /// @brief What assistive technology reads as a widget's description: a field's messages and then its
+    ///        description, joined by line feeds; an overlay's description. A probe that reads none keeps the
+    ///        default, and the cases that read one fail on it.
+    /// @param widget The widget.
+    /// @return The description; `nullopt` when the probe reads none.
+    [[nodiscard]] virtual std::optional<std::string> descriptionOf(Widget const& widget) {
+        static_cast<void>(widget);
+        return std::nullopt;
+    }
+
     /// @brief Where a widget is drawn, for the layout cases (`layoutConformanceCases`). A backend that lays nothing
     ///        out, such as `RecordingBackend`, answers none and runs only `conformanceCases`; a layout case run on
     ///        it fails.
@@ -2485,6 +2495,28 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: a text input's description is its accessible description, after its messages, and follows its
+///        binding.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> fieldDescriptionFollowsErrors(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<std::string>> errors{probe.runtime(), std::vector<std::string>{}};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::textInput({.field = {.errors = [&errors] { return errors.get(); },
+                                                .description = "Required range 2–8 °C"}})};
+    probe.settle();
+    Checks checks;
+    auto const read = [&probe, &view] { return probe.descriptionOf(view.root()).value_or("(none read)"); };
+    checks.text("the description", "Required range 2–8 °C", read());
+    errors.set({"Outside 2–8 °C"});
+    probe.settle();
+    checks.text("the description after an error", "Outside 2–8 °C\nRequired range 2–8 °C", read());
+    errors.set({});
+    probe.settle();
+    checks.text("the description once the error cleared", "Required range 2–8 °C", read());
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
@@ -2522,7 +2554,7 @@ struct SelectionReport {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 50> const cases{{
+    static std::array<ConformanceCase, 51> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -2594,6 +2626,8 @@ struct SelectionReport {
         {.name = "a removable badge reports its removal once", .run = detail::removableBadgeReportsRemoval},
         {.name = "a chart shows its current summary", .run = detail::chartShowsCurrentSummary},
         {.name = "a Text with spans reads as its runs' characters", .run = detail::textSpansReadAsCharacters},
+        {.name = "a field's description is its accessible description, after its messages",
+         .run = detail::fieldDescriptionFollowsErrors},
     }};
     return cases;
 }

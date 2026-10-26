@@ -81,6 +81,9 @@ public:
     [[nodiscard]] std::string textOf(ui::Widget const& widget) override {
         return _fault == Fault::WrongText ? "?" : WidgetBase::of(widget).probeText();
     }
+    [[nodiscard]] std::optional<std::string> descriptionOf(ui::Widget const& widget) override {
+        return WidgetBase::of(widget).accessibleDescription();
+    }
     [[nodiscard]] bool visibleOf(ui::Widget const& widget) override { return WidgetBase::of(widget).userVisible(); }
     [[nodiscard]] bool enabledOf(ui::Widget const& widget) override { return WidgetBase::of(widget).enabled(); }
 

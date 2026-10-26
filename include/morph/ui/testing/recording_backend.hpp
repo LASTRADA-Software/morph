@@ -889,7 +889,8 @@ public:
     }
 };
 
-/// @brief The `FieldWidget` half of every fake field: properties `readonly`, `required`, `errors`, `stale`.
+/// @brief The `FieldWidget` half of every fake field: properties `readonly`, `required`, `errors`, `stale`,
+///        `description` and `tone`.
 /// @tparam Interface The field interface the fake implements.
 template <typename Interface>
 class FakeField : public FakeLeaf<Interface> {
@@ -913,6 +914,14 @@ public:
     /// @brief Records property `stale`.
     /// @param stale Whether the value is being recomputed.
     void setStale(bool stale) override { this->set("stale", formatBool(stale)); }
+
+    /// @brief Records property `description`.
+    /// @param description The line.
+    void setDescription(std::string_view description) override { this->set("description", formatText(description)); }
+
+    /// @brief Records property `tone`.
+    /// @param tone The tone.
+    void setTone(Tone tone) override { this->set("tone", enumName(tone)); }
 };
 
 /// @brief A fake `TextWidget`: properties `text`, `spans` (as `formatSpans` gives them), `role`.
@@ -921,6 +930,18 @@ public:
     using FakeField<TextWidget>::FakeField;
     void setText(std::string_view text) override { set("text", formatText(text)); }
     void setSpans(std::vector<TextSpan> const& spans) override { set("spans", formatSpans(spans)); }
+    /// @brief Refuses a description: a text is not described.
+    /// @throws std::logic_error always.
+    void setDescription(std::string_view description) override {
+        static_cast<void>(description);
+        throw std::logic_error{"RecordingBackend: a text is not described"};
+    }
+    /// @brief Refuses a tone: a text is not toned.
+    /// @throws std::logic_error always.
+    void setTone(Tone tone) override {
+        static_cast<void>(tone);
+        throw std::logic_error{"RecordingBackend: a text is not toned"};
+    }
     void setRole(TextRole role) override { set("role", enumName(role)); }
 };
 

@@ -159,6 +159,8 @@ Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, Fil
 | `required` | A mark that the field must be given, after its caption when the field draws one, else beside its control; a text's follows its last line. Whether a value is missing is the application's to decide, and to show through `errors` |
 | `errors` | The messages shown with the field, in order. Which errors show, and when (spec 5's `shownErrors`), is decided before they reach this property |
 | `stale` | The value shown is the last known one while a newer one is computed |
+| `description` | A line that describes the field, drawn under its control after its messages, and announced as its accessible description after them. Not on a text: the mount refuses a `Text` that has one |
+| `tone` | An evaluation of the value that does not make it invalid (`Tone`; `Neutral` is none): the control is outlined in the tone and the description drawn in its colour. A field with errors is drawn as `Err` whatever its tone. Not on a text |
 
 **Field chrome.** A TextInput, Select and DateTimeInput carry the field's `label` and `showLabel` (set once;
 default `false`). With `showLabel` the input draws the label as a visible caption above its control; without
@@ -266,8 +268,9 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
    of the chord pressed as a widget callback. A new widget is already visible, enabled,
    content-sized, neither draggable nor a drop target, and has none of the rest, so a node that
    says nothing more costs no call. Then, for text and the inputs, `FieldState` the same way:
-   `readonly`, `required` and `stale` only when bound or `true`, `errors` only when bound or not
-   empty. A new field is editable, not required, without errors and not stale.
+   `readonly`, `required` and `stale` only when bound or `true`, `errors` and `description` only when bound or not
+   empty, `tone` only when bound or not `Neutral`. A new field is editable, not required, without errors, not
+   stale, undescribed and untoned.
 3. The kind's own props and callbacks. Every `Prop` is applied, even one that holds its default: a
    constant calls its setter once; a binding makes a `Computed` (equality-gated, so an unchanged
    result calls nothing) and an `Effect` that calls one setter — except a Tabs index and a

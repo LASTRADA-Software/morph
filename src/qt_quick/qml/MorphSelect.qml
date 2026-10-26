@@ -50,6 +50,7 @@ MorphField {
         palette.buttonText: root.scheme.text
         palette.text: root.scheme.text
         background: MorphInputBackground {
+            tone: root.shownTone
             scheme: root.scheme
             focused: combo.visualFocus || combo.popup.visible
             readOnly: root.readOnly
@@ -130,6 +131,30 @@ MorphField {
                 required property int index
                 required property string modelData
                 text: modelData
+                // The style's indicator, with its border in the field's tone while it has one.
+                indicator: Rectangle {
+                    objectName: "radioIndicator"
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    x: radioButton.leftPadding
+                    y: radioButton.topPadding + (radioButton.availableHeight - height) / 2
+                    radius: width / 2
+                    color: radioButton.down ? radioButton.palette.light : radioButton.palette.base
+                    border.width: radioButton.visualFocus ? 2 : 1
+                    border.color: root.shownTone !== 0 ? root.toneOf(root.shownTone)
+                                                       : radioButton.visualFocus ? radioButton.palette.highlight
+                                                                                 : radioButton.palette.mid
+
+                    Rectangle {
+                        x: (parent.width - width) / 2
+                        y: (parent.height - height) / 2
+                        width: 20
+                        height: 20
+                        radius: width / 2
+                        color: radioButton.palette.text
+                        visible: radioButton.checked
+                    }
+                }
                 contentItem: Text {
                     leftPadding: radioButton.indicator.width + radioButton.spacing
                     text: radioButton.text

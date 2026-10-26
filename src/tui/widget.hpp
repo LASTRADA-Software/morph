@@ -6,6 +6,7 @@
 #include <core/tui/InputEvent.hpp>
 #include <core/tui/Rect.hpp>
 #include <core/tui/Tooltip.hpp>
+#include <algorithm>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -102,6 +103,8 @@ public:
     void applyTooltip(std::string_view text) { _tooltip = text; }
     /// What the hover shows: the tooltip, and a field adds its messages.
     [[nodiscard]] virtual std::string hoverText() const { return _tooltip; }
+    /// What assistive technology reads as the widget's description; none for a widget that is not described.
+    [[nodiscard]] virtual std::string accessibleDescription() const { return {}; }
     /// Declares the chords this widget handles while the focus is inside it.
     void applyKeys(std::vector<std::string> const& chords, std::function<void(std::string)> onChord);
     /// Runs the handler of the chord @p key is, when this widget declares it. A view that handles keys itself calls
@@ -316,6 +319,15 @@ private:
 
 /// Draws @p marks right-aligned on the canvas's first row, over what is there.
 void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks);
+/// @p text split at '\n'.
+[[nodiscard]] std::vector<std::string_view> splitLines(std::string_view text);
+/// The display width of @p text in cells.
+[[nodiscard]] int displayWidth(std::string_view text);
+/// A tone's style: the theme's info, success, warning or error style, and the normal text for `Neutral`.
+[[nodiscard]] ::core::tui::Style const& toneStyle(::core::tui::Theme const& theme, ui::Tone tone);
+/// Draws a field's description under its control: each line muted, or in @p tone's style while toned, clipped at
+/// the canvas's width.
+void paintFieldDescription(::core::tui::Canvas& canvas, std::string_view description, ui::Tone tone);
 /// The required mark drawn after a caption or a text's last line, a space before it.
 inline constexpr std::string_view kRequiredMark = " *";
 /// Draws @p caption on the canvas's first row, followed by the required mark in the error style while @p required,
@@ -359,9 +371,13 @@ public:
 /// Implements the field state of field interface @p Interface: read-only, required, errors and stale.
 ///
 /// A terminal shows the state as marks at the right edge of the control's first row, `paintMarks` drawing them: `*`
-/// for a required field that draws no caption, `!` for one with errors, `~` for a stale value. A captioned field's
-/// `*` follows its caption instead (`paintCaption`), and a text's its last line. The messages show on hover, after
-/// the tooltip. A field that edits checks `readOnly()` before it reports an edit.
+/// for a required field that draws no caption, `!` for one with errors or toned `err` or `warn` (the terminal has
+/// no outline), `~` for a stale value. A captioned field's `*` follows its caption instead (`paintCaption`), and a
+/// text's its last line. The description takes the rows under the control, muted or in the tone's style. The
+/// messages, then the description, are the field's accessible description, and show on hover after the tooltip.
+/// A field that edits checks `readOnly()` before it reports an edit.
+///
+/// A kind sizes and draws its control (`controlSize`, `paintControl`); the field adds the description's rows.
 template <class Interface>
 class TuiField : public TuiWidget<Interface> {
 public:
@@ -382,16 +398,67 @@ public:
         _stale = stale;
         this->refresh();
     }
+    void setDescription(std::string_view description) override {
+        _description = std::string{description};
+        this->refresh();
+    }
+    void setTone(ui::Tone tone) override {
+        _tone = tone;
+        this->refresh();
+    }
     [[nodiscard]] bool readOnly() const override { return _readOnly; }
-    [[nodiscard]] std::string hoverText() const override {
-        std::string text = WidgetBase::hoverText();
+    /// What assistive technology reads as the field's description: its messages, then its description.
+    [[nodiscard]] std::string accessibleDescription() const override {
+        std::string text;
         for (std::string const& error : _errors) {
             text += text.empty() ? error : "\n" + error;
         }
+        if (!_description.empty()) {
+            text += text.empty() ? _description : "\n" + _description;
+        }
         return text;
+    }
+    [[nodiscard]] std::string hoverText() const override {
+        std::string text = WidgetBase::hoverText();
+        std::string const described = accessibleDescription();
+        if (!described.empty()) {
+            text += text.empty() ? described : "\n" + described;
+        }
+        return text;
+    }
+    [[nodiscard]] ::core::tui::Size naturalSize() const final {
+        ::core::tui::Size size = controlSize();
+        if (!_description.empty()) {
+            for (auto const line : splitLines(_description)) {
+                size.width = std::max(size.width, displayWidth(line));
+                ++size.height;
+            }
+        }
+        return size;
+    }
+    void paint(::core::tui::Canvas& canvas) final {
+        int const rows = descriptionRows();
+        auto control = canvas.subcanvas(
+            {.x = 0, .y = 0, .width = canvas.width(), .height = std::max(0, canvas.height() - rows)});
+        paintControl(control);
+        if (rows > 0) {
+            auto below = canvas.subcanvas({.x = 0,
+                                           .y = control.height(),
+                                           .width = canvas.width(),
+                                           .height = canvas.height() - control.height()});
+            detail::paintFieldDescription(below, _description, _tone);
+        }
     }
 
 protected:
+    /// The size of the control the kind draws, its caption included, without the description.
+    [[nodiscard]] virtual ::core::tui::Size controlSize() const = 0;
+    /// Draws the control, its caption included, on the canvas left above the description.
+    virtual void paintControl(::core::tui::Canvas& canvas) = 0;
+    /// The rows the description takes under the control.
+    [[nodiscard]] int descriptionRows() const {
+        return _description.empty() ? 0 : static_cast<int>(splitLines(_description).size());
+    }
     /// Draws the control's marks at the right edge of the canvas's first row; @p required false leaves out the `*`,
     /// for a kind that draws it elsewhere.
     void paintMarks(::core::tui::Canvas& canvas, bool required = true) const {
@@ -427,7 +494,7 @@ private:
         if (_required && required && _caption.empty()) {
             out += '*';
         }
-        if (!_errors.empty()) {
+        if (!_errors.empty() || _tone == ui::Tone::Err || _tone == ui::Tone::Warn) {
             out += '!';
         }
         if (_stale) {
@@ -441,6 +508,8 @@ private:
     bool _stale = false;
     std::vector<std::string> _errors;
     std::string _caption;
+    std::string _description;
+    ui::Tone _tone = ui::Tone::Neutral;
 };
 
 /// Implements the Common setters and `moveChild` of container interface @p Interface over ContainerBase.
@@ -510,10 +579,6 @@ struct StackSpec {
 /// Places @p children inside @p area (in the container's coordinates) as `stackAreas` says. Hidden children get an
 /// empty area, so they neither render nor take a click (see `forgetDrawnBounds`).
 void arrangeStack(std::span<WidgetBase* const> children, ::core::tui::Rect area, StackSpec const& spec);
-/// @p text split at '\n'.
-[[nodiscard]] std::vector<std::string_view> splitLines(std::string_view text);
-/// The display width of @p text in cells.
-[[nodiscard]] int displayWidth(std::string_view text);
 /// Draws @p runs one after another from row @p row, column @p column, in @p style, a strong run bold; every cell is
 /// monospace already, so a mono run is drawn as the others. A run's '\n' starts the next row at column 0 while
 /// @p multiline, and is drawn as a space otherwise.

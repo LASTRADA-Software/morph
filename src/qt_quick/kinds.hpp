@@ -39,6 +39,10 @@ public:
     void setText(std::string_view text) override;
     void setRole(ui::TextRole role) override;
     void setSpans(std::vector<ui::TextSpan> const& spans) override;
+    /// A text is not described; the mount never asks.
+    void setDescription(std::string_view description) override;
+    /// A text is not toned; the mount never asks.
+    void setTone(ui::Tone tone) override;
     [[nodiscard]] std::string shownText() const override;
 };
 
