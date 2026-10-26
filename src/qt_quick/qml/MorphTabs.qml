@@ -28,9 +28,9 @@ MorphWidget {
     }
 
     function placeChosen() {
-        if (bar.currentIndex >= 0 && bar.contentItem instanceof ListView) {
-            bar.contentItem.positionViewAtIndex(bar.currentIndex, ListView.Contain)
-        }
+        const list = bar.contentItem as ListView
+        if (bar.currentIndex >= 0 && list)
+            list.positionViewAtIndex(bar.currentIndex, ListView.Contain)
     }
 
     // A hidden bar never holds the focus: the workspace's chords must reach a page when a second tab arrives.
