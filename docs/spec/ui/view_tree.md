@@ -122,7 +122,7 @@ lowers them to the kinds below.
 | `Slider` | `slider` | `value` (`std::int64_t`), `minimum`, `maximum`, `step` (the three set once), `onChange` (each step while a drag lasts), `onCommit` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePicker` | `filePicker` | `path`, `mode` (`FilePickerMode{Open, Save}`, set once), `onPicked` |
 | `Banner` | `banner` | `tone` (`Tone{Neutral, Info, Ok, Warn, Err}`), `text`, `action` (`ActionButton{label, onClick}`; an empty label shows no button), `dismissible` (set once), `onDismiss` — a dismissal leaves the banner shown: the application hides it |
-| `Badge` | `badge` | `tone`, `text`, `icon` (set once) |
+| `Badge` | `badge` | `tone`, `text`, `icon` (set once), `onRemove` (set once; given, the badge is removable and takes the focus), `removeLabel` (the remove control's accessible name; empty: `Remove ` and the text) |
 | `Progress` | `progress` | `value` (`std::optional<double>`, 0 to 1; `nullopt` is indeterminate), `label` |
 | `Steps` | `steps` | `items` (`Step{label, state}`, `StepState{Pending, Active, Done, Failed}`), `current` (`std::optional<std::size_t>`) |
 | `KeyValue` | `keyValue` | `items` (`KeyValueItem{label, value}`) |

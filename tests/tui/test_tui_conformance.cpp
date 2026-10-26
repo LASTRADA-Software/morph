@@ -138,7 +138,15 @@ public:
     }
 
     // Esc: on a banner, which the probe focuses first; in a dialog or a drawer, whose opening moved the focus inside.
+    // Esc, as a dialog or a focused banner takes it; a removable badge is focused and removed with Delete.
     void dismiss(ui::Widget& widget) override {
+        if (dynamic_cast<morph::tui::detail::BadgeImpl*>(&WidgetBase::of(widget)) != nullptr) {
+            focusByClick(widget);
+            settle();
+            send(special(KeyCode::Delete));
+            settle();
+            return;
+        }
         if (dynamic_cast<morph::tui::detail::BannerImpl*>(&WidgetBase::of(widget)) != nullptr) {
             focusByClick(widget);
         }

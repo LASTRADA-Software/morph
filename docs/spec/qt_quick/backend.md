@@ -161,7 +161,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | DateTimeInput | `MorphDateTimeInput` | `yyyy-MM-dd` or `yyyy-MM-dd HH:mm` in the display zone | the instant typed, once the user finishes; empty is cleared |
 | Slider | `MorphSlider` | an integer `Slider` | the rounded value moved to |
 | FilePicker | `MorphFilePicker` | a path and a button opening Qt Quick Dialogs' `FileDialog` | the local path picked |
-| Banner, Badge, Progress, Steps, KeyValue, EmptyState | the component of that name | as the backend contract says | a banner's action and dismissal, an empty state's action |
+| Banner, Badge, Progress, Steps, KeyValue, EmptyState | the component of that name; a removable badge's `ToolButton` (`remove`, drawing `close`, its accessible name `removeLabel`) is the badge's focus target | as the backend contract says | a banner's action and dismissal, a badge's removal, an empty state's action |
 | Collapsible | `MorphCollapsible` | a toggle with the title, the header beside it, the content below while open | the open state asked for |
 | DropZone | `MorphDropZone` | a framed `DropArea` for files | the local paths of a drop it took |
 

@@ -1089,6 +1089,11 @@ struct Badge {
     std::string icon;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief Called when the user removes the badge; empty: the badge has no remove control and takes no focus.
+    ///        Set once.
+    Action onRemove;
+    /// @brief The remove control's accessible name; empty: `Remove ` and the badge's text.
+    Prop<std::string> removeLabel;
 };
 
 /// @brief A progress bar.

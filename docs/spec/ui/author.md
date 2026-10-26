@@ -171,6 +171,8 @@ expression of one),
 `{"lit": {"stretch": w}}`), which the loader checks; a record built with `obj` is evaluated at mount. `with(key, handle)` and
 `withText(key, text)` set any other key, and `Node{json}` wraps a node no builder spells.
 
+- **`badge`** takes its text, tone and icon, or `BadgeOptions{text, tone, icon, onRemove, removeLabel}` for one the
+  user can remove.
 - **`menu`** takes `MenuItem{label, icon, keys, checked, enabled, onClick, items, separator, description, visible}`
   entries, each key written only when given; `menuSeparator()` is an entry with `separator`, which writes nothing else.
   `menuButton(MenuButtonOptions{label, icon, emphasis}, items)` writes a `style: button` menu; an icon-only one names

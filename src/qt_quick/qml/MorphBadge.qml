@@ -3,7 +3,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 
-// A short label in a tone, with an optional icon.
+// A short label in a tone, with an optional icon. A removable badge draws a remove button after its text, which
+// takes the focus; a click on it, or Delete, Backspace, Enter or Space while it has the focus, removes the badge.
 MorphWidget {
     id: root
 
@@ -12,6 +13,15 @@ MorphWidget {
     property int tone: 0
     property string text: ""
     property string icon: ""
+    // Whether the badge has a remove button, and the button's accessible name; set by C++ before the first frame.
+    property bool removable: false
+    property string removeLabel: ""
+
+    focusTarget: root.removable ? remove : root
+
+    function removeIt() {
+        root.fire("remove", undefined)
+    }
 
     // The icon's URL in the theme's set; without one, the icon's name is drawn before the text, as text.
     readonly property string iconSource: Theme.iconSource(root.icon)
@@ -49,6 +59,32 @@ MorphWidget {
             font: Theme.bodyFont
             text: (root.icon !== "" && root.iconSource === "" ? root.icon + " " : "") + root.text
             color: root.toneOf(root.tone)
+        }
+
+        ToolButton {
+            id: remove
+            objectName: "remove"
+            visible: root.removable
+            focusPolicy: Qt.StrongFocus
+            padding: 0
+            height: label.implicitHeight
+            width: visible ? label.implicitHeight : 0
+            anchors.verticalCenter: parent.verticalCenter
+            icon.source: Theme.iconSource("close")
+            icon.color: "transparent"
+            text: icon.source.toString() !== "" ? "" : "×"
+            font: Theme.bodyFont
+            palette.buttonText: root.toneOf(root.tone)
+            Accessible.name: root.removeLabel
+            Accessible.role: Accessible.Button
+            onClicked: root.removeIt()
+            Keys.onPressed: event => {
+                if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace || event.key === Qt.Key_Return
+                        || event.key === Qt.Key_Enter) {
+                    event.accepted = true
+                    root.removeIt()
+                }
+            }
         }
     }
 }

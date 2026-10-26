@@ -204,6 +204,7 @@ public:
     void setTone(ui::Tone tone) override;
     void setText(std::string_view text) override;
     void setIcon(std::string_view icon) override;
+    void setOnRemove(ui::Action onRemove, std::string_view label) override;
     [[nodiscard]] std::string shownText() const override;
 };
 

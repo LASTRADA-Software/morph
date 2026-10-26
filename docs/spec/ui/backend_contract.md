@@ -251,7 +251,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)`, `setOnCommit(value)` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
 | `BannerWidget` | `setTone`, `setText`, `setActionLabel`, `setDismissible` (once) | `setOnAction`, `setOnDismiss` |
-| `BadgeWidget` | `setTone`, `setText`, `setIcon` (once) | — |
+| `BadgeWidget` | `setTone`, `setText`, `setIcon` (once) | `setOnRemove(onRemove, label)`: only for a removable badge, which then draws a remove control after its text (the framework icon `close`) named `label`, and takes the focus; Delete, Backspace, Enter or Space on it, or a click on its control, calls `onRemove`. A badge without it takes no focus |
 | `ProgressWidget` | `setValue(optional<double>)`, `setLabel` | — |
 | `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)` | — |
 | `KeyValueWidget` | `setItems(vector<KeyValueItem>)` | — |
@@ -359,7 +359,7 @@ The headless reference backend and the test double for everything above the cont
   `selectionMode`, `selection` (the requested keys it marks, in the order requested),
   and `rowKey` on a row (Table); `mode`, `offset`, `value` (DateTimeInput); `range`, `value`
   (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `actionLabel`, `dismissible` (Banner);
-  `tone`, `text`, `icon` (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
+  `tone`, `text`, `icon`, and `removable` (the remove control's name) of a removable one (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
   (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title` (Drawer);
   `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
   `accept`, `multiple` (DropZone); `component`, `minVersion` and each prop as `prop.<name>` (Custom).
@@ -392,7 +392,7 @@ The headless reference backend and the test double for everything above the cont
   banner or empty state), `edit`, `submit` (Enter: the commit, then the submit), `commit` (focus
   leaving: the text the field shows), `moveCursor`, `toggle`, `choose`, `chooseIndex` (a menu's
   top-level entry or a tab), `chooseMenuEntry(id, path)`, `collapse`, `expand(id, open)` (a
-  collapsible section), `dismiss` (a dialog, a drawer or a dismissible banner), `resize(id,
+  collapsible section), `dismiss` (a dialog, a drawer, a dismissible banner, or a removable badge, whose `onRemove` it runs), `resize(id,
   sizes)`, `dropFiles(id, paths)` (true when the zone took the drop), `selectRows` (reported as `Replace`, its last
   key the anchor), `clickRow(id, key, RowClick)` (a click with its modifiers, as the selection model has it),
   `clickHeader(id, column)` (a sortable column's index reaches `onSort`; another header does nothing, as a
@@ -494,7 +494,7 @@ after it; its reading operations report what the widget shows now.
 | `click(widget)` | Activates a button |
 | `type(widget, text)` | Replaces a field's text as typing would: the field is cleared first, so it ends up holding exactly `text`; `onChange` may see intermediate texts |
 | `drag(source, target)` | Drags one widget onto another |
-| `dismiss(dialog)` | Dismisses a dialog or drawer (Esc on the TUI), or a dismissible banner |
+| `dismiss(dialog)` | Dismisses a dialog or drawer (Esc on the TUI), or a dismissible banner; removes a removable badge with its remove control |
 | `selectRows(table, rows)` | Selects rows by position, in the order the user picks them — at least one, and only one in a `Single` table — so the user's selection is exactly those rows |
 | `clickRow(table, row, click)` | Clicks a row by position as a user would, plain (`RowClick::Only`), with Ctrl (`Toggle`) or with Shift (`Range`) |
 | `clickHeader(table, column)` | Clicks a column's header as a user would |
@@ -589,6 +589,7 @@ Each case is named by the rule it checks:
     `B · 3`, and `B`'s page is the one shown.
 47. A button-style menu labelled `More` over `[A, separator, B, C]` reads `More`; choosing `[2]` runs `B`, and
     choosing the separator `[1]` then runs nothing.
+48. Dismissing a removable badge, the user removing it, runs its `onRemove` once.
 
 ### What the probe cannot reach
 

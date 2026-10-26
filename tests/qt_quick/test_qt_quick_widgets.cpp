@@ -5,6 +5,8 @@
 // probe cannot reach"): read-only fields of every kind, unreachable widgets, and controlled inputs other than a
 // text field snapping back.
 
+#include <QAccessible>
+#include <QAccessibleInterface>
 #include <QColor>
 #include <QDate>
 #include <QDateTime>
@@ -626,6 +628,38 @@ TEST_CASE("qt_quick widgets: the field state shows errors, required, stale", "[q
     CHECK(item.opacity() < 1.0);
     text->setStale(false);
     CHECK(item.opacity() == 1.0);
+}
+
+// Mutation: leave `removable` unwritten in BadgeImpl::setOnRemove (no remove button is shown or reached).
+TEST_CASE("qt_quick widgets: a removable badge's remove button is named and removes it", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto plain = scene.backend().createBadge(column.get());
+    plain->setText("Plain");
+    auto badge = scene.backend().createBadge(column.get());
+    badge->setText("Result");
+    int removals = 0;
+    badge->setOnRemove([&removals] { ++removals; }, "Remove Result");
+    scene.settle();
+    auto* const remove = Scene::itemOf(*badge).findChild<QQuickItem*>(QStringLiteral("remove"));
+    REQUIRE(remove != nullptr);
+    CHECK(remove->isVisible());
+    auto const* const plainRemove = Scene::itemOf(*plain).findChild<QQuickItem*>(QStringLiteral("remove"));
+    REQUIRE(plainRemove != nullptr);
+    CHECK_FALSE(plainRemove->isVisible());
+
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface* const named = QAccessible::queryAccessibleInterface(remove);
+    REQUIRE(named != nullptr);
+    CHECK(named->text(QAccessible::Name) == QStringLiteral("Remove Result"));
+    QAccessible::setActive(wasActive);
+
+    scene.click(*remove);
+    CHECK(removals == 1);
+    remove->forceActiveFocus();
+    scene.key(Qt::Key_Delete);
+    CHECK(removals == 2);
 }
 
 TEST_CASE("qt_quick widgets: the display kinds show what they are given", "[qt_quick]") {

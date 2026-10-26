@@ -541,6 +541,7 @@
     { "name": "a separator that is false", "doc": { "view": { "kind": "menu", "items": [ { "separator": false } ] } }, "at": "/view/items/0/separator", "reason": "`separator` is `true`" },
     { "name": "a trigger label on a bar menu", "doc": { "view": { "kind": "menu", "label": "More", "items": [] } }, "at": "/view/label", "reason": "is a button-style menu's trigger" },
     { "name": "an unknown menu style", "doc": { "view": { "kind": "menu", "style": "pill", "items": [] } }, "at": "/view/style", "reason": "not one of the values of `style`" },
+    { "name": "a removeLabel without onRemove", "doc": { "view": { "kind": "badge", "text": "A", "removeLabel": "Drop A" } }, "at": "/view/removeLabel", "reason": "the badge gives no `onRemove`" },
     { "name": "a grid with columns and tracks", "doc": { "view": { "kind": "grid", "columns": 2, "tracks": [ {} ], "children": [] } }, "at": "/view/tracks", "reason": "a grid takes `columns` or `tracks`, not both" },
     { "name": "a grid with no tracks", "doc": { "view": { "kind": "grid", "tracks": [], "children": [] } }, "at": "/view/tracks", "reason": "lists at least one track" },
     { "name": "a track aligned stretch", "doc": { "view": { "kind": "grid", "tracks": [ { "align": "stretch" } ], "children": [] } }, "at": "/view/tracks/0/align", "reason": "start, center or end" },

@@ -97,7 +97,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Slider | `[====\|----] value` | Left, Right, Home, End, press and drag on the track |
 | FilePicker | a path field, prompted `Open: ` or `Save: ` | typing; Enter |
 | Banner | its text in its tone, `[ action ]`, `[x]` when dismissible | Enter runs the action; Esc or Delete dismisses; a click on either |
-| Badge | `[text]` in its tone, a framework icon's glyph before the text | — |
+| Badge | `[text]` in its tone, a framework icon's glyph before the text; a removable one `[text ×]`, inverse while focused | a removable one: Delete, Backspace, Enter or Space while focused, or a click on the `×`, removes it; a click elsewhere on it focuses it |
 | Progress | `[####......] 40%` and the label; `<=>` when indeterminate | — |
 | Steps | a row per step: `[ ]` pending, `[>]` active, `[x]` done, `[!]` failed; the current one accented | — |
 | KeyValue | captions, then the values lined up after the widest | — |

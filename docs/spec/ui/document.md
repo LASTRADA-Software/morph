@@ -189,7 +189,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | `slider` | `value`, `min`, `max`, `step`, `label`, `onChange`, `onCommit` | as `textInput` |
 | `filePicker` | `accept`, `multiple`, `mode`, `label`, `onPick` | |
 | `banner` | `tone`, `text`, `dismissible`, `action` (`{label, onClick}`), `onDismiss` | |
-| `badge` | `tone`, `text`, `icon` | |
+| `badge` | `tone`, `text`, `icon`, `onRemove` (commands: the badge draws a remove control after its text and takes the focus, and removing it runs them; a removable badge is a filter chip), `removeLabel` (the control's accessible name, only with `onRemove`; default `Remove ` and the text, translated with `t`) | |
 | `progress` | `value` (0 to 1; a decimal is read exactly, at whatever places it carries), `label` | |
 | `steps` | `items`, `current` | |
 | `keyValue` | `items` | |

@@ -496,6 +496,27 @@ TEST_CASE("ui::Mounted: a separator hidden entries leave at an end or beside ano
     CHECK(ran == Lines{"print"});
 }
 
+// Mutation: drop the default in the badge's mount (the control is then named by an empty label).
+TEST_CASE("ui::Mounted: a removable badge names its control after its text, and removing it runs once", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<std::string> text{runtime, std::string{"Result"}};
+    int removals = 0;
+    ui::Mounted const view{runtime, backend,
+                           ui::column({.children = {ui::badge({.text = [&] { return text.get(); },
+                                                                .onRemove = [&removals] { ++removals; }}),
+                                                     ui::badge({.text = std::string{"Plain"}})}})};
+    CHECK(backend.prop(2, "removable") == "Remove Result");
+    CHECK_FALSE(backend.hasProp(3, "removable"));
+    text.set("Sample");
+    owner.runAll();
+    CHECK(backend.prop(2, "removable") == "Remove Sample");
+    backend.dismiss(2);
+    CHECK(removals == 1);
+    CHECK_THROWS_AS(backend.dismiss(3), std::logic_error);
+}
+
 // Mutations: skip the enabled check (on the entry, or on an entry above it) in RecordingBackend::chooseMenuEntry.
 TEST_CASE("ui::Mounted: a disabled menu entry, or one inside a disabled entry, runs nothing", "[ui]") {
     Owner owner;

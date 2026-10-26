@@ -927,8 +927,11 @@ inline constexpr std::array<KeySpec, 7> kActionButtonKeys = {{{"id", Shape::Name
 inline constexpr std::array<KeySpec, 4> kHeadBadgeKeys = {
     {{"tone", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}, {"visible", Shape::Condition}}};
 /// @brief The keys of `badge`.
-inline constexpr std::array<KeySpec, 3> kBadgeKeys = {
-    {{"tone", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}}};
+inline constexpr std::array<KeySpec, 5> kBadgeKeys = {{{"tone", Shape::Expr},
+                                                       {"text", Shape::Expr},
+                                                       {"icon", Shape::Expr},
+                                                       {"onRemove", Shape::Commands},
+                                                       {"removeLabel", Shape::Expr}}};
 /// @brief The keys of `progress`.
 inline constexpr std::array<KeySpec, 2> kProgressKeys = {{{"value", Shape::Expr}, {"label", Shape::Expr}}};
 /// @brief The keys of `steps`.
@@ -3372,6 +3375,9 @@ private:
             checkGrid(node);
         } else if (node.kind == "menu") {
             checkMenu(node);
+        } else if (node.kind == "badge" && node.prop("removeLabel") != nullptr && node.event("onRemove") == nullptr) {
+            refuse(pointerAppend(node.path, "removeLabel"),
+                   "`removeLabel` names a removable badge's remove control; the badge gives no `onRemove`");
         } else if (node.kind == "textInput") {
             static constexpr std::array<std::string_view, 3> kCommit = {"change", "blur", "enter"};
             checkChoice(node, "commitOn", kCommit);

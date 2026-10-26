@@ -742,6 +742,15 @@ public:
     /// @brief Sets the icon; called once.
     /// @param icon The name of an icon in the theme's icon map; empty shows none.
     virtual void setIcon(std::string_view icon) = 0;
+
+    /// @brief Makes the badge removable: it draws a remove control after its text, drawn as the framework icon
+    ///        `close`, and takes the focus. Delete, Backspace, Enter or Space on it, or a click on its control, calls
+    ///        @p onRemove. The mount calls it only for a badge with a remove handler, at mount and whenever the
+    ///        label changes; a badge it is never called on takes no focus.
+    /// @param onRemove The handler.
+    /// @param label    The remove control's accessible name.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): a sink every override moves from.
+    virtual void setOnRemove(Action onRemove, std::string_view label) = 0;
 };
 
 /// @brief A progress bar.

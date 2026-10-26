@@ -74,7 +74,9 @@ private:
 };
 
 /// Badge: `[text]` in its tone. A terminal has no icon map: a framework icon is drawn as its glyph before the text,
-/// and any other is kept and not drawn.
+/// and any other is kept and not drawn. A removable badge draws `[text ×]`, takes the focus, and is removed by
+/// Delete, Backspace, Enter or Space while it holds the focus, or by a click on its `×`; a click elsewhere on it only
+/// focuses it.
 class BadgeImpl final : public TuiWidget<ui::BadgeWidget> {
 public:
     explicit BadgeImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
@@ -84,16 +86,24 @@ public:
         _icon = std::string{icon};
         refresh();
     }
+    void setOnRemove(ui::Action onRemove, std::string_view label) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::string probeText() const override { return _text; }
     [[nodiscard]] bool placedAcrossColumn() const override { return true; }
+    [[nodiscard]] bool wantsFocus() const override { return static_cast<bool>(_onRemove); }
     void paint(::core::tui::Canvas& canvas) override;
+    [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
+    void activate() override;
+    void click(::core::tui::Point cell) override;
 
 private:
     [[nodiscard]] std::string caption() const;
+    /// Runs the remove handler, which may destroy this badge.
+    void remove();
     ui::Tone _tone = ui::Tone::Neutral;
     std::string _text;
     std::string _icon;
+    ui::Action _onRemove;
 };
 
 /// Progress: a bar of `#` over `.` and the percentage, or `<=>` for an indeterminate one, then the label.

@@ -1613,6 +1613,19 @@ private:
         bind(scope, spec.tone, [&widget](Tone tone) { widget.setTone(tone); });
         bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
         widget.setIcon(spec.icon);
+        if (spec.onRemove) {
+            // An empty label names the control after the badge's text, which may be bound as well.
+            auto const labelOf = [removeLabel = spec.removeLabel, text = spec.text] {
+                std::string const label = removeLabel.evaluate();
+                return label.empty() ? "Remove " + text.evaluate() : label;
+            };
+            Prop<std::string> const label = spec.removeLabel.isBound() || spec.text.isBound()
+                                                ? Prop<std::string>(labelOf)
+                                                : Prop<std::string>(labelOf());
+            bind(scope, label, [&widget, onRemove = event(spec.onRemove)](std::string const& shown) {
+                widget.setOnRemove(onRemove, shown);
+            });
+        }
         return widget;
     }
 

@@ -242,6 +242,12 @@ void BadgeImpl::setIcon(std::string_view icon) {
     write("icon", toQString(icon));
 }
 
+void BadgeImpl::setOnRemove(ui::Action onRemove, std::string_view label) {
+    write("removable", true);
+    write("removeLabel", toQString(label));
+    relay().on(QStringLiteral("remove"), actionHandler(std::move(onRemove)));
+}
+
 std::string BadgeImpl::shownText() const { return toUtf8(read("text").toString()); }
 
 ProgressImpl::ProgressImpl(Context& context, ui::ContainerWidget* parent)

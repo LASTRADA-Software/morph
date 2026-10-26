@@ -474,6 +474,14 @@ TEST_CASE("a menu button writes its style and trigger, and a separator writes no
           R"("icon":"more","emphasis":"ghost"})");
 }
 
+// Mutation: drop `onRemove` from the badge's writer.
+TEST_CASE("a removable badge writes its remove commands and label", "[ui][author]") {
+    CHECK(text(ui::badge({.text = "Result", .onRemove = ui::notify("gone"), .removeLabel = "Drop Result"}).json())
+              .contains(R"("onRemove":)"));
+    CHECK(text(ui::badge({.text = "Result", .onRemove = ui::notify("gone"), .removeLabel = "Drop Result"}).json())
+              .contains(R"("removeLabel":"Drop Result")"));
+}
+
 // Mutation: drop the tracks branch of grid (no `tracks` is written).
 TEST_CASE("a grid's tracks are written as parts, each key only when given", "[ui][author]") {
     CHECK(text(ui::grid(ui::Nodes{}, {.tracks = {{.width = ui::fixed(3)},

@@ -6824,6 +6824,10 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     if (kind == "badge") {
         Badge spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Neutral, toneOf), .text = textProp("text")};
         spec.icon = onceText("icon");
+        if (Commands const* const onRemove = node.event("onRemove")) {
+            spec.onRemove = [this, ctx, onRemove] { runEvent(onRemove, ctx, Value{}); };
+            spec.removeLabel = textProp("removeLabel");
+        }
         commonOf(node, ctx, element, spec.common);
         return ui::badge(std::move(spec));
     }

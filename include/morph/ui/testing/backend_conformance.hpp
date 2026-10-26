@@ -118,8 +118,9 @@ public:
     /// @param target The widget it is dropped on.
     virtual void drag(Widget& source, Widget& target) = 0;
 
-    /// @brief Dismisses a dialog or drawer as a user would (Esc on the TUI), or a dismissible banner.
-    /// @param dialog The dialog, drawer or banner.
+    /// @brief Dismisses a dialog or drawer as a user would (Esc on the TUI), or a dismissible banner, or removes a
+    ///        removable badge with its remove control.
+    /// @param dialog The dialog, drawer, banner or badge.
     virtual void dismiss(Widget& dialog) = 0;
 
     /// @brief Selects rows of a table as a user would, so that the user's selection is exactly these rows.
@@ -1574,6 +1575,21 @@ private:
     return checks.result();
 }
 
+/// @brief Case: dismissing a removable badge, the user removing it, runs its `onRemove` once.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> removableBadgeReportsRemoval(ConformanceProbe& probe) {
+    int removals = 0;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::badge({.text = std::string{"Result"}, .onRemove = [&removals] { ++removals; }})};
+    probe.settle();
+    probe.dismiss(view.root());
+    probe.settle();
+    Checks checks;
+    checks.that(removals == 1, "removing the badge ran onRemove " + std::to_string(removals) + " times, not once");
+    return checks.result();
+}
+
 /// @brief Case: typing into a read-only input reaches no handler; once editable again, it does.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -2438,7 +2454,7 @@ struct SelectionReport {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 47> const cases{{
+    static std::array<ConformanceCase, 48> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -2507,6 +2523,7 @@ struct SelectionReport {
         {.name = "relabelled tabs keep the highlighted tab and its page", .run = detail::relabelledTabsKeepHighlight},
         {.name = "a button-style menu reports the entry past a separator, and never the separator",
          .run = detail::buttonMenuSkipsSeparator},
+        {.name = "a removable badge reports its removal once", .run = detail::removableBadgeReportsRemoval},
     }};
     return cases;
 }

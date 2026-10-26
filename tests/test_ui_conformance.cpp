@@ -307,7 +307,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 47);
+    REQUIRE(cases.size() == 48);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -375,7 +375,8 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
           "a closed collapsible's content takes no input, its header does",
           "a drop zone takes a drop whole or refuses it whole",
           "a click on a sortable header asks to sort by it, and no other header or setter does",
-          "a button-style menu reports the entry past a separator, and never the separator"}) {
+          "a button-style menu reports the entry past a separator, and never the separator",
+          "a removable badge reports its removal once"}) {
         INFO(name);
         CHECK(deadInput.contains(name));
     }

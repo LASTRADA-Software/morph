@@ -1265,13 +1265,22 @@ private:
     int _shown = 0;
 };
 
-/// @brief A fake `BadgeWidget`: properties `tone`, `text`, `icon`.
+/// @brief A fake `BadgeWidget`: properties `tone`, `text`, `icon`, and `removable` of a removable one.
 class FakeBadge final : public FakeLeaf<BadgeWidget> {
 public:
     using FakeLeaf<BadgeWidget>::FakeLeaf;
     void setTone(Tone tone) override { set("tone", enumName(tone)); }
     void setText(std::string_view text) override { set("text", formatText(text)); }
     void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
+
+    /// @brief Records property `removable`, the remove control's name, and keeps @p onRemove for
+    ///        `RecordingBackend::dismiss`.
+    /// @param onRemove The handler.
+    /// @param label    The remove control's accessible name.
+    void setOnRemove(Action onRemove, std::string_view label) override {
+        set("removable", formatText(label));
+        callbacks().dismiss = std::move(onRemove);
+    }
 };
 
 /// @brief A fake `ProgressWidget`: properties `value` (as `formatFraction` gives it), `label`.
@@ -2234,17 +2243,23 @@ public:
     }
 
     /// @brief Dismisses an open dialog or drawer, as Esc does on the TUI: it closes, then `onDismiss` runs. Or
-    ///        dismisses a dismissible banner, which stays shown: the application hides it.
-    /// @param widgetId The dialog, drawer or banner.
-    /// @throws std::logic_error when the widget is none of those, or is a banner that is not dismissible.
+    ///        dismisses a dismissible banner, which stays shown: the application hides it. Or removes a removable
+    ///        badge, as its remove control does: `onRemove` runs, and the application takes it away.
+    /// @param widgetId The dialog, drawer, banner or badge.
+    /// @throws std::logic_error when the widget is none of those, is a banner that is not dismissible, or is a badge
+    ///         that is not removable.
     void dismiss(int widgetId) {
-        detail::Record const& record = expectKind(widgetId, "dismiss", {"Dialog", "Drawer", "Banner"});
+        detail::Record const& record = expectKind(widgetId, "dismiss", {"Dialog", "Drawer", "Banner", "Badge"});
         if (record.kind == "Banner" && !flagIs(record, "dismissible", true)) {
             throw std::logic_error{"RecordingBackend: dismiss of Banner#" + std::to_string(widgetId) +
                                    ", which is not dismissible"};
         }
+        if (record.kind == "Badge" && !record.props.contains("removable")) {
+            throw std::logic_error{"RecordingBackend: dismiss of Badge#" + std::to_string(widgetId) +
+                                   ", which is not removable"};
+        }
         if (reachable(record)) {
-            if (record.kind != "Banner") {
+            if (record.kind != "Banner" && record.kind != "Badge") {
                 _store->setByUser(widgetId, "open", detail::formatBool(false));
             }
             invoke(record.callbacks.dismiss);

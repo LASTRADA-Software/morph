@@ -4378,6 +4378,34 @@ struct BannerOptions {
     return detail::NodeWriter{"badge"}.put("tone", tone).put("text", text).put("icon", icon).done();
 }
 
+/// @brief Options of a `badge` that may be removed.
+struct BadgeOptions {
+    /// @brief The label.
+    AnyHandle text;
+    /// @brief The tone.
+    AnyHandle tone;
+    /// @brief An icon of the theme's icon map.
+    AnyHandle icon;
+    /// @brief Commands run when the user removes the badge; given, the badge draws a remove control and takes the
+    ///        focus.
+    Commands onRemove;
+    /// @brief The remove control's accessible name; absent: `Remove ` and the text.
+    AnyHandle removeLabel;
+};
+
+/// @brief A `badge` node with its options.
+/// @param options The text, tone, icon, and what removing it does.
+/// @return The node.
+[[nodiscard]] inline Node badge(BadgeOptions const& options) {
+    return detail::NodeWriter{"badge"}
+        .put("tone", options.tone)
+        .put("text", options.text)
+        .put("icon", options.icon)
+        .put("onRemove", options.onRemove)
+        .put("removeLabel", options.removeLabel)
+        .done();
+}
+
 /// @brief A `progress` node.
 /// @param value The fraction from 0 to 1; `null` is indeterminate.
 /// @param label The label.

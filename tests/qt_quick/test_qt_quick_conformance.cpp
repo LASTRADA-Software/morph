@@ -120,6 +120,11 @@ public:
             mouseClick(item != nullptr ? item->findChild<QQuickItem*>(QStringLiteral("dismiss")) : nullptr);
             return;
         }
+        if (auto const* const badge = dynamic_cast<detail::BadgeImpl const*>(&widget)) {
+            QQuickItem const* const item = badge->item();
+            mouseClick(item != nullptr ? item->findChild<QQuickItem*>(QStringLiteral("remove")) : nullptr);
+            return;
+        }
         _scene.key(Qt::Key_Escape);
     }
 

@@ -198,10 +198,50 @@ std::string BadgeImpl::caption() const {
     return glyph.empty() ? _text : std::string{glyph} + " " + _text;
 }
 
-::core::tui::Size BadgeImpl::naturalSize() const { return {.width = displayWidth(caption()) + 2, .height = 1}; }
+// The remove control's accessible name has no place on a terminal, which names the badge by its text.
+void BadgeImpl::setOnRemove(ui::Action onRemove, std::string_view label) {
+    static_cast<void>(label);
+    _onRemove = std::move(onRemove);
+    refresh();
+}
+
+// The brackets, and for a removable badge a space and the `×` before the closing one.
+::core::tui::Size BadgeImpl::naturalSize() const {
+    return {.width = displayWidth(caption()) + (_onRemove ? 4 : 2), .height = 1};
+}
 
 void BadgeImpl::paint(::core::tui::Canvas& canvas) {
-    canvas.putString(0, 0, "[" + caption() + "]", toneStyle(canvas.theme(), _tone));
+    ::core::tui::Style style = toneStyle(canvas.theme(), _tone);
+    if (_onRemove && hasFocus()) {
+        style.inverse = true;
+    }
+    std::string const glyph{ui::iconGlyph("close")};
+    canvas.putString(0, 0, "[" + caption() + (_onRemove ? " " + glyph : std::string{}) + "]", style);
+}
+
+EventResult BadgeImpl::key(::core::tui::KeyEvent const& key) {
+    if (_onRemove && (isActivation(key) || isPlainKey(key, KeyCode::Delete) || isPlainKey(key, KeyCode::Backspace))) {
+        remove();
+        return EventResult::Handled;
+    }
+    return EventResult::Ignored;
+}
+
+void BadgeImpl::activate() { remove(); }
+
+// The `×` is the cell before the closing bracket.
+void BadgeImpl::click(::core::tui::Point cell) {
+    if (_onRemove && cell.y == 0 && cell.x == displayWidth(caption()) + 2) {
+        remove();
+    }
+}
+
+void BadgeImpl::remove() {
+    if (!_onRemove || !actionable()) {
+        return;
+    }
+    auto const handler = _onRemove;
+    handler();
 }
 
 void ProgressImpl::setValue(std::optional<double> value) {
