@@ -7722,6 +7722,7 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
         Drawer spec{
             .open = std::move(open),
             .title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf),
+            .description = bindProp<std::string>(ctx, node.prop("description"), std::string{}, stringOf),
             .child = std::move(body),
             .onDismiss = std::move(onDismiss),
             .side = side && textOf(once(ctx, side), session.formatting()) == "start" ? Side::Start : Side::End};
@@ -7730,6 +7731,7 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
     }
     Dialog spec{.open = std::move(open),
                 .title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf),
+                .description = bindProp<std::string>(ctx, node.prop("description"), std::string{}, stringOf),
                 .child = std::move(body),
                 .onDismiss = std::move(onDismiss)};
     commonOf(node, ctx, element, spec.common);

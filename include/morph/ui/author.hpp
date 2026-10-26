@@ -3880,6 +3880,8 @@ struct TabsOptions {
 struct DialogOptions {
     /// @brief The title: the accessible name.
     AnyHandle title;
+    /// @brief A line under the title, in the head, ruled off from the body: the accessible description.
+    AnyHandle description;
     /// @brief Whether it is open; absent for `open` and `close` commands alone.
     AnyHandle open;
     /// @brief When its element errors show.
@@ -3909,7 +3911,10 @@ namespace detail {
     DeclScope scope;
     Nodes const children = builder(scope);
     NodeWriter node{kind};
-    node.text("id", element.name()).put("title", options.title).put("open", options.open);
+    node.text("id", element.name())
+        .put("title", options.title)
+        .put("description", options.description)
+        .put("open", options.open);
     if (options.showErrors) {
         node.text("showErrors", showErrorsName(*options.showErrors));
     }

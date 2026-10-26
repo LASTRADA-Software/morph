@@ -1169,6 +1169,10 @@ private:
     template <typename Spec, typename OverlayWidget>
     Widget& mountOverlay(reactive::Scope& scope, Spec const& spec, OverlayWidget& widget) {
         bind(scope, spec.title, [&widget](std::string const& title) { widget.setTitle(title); });
+        if (spec.description.isBound() || !spec.description.constant().empty()) {
+            bind(scope, spec.description,
+                 [&widget](std::string const& description) { widget.setDescription(description); });
+        }
         auto& content = scope.make<std::unique_ptr<reactive::Scope>>();
         auto& shownOpen = scope.make<std::optional<bool>>();
         // A bound `open` is controlled: a dismissal the document refuses opens the dialog again, over the content it

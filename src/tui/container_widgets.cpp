@@ -692,6 +692,11 @@ void OverlayCore::setTitle(std::string_view title) {
     _self->refresh();
 }
 
+void OverlayCore::setDescription(std::string_view description) {
+    _description = std::string{description};
+    _self->refresh();
+}
+
 ::core::tui::Size FooterImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Horizontal, 1); }
 
 std::vector<::core::tui::Rect> FooterImpl::childAreas(::core::tui::Size size) const {
@@ -712,10 +717,13 @@ ui::ContainerWidget& OverlayFooter::of(ContainerBase& overlay) {
     return *_footer;
 }
 
+// A description takes the first row inside the frame and a rule the second, so the content starts two rows lower.
 std::vector<::core::tui::Rect> OverlayCore::childAreas(::core::tui::Size size) const {
-    return stackAreas(_self->children(),
-                      {.x = 2, .y = 1, .width = std::max(0, size.width - 4), .height = std::max(0, size.height - 2)},
-                      StackSpec{.axis = ui::Axis::Vertical});
+    int const head = _description.empty() ? 0 : 2;
+    return stackAreas(
+        _self->children(),
+        {.x = 2, .y = 1 + head, .width = std::max(0, size.width - 4), .height = std::max(0, size.height - 2 - head)},
+        StackSpec{.axis = ui::Axis::Vertical});
 }
 
 bool OverlayCore::showsFrame() const {
@@ -735,11 +743,12 @@ bool OverlayCore::showsFrame() const {
 ::core::tui::Size OverlayCore::frameSize() const {
     auto const inner = stackNaturalSize(_self->children(), ui::Axis::Vertical, 0);
     auto const area = _self->context().screen->viewportArea();
-    int const width = std::max(inner.width + 4, displayWidth(_title) + 4);
+    int const width = std::max({inner.width + 4, displayWidth(_title) + 4, displayWidth(_description) + 4});
+    int const head = _description.empty() ? 0 : 2;
     if (_side.has_value()) {
         return {.width = std::min(width, area.width), .height = area.height};
     }
-    return {.width = std::min(width, area.width), .height = std::min(inner.height + 2, area.height)};
+    return {.width = std::min(width, area.width), .height = std::min(inner.height + 2 + head, area.height)};
 }
 
 // A dialog is centred; a drawer stands against its side, the whole height of the screen.
@@ -761,6 +770,14 @@ void OverlayCore::paintFrame(::core::tui::Canvas& canvas) {
     canvas.drawBox(canvas.area(), ::core::tui::BorderStyle::Single, theme.dialogBorder);
     auto title = canvas.subcanvas({.x = 2, .y = 0, .width = std::max(0, canvas.width() - 4), .height = 1});
     title.putString(0, 0, _title, theme.dialogTitle);
+    if (!_description.empty() && canvas.height() > 3) {
+        // One row, clipped at the frame's width like any terminal text, then a rule across the frame's inside.
+        auto line = canvas.subcanvas({.x = 2, .y = 1, .width = std::max(0, canvas.width() - 4), .height = 1});
+        line.putString(0, 0, splitLines(_description).front(), theme.textMuted);
+        for (int column = 1; column + 1 < canvas.width(); ++column) {
+            canvas.putString(2, column, "─", theme.dialogBorder);
+        }
+    }
     _self->placeChildren(childAreas(canvas.size()));
 }
 

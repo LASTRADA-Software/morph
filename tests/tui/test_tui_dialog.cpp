@@ -5,12 +5,14 @@
 #include <core/tui/InputEvent.hpp>
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Rect.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/view.hpp>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "tui/container_widgets.hpp"
@@ -998,4 +1000,30 @@ TEST_CASE("tui dialog: the footer is the bottom row, right-aligned, and stays af
     CHECK(harness.draw() == Rows{"[ Behind ]", "", "", "         ┌─Confirm─┐", "         │ Again   │",
                                  "         │  [ OK ] │", "         └─────────┘"});
     text.reset();
+}
+
+// Mutation: leave the content's areas where they start without a description (the first child overlaps the rule).
+TEST_CASE("tui dialog: a description takes the first row inside the frame, a rule the second, then the content",
+          "[tui][dialog]") {
+    Harness harness{40, 12};
+    Scene scene{harness, {}};
+    scene.dialog->setDescription("Sign the results");
+    auto const text = harness.make<TextImpl>(scene.body.get());
+    text->setText("Sure?");
+    scene.dialog->setOpen(true);
+    Rows const rows = harness.draw();
+    auto const at = [&rows](std::string_view needle) {
+        for (std::size_t row = 0; row < rows.size(); ++row) {
+            if (rows.at(row).contains(needle)) {
+                return static_cast<int>(row);
+            }
+        }
+        return -1;
+    };
+    int const title = at("Confirm");
+    REQUIRE(title >= 0);
+    CHECK(at("Sign the results") == title + 1);
+    CHECK(rows.at(static_cast<std::size_t>(title) + 2).find("──") != std::string::npos);
+    CHECK(at("Sure?") == title + 3);
+    CHECK(scene.dialog->accessibleDescription() == "Sign the results");
 }

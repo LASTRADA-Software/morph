@@ -386,6 +386,9 @@ public:
         }
     }
     void setTitle(std::string_view title) override { this->write("title", toQString(title)); }
+    void setDescription(std::string_view description) override {
+        this->write("description", toQString(description));
+    }
     void setOnDismiss(ui::Action onDismiss) override {
         this->relay().on(QStringLiteral("dismiss"), [onDismiss = std::move(onDismiss)](QVariant const&) {
             if (onDismiss) {

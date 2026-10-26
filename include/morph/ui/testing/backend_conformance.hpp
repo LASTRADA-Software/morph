@@ -2517,6 +2517,26 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: an open dialog's description is its accessible description, and follows its binding.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> dialogDescriptionFollowsBinding(ConformanceProbe& probe) {
+    reactive::Signal<std::string> description{probe.runtime(), std::string{"Enter your password to sign."}};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::dialog({.open = true,
+                                   .title = "Sign",
+                                   .description = [&description] { return description.get(); },
+                                   .child = ui::text({.text = "body"})})};
+    probe.settle();
+    Checks checks;
+    auto const read = [&probe, &view] { return probe.descriptionOf(view.root()).value_or("(none read)"); };
+    checks.text("the dialog's description", "Enter your password to sign.", read());
+    description.set("Signing as Approved.");
+    probe.settle();
+    checks.text("the dialog's description after a change", "Signing as Approved.", read());
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
@@ -2554,7 +2574,7 @@ struct SelectionReport {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 51> const cases{{
+    static std::array<ConformanceCase, 52> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -2628,6 +2648,8 @@ struct SelectionReport {
         {.name = "a Text with spans reads as its runs' characters", .run = detail::textSpansReadAsCharacters},
         {.name = "a field's description is its accessible description, after its messages",
          .run = detail::fieldDescriptionFollowsErrors},
+        {.name = "an open dialog's description is its accessible description",
+         .run = detail::dialogDescriptionFollowsBinding},
     }};
     return cases;
 }

@@ -263,7 +263,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `ScrollWidget` | — | — |
 | `SlotWidget` | `setScrollable(scrollable)` (a new slot does not scroll) | — |
 | `TabsWidget` | `setTabs(labels)` (may be called again; a call with the same number of labels replaces the captions and keeps the highlight, the shown page and the keyboard focus), `setSelected(index)` (past the last highlights none), `setBarShown(shown)` (whether the strip of tab buttons is drawn; the selected page shows either way, and a new tabs widget shows its strip) | `setOnSelect(index)` |
-| `DialogWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
+| `DialogWidget` | `setOpen`, `setTitle`, `setDescription` (a line under the title in the head, not scrolled with the content, and the overlay's accessible description), `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `ToastWidget` | `show(text, tone)` (one call: shows the message and restarts the dismiss interval regardless of whether the toast is already on-screen) | — |
 | `BusyWidget` | `setActive`, `setLabel` | — |
 | `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)`, `setSelectColumn(bool)`, `setSelectAllLabel(text)`, `setRowLabel(row, text)`, `setRowHeading(row)` (once, after `setRowKey`: the row is never marked, reported or activated), `setExistingKeys(keys)` (every key, in row order, above the virtualization threshold), `setSort(optional<TableSort>)` (marks the column's header with the direction, or none; only for a table with a sortable column) | `setOnSelectionChange(keys, SelectionChange)`, `setOnActivate(Key)` (Enter or a double click), `setOnSort(column)` (a click on a sortable column's header, or Enter or Space on it where the header takes focus; the index counts the columns `setColumns` gave, which the select column is not one of; another header reports nothing). The backend never reorders rows for a sort: it shows `setSort`, and what a click means is the lowering's |
@@ -277,7 +277,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `KeyValueWidget` | `setItems(vector<KeyValueItem>)`, `setCaptionPlacement` (once, only for `Above`) | — |
 | `EmptyStateWidget` | `setTitle`, `setText`, `setIcon` (once), `setActionLabel` | `setOnAction` |
 | `ChartWidget` | `setData(ChartData)`, at mount and on every change (`view_tree.md`, Chart data); it takes no focus | — |
-| `DrawerWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open drawer |
+| `DrawerWidget` | `setOpen`, `setTitle`, `setDescription` (as a dialog's), `footer()` | `setOnDismiss` (Esc on the TUI), for an open drawer |
 | `SplitterWidget` | `setSizes(vector<int>)` | `setOnResize(sizes)` |
 | `CollapsibleWidget` | `setTitle`, `setHeader(child)` (at most once), `setOpen` | `setOnToggle(open)`, with the state the user asked for |
 | `DropZoneWidget` | `setAccept(extensions)`, `setMultiple` (both once) | `setOnDrop(paths)` |
@@ -375,13 +375,13 @@ The headless reference backend and the test double for everything above the cont
   (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
   `selected` is the option it marks, else `none`); `items` (Menu, as below), and a button-style menu's `style=Button` (at creation), `label`, `icon` and `emphasis`; `gap`, `align`, `justify` (Column, Row); `columns`,
   `tracks` (each width, then `;align=` where it is not `start`), `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
-  `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title` (Dialog); `active`, `label` (Busy);
+  `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title`, `description` (Dialog); `active`, `label` (Busy);
   `columns` (each `label:width`, then `;align=` and `;valign=` for a place other than the default),
   `selectionMode`, `selection` (the requested keys it marks, in the order requested),
   and `rowKey` on a row (Table); `mode`, `offset`, `value` (DateTimeInput); `range`, `value`
   (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `spans`, `actionLabel`, `dismissible` (Banner);
   `tone`, `text`, `icon`, and `removable` (the remove control's name) of a removable one (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
-  and `captions` (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title` (Drawer);
+  and `captions` (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title`, `description` (Drawer);
   `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
   `accept`, `multiple` (DropZone); `component`, `minVersion` and each prop as `prop.<name>` (Custom);
   `yRange`, `xRange`, `yLabel`, `yTicks`, `lines`, `series`, `summary` (Chart, each set only when its text
@@ -628,6 +628,8 @@ Each case is named by the rule it checks:
     runs' characters joined in order, a run's markup shown as characters.
 51. A text input described `Required range 2–8 °C` reads that as its accessible description; given the error
     `Outside 2–8 °C` it reads the error, a line feed and the description; the error cleared, the description again.
+52. An open dialog described `Enter your password to sign.` reads that as its accessible description, and
+    `Signing as Approved.` once the binding changes.
 
 ### What the probe cannot reach
 

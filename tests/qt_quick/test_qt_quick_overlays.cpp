@@ -3,6 +3,7 @@
 // Dialogs and drawers on the real Qt Quick engine: opened and closed by code without a dismissal, dismissed by
 // Escape or a click outside with one, and holding their content out of reach while closed.
 
+#include <QPointF>
 #include <QQuickItem>
 #include <QTest>
 #include <catch2/catch_template_test_macros.hpp>
@@ -254,4 +255,69 @@ TEST_CASE("qt_quick dialog: an explicit Fixed width overrides the content-driven
     qreal const wideWidth = widePopup->property("width").toReal();
 
     CHECK(wideWidth > narrowWidth);
+}
+
+namespace {
+
+/// The first item named @p name under @p root, depth first.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+QQuickItem* namedIn(QQuickItem const& root, QString const& name) {
+    for (QQuickItem* const child : root.childItems()) {
+        if (child->objectName() == name) {
+            return child;
+        }
+        if (QQuickItem* const found = namedIn(*child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Mutation: put the description inside the scroll's column (it then scrolls away); leave the scroll's cap without the
+// description's height (the footer is pushed past the window).
+TEMPLATE_TEST_CASE("qt_quick overlays: a description sits in the head under the title, ruled off and not scrolled",
+                   "[qt_quick]", ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    std::unique_ptr<TestType> overlay;
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(nullptr);
+    } else {
+        overlay = scene.backend().createDrawer(nullptr, ui::Side::End);
+    }
+    overlay->setTitle("Sign");
+    // Tall enough that a scroll area capped without it would push the footer past the window.
+    overlay->setDescription("Enter your password to sign the results.\nSecond line\nThird line\nFourth line\n"
+                            "Fifth line\nSixth line\nSeventh line\nEighth line");
+    std::vector<std::unique_ptr<ui::TextWidget>> rows;
+    for (int i = 0; i < 60; ++i) {
+        rows.push_back(scene.backend().createText(overlay.get()));
+        rows.back()->setText("row " + std::to_string(i));
+    }
+    auto const save = scene.backend().createButton(&overlay->footer());
+    save->setLabel("Done");
+    overlay->setOpen(true);
+    scene.settle();
+    QQuickItem const& overlayItem = Scene::itemOf(static_cast<ui::Widget&>(*overlay));
+    QQuickItem const& contentRoot = *scene.window().contentItem();
+    QQuickItem* const description = namedIn(contentRoot, QStringLiteral("description"));
+    QQuickItem* const rule = namedIn(contentRoot, QStringLiteral("headRule"));
+    REQUIRE(description != nullptr);
+    REQUIRE(rule != nullptr);
+    CHECK(rule->isVisible());
+    QQuickItem const& first = Scene::itemOf(*rows.front());
+    qreal const descriptionY = description->mapToScene(QPointF{0, 0}).y();
+    CHECK(descriptionY + description->height() <= rule->mapToScene(QPointF{0, 0}).y());
+    CHECK(rule->mapToScene(QPointF{0, 0}).y() < first.mapToScene(QPointF{0, 0}).y());
+    // Scrolled to the end, the head stays put and the footer stays inside the window.
+    rows.back()->focus();
+    scene.settle();
+    CHECK(description->mapToScene(QPointF{0, 0}).y() == descriptionY);
+    QQuickItem const& button = Scene::itemOf(*save);
+    CHECK(button.mapToScene(QPointF{0, 0}).y() + button.height() <= 600);
+    // The content column is the overlay's accessible node, named by the title.
+    auto* const node = qobject_cast<QQuickItem*>(detail::baseOf(*overlay)->part("accessibleItem"));
+    REQUIRE(node != nullptr);
+    CHECK(overlayItem.property("accessibleName").toString() == QStringLiteral("Sign"));
 }

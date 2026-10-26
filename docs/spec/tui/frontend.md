@@ -183,7 +183,10 @@ its top and bottom and columns at its sides.
 A dialog's or a drawer's box is an overlay shown while it is open and the user could see it. The box on top is modal:
 Tab cycles inside it, and neither the pointer nor a key reaches anything behind it. Opening moves the focus inside;
 closing hands it back to the widget that had it. Esc inside the open box closes it, and then calls `onDismiss`, as a
-toolkit's dismissal does: an application that keeps it open opens it again.
+toolkit's dismissal does: an application that keeps it open opens it again. A description is drawn muted on the
+first row inside the frame, under the title in the border, then a `─` rule row, and the content is laid out below,
+two rows lower; it is one row, clipped at the frame's width like any terminal text, and the box's
+`accessibleDescription()`.
 
 ## Keys and chords
 

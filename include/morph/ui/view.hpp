@@ -813,6 +813,9 @@ struct Dialog {
     Prop<bool> open;
     /// @brief The title.
     Prop<std::string> title;
+    /// @brief A line under the title, in the head, that describes the dialog and is its accessible description;
+    ///        empty shows none. Applied only when bound or not empty.
+    Prop<std::string> description;
     /// @brief The content; may be null.
     Node child;
     /// @brief Called when the user dismisses it (Esc on the TUI).
@@ -1334,6 +1337,8 @@ struct Drawer {
     Prop<bool> open;
     /// @brief The title.
     Prop<std::string> title;
+    /// @brief A line under the title, as a dialog's.
+    Prop<std::string> description;
     /// @brief The content; may be null.
     Node child;
     /// @brief Called when the user dismisses it (Esc on the TUI).

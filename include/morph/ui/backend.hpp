@@ -490,6 +490,11 @@ public:
     /// @param title The title, UTF-8.
     virtual void setTitle(std::string_view title) = 0;
 
+    /// @brief Shows a line under the title, in the head, which does not scroll with the content, and makes it the
+    ///        overlay's accessible description. The mount calls it only when bound or not empty.
+    /// @param description The line, UTF-8; empty shows none.
+    virtual void setDescription(std::string_view description) = 0;
+
     /// @brief Sets what a user dismissal (Esc on the TUI) of the open dialog calls.
     /// @param onDismiss The handler; empty does nothing.
     virtual void setOnDismiss(Action onDismiss) = 0;
@@ -858,6 +863,10 @@ public:
     /// @brief Replaces the title.
     /// @param title The title, UTF-8.
     virtual void setTitle(std::string_view title) = 0;
+
+    /// @brief Shows a line under the title, as `DialogWidget::setDescription` does.
+    /// @param description The line, UTF-8; empty shows none.
+    virtual void setDescription(std::string_view description) = 0;
 
     /// @brief Sets what a user dismissal (Esc on the TUI) calls.
     /// @param onDismiss The handler; empty does nothing.

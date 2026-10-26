@@ -265,10 +265,14 @@ public:
 
     void setOpen(bool open);
     void setTitle(std::string_view title);
+    /// The line under the title: drawn muted on the first row inside the frame, then a rule row, both above the
+    /// content, which loses those two rows.
+    void setDescription(std::string_view description);
     void setOnDismiss(ui::Action onDismiss) { _onDismiss = std::move(onDismiss); }
     /// Closes the overlay and calls `onDismiss`, as Esc does.
     void dismiss();
     [[nodiscard]] std::string const& title() const noexcept { return _title; }
+    [[nodiscard]] std::string const& description() const noexcept { return _description; }
     [[nodiscard]] ::core::tui::Component& frame() const noexcept { return *_frame; }
     [[nodiscard]] bool isOpen() const noexcept { return _open; }
     [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const;
@@ -296,6 +300,7 @@ private:
     std::optional<ui::Side> _side;
     std::unique_ptr<::core::tui::Component> _frame;  ///< A Frame.
     std::string _title;
+    std::string _description;
     ui::Action _onDismiss;
     bool _open = false;
     bool _framed = false;  ///< Whether the box showed when last seen.
@@ -337,6 +342,8 @@ public:
 
     void setOpen(bool open) override { _overlay.setOpen(open); }
     void setTitle(std::string_view title) override { _overlay.setTitle(title); }
+    void setDescription(std::string_view description) override { _overlay.setDescription(description); }
+    [[nodiscard]] std::string accessibleDescription() const override { return _overlay.description(); }
     void setOnDismiss(ui::Action onDismiss) override { _overlay.setOnDismiss(std::move(onDismiss)); }
     [[nodiscard]] ui::ContainerWidget& footer() override { return _footer.of(*this); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override { return {.width = 0, .height = 0}; }
@@ -368,6 +375,8 @@ public:
 
     void setOpen(bool open) override { _overlay.setOpen(open); }
     void setTitle(std::string_view title) override { _overlay.setTitle(title); }
+    void setDescription(std::string_view description) override { _overlay.setDescription(description); }
+    [[nodiscard]] std::string accessibleDescription() const override { return _overlay.description(); }
     void setOnDismiss(ui::Action onDismiss) override { _overlay.setOnDismiss(std::move(onDismiss)); }
     [[nodiscard]] ui::ContainerWidget& footer() override { return _footer.of(*this); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override { return {.width = 0, .height = 0}; }

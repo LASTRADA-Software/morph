@@ -563,5 +563,6 @@ TEST_CASE("qt_quick components: a dialog restyle without the footer part is refu
     QQmlEngine probeEngine;
     auto refused = components.restyle(probeEngine, "dialog", "BareDialog");
     REQUIRE_FALSE(refused.has_value());
-    CHECK(refused.error().reason == "restyle of `dialog`: BareDialog does not declare footer, footerChanged");
+    CHECK(refused.error().reason ==
+          "restyle of `dialog`: BareDialog does not declare description, descriptionChanged, footer, footerChanged");
 }

@@ -1266,12 +1266,13 @@ private:
     std::unique_ptr<FakeSlot> _footer;
 };
 
-/// @brief A fake `DialogWidget`: properties `open`, `title`; a `Footer` child once its footer is asked for.
+/// @brief A fake `DialogWidget`: properties `open`, `title`, `description`; a `Footer` child once its footer is asked for.
 class FakeDialog final : public FakeOverlay<DialogWidget> {
 public:
     using FakeOverlay<DialogWidget>::FakeOverlay;
     void setOpen(bool open) override { set("open", formatBool(open)); }
     void setTitle(std::string_view title) override { set("title", formatText(title)); }
+    void setDescription(std::string_view description) override { set("description", formatText(description)); }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
 };
 
@@ -1475,12 +1476,13 @@ public:
     void setOnAction(Action onAction) override { callbacks().action = std::move(onAction); }
 };
 
-/// @brief A fake `DrawerWidget`: properties `side`, `open`, `title`; a `Footer` child once its footer is asked for.
+/// @brief A fake `DrawerWidget`: properties `side`, `open`, `title`, `description`; a `Footer` child once its footer is asked for.
 class FakeDrawer final : public FakeOverlay<DrawerWidget> {
 public:
     using FakeOverlay<DrawerWidget>::FakeOverlay;
     void setOpen(bool open) override { set("open", formatBool(open)); }
     void setTitle(std::string_view title) override { set("title", formatText(title)); }
+    void setDescription(std::string_view description) override { set("description", formatText(description)); }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
 };
 

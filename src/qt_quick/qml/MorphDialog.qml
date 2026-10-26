@@ -10,6 +10,8 @@ MorphWidget {
     id: root
 
     property string title: ""
+    // A line under the title, in the head, divided from the body by a rule: the overlay's accessible description.
+    property string description: ""
     // Set while C++ opens or closes it, so that is not taken for a dismissal.
     property bool programmatic: false
     readonly property Item content: column
@@ -35,6 +37,11 @@ MorphWidget {
     }
 
     focusTarget: column
+    // A Popup takes no `Accessible` attached property, since it is not an Item, so the content column is the
+    // overlay's accessible node: a dialog named by its title, described by its description.
+    accessibleItem: contentColumn
+    defaultName: title
+    defaultRole: Accessible.Dialog
     implicitWidth: 0
     implicitHeight: 0
     // root is only a zero-sized placeholder for the Popup overlay below, which is reparented to the Overlay; without
@@ -87,6 +94,9 @@ MorphWidget {
 
         contentItem: ColumnLayout {
             id: contentColumn
+            Accessible.role: root.accessibleRole
+            Accessible.name: root.accessibleName
+            Accessible.description: root.description
             // A document does not know the window size, so the frontend keeps a wide dialog from running past it;
             // Math.min only ever shrinks, it does not stretch a narrow dialog's own natural width up to the cap.
             // contentItem is the Popup's root, not a layout's child, so its own width is set directly, not via a
@@ -108,6 +118,28 @@ MorphWidget {
                 text: root.title
             }
 
+            Label {
+                id: descriptionLabel
+                objectName: "description"
+                textFormat: Text.PlainText
+                font: Theme.bodyFont
+                color: Theme.cardScheme.muted
+                visible: root.description !== ""
+                text: root.description
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+
+            // Spans the content's width under the head while the description shows.
+            Rectangle {
+                id: headRule
+                objectName: "headRule"
+                visible: root.description !== ""
+                color: Theme.cardScheme.border
+                implicitHeight: 1
+                Layout.fillWidth: true
+            }
+
             // Only the content between the title and the footer scrolls, so both stay reachable however tall the
             // content is. Capped directly against the window, less what the title and footer and the Popup's own
             // margin already take: the one number nothing else needs to derive circularly from the scroll area's
@@ -119,7 +151,10 @@ MorphWidget {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.maximumHeight: Math.max(0, (popup.Overlay.overlay?.height ?? Infinity) - 4 * Theme.unitHeight -
-                                               titleLabel.height - footerArea.height - contentColumn.spacing * 2)
+                                               titleLabel.height - footerArea.height - contentColumn.spacing * 2 -
+                                               (root.description === "" ? 0 : descriptionLabel.height +
+                                                                              headRule.height +
+                                                                              contentColumn.spacing * 2))
                 clip: true
 
                 ColumnLayout {

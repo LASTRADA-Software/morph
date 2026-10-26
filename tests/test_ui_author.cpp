@@ -1515,3 +1515,10 @@ TEST_CASE("a text's spans are written as runs that the loader takes", "[ui][auth
     INFO((added ? std::string{} : added.error().message()));
     CHECK(added.has_value());
 }
+// Mutation: leave `description` out of the dialog writer (the key is not written).
+TEST_CASE("a dialog's description is written beside its title", "[ui][author]") {
+    auto const sign = ui::element("sign");
+    auto const json = text(ui::dialog(sign, {ui::text({.text = "x"})}, {.title = "Sign", .description = "Stored"})
+                               .json());
+    CHECK(json.contains(R"("title":"Sign","description":"Stored")"));
+}

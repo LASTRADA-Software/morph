@@ -831,8 +831,9 @@ inline constexpr std::array<KeySpec, 3> kTabsKeys = {
 inline constexpr std::array<KeySpec, 3> kTabKeys = {
     {{"id", Shape::Name}, {"label", Shape::Expr}, {"children", Shape::Nodes}}};
 /// @brief The keys of `dialog` and `drawer`.
-inline constexpr std::array<KeySpec, 9> kDialogKeys = {{{"open", Shape::Condition},
-                                                        {"title", Shape::Expr},
+inline constexpr std::array<KeySpec, 10> kDialogKeys = {{{"open", Shape::Condition},
+                                                         {"title", Shape::Expr},
+                                                         {"description", Shape::Expr},
                                                         {"showErrors", Shape::Text},
                                                         {"children", Shape::Nodes, {}, kInner},
                                                         {"onDismiss", Shape::Commands},
