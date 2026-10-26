@@ -204,8 +204,9 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
   (`qt_quick_chart_scale_2`).
 - **Description and tone.** `MorphField` carries `description` and `tone` (the `Tone` index, 0 none). A `description`
   label under the messages wraps, is muted or `toneOf(tone)`, and counts in the field's height; the field's
-  `accessibleDescription`, which every control declares as `Accessible.description`, is the messages and then the
-  description. `shownTone` is `Err` while the field has errors, else its tone, and outlines the control:
+  `accessibleDescription`, which every control declares as `Accessible.description`, is the messages, then the
+  description, then the kind's `announcedUnit` (a text input's unit), so a listener hears a value with its unit
+  while the name stays the label. `shownTone` is `Err` while the field has errors, else its tone, and outlines the control:
   `MorphInputBackground` takes `tone`, draws its border in the tone's colour focused or not (focus shows as the 2 px
   width), and a 2 px ring of the tone's fill outside it as a sibling `Rectangle`, since a `Rectangle` draws nothing
   outside itself. A check box draws its indicator's border in the tone, a radio select each indicator's, and a slider

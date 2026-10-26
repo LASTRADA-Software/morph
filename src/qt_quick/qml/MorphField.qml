@@ -37,9 +37,12 @@ MorphWidget {
     readonly property real markerRoom: Theme.spaceOf(1) + marker.implicitWidth
     readonly property real controlWidth: width - (!required || markerAfterCaption ? 0
                                                   : markerFollowsText ? markerRoom : marker.implicitWidth)
-    // What assistive technology reads as the field's description: its messages, then its description.
-    readonly property string accessibleDescription: description === "" ? errors.join("\n")
-                                                                       : errors.concat([description]).join("\n")
+    // The unit a kind shows beside its value, announced last, so a listener hears the value with its unit.
+    property string announcedUnit: ""
+    // What assistive technology reads as the field's description: its messages, then its description, then the unit.
+    readonly property string accessibleDescription: errors.concat(description === "" ? [] : [description])
+                                                          .concat(announcedUnit === "" ? [] : [announcedUnit])
+                                                          .join("\n")
 
     focusTarget: control ? control : root
     implicitWidth: Math.max(captionLabel.visible ? captionLabel.implicitWidth + (required ? markerRoom : 0) : 0,

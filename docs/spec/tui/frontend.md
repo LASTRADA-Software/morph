@@ -216,8 +216,8 @@ there. Esc ends a drag with no drop. A terminal without mouse reporting ignores 
 
 A field shows its state as marks at the right edge of its control's first row: `*` required, `!` with errors, `~`
 stale; a field toned `err` or `warn` adds `!` too, since the terminal draws no outline. Its description takes the
-rows under the control, muted or in the tone's style, one per line and clipped at the field's width; the messages
-and then the description are its `accessibleDescription()`, and its hover text follows the tooltip with them. A
+rows under the control, muted or in the tone's style, one per line and clipped at the field's width; the messages,
+the description and a text input's unit are its `accessibleDescription()`, and its hover text follows the tooltip with them. A
 captioned field draws its `*` after its caption instead, as ` *` in the error style, and its caption's width
 counts those two cells; a required text draws ` *` after its last line's end, and its natural width counts them, so
 in a row it is not drawn over the text's last characters (given less, it is drawn at the right edge). The

@@ -373,3 +373,18 @@ TEST_CASE("ui document: a group loads with its legend and children, and its keys
     REQUIRE_FALSE(column.has_value());
     CHECK(column.error().reason == gap.error().reason);
 }
+
+// Mutation: drop checkMultilineExtras (both documents load, and the icon's mount throws).
+TEST_CASE("ui document: a multiline text input refuses a unit and an icon", "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "u", "view": {"kind": "textInput", "label": "T", "unit": "°C"}})")
+              .has_value());
+    auto const unit = loadDocumentText(R"({"vocab": "ui/1", "id": "u", "view": {"kind": "textInput", "label": "T",
+        "mode": "multiline", "unit": "°C"}})");
+    REQUIRE_FALSE(unit.has_value());
+    CHECK(unit.error().path == "/view/unit");
+    CHECK(unit.error().reason == "a multiline input shows no unit");
+    auto const icon = loadDocumentText(R"({"vocab": "ui/1", "id": "u", "view": {"kind": "textInput", "label": "T",
+        "mode": "multiline", "icon": "search"}})");
+    REQUIRE_FALSE(icon.has_value());
+    CHECK(icon.error().path == "/view/icon");
+}

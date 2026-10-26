@@ -1295,3 +1295,14 @@ TEST_CASE("qt_quick widgets: a required mark follows a caption, or a text's last
     CHECK(textMark->x() < label.property("contentWidth").toReal() / 2);
     CHECK(textMark->x() > 0);
 }
+
+// Mutation: leave `announcedUnit` out of MorphField's accessible description (it then ends with the description).
+TEST_CASE("qt_quick widgets: a text input announces its unit after its description", "[qt_quick]") {
+    Scene scene;
+    auto const input = scene.backend().createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    input->setUnit("°C");
+    input->setDescription("Required range 2–8 °C");
+    scene.settle();
+    QString const declared = Scene::itemOf(*input).property("accessibleDescription").toString();
+    CHECK(declared == QStringLiteral("Required range 2–8 °C\n°C"));
+}

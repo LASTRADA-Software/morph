@@ -14,6 +14,7 @@ MorphField {
     property bool edited: false
     // The unit, drawn muted at the trailing edge inside the field; empty draws none.
     property string unit: ""
+    announcedUnit: unit
     // The fraction digits a number is entered with, -1 for an input that holds no number: carried for a kit's
     // restyle to read; the stock input draws nothing from it.
     property int decimals: -1

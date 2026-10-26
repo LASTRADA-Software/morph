@@ -6824,7 +6824,19 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         } else if (mode == "password") {
             spec.mode = TextInputMode::Password;
         }
-        spec.icon = onceText("icon");
+        // A multiline input shows no unit and no icon; a computed mode that turns out multiline is reported and
+        // its unit and icon left out, so the mount never meets them there. The loader refuses a literal one.
+        for (std::string_view const key : {std::string_view{"unit"}, std::string_view{"icon"}}) {
+            if (ExprPtr const given = node.prop(key); given != nullptr && spec.mode == TextInputMode::Multiline) {
+                report(given->path, "a multiline input shows no " + std::string{key});
+            }
+        }
+        if (spec.mode != TextInputMode::Multiline) {
+            spec.icon = onceText("icon");
+            if (node.prop("unit")) {
+                spec.unit = textProp("unit");
+            }
+        }
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);

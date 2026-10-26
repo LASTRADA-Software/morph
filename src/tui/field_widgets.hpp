@@ -100,6 +100,14 @@ public:
     [[nodiscard]] std::size_t cursor() const noexcept { return _field->cursor(); }
     [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
+    /// The messages, the description, then the unit, so a listener hears the value with its unit.
+    [[nodiscard]] std::string accessibleDescription() const override {
+        std::string text = TuiField::accessibleDescription();
+        if (!_unit.empty()) {
+            text += text.empty() ? _unit : "\n" + _unit;
+        }
+        return text;
+    }
     [[nodiscard]] std::string probeText() const override;
     void paintControl(::core::tui::Canvas& canvas) override;
 

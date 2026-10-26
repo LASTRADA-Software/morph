@@ -880,3 +880,32 @@ TEST_CASE("interpreter control: a field's tone evaluates its value without makin
     h.settle();
     CHECK(h.text("ready") == "false");
 }
+
+// Mutation: drop the unit's binding (no `unit` is recorded); drop the computed-mode check (the mount throws).
+TEST_CASE("interpreter control: a text input's unit is bound, and a computed multiline mode drops it with a report",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "unit",
+      "state": {"unit": {"init": "°C"}, "mode": {"init": "multiline"}},
+      "view": {"kind": "column", "children": [
+        {"kind": "textInput", "testId": "fixed", "label": "Temperature", "unit": "°C"},
+        {"kind": "textInput", "testId": "bound", "label": "Assay", "unit": {"ref": "unit"}},
+        {"kind": "textInput", "testId": "area", "label": "Note", "mode": {"ref": "mode"}, "unit": "%",
+         "icon": "search"},
+        {"kind": "button", "testId": "percent", "label": "%", "onClick": [{"set": "unit", "value": "% LC"}]}]}})");
+    CHECK(h.backend.prop(h.byTestId("TextInput", "fixed"), "unit") == "°C");
+    int const bound = h.byTestId("TextInput", "bound");
+    CHECK(h.backend.prop(bound, "unit") == "°C");
+    h.backend.click(h.byTestId("Button", "percent"));
+    h.settle();
+    CHECK(h.backend.prop(bound, "unit") == "% LC");
+    int const area = h.byTestId("TextInput", "area");
+    CHECK_FALSE(h.backend.hasProp(area, "unit"));
+    CHECK_FALSE(h.backend.hasProp(area, "icon"));
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.reason == "a multiline input shows no unit";
+          }) == 1);
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.reason == "a multiline input shows no icon";
+          }) == 1);
+}

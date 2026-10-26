@@ -371,8 +371,8 @@ The headless reference backend and the test double for everything above the cont
 - **Properties.** Every kind records `visible`, `enabled`, `layout` (as `width/height`, each followed by ` min=<n>`
   and ` max=<n>` for its bounds, then ` self=<align>` for an `alignSelf`), `dragKey`, `drop`, `a11yName`,
   `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run; text and the six
-  inputs record `readonly`, `required`, `errors`, `stale`, `description` and `tone`; and each kind its own: `text`, `spans`, `role` (Text); `label`, `emphasis`, `icon`, `style`, `selected` (Button); `mode`, `text`, `placeholder`
-  (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
+  inputs record `readonly`, `required`, `errors`, `stale`, `description` and `tone`; and each kind its own: `text`, `spans`, `role` (Text); `label`, `emphasis`, `icon`, `style`, `selected` (Button); `mode`, `text`, `placeholder`,
+  `unit`, `decimals`, `icon`, `caption`, `captionShown` (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
   `selected` is the option it marks, else `none`); `items` (Menu, as below), and a button-style menu's `style=Button` (at creation), `label`, `icon` and `emphasis`; `gap`, `align`, `justify` (Column, Row); `columns`,
   `tracks` (each width, then `;align=` where it is not `start`), `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
   `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title`, `description` (Dialog); `active`, `label` (Busy);

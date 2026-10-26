@@ -757,10 +757,11 @@ inline constexpr std::array<KeySpec, 7> kButtonKeys = {{{"label", Shape::Expr},
                                                         {"onClick", Shape::Commands},
                                                         {"onActivate", Shape::Commands}}};
 /// @brief The keys of `textInput`.
-inline constexpr std::array<KeySpec, 10> kTextInputKeys = {{{"value", Shape::Expr},
+inline constexpr std::array<KeySpec, 11> kTextInputKeys = {{{"value", Shape::Expr},
                                                             {"placeholder", Shape::Expr},
                                                             {"mode", Shape::Expr},
                                                             {"icon", Shape::Expr},
+                                                            {"unit", Shape::Expr},
                                                             {"commitOn", Shape::Text},
                                                             {"label", Shape::Expr},
                                                             {"showLabel", Shape::Flag},
@@ -3484,6 +3485,7 @@ private:
         } else if (node.kind == "textInput") {
             static constexpr std::array<std::string_view, 3> kCommit = {"change", "blur", "enter"};
             checkChoice(node, "commitOn", kCommit);
+            checkMultilineExtras(node);
         } else if (node.kind == "select") {
             static constexpr std::array<std::string_view, 2> kStale = {"clear", "keep"};
             checkChoice(node, "onStale", kStale);
@@ -3750,6 +3752,21 @@ private:
                 checkLiteralRun(run->literal, run->path);
             } else if (run->kind == ExprKind::Object) {
                 checkRunRecord(*run);
+            }
+        }
+    }
+
+    // A literal multiline text input with a unit or an icon: a text area holds no number and draws no icon.
+    static void checkMultilineExtras(DocNode const& node) {
+        ExprPtr const mode = node.prop("mode");
+        std::string const* const name =
+            mode != nullptr && mode->kind == ExprKind::Literal ? mode->literal.asString() : nullptr;
+        if (name == nullptr || *name != "multiline") {
+            return;
+        }
+        for (std::string_view const key : {std::string_view{"unit"}, std::string_view{"icon"}}) {
+            if (node.prop(key) != nullptr) {
+                refuse(pointerAppend(node.path, key), "a multiline input shows no " + std::string{key});
             }
         }
     }
