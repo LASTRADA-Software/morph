@@ -2754,6 +2754,8 @@ private:
     /// @brief A text's role: a literal one as the loader checked it; a computed one evaluated in its slot, where a
     ///        name of no role is reported once for its path and drawn `Normal`.
     Prop<TextRole> roleProp(LowerCtx const& ctx, ExprPtr const& expr);
+    /// A text's or a banner's `spans`, reported once at its path when it drops a run.
+    Prop<std::vector<TextSpan>> spansProp(LowerCtx const& ctx, ExprPtr const& expr);
 
     /// @brief A node's surface: the name of a theme surface, or empty for the default. A computed one is evaluated in
     ///        its slot; `null` is no surface, and any other value that is not a string is reported for the node's
@@ -6052,6 +6054,53 @@ inline constexpr std::string_view kRoleNames = "a role is normal, muted, heading
     return Tone::Neutral;
 }
 
+/// @brief A span list's runs: each element a record `{text, strong?, mono?}`, or a plain run of any other value
+///        but a list or `null`. A run's text is shown as `textOf` shows any value, so a computed number is a run of
+///        its digits, and a flag is set only by `true`.
+/// @param value   The list; `null` is no runs.
+/// @param format  How a run's value is written.
+/// @param dropped Set when the value is not a list, or an element is a list, `null`, or a record without `text`;
+///                such an element is left out.
+/// @return The runs, in order.
+[[nodiscard]] inline std::vector<TextSpan> spansOf(Value const& value, FormatContext const& format, bool& dropped) {
+    std::vector<TextSpan> spans;
+    if (value.isNull()) {
+        return spans;
+    }
+    ValueList const* const runs = value.asList();
+    if (runs == nullptr) {
+        dropped = true;
+        return spans;
+    }
+    auto const flag = [](Value const* field) {
+        bool const* const set = field != nullptr ? field->asBool() : nullptr;
+        return set != nullptr && *set;
+    };
+    for (Value const& run : *runs) {
+        if (run.asRecord() == nullptr) {
+            if (run.isNull() || run.asList() != nullptr) {
+                dropped = true;
+            } else {
+                spans.push_back(TextSpan{.text = textOf(run, format)});
+            }
+            continue;
+        }
+        Value const* const text = run.field("text");
+        if (text == nullptr) {
+            dropped = true;
+            continue;
+        }
+        spans.push_back(TextSpan{
+            .text = textOf(*text, format), .strong = flag(run.field("strong")), .mono = flag(run.field("mono"))});
+    }
+    return spans;
+}
+
+/// @brief What a span list with a run it drops is told.
+inline constexpr std::string_view kSpansReason =
+    "spans is a list of runs, each a value or a record with `text`; a list, a null or a record without `text` is "
+    "dropped";
+
 /// @brief A splitter's `sizes`: a list of numbers, each read as `intOf` reads it.
 /// @param value The value.
 /// @return The sizes; `nullopt` for anything but a list whose every item is an `int` or a decimal.
@@ -6245,6 +6294,17 @@ inline Prop<std::string> ScreenCore::surfaceOf(DocNode const& node, LowerCtx con
     }
     return slotProp<std::string>([scope = ctx.scope, bindings = ctx.bindings, expr, nameOf = std::move(nameOf)] {
         return nameOf(evalIn(*scope, bindings.get(), expr));
+    });
+}
+
+inline Prop<std::vector<TextSpan>> ScreenCore::spansProp(LowerCtx const& ctx, ExprPtr const& expr) {
+    return slotProp<std::vector<TextSpan>>([this, scope = ctx.scope, bindings = ctx.bindings, expr] {
+        bool dropped = false;
+        std::vector<TextSpan> spans = spansOf(evalIn(*scope, bindings.get(), expr), session.formatting(), dropped);
+        if (dropped) {
+            report(expr->path, kSpansReason);
+        }
+        return spans;
     });
 }
 
@@ -6548,7 +6608,13 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     };
 
     if (kind == "text") {
-        Text spec{.text = textProp("text"), .role = roleProp(ctx, node.prop("role"))};
+        Text spec{.role = roleProp(ctx, node.prop("role"))};
+        // A text with spans shows them, so its `text`, an older client's fallback, is not lowered.
+        if (ExprPtr const spans = node.prop("spans")) {
+            spec.spans = spansProp(ctx, spans);
+        } else {
+            spec.text = textProp("text");
+        }
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         return ui::text(std::move(spec));
@@ -6879,7 +6945,12 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         return lowerRows(node, ctx, element);
     }
     if (kind == "banner") {
-        Banner spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Info, toneOf), .text = textProp("text")};
+        Banner spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Info, toneOf)};
+        if (ExprPtr const spans = node.prop("spans")) {
+            spec.spans = spansProp(ctx, spans);
+        } else {
+            spec.text = textProp("text");
+        }
         spec.action = actionPart();
         spec.dismissible = onceBool("dismissible", false);
         spec.onDismiss = action("onDismiss");

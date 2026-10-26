@@ -17,13 +17,17 @@ public:
     explicit TextImpl(Context& context) : TuiField{context} { adopt(makeView(*this)); }
     void setText(std::string_view text) override;
     void setRole(ui::TextRole role) override;
+    void setSpans(std::vector<ui::TextSpan> const& spans) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::string probeText() const override { return _text; }
     [[nodiscard]] bool placedAcrossColumn() const override { return true; }
     void paint(::core::tui::Canvas& canvas) override;
 
 private:
+    // The characters shown: the text, or the runs joined.
     std::string _text;
+    // The runs, while the text has spans; empty for a plain text.
+    std::vector<ui::TextSpan> _runs;
     ui::TextRole _role = ui::TextRole::Normal;
 };
 

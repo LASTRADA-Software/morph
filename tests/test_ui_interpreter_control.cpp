@@ -4,6 +4,7 @@
 // concurrency modes and optimistic writes) and boundaries, mounted on RecordingBackend with a scripted dispatcher.
 
 #include <catch2/catch_test_macros.hpp>
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <string>
@@ -761,4 +762,46 @@ TEST_CASE("interpreter control: a grid's tracks reach the grid in place of a col
     int const plain = h.byTestId("Grid", "plain");
     CHECK(h.backend.prop(plain, "columns") == "2");
     CHECK_FALSE(h.backend.hasProp(plain, "tracks"));
+}
+
+// Mutation: lower `text` beside `spans`, and the fallback text is recorded; drop the report, and the diagnostic is
+// missing.
+TEST_CASE("interpreter control: a text's and a banner's spans record their runs in place of the text",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "spans",
+      "state": {"attempts": {"init": 3}, "count": {"init": 7}},
+      "view": {"kind": "column", "children": [
+        {"kind": "banner", "tone": "err", "testId": "refused",
+         "spans": {"list": [{"obj": {"text": "Password incorrect.", "strong": true}},
+                            {"fn": "format", "args": [" {0} of 5 attempts left before the account locks.",
+                                                      {"ref": "attempts"}]}]}},
+        {"kind": "text", "testId": "lot", "text": "fallback",
+         "spans": {"list": ["Lot ", {"obj": {"text": "L-26-0381", "mono": true}}]}},
+        {"kind": "text", "testId": "count", "spans": {"list": ["n=", {"ref": "count"}]}},
+        {"kind": "text", "testId": "bad",
+         "spans": {"list": ["a", {"ref": "count"}, {"if": [true, {"obj": {"x": {"ref": "count"}}}, "z"]}]}},
+        {"kind": "button", "testId": "fewer", "label": "Fewer",
+         "onClick": [{"set": "attempts", "value": 2}, {"set": "count", "value": 8}]}]}})");
+    int const banner = h.byTestId("Banner", "refused");
+    CHECK(h.backend.prop(banner, "spans") ==
+          "[Password incorrect.;strong, 3 of 5 attempts left before the account locks.]");
+    CHECK(h.backend.prop(banner, "text").empty());
+    int const lot = h.byTestId("Text", "lot");
+    CHECK(h.backend.prop(lot, "spans") == "[Lot ,L-26-0381;mono]");
+    CHECK_FALSE(h.backend.dump().contains("text=fallback"));
+    CHECK(h.backend.prop(h.byTestId("Text", "count"), "spans") == "[n\\=,7]");
+    int const bad = h.byTestId("Text", "bad");
+    CHECK(h.backend.prop(bad, "spans") == "[a,7]");
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.path == "/view/children/3/spans";
+          }) == 1);
+    h.backend.click(h.byTestId("Button", "fewer"));
+    h.settle();
+    CHECK(h.backend.prop(banner, "spans") ==
+          "[Password incorrect.;strong, 2 of 5 attempts left before the account locks.]");
+    CHECK(h.backend.prop(bad, "spans") == "[a,8]");
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.path == "/view/children/3/spans";
+          }) == 1);
 }

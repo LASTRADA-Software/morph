@@ -168,7 +168,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 
 | Kind | Keys (a ⓘ key is in the node's own scope) | Element values beyond `visible`, `enabled`, `valid`, `errors`, `shownErrors` |
 |---|---|---|
-| `text` | `text`, `role` (`normal`, the default, `muted`, `heading` (`title` is accepted as its alias), `section`, `error`, `success`, `mono`: an identifier, in the theme's fixed-pitch family at the body size) | |
+| `text` | `text`, `spans` (runs of emphasis, below), `role` (`normal`, the default, `muted`, `heading` (`title` is accepted as its alias), `section`, `error`, `success`, `mono`: an identifier, in the theme's fixed-pitch family at the body size) | |
 | `button` | `label`, `icon`, `emphasis` (`normal`, `primary`, `danger`, `ghost`), `style` (`push`, the default, or `item`: an entry of a list), `selected` (a condition: an item is the current entry; a push button is pressed in), `onClick`, `onActivate` | |
 | `textInput` | `value`, `placeholder`, `mode`, `icon` (an icon of the theme's icon set, drawn at the leading edge; refused on a multiline input), `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
 | `checkbox` | `label`, `checked`, `onToggle`, `onChange` | `checked` |
@@ -188,7 +188,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | `dateTimeInput` | `value`, `mode`, `label`, `showLabel`, `onChange`, `onCommit` | as `textInput` |
 | `slider` | `value`, `min`, `max`, `step`, `label`, `onChange`, `onCommit` | as `textInput` |
 | `filePicker` | `accept`, `multiple`, `mode`, `label`, `onPick` | |
-| `banner` | `tone`, `text`, `dismissible`, `action` (`{label, onClick}`), `onDismiss` | |
+| `banner` | `tone`, `text`, `spans` (as on `text`), `dismissible`, `action` (`{label, onClick}`), `onDismiss` | |
 | `badge` | `tone`, `text`, `icon`, `onRemove` (commands: the badge draws a remove control after its text and takes the focus, and removing it runs them; a removable badge is a filter chip), `removeLabel` (the control's accessible name, only with `onRemove`; default `Remove ` and the text, translated with `t`) | |
 | `progress` | `value` (0 to 1; a decimal is read exactly, at whatever places it carries), `label` | |
 | `steps` | `items`, `current` | |
@@ -213,6 +213,22 @@ in `date-time` mode, and `""` on clearing; a timestamp field writes the timestam
 whose type the document leaves undecided is written as the type it holds at the edit. The input reads its value as
 the expression language's date functions do ([`expressions.md`](expressions.md#semantics), "Dates and instants"):
 a `yyyy-MM-dd` string is a date, which it shows as midnight in the display zone, and `""` is a date not given yet.
+
+**Spans.** A `text`'s or a `banner`'s `spans` is an expression of a list of runs, the one way to emphasise part of
+a sentence: an identifier in the monospace face, a bold word. Each run is a record `{text, strong, mono}`, whose
+`text` is shown as any value is (a number as its digits) and whose `strong` and `mono` are booleans that default to
+`false`, or a plain value, a run with neither flag. The node's role gives every run its colour and size: a muted line
+with a `mono` run is muted in the mono face. Data is only ever the text of a run and is never parsed, so it cannot
+open a run of its own. A `spans` written as a `list` is checked at load: a literal run is a string, and an `obj` run
+has a `text`, no keys but `text`, `strong` and `mono`, and a literal flag that is a boolean. A computed run of another
+shape (a list, `null`, a record without `text`) is dropped and reported once at the node's `spans`. A node may give
+`text`, `spans` or both: a client that knows spans draws them and does not read `text`, and `text` beside `spans` is
+what a client older than spans draws, so a document that may reach one gives both.
+
+```json
+{"kind": "text", "role": "muted",
+ "spans": {"list": ["Signing as ", {"obj": {"text": {"ref": "meaningLabel"}, "strong": true}}, "."]}}
+```
 
 A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 

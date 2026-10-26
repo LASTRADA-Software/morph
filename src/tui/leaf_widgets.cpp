@@ -77,6 +77,13 @@ namespace {
 
 void TextImpl::setText(std::string_view text) {
     _text = std::string{text};
+    _runs.clear();
+    refresh();
+}
+
+void TextImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
+    _text = ui::spansText(spans);
+    _runs = spans;
     refresh();
 }
 
@@ -96,6 +103,11 @@ void TextImpl::setRole(ui::TextRole role) {
 
 void TextImpl::paint(::core::tui::Canvas& canvas) {
     ::core::tui::Style const style = roleStyle(canvas.theme(), _role);
+    if (!_runs.empty()) {
+        paintRuns(canvas, _runs, style, true);
+        paintMarks(canvas);
+        return;
+    }
     int row = 0;
     for (auto const line : splitLines(_text)) {
         if (row >= canvas.height()) {

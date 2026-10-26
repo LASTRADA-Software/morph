@@ -158,3 +158,16 @@ TEST_CASE("tui empty state: title, text and an action that Enter and a click on 
     CHECK(harness.key(core::tui::KeyCode::Enter) == core::tui::EventResult::Handled);
     CHECK(actions == 2);
 }
+
+// Mutation: draw `_text` whatever the runs (the strong run is not bold).
+TEST_CASE("tui banner: a banner's runs draw on its row, a strong run bold", "[tui][display]") {
+    Harness harness{40, 3};
+    auto const banner = harness.make<BannerImpl>(nullptr);
+    banner->setTone(ui::Tone::Err);
+    banner->setSpans({{.text = "Refused.", .strong = true}, {.text = " 3 left"}});
+    CHECK(harness.draw() == Rows{"Refused. 3 left"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.bold);
+    CHECK_FALSE(buffer.at(0, 10).style.bold);
+    CHECK(banner->probeText() == "Refused. 3 left");
+}

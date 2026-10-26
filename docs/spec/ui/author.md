@@ -180,6 +180,11 @@ expression of one),
   entries, each key written only when given; `menuSeparator()` is an entry with `separator`, which writes nothing else.
   `menuButton(MenuButtonOptions{label, icon, emphasis}, items)` writes a `style: button` menu; an icon-only one names
   itself with `.a11y(...)`.
+- **`text` and `banner`** take `spans` beside `text` (declared right after it, so a call names `.spans` before
+  `.role`). The free helpers build the runs: `strong(text)`, `mono(text)` and `styled(text, SpanStyle{.strong,
+  .mono})` each a record run, and `spans({…})` the list (`list` under a name that reads at the call):
+  `text({.spans = spans({"Lot ", mono(lot)}), .role = "muted"})`. `styled` is not `span`, which a node's `span`
+  already means.
 - **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected}`: an absent `style`
   writes no key, and `selected`, a condition, is written as given: an item's current entry, a push button pressed in.
 - **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, tracks, align, justify}`; an

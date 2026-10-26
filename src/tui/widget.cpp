@@ -801,6 +801,32 @@ std::vector<std::string_view> splitLines(std::string_view text) {
 
 int displayWidth(std::string_view text) { return ::core::tui::stringWidth(text); }
 
+void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& runs, ::core::tui::Style const& style,
+               bool multiline) {
+    int row = 0;
+    int column = 0;
+    for (ui::TextSpan const& run : runs) {
+        ::core::tui::Style runStyle = style;
+        runStyle.bold = style.bold || run.strong;
+        bool first = true;
+        for (auto const line : splitLines(run.text)) {
+            if (!first) {
+                if (multiline) {
+                    ++row;
+                    column = 0;
+                } else {
+                    column += canvas.putString(row, column, " ", runStyle);
+                }
+            }
+            first = false;
+            if (row >= canvas.height()) {
+                return;
+            }
+            column += canvas.putString(row, column, line, runStyle);
+        }
+    }
+}
+
 bool isActivation(::core::tui::KeyEvent const& key) noexcept {
     return ::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None &&
            (key.key == ::core::tui::KeyCode::Enter || key.codepoint == U' ');

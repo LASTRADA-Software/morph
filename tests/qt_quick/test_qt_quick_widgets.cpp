@@ -11,6 +11,7 @@
 #include <QDate>
 #include <QDateTime>
 #include <QFont>
+#include <QFontInfo>
 #include <QList>
 #include <QMessageLogContext>
 #include <QObject>
@@ -1162,4 +1163,46 @@ TEST_CASE("qt_quick widgets: every text a document gives is drawn as its charact
         CHECK(std::abs(item->property("implicitWidth").toReal() - padding -
                        plainWidth(scene.engine(), shown, item->property("font").value<QFont>())) < 0.5);
     }
+}
+
+// Mutation: drop `toHtmlEscaped` (the markup run draws as styled `x & y`, narrower); drop the `pre-wrap` span (the
+// line feed and the spaces fold); build a mono run without its `font-family` (as wide as the body font).
+TEST_CASE("qt_quick widgets: a text's runs are escaped rich text that keeps their characters and faces",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const markup = scene.backend().createText(column.get());
+    markup->setSpans({{.text = "<b>x</b> & <i>y</i>"}});
+    auto const lines = scene.backend().createText(column.get());
+    lines->setSpans({{.text = "a\nb"}});
+    auto const line = scene.backend().createText(column.get());
+    line->setSpans({{.text = "a"}});
+    auto const spaced = scene.backend().createText(column.get());
+    spaced->setSpans({{.text = "a     b"}});
+    auto const mono = scene.backend().createText(column.get());
+    mono->setSpans({{.text = "iiiiiiiiii", .mono = true}});
+    auto const body = scene.backend().createText(column.get());
+    body->setSpans({{.text = "iiiiiiiiii"}});
+    scene.settle();
+    auto const widthOf = [](ui::Widget const& widget) {
+        return Scene::controlOf(widget).property("implicitWidth").toReal();
+    };
+    auto const font = Scene::controlOf(*markup).property("font").value<QFont>();
+    CHECK(Scene::controlOf(*markup).property("textFormat").toInt() == 1);  // Text.RichText
+    CHECK(std::abs(widthOf(*markup) - plainWidth(scene.engine(), QStringLiteral("<b>x</b> & <i>y</i>"), font)) < 1.0);
+    CHECK(Scene::itemOf(*markup).property("accessibleName").toString() == QStringLiteral("<b>x</b> & <i>y</i>"));
+    CHECK(base(*markup).shownText() == "<b>x</b> & <i>y</i>");
+    qreal const lineHeight = Scene::controlOf(*line).property("implicitHeight").toReal();
+    CHECK(std::abs(Scene::controlOf(*lines).property("implicitHeight").toReal() - (2 * lineHeight)) < 1.0);
+    CHECK(std::abs(widthOf(*spaced) - plainWidth(scene.engine(), QStringLiteral("a     b"), font)) < 1.0);
+    // A machine without a fixed-pitch family would draw the mono run in a proportional fallback and measure nothing.
+    QStringList const families = detail::monoFamiliesOf(base(*mono).context());
+    REQUIRE_FALSE(families.isEmpty());
+    REQUIRE(QFontInfo{QFont{families.first()}}.fixedPitch());
+    CHECK(widthOf(*mono) > widthOf(*body) + 10);
+    // A plain text set after the runs shows as plain text again.
+    markup->setText("<b>y</b>");
+    scene.settle();
+    CHECK(Scene::controlOf(*markup).property("textFormat").toInt() == 0);
+    CHECK(Scene::controlOf(*markup).property("text").toString() == QStringLiteral("<b>y</b>"));
 }

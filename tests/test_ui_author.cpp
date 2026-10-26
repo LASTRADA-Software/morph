@@ -1498,3 +1498,20 @@ TEST_CASE("a dialog's actions are written as its footer buttons, in its scope", 
     CHECK(emitted->text.contains(
         R"("actions":[{"id":"ok","label":"OK","emphasis":"primary","onClick":[{"set":"saved","value":"yes"}]}])"));
 }
+
+// Mutation: leave `spans` out of text() (the node is written without its runs).
+TEST_CASE("a text's spans are written as runs that the loader takes", "[ui][author]") {
+    auto const lot = ui::ref<std::string>("lot");
+    CHECK(text(ui::text({.text = "Lot", .spans = ui::spans({"Lot ", ui::mono(lot), ui::strong("!"),
+                                                           ui::styled("x", {.strong = true, .mono = true})}),
+                         .role = "muted"})
+                   .json()) ==
+          R"({"kind":"text","text":"Lot","spans":{"list":["Lot ",{"obj":{"text":{"ref":"lot"},"mono":true}},)"
+          R"({"obj":{"text":"!","strong":true}},{"obj":{"text":"x","strong":true,"mono":true}}]},"role":"muted"})");
+    ui::ScreenRegistry screens;
+    auto const added = screens.add(ui::screen("author.spans", [](ui::Scope&) {
+        return ui::banner({.spans = ui::spans({ui::strong("Refused."), " Try again."})});
+    }));
+    INFO((added ? std::string{} : added.error().message()));
+    CHECK(added.has_value());
+}

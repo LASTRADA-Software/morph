@@ -81,6 +81,29 @@ ui::Key parseKey(std::string_view text) {
     return ui::Key{std::int64_t{std::stoll(std::string{text})}};
 }
 
+// The characters of runs as `formatSpans` records them: each run's text up to its first unescaped `;`, joined.
+std::string spansText(std::string_view recorded) {
+    std::string joined;
+    std::string_view const inner = recorded.substr(1, recorded.size() - 2);
+    bool flags = false;
+    for (std::size_t i = 0; i < inner.size(); ++i) {
+        char const character = inner.at(i);
+        if (character == '\\' && i + 1 < inner.size()) {
+            if (!flags) {
+                joined += unescape(inner.substr(i, 2));
+            }
+            ++i;
+        } else if (character == ',') {
+            flags = false;
+        } else if (character == ';') {
+            flags = true;
+        } else if (!flags) {
+            joined += character;
+        }
+    }
+    return joined;
+}
+
 // How a probe, or the backend behind it, breaks the contract on purpose. A suite that passes a correct backend
 // measures something only if it fails a broken one.
 enum class Fault : std::uint8_t {
@@ -112,6 +135,9 @@ public:
         std::string const kind = _backend.kindOf(widgetId);
         if (kind == "Select") {
             return markedLabel(widgetId);
+        }
+        if (std::string const spans = _backend.prop(widgetId, "spans"); !spans.empty()) {
+            return spansText(spans);
         }
         if (kind == "Tabs") {
             return highlightedLabel(widgetId);
@@ -310,7 +336,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 49);
+    REQUIRE(cases.size() == 50);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);

@@ -5,6 +5,7 @@
 #include <QQmlProperty>
 #include <QQuickItem>
 #include <QRegularExpression>
+#include <QStringList>
 #include <QUrl>
 #include <QVariantList>
 #include <algorithm>
@@ -50,7 +51,45 @@ void exposeShownOption(QObject const* comboBox) {
 TextImpl::TextImpl(Context& context, ui::ContainerWidget* parent)
     : FieldItemWidget{context, QStringLiteral("MorphText"), parent} {}
 
-void TextImpl::setText(std::string_view text) { write("text", toQString(text)); }
+void TextImpl::setText(std::string_view text) {
+    write("richText", QString{});
+    write("text", toQString(text));
+}
+
+void TextImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
+    write("text", toQString(ui::spansText(spans)));
+    write("richText", richTextOf(spans, monoFamiliesOf(context())));
+}
+
+QString richTextOf(std::vector<ui::TextSpan> const& spans, QStringList const& monoFamilies) {
+    // A family name sits in a quoted CSS string inside an HTML attribute: escaped for the string, then the attribute.
+    QStringList quoted;
+    for (QString family : monoFamilies) {
+        family.replace(QLatin1Char('\\'), QStringLiteral("\\\\")).replace(QLatin1Char('\''), QStringLiteral("\\'"));
+        quoted.append(QLatin1Char('\'') + family + QLatin1Char('\''));
+    }
+    QString const monoOpen = QStringLiteral("<span style=\"font-family:%1\">")
+                                 .arg((quoted.isEmpty() ? QStringLiteral("monospace") : quoted.join(QLatin1Char(',')))
+                                          .toHtmlEscaped());
+    QString html = QStringLiteral("<span style=\"white-space:pre-wrap\">");
+    for (ui::TextSpan const& span : spans) {
+        QString run = toQString(span.text).toHtmlEscaped();
+        if (span.strong) {
+            run = QStringLiteral("<b>") + run + QStringLiteral("</b>");
+        }
+        if (span.mono) {
+            run = monoOpen + run + QStringLiteral("</span>");
+        }
+        html += run;
+    }
+    return html + QStringLiteral("</span>");
+}
+
+QStringList monoFamiliesOf(Context const& context) {
+    QObject const* const theme =
+        context.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    return theme != nullptr ? theme->property("monoFamilies").toStringList() : QStringList{};
+}
 
 void TextImpl::setRole(ui::TextRole role) { write("role", static_cast<int>(role)); }
 

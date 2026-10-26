@@ -3259,10 +3259,52 @@ private:
 
 }  // namespace detail
 
+/// @brief The look of a run of text: its weight and its face.
+struct SpanStyle {
+    /// @brief Whether the run is drawn in the strong weight.
+    bool strong = false;
+    /// @brief Whether the run is drawn in the theme's monospace face.
+    bool mono = false;
+};
+
+/// @brief A run of text in a span list with the look @p style gives: `{"obj": {"text": …, "strong": true, …}}`, each
+///        flag written only when set.
+/// @param text  The run's text; data is never parsed for markup.
+/// @param style Its weight and face.
+/// @return The run.
+[[nodiscard]] inline AnyHandle styled(AnyHandle const& text, SpanStyle style) {
+    std::vector<std::pair<std::string, AnyHandle>> fields{{"text", text}};
+    if (style.strong) {
+        fields.emplace_back("strong", AnyHandle{true});
+    }
+    if (style.mono) {
+        fields.emplace_back("mono", AnyHandle{true});
+    }
+    return obj(fields);
+}
+
+/// @brief A run of text in the strong weight, for a span list.
+/// @param text The run's text.
+/// @return The run.
+[[nodiscard]] inline AnyHandle strong(AnyHandle const& text) { return styled(text, {.strong = true}); }
+
+/// @brief A run of text in the theme's monospace face, such as an identifier inside a sentence, for a span list.
+/// @param text The run's text.
+/// @return The run.
+[[nodiscard]] inline AnyHandle mono(AnyHandle const& text) { return styled(text, {.mono = true}); }
+
+/// @brief A span list: the runs of a text, a banner or a key-value item, in order. A string is a plain run; `strong`,
+///        `mono` and `styled` make the others.
+/// @param runs The runs.
+/// @return The list, `{"list": [...]}`.
+[[nodiscard]] inline AnyHandle spans(std::vector<AnyHandle> const& runs) { return list(runs); }
+
 /// @brief Options of `text`.
 struct TextOptions {
-    /// @brief The text.
+    /// @brief The text; beside `spans`, what a client that does not know spans draws.
     AnyHandle text;
+    /// @brief The text as runs (`spans`), shown in place of `text` by a client that knows them.
+    AnyHandle spans;
     /// @brief The typographic role, such as `heading`.
     AnyHandle role;
     /// @brief Whether the shown value is being recalculated.
@@ -3275,6 +3317,7 @@ struct TextOptions {
 [[nodiscard]] inline Node text(TextOptions const& options) {
     return detail::NodeWriter{"text"}
         .put("text", options.text)
+        .put("spans", options.spans)
         .put("role", options.role)
         .put("stale", options.stale)
         .done();
@@ -4349,8 +4392,10 @@ inline void actionPart(NodeWriter& node, std::optional<ActionPart> const& action
 struct BannerOptions {
     /// @brief The tone.
     AnyHandle tone;
-    /// @brief The text.
+    /// @brief The text; beside `spans`, what a client that does not know spans draws.
     AnyHandle text;
+    /// @brief The text as runs (`spans`), shown in place of `text` by a client that knows them.
+    AnyHandle spans;
     /// @brief Whether the user may dismiss it.
     AnyHandle dismissible;
     /// @brief Its action.
@@ -4364,7 +4409,10 @@ struct BannerOptions {
 /// @return The node.
 [[nodiscard]] inline Node banner(BannerOptions const& options) {
     detail::NodeWriter node{"banner"};
-    node.put("tone", options.tone).put("text", options.text).put("dismissible", options.dismissible);
+    node.put("tone", options.tone)
+        .put("text", options.text)
+        .put("spans", options.spans)
+        .put("dismissible", options.dismissible);
     detail::actionPart(node, options.action);
     return node.put("onDismiss", options.onDismiss).done();
 }

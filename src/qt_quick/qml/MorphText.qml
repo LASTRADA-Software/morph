@@ -7,7 +7,11 @@ import QtQuick.Controls
 MorphField {
     id: root
 
+    // The characters shown: the text, or a text's runs joined, which assistive technology reads.
     property string text: ""
+    // A text's runs as escaped rich text, built in C++; while it is not empty the label shows it, and a plain text
+    // never goes through rich text.
+    property string richText: ""
     property int role: 0
     // Where the text sits across the widget: a table sets it from its column's `align`.
     property int textAlign: Qt.AlignLeft
@@ -20,10 +24,10 @@ MorphField {
     control: label
 
     Label {
-        textFormat: Text.PlainText
         id: label
+        textFormat: root.richText !== "" ? Text.RichText : Text.PlainText
         width: root.controlWidth
-        text: root.text
+        text: root.richText !== "" ? root.richText : root.text
         wrapMode: Text.Wrap
         horizontalAlignment: root.textAlign
         font: Theme.figuresOf(root.role === 2 ? Theme.headingFont

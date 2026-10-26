@@ -144,6 +144,12 @@ public:
     /// @brief Sets the style.
     /// @param role The role, mapped to the backend's theme.
     virtual void setRole(TextRole role) = 0;
+
+    /// @brief Replaces what the text shows with runs, in order, in the text's role: a strong run in the backend's
+    ///        bold weight, a mono run in its monospace face, and every run's text as its characters. The mount calls
+    ///        it in place of `setText` for a text that has spans.
+    /// @param spans The runs.
+    virtual void setSpans(std::vector<TextSpan> const& spans) = 0;
 };
 
 /// @brief A push button.
@@ -698,6 +704,11 @@ public:
     /// @brief Replaces the message.
     /// @param text The message, UTF-8.
     virtual void setText(std::string_view text) = 0;
+
+    /// @brief Replaces the message with runs, as `TextWidget::setSpans` does. The mount calls it in place of
+    ///        `setText` for a banner that has spans.
+    /// @param spans The runs.
+    virtual void setSpans(std::vector<TextSpan> const& spans) = 0;
 
     /// @brief Replaces the action button's caption.
     /// @param label The caption, UTF-8; empty shows no button.

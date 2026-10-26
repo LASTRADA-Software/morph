@@ -303,3 +303,28 @@ TEST_CASE("ui document: a date input's value is a timestamp or a string, and any
         "view": { "kind": "dateTimeInput", "value": { "ref": "when" } }})")
               .has_value());
 }
+
+// Mutation: drop `spans` from the text's keys, and the first two documents are refused; drop the run check, and the
+// third loads.
+TEST_CASE("ui document: a text's spans load beside or in place of its text, and a run without text is refused",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": ["Lot ", {"obj": {"text": "L-26-0381", "mono": true}}]}}})")
+              .has_value());
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "banner", "text": "Lot L-26-0381",
+        "spans": {"list": ["Lot ", {"obj": {"text": "L-26-0381", "mono": true, "strong": false}}]}}})")
+              .has_value());
+    auto const noText = loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": ["Lot ", {"obj": {"strong": true}}]}}})");
+    REQUIRE_FALSE(noText.has_value());
+    CHECK(noText.error().path == "/view/spans/list/1");
+    CHECK(noText.error().reason == "a run's record gives its `text`");
+    auto const notAFlag = loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": [{"obj": {"text": "x", "mono": "yes"}}]}}})");
+    REQUIRE_FALSE(notAFlag.has_value());
+    CHECK(notAFlag.error().reason == "a run's `mono` is true or false");
+    auto const number = loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": [7]}}})");
+    REQUIRE_FALSE(number.has_value());
+    CHECK(number.error().reason == "a run is a string or a record with `text`");
+}

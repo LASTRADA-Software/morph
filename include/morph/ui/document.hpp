@@ -744,7 +744,8 @@ inline constexpr std::array<std::string_view, 3> kFormValues = {"ready", "body",
 inline constexpr std::array<std::string_view, 3> kTransferValues = {"progress", "pending", "error"};
 
 /// @brief The keys of `text`.
-inline constexpr std::array<KeySpec, 2> kTextKeys = {{{"text", Shape::Expr}, {"role", Shape::Expr}}};
+inline constexpr std::array<KeySpec, 3> kTextKeys = {
+    {{"text", Shape::Expr}, {"spans", Shape::Expr}, {"role", Shape::Expr}}};
 /// @brief The keys of `button`.
 inline constexpr std::array<KeySpec, 7> kButtonKeys = {{{"label", Shape::Expr},
                                                         {"icon", Shape::Expr},
@@ -909,8 +910,9 @@ inline constexpr std::array<KeySpec, 5> kFilePickerKeys = {{{"accept", Shape::Ex
                                                             {"label", Shape::Expr},
                                                             {"onPick", Shape::Commands}}};
 /// @brief The keys of `banner`.
-inline constexpr std::array<KeySpec, 5> kBannerKeys = {{{"tone", Shape::Expr},
+inline constexpr std::array<KeySpec, 6> kBannerKeys = {{{"tone", Shape::Expr},
                                                         {"text", Shape::Expr},
+                                                        {"spans", Shape::Expr},
                                                         {"dismissible", Shape::Expr},
                                                         {"action", Shape::Part, "action"},
                                                         {"onDismiss", Shape::Commands}}};
@@ -3482,6 +3484,9 @@ private:
             checkChoice(node, "submit", kSubmitModes);
         } else if (node.kind == "text") {
             checkTextRole(node);
+            checkSpans(node.prop("spans"));
+        } else if (node.kind == "banner") {
+            checkSpans(node.prop("spans"));
         } else if (node.kind == "table") {
             checkCellPlace(node, "valign");
         }
@@ -3698,6 +3703,73 @@ private:
         }
         if (!listed(kRoles, *name)) {
             refuse(pointerAppend(node.path, "role"), "`" + *name + "` is not one of the values of `role`");
+        }
+    }
+
+    // A span list written out: each literal run a string, each record run a `text` with at most the flags `strong`
+    // and `mono`, each literal flag a boolean. A computed list, or a computed element, is checked as it is drawn.
+    static void checkSpans(ExprPtr const& spans) {
+        if (spans == nullptr) {
+            return;
+        }
+        if (spans->kind == ExprKind::Literal) {
+            ValueList const* const runs = spans->literal.asList();
+            if (runs == nullptr) {
+                refuse(spans->path, "`spans` is a list of runs");
+            }
+            for (Value const& run : *runs) {
+                checkLiteralRun(run, spans->path);
+            }
+            return;
+        }
+        if (spans->kind != ExprKind::List) {
+            return;
+        }
+        for (ExprPtr const& run : spans->args) {
+            if (run->kind == ExprKind::Literal) {
+                checkLiteralRun(run->literal, run->path);
+            } else if (run->kind == ExprKind::Object) {
+                checkRunRecord(*run);
+            }
+        }
+    }
+
+    // A literal run: a string, or a record of a string `text` and boolean flags.
+    static void checkLiteralRun(Value const& run, std::string const& path) {
+        if (run.asString() != nullptr) {
+            return;
+        }
+        ValueRecord const* const record = run.asRecord();
+        if (record == nullptr) {
+            refuse(path, "a run is a string or a record with `text`");
+        }
+        if (!record->contains("text")) {
+            refuse(path, "a run's record gives its `text`");
+        }
+        for (auto const& [key, value] : *record) {
+            if (key != "text" && key != "strong" && key != "mono") {
+                refuse(path, "a run takes `text`, `strong` and `mono`, not `" + key + "`");
+            }
+            if (key != "text" && value.asBool() == nullptr) {
+                refuse(path, "a run's `" + key + "` is true or false");
+            }
+        }
+    }
+
+    // A run written as an `obj`: a `text`, and flags that are booleans when written as constants.
+    static void checkRunRecord(Expr const& run) {
+        bool hasText = false;
+        for (auto const& [key, value] : run.fields) {
+            if (key == "text") {
+                hasText = true;
+            } else if (key != "strong" && key != "mono") {
+                refuse(value->path, "a run takes `text`, `strong` and `mono`, not `" + key + "`");
+            } else if (value->kind == ExprKind::Literal && value->literal.asBool() == nullptr) {
+                refuse(value->path, "a run's `" + key + "` is true or false");
+            }
+        }
+        if (!hasText) {
+            refuse(run.path, "a run's record gives its `text`");
         }
     }
 

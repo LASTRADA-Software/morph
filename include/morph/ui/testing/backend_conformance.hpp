@@ -2471,6 +2471,20 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: a Text given spans reads as its runs' characters, joined in order: a run's markup is characters.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> textSpansReadAsCharacters(ConformanceProbe& probe) {
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::text({.spans = std::vector<TextSpan>{{.text = "Lot "},
+                                                                {.text = "L-26-0381", .mono = true},
+                                                                {.text = " <b>x</b>", .strong = true}}})};
+    probe.settle();
+    Checks checks;
+    checks.text("a Text with spans", "Lot L-26-0381 <b>x</b>", probe.textOf(view.root()));
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
@@ -2508,7 +2522,7 @@ struct SelectionReport {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 49> const cases{{
+    static std::array<ConformanceCase, 50> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -2579,6 +2593,7 @@ struct SelectionReport {
          .run = detail::buttonMenuSkipsSeparator},
         {.name = "a removable badge reports its removal once", .run = detail::removableBadgeReportsRemoval},
         {.name = "a chart shows its current summary", .run = detail::chartShowsCurrentSummary},
+        {.name = "a Text with spans reads as its runs' characters", .run = detail::textSpansReadAsCharacters},
     }};
     return cases;
 }

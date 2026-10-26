@@ -745,3 +745,20 @@ TEST_CASE("tui widgets: a sidebar surface draws its subtree inverse; a card draw
     CHECK_FALSE(buffer.at(1, 0).style.inverse);
     CHECK_FALSE(buffer.at(2, 0).style.inverse);
 }
+
+// Mutation: ignore `strong` in paintRuns (the strong run is not bold).
+TEST_CASE("tui widgets: a text's runs draw in order, a strong run bold and its neighbours not, a line feed breaking",
+          "[tui][widgets]") {
+    Harness harness{30, 3};
+    auto const text = harness.make<TextImpl>(nullptr);
+    text->setSpans({{.text = "Lot "}, {.text = "L-26", .strong = true}, {.text = " ok\nnext", .mono = true}});
+    CHECK(harness.draw() == Rows{"Lot L-26 ok", "next"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK_FALSE(buffer.at(0, 3).style.bold);
+    CHECK(buffer.at(0, 4).style.bold);
+    CHECK(buffer.at(0, 7).style.bold);
+    CHECK_FALSE(buffer.at(0, 8).style.bold);
+    CHECK(text->probeText() == "Lot L-26 ok\nnext");
+    text->setText("plain");
+    CHECK(harness.draw() == Rows{"plain"});
+}

@@ -125,6 +125,20 @@ template <typename Special>
     return formatted + "]";
 }
 
+/// @brief Formats runs of text: `[Lot ,L-26-0381;mono]`, each run its text followed by `;strong` and `;mono` when set.
+/// @param spans The runs.
+/// @return Their text; `=`, `,`, `[`, `]` and `;` in a run are escaped, so a run cannot forge a flag.
+[[nodiscard]] inline std::string formatSpans(std::vector<TextSpan> const& spans) {
+    std::string formatted = "[";
+    for (TextSpan const& span : spans) {
+        formatted += formatted.size() == 1 ? "" : ",";
+        formatted += escape(span.text, [](char character) { return std::string_view{"=,[];"}.contains(character); });
+        formatted += span.strong ? ";strong" : "";
+        formatted += span.mono ? ";mono" : "";
+    }
+    return formatted + "]";
+}
+
 /// @brief Formats a key: an integer in decimal, a string in double quotes, so `7` and `"7"` differ.
 /// @param key The key.
 /// @return Its text. A string key is escaped as `formatItem` escapes, and a double quote in it is preceded by a
@@ -901,11 +915,12 @@ public:
     void setStale(bool stale) override { this->set("stale", formatBool(stale)); }
 };
 
-/// @brief A fake `TextWidget`: properties `text`, `role`.
+/// @brief A fake `TextWidget`: properties `text`, `spans` (as `formatSpans` gives them), `role`.
 class FakeText final : public FakeField<TextWidget> {
 public:
     using FakeField<TextWidget>::FakeField;
     void setText(std::string_view text) override { set("text", formatText(text)); }
+    void setSpans(std::vector<TextSpan> const& spans) override { set("spans", formatSpans(spans)); }
     void setRole(TextRole role) override { set("role", enumName(role)); }
 };
 
@@ -1239,12 +1254,14 @@ public:
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
 };
 
-/// @brief A fake `BannerWidget`: properties `tone`, `text`, `actionLabel`, `dismissible`.
+/// @brief A fake `BannerWidget`: properties `tone`, `text`, `spans` (as `formatSpans` gives them), `actionLabel`,
+///        `dismissible`.
 class FakeBanner final : public FakeLeaf<BannerWidget> {
 public:
     using FakeLeaf<BannerWidget>::FakeLeaf;
     void setTone(Tone tone) override { set("tone", enumName(tone)); }
     void setText(std::string_view text) override { set("text", formatText(text)); }
+    void setSpans(std::vector<TextSpan> const& spans) override { set("spans", formatSpans(spans)); }
     void setActionLabel(std::string_view label) override { set("actionLabel", formatText(label)); }
     void setOnAction(Action onAction) override { callbacks().action = std::move(onAction); }
     void setDismissible(bool dismissible) override { set("dismissible", formatBool(dismissible)); }

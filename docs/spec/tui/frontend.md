@@ -77,7 +77,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 
 | Widget | Shows | Input |
 |---|---|---|
-| Text | one row per line, styled by role: a heading bold, a section bold in the muted style, muted, error and success in their theme styles; mono as normal text, since every cell is drawn in one fixed-pitch font | — |
+| Text | one row per line, styled by role: a heading bold, a section bold in the muted style, muted, error and success in their theme styles; mono as normal text, since every cell is drawn in one fixed-pitch font. Spans draw run after run in the role's style, a strong run bold and a mono run as the others; a run's line feed starts the next row | — |
 | Button | `[ label ]`, a framework icon's glyph before the label, the caption in the list's selected-item style while selected (the brackets keep the button's style, so a selected push button is as wide as another); a list item ` label`, unbracketed and padded to its slot's width, in the list's selected-item style while selected and the focus style while focused | Enter, Space, click |
 | TextInput | `core::tui::InputField`; single-line, multiline or masked; a unit is drawn muted at the right edge before the field marks, and the editable width ends one cell before it | typing; Enter submits a single-line field after its commit, and a field without a submit handler commits and passes Enter on; the focus leaving after an edit commits |
 | Checkbox | `[x] label` | Space, click; Enter passes on |
@@ -96,7 +96,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | DateTimeInput | `YYYY-MM-DD[ HH:MM]` in the display zone | typing; Up/Down step |
 | Slider | `[====\|----] value` | Left, Right, Home, End, press and drag on the track |
 | FilePicker | a path field, prompted `Open: ` or `Save: ` | typing; Enter |
-| Banner | its text in its tone, `[ action ]`, `[x]` when dismissible | Enter runs the action; Esc or Delete dismisses; a click on either |
+| Banner | its text in its tone (spans as a text's, on the one row, a strong run bold), `[ action ]`, `[x]` when dismissible | Enter runs the action; Esc or Delete dismisses; a click on either |
 | Badge | `[text]` in its tone, a framework icon's glyph before the text; a removable one `[text ×]`, inverse while focused | a removable one: Delete, Backspace, Enter or Space while focused, or a click on the `×`, removes it; a click elsewhere on it focuses it |
 | Progress | `[####......] 40%` and the label; `<=>` when indeterminate | — |
 | Steps | a row per step: `[ ]` pending, `[>]` active, `[x]` done, `[!]` failed; the current one accented | — |

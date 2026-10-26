@@ -445,6 +445,31 @@ struct FieldState {
     Prop<bool> stale = false;
 };
 
+/// @brief A run of text inside a sentence, drawn in the node's role with its own weight and face.
+struct TextSpan {
+    /// @brief The run's text, UTF-8; shown as its characters, never as markup.
+    std::string text;
+    /// @brief Whether the run is drawn in the strong weight.
+    bool strong = false;
+    /// @brief Whether the run is drawn in the theme's monospace face (`font.mono`).
+    bool mono = false;
+
+    /// @brief Memberwise equality.
+    /// @return Whether text and both flags match.
+    bool operator==(TextSpan const&) const = default;
+};
+
+/// @brief The characters a list of runs shows, joined in order: what assistive technology and a probe read.
+/// @param spans The runs.
+/// @return Their text, joined.
+[[nodiscard]] inline std::string spansText(std::vector<TextSpan> const& spans) {
+    std::string joined;
+    for (TextSpan const& span : spans) {
+        joined += span.text;
+    }
+    return joined;
+}
+
 struct NodeData;
 
 /// @brief A view-tree node: immutable, shared data.
@@ -452,8 +477,11 @@ using Node = std::shared_ptr<NodeData const>;
 
 /// @brief Static or bound text.
 struct Text {
-    /// @brief The text, UTF-8.
+    /// @brief The text, UTF-8; not applied while the text has spans.
     Prop<std::string> text;
+    /// @brief The text as runs, each plain, strong or monospace; while bound or not empty, it is shown in place of
+    ///        `text`.
+    Prop<std::vector<TextSpan>> spans;
     /// @brief The style.
     Prop<TextRole> role = TextRole::Normal;
     /// @brief Read-only, required, errors and stale.
@@ -1081,8 +1109,11 @@ struct ActionButton {
 struct Banner {
     /// @brief What the message conveys.
     Prop<Tone> tone = Tone::Info;
-    /// @brief The message.
+    /// @brief The message; not applied while the banner has spans.
     Prop<std::string> text;
+    /// @brief The message as runs, each plain, strong or monospace; while bound or not empty, it is shown in place
+    ///        of `text`.
+    Prop<std::vector<TextSpan>> spans;
     /// @brief The button beside the message; an empty label shows none.
     ActionButton action{};
     /// @brief Whether the user can dismiss it; set once.

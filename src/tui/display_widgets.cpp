@@ -73,6 +73,13 @@ void BannerImpl::setTone(ui::Tone tone) {
 
 void BannerImpl::setText(std::string_view text) {
     _text = std::string{text};
+    _runs.clear();
+    refresh();
+}
+
+void BannerImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
+    _text = ui::spansText(spans);
+    _runs = spans;
     refresh();
 }
 
@@ -114,7 +121,11 @@ void BannerImpl::paint(::core::tui::Canvas& canvas) {
     auto const& theme = canvas.theme();
     auto const& style = toneStyle(theme, _tone);
     canvas.fill({.x = 0, .y = 0, .width = canvas.width(), .height = 1}, ' ', style);
-    canvas.putString(0, 0, _text, style);
+    if (_runs.empty()) {
+        canvas.putString(0, 0, _text, style);
+    } else {
+        paintRuns(canvas, _runs, style, false);
+    }
     auto const placed = controls();
     auto const& control = controlStyle(theme, actionable(), hasFocus());
     if (placed.action) {

@@ -212,7 +212,15 @@ BannerImpl::BannerImpl(Context& context, ui::ContainerWidget* parent)
 
 void BannerImpl::setTone(ui::Tone tone) { write("tone", static_cast<int>(tone)); }
 
-void BannerImpl::setText(std::string_view text) { write("text", toQString(text)); }
+void BannerImpl::setText(std::string_view text) {
+    write("richText", QString{});
+    write("text", toQString(text));
+}
+
+void BannerImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
+    write("text", toQString(ui::spansText(spans)));
+    write("richText", richTextOf(spans, monoFamiliesOf(context())));
+}
 
 void BannerImpl::setActionLabel(std::string_view label) { write("actionLabel", toQString(label)); }
 

@@ -760,6 +760,11 @@ private:
         bind(scope, label, [&widget, shown](std::string const& text) { widget.setCaption(text, shown); });
     }
 
+    // Whether a node's spans are given: bound, or a constant with runs.
+    [[nodiscard]] static bool hasSpans(Prop<std::vector<TextSpan>> const& spans) {
+        return spans.isBound() || !spans.constant().empty();
+    }
+
     // Like applyCommon, a constant default calls no setter.
     void applyField(reactive::Scope& scope, FieldWidget& widget, FieldState const& field) {
         if (field.readonly.isBound() || field.readonly.constant()) {
@@ -780,7 +785,12 @@ private:
         TextWidget& widget = scope.adopt(_backend->createText(parent));
         applyCommon(scope, widget, spec.common);
         applyField(scope, widget, spec.field);
-        bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        // Spans replace the text, so a text that has them is never told its plain text.
+        if (hasSpans(spec.spans)) {
+            bind(scope, spec.spans, [&widget](std::vector<TextSpan> const& spans) { widget.setSpans(spans); });
+        } else {
+            bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        }
         bind(scope, spec.role, [&widget](TextRole role) { widget.setRole(role); });
         return widget;
     }
@@ -1599,7 +1609,11 @@ private:
         BannerWidget& widget = scope.adopt(_backend->createBanner(parent));
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.tone, [&widget](Tone tone) { widget.setTone(tone); });
-        bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        if (hasSpans(spec.spans)) {
+            bind(scope, spec.spans, [&widget](std::vector<TextSpan> const& spans) { widget.setSpans(spans); });
+        } else {
+            bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        }
         bind(scope, spec.action.label, [&widget](std::string const& label) { widget.setActionLabel(label); });
         widget.setOnAction(event(spec.action.onClick));
         widget.setDismissible(spec.dismissible);

@@ -2,6 +2,7 @@
 
 #pragma once
 #include <QString>
+#include <QStringList>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -24,11 +25,20 @@ namespace morph::qt_quick::detail {
 
 // ── Fields ────────────────────────────────────────────────────────────────
 
+/// Runs of text as the rich text a label draws: each run's text escaped, a strong run bold, a mono run in
+/// @p monoFamilies, the whole kept in `white-space:pre-wrap` so line feeds and runs of spaces stay as a plain text
+/// keeps them.
+[[nodiscard]] QString richTextOf(std::vector<ui::TextSpan> const& spans, QStringList const& monoFamilies);
+
+/// The monospace families the engine's `Theme` draws `font.mono` in, first choice first.
+[[nodiscard]] QStringList monoFamiliesOf(Context const& context);
+
 class TextImpl final : public FieldItemWidget<ui::TextWidget> {
 public:
     TextImpl(Context& context, ui::ContainerWidget* parent);
     void setText(std::string_view text) override;
     void setRole(ui::TextRole role) override;
+    void setSpans(std::vector<ui::TextSpan> const& spans) override;
     [[nodiscard]] std::string shownText() const override;
 };
 
@@ -191,6 +201,7 @@ public:
     BannerImpl(Context& context, ui::ContainerWidget* parent);
     void setTone(ui::Tone tone) override;
     void setText(std::string_view text) override;
+    void setSpans(std::vector<ui::TextSpan> const& spans) override;
     void setActionLabel(std::string_view label) override;
     void setOnAction(ui::Action onAction) override;
     void setDismissible(bool dismissible) override;

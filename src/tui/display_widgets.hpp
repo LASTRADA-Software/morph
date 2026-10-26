@@ -27,6 +27,7 @@ public:
     explicit BannerImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
     void setTone(ui::Tone tone) override;
     void setText(std::string_view text) override;
+    void setSpans(std::vector<ui::TextSpan> const& spans) override;
     void setActionLabel(std::string_view label) override;
     void setOnAction(ui::Action onAction) override { _onAction = std::move(onAction); }
     void setDismissible(bool dismissible) override;
@@ -50,7 +51,10 @@ private:
     [[nodiscard]] Controls controls() const;
 
     ui::Tone _tone = ui::Tone::Neutral;
+    // The characters shown: the message, or the runs joined.
     std::string _text;
+    // The runs, while the message has spans; empty for a plain message.
+    std::vector<ui::TextSpan> _runs;
     std::string _actionLabel;
     bool _dismissible = false;
     ui::Action _onAction;

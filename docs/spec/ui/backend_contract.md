@@ -88,6 +88,11 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   chosen or opened; a `description` is a muted line of help with its entry. `onActivate` receives
   the chosen entry's path, its index at each level from the top with separators counted, and only
   for an enabled entry without a submenu whose ancestors are all enabled.
+- **Spans.** `TextWidget::setSpans` and `BannerWidget::setSpans` replace what the widget shows with runs, in order,
+  in the widget's role or tone: a backend draws a `strong` run in its bold weight and a `mono` run in its monospace
+  face, and every run's text as its characters. The mount calls `setSpans` in place of `setText` for a node that has
+  spans. Both are pure, so a backend cannot drop the emphasis silently. What a probe and assistive technology read
+  of such a widget is the runs' text joined (`spansText`).
 - **Text is characters.** Every setter's text is shown as the characters it holds: a backend never interprets a
   document's or a value's text as markup, so a name or a comment that holds `<b>` or `<a href=…>` shows those
   characters.
@@ -233,7 +238,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `Widget` | `setVisible`, `setEnabled`, `setLayout(LayoutHints)`, `setDragKey(optional<Key>)`, `setAccessibleName`, `setAccessibleRole`, `setTestId`, `setTooltip`, `setSurface` (may be called again, and restyles the widget and everything inside it; empty is the theme's default), `focus()` | `setDropHandler(accepts, onDrop)`, `setKeys(chords, onChord)` (the chord pressed) |
 | `ContainerWidget` | `moveChild(child, index)` | — |
 | `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale` | — |
-| `TextWidget` | `setText`, `setRole` | — |
+| `TextWidget` | `setText`, `setRole`, `setSpans` | — |
 | `ButtonWidget` | `setLabel`, `setEmphasis`, `setIcon` (once, for a button with an icon), `setStyle` (once, for an item), `setSelected` | `setOnClick` (Enter, Space or a click) |
 | `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only), `setIcon` (an icon of the theme's icon set, drawn at the leading edge; single-line and password only, called once), `setCaption(label, shown)` (the field's label, and whether the input draws it as a visible caption above its control) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
@@ -253,7 +258,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)` | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)`, `setOnCommit(value)` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
-| `BannerWidget` | `setTone`, `setText`, `setActionLabel`, `setDismissible` (once) | `setOnAction`, `setOnDismiss` |
+| `BannerWidget` | `setTone`, `setText`, `setSpans`, `setActionLabel`, `setDismissible` (once) | `setOnAction`, `setOnDismiss` |
 | `BadgeWidget` | `setTone`, `setText`, `setIcon` (once) | `setOnRemove(onRemove, label)`: only for a removable badge, which then draws a remove control after its text (the framework icon `close`) named `label`, and takes the focus; Delete, Backspace, Enter or Space on it, or a click on its control, calls `onRemove`. A badge without it takes no focus |
 | `ProgressWidget` | `setValue(optional<double>)`, `setLabel` | — |
 | `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)` | — |
@@ -354,7 +359,7 @@ The headless reference backend and the test double for everything above the cont
 - **Properties.** Every kind records `visible`, `enabled`, `layout` (as `width/height`, each followed by ` min=<n>`
   and ` max=<n>` for its bounds, then ` self=<align>` for an `alignSelf`), `dragKey`, `drop`, `a11yName`,
   `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run; text and the six
-  inputs record `readonly`, `required`, `errors` and `stale`; and each kind its own: `text`, `role` (Text); `label`, `emphasis`, `icon`, `style`, `selected` (Button); `mode`, `text`, `placeholder`
+  inputs record `readonly`, `required`, `errors` and `stale`; and each kind its own: `text`, `spans`, `role` (Text); `label`, `emphasis`, `icon`, `style`, `selected` (Button); `mode`, `text`, `placeholder`
   (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
   `selected` is the option it marks, else `none`); `items` (Menu, as below), and a button-style menu's `style=Button` (at creation), `label`, `icon` and `emphasis`; `gap`, `align`, `justify` (Column, Row); `columns`,
   `tracks` (each width, then `;align=` where it is not `start`), `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
@@ -362,7 +367,7 @@ The headless reference backend and the test double for everything above the cont
   `columns` (each `label:width`, then `;align=` and `;valign=` for a place other than the default),
   `selectionMode`, `selection` (the requested keys it marks, in the order requested),
   and `rowKey` on a row (Table); `mode`, `offset`, `value` (DateTimeInput); `range`, `value`
-  (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `actionLabel`, `dismissible` (Banner);
+  (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `spans`, `actionLabel`, `dismissible` (Banner);
   `tone`, `text`, `icon`, and `removable` (the remove control's name) of a removable one (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
   (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title` (Drawer);
   `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
@@ -382,14 +387,15 @@ The headless reference backend and the test double for everything above the cont
   as `[label@value;tone;style,…]` (`err`, `dashed`), and its series as `[label;joined;[point|…],…]`, each point
   `xLabel@x,y;tone;note` with `y` as a number, `gap` for none, or the axis end followed by `↑` or `↓` for a clipped
   point, and the tone empty for an unmarked one; every chart number shortest-round-trip, so a log is the same on
-  every platform; a
+  every platform; runs as `[Lot ,L-26-0381;mono]`, each run's text followed by `;strong` and
+  `;mono` when set (a node with spans records `spans` and no `text`); a
   menu as `[label;attr=value…,…]`, where an entry's attributes follow its label only when they
   differ from the default (`;icon=`, `;keys=`, `;checked=true` or `false`, `;enabled=false`,
   `;description=`), a separator is `;separator` alone, and
   its submenu follows in brackets: `[File[Open;keys=Ctrl+O,Recent[a.txt]],;separator,Wrap;checked=true]`.
 - **Escaping.** Free text is escaped so that every value stays on its line and reads as one field:
   a line feed becomes `\n`, a carriage return `\r`, and a backslash or `=` is preceded by a
-  backslash. Text inside a list also escapes `,`, `[` and `]`, text inside a menu also `;`, text inside a chart
+  backslash. Text inside a list also escapes `,`, `[` and `]`, text inside a menu or a run also `;`, text inside a chart
   property also `;`, `@` and `|`, and a
   string key also escapes `"`.
 - **Lookups.** `find(kind, name, value)` is the first live widget, by id, of that kind whose
@@ -604,6 +610,8 @@ Each case is named by the rule it checks:
     choosing the separator `[1]` then runs nothing.
 48. Dismissing a removable badge, the user removing it, runs its `onRemove` once.
 49. A chart shows the summary of the data it was last given: set with summary `A`, then `B`, it reads `B`.
+50. A Text given spans `Lot `, a mono `L-26-0381` and a strong ` <b>x</b>` reads `Lot L-26-0381 <b>x</b>`: its
+    runs' characters joined in order, a run's markup shown as characters.
 
 ### What the probe cannot reach
 
