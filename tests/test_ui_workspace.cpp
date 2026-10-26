@@ -182,6 +182,22 @@ TEST_CASE("workspace: the bar and each page stretch, so a stretching screen fill
     CHECK(harness.backend.prop(pages.front(), "layout") == "stretch(1)/stretch(1)");
 }
 
+// Mutation: drop the page slot's setScrollable call (no page records `scrollable`).
+TEST_CASE("workspace: every page scrolls a screen that keeps its content height", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("home", {}) == 0U);
+    REQUIRE(shell.open("note", note(1)) == 1U);
+    harness.settle();
+    int const bar = harness.backend.find("Tabs", "layout", "stretch(1)/stretch(1)").value();
+    std::vector<int> const pages = harness.backend.children(bar);
+    REQUIRE(pages.size() == 2U);
+    for (int const page : pages) {
+        CHECK(harness.backend.prop(page, "scrollable") == "true");
+    }
+}
+
 // Mutation: never replace a placeholder (the draft is stacked as a second tab).
 TEST_CASE("workspace: a reuseEmpty placeholder without identity is replaced in place", "[ui][workspace]") {
     Harness harness;

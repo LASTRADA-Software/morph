@@ -330,6 +330,9 @@ private:
         page->screenId = std::string{screenId};
         page->slot = _backend->createSlot(_bar.get());
         page->slot->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+        // A screen whose root keeps its content height scrolls inside the page instead of being cut at the window's
+        // edge; one whose root stretches fills the page and lays itself out.
+        page->slot->setScrollable(true);
         page->slot->setVisible(false);
         std::expected<std::unique_ptr<ScreenHandle>, MountError> handle;
         WorkspaceScreen const facts = _screens ? _screens(screenId) : WorkspaceScreen{};

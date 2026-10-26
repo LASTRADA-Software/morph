@@ -3611,6 +3611,36 @@ struct PanelOptions {
     return detail::NodeWriter{"scroll"}.put("axis", axis).put("children", children).done();
 }
 
+/// @brief The bars `pinned` keeps in view around its content.
+struct PinnedOptions {
+    /// @brief The nodes above the content, which stay at the top; none when empty.
+    Nodes top;
+    /// @brief The nodes below the content, which stay at the bottom, such as a bar of actions; none when empty.
+    Nodes bottom;
+};
+
+/// @brief Content that scrolls between bars that stay in view: a column that stretches both ways, holding `top`, a
+///        vertical `scroll` that stretches in height around @p content, and `bottom`. The scroll takes the column's
+///        spare height, so the bars stay at the column's ends however long the content is. Use it as a screen's root,
+///        which the workspace then lets fill the page.
+/// @param content The content that scrolls.
+/// @param options The bars.
+/// @return The column.
+[[nodiscard]] inline Node pinned(Nodes const& content, PinnedOptions const& options = {}) {
+    std::vector<Node> children;
+    Json const top = options.top.json();
+    Json const bottom = options.bottom.json();
+    // Each bar node carries its list's catalog facts, so the column names every model and action they do.
+    for (Json const& node : std::get<Json::array_t>(top.data)) {
+        children.emplace_back(node, options.top.facts());
+    }
+    children.push_back(scroll(content).sizing(stretch(), stretch()));
+    for (Json const& node : std::get<Json::array_t>(bottom.data)) {
+        children.emplace_back(node, options.bottom.facts());
+    }
+    return column(Nodes{children}).sizing(stretch(), stretch());
+}
+
 /// @brief A scope's builder: declares on the scope and returns the nodes that read it.
 using ScopeBuilder = std::function<Nodes(DeclScope&)>;
 

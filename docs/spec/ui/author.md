@@ -145,6 +145,8 @@ Every kind of the kind table has a builder whose options struct holds the kind's
 `keyValue`, `emptyState`, `splitter`, `collapsible`, `dropZone`, `customize`, `boundary`, `form`,
 `collection`, `wizard` and `custom`. Children come first, as a `Nodes` list (`{a, b}`, or one node),
 options second. `tabs(tabs, TabsOptions{.selected, .onChoose})` takes `Tab{id, label, children}` pages.
+`pinned(content, PinnedOptions{.top, .bottom})` writes the bar-that-stays-in-view idiom: a column sized to stretch
+both ways holding `top`, a vertical `scroll` sized to stretch both ways around `content`, and `bottom`.
 `DialogOptions::actions` (a `dialog`'s or `drawer`'s) lists its footer buttons as
 `ActionButtonOptions`, run in its scope.
 

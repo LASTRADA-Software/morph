@@ -75,6 +75,7 @@ class Gate final : public morph::tui::detail::TuiContainer<ui::SlotWidget> {
 public:
     explicit Gate(Context& context) : TuiContainer{context} { adopt(morph::tui::detail::makeView(*this)); }
     void setOpen(bool open) noexcept { _open = open; }
+    void setScrollable(bool scrollable) override { static_cast<void>(scrollable); }
     [[nodiscard]] core::tui::Size naturalSize() const override {
         return morph::tui::detail::stackNaturalSize(children(), ui::Axis::Vertical, 0);
     }

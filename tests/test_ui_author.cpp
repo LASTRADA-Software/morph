@@ -322,6 +322,17 @@ TEST_CASE("handles read fields by member pointer below a name", "[ui][author]") 
     CHECK(text(ui::row(&author_test::Partial::shown)) == R"({"row":"shown"})");
 }
 
+// Mutation: leave the scroll at its content height in pinned (the scroll loses its sizing).
+TEST_CASE("pinned writes a stretching column around a stretching scroll, with its bars outside it", "[ui][author]") {
+    ui::Node const node = ui::pinned(ui::text({.text = "body"}),
+                                     {.top = ui::text({.text = "head"}), .bottom = ui::text({.text = "bar"})});
+    CHECK(text(node) ==
+          R"({"kind":"column","children":[{"kind":"text","text":"head"},)"
+          R"({"kind":"scroll","children":[{"kind":"text","text":"body"}],)"
+          R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}},)"
+          R"({"kind":"text","text":"bar"}],"sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}})");
+}
+
 TEST_CASE("the library and reading forms have builders", "[ui][author]") {
     auto const items = ui::ref<std::vector<ResultView>>("items");
     CHECK(text(ui::engaged(ui::ref("x"))) == R"({"fn":"engaged","args":[{"ref":"x"}]})");

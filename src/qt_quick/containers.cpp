@@ -85,7 +85,9 @@ ScrollImpl::ScrollImpl(Context& context, ui::ContainerWidget* parent, ui::Axis a
                                        QVariant::fromValue(&context.component(QStringLiteral("MorphScrollBar")))}}} {}
 
 SlotImpl::SlotImpl(Context& context, ui::ContainerWidget* parent)
-    : ContainerItemWidget{context, QStringLiteral("MorphSlot"), parent} {}
+    : ContainerItemWidget{context, QStringLiteral("MorphSlot"), parent,
+                          QVariantMap{{QStringLiteral("bar"),
+                                       QVariant::fromValue(&context.component(QStringLiteral("MorphScrollBar")))}}} {}
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
 
@@ -112,6 +114,8 @@ void TabsImpl::setOnSelect(std::function<void(std::size_t)> onSelect) {
 }
 
 void TabsImpl::setBarShown(bool shown) { write("barShown", shown); }
+
+void SlotImpl::setScrollable(bool scrollable) { write("scrollable", scrollable); }
 
 int TabsImpl::highlighted() const { return read("highlighted").toInt(); }
 

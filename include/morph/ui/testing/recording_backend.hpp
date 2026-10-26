@@ -1157,6 +1157,13 @@ public:
     void setOnPicked(std::function<void(std::string)> onPicked) override { callbacks().picked = std::move(onPicked); }
 };
 
+/// @brief A fake `SlotWidget`: property `scrollable`, recorded once set.
+class FakeSlot final : public FakeContainer<SlotWidget> {
+public:
+    using FakeContainer<SlotWidget>::FakeContainer;
+    void setScrollable(bool scrollable) override { set("scrollable", scrollable ? "true" : "false"); }
+};
+
 /// @brief A fake `TabsWidget`: properties `tabs`, `selected`, `barShown`.
 class FakeTabs final : public FakeContainer<TabsWidget> {
 public:
@@ -1181,13 +1188,13 @@ public:
     /// @return It.
     ContainerWidget& footer() override {
         if (_footer == nullptr) {
-            _footer = std::make_unique<FakeContainer<SlotWidget>>(this->sharedStore(), "Footer", this);
+            _footer = std::make_unique<FakeSlot>(this->sharedStore(), "Footer", this);
         }
         return *_footer;
     }
 
 private:
-    std::unique_ptr<FakeContainer<SlotWidget>> _footer;
+    std::unique_ptr<FakeSlot> _footer;
 };
 
 /// @brief A fake `DialogWidget`: properties `open`, `title`; a `Footer` child once its footer is asked for.
@@ -1749,7 +1756,7 @@ public:
             _store, "Scroll", parent, detail::PropList{{"axis", detail::enumName(axis)}});
     }
     [[nodiscard]] std::unique_ptr<SlotWidget> createSlot(ContainerWidget* parent) override {
-        return std::make_unique<detail::FakeContainer<SlotWidget>>(_store, "Slot", parent);
+        return std::make_unique<detail::FakeSlot>(_store, "Slot", parent);
     }
     [[nodiscard]] std::unique_ptr<TabsWidget> createTabs(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeTabs>(_store, "Tabs", parent);

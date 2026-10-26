@@ -296,6 +296,14 @@ public:
 class SlotImpl final : public ContainerItemWidget<ui::SlotWidget> {
 public:
     SlotImpl(Context& context, ui::ContainerWidget* parent);
+    void setScrollable(bool scrollable) override;
+};
+
+/// An overlay's footer: a `MorphFooter` row of its actions, which never scrolls.
+class FooterItem final : public ContainerItemWidget<ui::SlotWidget> {
+public:
+    using ContainerItemWidget<ui::SlotWidget>::ContainerItemWidget;
+    void setScrollable(bool scrollable) override { static_cast<void>(scrollable); }
 };
 
 class TabsImpl final : public ContainerItemWidget<ui::TabsWidget> {
@@ -328,8 +336,7 @@ public:
         if (_footer == nullptr) {
             _makingFooter = true;
             try {
-                _footer = std::make_unique<ContainerItemWidget<ui::SlotWidget>>(this->context(),
-                                                                                QStringLiteral("MorphFooter"), this);
+                _footer = std::make_unique<FooterItem>(this->context(), QStringLiteral("MorphFooter"), this);
             } catch (...) {
                 _makingFooter = false;
                 throw;
@@ -366,7 +373,7 @@ protected:
     [[nodiscard]] QObject* scheme() const override { return this->context().themeObject("cardScheme"); }
 
 private:
-    std::unique_ptr<ContainerItemWidget<ui::SlotWidget>> _footer;
+    std::unique_ptr<FooterItem> _footer;
     bool _makingFooter = false;
 };
 

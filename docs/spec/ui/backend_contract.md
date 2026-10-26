@@ -146,7 +146,7 @@ reorders children, and only through this.
 | `GridWidget` | Row-major in `setColumns` columns, `setGap` apart; `setSpan(child, n)` widens one, and a child spans 1 until told; `setAlign` places each cell's content in its row |
 | `PanelWidget` | Inside the frame, `setPadding` in; a collapsed panel hides its content, which takes no input. `setHeader`'s widget is not part of "its content" for this: it stays shown and usable while collapsed |
 | `ScrollWidget` | One scrolled viewport, on the axis fixed at creation, that keeps the focused child visible |
-| `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page |
+| `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page. A scrollable slot (`setScrollable(true)`) shows a child that does not stretch in height at its natural height in a vertical viewport of its own height, which keeps the focused widget in view; a child that stretches in height fills it, as in a slot that does not scroll. The slot reads its shown child's height sizing itself |
 | `TabsWidget` | Page slots in the order first shown; the mount keeps exactly the selected page's slot visible, and `setSelected` moves the bar's highlight only |
 | `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included. `footer()` is a container the overlay owns and lays out after its content, showing nothing while it is empty; the mount puts the overlay's actions there. A `DrawerWidget` has the same footer |
 | `TableWidget` | Rows, each a horizontal stack of cells in column order; `setSelectColumn(true)` once, before any row, for a table that draws its selection as check boxes; `setRowKey(row, key)` once per row, right after it is built, then `setRowHeading(row)` for a heading row, whose one cell spans every column and the select column, then `setRowTone(row, tone)` for a toned row and `setRowLabel(row, label)` for a named one, and again on every change. A hidden cell keeps its column: the cells after it stay under their own headers |
@@ -179,7 +179,8 @@ units, at most the space there is; `stretch` is unchanged. In a column every con
 in a row as tall as the row; a grid cell, and the content of a panel, scroll area, slot, tab page, dialog or drawer,
 fills its width. A kind whose width is its label (a button, a badge, a checkbox) fills the line but draws at its
 natural width at the line's start, on Qt Quick as on the terminal. Along the axis a stack packs its children at the
-start, `setGap` apart; only a `stretch` child takes spare length. A content-sized splitter keeps each pane at its own
+start, `setGap` apart; only a `stretch` child takes spare length, so a `stretch` child of a column takes the column's
+spare height, and a stretching scroll above a bar keeps the bar at the column's end. A content-sized splitter keeps each pane at its own
 size until the user drags. A splitter's panes are sized by the splitter, not by this rule.
 
 **Table cells.** A table sizes and places its cells itself. A cell fills its column's width, except a kind whose
@@ -228,7 +229,8 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `GridWidget` | `setColumns` (at least one), `setGap`, `setSpan(child, span)`, `setAlign(Align)` | — |
 | `SpacerWidget` | — | — |
 | `PanelWidget` | `setTitle`, `setHeader(Widget&)` (shown beside the title, called at most once), `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
-| `ScrollWidget`, `SlotWidget` | — | — |
+| `ScrollWidget` | — | — |
+| `SlotWidget` | `setScrollable(scrollable)` (a new slot does not scroll) | — |
 | `TabsWidget` | `setTabs(labels)` (may be called again; a call with the same number of labels replaces the captions and keeps the highlight, the shown page and the keyboard focus), `setSelected(index)` (past the last highlights none), `setBarShown(shown)` (whether the strip of tab buttons is drawn; the selected page shows either way, and a new tabs widget shows its strip) | `setOnSelect(index)` |
 | `DialogWidget` | `setOpen`, `setTitle`, `footer()` | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `ToastWidget` | `show(text, tone)` (one call: shows the message and restarts the dismiss interval regardless of whether the toast is already on-screen) | — |
@@ -453,6 +455,10 @@ the container it measures inside another, since a root fills the window or scree
    lines from either, more than the unit a measure may be off by.
 10. A heading row's one cell, in a table of a 10-unit and a 20-unit column whose cells are containers, starts where
     the first column's cell starts and ends where the second's ends.
+11. In a 20-unit column, a scroll that stretches in height above a one-line bar keeps the bar at the column's end
+    however long the scroll's content is: the scroll takes the column's spare height, not its content's.
+12. A scrollable slot 20 units tall shows a content-height column of 40 lines in a viewport of its own height and
+    brings the focused 40th line into view; a column that stretches in height fills the slot from its top.
 
 ### The probe
 

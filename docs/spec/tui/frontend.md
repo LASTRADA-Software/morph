@@ -83,7 +83,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Checkbox | `[x] label` | Space, click; Enter passes on |
 | Select | radio: a row per option, `(•)` marking; dropdown: `[label ▾]` opening a list overlay | Enter, Space, click; arrows in the list |
 | Menu | one level of entries as a list, `>` on an entry with a submenu, the mark of a checkable one, its chord | Right, Enter, Space or a click opens a submenu; Left or Backspace goes up; choosing a leaf shows the top again |
-| Stack, Slot | children along an axis, a spacing step apart | — |
+| Stack, Slot | children along an axis, a spacing step apart; a scrollable slot whose shown children keep their content height is a viewport over them that follows the focus, as Scroll is, and takes the focus itself while nothing inside can | a scrolling slot: arrows, PageUp/PageDown, Home/End, wheel |
 | Grid | equal columns, cells row-major, spans | — |
 | Spacer | nothing; stretches in a stack | — |
 | Panel | a box with a title; a collapsible one folds to its title line | Enter, Space, click on the title |

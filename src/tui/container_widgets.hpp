@@ -51,15 +51,6 @@ private:
     ui::Justify _justify = ui::Justify::Start;
 };
 
-/// The slot a Switch case or a Tabs page mounts into: its children stacked vertically, no gap.
-class SlotImpl final : public TuiContainer<ui::SlotWidget> {
-public:
-    explicit SlotImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
-    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
-    void paint(::core::tui::Canvas& canvas) override;
-};
-
 /// Grid: equal columns, cells row-major, a cell spanning several columns. A hidden child leaves no cell: the cells
 /// after it move up one place, as a null cell of the view tree leaves none.
 class GridImpl final : public TuiContainer<ui::GridWidget> {
@@ -137,8 +128,9 @@ private:
     std::function<void(bool)> _onToggle;
 };
 
-/// Scroll: a viewport onto its content, which is laid out at its natural extent along the scroll's axis (at least
-/// the viewport's) and at the viewport's across it, and drawn moved back by the scroll position.
+/// What a Scroll is, and a scrollable Slot while it scrolls: a viewport onto its content, which is laid
+/// out at its natural extent along the scroll's axis (at least the viewport's) and at the viewport's across it, and
+/// drawn moved back by the scroll position.
 ///
 /// A widget scrolled wholly out of view is given no area, so it neither draws nor takes a click; one scrolled partly
 /// out of view draws the part that shows (see `WidgetBase::render`). Whenever the focus moves to a widget inside, or
@@ -151,27 +143,35 @@ private:
 /// it. Up and Down (Left and Right across a horizontal scroll) move the view one cell, PageUp and PageDown one view
 /// less a cell, Home and End to either end; they work too when they bubble up from a focused widget inside that
 /// leaves them, and like the wheel they are left to the scroll's surroundings when the view cannot move.
-class ScrollImpl final : public TuiContainer<ui::ScrollWidget> {
+class ScrollViewport {
 public:
-    ScrollImpl(Context& context, ui::Axis axis) : TuiContainer{context}, _axis{axis} { adopt(makeView(*this)); }
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
-    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
-    [[nodiscard]] bool wantsFocus() const override;
-    void paint(::core::tui::Canvas& canvas) override;
-    [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
-    [[nodiscard]] bool wheel(int delta) override;
+    explicit ScrollViewport(ui::Axis axis) noexcept : _axis{axis} {}
+    /// The axis it scrolls along.
+    [[nodiscard]] ui::Axis axis() const noexcept { return _axis; }
+    /// Where @p owner's children go in a view of @p size, moved back by the scroll position.
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(ContainerBase const& owner, ::core::tui::Size size) const;
+    /// Whether @p owner takes the focus itself: while nothing inside it can.
+    [[nodiscard]] static bool wantsFocus(ContainerBase const& owner);
+    /// Lays @p owner's children out for the frame @p canvas is, following the focus.
+    void paint(ContainerBase const& owner, ::core::tui::Canvas& canvas);
+    /// Moves the view on a scrolling key; whether it moved.
+    [[nodiscard]] ::core::tui::EventResult key(ContainerBase const& owner, ::core::tui::KeyEvent const& key);
+    /// Moves the view a cell per notch; whether it moved.
+    [[nodiscard]] bool wheel(ContainerBase const& owner, int delta);
 
 private:
     /// Where the children go at scroll position 0, for a viewport of @p viewport.
-    [[nodiscard]] std::vector<::core::tui::Rect> contentAreas(::core::tui::Size viewport) const;
+    [[nodiscard]] std::vector<::core::tui::Rect> contentAreas(ContainerBase const& owner,
+                                                              ::core::tui::Size viewport) const;
     /// Where the widget owning the focused view lies in the content at scroll position 0, as far as the containers
     /// on the way to it say; nothing when the focus is not inside.
-    [[nodiscard]] std::optional<::core::tui::Rect> focusedArea(::core::tui::Size viewport) const;
+    [[nodiscard]] std::optional<::core::tui::Rect> focusedArea(ContainerBase const& owner,
+                                                               ::core::tui::Size viewport) const;
     /// Moves the view to the focused widget inside when it, its place in the content or the view's size changed
     /// since the scroll last followed it.
-    void followFocus(::core::tui::Size viewport);
+    void followFocus(ContainerBase const& owner, ::core::tui::Size viewport);
     /// Moves the view by @p cells along the axis, within the content; whether it moved.
-    bool scrollBy(int cells);
+    bool scrollBy(ContainerBase const& owner, int cells);
 
     ui::Axis _axis;
     int _offset = 0;                    ///< The scroll position: content cells before the view.
@@ -188,7 +188,45 @@ private:
 
         bool operator==(Followed const&) const = default;
     };
+
     Followed _followed;
+};
+
+class ScrollImpl final : public TuiContainer<ui::ScrollWidget> {
+public:
+    ScrollImpl(Context& context, ui::Axis axis) : TuiContainer{context}, _scroller{axis} { adopt(makeView(*this)); }
+    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
+    [[nodiscard]] bool wantsFocus() const override;
+    void paint(::core::tui::Canvas& canvas) override;
+    [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
+    [[nodiscard]] bool wheel(int delta) override;
+
+private:
+    ScrollViewport _scroller;
+};
+
+/// The slot a Switch case or a Tabs page mounts into: its children stacked vertically, no gap. A scrollable one whose
+/// shown children all keep their content height is a vertical `ScrollViewport` over them: it follows the focus, takes
+/// the arrows, PageUp and PageDown, Home and End and the wheel, and takes the focus itself while nothing inside can. A
+/// child that stretches down fills the slot, which then does not scroll.
+class SlotImpl final : public TuiContainer<ui::SlotWidget> {
+public:
+    explicit SlotImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
+    void setScrollable(bool scrollable) override;
+    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
+    [[nodiscard]] bool wantsFocus() const override;
+    void paint(::core::tui::Canvas& canvas) override;
+    [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
+    [[nodiscard]] bool wheel(int delta) override;
+
+private:
+    // Whether the slot scrolls now: scrollable, and no shown child stretches down.
+    [[nodiscard]] bool scrolls() const;
+
+    bool _scrollable = false;
+    ScrollViewport _scroller{ui::Axis::Vertical};
 };
 
 /// The overlay of a dialog or a drawer: a box with a border and a title over everything else, holding the children's
@@ -258,10 +296,12 @@ private:
 };
 
 /// Dialog: an `OverlayCore` centred on the screen. Closed until opened.
-/// An overlay's footer: its children in one row against the right edge, one cell apart. Empty, it takes no room.
+/// An overlay's footer: its children in one row against the right edge, one cell apart. Empty, it takes no room. It
+/// never scrolls.
 class FooterImpl final : public TuiContainer<ui::SlotWidget> {
 public:
     explicit FooterImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
+    void setScrollable(bool scrollable) override { static_cast<void>(scrollable); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     void paint(::core::tui::Canvas& canvas) override;

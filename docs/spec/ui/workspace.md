@@ -53,8 +53,10 @@ answers them by index over its order.
   strip of tab buttons shows with two tabs or more and hides with one (`setBarShown(tabs > 1)`): one tab needs no
   strip to choose it by, and the chords work with it hidden. There is no option to show it for one tab; an
   application that wants a strip of its own builds it over `WorkspaceModel`. The bar
-  and every page stretch both ways, so a screen whose root stretches fills the page; a content-sized one keeps its
-  own size.
+  and every page stretch both ways, so a screen whose root stretches fills the page and lays itself out. Every page
+  slot is scrollable (`SlotWidget::setScrollable(true)`): a screen whose root keeps its content height is shown at
+  that height and scrolls inside the page, so no screen is cut off at the window's edge. Scrolling every page
+  instead would leave a stretching root no height to stretch to.
 - `WorkspaceOptions::screens` gives a screen id's catalog facts, `WorkspaceScreen{singleton, reuseEmpty, host,
   available}`; empty treats every screen as a plain, available document screen.
 - Tabs keep the order they were opened in, so a page slot's index is its tab's. `tabs()` lists them as

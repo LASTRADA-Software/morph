@@ -2242,13 +2242,97 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: in a column of fixed height, a scroll that stretches in height above a text keeps the text at the
+///        column's end, however long the scroll's content: the scroll takes the column's spare height, not its
+///        content's.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> stretchingScrollKeepsBarAtEnd(ConformanceProbe& probe) {
+    std::vector<Node> lines;
+    lines.reserve(40);
+    for (int line = 1; line <= 40; ++line) {
+        lines.push_back(sizedText("line " + std::to_string(line), {}));
+    }
+    Scroll scroll{.child = ui::column(Column{.children = std::move(lines)}), .axis = Axis::Vertical};
+    scroll.common.layout = {.width = Sizing::stretch(), .height = Sizing::stretch()};
+    Column column{.children = {ui::scroll(std::move(scroll)), sizedText("bar", {})}};
+    column.common.layout = {.width = Sizing::fixed(30), .height = Sizing::fixed(20)};
+    Mounted const view{probe.runtime(), probe.backend(), insideRow(ui::column(std::move(column)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const inside = measured(probe, view);
+    checks.that(inside.children.size() == 2, "the column holds a scroll and a bar");
+    if (inside.children.size() == 2) {
+        WidgetBounds const outer = geometry.of(*inside.container);
+        WidgetBounds const bar = geometry.of(*inside.children.at(1));
+        geometry.near("the bar's bottom, at the column's", outer.y + outer.height, bar.y + bar.height);
+        checks.that(geometry.of(*inside.children.at(0)).height < 20,
+                    "the scroll is as tall as the column or taller, so the bar is pushed out of it");
+    }
+    return checks.result();
+}
+
+/// @brief Whether @p inner lies wholly inside @p outer, within half a unit, and is drawn at all.
+/// @param outer The outer bounds.
+/// @param inner The inner bounds.
+/// @return True when it does.
+[[nodiscard]] inline bool within(WidgetBounds const& outer, WidgetBounds const& inner) {
+    return inner.height > 0 && inner.y >= outer.y - 0.5 && inner.y + inner.height <= outer.y + outer.height + 0.5;
+}
+
+/// @brief Case: a scrollable slot of fixed height shows a column of 40 lines inside its own height and brings the
+///        focused last one into view; holding a column that stretches in height, the column fills it exactly.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> scrollableSlotScrolls(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    IViewBackend& backend = probe.backend();
+    for (bool const stretching : {false, true}) {
+        auto const root = backend.createStack(nullptr, Axis::Vertical);
+        auto const slot = backend.createSlot(root.get());
+        slot->setLayout({.width = Sizing::fixed(30), .height = Sizing::fixed(20)});
+        slot->setScrollable(true);
+        auto const column = backend.createStack(slot.get(), Axis::Vertical);
+        if (stretching) {
+            column->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+        }
+        // A button first, so a backend that focuses the first focusable widget on its own focuses the top line, not
+        // the last.
+        auto const first = backend.createButton(column.get());
+        first->setLabel("first");
+        std::vector<std::unique_ptr<TextWidget>> lines;
+        for (int line = 2; line < (stretching ? 3 : 40); ++line) {
+            lines.push_back(backend.createText(column.get()));
+            lines.back()->setText("line " + std::to_string(line));
+        }
+        auto const last = backend.createButton(column.get());
+        last->setLabel("last");
+        probe.settle();
+        WidgetBounds const box = geometry.of(*slot);
+        geometry.near(stretching ? "the slot's height around a stretching column" : "the slot's height", 20,
+                      box.height);
+        if (stretching) {
+            geometry.near("a stretching column's height in the slot", 20, geometry.of(*column).height);
+            geometry.near("the first line, at the slot's top", box.y, geometry.of(*first).y);
+            continue;
+        }
+        checks.that(!within(box, geometry.of(*last)), "the 40th line lies inside a 20-unit slot before any scroll");
+        last->focus();
+        probe.settle();
+        checks.that(within(box, geometry.of(*last)), "the focused 40th line stays outside the slot");
+    }
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 10> const cases{{
+    static std::array<ConformanceCase, 12> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -2262,6 +2346,10 @@ struct SelectionReport {
         {.name = "a table column's valign places a cell at its row's top or bottom",
          .run = detail::columnPlacesCellsDownRow},
         {.name = "a table's heading row spans every column", .run = detail::headingSpansColumns},
+        {.name = "a stretching scroll above a bar keeps the bar at its column's end",
+         .run = detail::stretchingScrollKeepsBarAtEnd},
+        {.name = "a scrollable slot scrolls a content-height child and fills with a stretching one",
+         .run = detail::scrollableSlotScrolls},
     }};
     return cases;
 }

@@ -71,14 +71,59 @@ std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) con
 
 void StackImpl::paint(::core::tui::Canvas& canvas) { placeChildren(childAreas(canvas.size())); }
 
+::core::tui::Size ScrollImpl::naturalSize() const { return stackNaturalSize(children(), _scroller.axis(), 0); }
+
+std::vector<::core::tui::Rect> ScrollImpl::childAreas(::core::tui::Size size) const {
+    return _scroller.childAreas(*this, size);
+}
+
+bool ScrollImpl::wantsFocus() const { return ScrollViewport::wantsFocus(*this); }
+
+void ScrollImpl::paint(::core::tui::Canvas& canvas) { _scroller.paint(*this, canvas); }
+
+::core::tui::EventResult ScrollImpl::key(::core::tui::KeyEvent const& key) { return _scroller.key(*this, key); }
+
+bool ScrollImpl::wheel(int delta) { return _scroller.wheel(*this, delta); }
+
 ::core::tui::Size SlotImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Vertical, 0); }
 
 std::vector<::core::tui::Rect> SlotImpl::childAreas(::core::tui::Size size) const {
+    if (scrolls()) {
+        return _scroller.childAreas(*this, size);
+    }
     return stackAreas(children(), {.x = 0, .y = 0, .width = size.width, .height = size.height},
                       StackSpec{.axis = ui::Axis::Vertical});
 }
 
-void SlotImpl::paint(::core::tui::Canvas& canvas) { placeChildren(childAreas(canvas.size())); }
+bool SlotImpl::wantsFocus() const { return scrolls() && ScrollViewport::wantsFocus(*this); }
+
+void SlotImpl::paint(::core::tui::Canvas& canvas) {
+    if (scrolls()) {
+        _scroller.paint(*this, canvas);
+        return;
+    }
+    placeChildren(childAreas(canvas.size()));
+}
+
+::core::tui::EventResult SlotImpl::key(::core::tui::KeyEvent const& key) {
+    return scrolls() ? _scroller.key(*this, key) : ::core::tui::EventResult::Ignored;
+}
+
+bool SlotImpl::wheel(int delta) { return scrolls() && _scroller.wheel(*this, delta); }
+
+void SlotImpl::setScrollable(bool scrollable) {
+    if (scrollable != _scrollable) {
+        _scrollable = scrollable;
+        refresh();
+    }
+}
+
+// A child that stretches down fills the slot, so only content-height children scroll.
+bool SlotImpl::scrolls() const {
+    return _scrollable && std::ranges::none_of(children(), [](WidgetBase const* child) {
+               return child->shown() && child->layout().height.kind == ui::Sizing::Kind::Stretch;
+           });
+}
 
 void GridImpl::setColumns(int columns) {
     _columns = columns;
@@ -330,21 +375,20 @@ void PanelImpl::click(::core::tui::Point cell) {
     }
 }
 
-::core::tui::Size ScrollImpl::naturalSize() const { return stackNaturalSize(children(), _axis, 0); }
-
-std::vector<::core::tui::Rect> ScrollImpl::contentAreas(::core::tui::Size viewport) const {
-    auto const natural = naturalSize();
+std::vector<::core::tui::Rect> ScrollViewport::contentAreas(ContainerBase const& owner,
+                                                            ::core::tui::Size viewport) const {
+    auto const natural = stackNaturalSize(owner.children(), _axis, 0);
     auto content = ::core::tui::Rect{.x = 0, .y = 0, .width = viewport.width, .height = viewport.height};
     if (_axis == ui::Axis::Vertical) {
         content.height = std::max(viewport.height, natural.height);
     } else {
         content.width = std::max(viewport.width, natural.width);
     }
-    return stackAreas(children(), content, StackSpec{.axis = _axis});
+    return stackAreas(owner.children(), content, StackSpec{.axis = _axis});
 }
 
-std::vector<::core::tui::Rect> ScrollImpl::childAreas(::core::tui::Size size) const {
-    auto areas = contentAreas(size);
+std::vector<::core::tui::Rect> ScrollViewport::childAreas(ContainerBase const& owner, ::core::tui::Size size) const {
+    auto areas = contentAreas(owner, size);
     bool const vertical = _axis == ui::Axis::Vertical;
     for (auto& area : areas) {
         if (!area.empty()) {
@@ -374,19 +418,20 @@ namespace {
 
 // Walks down from this scroll's child to the focused widget, each container saying where the next one lies inside
 // it. Where one does not say, or puts the next out of its own area, the last area known is the answer.
-std::optional<::core::tui::Rect> ScrollImpl::focusedArea(::core::tui::Size viewport) const {
+std::optional<::core::tui::Rect> ScrollViewport::focusedArea(ContainerBase const& owner,
+                                                             ::core::tui::Size viewport) const {
     std::vector<WidgetBase const*> chain;
-    for (auto const* widget = context().ownerOf(context().screen->focusedComponent()); widget != nullptr;
+    for (auto const* widget = owner.context().ownerOf(owner.context().screen->focusedComponent()); widget != nullptr;
          widget = widget->container()) {
         chain.push_back(widget);
-        if (widget->container() == this) {
+        if (widget->container() == &owner) {
             break;
         }
     }
-    if (chain.empty() || chain.back()->container() != this) {
+    if (chain.empty() || chain.back()->container() != &owner) {
         return std::nullopt;
     }
-    auto area = areaOf(*this, contentAreas(viewport), chain.back());
+    auto area = areaOf(owner, contentAreas(owner, viewport), chain.back());
     for (auto const [inner, outer] :
          std::views::zip(chain | std::views::reverse | std::views::drop(1), chain | std::views::reverse)) {
         auto const* const container = dynamic_cast<ContainerBase const*>(outer);
@@ -408,14 +453,14 @@ std::optional<::core::tui::Rect> ScrollImpl::focusedArea(::core::tui::Size viewp
 
 // Moving the view where the user asked does not count as a change: the focused widget's place in the content and
 // the view's size are what is compared.
-void ScrollImpl::followFocus(::core::tui::Size viewport) {
-    auto const* const focused = context().screen->focusedComponent();
-    bool const inside = focused != nullptr && focused != &view() && isWithin(focused, view());
+void ScrollViewport::followFocus(ContainerBase const& owner, ::core::tui::Size viewport) {
+    auto const* const focused = owner.context().screen->focusedComponent();
+    bool const inside = focused != nullptr && focused != &owner.view() && isWithin(focused, owner.view());
     if (!inside) {
         _followed = {};
         return;
     }
-    auto const area = focusedArea(viewport);
+    auto const area = focusedArea(owner, viewport);
     Followed const now{.view = focused, .area = area.value_or(::core::tui::Rect{}), .viewport = viewport};
     if (now == _followed) {
         return;
@@ -433,38 +478,39 @@ void ScrollImpl::followFocus(::core::tui::Size viewport) {
     _offset = std::min(_offset, first);
 }
 
-void ScrollImpl::paint(::core::tui::Canvas& canvas) {
+void ScrollViewport::paint(ContainerBase const& owner, ::core::tui::Canvas& canvas) {
     auto const viewport = canvas.size();
     _viewportSize = viewport;
     bool const vertical = _axis == ui::Axis::Vertical;
-    auto const natural = naturalSize();
+    auto const natural = stackNaturalSize(owner.children(), _axis, 0);
     _viewport = vertical ? viewport.height : viewport.width;
     _extent = std::max(_viewport, vertical ? natural.height : natural.width);
-    followFocus(viewport);
+    followFocus(owner, viewport);
     _offset = std::clamp(_offset, 0, _extent - _viewport);
-    placeChildren(childAreas(viewport));
+    owner.placeChildren(childAreas(owner, viewport));
 }
 
 // A move the user asked for counts as having followed the focus as it is now, so the next frame does not undo it
 // when the focus moved since the last one.
-bool ScrollImpl::scrollBy(int cells) {
+bool ScrollViewport::scrollBy(ContainerBase const& owner, int cells) {
     int const target = std::clamp(_offset + cells, 0, std::max(0, _extent - _viewport));
     if (target == _offset) {
         return false;
     }
     _offset = target;
-    auto const* const focused = context().screen->focusedComponent();
-    _followed = {
-        .view = focused, .area = focusedArea(_viewportSize).value_or(::core::tui::Rect{}), .viewport = _viewportSize};
-    refresh();
+    auto const* const focused = owner.context().screen->focusedComponent();
+    _followed = {.view = focused,
+                 .area = focusedArea(owner, _viewportSize).value_or(::core::tui::Rect{}),
+                 .viewport = _viewportSize};
+    owner.refresh();
     return true;
 }
 
-bool ScrollImpl::wheel(int delta) { return scrollBy(delta); }
+bool ScrollViewport::wheel(ContainerBase const& owner, int delta) { return scrollBy(owner, delta); }
 
 // Each widget below says whether it wants the focus; a scroll among them asks its own content in turn.
-bool ScrollImpl::wantsFocus() const {
-    std::vector<WidgetBase const*> pending{children().begin(), children().end()};
+bool ScrollViewport::wantsFocus(ContainerBase const& owner) {
+    std::vector<WidgetBase const*> pending{owner.children().begin(), owner.children().end()};
     while (!pending.empty()) {
         auto const* const widget = pending.back();
         pending.pop_back();
@@ -481,7 +527,7 @@ bool ScrollImpl::wantsFocus() const {
     return true;
 }
 
-::core::tui::EventResult ScrollImpl::key(::core::tui::KeyEvent const& key) {
+::core::tui::EventResult ScrollViewport::key(ContainerBase const& owner, ::core::tui::KeyEvent const& key) {
     using ::core::tui::KeyCode;
     if (::core::tui::withoutLockKeys(key.modifiers) != ::core::tui::Modifier::None) {
         return ::core::tui::EventResult::Ignored;
@@ -502,7 +548,8 @@ bool ScrollImpl::wantsFocus() const {
     } else if (key.key == KeyCode::End) {
         cells = _extent - _viewport - _offset;
     }
-    return cells != 0 && scrollBy(cells) ? ::core::tui::EventResult::Handled : ::core::tui::EventResult::Ignored;
+    return cells != 0 && scrollBy(owner, cells) ? ::core::tui::EventResult::Handled
+                                                : ::core::tui::EventResult::Ignored;
 }
 
 namespace {

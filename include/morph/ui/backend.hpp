@@ -384,7 +384,16 @@ public:
 class ScrollWidget : public ContainerWidget {};
 
 /// @brief A container that shows its children and nothing else: the host of a Switch's case and of a Tabs page.
-class SlotWidget : public ContainerWidget {};
+class SlotWidget : public ContainerWidget {
+public:
+    /// @brief Whether the slot scrolls a child that does not stretch in height. A scrollable slot shows such a
+    ///        child at its natural height inside a vertical viewport of the slot's own height, which keeps the
+    ///        focused widget in view; a child that stretches in height is laid out as in a slot that does not
+    ///        scroll, filling it. The slot reads its shown child's height sizing itself, so a new child follows
+    ///        without another call. A new slot does not scroll.
+    /// @param scrollable Whether it scrolls.
+    virtual void setScrollable(bool scrollable) = 0;
+};
 
 /// @brief A tab bar over page slots.
 ///
