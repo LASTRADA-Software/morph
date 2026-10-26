@@ -742,3 +742,23 @@ TEST_CASE("interpreter control: a splitter's sizes reach the splitter", "[ui][in
     REQUIRE(h.diagnostics.size() == 1);
     CHECK(h.diagnostics.front().reason.contains("sizes is a list of numbers"));
 }
+
+// Mutation: lower no tracks (the grid gets `columns=1` and no `tracks`).
+TEST_CASE("interpreter control: a grid's tracks reach the grid in place of a column count", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "tracks",
+      "view": { "kind": "column", "children": [
+        { "kind": "grid", "testId": "plate", "tracks": [
+          { "width": { "lit": { "fixed": 3 } } },
+          { "width": { "lit": { "fixed": 6 } }, "align": "center" },
+          { "align": "end" } ],
+          "children": [ { "kind": "text", "text": "A" } ] },
+        { "kind": "grid", "testId": "plain", "columns": 2, "children": [] } ] } })");
+    int const plate = h.byTestId("Grid", "plate");
+    CHECK(h.backend.prop(plate, "tracks") == "[fixed(3),fixed(6);align=center,stretch(1);align=end]");
+    CHECK_FALSE(h.backend.hasProp(plate, "columns"));
+    int const plain = h.byTestId("Grid", "plain");
+    CHECK(h.backend.prop(plain, "columns") == "2");
+    CHECK_FALSE(h.backend.hasProp(plain, "tracks"));
+}

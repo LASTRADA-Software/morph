@@ -327,9 +327,19 @@ public:
 /// @brief Children laid out row-major in columns.
 class GridWidget : public ContainerWidget {
 public:
-    /// @brief Sets the column count.
+    /// @brief Sets the column count; the columns share the width.
     /// @param columns At least one.
     virtual void setColumns(int columns) = 0;
+
+    /// @brief Sets the column tracks in place of a column count; the mount calls it once, before any child, and then
+    ///        never calls `setColumns`.
+    ///
+    /// Fixed tracks take their amount, content tracks their widest cell that spans only them, and stretch tracks
+    /// share what is left by weight. A spanning cell covers its tracks and the gaps between them, and sizes none.
+    /// Across its track, a text cell's text and a label-width cell sit where the track's `align` says (the first
+    /// track's, for a spanning cell); a container cell fills the track.
+    /// @param tracks At least one.
+    virtual void setTracks(std::vector<GridTrack> const& tracks) = 0;
 
     /// @brief Sets the space between cells.
     /// @param gap A spacing step, 0 to `kMaxSpacingStep`; the mount never passes another value.

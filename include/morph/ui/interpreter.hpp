@@ -6740,6 +6740,12 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         Grid spec{.columns = static_cast<int>(onceInt("columns", 1)),
                   .gap = static_cast<int>(onceInt("gap", 0)),
                   .align = alignOf(node.name("align"))};
+        for (DocNodePtr const& track : node.partList("tracks")) {
+            ExprPtr const width = track->prop("width");
+            spec.tracks.push_back(
+                GridTrack{.width = width ? sizingOf(once(ctx, width)) : Sizing::stretch(),
+                          .align = cellPlaceNamed(track->name("align")).value_or(Align::Start)});
+        }
         for (DocNodePtr const& cell : node.nodes("children")) {
             ExprPtr const span = cell->prop("span");
             spec.cells.push_back(

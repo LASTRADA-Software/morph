@@ -90,6 +90,11 @@ struct GridPlan {
 /// its tallest cell.
 [[nodiscard]] GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width, int rowGap);
 
+/// As `planGrid` with a column count, with one `Item` per column sizing it as `distribute` sizes a stack's items;
+/// no item counts as one stretch column.
+[[nodiscard]] GridPlan planGrid(std::span<Item const> columns, std::span<GridCell const> cells, Track width,
+                                int rowGap);
+
 /// The rectangle a slot of `plan` covers, gaps between its columns included.
 [[nodiscard]] ::core::tui::Rect slotArea(GridPlan const& plan, GridSlot const& slot);
 

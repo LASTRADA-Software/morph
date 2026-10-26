@@ -84,7 +84,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Select | radio: a row per option, `(•)` marking; dropdown: `[label ▾]` opening a list overlay | Enter, Space, click; arrows in the list |
 | Menu | one level of entries as a list, `>` on an entry with a submenu, the mark of a checkable one, its chord | Right, Enter, Space or a click opens a submenu; Left or Backspace goes up; choosing a leaf shows the top again |
 | Stack, Slot | children along an axis, a spacing step apart; a scrollable slot whose shown children keep their content height is a viewport over them that follows the focus, as Scroll is, and takes the focus itself while nothing inside can | a scrolling slot: arrows, PageUp/PageDown, Home/End, wheel |
-| Grid | equal columns, cells row-major, spans | — |
+| Grid | equal columns, or columns sized by their tracks; cells row-major, spans | — |
 | Spacer | nothing; stretches in a stack | — |
 | Panel | a box with a title; a collapsible one folds to its title line | Enter, Space, click on the title |
 | Scroll | a viewport that follows the focus | arrows, PageUp/PageDown, Home/End, wheel |
@@ -128,7 +128,8 @@ into its bounds, and shares what is left among Stretch children by weight (`layo
 its child's maximum, and what a capped child leaves goes to the Stretch children not capped, at most one pass per
 Stretch child; a share below its minimum is raised to it. An overflow is taken from the last child first, down to
 each child's minimum, and then the stack overflows and clips. A grid places cells
-row-major in equal columns. Several roots share the screen as a column, in the order they were made: each takes the
+row-major in equal columns, or in columns its tracks size: `layout::planGrid` gives each track to `distribute` as a
+stack item, a content track's natural width its widest cell that spans only it. Several roots share the screen as a column, in the order they were made: each takes the
 height it asks for, and the last shown one what is left; a single root takes the whole screen.
 
 Across a stack's axis, a Content or Stretch child fills the stack's extent and a Fixed child gets its amount, clamped
@@ -145,7 +146,8 @@ child its `crossExtent`, and one narrower than the space is offset to the start,
 `justify`: before the first child, half of it for `center` and all of it for `end`; for `between`, `spare / (shown −
 1)` cells added to every gap and the remainder one cell to each gap from the first. A grid places each cell in its row
 the same way by the cell's `alignSelf`, else the grid's `align`; across its column the cell fills the width as
-before.
+before, except that a track with `align` `center` or `end` places a cell drawn at its natural width
+(`placedAcrossColumn`: a text, a badge, a check box, a push button) there, as a table column does.
 
 **Spacing.** A `gap` or `padding` arrives as a spacing step, 0 to 5 (`ui::spacingStep`), and the container maps it to
 cells by axis with `layout::stepCells`. A cell is about twice as tall as it is wide, so a step is about half as many

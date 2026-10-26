@@ -268,6 +268,7 @@ class GridImpl final : public ContainerItemWidget<ui::GridWidget> {
 public:
     GridImpl(Context& context, ui::ContainerWidget* parent);
     void setColumns(int columns) override;
+    void setTracks(std::vector<ui::GridTrack> const& tracks) override;
     void setGap(int gap) override;
     void setSpan(ui::Widget& child, int span) override;
     void setAlign(ui::Align align) override;
@@ -275,6 +276,12 @@ public:
 protected:
     /// A cell's content is placed vertically in its row.
     [[nodiscard]] int alignsAcross() const noexcept override { return 2; }
+    /// A grid with tracks places its cells itself, again whenever one's size, visibility or span changes.
+    void adopted(ItemBase& child) override;
+
+private:
+    /// Lays a grid with tracks out again; a grid without them leaves it to its GridLayout.
+    void place() const;
 };
 
 class PanelImpl final : public ContainerItemWidget<ui::PanelWidget> {

@@ -181,13 +181,20 @@ int crossExtent(ui::Sizing sizing, int space, Bounds bounds) {
 }
 
 GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width, int rowGap) {
-    int const count = std::max(1, columns);
+    std::vector<Item> const equal(static_cast<std::size_t>(std::max(1, columns)),
+                                  Item{.sizing = ui::Sizing::stretch(1), .natural = 0});
+    return planGrid(equal, cells, width, rowGap);
+}
+
+GridPlan planGrid(std::span<Item const> columns, std::span<GridCell const> cells, Track width, int rowGap) {
+    std::vector<Item> const single{Item{.sizing = ui::Sizing::stretch(1), .natural = 0}};
+    std::span<Item const> const tracks = columns.empty() ? std::span<Item const>{single} : columns;
+    // Bounded by memory, as the column widths are, so it saturates rather than overflows.
+    int const count = saturate(static_cast<Wide>(tracks.size()));
     GridPlan plan;
     plan.columnGap = std::max(0, width.gap);
     plan.rowGap = std::max(0, rowGap);
-    std::vector<Item> const equal(static_cast<std::size_t>(count),
-                                  Item{.sizing = ui::Sizing::stretch(1), .natural = 0});
-    plan.columnWidths = distribute(equal, Track{.length = width.length, .gap = plan.columnGap});
+    plan.columnWidths = distribute(tracks, Track{.length = width.length, .gap = plan.columnGap});
     plan.columnX = edgesOf(plan.columnWidths, plan.columnGap);
 
     int column = 0;

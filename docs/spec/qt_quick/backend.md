@@ -146,7 +146,7 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
 | Select | `MorphSelect` | a `ComboBox` with a themed chevron indicator (`nav.expand`/`nav.collapse`, flipping with the popup), or `RadioButton`s | the chosen option's index, which C++ turns into its key |
 | Menu | `MorphMenu` | a bar of top-level entries; a submenu opens in a popup, one level at a time | the chosen entry's path |
 | Column, Row | `MorphStack` | a `GridLayout` flowing on the axis; `align` and `justify` (the `ui::Align` and `ui::Justify` indices) | — |
-| Grid | `MorphGrid` | a `GridLayout`; a child's span is its `Layout.columnSpan`; `align` | — |
+| Grid | `MorphGrid` | a `GridLayout`; a child's span is its `Layout.columnSpan`; `align`. With `tracks` (`{kind, amount, align}` each), `place()` lays the cells out in an item of its own instead, as the terminal does, and C++ calls it again whenever a cell's implicit size, visibility or span changes; across its track a label-width cell (`fillsAcross` false) keeps its natural width at the track's start, centre or end, and a text cell its `textAlign` | — |
 | Spacer | `MorphSpacer` | space that fills the layout | — |
 | Panel | `MorphPanel` | a framed region with a title and padding; collapsible, with a header button | the collapsed state asked for |
 | Scroll | `MorphScroll` | a `Flickable` that scrolls the focused item into view, its content along a horizontal axis at least the viewport's width, with one bar on its axis made from its `bar` part (`MorphScrollBar`, a child of the flickable, where the attached `ScrollBar` lays it out) | — |

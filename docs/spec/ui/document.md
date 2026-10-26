@@ -175,7 +175,7 @@ left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {
 | `select` | `options`, `selected`, `style`, `label`, `showLabel`, `onStale` (`clear`, `keep`), `onChoose`, `onChange` | `selected`, `selectedOption` |
 | `menu` | `items`: parts `{label, icon, keys, checked, enabled, onClick, items}` | |
 | `column`, `row` | `children`, `gap`, `align` (across the axis: `start`, `center`, `end`, `stretch`, the default), `justify` (the spare length along the axis while no shown child stretches: `start`, the default, `center`, `end`, `between`, in equal gaps never less than `gap`) | |
-| `grid` | `children`, `gap`, `columns`, `align` (each cell's content in its row, as a row's) | |
+| `grid` | `children`, `gap`, `columns` (columns sharing the width), `tracks` (in place of `columns`; parts `{width, align}`, one per column: `width` a sizing, default `{"stretch": 1}`, as a table column's; `align` `start`, the default, `center` or `end`, where a text's text and a label-width cell sit across the column, as a table column's `align`; a container cell fills it), `align` (each cell's content in its row, as a row's) | |
 | `spacer` | | |
 | `panel` | `title`, `header` (nodes, shown beside the title, usable while collapsed), `padding`, `collapsible`, `collapsed`, `onToggle`, `children` | |
 | `scroll` | `axis`, `children` | |
@@ -259,7 +259,8 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   bound); a `sizing` that is not literal (a `record`, `cond` or `obj` expression) is read at mount, and one that
   evaluates to none of the forms is reported once and lowers to content. A literal text `role` is one of its names; a computed one is read at mount, and one that evaluates to no role is
   reported once for its path and drawn `normal`. A `grid` takes no `justify` (its columns
-  share its width; there is no spare length to justify); `alignSelf` is given only on a child of a `row`, `column`,
+  are sized by their count or tracks; there is no spare length to justify), and `columns` or `tracks`, not both, with
+  at least one track; a track's `align` is `start`, `center` or `end`; `alignSelf` is given only on a child of a `row`, `column`,
   `grid` or `forEach`, not on the view root, a component's fallback root or the content of another kind (a `panel`,
   a `dialog`); and the `column` or `row` an `arrange` point orders takes no `align` or `justify`, since it is drawn as
   a list. An `actionButton` has an `id` and a `label`, and its

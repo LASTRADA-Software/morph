@@ -834,7 +834,11 @@ private:
     Widget& mountKind(reactive::Scope& scope, Grid const& spec, ContainerWidget* parent) {
         GridWidget& widget = scope.adopt(_backend->createGrid(parent));
         applyCommon(scope, widget, spec.common);
-        widget.setColumns(spec.columns);
+        if (spec.tracks.empty()) {
+            widget.setColumns(spec.columns);
+        } else {
+            widget.setTracks(spec.tracks);
+        }
         widget.setGap(spacingStep(spec.gap));
         if (spec.align != Align::Stretch) {
             widget.setAlign(spec.align);

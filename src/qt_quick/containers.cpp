@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <QMetaObject>
+#include <QPointer>
+#include <QQuickItem>
 #include <QStringList>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 #include <algorithm>
 #include <cctype>
 #include <iterator>
@@ -36,6 +39,39 @@ GridImpl::GridImpl(Context& context, ui::ContainerWidget* parent)
 
 void GridImpl::setColumns(int columns) { write("columns", std::max(1, columns)); }
 
+void GridImpl::setTracks(std::vector<ui::GridTrack> const& tracks) {
+    QVariantList list;
+    for (ui::GridTrack const& track : tracks) {
+        list.append(QVariantMap{{QStringLiteral("kind"), static_cast<int>(track.width.kind)},
+                                {QStringLiteral("amount"), track.width.amount},
+                                {QStringLiteral("align"), static_cast<int>(track.align)}});
+    }
+    write("tracks", list);
+}
+
+void GridImpl::adopted(ItemBase& child) {
+    QQuickItem const* const cell = child.item();
+    if (cell == nullptr || item() == nullptr) {
+        return;
+    }
+    // The grid's item is the connection's context, and the call goes through it, not through this widget, which may
+    // be gone while Qt still holds the item.
+    auto const place = [grid = QPointer<QQuickItem>{item()}] {
+        if (grid != nullptr) {
+            QMetaObject::invokeMethod(grid, "place", Qt::DirectConnection);
+        }
+    };
+    QObject::connect(cell, &QQuickItem::implicitWidthChanged, item(), place);
+    QObject::connect(cell, &QQuickItem::implicitHeightChanged, item(), place);
+    QObject::connect(cell, &QQuickItem::visibleChanged, item(), place);
+}
+
+void GridImpl::place() const {
+    if (item() != nullptr) {
+        QMetaObject::invokeMethod(item(), "place", Qt::DirectConnection);
+    }
+}
+
 void GridImpl::setGap(int gap) { write("gap", gap); }
 
 void GridImpl::setAlign(ui::Align align) {
@@ -46,6 +82,7 @@ void GridImpl::setAlign(ui::Align align) {
 void GridImpl::setSpan(ui::Widget& child, int span) {
     if (ItemBase const* const base = baseOf(child)) {
         base->write("columnSpan", std::max(1, span));
+        place();
     }
 }
 

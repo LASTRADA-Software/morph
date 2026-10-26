@@ -3501,16 +3501,27 @@ namespace detail {
     return detail::NodeWriter{"menu"}.raw("items", std::move(array)).done();
 }
 
+/// @brief One column track of a `grid`.
+struct GridTrack {
+    /// @brief The column's width: `content()`, `fixed(n)` or `stretch(w)`; absent stretches with weight 1.
+    AnyHandle width;
+    /// @brief Where a text's text and a label-width cell sit across the column: `Start`, `Center` or `End`; absent
+    ///        writes no key, the start.
+    std::optional<Align> align;
+};
+
 /// @brief Options of `column`, `row` and `grid`.
 struct ContainerOptions {
     /// @brief The gap between children: a spacing step, 0 to `kMaxSpacingStep`.
     AnyHandle gap;
-    /// @brief A grid's columns; adaptive layouts read `env("widthClass")`.
+    /// @brief A grid's columns, sharing its width; adaptive layouts read `env("widthClass")`.
     AnyHandle columns;
+    /// @brief A grid's column tracks, in place of `columns`; empty writes none.
+    std::vector<GridTrack> tracks;
     /// @brief Where the children sit across the axis; absent stretches them.
     std::optional<Align> align;
     /// @brief A row's or column's spare length along its axis; absent packs at the start. Not on a grid, whose
-    ///        columns share its width.
+    ///        columns are sized by their count or tracks.
     std::optional<Justify> justify;
 };
 
@@ -3553,11 +3564,26 @@ namespace detail {
 
 /// @brief A `grid` node.
 /// @param children The children.
-/// @param options  The gap, columns and alignment; a `justify` is written, and the loader refuses it.
+/// @param options  The gap, columns or tracks, and alignment; a `justify` is written, and the loader refuses it.
 /// @return The node.
 [[nodiscard]] inline Node grid(Nodes const& children, ContainerOptions const& options = {}) {
     detail::NodeWriter node{"grid"};
     node.put("children", children).put("gap", options.gap).put("columns", options.columns);
+    if (!options.tracks.empty()) {
+        Json::array_t tracks;
+        tracks.reserve(options.tracks.size());
+        for (GridTrack const& track : options.tracks) {
+            Json part = Json::object_t{};
+            if (track.width.present()) {
+                detail::put(part, "width", track.width.json());
+            }
+            if (track.align) {
+                detail::put(part, "align", detail::alignName(*track.align));
+            }
+            tracks.emplace_back(std::move(part));
+        }
+        node.raw("tracks", std::move(tracks));
+    }
     if (options.align) {
         node.text("align", detail::alignName(*options.align));
     }

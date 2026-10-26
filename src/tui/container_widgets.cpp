@@ -130,6 +130,11 @@ void GridImpl::setColumns(int columns) {
     refresh();
 }
 
+void GridImpl::setTracks(std::vector<ui::GridTrack> const& tracks) {
+    _tracks = tracks;
+    refresh();
+}
+
 void GridImpl::setGap(int gap) {
     _columnGap = layout::stepCells(gap, ui::Axis::Horizontal);
     _rowGap = layout::stepCells(gap, ui::Axis::Vertical);
@@ -170,10 +175,45 @@ std::vector<layout::GridCell> GridImpl::cellsOf(std::span<WidgetBase* const> sho
     return cells;
 }
 
+std::vector<layout::Item> GridImpl::trackItems(std::span<WidgetBase* const> shown) const {
+    std::vector<layout::Item> items;
+    items.reserve(_tracks.size());
+    for (ui::GridTrack const& track : _tracks) {
+        items.push_back(layout::Item{.sizing = track.width, .natural = 0});
+    }
+    // Where each cell lands depends only on the spans, so a plan of no width says which track each one is in.
+    auto const slots = layout::planGrid(items, cellsOf(shown), layout::Track{}, 0).slots;
+    for (auto const [child, slot] : std::views::zip(shown, slots)) {
+        if (slot.span == 1) {
+            auto& item = items.at(static_cast<std::size_t>(slot.column));
+            item.natural = std::max(item.natural, requestedSize(*child).width);
+        }
+    }
+    return items;
+}
+
+layout::GridPlan GridImpl::planOf(std::span<WidgetBase* const> shown, int width) const {
+    layout::Track const track{.length = width, .gap = _columnGap};
+    return _tracks.empty() ? layout::planGrid(_columns, cellsOf(shown), track, _rowGap)
+                           : layout::planGrid(trackItems(shown), cellsOf(shown), track, _rowGap);
+}
+
 ::core::tui::Size GridImpl::naturalSize() const {
     auto const shown = shownChildren();
     if (shown.empty()) {
         return {.width = 0, .height = 0};
+    }
+    if (!_tracks.empty()) {
+        // Each track at its natural width: a fixed one its amount, a content or stretch one its widest cell.
+        auto const items = trackItems(shown);
+        int width = _columnGap * (static_cast<int>(items.size()) - 1);
+        for (layout::Item const& item : items) {
+            width += item.sizing.kind == ui::Sizing::Kind::Fixed ? std::max(0, item.sizing.amount) : item.natural;
+        }
+        auto const plan = planOf(shown, width);
+        int const height = std::accumulate(plan.rowHeights.begin(), plan.rowHeights.end(), 0) +
+                           (_rowGap * (static_cast<int>(plan.rowHeights.size()) - 1));
+        return {.width = width, .height = height};
     }
     int const columns = std::max(1, _columns);
     int unit = 0;
@@ -192,8 +232,7 @@ std::vector<layout::GridCell> GridImpl::cellsOf(std::span<WidgetBase* const> sho
 
 std::vector<::core::tui::Rect> GridImpl::childAreas(::core::tui::Size size) const {
     auto const shown = shownChildren();
-    auto const plan =
-        layout::planGrid(_columns, cellsOf(shown), layout::Track{.length = size.width, .gap = _columnGap}, _rowGap);
+    auto const plan = planOf(shown, size.width);
     std::vector<::core::tui::Rect> areas;
     areas.reserve(children().size());
     auto slot = plan.slots.begin();
@@ -207,6 +246,16 @@ std::vector<::core::tui::Rect> GridImpl::childAreas(::core::tui::Size size) cons
         // alignment places it.
         ui::LayoutHints const& hints = child->layout();
         area.width = layout::crossExtent(hints.width, area.width, layout::boundsOf(hints.minWidth, hints.maxWidth));
+        // A track places a cell drawn at its natural width at its start, centre or end; a spanning cell by its
+        // first track.
+        if (!_tracks.empty() && child->placedAcrossColumn()) {
+            ui::Align const across = _tracks.at(static_cast<std::size_t>(slot->column)).align;
+            if (across == ui::Align::Center || across == ui::Align::End) {
+                int const natural = std::min(requestedSize(*child).width, area.width);
+                area.x += alignedOffset(across, natural, area.width);
+                area.width = natural;
+            }
+        }
         ui::Align const placed = hints.alignSelf.value_or(_align);
         int const height = alignedExtent(placed, hints.height, requestedSize(*child).height, area.height,
                                          layout::boundsOf(hints.minHeight, hints.maxHeight));

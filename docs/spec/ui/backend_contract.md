@@ -143,7 +143,7 @@ reorders children, and only through this.
 | Container | Children |
 |---|---|
 | `StackWidget` | In order along the axis fixed at creation, `setGap` apart; `setAlign` places them across the axis and `setJustify` the spare length along it |
-| `GridWidget` | Row-major in `setColumns` columns, `setGap` apart; `setSpan(child, n)` widens one, and a child spans 1 until told; `setAlign` places each cell's content in its row |
+| `GridWidget` | Row-major in `setColumns` columns sharing the width, or in `setTracks` columns sized by their tracks, `setGap` apart; `setSpan(child, n)` widens one, and a child spans 1 until told; `setAlign` places each cell's content in its row |
 | `PanelWidget` | Inside the frame, `setPadding` in; a collapsed panel hides its content, which takes no input. `setHeader`'s widget is not part of "its content" for this: it stays shown and usable while collapsed |
 | `ScrollWidget` | One scrolled viewport, on the axis fixed at creation, that keeps the focused child visible |
 | `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page. A scrollable slot (`setScrollable(true)`) shows a child that does not stretch in height at its natural height in a vertical viewport of its own height, which keeps the focused widget in view; a child that stretches in height fills it, as in a slot that does not scroll. The slot reads its shown child's height sizing itself |
@@ -204,7 +204,12 @@ same way, so a `stretch` card with `maxWidth: 44` in a 70-unit column under `Cen
 side. `StackWidget::setJustify(Justify)` places the spare length along the axis while no shown child stretches (one
 that stretches takes it all): packed at the start, centred, at the end, or for `Between` in equal gaps, each at least
 `setGap`'s, the first child at the start and the last at the end. `GridWidget::setAlign` places each cell's content
-vertically in its row as a row places its children; a grid's columns share its width, so it has no `setJustify`.
+vertically in its row as a row places its children; a grid's columns are sized by their count or tracks, so it has no
+`setJustify`. `GridWidget::setTracks` sizes each column as a stack sizes its children: fixed tracks their amount,
+content tracks their widest cell that spans only them, and stretch tracks what is left, by weight; a spanning cell
+covers its tracks and the gaps between them and sizes none. Across its track a cell sits as across a table column
+with that `align`: a text's text and a label-width cell (a badge, a check box, a push button) at its natural width at
+the start, centre or end, a spanning cell by its first track, and a container cell fills the track.
 
 **Bounds.** A bound clamps the extent the sizing rule gives, in backend units. Along a stack's axis a `stretch`
 child's share stops at its maximum and the rest goes to the other `stretch` children; a content or fixed child takes
@@ -226,7 +231,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)` | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
 | `MenuWidget` | `setItems(entries)` | `setOnActivate(path)` |
 | `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)` | — |
-| `GridWidget` | `setColumns` (at least one), `setGap`, `setSpan(child, span)`, `setAlign(Align)` | — |
+| `GridWidget` | `setColumns` (at least one), `setTracks(tracks)` (at least one, in place of `setColumns`), `setGap`, `setSpan(child, span)`, `setAlign(Align)` | — |
 | `SpacerWidget` | — | — |
 | `PanelWidget` | `setTitle`, `setHeader(Widget&)` (shown beside the title, called at most once), `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
 | `ScrollWidget` | — | — |
@@ -342,7 +347,7 @@ The headless reference backend and the test double for everything above the cont
   inputs record `readonly`, `required`, `errors` and `stale`; and each kind its own: `text`, `role` (Text); `label`, `emphasis`, `icon`, `style`, `selected` (Button); `mode`, `text`, `placeholder`
   (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
   `selected` is the option it marks, else `none`); `items` (Menu, as below); `gap`, `align`, `justify` (Column, Row); `columns`,
-  `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
+  `tracks` (each width, then `;align=` where it is not `start`), `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
   `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title` (Dialog); `active`, `label` (Busy);
   `columns` (each `label:width`, then `;align=` and `;valign=` for a place other than the default),
   `selectionMode`, `selection` (the requested keys it marks, in the order requested),
@@ -459,6 +464,9 @@ the container it measures inside another, since a root fills the window or scree
     however long the scroll's content is: the scroll takes the column's spare height, not its content's.
 12. A scrollable slot 20 units tall shows a content-height column of 40 lines in a viewport of its own height and
     brings the focused 40th line into view; a column that stretches in height fills the slot from its top.
+13. In a 40-unit grid with no gap, tracks `fixed(10)` and `stretch` give their texts cells 10 and 30 units wide.
+14. A badge in a `fixed(12)` track with `align: Center` is narrower than its track and has as much space before it
+    as after it.
 
 ### The probe
 

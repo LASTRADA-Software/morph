@@ -1068,11 +1068,24 @@ public:
     void setJustify(Justify justify) override { set("justify", formatJustify(justify)); }
 };
 
-/// @brief A fake `GridWidget`: properties `columns`, `gap`, `align`, and `span` on a child.
+/// @brief A fake `GridWidget`: properties `columns`, `tracks`, `gap`, `align`, and `span` on a child.
 class FakeGrid final : public FakeContainer<GridWidget> {
 public:
     using FakeContainer<GridWidget>::FakeContainer;
     void setColumns(int columns) override { set("columns", std::to_string(columns)); }
+
+    /// @brief Records property `tracks`, each as its width, then `;align=` where the track's alignment is not
+    ///        `Start`.
+    /// @param tracks The tracks, in order.
+    void setTracks(std::vector<GridTrack> const& tracks) override {
+        set("tracks", formatList(tracks, [](GridTrack const& track) {
+                std::string text = formatSizing(track.width);
+                if (track.align != Align::Start) {
+                    text += ";align=" + formatAlign(track.align);
+                }
+                return text;
+            }));
+    }
     void setGap(int gap) override { set("gap", std::to_string(gap)); }
     void setAlign(Align align) override { set("align", formatAlign(align)); }
 

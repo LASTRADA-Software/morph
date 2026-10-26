@@ -789,11 +789,14 @@ inline constexpr std::array<KeySpec, 7> kMenuItemKeys = {{{"label", Shape::Expr}
 inline constexpr std::array<KeySpec, 4> kContainerKeys = {
     {{"children", Shape::Nodes}, {"gap", Shape::Expr}, {"align", Shape::Text}, {"justify", Shape::Text}}};
 /// @brief The keys of `grid`; `justify` is read only to refuse it.
-inline constexpr std::array<KeySpec, 5> kGridKeys = {{{"children", Shape::Nodes},
+inline constexpr std::array<KeySpec, 6> kGridKeys = {{{"children", Shape::Nodes},
                                                       {"gap", Shape::Expr},
                                                       {"columns", Shape::Expr},
+                                                      {"tracks", Shape::Parts, "track"},
                                                       {"align", Shape::Text},
                                                       {"justify", Shape::Text}}};
+/// @brief The keys of a `grid` track part.
+inline constexpr std::array<KeySpec, 2> kTrackKeys = {{{"width", Shape::Expr}, {"align", Shape::Text}}};
 /// @brief The keys of `panel`.
 inline constexpr std::array<KeySpec, 7> kPanelKeys = {{{"title", Shape::Expr},
                                                        {"header", Shape::Nodes},
@@ -981,7 +984,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 49> kKinds = {{
+inline constexpr std::array<KindSpec, 50> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -1024,6 +1027,7 @@ inline constexpr std::array<KindSpec, 49> kKinds = {{
     {"tab", kTabKeys, kPart},
     {"column", kColumnKeys, kPart},
     {"group", kGroupKeys, kPart},
+    {"track", kTrackKeys, kPart},
     {"action", kActionKeys, kPart},
     {"a11y", kA11yKeys, kPart},
     {"drag", kDragKeys, kPart},
@@ -3089,6 +3093,8 @@ private:
         checkPlacements(node);
         if (part && node.kind == "column") {
             checkColumnPart(node);
+        } else if (part && node.kind == "track") {
+            checkCellPlace(node, "align");
         }
         if (!part) {
             checkFlags(node);
@@ -3353,9 +3359,8 @@ private:
             checkChoice(node, "emphasis", kEmphasis);
             static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
             checkChoice(node, "style", kStyles);
-        } else if (node.kind == "grid" && !node.name("justify").empty()) {
-            refuse(pointerAppend(node.path, "justify"),
-                   "a grid's columns share its width; there is no spare length to justify");
+        } else if (node.kind == "grid") {
+            checkGrid(node);
         } else if (node.kind == "textInput") {
             static constexpr std::array<std::string_view, 3> kCommit = {"change", "blur", "enter"};
             checkChoice(node, "commitOn", kCommit);
@@ -3598,6 +3603,26 @@ private:
         checkTextRole(node);
         checkCellPlace(node, "align");
         checkCellPlace(node, "valign");
+    }
+
+    // A grid's columns come from a count or from tracks, never both, and their widths, not a justification, size
+    // them.
+    static void checkGrid(DocNode const& node) {
+        if (!node.name("justify").empty()) {
+            refuse(pointerAppend(node.path, "justify"),
+                   "a grid's columns are sized by their count or tracks; there is no spare length to justify");
+        }
+        auto const tracks = node.parts.find("tracks");
+        if (tracks == node.parts.end()) {
+            return;
+        }
+        if (node.prop("columns") != nullptr) {
+            refuse(pointerAppend(node.path, "tracks"),
+                   "a grid takes `columns` or `tracks`, not both; with `tracks`, the column count is their number");
+        }
+        if (tracks->second.empty()) {
+            refuse(pointerAppend(node.path, "tracks"), "`tracks` lists at least one track");
+        }
     }
 
     // A cell place, which names the three it may be.

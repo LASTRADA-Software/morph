@@ -2326,13 +2326,59 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: in a 40-unit grid with no gap, a `fixed(10)` track and a stretch track give their texts cells 10 and
+///        30 units wide.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> gridTracksSizeColumns(ConformanceProbe& probe) {
+    Grid grid{.tracks = {GridTrack{.width = Sizing::fixed(10)}, GridTrack{.width = Sizing::stretch()}}};
+    grid.cells = {GridCell{.node = sizedText("a", {})}, GridCell{.node = sizedText("b", {})}};
+    grid.common.layout = {.width = Sizing::fixed(40)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::grid(std::move(grid)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the grid holds two cells");
+    if (children.size() == 2) {
+        geometry.near("the fixed(10) track's cell width", 10, geometry.of(*children.at(0)).width);
+        geometry.near("the stretch track's cell width", 30, geometry.of(*children.at(1)).width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a badge in a `fixed(12)` track with `align: Center` has as much space before it as after it, within
+///        a unit.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> centredTrackCentresBadge(ConformanceProbe& probe) {
+    Grid grid{.tracks = {GridTrack{.width = Sizing::fixed(12), .align = Align::Center}}};
+    grid.cells = {GridCell{.node = ui::badge({.text = std::string{"ok"}})}};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::grid(std::move(grid)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const found = measured(probe, view);
+    checks.that(found.container != nullptr && found.children.size() == 1, "the grid holds one cell");
+    if (found.container != nullptr && found.children.size() == 1) {
+        WidgetBounds const outer = geometry.of(*found.container);
+        WidgetBounds const badge = geometry.of(*found.children.front());
+        double const before = badge.x - outer.x;
+        double const after = outer.x + 12 - (badge.x + badge.width);
+        checks.that(badge.width < 10, "the badge fills its track: it is " + std::to_string(badge.width) +
+                                          " units wide, so its track's alignment cannot place it");
+        geometry.near("the space after the badge, against the space before it", before, after);
+    }
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 12> const cases{{
+    static std::array<ConformanceCase, 14> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -2350,6 +2396,8 @@ struct SelectionReport {
          .run = detail::stretchingScrollKeepsBarAtEnd},
         {.name = "a scrollable slot scrolls a content-height child and fills with a stretching one",
          .run = detail::scrollableSlotScrolls},
+        {.name = "grid tracks of fixed and stretch width", .run = detail::gridTracksSizeColumns},
+        {.name = "a centred track centres a label-width cell", .run = detail::centredTrackCentresBadge},
     }};
     return cases;
 }

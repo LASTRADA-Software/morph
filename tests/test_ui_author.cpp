@@ -462,6 +462,16 @@ TEST_CASE("an arrange point names the column whose children it orders, and the s
     CHECK((*added)->text.contains(R"("tiles":{"kind":"arrange","of":"board"})"));
 }
 
+// Mutation: drop the tracks branch of grid (no `tracks` is written).
+TEST_CASE("a grid's tracks are written as parts, each key only when given", "[ui][author]") {
+    CHECK(text(ui::grid(ui::Nodes{}, {.tracks = {{.width = ui::fixed(3)},
+                                                 {.width = ui::fixed(6), .align = morph::ui::Align::Center},
+                                                 {}}})
+                   .json()) ==
+          R"({"kind":"grid","tracks":[{"width":{"lit":{"fixed":3}}},{"width":{"lit":{"fixed":6}},"align":"center"},)"
+          R"({}]})");
+}
+
 // Mutation: drop the align branch of stackNode (the column's `align` is not written).
 TEST_CASE("align, justify and alignSelf are written by name, and a screen using them validates", "[ui][author]") {
     CHECK(text(ui::column({ui::text({.text = "a"}).alignSelf(morph::ui::Align::End)},

@@ -51,12 +51,14 @@ private:
     ui::Justify _justify = ui::Justify::Start;
 };
 
-/// Grid: equal columns, cells row-major, a cell spanning several columns. A hidden child leaves no cell: the cells
-/// after it move up one place, as a null cell of the view tree leaves none.
+/// Grid: equal columns, or columns sized by their tracks; cells row-major, a cell spanning several columns. A hidden
+/// child leaves no cell: the cells after it move up one place, as a null cell of the view tree leaves none. Across a
+/// track, a cell placed at its natural width (`placedAcrossColumn`) sits at the track's start, centre or end.
 class GridImpl final : public TuiContainer<ui::GridWidget> {
 public:
     explicit GridImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
     void setColumns(int columns) override;
+    void setTracks(std::vector<ui::GridTrack> const& tracks) override;
     void setGap(int gap) override;
     /// Throws std::logic_error when @p child is not one of this grid's children.
     void setSpan(ui::Widget& child, int span) override;
@@ -71,8 +73,13 @@ protected:
 private:
     [[nodiscard]] int spanOf(WidgetBase const* child) const;
     [[nodiscard]] std::vector<layout::GridCell> cellsOf(std::span<WidgetBase* const> shown) const;
+    /// The plan of the shown cells in @p width: equal columns, or the tracks' widths.
+    [[nodiscard]] layout::GridPlan planOf(std::span<WidgetBase* const> shown, int width) const;
+    /// One stack item per track, a content track's natural width its widest one-track cell's.
+    [[nodiscard]] std::vector<layout::Item> trackItems(std::span<WidgetBase* const> shown) const;
 
     int _columns = 1;
+    std::vector<ui::GridTrack> _tracks;
     int _columnGap = 0;
     int _rowGap = 0;
     ui::Align _align = ui::Align::Stretch;

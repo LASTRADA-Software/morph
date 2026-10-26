@@ -632,18 +632,32 @@ struct GridCell {
     int span = 1;
 };
 
+/// @brief One column track of a grid: how wide its column is and where each cell sits across it.
+struct GridTrack {
+    /// @brief The column's width: fixed tracks first, content tracks to their widest one-column cell, stretch tracks
+    ///        share the rest by weight.
+    Sizing width = Sizing::stretch();
+    /// @brief Where a cell sits across the column: the text of a text cell and a label-width cell (a badge, a check
+    ///        box, a push button) at its natural width, at the start, centre or end. A container cell fills the
+    ///        column whatever this says; `Stretch` reads as `Start`.
+    Align align = Align::Start;
+};
+
 /// @brief Cells laid out row-major in a fixed number of columns.
 struct Grid {
-    /// @brief The column count.
+    /// @brief The column count; ignored when `tracks` is not empty.
     int columns = 1;
+    /// @brief The column tracks, set once; empty gives `columns` columns sharing the width. Given, the column count
+    ///        is their number.
+    std::vector<GridTrack> tracks;
     /// @brief The cells, row-major.
     std::vector<GridCell> cells;
     /// @brief Space between cells: a spacing step, 0 to `kMaxSpacingStep`.
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
-    /// @brief Where each cell's content sits vertically in its row; set once. A grid's columns share its width, so
-    ///        there is no spare length to justify.
+    /// @brief Where each cell's content sits vertically in its row; set once. A grid's columns are sized by their
+    ///        count or tracks, so there is no spare length to justify.
     Align align = Align::Stretch;
 };
 
