@@ -88,6 +88,9 @@ struct Audit {
     Flag dated;
     ui::AnyHandle shown;
     ui::Handle<std::int64_t> active;
+    // The trail's page, and how many entries compact lists before "Load 25 more".
+    ui::Handle<std::int64_t> page;
+    ui::Handle<std::int64_t> listed;
 };
 
 // Whether an entry's field matches a facet group: one of its checked values, or any value while none is checked.
@@ -136,6 +139,8 @@ Audit declare(ui::Scope& screen) {
     audit.dated = screen.let("dated", !ui::isEmpty(audit.from) || !ui::isEmpty(audit.until));
     auto const all = screen.state<ui::Any>("entries", entries());
     audit.shown = screen.let("shown", shownEntries(audit, all));
+    audit.page = screen.state("page", std::int64_t{0});
+    audit.listed = screen.state("listed", std::int64_t{25});
     ui::Handle<std::int64_t> active = ui::cond(audit.dated, ui::Handle<std::int64_t>{1}, ui::Handle<std::int64_t>{0});
     for (std::vector<Facet> const* const group : {&audit.types, &audit.actions}) {
         for (Facet const& facet : *group) {
@@ -281,18 +286,30 @@ ui::Node trailTable(Audit const& audit) {
                       .width = ui::stretch(2),
                       .cell = ui::text({.text = ui::cond(noReason, ui::AnyHandle{"—"}, reason),
                                         .role = ui::cond(noReason, Text{"muted"}, Text{"normal"})})}},
+                .pageSize = std::int64_t{25},
+                .page = audit.page,
                 .empty = noEntries(audit),
                 // The When and Record cells are two lines tall; every cell starts at the row's top.
                 .valign = Align::Start})
+        .id(ui::element("trail"))
         .a11y("Audit trail")
         .testId("trail");
 }
 
-// The gallery holds one page; the pager says where it is and has nowhere to go.
-ui::Node pager(char const* label) {
-    return ui::row({layout::muted(label).sizing(ui::stretch()),
-                    ui::button({.label = "‹"}).a11y("Previous page").enabled(false),
-                    ui::button({.label = "›"}).a11y("Next page").enabled(false)},
+// The trail's pager: where the page is, and the previous and next page.
+ui::Node pager(Audit const& audit) {
+    auto const page = ui::Handle<std::int64_t>{ui::ref("trail.page")};
+    auto const pageCount = ui::Handle<std::int64_t>{ui::ref("trail.pageCount")};
+    return ui::row({layout::muted(ui::format("{0}–{1} of {2}", {ui::ref("trail.pageFirst"), ui::ref("trail.pageLast"),
+                                                                 ui::ref("trail.viewCount")}))
+                        .sizing(ui::stretch())
+                        .testId("range"),
+                    ui::button({.label = "‹", .onClick = ui::set(audit.page, page - 1)})
+                        .a11y("Previous page")
+                        .enabled(page > 0),
+                    ui::button({.label = "›", .onClick = ui::set(audit.page, page + 1)})
+                        .a11y("Next page")
+                        .enabled(page < pageCount - 1)},
                    {.gap = 1, .align = Align::Center})
         .testId("pager");
 }
@@ -308,7 +325,7 @@ ui::Node searchField(Audit const& audit) {
 
 ui::Node expandedLayout(Audit const& audit) {
     auto const main = ui::column({ui::row({ui::spacer().sizing(ui::stretch()), searchField(audit)}, {.gap = 1}),
-                                  chips(audit), ui::panel({trailTable(audit), pager("1–25 of 57")}, {.padding = 0})},
+                                  chips(audit), ui::panel({trailTable(audit), pager(audit)}, {.padding = 0})},
                                  {.gap = 2})
                           .sizing(ui::stretch());
     return ui::row({facetsPanel(audit), main}, {.gap = 2, .align = Align::Start});
@@ -353,11 +370,12 @@ ui::Node compactLayout(Audit const& audit) {
                   .sizing(ui::stretch())},
              {.gap = 1}),
          layout::muted("57 entries · times in CEST (UTC+2)"),
-         ui::forEach(audit.shown, {.key = ui::row("at"), .gap = 3},
+         ui::forEach(ui::slice(audit.shown, std::int64_t{0}, audit.listed), {.key = ui::row("at"), .gap = 3},
                      [](ui::DeclScope&) { return ui::Nodes{entryCard()}; })
              .testId("entries"),
          ui::column(noEntries(audit)).visible(ui::isEmpty(audit.shown)),
-         ui::button({.label = "Load 25 more", .onClick = ui::notify("The gallery holds the first page only")})
+         ui::button({.label = "Load 25 more", .onClick = ui::set(audit.listed, audit.listed + 25)})
+             .visible(audit.listed < ui::Handle<std::int64_t>{ui::call("count", {audit.shown})})
              .testId("load-more"),
          filtersDrawer(audit)},
         {.gap = 2});

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,8 +32,11 @@ TEST_CASE("samples, expanded: the table, its out-of-spec tone, and three rows se
     screen.requireNoProblems();
     CHECK(screen.shows("Table", "samples"));
     CHECK(screen.prop("Table", "samples", "columns") ==
-          "[Sample:fixed(12),Product · lot:stretch(1),Tests:fixed(16),Priority:fixed(8),Status:fixed(12),"
-          "Due ▲:fixed(13),Specification:fixed(14)]");
+          "[Sample:fixed(12);sortable=true,Product · lot:stretch(1),Tests:fixed(16),Priority:fixed(8),"
+          "Status:fixed(12),Due:fixed(13);sortable=true,Specification:fixed(14)]");
+    // Sorted by due time, earliest first, 25 rows a page.
+    CHECK(screen.prop("Table", "samples", "sort") == "5:Ascending");
+    CHECK(screen.text("range") == "1–25 of 38");
     CHECK(showsText(screen, "Paracetamol 500 mg · L-26-0377"));
     CHECK(showsText(screen, "22 min overdue"));
     // The table draws the selection as its own check-box column, over the selected state.
@@ -68,9 +72,26 @@ TEST_CASE("samples, expanded: selecting rows drives the bulk bar, and changing p
     CHECK(stat == 2);
     // The header box is Ctrl+A: every row on the page.
     CHECK(screen.backend().press(table, "Ctrl+A"));
-    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "8 selected on this page"; }));
+    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "25 selected on this page"; }));
     screen.click("select-all");
     CHECK(screen.waitFor([&screen] { return screen.text("selected") == "All 312 samples selected"; }));
+    screen.requireNoProblems();
+}
+
+TEST_CASE("samples, expanded: the pager turns the page, and a header sorts from the first page", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    int const table = screen.find("Table", "samples").value_or(0);
+    CHECK(screen.prop("Button", "previous-page", "enabled") == "false");
+    screen.click("next-page");
+    CHECK(screen.waitFor([&screen] { return screen.text("range") == "26–38 of 38"; }));
+    CHECK(screen.prop("Button", "next-page", "enabled") == "false");
+    CHECK(screen.backend().children(table).size() == 13);
+    // A click on the Due header sorts latest first and goes back to the first page.
+    screen.backend().clickHeader(table, 5);
+    CHECK(screen.waitFor([&screen] { return screen.text("range") == "1–25 of 38"; }));
+    CHECK(screen.prop("Table", "samples", "sort") == "5:Descending");
+    screen.backend().choose(screen.find("Select", "page-size").value_or(0), morph::ui::Key{std::int64_t{50}});
+    CHECK(screen.waitFor([&screen] { return screen.text("range") == "1–38 of 38"; }));
     screen.requireNoProblems();
 }
 
@@ -94,6 +115,9 @@ TEST_CASE("samples, compact: rows become cards with the same selection, the bar 
     CHECK(screen.find("Menu", "more-bulk").has_value());
     CHECK(screen.prop("Button", "head_action_register", "label") == "Register");
     CHECK(screen.prop("Button", "open-filters", "label") == "Filters · 0");
+    // The cards follow the shared order, 25 at a time.
+    CHECK(screen.prop("Select", "sort", "selected") == "\"due-asc\"");
+    CHECK(screen.prop("Button", "load-more", "label") == "Load more · 25 of 38");
     screen.backend().toggle(*selectBox(screen, "S-26-104170"));
     CHECK(screen.waitFor([&screen] { return screen.text("selected") == "2 selected"; }));
     screen.click("assign");

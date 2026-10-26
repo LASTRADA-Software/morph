@@ -7,6 +7,7 @@
 
 #include <array>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "layout.hpp"
@@ -22,9 +23,14 @@ using layout::ButtonEmphasis;
 using layout::Justify;
 using Text = ui::Handle<std::string>;
 using Flag = ui::Handle<bool>;
+using morph::ui::Value;
+using morph::ui::ValueList;
+using morph::ui::ValueRecord;
 
 // The samples the trail of open work holds beyond this page, as the design counts them.
 constexpr char const* kTotal = "312";
+// The routine samples the gallery adds to the design's eight.
+constexpr int kRoutine = 30;
 
 struct Sample {
     char const* id;
@@ -42,26 +48,60 @@ struct Sample {
 };
 
 // Every field of a sample record; a bulk action rebuilds a record from them with one field changed.
-constexpr std::array<char const*, 12> kFields{"id",     "product",    "short", "lot",     "tests", "priority",
-                                              "status", "statusTone", "due",   "overdue", "spec",  "specTone"};
+constexpr std::array<char const*, 13> kFields{"id",      "product", "short", "lot",  "tests",   "priority", "status",
+                                              "statusTone", "due",  "dueAt", "overdue", "spec", "specTone"};
 
-ui::AnyHandle sample(Sample const& item) {
-    return ui::obj({{"id", item.id},
-                    {"product", item.product},
-                    {"short", item.shortProduct},
-                    {"lot", item.lot},
-                    {"tests", item.tests},
-                    {"priority", item.priority},
-                    {"status", item.status},
-                    {"statusTone", item.statusTone},
-                    {"due", item.due},
-                    {"overdue", item.overdue},
-                    {"spec", item.spec},
-                    {"specTone", item.specTone}});
+// When a sample is due, as text that sorts by time: the design's "24-Oct 10:30" is 2026-10-24T10:30, and an overdue
+// sample was due before the first of them.
+std::string dueAt(std::string const& due) {
+    if (due.size() == 12 && due.substr(2, 5) == "-Oct ") {
+        return "2026-10-" + due.substr(0, 2) + "T" + due.substr(7);
+    }
+    return "2026-10-24T07:38";
+}
+
+// A sample as a record: a literal, so the whole list is one node of its expression.
+Value sample(Sample const& item) {
+    return Value{ValueRecord{{"id", Value{item.id}},
+                             {"product", Value{item.product}},
+                             {"short", Value{item.shortProduct}},
+                             {"lot", Value{item.lot}},
+                             {"tests", Value{item.tests}},
+                             {"priority", Value{item.priority}},
+                             {"status", Value{item.status}},
+                             {"statusTone", Value{item.statusTone}},
+                             {"due", Value{item.due}},
+                             {"dueAt", Value{dueAt(item.due)}},
+                             {"overdue", Value{item.overdue}},
+                             {"spec", Value{item.spec}},
+                             {"specTone", Value{item.specTone}}}};
+}
+
+// Routine water samples beyond the design's eight, so the list has a second page to turn to.
+std::vector<Value> routineSamples() {
+    std::vector<Value> routine;
+    for (int index = 0; index < kRoutine; ++index) {
+        std::string const day = std::to_string(29 + (index / 10));
+        std::string const hour = std::to_string(10 + (index % 10));
+        routine.push_back(Value{ValueRecord{{"id", Value{"S-26-1042" + std::to_string(40 + index)}},
+                                            {"product", Value{"Purified water · loop " + std::to_string((index % 4) + 1)}},
+                                            {"short", Value{"Purified water"}},
+                                            {"lot", Value{""}},
+                                            {"tests", Value{"TOC, conductivity"}},
+                                            {"priority", Value{"Routine"}},
+                                            {"status", Value{"Registered"}},
+                                            {"statusTone", Value{"neutral"}},
+                                            {"due", Value{day + "-Oct " + hour + ":00"}},
+                                            {"dueAt", Value{"2026-10-" + day + "T" + hour + ":00"}},
+                                            {"overdue", Value{false}},
+                                            {"spec", Value{""}},
+                                            {"specTone", Value{""}}}});
+    }
+    return routine;
 }
 
 ui::AnyHandle samples() {
-    return ui::list({
+    ValueList designed{
         sample({.id = "S-26-104170",
                 .product = "Paracetamol 500 mg",
                 .shortProduct = "Paracetamol 500 mg",
@@ -158,7 +198,11 @@ ui::AnyHandle samples() {
                 .overdue = false,
                 .spec = "",
                 .specTone = ""}),
-    });
+    };
+    for (Value& more : routineSamples()) {
+        designed.push_back(std::move(more));
+    }
+    return ui::AnyHandle{Value{std::move(designed)}};
 }
 
 struct Samples {
@@ -178,6 +222,12 @@ struct Samples {
     Text priority;
     Text worksheet;
     Text newPriority;
+    // The table's sort, shared with the compact cards, the page it shows and how many rows a page holds.
+    ui::AnyHandle order;
+    ui::Handle<std::int64_t> page;
+    ui::Handle<std::int64_t> pageSize;
+    // How many cards compact lists before "Load more".
+    ui::Handle<std::int64_t> cardCount;
 };
 
 ui::AnyHandle shownSamples(Samples const& list) {
@@ -207,6 +257,10 @@ Samples declare(ui::Scope& screen) {
     list.selected = screen.state<ui::Any>(
         "selected", ui::AnyHandle{std::vector<std::string>{"S-26-104170", "S-26-104221", "S-26-104176"}});
     list.everySelected = screen.state("everySelected", false);
+    list.order = screen.state<ui::Any>("order", ui::list({ui::sortKey("due")}));
+    list.page = screen.state("page", std::int64_t{0});
+    list.pageSize = screen.state("pageSize", std::int64_t{25});
+    list.cardCount = screen.state("cardCount", std::int64_t{25});
     list.shown = screen.let("shown", shownSamples(list));
     list.selectedCount = screen.let("selectedCount", ui::Handle<std::int64_t>{ui::call("count", {list.selected})});
     auto const shownCount = ui::Handle<std::int64_t>{ui::call("count", {list.shown})};
@@ -407,7 +461,7 @@ ui::Node samplesTable(Samples const& list) {
     return ui::table(
                list.shown,
                {.key = ui::row("id"),
-                .columns = {{.name = "id", .label = "Sample", .width = ui::fixed(12), .role = "mono"},
+                .columns = {{.name = "id", .label = "Sample", .width = ui::fixed(12), .role = "mono", .sortable = true},
                             {.name = "product",
                              .label = "Product · lot",
                              .width = ui::stretch(),
@@ -421,8 +475,12 @@ ui::Node samplesTable(Samples const& list) {
                              .label = "Status",
                              .width = ui::fixed(12),
                              .cell = layout::tag(ui::row("status"), ui::row("statusTone"))},
-                            // The rows come sorted by due time; a table over rows does not sort.
-                            {.name = "due", .label = "Due ▲", .width = ui::fixed(13), .cell = dueText()},
+                            {.name = "due",
+                             .label = "Due",
+                             .width = ui::fixed(13),
+                             .cell = dueText(),
+                             .sortable = true,
+                             .sortBy = ui::row("dueAt")},
                             {.name = "spec", .label = "Specification", .width = ui::fixed(14), .cell = specCell()}},
                 // The table draws the selection the cards share: its own boxes, and a header box for the page.
                 .selectionMode = ui::Selection::Multiple,
@@ -431,20 +489,44 @@ ui::Node samplesTable(Samples const& list) {
                 .selectColumn = true,
                 .selectAllLabel = "Select all on this page",
                 .rowLabel = ui::row("id"),
+                // A new order starts at its first rows.
+                .sort = list.order,
+                .onSortChange = {ui::set(list.order, ui::event()), ui::set(list.page, std::int64_t{0})},
+                .pageSize = list.pageSize,
+                .page = list.page,
                 .rowTone = ui::cond(ui::eq(ui::row("specTone"), "err"), ui::AnyHandle{"err"}, ui::AnyHandle{nullptr}),
                 .empty = noSamples(list)})
+        .id(ui::element("sampleTable"))
         .a11y("Samples")
         .testId("samples");
 }
 
-ui::Node pageFooter() {
-    auto const sizes = ui::list({ui::obj({{"key", "25"}, {"label", "25"}}), ui::obj({{"key", "50"}, {"label", "50"}}),
-                                 ui::obj({{"key", "100"}, {"label", "100"}})});
+// The table's pager: where the page is, how many rows a page holds, and the previous and next page.
+ui::Node pageFooter(Samples const& list) {
+    auto const sizes =
+        ui::list({ui::obj({{"key", std::int64_t{25}}, {"label", "25"}}), ui::obj({{"key", std::int64_t{50}}, {"label", "50"}}),
+                  ui::obj({{"key", std::int64_t{100}}, {"label", "100"}})});
+    auto const page = ui::Handle<std::int64_t>{ui::ref("sampleTable.page")};
+    auto const pageCount = ui::Handle<std::int64_t>{ui::ref("sampleTable.pageCount")};
     return ui::row(
-               {layout::muted(ui::format("1–25 of {0}", {ui::AnyHandle{kTotal}})).sizing(ui::stretch()),
-                ui::select({.options = sizes, .selected = "25", .label = "Rows"}).enabled(false).sizing(ui::fixed(8)),
-                ui::button({.label = "‹"}).a11y("Previous page").enabled(false),
-                ui::button({.label = "›"}).a11y("Next page").enabled(false)},
+               {layout::muted(ui::format("{0}–{1} of {2}", {ui::ref("sampleTable.pageFirst"), ui::ref("sampleTable.pageLast"),
+                                                            ui::ref("sampleTable.viewCount")}))
+                    .sizing(ui::stretch())
+                    .testId("range"),
+                ui::select({.options = sizes,
+                            .selected = list.pageSize,
+                            .label = "Rows",
+                            .onChoose = {ui::set(list.pageSize, ui::event()), ui::set(list.page, std::int64_t{0})}})
+                    .sizing(ui::fixed(8))
+                    .testId("page-size"),
+                ui::button({.label = "‹", .onClick = ui::set(list.page, page - 1)})
+                    .a11y("Previous page")
+                    .enabled(page > 0)
+                    .testId("previous-page"),
+                ui::button({.label = "›", .onClick = ui::set(list.page, page + 1)})
+                    .a11y("Next page")
+                    .enabled(page < pageCount - 1)
+                    .testId("next-page")},
                {.gap = 1, .align = Align::Center})
         .testId("pager");
 }
@@ -455,7 +537,7 @@ ui::Node expandedLayout(Samples const& list) {
                  statusFilter(list).sizing(ui::fixed(19)), priorityFilter(list).sizing(ui::fixed(18))},
                 {.gap = 1, .align = Align::Center});
     return ui::column(
-        {toolbar, bulkBar(list), ui::panel({samplesTable(list), pageFooter()}, {.padding = 0}),
+        {toolbar, bulkBar(list), ui::panel({samplesTable(list), pageFooter(list)}, {.padding = 0}),
          layout::muted("Rows with a tinted background have a result out of specification. A checked box marks a "
                        "row as selected."),
          assignDialog(list), priorityDialog(list)},
@@ -519,7 +601,39 @@ ui::Node compactBulkBar(Samples const& list) {
         .testId("bulk");
 }
 
+// The sort's first key: its column and its direction.
+ui::AnyHandle sortColumn() { return ui::ref("order.0.column"); }
+ui::AnyHandle sortDirection() { return ui::ref("order.0.direction"); }
+
+// The cards in the table's order: its sort's first key, by due time or by id.
+ui::AnyHandle cardOrder(Samples const& list) {
+    return ui::sorted(
+        list.shown, "entry",
+        [](ui::AnyHandle const& item) { return ui::cond(ui::eq(sortColumn(), "id"), item.at("id"), item.at("dueAt")); },
+        sortDirection());
+}
+
+// Compact's sort: a choice of the sortable columns and directions, each one key of the order the table shares.
+ui::Node sortChoice(Samples const& list) {
+    auto const option = [](char const* column, char const* direction, char const* label) {
+        return ui::obj({{"key", std::string{column} + "-" + direction}, {"label", label}});
+    };
+    auto const choices = ui::list({option("due", "asc", "Sort: due, earliest first"),
+                                   option("due", "desc", "Sort: due, latest first"),
+                                   option("id", "asc", "Sort: sample, ascending"),
+                                   option("id", "desc", "Sort: sample, descending")});
+    auto const chosen = ui::Handle<std::string>{ui::event()};
+    auto const key = ui::obj({{"column", ui::cond(Flag{ui::call("contains", {chosen, "due"})}, Text{"due"}, Text{"id"})},
+                              {"direction", ui::cond(Flag{ui::call("contains", {chosen, "desc"})}, Text{"desc"}, Text{"asc"})}});
+    return ui::select({.options = choices,
+                       .selected = ui::format("{0}-{1}", {sortColumn(), sortDirection()}),
+                       .label = "Sort",
+                       .onChoose = {ui::set(list.order, ui::list({key})), ui::set(list.page, std::int64_t{0})}})
+        .testId("sort");
+}
+
 ui::Node compactLayout(Samples const& list) {
+    auto const shownCount = ui::Handle<std::int64_t>{ui::call("count", {list.shown})};
     auto const active =
         ui::cond(ui::eq(list.status, "open"), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1}) +
         ui::cond(ui::eq(list.priority, "any"), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1});
@@ -528,14 +642,16 @@ ui::Node compactLayout(Samples const& list) {
          ui::row({ui::button({.label = ui::format("Filters · {0}", {active}), .onClick = ui::open(list.filtersDrawer)})
                       .sizing(ui::stretch())
                       .testId("open-filters"),
-                  // A table over rows does not sort, and neither can a list; the order is the one the rows came in.
-                  ui::button({.label = "Sort: due, earliest first"}).enabled(false).sizing(ui::stretch())},
+                  sortChoice(list).sizing(ui::stretch())},
                  {.gap = 1}),
-         ui::forEach(list.shown, {.key = ui::row("id"), .gap = 1},
+         ui::forEach(ui::slice(cardOrder(list), std::int64_t{0}, list.cardCount), {.key = ui::row("id"), .gap = 1},
                      [&list](ui::DeclScope&) { return ui::Nodes{sampleCard(list)}; })
              .testId("cards"),
          ui::column(noSamples(list)).visible(ui::Handle<bool>{ui::isEmpty(list.shown)}),
-         ui::button({.label = ui::format("Load more · 25 of {0}", {ui::AnyHandle{kTotal}})}).enabled(false),
+         ui::button({.label = ui::format("Load more · {0} of {1}", {list.cardCount, shownCount}),
+                     .onClick = ui::set(list.cardCount, list.cardCount + 25)})
+             .visible(list.cardCount < shownCount)
+             .testId("load-more"),
          compactBulkBar(list), compactFilters(list), assignDialog(list), priorityDialog(list)},
         {.gap = 2});
 }

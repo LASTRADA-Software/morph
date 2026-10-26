@@ -291,7 +291,7 @@
   verified it draws as a bordered box. Larger than the design's 26 px chip.
 - **Weight:** Low
 
-### G28: Paging a table over rows
+### G28: Paging a table over rows — fixed in batch B
 - **Design(s):** 04, 05, 07
 - **Needs:** "1–25 of 57" with previous and next page, and a rows-per-page select (05), or "Load 25 more" (compact);
   the first five samples to place and "+ 9 more" (07).
@@ -325,7 +325,7 @@
 - **Workaround used:** the check box above the table, at the toolbar's start.
 - **Weight:** Low
 
-### G31: Sorting a table over rows
+### G31: Sorting a table over rows — fixed in batch B
 - **Design(s):** 05
 - **Needs:** "Due ▲" as a sorted, sortable column header (`aria-sort`), and on compact a "Sort: due, earliest first"
   control.
@@ -461,7 +461,7 @@
 - **Workaround used:** none.
 - **Weight:** Low
 
-### G41: A selectable cell that keeps its own look
+### G41: A selectable cell that keeps its own look — fixed in batch B (a selected push button; the circle stays out of ui/1)
 - **Design(s):** 07
 - **Needs:** a plate well as a 40 px circle, outlined, that draws a thick accent ring while it is selected; clicking
   it selects it.
@@ -498,7 +498,7 @@
   selects a range".
 - **Weight:** Low
 
-### G44: Grouping a list into runs
+### G44: Grouping a list into runs — fixed in batch B (runs of wells; the empty plate rows stay one section each)
 - **Design(s):** 07
 - **Needs:** on compact, consecutive empty wells as one line, "A5–A8 · Empty, 4 wells" with one Assign button, and
   rows D to H folded into one section.
@@ -521,7 +521,7 @@
   It shows 0.28 % for 99.6 and 99.2, as the design does; it would be wrong for three or more preparations.
 - **Weight:** Medium
 
-### G46: A table's group heading rows
+### G46: A table's group heading rows — fixed in batch B
 - **Design(s):** 08
 - **Needs:** "S-26-104176 · lot L-26-0381" as a heading row across every column of the worksheet, between the
   results of one sample and the next.

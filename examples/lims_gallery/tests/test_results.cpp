@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <stdexcept>
 #include <string>
 
@@ -33,6 +34,13 @@ TEST_CASE("results, expanded: the worksheet grid, its calculations and the chang
     screen.requireNoProblems();
     CHECK(screen.find("Panel", "suitability").has_value());
     CHECK(screen.shows("Table", "results"));
+    // Each sample's results sit under a heading row across the worksheet.
+    std::size_t headings = 0;
+    for (int const row : screen.backend().all("Row")) {
+        headings += screen.backend().prop(row, "heading") == "true" ? 1U : 0U;
+    }
+    CHECK(headings == 2);
+    CHECK(screen.backend().find("Text", "text", "· lot L-26-0381").has_value());
     CHECK(screen.backend().prop(resultInput(screen, "Assay, mean result, S-26-104176"), "text") == "99.4");
     CHECK(screen.backend().prop(resultInput(screen, "Assay, mean result, S-26-104176"), "readonly") == "true");
     CHECK(screen.backend().prop(resultInput(screen, "Total impurities result, S-26-104170"), "text") == "0.24");

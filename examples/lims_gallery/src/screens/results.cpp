@@ -32,11 +32,11 @@ using Count = ui::Handle<std::int64_t>;
 // A limit the specification does not set.
 constexpr std::int64_t kNoLimit = -1;
 
-// One line of the worksheet: a sample's heading, an entered result, or one the worksheet calculates. Limits are
+// One line of the worksheet: an entered result, or one the worksheet calculates. Limits are
 // scaled by the result's places: 950 at one place is 95.0.
 struct Line {
     char const* id;
-    char const* kind;  // `group`, `entered`, `mean` or `total`
+    char const* kind;  // `entered`, `mean` or `total`
     char const* sample;
     char const* analyte;
     char const* area;
@@ -50,19 +50,7 @@ struct Line {
     char const* spec;
 };
 
-constexpr std::array<Line, 9> kLines{{
-    {.id = "g1",
-     .kind = "group",
-     .sample = "S-26-104176",
-     .analyte = "lot L-26-0381",
-     .area = "",
-     .value = "",
-     .original = "",
-     .unit = "",
-     .places = 0,
-     .low = kNoLimit,
-     .high = kNoLimit,
-     .spec = ""},
+constexpr std::array<Line, 7> kLines{{
     {.id = "a1",
      .kind = "entered",
      .sample = "S-26-104176",
@@ -111,18 +99,6 @@ constexpr std::array<Line, 9> kLines{{
      .low = kNoLimit,
      .high = 10,
      .spec = "≤ 0.10"},
-    {.id = "g2",
-     .kind = "group",
-     .sample = "S-26-104170",
-     .analyte = "lot L-26-0377",
-     .area = "",
-     .value = "",
-     .original = "",
-     .unit = "",
-     .places = 0,
-     .low = kNoLimit,
-     .high = kNoLimit,
-     .spec = ""},
     {.id = "ib2",
      .kind = "entered",
      .sample = "S-26-104170",
@@ -161,12 +137,17 @@ constexpr std::array<Line, 9> kLines{{
      .spec = "≤ 0.50"},
 }};
 
-// The samples, in the worksheet's order.
+// The samples, in the worksheet's order, and their lots.
 constexpr std::array<char const*, 2> kSamples{"S-26-104176", "S-26-104170"};
+constexpr std::array<char const*, 2> kLots{"L-26-0381", "L-26-0377"};
+
+char const* lotOf(char const* sample) {
+    return std::string_view{sample} == kSamples.front() ? kLots.front() : kLots.back();
+}
 
 // The record fields a line keeps; an edit rewrites `value` alone.
-constexpr std::array<char const*, 12> kFields{"id",       "kind", "sample", "analyte", "area", "value",
-                                              "original", "unit", "places", "low",     "high", "spec"};
+constexpr std::array<char const*, 13> kFields{"id",   "kind",   "sample", "lot",  "analyte", "area", "value",
+                                              "original", "unit", "places", "low", "high",    "spec"};
 
 // 100 / √2 to four places. With two preparations the standard deviation is |a − b| / √2, and the expression language
 // has no square root, so the RSD in percent is |a − b| × 100 / √2 over the mean, with the root as this constant.
@@ -211,6 +192,7 @@ ui::AnyHandle lineList() {
         lines.push_back(ui::obj({{"id", line.id},
                                  {"kind", line.kind},
                                  {"sample", line.sample},
+                                 {"lot", lotOf(line.sample)},
                                  {"analyte", line.analyte},
                                  {"area", line.area},
                                  {"value", line.value},
@@ -444,8 +426,7 @@ ui::Node resultInput(Worksheet const& sheet, Evaluation const& evaluation, Field
 }
 
 ui::Node analyteCell(Evaluation const& evaluation) {
-    Flag const group = ui::eq(ui::row("kind"), "group");
-    return ui::row({ui::text({.text = ui::row("analyte"), .role = ui::cond(group, Text{"muted"}, Text{"normal"})}),
+    return ui::row({ui::text({.text = ui::row("analyte")}),
                     layout::tag("Changed", "warn")
                         .visible(ui::eq(ui::row("kind"), "entered") && ui::ne(ui::row("value"), ui::row("original")))
                         .testId("changed"),
@@ -458,26 +439,20 @@ ui::Node evaluationCell(Worksheet const& sheet, Evaluation const& evaluation) {
                     layout::muted(ui::format("RSD {0} %", {sheet.rsd}))
                         .visible(ui::eq(ui::row("kind"), "mean"))
                         .testId("rsd")},
-                   {.gap = 1, .align = Align::Center})
-        .visible(ui::ne(ui::row("kind"), "group"));
+                   {.gap = 1, .align = Align::Center});
 }
 
 ui::Node resultTable(Worksheet const& sheet) {
     Field const field = rowField();
     Evaluation const evaluation = evaluate(sheet, field);
-    Flag const group = ui::eq(ui::row("kind"), "group");
     std::vector<ui::TableColumn> const columns{
-        {.name = "sample",
-         .label = "Sample",
-         .width = ui::fixed(13),
-         .cell = ui::text({.text = ui::cond(group, Text{ui::row("sample")}, Text{""}), .role = "mono"})},
         {.name = "analyte", .label = "Analyte", .width = ui::stretch(), .cell = analyteCell(evaluation)},
         {.name = "area", .label = "Peak area", .width = ui::fixed(10), .align = Align::End},
         {.name = "result",
          .label = "Result",
          .width = ui::fixed(10),
          .align = Align::End,
-         .cell = resultInput(sheet, evaluation, field).visible(!group)},
+         .cell = resultInput(sheet, evaluation, field)},
         {.name = "unit", .label = "Unit", .width = ui::fixed(6), .cell = ui::text({.text = ui::row("unit")})},
         {.name = "spec",
          .label = "Specification",
@@ -490,6 +465,13 @@ ui::Node resultTable(Worksheet const& sheet) {
     return ui::table(sheet.lines,
                      {.key = ui::row("id"),
                       .columns = columns,
+                      // Each sample's results under a heading across the worksheet: its id and its lot.
+                      .group = ui::TableGroup{.by = ui::row("sample"),
+                                              .heading = {ui::row({ui::text({.text = ui::row("key"), .role = "mono"}),
+                                                                   ui::text({.text = ui::format("· lot {0}",
+                                                                                                {ui::row("first.lot")})})},
+                                                                  {.gap = 1})
+                                                              .testId("group")}},
                       .rowTone = ui::cond(evaluation.outOfSpec, ui::AnyHandle{"err"}, ui::AnyHandle{nullptr})})
         .a11y("Results of worksheet WS-2026-0412")
         .testId("results");
@@ -611,7 +593,7 @@ ui::Node resultField(Worksheet const& sheet) {
 ui::Node compactLayout(Worksheet const& sheet) {
     auto const sample = currentSample(sheet);
     auto const shown = ui::filter(sheet.lines, "line", [&sample](ui::AnyHandle const& line) -> ui::AnyHandle {
-        return ui::eq(line.at("sample"), sample) && ui::ne(line.at("kind"), "group");
+        return ui::eq(line.at("sample"), sample);
     });
     auto const last = static_cast<std::int64_t>(kSamples.size()) - 1;
     return ui::column(

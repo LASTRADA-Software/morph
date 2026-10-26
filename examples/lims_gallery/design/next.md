@@ -9,26 +9,26 @@ open separate PRs.
 |---|---|
 | Ten gallery designs (01–10) | done |
 | Batch A: defects and responsive layout | landed; the gallery dropped its workarounds |
-| Batch B: tables | designed and reviewed (`docs/superpowers/specs/2026-10-25-lims-gallery-batch-b-design.md`); part 1 landed, the gallery dropped its workarounds; part 2 next |
+| Batch B: tables | landed (`docs/superpowers/specs/2026-10-25-lims-gallery-batch-b-design.md`); the gallery dropped its workarounds |
 | Batch C: text, fields and small controls | designed and reviewed (`docs/superpowers/specs/2026-10-25-lims-gallery-batch-c-design.md`); lands after batch B |
 | Batch D: layout, overlays and navigation | designed, not reviewed yet (`docs/superpowers/specs/2026-10-25-lims-gallery-batch-d-design.md`); four parts |
 | Batch E: expressions and charts | not designed yet |
 
-**Batch B part 1 ("columns and the selection") has landed:** G2 (the `mono` role and `font.mono`), G47 with a
-column's `align` and `valign`, G29 (a bound selection and `onSelectionChange`), G43 (one selection model with
-`SelectionChange` reports and a keyboard on every backend) and G30 (the select column), with conformance cases 41 to
-43 and layout cases 8 and 9. The gallery's samples, results, review, audit and console screens use them. The plate's
-well labels stay proportional: they are button labels, which take no text role.
+**Batch B has landed.** Part 1 ("columns and the selection"): G2, G47 with `valign`, G29, G43 and G30, with
+conformance cases 41 to 43 and layout cases 8 and 9. Part 2 ("the row pipeline"): G41 (a selected push button), G31
+(sortable columns, `sort` on the table and the `sort` form), G28 (`pageSize` and `page`, the `slice` function, and the
+selection kept across pages), G44 (the `runs` form) and G46 (a table's `group` heading rows), with conformance cases
+44 and 45 and layout case 10. A table over rows now refuses `filters` and `highlightKey`, and reads `showHeader`.
+The samples screen sorts, pages and shares its order with the compact cards; the audit trail pages; the results
+worksheet groups by sample; the plate's sample wells are selected push buttons, its "to place" list is a slice, and
+compact lists a plate row's empty wells as runs. The plate's empty rows are not folded into one section.
 
 ## How to continue
 
-1. **Batch B part 2** ("the row pipeline"): G41, G31, G28, G44, G46, as the design orders them, with G30's paged
-   Ctrl+A test. A table over `rows` ignores the kind of a selection report today, since it holds every row; G28's
-   paging is where an `Extend` starts keeping the keys of other pages.
-2. **Batch C**, in the order its design gives (plain text first: #1058).
-3. **Review batch D's design** once, by a separate agent on the default model, then implement it in its four parts.
+1. **Batch C**, in the order its design gives (plain text first: #1058).
+2. **Review batch D's design** once, by a separate agent on the default model, then implement it in its four parts.
    **Design batch E** (`batches.md` lists its gaps) and review it the same way. Batch E's chart should need no new Qt module and needs a terminal fallback.
-4. When everything has landed, take the PR out of draft.
+3. When everything has landed, take the PR out of draft.
 
 Two corrections to `gaps.md` from the batch C design, to apply when batch C lands: G10 says a field is outlined while
 it has errors, but no Qt Quick input is outlined for errors at all; G13's date formatting hook is never set by any

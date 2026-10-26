@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "gallery_harness.hpp"
 
@@ -40,9 +43,18 @@ TEST_CASE("plate, expanded: the samples to place beside the 12-column plate, A3 
     CHECK(wellLabel(screen, "B3") == "S1");
     CHECK(wellLabel(screen, "H4") == "S67");
     CHECK(wellLabel(screen, "D5") == "·");
+    // A sample well is a push button that shows its selection, not a list item.
     CHECK(screen.backend().prop(well(screen, "A3"), "selected") == "true");
+    CHECK_FALSE(screen.backend().hasProp(well(screen, "A3"), "style"));
     CHECK(screen.backend().prop(well(screen, "A9"), "a11yName") == "A9, control high");
     CHECK(screen.prop("Panel", "to-place", "title") == "To place · 14");
+    // The panel lists the first five and counts the rest.
+    std::size_t listed = 0;
+    for (int const row : screen.backend().all("Row")) {
+        listed += screen.backend().prop(row, "testId") == "source" ? 1U : 0U;
+    }
+    CHECK(listed == 5);
+    CHECK(screen.text("more") == "+ 9 more");
     CHECK(screen.text("selected") == "6 wells selected · A3–A8");
     CHECK(screen.shows("Panel", "bulk"));
 }
@@ -97,20 +109,58 @@ TEST_CASE("plate, expanded: the keyboard path through the wells", "[lims-gallery
     screen.requireNoProblems();
 }
 
-TEST_CASE("plate, compact: the wells listed by row", "[lims-gallery]") {
+namespace {
+
+// The texts of plate row @p row's lines on compact, in order: one per run of wells.
+std::vector<std::string> runLines(GalleryScreen& screen, std::string const& row) {
+    std::optional<int> list;
+    for (char const* const kind : {"Column", "Stack", "ForEach"}) {
+        list = list ? list : screen.backend().find(kind, "testId", "lines-" + row);
+    }
+    REQUIRE(list.has_value());
+    std::vector<std::string> texts;
+    std::vector<int> pending{list.value_or(0)};
+    while (!pending.empty()) {
+        int const at = pending.front();
+        pending.erase(pending.begin());
+        if (screen.backend().kindOf(at) == "Text" && screen.backend().prop(at, "testId") == "line") {
+            texts.push_back(screen.backend().prop(at, "text"));
+        }
+        std::vector<int> const children = screen.backend().children(at);
+        pending.insert(pending.begin(), children.begin(), children.end());
+    }
+    return texts;
+}
+
+}  // namespace
+
+TEST_CASE("plate, compact: the wells listed by row, empty wells as one line a run", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "compact"};
     screen.requireNoProblems();
     CHECK_FALSE(screen.find("Grid", "plate").has_value());
     CHECK(screen.prop("Collapsible", "row-A", "title") == "Row A · 1 standard, 2 controls, 9 empty");
     CHECK(screen.prop("Collapsible", "row-B", "title") == "Row B · 1 standard, 1 blank, 10 samples");
     CHECK(screen.prop("Collapsible", "row-D", "title") == "Row D · 1 standard, 10 samples, 1 empty");
-    CHECK(screen.find("Row", "line-A1").has_value());
-    CHECK(screen.text("line-A3") == "Empty");
-    CHECK(screen.text("line-B3") == "Sample S-26-104234");
-    screen.click("assign-A3");
+    CHECK(runLines(screen, "A") ==
+          std::vector<std::string>{"Standard 1, 100 ng/mL", "Control, low", "Empty, 6 wells", "Control, high",
+                                   "Empty, 3 wells"});
+    CHECK(runLines(screen, "B").at(2) == "Sample S-26-104234");
+    // The run's one Assign places a sample in its first well, which leaves the rest a shorter run.
+    // Every run line has an Assign, shown for an empty run alone; the first shown is row A's first empty run's.
+    std::optional<int> assign;
+    for (int const button : screen.backend().all("Button")) {
+        if (!assign && screen.backend().prop(button, "testId") == "assign" &&
+            screen.backend().prop(button, "visible") != "false") {
+            assign = button;
+        }
+    }
+    REQUIRE(assign.has_value());
+    screen.backend().click(assign.value_or(0));
     REQUIRE(screen.waitFor([&screen] { return screen.find("Select", "assign-well").has_value(); }));
+    CHECK(screen.prop("Select", "assign-well", "selected") == "\"A3\"");
     screen.click("action_assign");
-    CHECK(screen.waitFor([&screen] { return screen.text("line-A3") == "Sample S-26-104301"; }));
+    CHECK(screen.waitFor([&screen] { return runLines(screen, "A").at(2) == "Sample S-26-104301"; }));
+    CHECK(runLines(screen, "A").at(3) == "Empty, 5 wells");
     CHECK(screen.prop("Collapsible", "row-A", "title") == "Row A · 1 standard, 2 controls, 1 sample, 8 empty");
     CHECK(screen.text("to-place-count") == "ELISA, host cell protein · 13 samples to place");
     screen.requireNoProblems();

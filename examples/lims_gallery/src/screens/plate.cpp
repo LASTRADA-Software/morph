@@ -42,6 +42,8 @@ constexpr std::int64_t kIdBase = 104233;
 // Samples 1 to 67 are placed when the screen opens; 68 to 81 are still to place.
 constexpr std::int64_t kFirstToPlace = 68;
 constexpr std::int64_t kLastSample = 81;
+// How many of the samples to place the panel lists; it counts the rest.
+constexpr std::int64_t kListed = 5;
 
 // The standards' concentrations, one per row in column 1.
 constexpr std::array<char const*, 8> kStandards{"100", "50", "25", "12.5", "6.25", "3.13", "1.56", "0.78"};
@@ -357,7 +359,6 @@ ui::Node sampleWell(Plate const& plate, Well const& well) {
     auto const node =
         ui::button({.label = ui::cond(ui::engaged(sample), Text{ui::format("S{0}", {sample})}, Text{"·"}),
                     .onClick = toggleWell(plate, well.name),
-                    .style = morph::ui::ButtonStyle::Item,
                     .selected = selected})
             .id(plate.elements.at(well.name))
             .a11y(ui::format("{0}, {1}{2}", {name, role, ui::cond(selected, Text{", selected"}, Text{""})}))
@@ -420,9 +421,14 @@ ui::Node sourceRow(Plate const& plate) {
 }
 
 ui::Node sources(Plate const& plate) {
-    return ui::panel({ui::forEach(plate.toPlace, {.key = ui::row("n"), .gap = 1},
+    // The first five, then how many more: the design lists a few and counts the rest.
+    auto const more = Count{plate.toPlaceCount} - kListed;
+    return ui::panel({ui::forEach(ui::slice(plate.toPlace, std::int64_t{0}, kListed), {.key = ui::row("n"), .gap = 1},
                                   [&plate](ui::DeclScope&) { return ui::Nodes{sourceRow(plate)}; })
                           .testId("sources"),
+                      ui::text({.text = ui::format("+ {0} more", {more}), .role = "muted"})
+                          .visible(more > 0)
+                          .testId("more"),
                       ui::text({.text = "All samples are placed.", .role = "muted"})
                           .visible(ui::eq(plate.toPlaceCount, std::int64_t{0}))},
                      {.title = ui::format("To place · {0}", {plate.toPlaceCount}), .padding = 1})
@@ -544,25 +550,45 @@ ui::Node expandedLayout(Plate const& plate) {
 
 // ── Compact: the wells listed by row ─────────────────────────────────────────────────────────────────────────────
 
-ui::Node wellLine(Plate const& plate, Well const& well) {
-    if (well.kind != Kind::Sample) {
-        return ui::row({ui::text({.text = well.name, .role = "section"}).sizing(ui::fixed(5)),
-                        ui::text({.text = well.description}).sizing(ui::stretch())},
-                       {.gap = 1, .align = Align::Center})
-            .testId("line-" + well.name);
+// A plate row's wells as records: the well's name, its line's text, and `run`, which adjacent empty sample wells
+// share so they list as one line; every other well has a run of its own.
+ui::AnyHandle rowWells(Plate const& plate, std::size_t row) {
+    std::vector<ui::AnyHandle> wells;
+    for (int column = 1; column <= kColumns; ++column) {
+        Well const& well = wellOf(row, column);
+        if (well.kind != Kind::Sample) {
+            wells.push_back(ui::obj({{"name", well.name}, {"text", well.description}, {"run", well.name}}));
+            continue;
+        }
+        auto const sample = plate.samples.at(well.name);
+        wells.push_back(
+            ui::obj({{"name", well.name},
+                     {"text", ui::cond(ui::engaged(sample), Text{ui::format("Sample {0}", {fullId(sample)})},
+                                       Text{"Empty"})},
+                     {"run", ui::cond(ui::engaged(sample), ui::AnyHandle{well.name}, ui::AnyHandle{"empty"})}}));
     }
-    auto const sample = plate.samples.at(well.name);
-    auto const name = ui::AnyHandle{well.name};
-    return ui::row({ui::text({.text = well.name, .role = "section"}).sizing(ui::fixed(5)),
-                    ui::text({.text = ui::cond(ui::engaged(sample), Text{ui::format("Sample {0}", {fullId(sample)})},
-                                               Text{"Empty"})})
-                        .sizing(ui::stretch())
-                        .testId("line-" + well.name),
-                    ui::button({.label = "Assign…", .onClick = openAssign(plate, name, firstToPlace(plate))})
-                        .visible(!ui::engaged(sample))
-                        .a11y(ui::format("Assign a sample to {0}", {name}))
-                        .testId("assign-" + well.name)},
-                   {.gap = 1, .align = Align::Center});
+    return ui::list(wells);
+}
+
+// One run of a plate row: a well's line, or "A5–A8 · Empty, 4 wells" with one Assign for the run's first well.
+ui::Node runLine(Plate const& plate) {
+    auto const first = ui::row("first.name");
+    auto const count = Count{ui::row("count")};
+    Flag const empty = ui::eq(ui::row("key"), "empty");
+    Flag const several = count > 1;
+    return ui::row(
+        {ui::text({.text = ui::cond(several, Text{ui::format("{0}–{1}", {first, ui::row("last.name")})}, Text{first}),
+                   .role = "section"})
+             .sizing(ui::fixed(8)),
+         ui::text({.text = ui::cond(empty && several, Text{ui::format("Empty, {0} wells", {count})},
+                                    Text{ui::row("first.text")})})
+             .sizing(ui::stretch())
+             .testId("line"),
+         ui::button({.label = "Assign…", .onClick = openAssign(plate, first, firstToPlace(plate))})
+             .visible(empty)
+             .a11y(ui::format("Assign a sample to {0}", {first}))
+             .testId("assign")},
+        {.gap = 1, .align = Align::Center});
 }
 
 // "Row B · 1 standard, 1 blank, 10 samples": the template's wells, then how many sample wells are filled and empty.
@@ -595,14 +621,12 @@ ui::AnyHandle rowTitle(Plate const& plate, std::size_t row) {
 }
 
 ui::Node rowSection(Plate const& plate, std::size_t row) {
-    std::vector<ui::Node> lines;
-    lines.reserve(kColumns);
-    for (int column = 1; column <= kColumns; ++column) {
-        lines.push_back(wellLine(plate, wellOf(row, column)));
-    }
+    auto const runs = ui::runs(rowWells(plate, row), "well", [](ui::AnyHandle const& well) { return well.at("run"); });
     auto const name = ui::AnyHandle{kRowNames.at(row)};
     return ui::collapsible(
-               {ui::column(lines, {.gap = 1})},
+               {ui::forEach(runs, {.key = ui::row("first.name"), .gap = 1},
+                            [&plate](ui::DeclScope&) { return ui::Nodes{runLine(plate)}; })
+                    .testId(std::string{"lines-"} + kRowNames.at(row))},
                {.title = rowTitle(plate, row),
                 .open = ui::eq(plate.openRow, name),
                 .onToggle = ui::set(plate.openRow, ui::cond(ui::Handle<bool>{ui::event()}, name, ui::AnyHandle{""}))})
