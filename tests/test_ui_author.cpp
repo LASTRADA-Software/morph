@@ -1515,10 +1515,24 @@ TEST_CASE("a text's spans are written as runs that the loader takes", "[ui][auth
     INFO((added ? std::string{} : added.error().message()));
     CHECK(added.has_value());
 }
+
 // Mutation: leave `description` out of the dialog writer (the key is not written).
 TEST_CASE("a dialog's description is written beside its title", "[ui][author]") {
     auto const sign = ui::element("sign");
     auto const json = text(ui::dialog(sign, {ui::text({.text = "x"})}, {.title = "Sign", .description = "Stored"})
                                .json());
     CHECK(json.contains(R"("title":"Sign","description":"Stored")"));
+}
+
+// Mutation: drop the group rule from brokenRule (the unnamed group passes).
+TEST_CASE("accessibility: a group has a label or an a11y.name", "[ui][author]") {
+    auto const unnamed = accessibility(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "group", "children": []}})");
+    REQUIRE(unnamed.has_value());
+    CHECK(unnamed->reason == "accessibility: a `group` has a `label` or an `a11y.name`");
+    CHECK_FALSE(accessibility(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "group", "label": "Conditions",
+        "children": []}})")
+                    .has_value());
+    CHECK_FALSE(accessibility(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "group",
+        "a11y": {"name": "Conditions"}, "children": []}})")
+                    .has_value());
 }

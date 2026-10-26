@@ -2466,6 +2466,9 @@ public:
     /// @param name    The value's name.
     /// @return The value.
     [[nodiscard]] Value elementValue(ElementState const& element, std::string_view name) const;
+    /// Whether @p element is a group with an element inside it the user touched: a group has no value of its own to
+    /// touch, so its errors show under the `touched` policy once any of its inputs is.
+    [[nodiscard]] static bool touchedWithin(ElementState const& element);
 
     /// @brief The current value of an input, checkbox or select: what `required` tests.
     /// @param element The element.
@@ -2654,6 +2657,9 @@ private:
     /// reported, at @p path, while @p noted is still false, and shows no tone.
     std::optional<Tone> rowToneOf(Value const& value, std::string const& path, bool& noted);
     Node lowerBoundary(DocNode const& node, LowerCtx const& ctx);
+    /// A group: a column of its legend (a text carrying the mark), its children, its description and its shown
+    /// errors, named and announced as a group.
+    Node lowerGroup(DocNode const& node, LowerCtx const& ctx, ElementState* element, std::vector<Node> children);
     Node lowerCustom(DocNode const& node, LowerCtx const& ctx);
     Node lowerChart(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     /// Everything a chart draws, read from its node in @p scope; the one tracked read of the chart's binding.
@@ -4421,7 +4427,8 @@ inline void ScreenCore::wireErrors(ElementState& element) {
         DocNode const& field = *element.node;
         RtScope const& owner = *element.scope;
         std::vector<std::string> errors;
-        if (ExprPtr const required = field.prop("required")) {
+        // A group's `required` is its legend's mark only: a group has no value, so no `Required` is derived from it.
+        if (ExprPtr const required = field.kind != "group" ? field.prop("required") : nullptr) {
             Value const requiredNow = evalIn(owner, nullptr, required);
             bool const* const flag = requiredNow.asBool();
             if (flag != nullptr && *flag && !engaged(inputValue(element))) {
@@ -4920,7 +4927,7 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
         std::string const mode = policy.showErrors.empty() ? _doc->showErrors : policy.showErrors;
         bool const submittedNow = policy.submitted != nullptr && policy.submitted->get();
         if (mode == "always" || (mode == "submit" && submittedNow) ||
-            (mode != "submit" && (submittedNow || element.touched.get()))) {
+            (mode != "submit" && (submittedNow || element.touched.get() || touchedWithin(element)))) {
             return errors();
         }
         return Value{ValueList{}};
@@ -5017,6 +5024,16 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
         return element.committed.get();
     }
     return Value{};
+}
+
+inline bool ScreenCore::touchedWithin(ElementState const& element) {
+    if (element.node->kind != "group") {
+        return false;
+    }
+    std::string const inside = element.node->path + "/";
+    return std::ranges::any_of(element.scope->elements, [&inside](std::unique_ptr<ElementState> const& other) {
+        return other->node->path.starts_with(inside) && other->touched.get();
+    });
 }
 
 // --- Commands --------------------------------------------------------------------------------------------------
@@ -6352,6 +6369,53 @@ inline KeyValueItem ScreenCore::keyValueItemOf(Value const& item, std::string co
     return out;
 }
 
+// A group needs no widget of its own: it lowers to kinds every backend has, so the view tree and the contract do not
+// change. Its description is a line read in order after its children, since `Common` carries no accessible
+// description.
+inline Node ScreenCore::lowerGroup(DocNode const& node, LowerCtx const& ctx, ElementState* element,
+                                   std::vector<Node> children) {
+    Text legend{.text = bindProp<std::string>(ctx, node.prop("label"), std::string{}, stringOf)};
+    legend.field.required = bindProp<bool>(ctx, node.prop("required"), false, boolOf);
+    std::vector<Node> column;
+    column.reserve(children.size() + 3);
+    column.push_back(ui::text(std::move(legend)));
+    std::ranges::move(children, std::back_inserter(column));
+    if (ExprPtr const description = node.prop("description")) {
+        Text line{.text = bindProp<std::string>(ctx, description, std::string{}, stringOf), .role = TextRole::Muted};
+        line.common.visible = slotProp<bool>([scope = ctx.scope, bindings = ctx.bindings, description, this] {
+            return !textOf(evalIn(*scope, bindings.get(), description), session.formatting()).empty();
+        });
+        column.push_back(ui::text(std::move(line)));
+    }
+    // The shown errors, one line each: a check that targets the group shows its message here.
+    auto shown = [this, element, scope = ctx.scope, bindings = ctx.bindings, errors = node.prop("errors")] {
+        return stringsOf(element != nullptr ? elementValue(*element, "shownErrors")
+                                            : evalIn(*scope, bindings.get(), errors));
+    };
+    Text messages{.text = slotProp<std::string>([shown] {
+                      std::string joined;
+                      for (std::string const& message : shown()) {
+                          joined += (joined.empty() ? "" : "\n") + message;
+                      }
+                      return joined;
+                  }),
+                  .role = TextRole::Error};
+    messages.common.visible = slotProp<bool>([shown] { return !shown().empty(); });
+    column.push_back(ui::text(std::move(messages)));
+    Column spec{.children = std::move(column), .gap = static_cast<int>(intOf(
+                                                    node.prop("gap") ? once(ctx, node.prop("gap")) : Value{}, 0))};
+    commonOf(node, ctx, element, spec.common);
+    if (spec.common.a11y.role.empty()) {
+        spec.common.a11y.role = "group";
+    }
+    bool const named = std::ranges::any_of(node.partList("a11y"),
+                                           [](DocNodePtr const& a11y) { return a11y->prop("name") != nullptr; });
+    if (!named) {
+        spec.common.a11y.name = bindProp<std::string>(ctx, node.prop("label"), std::string{}, stringOf);
+    }
+    return ui::column(std::move(spec));
+}
+
 inline Prop<std::vector<TextSpan>> ScreenCore::spansProp(LowerCtx const& ctx, ExprPtr const& expr) {
     return slotProp<std::vector<TextSpan>>([this, scope = ctx.scope, bindings = ctx.bindings, expr] {
         bool dropped = false;
@@ -6775,12 +6839,14 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                                                   })};
         spec.onToggle = [this, ctx, element, onToggle = node.event("onToggle"),
                          onChange = node.event("onChange")](bool checked) {
-            if (element->bound == nullptr) {
-                session.asUser([&] {
+            // A toggle is a check box's commit, so it touches the box.
+            session.asUser([&] {
+                if (element->bound == nullptr) {
                     session.noteWrite();
                     element->draft.set(checked);
-                });
-            }
+                }
+                element->touched.set(true);
+            });
             runEvent(onToggle, ctx, Value{checked});
             runEvent(onChange, ctx, Value{checked});
         };
@@ -6799,12 +6865,14 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         spec.onSelect = [this, ctx, element, onChoose = node.event("onChoose"),
                          onChange = node.event("onChange")](Key const& key) {
             Value const chosen = valueOfKey(key);
-            if (element->bound == nullptr) {
-                session.asUser([&] {
+            // A choice is a select's commit, so it touches the select.
+            session.asUser([&] {
+                if (element->bound == nullptr) {
                     session.noteWrite();
                     element->draft.set(chosen);
-                });
-            }
+                }
+                element->touched.set(true);
+            });
             runEvent(onChoose, ctx, chosen);
             runEvent(onChange, ctx, chosen);
         };
@@ -6933,6 +7001,9 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         }
         commonOf(node, ctx, element, spec.common);
         return ui::menu(std::move(spec));
+    }
+    if (kind == "group") {
+        return lowerGroup(node, ctx, element, children("children"));
     }
     if (kind == "column" || kind == "row") {
         int const gap = static_cast<int>(onceInt("gap", 0));

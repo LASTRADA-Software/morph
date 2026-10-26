@@ -3660,6 +3660,36 @@ namespace detail {
     return detail::stackNode("column", children, options);
 }
 
+/// @brief Options of `group`.
+struct GroupOptions {
+    /// @brief The legend: the group's caption and accessible name.
+    AnyHandle label;
+    /// @brief Whether the legend carries the required mark, a condition. The mark only: which of the children are
+    ///        required is a check's to say.
+    AnyHandle required;
+    /// @brief A line under the children, read in order after them.
+    AnyHandle description;
+    /// @brief Messages shown under the group, as on an input; a check that targets the group adds its own.
+    AnyHandle errors;
+    /// @brief The gap between the legend, the children and the lines under them: a spacing step.
+    AnyHandle gap;
+};
+
+/// @brief A `group` node: a labelled set of inputs, a fieldset with a legend.
+/// @param children The inputs and whatever arranges them.
+/// @param options  The legend, the mark, the description, the errors and the gap.
+/// @return The node.
+[[nodiscard]] inline Node group(Nodes const& children, GroupOptions const& options) {
+    return detail::NodeWriter{"group"}
+        .put("label", options.label)
+        .put("required", options.required)
+        .put("description", options.description)
+        .put("errors", options.errors)
+        .put("gap", options.gap)
+        .put("children", children)
+        .done();
+}
+
 /// @brief A `row` node.
 /// @param children The children.
 /// @param options  The gap and the alignment.
@@ -5113,6 +5143,12 @@ namespace detail {
         }
         return "accessibility: a `" + node.kind + "` has a `title` or an `a11y.name`";
     }
+    if (kind == "group") {
+        if (names(node, "label") || hasA11yName(node)) {
+            return {};
+        }
+        return "accessibility: a `group` has a `label` or an `a11y.name`";
+    }
     if ((kind == "table" || kind == "custom") && !hasA11yName(node)) {
         return "accessibility: a `" + node.kind + "` has an `a11y.name`";
     }
@@ -5170,7 +5206,7 @@ inline std::optional<Refusal> accessibilityOf(DocNode const& node, std::string c
 ///
 /// Every text input, date-time input, slider, select, checkbox and file picker has a `label` or an `a11y.name`; a
 /// button without a `label`, every `custom` node and every `table` has an `a11y.name`; every `dialog` and `drawer`
-/// has a `title` or an `a11y.name`. An `icon` never counts, and neither does a label or name written as the
+/// has a `title` or an `a11y.name`, and every `group` a `label` or an `a11y.name`. An `icon` never counts, and neither does a label or name written as the
 /// constant `""` or `null`. A form field takes its field's label, so a `form` is not checked. The view and every
 /// component's fallback are walked; the client does not run these rules.
 /// @param document The loaded document.

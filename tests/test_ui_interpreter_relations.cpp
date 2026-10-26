@@ -320,3 +320,60 @@ TEST_CASE("interpreter relations: Esc, as a document spells it, runs a dialog's 
     h.settle();
     CHECK(h.text("count") == "2");
 }
+
+namespace {
+
+constexpr char const* kConditions = R"({
+  "vocab": "ui/1", "id": "receipt",
+  "state": {"intact": {"init": false}, "sealed": {"init": true}, "labelled": {"init": false},
+            "ambient": {"init": false}},
+  "view": {"kind": "column", "children": [
+    {"kind": "button", "testId": "open", "label": "open", "onClick": {"open": "dlg"}},
+    {"kind": "text", "testId": "ready", "text": {"fn": "format", "args": ["{0}", {"ref": "dlg.ready"}]}},
+    {"kind": "dialog", "id": "dlg", "title": "Receive",
+     "scope": {"checks": [{"id": "mandatory",
+                           "assert": {"fn": "and", "args": [{"ref": "intact"}, {"ref": "sealed"}, {"ref": "labelled"}]},
+                           "message": "Container, seal and label must be checked.", "targets": ["conditions"]}]},
+     "children": [
+       {"kind": "group", "id": "conditions", "testId": "conditions", "label": "Condition on receipt",
+        "required": true, "gap": 1, "description": "Container, seal and label must be checked to receive the sample.",
+        "children": [{"kind": "grid", "columns": 2, "gap": 1, "children": [
+          {"kind": "checkbox", "id": "intactBox", "testId": "intact", "label": "Container intact",
+           "checked": {"ref": "intact"}, "onToggle": [{"set": "intact", "value": {"ref": "event"}}]},
+          {"kind": "checkbox", "label": "Seal unbroken", "checked": {"ref": "sealed"}},
+          {"kind": "checkbox", "label": "Label legible", "checked": {"ref": "labelled"}},
+          {"kind": "checkbox", "label": "Ambient", "checked": {"ref": "ambient"}}]}]},
+       {"kind": "text", "testId": "valid", "text": {"fn": "format", "args": ["{0}", {"ref": "conditions.valid"}]}},
+       {"kind": "button", "testId": "label", "label": "label", "onClick": [{"set": "labelled", "value": true}]}]}]}})";
+
+}  // namespace
+
+// Mutation: leave `touchedWithin` out of `shownErrors` (the message stays hidden after the toggle).
+TEST_CASE("interpreter relations: a check targets a group, shows once a box inside is touched, and decides ready",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(kConditions);
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    CHECK(h.text("ready") == "false");
+    CHECK(h.text("valid") == "false");
+    int const group = h.byTestId("Column", "conditions");
+    std::vector<int> const lines = h.backend.children(group);
+    REQUIRE_FALSE(lines.empty());
+    int const messages = lines.back();
+    CHECK(h.backend.prop(messages, "visible") == "false");
+    h.backend.toggle(h.byTestId("Checkbox", "intact"));
+    h.settle();
+    CHECK(h.backend.prop(messages, "visible") != "false");
+    CHECK(h.backend.prop(messages, "text") == "Container, seal and label must be checked.");
+    CHECK(h.backend.prop(messages, "role") == "Error");
+    h.backend.click(h.byTestId("Button", "label"));
+    h.settle();
+    CHECK(h.text("ready") == "true");
+    CHECK(h.backend.prop(messages, "visible") == "false");
+    // The column is the group: named by its legend, announced as a group, its first child the legend with the mark.
+    CHECK(h.backend.prop(group, "a11yRole") == "group");
+    CHECK(h.backend.prop(group, "a11yName") == "Condition on receipt");
+    CHECK(h.backend.prop(lines.front(), "required") == "true");
+    CHECK(h.backend.prop(lines.front(), "text") == "Condition on receipt");
+}

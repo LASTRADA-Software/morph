@@ -841,6 +841,13 @@ inline constexpr std::array<KeySpec, 10> kDialogKeys = {{{"open", Shape::Conditi
                                                         {"cancel", Shape::Commands, {}, kInner},
                                                         {"actions", Shape::Parts, "actionButton", kInner},
                                                         {"side", Shape::Expr}}};
+/// @brief The keys of `group`: a labelled set of inputs, lowered to a column of existing kinds.
+inline constexpr std::array<KeySpec, 6> kGroupKeys = {{{"label", Shape::Expr},
+                                                       {"required", Shape::Condition},
+                                                       {"description", Shape::Expr},
+                                                       {"errors", Shape::Expr},
+                                                       {"gap", Shape::Expr},
+                                                       {"children", Shape::Nodes}}};
 /// @brief The keys of `busy`.
 inline constexpr std::array<KeySpec, 2> kBusyKeys = {{{"active", Shape::Condition}, {"label", Shape::Expr}}};
 /// @brief The keys of `forEach`.
@@ -889,7 +896,7 @@ inline constexpr std::array<KeySpec, 9> kColumnKeys = {{{"id", Shape::Name},
                                                         {"cell", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of a `table` group part: the value its rows are grouped by, and the heading drawn before each
 ///        group, both read in the row scope.
-inline constexpr std::array<KeySpec, 2> kGroupKeys = {
+inline constexpr std::array<KeySpec, 2> kTableGroupKeys = {
     {{"by", Shape::Expr, {}, kInner | kRequired}, {"heading", Shape::Nodes, {}, kInner | kRequired}}};
 /// @brief The keys of `dateTimeInput`.
 inline constexpr std::array<KeySpec, 6> kDateTimeKeys = {{{"value", Shape::Expr},
@@ -1021,7 +1028,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 53> kKinds = {{
+inline constexpr std::array<KindSpec, 54> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -1030,6 +1037,7 @@ inline constexpr std::array<KindSpec, 53> kKinds = {{
     {"menu", kMenuKeys},
     {"column", kContainerKeys},
     {"row", kContainerKeys},
+    {"group", kGroupKeys},
     {"grid", kGridKeys},
     {"spacer", {}},
     {"panel", kPanelKeys},
@@ -1064,7 +1072,7 @@ inline constexpr std::array<KindSpec, 53> kKinds = {{
     {"case", kCaseKeys, kPart | kScope},
     {"tab", kTabKeys, kPart},
     {"column", kColumnKeys, kPart},
-    {"group", kGroupKeys, kPart},
+    {"group", kTableGroupKeys, kPart},
     {"track", kTrackKeys, kPart},
     {"action", kActionKeys, kPart},
     {"a11y", kA11yKeys, kPart},

@@ -178,6 +178,7 @@ so the line goes in the text.
 | `checkbox` | `label`, `checked`, `onToggle`, `onChange` | `checked` |
 | `select` | `options`, `selected`, `style`, `label`, `showLabel`, `onStale` (`clear`, `keep`), `onChoose`, `onChange` | `selected`, `selectedOption` |
 | `menu` | `items`: parts `{label, icon, keys, checked, enabled, onClick, items, description, visible}` (`description` a muted line of help with the entry; `visible` a condition, a hidden entry left out), or `{separator: true}` alone, a line between entries; `style` (`bar`, the default, or `button`: one button that opens the entries); for `style: button`, the trigger's `label`, `icon` and `emphasis` (as a button's) | |
+| `group` | `label` (the legend), `required` (the legend's mark only: a group has no value, so no `Required` is derived from it), `description` (a line under the children), `errors` (as on an input), `gap`, `children` | |
 | `column`, `row` | `children`, `gap`, `align` (across the axis: `start`, `center`, `end`, `stretch`, the default), `justify` (the spare length along the axis while no shown child stretches: `start`, the default, `center`, `end`, `between`, in equal gaps never less than `gap`) | |
 | `grid` | `children`, `gap`, `columns` (columns sharing the width), `tracks` (in place of `columns`; parts `{width, align}`, one per column: `width` a sizing, default `{"stretch": 1}`, as a table column's; `align` `start`, the default, `center` or `end`, where a text's text and a label-width cell sit across the column, as a table column's `align`; a container cell fills it), `align` (each cell's content in its row, as a row's) | |
 | `spacer` | | |
@@ -233,6 +234,12 @@ what a client older than spans draws, so a document that may reach one gives bot
 {"kind": "text", "role": "muted",
  "spans": {"list": ["Signing as ", {"obj": {"text": {"ref": "meaningLabel"}, "strong": true}}, "."]}}
 ```
+
+**Groups.** A `group` is a labelled set of inputs, HTML's `fieldset` and `legend`: its legend is drawn with the
+required mark when `required`, its description and its shown errors under its children. Which of its children are
+required is the application's rule, which a check targeting the group says: the check's message shows on the group
+and keeps a dialog from `ready`. A group counts as touched once any element inside it is, so under the `touched`
+policy its message shows as soon as the user has acted inside it.
 
 A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 

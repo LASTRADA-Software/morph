@@ -244,7 +244,7 @@ TEST_CASE("ui document: a refusal names the document", "[ui][document]") {
     CHECK(loaded->view->kind == "text");
 
     auto const kinds = morph::ui::nodeKinds();
-    CHECK(kinds.size() == 38);
+    CHECK(kinds.size() == 39);
     CHECK(std::ranges::find(kinds, "chart") != kinds.end());
     CHECK(std::ranges::find(kinds, "dateTimeInput") != kinds.end());
     CHECK(std::ranges::find(kinds, "menuItem") == kinds.end());
@@ -355,4 +355,21 @@ TEST_CASE("ui document: an input takes a description and a tone, and a text refu
     REQUIRE_FALSE(text.has_value());
     CHECK(text.error().path == "/view/description");
     CHECK(text.error().reason == "a text is not described; put the line in the text");
+}
+
+// Mutation: drop `group` from the kinds (every document here is refused for its kind).
+TEST_CASE("ui document: a group loads with its legend and children, and its keys are checked as a column's",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "group", "id": "conditions",
+        "label": "Condition on receipt", "required": true, "gap": 1, "description": "Container, seal and label.",
+        "children": [{"kind": "checkbox", "label": "Container intact"}]}})")
+              .has_value());
+    auto const gap = loadDocumentText(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "group", "label": "x",
+        "gap": {"bogus": 1}, "children": []}})");
+    REQUIRE_FALSE(gap.has_value());
+    CHECK(gap.error().path.starts_with("/view/gap"));
+    auto const column = loadDocumentText(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "column",
+        "gap": {"bogus": 1}, "children": []}})");
+    REQUIRE_FALSE(column.has_value());
+    CHECK(column.error().reason == gap.error().reason);
 }

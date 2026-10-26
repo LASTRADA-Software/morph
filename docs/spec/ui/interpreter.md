@@ -229,10 +229,12 @@ reply; `parallel` applies each. `pending` counts runs in flight and queued.
   commits on `enter`; any other one lets Enter go on to its ancestors' chords once it has committed. `onCommit` (Enter or focus leaving after an edit) also marks the
   element `touched`. A date input's change is its commit: `onChange` runs, then `onCommit` with the same
   value. A slider reports `onChange` on each step and `onCommit` on a finished move (a release after a
-  drag, a key step, a wheel step). Both commits mark the element `touched`. The view tree reports no
-  focus, so `focused` stays false.
+  drag, a key step, a wheel step). Both commits mark the element `touched`. A check box's toggle and a select's
+  choice are their commits, and mark them `touched` too. A `group` has no value to touch: it counts as touched once
+  any element inside it is. The view tree reports no focus, so `focused` stays false.
 - **Errors.** An element's `errors` are, in order: `Required` when `required` is true and the value is
-  not engaged (`null`, `""` or an empty list), the node's own `errors`, the field errors of a reply in
+  not engaged (`null`, `""` or an empty list; never for a `group`, whose `required` is its legend's mark only),
+  the node's own `errors`, the field errors of a reply in
   its scope (a query's or mutation's value `errors.<id>`), and each failing check's message. `valid` is
   `errors` empty. A field's `tone` is not an error: it changes the field's look and nothing of `valid` or `ready`.
 - **`shownErrors`** follows the `showErrors` of the innermost dialog, else the screen: `always`;
@@ -312,6 +314,13 @@ sizing that evaluates to none of its forms is reported once for its path and low
 literal integers the loader checked, become `LayoutHints::minWidth`, `maxWidth`, `minHeight` and `maxHeight`. `align`,
 `justify` and `alignSelf`, names the loader checked, become the stack's or grid's `align` and `justify` and
 `LayoutHints::alignSelf`.
+
+A `group` lowers to a `Column` (gap `gap`) of existing kinds, so the view tree and the contract do not change: a
+`Text` of its `label` whose `field.required` is its `required` (so the mark follows the legend's last line), its
+children, a muted `Text` of its `description` shown while it is not empty, and an `Error` `Text` of its
+`shownErrors`, one per line, shown while there are any. The column's `Common` is the node's own, with `a11y.role`
+`group` and `a11y.name` the label unless the node's `a11y` names it. The description is read in order after the
+children, not as an accessible description: `Common` carries a name and a role only.
 
 Wherever the lowering turns a decimal into a number for the view tree, it reads the exact value: a `progress`'s
 `value` and a custom component's `number` prop take the quotient unrounded, and an integer property (a grid's

@@ -141,7 +141,7 @@ Each builder returns a `Command`; `Commands` is a list, built from one command o
 Every kind of the kind table has a builder whose options struct holds the kind's own keys:
 `text`, `button`, `textInput`, `checkbox`, `select`, `menu`, `column`, `row`, `grid`, `spacer`,
 `panel`, `scroll`, `switchOn` with `Case`, `tabs`, `dialog`, `drawer`, `busy`, `forEach`, `table`,
-`dataTable`, `dateTimeInput`, `slider`, `filePicker`, `banner`, `badge`, `progress`, `steps`,
+`dataTable`, `group`, `dateTimeInput`, `slider`, `filePicker`, `banner`, `badge`, `progress`, `steps`,
 `keyValue`, `emptyState`, `chart`, `splitter`, `collapsible`, `dropZone`, `customize`, `boundary`, `form`,
 `collection`, `wizard` and `custom`. `chart(ChartOptions{summary, series, lines, yMin, yMax, yPlaces, yLabel})`
 takes its series as `ChartSeries{label, points, y, x, xLabel, tone, note, joined}`, where each per-point key is a
@@ -185,6 +185,7 @@ expression of one),
   .mono})` each a record run, and `spans({…})` the list (`list` under a name that reads at the call):
   `text({.spans = spans({"Lot ", mono(lot)}), .role = "muted"})`. `styled` is not `span`, which a node's `span`
   already means.
+- **`group`** takes its children and `GroupOptions{label, required, description, errors, gap}`.
 - **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected}`: an absent `style`
   writes no key, and `selected`, a condition, is written as given: an item's current entry, a push button pressed in.
 - **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, tracks, align, justify}`; an
@@ -276,6 +277,7 @@ load-time validation:
 | `textInput`, `dateTimeInput`, `slider`, `select`, `checkbox`, `filePicker` | A `label` or an `a11y.name` |
 | `button` | A `label` or an `a11y.name`; an `icon` never names it |
 | `dialog`, `drawer` | A `title` or an `a11y.name` |
+| `group` | A `label` or an `a11y.name` |
 | `table` (including one declared from an action), `custom` | An `a11y.name` |
 
 - A label, title or name written as the constant `""` or `null` does not count; any other

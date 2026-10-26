@@ -128,6 +128,8 @@ ui::Screen homeScreen() {
                                  ui::obj({{"name", "three"}, {"label", "Close"}})}),
                        1),
              ui::emptyState({.title = "Nothing here", .text = "An empty state"}),
+             ui::group({ui::text({.text = "A labelled set of inputs"})},
+                       {.label = "Group", .required = true, .description = "A group's description"}),
              ui::collapsible({ui::text({.text = "Inside"})}, {.title = "More", .open = checked}),
              ui::dropZone({ui::text({.text = "Drop files here"})}, {.onDrop = ui::set(picked, "dropped")}),
              ui::customize(density), ui::custom(swatch).a11y("Swatch")});
