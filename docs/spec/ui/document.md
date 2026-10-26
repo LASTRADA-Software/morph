@@ -127,7 +127,7 @@ A command list is an array of commands, or one command object. `Command` carries
 |---|---|
 | `target` | The name acted on: `set`'s `name.path`; the state of `reset`; the mutation of `run`, `signIn`, `upload`; the query of `refetch`; the element of `open`, `close`, `focus`; the screen of `navigate`; the name of `host`, `switchBackend`, `setLocale`; the point of `resetPrefs`; the state a `download` to preview binds |
 | `value` | `set`'s value; `run`'s body; `navigate`'s params; `return`'s value; `host`'s args; `notify`'s message; `if`'s condition; the file of `upload` and `download` |
-| `extra` | `run`'s `each`; `navigate`'s `route`; `download`'s suggested `name` |
+| `extra` | `run`'s `each`; `navigate`'s `route`; `download`'s suggested `name`; `focus`'s `row` |
 | `binding` | `run`'s and `upload`'s `as` |
 | `option` | `navigate`'s `as`; `notify`'s `role`; `download`'s `dialog` or `preview` |
 | `transfer` | `upload`'s `id`, whose `progress`, `pending` and `error` are element values |
@@ -274,7 +274,13 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   refusal says so; `reset` state or a dialog; `run`, `signIn` and `upload` a mutation;
   `refetch` a query; `open` and `close` a dialog or drawer (`close` also `self`: the innermost dialog or drawer whose
   content holds the command, or the screen when there is none; inside a component, only a dialog or drawer of the
-  component's own); `focus` an element;
+  component's own); `focus` an element of the command's scope chain, or else one declared in the `switch` cases
+  reachable below that chain (down through cases only, never into a row, dialog, drawer or component): the
+  declarations there must all be cases of one switch, since at most one case is mounted, and two switches declaring
+  the name are refused with both paths. `focus` with `row` (an expression of a row key) names an element of a
+  `forEach`'s or table's row scope: the one row scope declaring it among the command's own and those below its scope
+  chain through switch cases; none, or two, is refused. Only `focus` reaches into cases: reading an element's value
+  from outside its case stays refused;
   `resetPrefs` a point or `all`; a download to preview a state. `from` and `into` are `ref` or `bytes`; a download
   from bytes gives a `name`; `type` is given only with `"from": "bytes"`, and `nameAs` and `typeAs` only with
   `"into": "bytes"`. A check's targets are elements;

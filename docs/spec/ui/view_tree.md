@@ -147,7 +147,7 @@ Every node but `Custom` also carries `Common`:
 | `surface` | The named token set of the theme that styles the node and everything inside it, a `Prop<std::string>`; the mount sets it again on each change |
 | `keys` | `KeyBinding{chord, onPress}`s: chords handled while focus is inside the node; the innermost node declaring a chord takes it, and for a chord listed twice the first entry is called. A focused widget's own chords come before its own keys, and its own keys before its ancestors' chords ([`backend_contract.md`](backend_contract.md), Chords) |
 | `autofocus` | The widget takes keyboard focus when the content it is part of mounts ([below](#focus)) |
-| `focusId` | The name `Mounted::focus` finds the widget by after mount, such as a document element's id; set once ([below](#focus)) |
+| `focusId` | The name `Mounted::focus` finds the widget by after mount; set once ([below](#focus)). The interpreter makes it a key unique per declaration, row and component use (its node's pointer, the component use's key and the row keys) |
 
 Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, FilePicker) also carry
 `field`, a `FieldState`:

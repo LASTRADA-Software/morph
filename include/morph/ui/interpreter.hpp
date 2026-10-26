@@ -1749,6 +1749,11 @@ public:
     std::shared_ptr<RtScope> parent;
     /// @brief The row of a row scope.
     reactive::Signal<Value> const* row = nullptr;
+    /// @brief The canonical key of a row scope's row; empty for any other scope.
+    std::string rowKey;
+    /// @brief For a component fallback's scope, the focus key of the `custom` node it is lowered for, so one
+    ///        fallback lowered for two uses keys its elements apart; empty for any other scope.
+    std::string usePrefix;
     /// @brief The dialog or drawer whose content it is.
     ElementState* owner = nullptr;
     /// @brief `touched`, `submit` or `always`, for a scope that decides it.
@@ -2605,8 +2610,9 @@ private:
     Node lowerSwitch(DocNode const& node, LowerCtx const& ctx);
     Node lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     /// A grouped table's heading row: its `group`'s `heading`, lowered as one cell in a row scope of its own whose
-    /// row is the group's run record.
-    TableRowView headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row);
+    /// row is the group's run record and whose key is `key`, the row's canonical key, as a data row's scope has.
+    TableRowView headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
+                            std::string key);
     /// A `rowTone` value as a tone: `neutral`, `info`, `ok`, `warn`, `err`, or `null` for none. Another value is
     /// reported, at @p path, while @p noted is still false, and shows no tone.
     std::optional<Tone> rowToneOf(Value const& value, std::string const& path, bool& noted);
@@ -2637,7 +2643,8 @@ private:
     void presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options);
     Node lowerTabs(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     std::shared_ptr<RtScope> rowScope(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
-                                      std::vector<DocNode const*> const& content);
+                                      std::vector<DocNode const*> const& content, std::string key);
+    bool focusTarget(Command const& command, RtScope const& scope, Bindings const* bindings);
     void commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common);
     void layoutOf(DocNode const& node, LowerCtx const& ctx, LayoutHints& layout);
     void fieldOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, FieldState& field);
@@ -5078,7 +5085,7 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
                        : unsupported(command, "`return`"));
             return;
         case CommandKind::Focus:
-            if (focusElement && focusElement(command.target)) {
+            if (focusTarget(command, scope, ctx.bindings.get())) {
                 finish(true);
                 return;
             }
@@ -6211,6 +6218,53 @@ inline void ScreenCore::layoutOf(DocNode const& node, LowerCtx const& ctx, Layou
     }
 }
 
+/// @brief Where a declaration is lowered, as a focus key reads it.
+struct FocusPlace {
+    /// @brief The focus key of the component use it is lowered for, and `>`; empty outside a component.
+    std::string prefix;
+    /// @brief The keys of the rows that enclose it, outermost first.
+    std::vector<std::string> rows;
+};
+
+/// @brief Where @p scope is: the row keys of its chain and the component use it is lowered for.
+/// @param scope The scope.
+/// @return It.
+[[nodiscard]] inline FocusPlace focusPlace(RtScope const& scope) {
+    FocusPlace place;
+    for (RtScope const* current = &scope; current != nullptr; current = current->parent.get()) {
+        if (current->row != nullptr) {
+            place.rows.push_back(current->rowKey);
+        }
+        if (current->parent == nullptr) {
+            place.prefix = current->usePrefix;
+        }
+    }
+    std::ranges::reverse(place.rows);
+    return place;
+}
+
+/// @brief A focus key: a declaration's pointer under its component use's prefix, with one key per enclosing row.
+/// @param place Where the declaration is lowered.
+/// @param path  The declaring node's JSON Pointer.
+/// @return The key, unique per declaration, row and component use.
+[[nodiscard]] inline std::string focusKey(FocusPlace const& place, std::string_view path) {
+    std::string key = place.prefix;
+    key += path;
+    for (std::string const& row : place.rows) {
+        key += '@';
+        key += row;
+    }
+    return key;
+}
+
+/// @brief The focus key of the element @p path declares, lowered in @p scope.
+/// @param path  The declaring node's JSON Pointer.
+/// @param scope The scope it is lowered in.
+/// @return The key.
+[[nodiscard]] inline std::string focusKeyOf(std::string_view path, RtScope const& scope) {
+    return focusKey(focusPlace(scope), path);
+}
+
 inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common) {
     static_cast<void>(element);
     common.visible = bindProp<bool>(ctx, node.prop("visible"), true, boolOf);
@@ -6218,7 +6272,9 @@ inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, Eleme
     common.tooltip = bindProp<std::string>(ctx, node.prop("tooltip"), std::string{}, stringOf);
     layoutOf(node, ctx, common.layout);
     common.testId = std::string{node.name("testId")};
-    common.focusId = node.id;
+    if (!node.id.empty()) {
+        common.focusId = focusKeyOf(node.path, *ctx.scope);
+    }
     common.surface = surfaceOf(node, ctx);
     if (ExprPtr const autofocus = node.prop("autofocus")) {
         common.autofocus = boolOf(once(ctx, autofocus), session.formatting());
@@ -7538,10 +7594,52 @@ inline Node ScreenCore::lowerTabs(DocNode const& node, LowerCtx const& ctx, Elem
     return ui::tabs(std::move(spec));
 }
 
+// Focuses the declaration the command's target resolved to: of several candidates (cases of one switch), the one
+// that is mounted. Each candidate is keyed by the command's own enclosing row keys, as many as enclose the
+// candidate; with `row`, the innermost of them is the row's key instead.
+inline bool ScreenCore::focusTarget(Command const& command, RtScope const& scope, Bindings const* bindings) {
+    if (!focusElement) {
+        return false;
+    }
+    auto const found = _doc->focusTargets.find(command.path);
+    if (found == _doc->focusTargets.end()) {
+        return focusElement(command.target);
+    }
+    FocusPlace const place = focusPlace(scope);
+    std::optional<std::string> row;
+    if (found->second.row) {
+        Value const value = evalIn(scope, bindings, command.extra);
+        if (value.isNull()) {
+            return false;
+        }
+        row = canonicalJson(valueOfKey(keyOf(value)));
+    }
+    for (FocusCandidate const& candidate : found->second.candidates) {
+        std::size_t const kept = row ? candidate.rows - 1 : candidate.rows;
+        if (candidate.rows == 0 && row) {
+            continue;
+        }
+        if (kept > place.rows.size()) {
+            continue;
+        }
+        FocusPlace candidatePlace{
+            .prefix = place.prefix,
+            .rows = {place.rows.begin(), std::next(place.rows.begin(), static_cast<std::ptrdiff_t>(kept))}};
+        if (row) {
+            candidatePlace.rows.push_back(*row);
+        }
+        if (focusElement(focusKey(candidatePlace, candidate.path))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 inline std::shared_ptr<RtScope> ScreenCore::rowScope(DocNode const& node, LowerCtx const& ctx,
                                                      reactive::Signal<Value> const& row,
-                                                     std::vector<DocNode const*> const& content) {
+                                                     std::vector<DocNode const*> const& content, std::string key) {
     auto scope = std::make_shared<RtScope>(*this, ctx.scope, &row, ctx.scope->nodes.depth() + 2);
+    scope->rowKey = std::move(key);
     declare(*scope, node.scope ? &*node.scope : nullptr, content, {});
     return scope;
 }
@@ -7574,8 +7672,9 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         for (DocNodePtr const& child : node.nodes("children")) {
             content.push_back(child.get());
         }
-        auto rowView = [this, ctx, &node, content](reactive::Signal<Value> const& row) -> Node {
-            auto scope = rowScope(node, ctx, row, content);
+        auto rowView = [this, ctx, &node, content, keyFn](reactive::Signal<Value> const& row) -> Node {
+            std::string key = runtime().untracked([&] { return canonicalJson(valueOfKey(keyFn(row.peek()))); });
+            auto scope = rowScope(node, ctx, row, content, std::move(key));
             LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
             std::vector<Node> children;
             children.reserve(content.size());
@@ -7690,7 +7789,8 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     auto cellsOf = [this, ctx, &node, cells, fields, roles, registry, keyFn,
                     toneReported](reactive::Signal<Value> const& row) {
         if (row.peek().field(kGroupHeadingField) != nullptr) {
-            return headingRow(node, ctx, row);
+            return headingRow(node, ctx, row,
+                              runtime().untracked([&] { return canonicalJson(valueOfKey(keyFn(row.peek()))); }));
         }
         std::vector<DocNode const*> content;
         for (DocNode const* const column : cells) {
@@ -7700,8 +7800,9 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                 }
             }
         }
-        auto scope = rowScope(node, ctx, row, content);
-        (*registry)[canonicalJson(valueOfKey(keyFn(row.peek())))] = scope;
+        std::string key = runtime().untracked([&] { return canonicalJson(valueOfKey(keyFn(row.peek()))); });
+        auto scope = rowScope(node, ctx, row, content, key);
+        (*registry)[std::move(key)] = scope;
         LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
         std::vector<Node> out;
         for (std::size_t index = 0; index < cells.size(); ++index) {
@@ -7899,14 +8000,14 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
 }
 
 inline TableRowView ScreenCore::headingRow(DocNode const& node, LowerCtx const& ctx,
-                                            reactive::Signal<Value> const& row) {
+                                            reactive::Signal<Value> const& row, std::string key) {
     auto const heading = node.partList("group").front()->nodes("heading");
     std::vector<DocNode const*> content;
     content.reserve(heading.size());
     for (DocNodePtr const& child : heading) {
         content.push_back(child.get());
     }
-    auto scope = rowScope(node, ctx, row, content);
+    auto scope = rowScope(node, ctx, row, content, std::move(key));
     LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
     // The cell owns the heading's scope, for as long as the row's node lives, as a data row's first cell does.
     auto owner = std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(lowerAll(heading, rowCtx), scope);
@@ -8049,6 +8150,7 @@ inline Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
                     return Value{std::move(record)};
                 }});
     auto scope = std::make_shared<RtScope>(*this, nullptr, nullptr, ctx.scope->nodes.depth() + 1);
+    scope->usePrefix = focusKeyOf(node.path, *ctx.scope) + ">";
     DocNode const& fallback = *component.fallback;
     declare(*scope, nullptr, {&fallback}, {});
     Node lowered = lower(fallback, LowerCtx{.scope = scope, .bindings = bindings, .boundary = nullptr});

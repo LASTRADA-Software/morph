@@ -269,8 +269,13 @@ its target does not resolve, and when the host does not support it.
   names no dialog or drawer") and fails the command: it never closes the screen the component sits in. A
   mutation's `onSuccess` runs in the scope that declares the mutation, so the same lexical rule applies to it.
 - `navigate` runs `onResult` with the returned value as `event`, or `onCancel`.
-- `focus` moves keyboard focus to the element of that id in the screen's mounted tree (`Mounted::focus`); an
-  element that is not mounted is reported and fails the command.
+- `focus` moves keyboard focus to the declaration its target resolved to at load (`Document::focusTargets`), in the
+  screen's mounted tree (`Mounted::focus`). The lowering gives every element the focus key of its declaration: the
+  node's JSON Pointer, after the key of the `custom` node whose fallback lowered it, followed by `@<canonical row
+  key>` for each row scope it sits in, outermost first. A key is unique per declaration, row and component use, and
+  the same on every re-render. The command keys each candidate with its own enclosing row keys, as many as enclose
+  the candidate, the innermost replaced by `row`'s value when it gives one, and focuses the candidate that is
+  mounted. None mounted, or a `row` of `null`, is reported as `` `x` is not mounted `` and fails the command.
 - `switchBackend` asks the host; a backend it does not list is reported. When the switch commits,
   `Session::backendChanged` runs, in one batch, every mounted screen's and the app root's `onBackendChange`, then
   marks every entry stale and refetches the mounted queries, and sets `{"env": "backend"}`; the command then

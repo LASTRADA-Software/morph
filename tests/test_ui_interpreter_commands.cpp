@@ -1219,3 +1219,126 @@ TEST_CASE("interpreter commands: close self inside a component names no dialog o
     REQUIRE(h.diagnostics.size() == 1);
     CHECK(h.diagnostics.front().reason == "`close: self` inside a component names no dialog or drawer");
 }
+
+namespace {
+
+// The text inputs, in the order they were mounted.
+std::vector<int> inputs(Harness const& h) { return h.backend.all("TextInput"); }
+
+// The buttons with test id @p testId, in the order they were mounted.
+std::vector<int> buttons(Harness const& h, std::string_view testId) {
+    std::vector<int> found;
+    for (int const button : h.backend.all("Button")) {
+        if (h.backend.prop(button, "testId") == testId) {
+            found.push_back(button);
+        }
+    }
+    return found;
+}
+
+}  // namespace
+
+// Mutation: key every element by its id again (`focusId = node.id`): the first row's field takes the focus.
+TEST_CASE("interpreter commands: focus takes the declaration the command names, not the first widget of its name",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "named",
+      "view": { "kind": "column", "children": [
+        { "kind": "forEach", "rows": { "lit": [ 1, 2 ] }, "children": [ { "kind": "textInput", "id": "name" } ] },
+        { "kind": "textInput", "id": "name", "testId": "screenName" },
+        { "kind": "button", "testId": "go", "label": "Go", "onClick": { "focus": "name" } } ] } })");
+    h.backend.click(h.byTestId("Button", "go"));
+    h.settle();
+    CHECK(h.backend.focused() == h.byTestId("TextInput", "screenName"));
+}
+
+// Mutation: drop the search through switch cases from checkFocus (the document is refused: `perPull` is not an
+// element of this scope).
+TEST_CASE("interpreter commands: focus reaches an element in a switch case, and the case shown", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "wizard",
+      "state": { "step": { "init": 0 } },
+      "view": { "kind": "column", "children": [
+        { "kind": "switch", "on": { "ref": "step" }, "cases": [
+          { "when": 0, "children": [ { "kind": "text", "text": "intro" } ] },
+          { "when": 1, "children": [ { "kind": "textInput", "id": "perPull", "testId": "perPull" },
+                                     { "kind": "textInput", "id": "notes", "testId": "notes1" } ] },
+          { "when": 2, "children": [ { "kind": "textInput", "id": "notes", "testId": "notes2" } ] } ] },
+        { "kind": "button", "testId": "toPull", "label": "Pull", "onClick": { "focus": "perPull" } },
+        { "kind": "button", "testId": "toNotes", "label": "Notes", "onClick": { "focus": "notes" } },
+        { "kind": "button", "testId": "one", "label": "1", "onClick": { "set": "step", "value": 1 } },
+        { "kind": "button", "testId": "two", "label": "2", "onClick": { "set": "step", "value": 2 } } ] } })");
+    h.backend.click(h.byTestId("Button", "toPull"));
+    h.settle();
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().reason == "`perPull` is not mounted");
+    h.backend.click(h.byTestId("Button", "one"));
+    h.settle();
+    h.backend.click(h.byTestId("Button", "toPull"));
+    h.settle();
+    CHECK(h.backend.focused() == h.byTestId("TextInput", "perPull"));
+    h.backend.click(h.byTestId("Button", "toNotes"));
+    h.settle();
+    CHECK(h.backend.focused() == h.byTestId("TextInput", "notes1"));
+    h.backend.click(h.byTestId("Button", "two"));
+    h.settle();
+    h.backend.click(h.byTestId("Button", "toNotes"));
+    h.settle();
+    CHECK(h.backend.focused() == h.byTestId("TextInput", "notes2"));
+}
+
+// Mutation: replace the row key with the command's own (ignore `row`): row 2's button focuses row 2's field.
+TEST_CASE("interpreter commands: inside a row, focus takes that row's element, and `row` another row's",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "rows",
+      "view": { "kind": "forEach", "rows": { "lit": [ 1, 2, 3 ] }, "children": [
+        { "kind": "textInput", "id": "name" },
+        { "kind": "button", "testId": "here", "label": "Here", "onClick": { "focus": "name" } },
+        { "kind": "button", "testId": "third", "label": "Third", "onClick": { "focus": "name", "row": 3 } } ] } })");
+    std::vector<int> const fields = inputs(h);
+    REQUIRE(fields.size() == 3);
+    h.backend.click(buttons(h, "here").at(1));
+    h.settle();
+    CHECK(h.backend.focused() == fields.at(1));
+    h.backend.click(buttons(h, "third").at(0));
+    h.settle();
+    CHECK(h.backend.focused() == fields.at(2));
+}
+
+// Mutation: key a row's element by its innermost row key only (outer row 1's inner row 3 takes the focus).
+TEST_CASE("interpreter commands: `row` in a nested forEach keeps the outer row", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "grid",
+      "view": { "kind": "forEach", "rows": { "lit": [ 1, 2 ] }, "children": [
+        { "kind": "forEach", "rows": { "lit": [ 1, 2, 3 ] }, "children": [
+          { "kind": "textInput", "id": "cell" },
+          { "kind": "button", "testId": "third", "label": "Third", "onClick": { "focus": "cell", "row": 3 } } ] } ] } })");
+    std::vector<int> const fields = inputs(h);
+    REQUIRE(fields.size() == 6);
+    // Outer row 2, inner row 1: the fourth button.
+    h.backend.click(buttons(h, "third").at(3));
+    h.settle();
+    CHECK(h.backend.focused() == fields.at(5));
+}
+
+// Mutation: key an element by its pointer alone, without the component use (the first use's field takes it).
+TEST_CASE("interpreter commands: focus inside a component use takes that use's element", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "uses",
+      "components": { "Field": { "host": "Field", "version": 1, "fallback": { "kind": "column", "children": [
+        { "kind": "textInput", "id": "name" },
+        { "kind": "button", "testId": "here", "label": "Here", "onClick": { "focus": "name" } } ] } } },
+      "view": { "kind": "column", "children": [ { "kind": "custom", "name": "Field" },
+                                                { "kind": "custom", "name": "Field" } ] } })");
+    std::vector<int> const fields = inputs(h);
+    REQUIRE(fields.size() == 2);
+    h.backend.click(buttons(h, "here").at(1));
+    h.settle();
+    CHECK(h.backend.focused() == fields.at(1));
+}

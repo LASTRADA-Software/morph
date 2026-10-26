@@ -281,7 +281,8 @@ struct Command {
     /// @brief The main expression: `set`'s value, `run`'s body, `navigate`'s params, `return`'s value, `host`'s
     ///        args, `notify`'s message, `if`'s condition, the file of `upload` and `download`.
     ExprPtr value;
-    /// @brief The second expression: `run`'s `each`, `navigate`'s `route`, `download`'s suggested `name`.
+    /// @brief The second expression: `run`'s `each`, `navigate`'s `route`, `download`'s suggested `name`,
+    ///        `focus`'s `row`.
     ExprPtr extra;
     /// @brief A binding name: `run`'s and `upload`'s `as`.
     std::string binding;
@@ -541,6 +542,23 @@ struct LoadWarning {
     }
 };
 
+/// @brief A declaration a `focus` command may reach: an element's node, and how many row keys key it.
+struct FocusCandidate {
+    /// @brief The declaring node's JSON Pointer.
+    std::string path;
+    /// @brief How many row scopes enclose the declaration (within its document or component fallback).
+    std::size_t rows = 0;
+};
+
+/// @brief Where a `focus` command's target resolved: the declarations of that name it may reach. At most one of
+///        them is mounted at a time; the command focuses the one that is.
+struct FocusTarget {
+    /// @brief The declarations, in document order.
+    std::vector<FocusCandidate> candidates;
+    /// @brief Whether the command gives `row`, whose value replaces the innermost row key of each candidate.
+    bool row = false;
+};
+
 /// @brief A loaded and validated UI document: a screen, or the app document (id `app`, spec 6 §5).
 struct Document {
     /// @brief The vocabulary, `ui/1`.
@@ -580,6 +598,8 @@ struct Document {
     /// @brief The static type of each `dateTimeInput`'s `value` that the loader could decide: `String` or
     ///        `Timestamp`, keyed by the node. A node whose value type is `any` or `key` has no entry.
     std::map<DocNode const*, TypeKind> dateValueKinds;
+    /// @brief Each `focus` command's resolved target, keyed by the command's JSON Pointer.
+    std::map<std::string, FocusTarget, std::less<>> focusTargets;
     /// @brief What load-time validation found that does not refuse the document, in the order found. Empty when
     ///        the catalog answers no actions.
     std::vector<LoadWarning> warnings;
@@ -1557,7 +1577,7 @@ private:
         {"close", CommandKind::Close, {}},
         {"navigate", CommandKind::Navigate, {"params", "as", "onResult", "onCancel"}},
         {"return", CommandKind::Return, {}},
-        {"focus", CommandKind::Focus, {}},
+        {"focus", CommandKind::Focus, {"row"}},
         {"host", CommandKind::Host, {"args"}},
         {"switchBackend", CommandKind::SwitchBackend, {}},
         {"resetPrefs", CommandKind::ResetPrefs, {}},
@@ -1664,8 +1684,11 @@ private:
             case CommandKind::Reset:
             case CommandKind::Refetch:
             case CommandKind::Open:
+                cmd.target = nameOf(primary, where, "the command names a declaration or an element");
+                break;
             case CommandKind::Focus:
                 cmd.target = nameOf(primary, where, "the command names a declaration or an element");
+                cmd.extra = optionalExpr(fields, "row", path);
                 break;
             case CommandKind::Close:
                 cmd.target = nameOf(primary, where, "`close` names a dialog, or `self`");
@@ -2175,8 +2198,12 @@ struct NameEntry {
 struct ScopeInfo {
     /// @brief The enclosing scope; `nullptr` for a screen or a component fallback.
     ScopeInfo* parent = nullptr;
+    /// @brief The scopes it encloses directly, in document order.
+    std::vector<ScopeInfo*> children;
     /// @brief Whether it is a `forEach` or `table` row scope.
     bool row = false;
+    /// @brief The `switch` whose case it is; `nullptr` for any other scope.
+    DocNode const* switchNode = nullptr;
     /// @brief Whether it is the screen's own scope.
     bool screen = false;
     /// @brief The names it declares.
@@ -2308,7 +2335,7 @@ public:
             collect(*_doc->view, screen);
         }
         for (DocNodePtr const& part : headParts()) {
-            collectPart(*part, screen, screen);
+            collectPart(*part, screen, screen, *part);
         }
         std::vector<ScopeInfo*> componentScopes;
         for (auto const& [name, component] : _doc->components) {
@@ -2376,6 +2403,12 @@ public:
         return std::move(_dateValueKinds);
     }
 
+    /// @brief Where each `focus` command's target resolved, keyed by the command's JSON Pointer.
+    /// @return The table; the validator keeps none.
+    [[nodiscard]] std::map<std::string, FocusTarget, std::less<>> takeFocusTargets() noexcept {
+        return std::move(_focusTargets);
+    }
+
     /// @brief Finds a name in a scope chain.
     /// @param scope The innermost scope.
     /// @param name  The name.
@@ -2428,6 +2461,9 @@ private:
         ScopeInfo& made = _scopes.emplace_back();
         made.parent = parent;
         made.row = row;
+        if (parent != nullptr) {
+            parent->children.push_back(&made);
+        }
         return made;
     }
 
@@ -2567,16 +2603,17 @@ private:
         }
         for (auto const& [key, parts] : node.parts) {
             for (DocNodePtr const& child : parts) {
-                collectPart(*child, isInner(spec, key) ? *inner : scope, *inner);
+                collectPart(*child, isInner(spec, key) ? *inner : scope, *inner, node);
             }
         }
     }
 
-    void collectPart(DocNode const& part, ScopeInfo& outer, ScopeInfo& ownerInner) {
+    void collectPart(DocNode const& part, ScopeInfo& outer, ScopeInfo& ownerInner, DocNode const& owner) {
         KindSpec const* const spec = findKind(part.kind, true);
         ScopeInfo* inner = &ownerInner;
         if (spec != nullptr && (spec->flags & kScope) != 0) {
             inner = &newScope(&outer, false);
+            inner->switchNode = owner.kind == "switch" ? &owner : nullptr;
             _scopeOf.emplace(&part, inner);
             // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the parser gives every switch case a scope.
             declare(*part.scope, *inner);
@@ -2593,7 +2630,7 @@ private:
         for (auto const& [key, parts] : part.parts) {
             static_cast<void>(key);
             for (DocNodePtr const& child : parts) {
-                collectPart(*child, outer, ownerInner);
+                collectPart(*child, outer, ownerInner, part);
             }
         }
     }
@@ -2656,6 +2693,100 @@ private:
             refuse(path, "`" + name + "` is not " + std::string{what} + " of this scope");
         }
         return *entry;
+    }
+
+    // How many row scopes enclose @p scope, itself included, up to its screen or component fallback.
+    [[nodiscard]] static std::size_t rowDepth(ScopeInfo const* scope) {
+        std::size_t rows = 0;
+        for (; scope != nullptr; scope = scope->parent) {
+            rows += scope->row ? 1U : 0U;
+        }
+        return rows;
+    }
+
+    // The element @p name declares in @p scope itself, or nothing.
+    [[nodiscard]] static NameEntry const* elementIn(ScopeInfo const& scope, std::string_view name) {
+        auto const found = scope.names.find(name);
+        return found != scope.names.end() && found->second.category == NameCategory::Element ? &found->second
+                                                                                             : nullptr;
+    }
+
+    // The elements named @p name in the switch cases below @p scope, at any depth through cases only.
+    // NOLINTNEXTLINE(misc-no-recursion): the scope tree, walked down through switch cases.
+    static void elementsInCases(ScopeInfo const& scope, std::string_view name, std::vector<NameEntry const*>& out) {
+        for (ScopeInfo const* const child : scope.children) {
+            if (child->switchNode == nullptr) {
+                continue;
+            }
+            if (NameEntry const* const entry = elementIn(*child, name)) {
+                out.push_back(entry);
+            }
+            elementsInCases(*child, name, out);
+        }
+    }
+
+    // The row scopes directly below @p scope, or below it through switch cases, that declare the element @p name.
+    // NOLINTNEXTLINE(misc-no-recursion): the scope tree, walked down through switch cases.
+    static void rowScopesBelow(ScopeInfo const& scope, std::string_view name, std::vector<ScopeInfo const*>& out) {
+        for (ScopeInfo const* const child : scope.children) {
+            if (child->row) {
+                if (elementIn(*child, name) != nullptr && std::ranges::find(out, child) == out.end()) {
+                    out.push_back(child);
+                }
+            } else if (child->switchNode != nullptr) {
+                rowScopesBelow(*child, name, out);
+            }
+        }
+    }
+
+    // A `focus` target resolves to declarations. Without `row`: the element the scope chain names, else those in the
+    // switch cases below the chain, which must all be cases of one switch (at most one case is mounted). With `row`:
+    // the one row scope that declares it among the chain's and those below the chain through switch cases.
+    void checkFocus(Command const& cmd, CheckContext const& context) {
+        FocusTarget target{.candidates = {}, .row = cmd.extra != nullptr};
+        if (cmd.extra) {
+            checkExpr(*cmd.extra, context);
+            std::vector<ScopeInfo const*> found;
+            for (ScopeInfo const* scope = context.scope; scope != nullptr; scope = scope->parent) {
+                if (scope->row && elementIn(*scope, cmd.target) != nullptr &&
+                    std::ranges::find(found, scope) == found.end()) {
+                    found.push_back(scope);
+                }
+                rowScopesBelow(*scope, cmd.target, found);
+            }
+            if (found.empty()) {
+                refuse(pointerAppend(cmd.path, "row"), "`row` names a row of a `forEach` or table; `" + cmd.target +
+                                                           "` is not an element of a row scope this command reaches");
+            }
+            if (found.size() > 1) {
+                refuse(cmd.path, "`" + cmd.target + "` is declared in two row scopes this command reaches, at " +
+                                     elementIn(*found.at(0), cmd.target)->path + " and " +
+                                     elementIn(*found.at(1), cmd.target)->path);
+            }
+            target.candidates.push_back(FocusCandidate{.path = elementIn(*found.front(), cmd.target)->element->path,
+                                                       .rows = rowDepth(found.front())});
+        } else if (lookup(context.scope, cmd.target) != nullptr) {
+            NameEntry const& entry = require(context, cmd.target, cmd.path, {NameCategory::Element}, "an element");
+            target.candidates.push_back(FocusCandidate{.path = entry.element->path, .rows = rowDepth(entry.scope)});
+        } else {
+            std::vector<NameEntry const*> inCases;
+            for (ScopeInfo const* scope = context.scope; scope != nullptr; scope = scope->parent) {
+                elementsInCases(*scope, cmd.target, inCases);
+            }
+            if (inCases.empty()) {
+                static_cast<void>(require(context, cmd.target, cmd.path, {NameCategory::Element}, "an element"));
+            }
+            for (NameEntry const* const entry : inCases) {
+                if (entry->scope->switchNode != inCases.front()->scope->switchNode) {
+                    refuse(cmd.path, "`" + cmd.target + "` is declared in the cases of two switches, at " +
+                                         inCases.front()->path + " and " + entry->path +
+                                         "; both may be mounted, so a focus cannot choose");
+                }
+                target.candidates.push_back(
+                    FocusCandidate{.path = entry->element->path, .rows = rowDepth(entry->scope)});
+            }
+        }
+        _focusTargets.insert_or_assign(cmd.path, std::move(target));
     }
 
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the alias, then the action it runs, as a query reads.
@@ -3555,7 +3686,7 @@ private:
                 checkDialog(cmd, context);
                 break;
             case CommandKind::Focus:
-                static_cast<void>(require(context, cmd.target, where, {NameCategory::Element}, "an element"));
+                checkFocus(cmd, context);
                 break;
             case CommandKind::ResetPrefs:
                 if (cmd.target != "all" && !_doc->customize.contains(cmd.target)) {
@@ -3901,6 +4032,7 @@ private:
     std::vector<std::pair<QueryDecl const*, ScopeInfo*>> _queryScopes;
     std::vector<LoadWarning> _warnings;
     std::map<DocNode const*, TypeKind> _dateValueKinds;
+    std::map<std::string, FocusTarget, std::less<>> _focusTargets;
     std::vector<std::string> _deriving;
     // NOLINTEND(misc-no-recursion)
 };
@@ -4054,6 +4186,7 @@ inline std::expected<Type, std::string> ScopeResolver::pref(std::string_view poi
         validator.run();
         doc.warnings = validator.takeWarnings();
         doc.dateValueKinds = validator.takeDateValueKinds();
+        doc.focusTargets = validator.takeFocusTargets();
         return doc;
     } catch (detail::DocumentRefused const& refused) {
         Refusal refusal = refused.refusal();
