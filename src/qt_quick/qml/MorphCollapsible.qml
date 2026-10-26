@@ -31,6 +31,10 @@ MorphWidget {
                 icon.source: Theme.iconSource(chevron)
                 icon.color: "transparent"
                 text: (icon.source.toString() !== "" ? "" : root.open ? "▾ " : "▸ ") + root.title
+                contentItem: MorphPlainContent {
+                    control: toggle
+                    color: toggle.palette.windowText
+                }
                 onClicked: {
                     root.open = !root.open
                     root.fire("toggle", root.open)

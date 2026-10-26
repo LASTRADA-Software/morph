@@ -10,13 +10,19 @@
 #include <QColor>
 #include <QDate>
 #include <QDateTime>
+#include <QFont>
+#include <QList>
 #include <QMessageLogContext>
 #include <QObject>
 #include <QPointF>
+#include <QQmlComponent>
+#include <QQmlEngine>
 #include <QQuickItem>
 #include <QString>
 #include <QStringList>
 #include <QTest>
+#include <QUrl>
+#include <QVariant>
 #include <QVariantList>
 #include <QtLogging>
 #include <catch2/catch_test_macros.hpp>
@@ -1029,4 +1035,131 @@ TEST_CASE("qt_quick widgets: a content-sized Item-style button also composes wit
                       << " w=" << badgeItem.width());
     CHECK(badgeItem.width() > 0.0);
     CHECK(badgeItem.x() >= itemItem.x() + itemItem.width() - 1.0);
+}
+
+namespace {
+
+/// The width a `PlainText` Text of @p text in @p font lays out to: the characters, never markup.
+qreal plainWidth(QQmlEngine& engine, QString const& text, QFont const& font) {
+    QQmlComponent component{&engine};
+    component.setData("import QtQuick\nText { textFormat: Text.PlainText }", QUrl{});
+    std::unique_ptr<QObject> const made{component.create()};
+    REQUIRE(made != nullptr);
+    made->setProperty("text", text);
+    made->setProperty("font", font);
+    return made->property("implicitWidth").toReal();
+}
+
+/// Every shown Text under @p root whose text holds a bold tag.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+void markupTexts(QQuickItem const& root, QList<QQuickItem const*>& found) {
+    for (QQuickItem const* const child : root.childItems()) {
+        if (!child->isVisible()) {
+            continue;
+        }
+        if (child->inherits("QQuickText") && child->property("text").toString().contains(QStringLiteral("<b>"))) {
+            found.append(child);
+        }
+        markupTexts(*child, found);
+    }
+}
+
+}  // namespace
+
+// Mutation: drop one Label's `textFormat`, or the tooltip's content item, and the walk names it.
+TEST_CASE("qt_quick widgets: every text a document gives is drawn as its characters, never as markup",
+          "[qt_quick]") {
+    Scene scene;
+    QString const tagged = QStringLiteral("<b>x</b> & <i>y</i>");
+    std::string const raw = tagged.toStdString();
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    int strings = 0;
+    // First, so it is inside the window for the pointer to rest on.
+    auto tipped = scene.backend().createText(column.get());
+    tipped->setText("hover");
+    tipped->setTooltip(raw);
+    ++strings;
+    auto text = scene.backend().createText(column.get());
+    text->setText(raw);
+    ++strings;
+    auto button = scene.backend().createButton(column.get());
+    button->setLabel(raw);
+    ++strings;
+    auto checkbox = scene.backend().createCheckbox(column.get());
+    checkbox->setLabel(raw);
+    ++strings;
+    auto radio = scene.backend().createSelect(column.get(), ui::SelectStyle::Radio);
+    radio->setOptions({{.key = std::string{"a"}, .label = raw}, {.key = std::string{"b"}, .label = raw + "2"}});
+    strings += 2;
+    auto dropdown = scene.backend().createSelect(column.get(), ui::SelectStyle::Dropdown);
+    dropdown->setOptions({{.key = std::string{"a"}, .label = raw}, {.key = std::string{"b"}, .label = raw + "2"}});
+    strings += 2;
+    auto badge = scene.backend().createBadge(column.get());
+    badge->setText(raw);
+    ++strings;
+    auto banner = scene.backend().createBanner(column.get());
+    banner->setText(raw);
+    banner->setActionLabel(raw);
+    strings += 2;
+    auto keyValue = scene.backend().createKeyValue(column.get());
+    keyValue->setItems({{.label = raw, .value = raw}});
+    strings += 2;
+    auto panel = scene.backend().createPanel(column.get());
+    panel->setTitle(raw);
+    ++strings;
+    auto collapsible = scene.backend().createCollapsible(column.get());
+    collapsible->setTitle(raw);
+    ++strings;
+    auto tabs = scene.backend().createTabs(column.get());
+    tabs->setTabs({raw});
+    ++strings;
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    input->setCaption(raw, true);
+    input->setErrors({raw});
+    strings += 2;
+    auto steps = scene.backend().createSteps(column.get());
+    steps->setSteps({{.label = raw}});
+    ++strings;
+    auto empty = scene.backend().createEmptyState(column.get());
+    empty->setTitle(raw);
+    empty->setText(raw);
+    empty->setActionLabel(raw);
+    strings += 3;
+    auto menu = scene.backend().createMenu(column.get(), ui::MenuStyle::Bar);
+    menu->setItems({{.label = raw, .items = {{.label = raw}}}});
+    strings += 2;
+    auto buttonMenu = scene.backend().createMenu(column.get(), ui::MenuStyle::Button);
+    buttonMenu->setTrigger({.label = raw});
+    ++strings;
+    scene.settle();
+    // The popups whose texts exist only while open: the tooltip first, while nothing covers its widget.
+    QTest::mouseMove(&scene.window(), Scene::centreOf(Scene::itemOf(*tipped)));
+    scene.settle();
+    QTest::qWait(800);
+    scene.settle();
+    auto* const combo = qobject_cast<QQuickItem*>(base(*dropdown).part("control"));
+    REQUIRE(combo != nullptr);
+    auto* const popup = combo->property("popup").value<QObject*>();
+    REQUIRE(popup != nullptr);
+    QMetaObject::invokeMethod(popup, "open");
+    base(*menu).call("open", QVariant{QVariantList{0}});
+    scene.settle();
+    // Last, since a modal dialog takes the hover from the widgets under it.
+    auto dialog = scene.backend().createDialog(nullptr);
+    dialog->setTitle(raw);
+    dialog->setOpen(true);
+    ++strings;
+    scene.settle();
+
+    QList<QQuickItem const*> found;
+    markupTexts(*scene.window().contentItem(), found);
+    CHECK(found.size() == strings);
+    for (QQuickItem const* const item : std::as_const(found)) {
+        QString const shown = item->property("text").toString();
+        INFO("a Text showing " << shown.toStdString() << " in " << item->parentItem()->metaObject()->className());
+        CHECK(item->property("textFormat").toInt() == 0);  // Text.PlainText
+        qreal const padding = item->property("leftPadding").toReal() + item->property("rightPadding").toReal();
+        CHECK(std::abs(item->property("implicitWidth").toReal() - padding -
+                       plainWidth(scene.engine(), shown, item->property("font").value<QFont>())) < 0.5);
+    }
 }

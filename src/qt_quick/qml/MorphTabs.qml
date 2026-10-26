@@ -77,6 +77,7 @@ MorphWidget {
                     leftPadding: Theme.spaceOf(4)
                     rightPadding: Theme.spaceOf(4)
                     contentItem: Text {
+                        textFormat: Text.PlainText
                         text: tab.text
                         font: tab.font
                         color: tab.checked ? root.scheme.accent : root.scheme.muted

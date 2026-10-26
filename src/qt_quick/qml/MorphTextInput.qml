@@ -99,6 +99,7 @@ MorphField {
         }
 
         Label {
+            textFormat: Text.PlainText
             id: unitLabel
             objectName: "unit"
             anchors.right: parent.right

@@ -88,6 +88,9 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   chosen or opened; a `description` is a muted line of help with its entry. `onActivate` receives
   the chosen entry's path, its index at each level from the top with separators counted, and only
   for an enabled entry without a submenu whose ancestors are all enabled.
+- **Text is characters.** Every setter's text is shown as the characters it holds: a backend never interprets a
+  document's or a value's text as markup, so a name or a comment that holds `<b>` or `<a href=…>` shows those
+  characters.
 - Every setter takes UTF-8. **A setter called with the value the widget already shows changes
   nothing**: in particular a text input keeps its cursor, its selection and an input method's
   composition. A controlled input's re-assertion, or another renderer, may make such a call.

@@ -63,6 +63,7 @@ MorphField {
             source: themedSource !== "" ? themedSource : ""
 
             Text {
+                textFormat: Text.PlainText
                 // The chevron the theme draws as a path when it names neither nav icon.
                 anchors.centerIn: parent
                 visible: parent.themedSource === ""
@@ -72,6 +73,24 @@ MorphField {
         }
         model: root.options
         currentIndex: -1
+        // The style's delegate draws an option's label as an IconLabel, which reads markup.
+        delegate: ItemDelegate {
+            id: option
+            required property int index
+            required property string modelData
+            width: ListView.view ? ListView.view.width : implicitWidth
+            text: modelData
+            font.family: combo.font.family
+            font.pixelSize: combo.font.pixelSize
+            font.weight: combo.currentIndex === index ? Font.DemiBold : Font.Normal
+            highlighted: combo.highlightedIndex === index
+            hoverEnabled: combo.hoverEnabled
+            contentItem: MorphPlainContent {
+                control: option
+                color: option.palette.text
+                alignment: Qt.AlignLeft
+            }
+        }
         // Declared, as the text input's field declares them.
         Accessible.role: root.accessibleRole
         Accessible.name: root.accessibleName
@@ -106,10 +125,20 @@ MorphField {
             model: root.options
 
             RadioButton {
+                id: radioButton
                 font: Theme.bodyFont
                 required property int index
                 required property string modelData
                 text: modelData
+                contentItem: Text {
+                    leftPadding: radioButton.indicator.width + radioButton.spacing
+                    text: radioButton.text
+                    textFormat: Text.PlainText
+                    font: radioButton.font
+                    color: radioButton.palette.windowText
+                    elide: Text.ElideRight
+                    verticalAlignment: Text.AlignVCenter
+                }
                 // Each option is a node of its own, named by its label, that a driver presses.
                 Accessible.role: Accessible.RadioButton
                 Accessible.name: modelData

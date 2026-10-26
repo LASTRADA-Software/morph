@@ -108,6 +108,10 @@ MorphWidget {
         font: root.triggerEmphasis === 0 || root.triggerEmphasis === 3 ? Theme.bodyFont : Theme.strongFont
         icon.source: Theme.iconSource(root.triggerIcon)
         icon.color: "transparent"
+        contentItem: MorphPlainContent {
+            control: trigger
+            color: trigger.palette.buttonText
+        }
         background: MorphButtonBackground {
             scheme: root.scheme
             fill: root.triggerEmphasis === 1 ? root.scheme.accent
@@ -120,8 +124,19 @@ MorphWidget {
             focused: trigger.visualFocus
         }
         Accessible.ignored: true
-        ToolTip.text: root.triggerLabel
-        ToolTip.visible: root.triggerLabel !== "" && trigger.text === "" && trigger.hovered
+        // A tooltip of its own: the attached ToolTip's content item reads markup, and the label is a document's text.
+        ToolTip {
+            id: triggerTip
+            text: root.triggerLabel
+            visible: root.triggerLabel !== "" && trigger.text === "" && trigger.hovered
+            contentItem: Text {
+                text: triggerTip.text
+                textFormat: Text.PlainText
+                font: triggerTip.font
+                wrapMode: Text.Wrap
+                color: triggerTip.palette.toolTipText
+            }
+        }
         onClicked: root.openFromTrigger()
         Keys.onReturnPressed: root.openFromTrigger()
         Keys.onEnterPressed: root.openFromTrigger()
@@ -138,11 +153,15 @@ MorphWidget {
 
             ToolButton {
                 font: Theme.bodyFont
-                id: top
+                id: topEntry
                 required property int index
                 required property var modelData
                 visible: !modelData.separator
                 text: root.entryText(modelData)
+                contentItem: MorphPlainContent {
+                    control: topEntry
+                    color: topEntry.palette.windowText
+                }
                 icon.source: Theme.iconSource(modelData.icon ? modelData.icon : "")
                 icon.color: "transparent"
                 enabled: modelData.enabled
@@ -179,6 +198,7 @@ MorphWidget {
                         Layout.fillWidth: true
                     }
                     ItemDelegate {
+                        id: entryButton
                         font: Theme.bodyFont
                         visible: entry.modelData.separator !== true
                         Layout.fillWidth: true
@@ -186,6 +206,11 @@ MorphWidget {
                               + (entry.modelData.keys ? "    " + entry.modelData.keys : "")
                         icon.source: Theme.iconSource(entry.modelData.icon ? entry.modelData.icon : "")
                         icon.color: "transparent"
+                        contentItem: MorphPlainContent {
+                            control: entryButton
+                            color: entryButton.palette.text
+                            alignment: Qt.AlignLeft
+                        }
                         enabled: entry.modelData.enabled
                         Accessible.role: Accessible.MenuItem
                         Accessible.description: entry.modelData.description ? entry.modelData.description : ""
@@ -198,6 +223,7 @@ MorphWidget {
                         }
                     }
                     Label {
+                        textFormat: Text.PlainText
                         visible: entry.modelData.separator !== true && !!entry.modelData.description
                         text: entry.modelData.description ? entry.modelData.description : ""
                         font: Theme.bodyFont

@@ -180,9 +180,32 @@ Item {
     Accessible.role: accessibleRole
     Accessible.ignored: accessibleItem !== null
 
-    ToolTip.text: tooltip
-    ToolTip.visible: tooltip !== "" && hover.hovered
-    ToolTip.delay: 600
+    // The tooltip, made the first time the widget has one: the attached ToolTip's content item reads markup, and a
+    // tooltip is a document's text.
+    property ToolTip tip: null
+    onTooltipChanged: {
+        if (root.tooltip !== "" && root.tip === null)
+            root.tip = tipComponent.createObject(root) as ToolTip
+    }
+
+    Component {
+        id: tipComponent
+
+        ToolTip {
+            id: tipPopup
+            objectName: "tooltip"
+            text: root.tooltip
+            visible: root.tooltip !== "" && hover.hovered
+            delay: 600
+            contentItem: Text {
+                text: tipPopup.text
+                textFormat: Text.PlainText
+                font: tipPopup.font
+                wrapMode: Text.Wrap
+                color: tipPopup.palette.toolTipText
+            }
+        }
+    }
 
     // A widget the user cannot see keeps no keyboard focus, so it takes no keys.
     onVisibleChanged: {

@@ -123,6 +123,14 @@ Each widget class (`src/qt_quick/kinds.hpp`) owns one item made from its kind's 
   role itself: Qt Quick Controls makes a control an accessible node of its own accord only while the platform's
   accessibility is active, and on a platform with no accessibility bridge, such as `offscreen` on Qt 6.8, it never
   is.
+- **draws text as plain text.** Every `Label` and `Text` that shows a document's or a value's text sets
+  `textFormat: Text.PlainText`: the default, `Text.AutoText`, draws a string that `Qt::mightBeRichText` takes for
+  markup as styled text, so data holding `<font>` or `<a href>` would be drawn as markup. The Basic style's own
+  content items read markup too and have no `textFormat`, so a button's, a collapsible's and a menu entry's
+  content is a `MorphPlainContent` (the control's icon, then its text as `PlainText`), a check box's and a radio
+  button's content is a `PlainText` `Text` past the indicator, a drop-down's options are delegates with that
+  content, a tab's content is a `PlainText` `Text`, and a widget's tooltip is a `ToolTip` of its own, made the
+  first time it has one, whose content is a `PlainText` `Text`.
 - **takes no focus out of reach.** `focus()` on a widget that is hidden or disabled, or inside such a container,
   does nothing; a widget that becomes hidden while focused gives its focus up.
 

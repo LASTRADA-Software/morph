@@ -35,6 +35,7 @@ MorphWidget {
             model: root.steps
 
             Label {
+                textFormat: Text.PlainText
                 required property int index
                 required property var modelData
                 text: root.marker(modelData.state) + " " + modelData.label

@@ -26,6 +26,15 @@ MorphField {
                                  Theme.touchTargets ? Theme.targetHeight : 0)
         text: root.label
         palette.windowText: root.scheme.text
+        contentItem: Text {
+            leftPadding: box.indicator.width + box.spacing
+            text: box.text
+            textFormat: Text.PlainText
+            font: box.font
+            color: box.palette.windowText
+            elide: Text.ElideRight
+            verticalAlignment: Text.AlignVCenter
+        }
         indicator: Rectangle {
             x: box.leftPadding
             y: (box.height - height) / 2
@@ -37,6 +46,7 @@ MorphField {
             border.color: box.visualFocus ? root.scheme.focus : box.checked ? root.scheme.accent : root.scheme.border
 
             Text {
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 visible: box.checked
                 text: "✓"

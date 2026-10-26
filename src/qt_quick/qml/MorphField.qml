@@ -32,6 +32,7 @@ MorphWidget {
     Accessible.description: accessibleDescription
 
     Label {
+        textFormat: Text.PlainText
         font: Theme.bodyFont
         id: captionLabel
         objectName: "caption"
@@ -51,6 +52,7 @@ MorphWidget {
     }
 
     Label {
+        textFormat: Text.PlainText
         font: Theme.bodyFont
         id: marker
         anchors.right: parent.right
@@ -61,6 +63,7 @@ MorphWidget {
     }
 
     Label {
+        textFormat: Text.PlainText
         font: Theme.bodyFont
         id: messages
         y: root.captionHeight + (root.control ? root.control.height : 0)

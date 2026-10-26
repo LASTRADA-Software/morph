@@ -63,6 +63,7 @@ MorphWidget {
                 Layout.preferredHeight: Theme.bodyPixels
             }
             Label {
+                textFormat: Text.PlainText
                 text: root.label
                 font: Theme.bodyFont
                 color: root.selected ? root.scheme.accent : root.scheme.text
@@ -85,6 +86,10 @@ MorphWidget {
         font: root.emphasis === 0 || root.ghost ? Theme.bodyFont : Theme.strongFont
         icon.source: Theme.iconSource(root.icon)
         icon.color: "transparent"
+        contentItem: MorphPlainContent {
+            control: button
+            color: button.palette.buttonText
+        }
         background: MorphButtonBackground {
             scheme: root.scheme
             fill: root.fill

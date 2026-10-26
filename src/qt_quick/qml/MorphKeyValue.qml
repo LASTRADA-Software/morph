@@ -24,6 +24,7 @@ MorphWidget {
             model: root.items.length * 2
 
             Label {
+                textFormat: Text.PlainText
                 font: Theme.bodyFont
                 required property int index
                 readonly property var pair: root.items[Math.floor(index / 2)]

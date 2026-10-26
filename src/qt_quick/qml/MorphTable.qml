@@ -386,6 +386,7 @@ MorphWidget {
                     Label {
                         id: headerLabel
                         objectName: "header" + index
+                        textFormat: Text.PlainText
                         font: Theme.strongFont
                         required property int index
                         required property var modelData

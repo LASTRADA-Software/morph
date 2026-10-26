@@ -63,6 +63,7 @@ MorphWidget {
         }
 
         Label {
+            textFormat: Text.PlainText
             font: Theme.bodyFont
             id: caption
             visible: root.label !== ""

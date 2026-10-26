@@ -55,6 +55,7 @@ MorphWidget {
                 }
 
                 Label {
+                    textFormat: Text.PlainText
                     font: Theme.strongFont
                     text: root.title
                 }

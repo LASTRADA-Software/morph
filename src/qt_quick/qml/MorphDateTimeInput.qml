@@ -165,6 +165,7 @@ MorphField {
                 }
 
                 Label {
+                    textFormat: Text.PlainText
                     font: Theme.bodyFont
                     width: grid.implicitWidth - previousButton.implicitWidth - nextButton.implicitWidth -
                            2 * parent.spacing
@@ -187,6 +188,7 @@ MorphField {
                 width: grid.implicitWidth
                 locale: grid.locale
                 delegate: Text {
+                    textFormat: Text.PlainText
                     font: Theme.bodyFont
                     color: root.scheme.muted
                     horizontalAlignment: Text.AlignHCenter
@@ -224,6 +226,7 @@ MorphField {
                     }
 
                     Text {
+                        textFormat: Text.PlainText
                         font: Theme.bodyFont
                         anchors.centerIn: parent
                         color: dayCell.chosen ? root.scheme.surface

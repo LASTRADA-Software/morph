@@ -43,6 +43,7 @@ MorphWidget {
         }
 
         Label {
+            textFormat: Text.PlainText
             font: Theme.bodyFont
             Layout.fillWidth: true
             text: root.text
@@ -50,10 +51,14 @@ MorphWidget {
         }
 
         Button {
+            id: action
             font: Theme.bodyFont
             objectName: "action"
             visible: root.actionLabel !== ""
             text: root.actionLabel
+            contentItem: MorphPlainContent {
+                control: action
+            }
             onClicked: root.fire("action", undefined)
         }
 

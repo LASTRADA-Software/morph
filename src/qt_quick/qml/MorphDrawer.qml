@@ -103,6 +103,7 @@ MorphWidget {
             id: contentColumn
 
             Label {
+                textFormat: Text.PlainText
                 id: titleLabel
                 font: Theme.strongFont
                 color: Theme.cardScheme.text

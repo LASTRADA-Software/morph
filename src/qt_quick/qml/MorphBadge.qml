@@ -55,6 +55,7 @@ MorphWidget {
         }
 
         Label {
+            textFormat: Text.PlainText
             id: label
             font: Theme.bodyFont
             text: (root.icon !== "" && root.iconSource === "" ? root.icon + " " : "") + root.text

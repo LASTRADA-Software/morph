@@ -20,6 +20,7 @@ MorphField {
     control: label
 
     Label {
+        textFormat: Text.PlainText
         id: label
         width: root.controlWidth
         text: root.text
