@@ -4317,6 +4317,113 @@ struct BannerOptions {
     return detail::NodeWriter{"steps"}.put("items", items).put("current", current).done();
 }
 
+/// @brief One step of a `stepper`.
+struct StepperStep {
+    /// @brief The step's name in the indicator.
+    std::string label;
+    /// @brief What the step shows while it is the current one.
+    Nodes children;
+    /// @brief Whether Continue may leave the step, a condition; absent always may.
+    AnyHandle canContinue;
+    /// @brief The element Continue focuses while the step cannot continue, such as the field that blocks it; it may
+    ///        be declared in the step's own children. None when absent.
+    std::optional<Element> blocking;
+    /// @brief Commands Continue runs while the step cannot continue, before it focuses `blocking`.
+    Commands onBlocked;
+};
+
+/// @brief Options of a `stepper`.
+struct StepperOptions {
+    /// @brief The `int` state holding the current step, from 0.
+    Handle<std::int64_t> step;
+    /// @brief The steps, in order.
+    std::vector<StepperStep> steps;
+    /// @brief Back's text.
+    std::string backLabel = "Back";
+    /// @brief Continue's text on every step but the last.
+    std::string continueLabel = "Continue";
+    /// @brief Continue's text on the last step.
+    std::string finishLabel = "Finish";
+    /// @brief What Continue runs on the last step, when it may continue.
+    Commands onFinish;
+    /// @brief Footer nodes between Back and Continue, such as a Save draft button.
+    Nodes extra;
+    /// @brief Whether the indicator shows the steps' labels, or only their marks.
+    bool labelled = true;
+    /// @brief When given, the indicator, Back and Continue take the test ids `<prefix>steps`, `<prefix>back` and
+    ///        `<prefix>continue`; an empty prefix gives `steps`, `back` and `continue`.
+    std::optional<std::string> testIdPrefix;
+};
+
+/// @brief A wizard over screen state: a `column` of a `steps` indicator, a `switch` on `step` with one case per step,
+///        and a footer row of Back, a spacer, `extra` and Continue. Back moves one step back and is disabled on the
+///        first; Continue moves one step on, or runs `onFinish` on the last, while the step's `canContinue` holds,
+///        and otherwise runs its `onBlocked` and focuses its `blocking` element. On a step that cannot continue and
+///        has no `blocking` element, Continue is disabled. Every part is a node of ui/1; the
+///        helper writes the JSON a screen would write by hand.
+/// @param options The step state, the steps and the footer.
+/// @return The column.
+[[nodiscard]] inline Node stepper(StepperOptions const& options) {
+    using Label = Handle<std::string>;
+    std::vector<AnyHandle> items;
+    std::vector<Case> cases;
+    std::vector<Commands> onSteps;
+    // Continue is disabled on a step that cannot continue and has no field to show the user: a click would do nothing.
+    std::optional<Handle<bool>> enabled;
+    auto const last = static_cast<std::int64_t>(options.steps.size()) - 1;
+    std::int64_t index = 0;
+    for (StepperStep const& step : options.steps) {
+        Label const state = cond(options.step > index, Label{"done"},
+                                 cond(eq(options.step, index), Label{"active"}, Label{"pending"}));
+        items.push_back(obj({{"label", options.labelled ? step.label : std::string{}}, {"state", state}}));
+        cases.emplace_back(AnyHandle{index}, step.children);
+        Commands const moveOn = index == last ? options.onFinish : Commands{set(options.step, options.step + 1)};
+        Commands blocked;
+        if (step.blocking && !step.onBlocked.empty()) {
+            blocked = Commands{seq(step.onBlocked), focus(*step.blocking)};
+        } else if (step.blocking) {
+            blocked = Commands{focus(*step.blocking)};
+        } else {
+            blocked = step.onBlocked;
+        }
+        Commands const onStep =
+            step.canContinue.present() ? Commands{ifThen(step.canContinue, moveOn, blocked)} : moveOn;
+        onSteps.push_back(onStep);
+        if (step.canContinue.present() && !step.blocking) {
+            Handle<bool> const here = ne(options.step, index) || Handle<bool>{step.canContinue};
+            enabled = enabled ? *enabled && here : here;
+        }
+        ++index;
+    }
+    auto const withId = [&options](Node const& node, std::string const& name) {
+        return options.testIdPrefix ? node.testId(*options.testIdPrefix + name) : node;
+    };
+    // An else-chain, not one `if` per step: a step's own `set` would otherwise satisfy the next step's test, and one
+    // click would move two steps.
+    Commands continueCommands;
+    for (auto at = static_cast<std::int64_t>(onSteps.size()) - 1; at >= 0; --at) {
+        continueCommands =
+            Commands{ifThen(eq(options.step, at), onSteps.at(static_cast<std::size_t>(at)), continueCommands)};
+    }
+    std::vector<Node> footer{
+        withId(button({.label = options.backLabel, .onClick = set(options.step, options.step - 1)})
+                   .enabled(options.step > 0),
+               "back"),
+        spacer().sizing(stretch())};
+    Json const extra = options.extra.json();
+    for (Json const& node : std::get<Json::array_t>(extra.data)) {
+        footer.emplace_back(node, options.extra.facts());
+    }
+    Node const next =
+        button({.label = cond(eq(options.step, last), Label{options.finishLabel}, Label{options.continueLabel}),
+                .emphasis = ButtonEmphasis::Primary,
+                .onClick = continueCommands});
+    footer.push_back(withId(enabled ? next.enabled(*enabled) : next, "continue"));
+    return column({withId(steps(list(items), options.step), "steps"), switchOn(options.step, cases),
+                   row(Nodes{footer}, {.gap = 1})},
+                  {.gap = 2});
+}
+
 /// @brief A `keyValue` node.
 /// @param items The pairs, `[{label, value}]`.
 /// @return The node.

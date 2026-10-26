@@ -14,6 +14,8 @@
 #include <string_view>
 #include <vector>
 
+#include "ui_interpreter_support.hpp"
+
 /// @file
 /// @brief The server-side builders of `morph::ui::author`: expression handles, declarations, nodes, commands,
 ///        registration with its catalog and accessibility rules, and the authoring goldens.
@@ -331,6 +333,47 @@ TEST_CASE("pinned writes a stretching column around a stretching scroll, with it
           R"({"kind":"scroll","children":[{"kind":"text","text":"body"}],)"
           R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}},)"
           R"({"kind":"text","text":"bar"}],"sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}})");
+}
+
+// Mutation: drop the focus from a blocked step's commands in stepper (the blocking field is not focused).
+TEST_CASE("stepper writes a wizard over screen state; Continue moves one step, or focuses a blocked step's field",
+          "[ui][author]") {
+    ui::ScreenRegistry screens;
+    auto const added = screens.add(ui::screen("author.stepper", [](ui::Scope& screen) {
+        auto const step = screen.state("step", std::int64_t{0});
+        auto const ready = screen.state("ready", false);
+        auto const attempted = screen.state("attempted", false);
+        auto const pulls = ui::element("pulls");
+        return ui::stepper({.step = step,
+                            .steps = {{.label = "One", .children = ui::text({.text = "one"}).testId("one")},
+                                      {.label = "Two",
+                                       .children = ui::textInput({.label = "Pulls"}).id(pulls).testId("pulls"),
+                                       .canContinue = ready,
+                                       .blocking = pulls,
+                                       .onBlocked = ui::set(attempted, true)}},
+                            .onFinish = ui::notify("done"),
+                            .testIdPrefix = "w-"});
+    }));
+    INFO((added ? std::string{} : added.error().message()));
+    REQUIRE(added.has_value());
+    std::string const& written = (*added)->text;
+    CHECK(written.contains(R"({"kind":"steps","items":)"));
+    CHECK(written.contains(R"("kind":"switch","on":{"ref":"step"})"));
+    morph::ui::testing::Harness h;
+    auto const mounted = h.mount(written);
+    REQUIRE(mounted != nullptr);
+    CHECK(h.backend.find("Text", "testId", "one").has_value());
+    h.backend.click(h.byTestId("Button", "w-continue"));
+    h.settle();
+    // One step on, not two: the step's own `set` must not satisfy the next step's test.
+    REQUIRE(h.backend.find("TextInput", "testId", "pulls").has_value());
+    CHECK(h.backend.prop(h.byTestId("Button", "w-continue"), "label") == "Finish");
+    h.backend.click(h.byTestId("Button", "w-continue"));
+    h.settle();
+    CHECK(h.backend.focused() == h.byTestId("TextInput", "pulls"));
+    CHECK(morph::ui::testing::readJson(*mounted, R"({"ref":"attempted"})") == "true");
+    // A step that names its blocking field keeps Continue enabled, so the click can show the field.
+    CHECK(h.backend.prop(h.byTestId("Button", "w-continue"), "enabled") != "false");
 }
 
 TEST_CASE("the library and reading forms have builders", "[ui][author]") {

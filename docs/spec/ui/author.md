@@ -147,6 +147,17 @@ Every kind of the kind table has a builder whose options struct holds the kind's
 options second. `tabs(tabs, TabsOptions{.selected, .onChoose})` takes `Tab{id, label, children}` pages.
 `pinned(content, PinnedOptions{.top, .bottom})` writes the bar-that-stays-in-view idiom: a column sized to stretch
 both ways holding `top`, a vertical `scroll` sized to stretch both ways around `content`, and `bottom`.
+`stepper(StepperOptions{.step, .steps, .backLabel, .continueLabel, .finishLabel, .onFinish, .extra, .labelled,
+.testIdPrefix})` writes a wizard over screen state, with no node of its own: a column of a `steps` indicator built from
+the steps' labels and `step`, a `switch` on `step` with one case per step, and a footer row of Back, a spacer, `extra`
+and Continue. Each `StepperStep{label, children, canContinue, blocking, onBlocked}` gives what Continue does there:
+while `canContinue` holds (absent: always), it sets `step` one on, or runs `onFinish` on the last step; otherwise it
+runs `onBlocked` and focuses `blocking`, which may be declared in the step's own case. On a step that cannot
+continue and names no `blocking` element, Continue is disabled, since a click would do nothing. Continue's commands are one
+`if` chain on `step`, so a step's own `set` never satisfies the next step's test. Back sets `step` one back and is
+disabled on the first. The three labels are plain text and default to English (`Back`, `Continue`, `Finish`). A given
+`testIdPrefix`, empty included, names the indicator, Back and Continue `<prefix>steps`, `<prefix>back` and
+`<prefix>continue`.
 `DialogOptions::actions` (a `dialog`'s or `drawer`'s) lists its footer buttons as
 `ActionButtonOptions`, run in its scope.
 
