@@ -32,10 +32,10 @@ TEST_CASE("audit, expanded: facets beside the trail, with the active filters as 
           "Reason:stretch(2);valign=start]");
     CHECK(showsText(screen, "WS-2026-0412"));
     CHECK(showsText(screen, "Transcription error: peak 7 integrated with the wrong baseline."));
-    CHECK(screen.shows("Row", "chip-type-result"));
-    CHECK(screen.shows("Row", "chip-action-modified"));
-    CHECK(screen.shows("Row", "chip-dates"));
-    CHECK_FALSE(screen.shows("Row", "chip-type-specification"));
+    CHECK(screen.shows("Badge", "chip-type-result"));
+    CHECK(screen.shows("Badge", "chip-action-modified"));
+    CHECK(screen.shows("Badge", "chip-dates"));
+    CHECK_FALSE(screen.shows("Badge", "chip-type-specification"));
     CHECK(screen.find("Row", "pager").has_value());
     CHECK(screen.prop("Button", "head_action_pdf", "label") == "Export PDF for inspection");
 }
@@ -46,7 +46,7 @@ TEST_CASE("audit, expanded: a facet narrows the trail and its chip removes it", 
     CHECK_FALSE(showsText(screen, "SPEC-ASSAY-07"));
     screen.toggle("type-specification");
     CHECK(screen.waitFor([&screen] { return showsText(screen, "SPEC-ASSAY-07"); }));
-    CHECK(screen.shows("Row", "chip-type-specification"));
+    CHECK(screen.shows("Badge", "chip-type-specification"));
     screen.choose("user", "jruiz");
     CHECK(screen.waitFor([&screen] { return !showsText(screen, "WS-2026-0412"); }));
     CHECK(showsText(screen, "S-26-104217"));
@@ -55,8 +55,8 @@ TEST_CASE("audit, expanded: a facet narrows the trail and its chip removes it", 
     screen.click("clear-all");
     CHECK(
         screen.waitFor([&screen] { return showsText(screen, "WS-2026-0412") && showsText(screen, "SPEC-ASSAY-07"); }));
-    CHECK_FALSE(screen.shows("Row", "chip-type-result"));
-    CHECK_FALSE(screen.shows("Row", "chip-dates"));
+    CHECK_FALSE(screen.shows("Badge", "chip-type-result"));
+    CHECK_FALSE(screen.shows("Badge", "chip-dates"));
     screen.requireNoProblems();
 }
 

@@ -372,6 +372,17 @@ ui::Node sampleWell(Plate const& plate, Well const& well) {
 
 ui::Node header(std::string const& text) { return ui::text({.text = text, .role = "muted"}).alignSelf(Align::Center); }
 
+// The row letters' narrow track, then twelve centred well tracks sharing the rest, so a column number sits over its
+// wells. The wells stretch rather than take the design's 44 px: a standard's push button (`STD1`) needs more on both
+// frontends, and twelve wider fixed tracks would overflow the plate's panel.
+std::vector<ui::GridTrack> plateTracks() {
+    std::vector<ui::GridTrack> tracks{{.width = ui::fixed(3)}};
+    for (int column = 1; column <= kColumns; ++column) {
+        tracks.push_back({.width = ui::stretch(), .align = Align::Center});
+    }
+    return tracks;
+}
+
 ui::Node plateGrid(Plate const& plate) {
     std::vector<ui::Node> cells;
     cells.reserve((kRowNames.size() + 1) * (kColumns + 1));
@@ -386,7 +397,7 @@ ui::Node plateGrid(Plate const& plate) {
             cells.push_back(well.kind == Kind::Sample ? sampleWell(plate, well) : templateWell(plate, well));
         }
     }
-    return ui::grid(cells, {.gap = 1, .columns = kColumns + 1, .align = Align::Center})
+    return ui::grid(cells, {.gap = 1, .tracks = plateTracks(), .align = Align::Center})
         .a11y("96-well plate PL-0193")
         .testId("plate");
 }

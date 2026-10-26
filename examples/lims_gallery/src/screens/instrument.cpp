@@ -110,17 +110,20 @@ void declareHead(ui::Scope& screen, Instrument const& instrument) {
 
 // The overflow menu: the actions the head has no room for.
 ui::Node moreMenu(Instrument const& instrument) {
-    return ui::menu({{.label = "More actions",
-                      .items = {{.label = "Record calibration…",
-                                 .onClick = {ui::set(instrument.logKind, std::string{"calibration"}),
-                                             ui::open(instrument.logDialog)}},
-                                {.label = "Print equipment label",
-                                 .onClick = ui::notify("Printing the equipment label for EQ-0142")},
-                                {.label = "Export history (PDF)",
-                                 .onClick = ui::notify("Exporting the history of EQ-0142 as PDF")},
-                                {.label = "Take out of service… (needs reason)",
-                                 .enabled = instrument.inService,
-                                 .onClick = ui::open(instrument.serviceDialog)}}}})
+    return ui::menuButton({.icon = "more"},
+                          {{.label = "Record calibration…",
+                            .onClick = {ui::set(instrument.logKind, std::string{"calibration"}),
+                                        ui::open(instrument.logDialog)}},
+                           {.label = "Print equipment label",
+                            .onClick = ui::notify("Printing the equipment label for EQ-0142")},
+                           {.label = "Export history (PDF)",
+                            .onClick = ui::notify("Exporting the history of EQ-0142 as PDF")},
+                           ui::menuSeparator(),
+                           {.label = "Take out of service…",
+                            .enabled = instrument.inService,
+                            .onClick = ui::open(instrument.serviceDialog),
+                            .description = "needs reason"}})
+        .a11y("More actions")
         .testId("more");
 }
 

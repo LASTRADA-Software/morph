@@ -36,7 +36,10 @@ std::string wellLabel(GalleryScreen& screen, std::string const& name) {
 TEST_CASE("plate, expanded: the samples to place beside the 12-column plate, A3 to A8 selected", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
     screen.requireNoProblems();
-    CHECK(screen.prop("Grid", "plate", "columns") == "13");
+    CHECK(screen.prop("Grid", "plate", "tracks") ==
+          "[fixed(3),stretch(1);align=center,stretch(1);align=center,stretch(1);align=center,stretch(1);align=center,"
+          "stretch(1);align=center,stretch(1);align=center,stretch(1);align=center,stretch(1);align=center,"
+          "stretch(1);align=center,stretch(1);align=center,stretch(1);align=center,stretch(1);align=center]");
     CHECK(wellLabel(screen, "A1") == "STD1");
     CHECK(wellLabel(screen, "A2") == "QC");
     CHECK(wellLabel(screen, "B2") == "B");

@@ -183,7 +183,7 @@
   while the three mandatory boxes are checked.
 - **Weight:** Low
 
-### G18: An overflow menu behind an icon button
+### G18: An overflow menu behind an icon button — fixed in batch D
 - **Design(s):** 03, 05
 - **Needs:** a "⋯" button beside the record's actions (accessible name "More actions") that opens a menu of further
   actions, with a separator before the destructive one and a muted hint on it ("Take out of service… (needs
@@ -193,7 +193,10 @@
   entry's text is one string. A screen head's `actions` are buttons only (`docs/spec/ui/document.md:91-100`), so the
   overflow cannot sit with them. Verified by trying.
 - **Workaround used:** a `menu` with one top-level entry labelled "More actions", placed in the page above the tabs
-  (expanded) or after the two large buttons (compact); no separator; the hint is part of the entry's label.
+  (expanded) or after the two large buttons (compact); no separator; the hint is part of the entry's label. Instrument's
+  "More actions" and samples' bulk "⋯" are now `style: button` menus, the instrument's with a separator before
+  "Take out of service…" and its hint as the entry's `description`. Instrument's still sits in the page: the head's
+  own menu is batch D's next part.
 - **Weight:** Medium
 
 ### G19: The screen head overflows the shell's top bar (defect) — filed as #1049 — fixed in batch A
@@ -239,7 +242,7 @@
 - **Workaround used:** a literal decimal at two places, `Rational{29, 100, DecimalPlaces{2}}`.
 - **Weight:** Medium
 
-### G23: Grid columns of different widths
+### G23: Grid columns of different widths — fixed in batch D
 - **Design(s):** 03, 07
 - **Needs:** a two-column list with a fixed label or timestamp column and a filling text column (`130px
   minmax(0, 1fr)`), as the design's details and recent events use; a plate's 22 px row-letter column beside twelve
@@ -249,7 +252,12 @@
   Verified by trying: the events in a two-column grid drew with the text misplaced.
 - **Workaround used:** `keyValue` for the details; each event as a `row` of a `fixed(18)` timestamp and a stretched
   text. The plate is a 13-column grid whose letter column is as wide as a well's; its headers sit at the start of
-  their cells, as `alignSelf` places a grid cell only across the row (verified in a grab, 1280 × 900).
+  their cells, as `alignSelf` places a grid cell only across the row (verified in a grab, 1280 × 900). The plate's grid
+  now has a `fixed(3)` letter track and twelve centred well tracks sharing the rest, so the numbers centre over the
+  wells. The wells stretch rather than take the design's 44 px: a standard's push button (`STD1`) is elided in six
+  units on Qt Quick, and twelve eight-unit tracks overflow the plate's panel at 1280 × 900 (both seen in grabs).
+  The events stay rows of a `fixed(18)` timestamp and a stretched text: they come from a `forEach`, whose rows are
+  not cells of one grid, so a grid per event would only restate the row.
 - **Weight:** Low
 
 ### G24: Label-over-value pairs
@@ -284,13 +292,14 @@
 - **Workaround used:** the inputs in a row at the top of the page, right-aligned under the head.
 - **Weight:** Medium
 
-### G27: Removable filter chips
+### G27: Removable filter chips — fixed in batch D
 - **Design(s):** 04
 - **Needs:** each active filter as a small outlined chip with a "×" (accessible name "Remove Result") that removes it.
 - **ui/1 today:** `badge` has `tone`, `text` and `icon`, no action (`docs/spec/ui/document.md:186`); there is no chip
   or token node. Inferred from reading.
 - **Workaround used:** a `row` on the `card` surface holding a text and a ghost "×" button with the accessible name;
-  verified it draws as a bordered box. Larger than the design's 26 px chip.
+  verified it draws as a bordered box. Larger than the design's 26 px chip. Each chip is now a removable `badge`
+  (`onRemove`, `removeLabel`). It is drawn filled: the outlined chip needs batch C's badge `style: outline`.
 - **Weight:** Low
 
 ### G28: Paging a table over rows — fixed in batch B

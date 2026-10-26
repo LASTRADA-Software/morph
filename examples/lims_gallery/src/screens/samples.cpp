@@ -585,10 +585,10 @@ ui::Node compactBulkBar(Samples const& list) {
                              .testId("selected"),
                          ui::button({.label = "Assign to worksheet", .onClick = ui::open(list.assignDialog)})
                              .testId("assign"),
-                         ui::menu({{.label = "⋯",
-                                    .items = {{.label = "Change priority…", .onClick = ui::open(list.priorityDialog)},
-                                              {.label = "Print labels", .onClick = printLabels(list)},
-                                              {.label = "Clear selection", .onClick = clearSelection(list)}}}})
+                         ui::menuButton({.icon = "more"},
+                                        {{.label = "Change priority…", .onClick = ui::open(list.priorityDialog)},
+                                         {.label = "Print labels", .onClick = printLabels(list)},
+                                         {.label = "Clear selection", .onClick = clearSelection(list)}})
                              .a11y("More bulk actions")
                              .testId("more-bulk")},
                         {.gap = 1, .align = Align::Center})},

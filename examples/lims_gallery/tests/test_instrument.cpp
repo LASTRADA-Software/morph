@@ -15,16 +15,16 @@ namespace {
 
 constexpr char const* kScreen = "lims-gallery.instrument";
 
-// The overflow menu's entries, by their place under its one top-level entry.
+// The overflow menu's entries, by their place in it; a separator stands before taking it out of service.
 constexpr std::size_t kRecordCalibration = 0;
-constexpr std::size_t kTakeOutOfService = 3;
+constexpr std::size_t kTakeOutOfService = 4;
 
 void chooseMore(GalleryScreen& screen, std::size_t entry) {
     auto const menu = screen.find("Menu", "more");
     if (!menu) {
         throw std::runtime_error{"no overflow menu is mounted"};
     }
-    screen.backend().chooseMenuEntry(*menu, std::vector<std::size_t>{0, entry});
+    screen.backend().chooseMenuEntry(*menu, std::vector<std::size_t>{entry});
 }
 
 }  // namespace

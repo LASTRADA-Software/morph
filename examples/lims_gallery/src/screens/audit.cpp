@@ -219,11 +219,7 @@ ui::Node facetsPanel(Audit const& audit) {
 
 ui::Node chip(ui::AnyHandle const& label, std::string const& removeName, ui::Commands const& remove,
               Flag const& shown) {
-    return ui::row({ui::text({.text = label}),
-                    ui::button({.label = "×", .emphasis = ButtonEmphasis::Ghost, .onClick = remove}).a11y(removeName)},
-                   {.gap = 0, .align = Align::Center})
-        .surface("card")
-        .visible(shown);
+    return ui::badge({.text = label, .onRemove = remove, .removeLabel = removeName}).visible(shown);
 }
 
 ui::Node chips(Audit const& audit) {
