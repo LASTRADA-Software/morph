@@ -19,13 +19,25 @@ MorphWidget {
     property string caption: ""
     property bool labelShown: false
     readonly property real captionHeight: captionLabel.visible ? captionLabel.implicitHeight : 0
-    readonly property real controlWidth: width - (required ? marker.implicitWidth : 0)
+    // The required mark follows the caption while one is drawn; a kind whose control is text it lays out itself
+    // (`markerFollowsText`) has the mark follow the text's last line, at `textEndX`, `textEndY`; otherwise the mark
+    // sits beside the control, at the field's right edge.
+    property bool markerFollowsText: false
+    property real textEndX: 0
+    property real textEndY: 0
+    readonly property bool markerAfterCaption: captionHeight > 0
+    // The room the mark takes on the line it follows: a space step, then the mark.
+    readonly property real markerRoom: Theme.spaceOf(1) + marker.implicitWidth
+    readonly property real controlWidth: width - (!required || markerAfterCaption ? 0
+                                                  : markerFollowsText ? markerRoom : marker.implicitWidth)
     // What assistive technology reads as the field's description: its messages.
     readonly property string accessibleDescription: errors.join("\n")
 
     focusTarget: control ? control : root
-    implicitWidth: Math.max(captionLabel.visible ? captionLabel.implicitWidth : 0,
-                            (control ? control.implicitWidth : 0) + (required ? marker.implicitWidth : 0))
+    implicitWidth: Math.max(captionLabel.visible ? captionLabel.implicitWidth + (required ? markerRoom : 0) : 0,
+                            (control ? control.implicitWidth : 0) + (!required || markerAfterCaption ? 0
+                                                                     : markerFollowsText ? markerRoom
+                                                                                         : marker.implicitWidth))
     implicitHeight: captionHeight + (control ? control.implicitHeight : 0) +
                     (messages.visible ? messages.implicitHeight : 0)
     opacity: stale ? Theme.staleOpacity : 1.0
@@ -36,7 +48,8 @@ MorphWidget {
         font: Theme.bodyFont
         id: captionLabel
         objectName: "caption"
-        width: root.width
+        // Elided short of the mark, so the mark stays visible after it.
+        width: root.width - (root.required ? root.markerRoom : 0)
         visible: root.labelShown && root.caption !== ""
         text: root.caption
         color: root.scheme.text
@@ -55,8 +68,12 @@ MorphWidget {
         textFormat: Text.PlainText
         font: Theme.bodyFont
         id: marker
-        anchors.right: parent.right
-        y: root.captionHeight
+        objectName: "requiredMark"
+        x: root.markerAfterCaption ? captionLabel.contentWidth + Theme.spaceOf(1)
+                                   : root.markerFollowsText ? Math.min(root.textEndX + Theme.spaceOf(1),
+                                                                       root.width - implicitWidth)
+                                                            : root.width - implicitWidth
+        y: root.markerAfterCaption ? 0 : root.markerFollowsText ? root.textEndY : root.captionHeight
         visible: root.required
         text: "*"
         color: root.scheme.error

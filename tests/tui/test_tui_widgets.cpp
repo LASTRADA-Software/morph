@@ -762,3 +762,16 @@ TEST_CASE("tui widgets: a text's runs draw in order, a strong run bold and its n
     text->setText("plain");
     CHECK(harness.draw() == Rows{"plain"});
 }
+
+// Mutation: leave the mark's cells out of the text's natural size (the mark then overwrites its last characters).
+TEST_CASE("tui widgets: a required text draws its mark after its last line, at its natural width in a row",
+          "[tui][widgets]") {
+    Harness harness{40, 2};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    auto const text = harness.make<TextImpl>(row.get());
+    text->setText("Condition on receipt");
+    text->setRequired(true);
+    auto const after = harness.make<TextImpl>(row.get());
+    after->setText("|");
+    CHECK(harness.draw().at(0).starts_with("Condition on receipt *"));
+}

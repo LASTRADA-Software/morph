@@ -316,11 +316,16 @@ private:
 
 /// Draws @p marks right-aligned on the canvas's first row, over what is there.
 void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks);
-/// Draws @p caption on the canvas's first row and answers the canvas below it, where a captioned field draws its
-/// control; the whole canvas for an empty caption.
-[[nodiscard]] ::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption);
-/// @p control grown by @p caption's row, and as wide as the caption needs; @p control itself for an empty caption.
-[[nodiscard]] ::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption);
+/// The required mark drawn after a caption or a text's last line, a space before it.
+inline constexpr std::string_view kRequiredMark = " *";
+/// Draws @p caption on the canvas's first row, followed by the required mark in the error style while @p required,
+/// and answers the canvas below it, where a captioned field draws its control; the whole canvas for an empty caption.
+[[nodiscard]] ::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption,
+                                                    bool required = false);
+/// @p control grown by @p caption's row, and as wide as the caption and, while @p required, its mark need;
+/// @p control itself for an empty caption.
+[[nodiscard]] ::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption,
+                                                 bool required = false);
 
 /// Implements the Common setters of ui interface @p Interface over WidgetBase.
 ///
@@ -353,9 +358,10 @@ public:
 
 /// Implements the field state of field interface @p Interface: read-only, required, errors and stale.
 ///
-/// A terminal shows the state as marks at the right edge of the field's first row, `paintMarks` drawing them: `*`
-/// for a required field, `!` for one with errors, `~` for a stale value. The messages show on hover, after the
-/// tooltip. A field that edits checks `readOnly()` before it reports an edit.
+/// A terminal shows the state as marks at the right edge of the control's first row, `paintMarks` drawing them: `*`
+/// for a required field that draws no caption, `!` for one with errors, `~` for a stale value. A captioned field's
+/// `*` follows its caption instead (`paintCaption`), and a text's its last line. The messages show on hover, after
+/// the tooltip. A field that edits checks `readOnly()` before it reports an edit.
 template <class Interface>
 class TuiField : public TuiWidget<Interface> {
 public:
@@ -386,10 +392,23 @@ public:
     }
 
 protected:
-    /// Draws the marks at the right edge of the canvas's first row.
-    void paintMarks(::core::tui::Canvas& canvas) const { detail::paintFieldMarks(canvas, marks()); }
-    /// How many cells the marks take at the right edge.
-    [[nodiscard]] int marksWidth() const { return static_cast<int>(marks().size()); }
+    /// Draws the control's marks at the right edge of the canvas's first row; @p required false leaves out the `*`,
+    /// for a kind that draws it elsewhere.
+    void paintMarks(::core::tui::Canvas& canvas, bool required = true) const {
+        detail::paintFieldMarks(canvas, controlMarks(required));
+    }
+    /// How many cells the control's marks take at the right edge.
+    [[nodiscard]] int marksWidth() const { return static_cast<int>(controlMarks(true).size()); }
+    /// Whether the field is marked required.
+    [[nodiscard]] bool required() const noexcept { return _required; }
+    /// Draws the caption, with the required mark after it, and answers the canvas left for the control.
+    [[nodiscard]] ::core::tui::Canvas paintCaption(::core::tui::Canvas& canvas) const {
+        return detail::paintFieldCaption(canvas, _caption, _required);
+    }
+    /// @p control grown by the caption and its mark.
+    [[nodiscard]] ::core::tui::Size withCaption(::core::tui::Size control) const {
+        return detail::withFieldCaption(control, _caption, _required);
+    }
     /// Takes the field's label as its caption while @p shown; otherwise the field draws none: what `setCaption`
     /// does for the kinds that have one.
     void showCaption(std::string_view label, bool shown) {
@@ -402,9 +421,10 @@ protected:
     [[nodiscard]] int captionRows() const noexcept { return _caption.empty() ? 0 : 1; }
 
 private:
-    [[nodiscard]] std::string marks() const {
+    // The `*` follows a caption while there is one, so the control's marks leave it out then.
+    [[nodiscard]] std::string controlMarks(bool required) const {
         std::string out;
-        if (_required) {
+        if (_required && required && _caption.empty()) {
             out += '*';
         }
         if (!_errors.empty()) {

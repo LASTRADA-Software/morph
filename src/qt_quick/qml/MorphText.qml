@@ -22,6 +22,16 @@ MorphField {
     defaultName: text
     defaultRole: Accessible.StaticText
     control: label
+    // A required text's mark follows the end of its last line. Rich text reports no lines, so for spans the mark
+    // follows the widest line, on the last one.
+    markerFollowsText: true
+    textEndX: root.richText !== "" ? label.contentWidth : label.lastLineEnd
+    textEndY: root.richText !== "" ? Math.max(0, label.contentHeight - metrics.height) : label.lastLineY
+
+    FontMetrics {
+        id: metrics
+        font: label.font
+    }
 
     Label {
         id: label
@@ -38,5 +48,14 @@ MorphField {
                               root.role === 6 ? Theme.monoFamilies : Theme.families, root.tabularFigures)
         color: root.textColorOf(root.role)
         Accessible.ignored: true
+        // Where the last line laid out ends, and where it sits.
+        property real lastLineEnd: 0
+        property real lastLineY: 0
+        onLineLaidOut: line => {
+            if (line.isLast) {
+                label.lastLineEnd = line.x + line.implicitWidth
+                label.lastLineY = line.y
+            }
+        }
     }
 }

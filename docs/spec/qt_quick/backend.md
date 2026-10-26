@@ -202,6 +202,11 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
   when the name is not, so a screen reader reads it once. `shownText()`, the probe's `textOf`, is the summary. A
   `Canvas` paints at the device pixel ratio, and the chart's tests run again at `QT_SCALE_FACTOR=2`
   (`qt_quick_chart_scale_2`).
+- **Required mark.** While a caption is drawn, `MorphField`'s mark sits on the caption's line, a space step after its
+  `contentWidth`, the caption elides short of it, and the control takes the field's whole width. `MorphText` sets
+  `markerFollowsText` and gives the end of its last line (`textEndX`, `textEndY`, recorded from `lineLaidOut`; rich
+  text reports no lines, so for spans the widest line's end on the last line) and wraps short of the mark. Otherwise
+  the mark sits at the field's right edge beside the control, which gives up its width.
 - **Captions.** `MorphField` carries `caption` and `labelShown`; while `labelShown` it draws the caption above its
   control and moves the control under it, and the field's implicit size takes it in. A text input, select and
   date-time input write both from `setCaption`. A restyle reads `caption` with `labelShown` false to know its

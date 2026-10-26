@@ -98,6 +98,11 @@ void TextImpl::setRole(ui::TextRole role) {
     for (auto const line : lines) {
         width = std::max(width, displayWidth(line));
     }
+    // A required text's mark follows its last line, so the cells it takes count, and a row that gives the text its
+    // natural width does not draw the mark over its last characters.
+    if (required()) {
+        width = std::max(width, displayWidth(lines.back()) + displayWidth(kRequiredMark));
+    }
     return {.width = width, .height = static_cast<int>(lines.size())};
 }
 
@@ -105,18 +110,25 @@ void TextImpl::paint(::core::tui::Canvas& canvas) {
     ::core::tui::Style const style = roleStyle(canvas.theme(), _role);
     if (!_runs.empty()) {
         paintRuns(canvas, _runs, style, true);
-        paintMarks(canvas);
-        return;
-    }
-    int row = 0;
-    for (auto const line : splitLines(_text)) {
-        if (row >= canvas.height()) {
-            break;
+    } else {
+        int row = 0;
+        for (auto const line : splitLines(_text)) {
+            if (row >= canvas.height()) {
+                break;
+            }
+            canvas.putString(row, 0, line, style);
+            ++row;
         }
-        canvas.putString(row, 0, line, style);
-        ++row;
     }
-    paintMarks(canvas);
+    paintMarks(canvas, false);
+    // The required mark after the last line's end; given less than that, at the right edge.
+    auto const lines = splitLines(_text);
+    auto const last = static_cast<int>(lines.size()) - 1;
+    if (required() && last < canvas.height()) {
+        int const mark = displayWidth(kRequiredMark);
+        canvas.putString(last, std::max(0, std::min(displayWidth(lines.back()), canvas.width() - mark)), kRequiredMark,
+                         canvas.theme().error);
+    }
 }
 
 void ButtonImpl::setLabel(std::string_view label) {

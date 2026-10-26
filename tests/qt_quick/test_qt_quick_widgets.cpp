@@ -1257,3 +1257,41 @@ TEST_CASE("qt_quick widgets: a stacked key-value puts each caption over its valu
     CHECK(values.at(0)->property("color").value<QColor>() == scheme->property("text").value<QColor>());
     CHECK(values.at(0)->property("textFormat").toInt() == 1);  // the run, as rich text
 }
+
+// Mutation: put the mark back at the right edge under the caption (its `y` is then the caption's height); bind a
+// text's mark to the label's `contentWidth` (its `x` is then after the first, longer line).
+TEST_CASE("qt_quick widgets: a required mark follows a caption, or a text's last line", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const captioned = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    captioned->setCaption("Meaning", true);
+    captioned->setRequired(true);
+    auto const bare = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    bare->setRequired(true);
+    auto const text = scene.backend().createText(column.get());
+    text->setText("A first line that is the longer one\nshort");
+    text->setRequired(true);
+    scene.settle();
+    QQuickItem& field = Scene::itemOf(*captioned);
+    QQuickItem const* const caption = findNamed(field, QStringLiteral("caption"));
+    QQuickItem const* const mark = findNamed(field, QStringLiteral("requiredMark"));
+    REQUIRE(caption != nullptr);
+    REQUIRE(mark != nullptr);
+    qreal const space = Scene::itemOf(*captioned).property("markerRoom").toReal() - mark->implicitWidth();
+    CHECK(mark->y() == caption->y());
+    CHECK(mark->x() >= caption->property("contentWidth").toReal());
+    CHECK(mark->x() <= caption->property("contentWidth").toReal() + space + 1);
+    CHECK(Scene::controlOf(*captioned).width() == field.width());
+    QQuickItem& bareField = Scene::itemOf(*bare);
+    QQuickItem const* const bareMark = findNamed(bareField, QStringLiteral("requiredMark"));
+    REQUIRE(bareMark != nullptr);
+    CHECK(std::abs(bareMark->x() + bareMark->width() - bareField.width()) < 1);
+    QQuickItem& textItem = Scene::itemOf(*text);
+    QQuickItem const* const textMark = findNamed(textItem, QStringLiteral("requiredMark"));
+    QQuickItem const& label = Scene::controlOf(*text);
+    REQUIRE(textMark != nullptr);
+    qreal const lineHeight = label.property("contentHeight").toReal() / 2;
+    CHECK(textMark->y() >= lineHeight - 1);
+    CHECK(textMark->x() < label.property("contentWidth").toReal() / 2);
+    CHECK(textMark->x() > 0);
+}

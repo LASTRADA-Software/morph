@@ -211,7 +211,10 @@ there. Esc ends a drag with no drop. A terminal without mouse reporting ignores 
 
 ## Field state
 
-A field shows its state as marks at the right edge of its first row: `*` required, `!` with errors, `~` stale. The
+A field shows its state as marks at the right edge of its control's first row: `*` required, `!` with errors, `~`
+stale. A captioned field draws its `*` after its caption instead, as ` *` in the error style, and its caption's width
+counts those two cells; a required text draws ` *` after its last line's end, and its natural width counts them, so
+in a row it is not drawn over the text's last characters (given less, it is drawn at the right edge). The
 messages show on hover, after the tooltip. A read-only field takes the focus and moves its cursor and selection, but
 any edit is undone and nothing is reported: no change, submit, commit, toggle or choice. A field draws no input
 fill, so a read-only one reads as its text in place, in the normal text colour where a disabled one is muted.

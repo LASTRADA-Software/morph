@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <chrono>
@@ -991,4 +992,23 @@ TEST_CASE("tui fields: a commit handler may destroy the panel whose title took t
     CHECK(toggles == 0);
     CHECK(harness.screen().focusedComponent() == nullptr);
     CHECK(harness.draw() == Rows{"2026-05-05"});
+}
+
+// Mutation: paint the `*` on the control again (row 1 then ends in `*`).
+TEST_CASE("tui fields: a captioned required input draws its mark after the caption, not on the control",
+          "[tui][fields]") {
+    Harness harness{30, 3};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    input->setCaption("Meaning", true);
+    input->setRequired(true);
+    Rows const rows = harness.draw();
+    REQUIRE_FALSE(rows.empty());
+    CHECK(rows.at(0) == "Meaning *");
+    CHECK(std::ranges::none_of(rows.begin() + 1, rows.end(), [](std::string const& row) { return row.contains('*'); }));
+    CHECK(harness.screen().renderedBuffer().at(0, 8).style.fg == harness.screen().theme().error.fg);
+    // Without a caption the mark stays at the control's right edge.
+    input->setCaption("", false);
+    Rows const bare = harness.draw();
+    REQUIRE_FALSE(bare.empty());
+    CHECK(bare.at(0).ends_with('*'));
 }

@@ -389,21 +389,25 @@ void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks) {
     canvas.putString(0, canvas.width() - width, marks, canvas.theme().warning);
 }
 
-::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption) {
+::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption, bool required) {
     if (caption.empty()) {
         return canvas.subcanvas({.x = 0, .y = 0, .width = canvas.width(), .height = canvas.height()});
     }
     if (canvas.height() > 0) {
-        canvas.putString(0, 0, caption, canvas.theme().textNormal);
+        int const end = canvas.putString(0, 0, caption, canvas.theme().textNormal);
+        if (required) {
+            canvas.putString(0, end, kRequiredMark, canvas.theme().error);
+        }
     }
     return canvas.subcanvas({.x = 0, .y = 1, .width = canvas.width(), .height = std::max(0, canvas.height() - 1)});
 }
 
-::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption) {
+::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption, bool required) {
     if (caption.empty()) {
         return control;
     }
-    return {.width = std::max(control.width, displayWidth(caption)), .height = control.height + 1};
+    int const mark = required ? displayWidth(kRequiredMark) : 0;
+    return {.width = std::max(control.width, displayWidth(caption) + mark), .height = control.height + 1};
 }
 
 EventResult WidgetBase::pointer(::core::tui::MouseEvent const& mouse) {

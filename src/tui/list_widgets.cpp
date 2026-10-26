@@ -202,14 +202,14 @@ void RadioSelectImpl::setOnSelect(std::function<void(ui::Key)> onSelect) { _onSe
 
 ::core::tui::Size RadioSelectImpl::naturalSize() const {
     // "▶ " or "  ", then "(•) " or "( ) ", then the label.
-    return withFieldCaption(
-        {.width = widestLabel(_options) + 6, .height = std::max(1, static_cast<int>(_options.size()))}, caption());
+    return withCaption(
+        {.width = widestLabel(_options) + 6, .height = std::max(1, static_cast<int>(_options.size()))});
 }
 
 std::string RadioSelectImpl::probeText() const { return labelOf(_options, _selected); }
 
 void RadioSelectImpl::paint(::core::tui::Canvas& canvas) {
-    auto rows = paintFieldCaption(canvas, caption());
+    auto rows = paintCaption(canvas);
     _top = scrolledTop(*_list, {.top = _top, .rows = rows.height()});
     paintRows(*_list, _top, {.reachable = actionable(), .focused = hasFocus()}, rows);
     paintMarks(rows);
@@ -381,7 +381,7 @@ void DropdownSelectImpl::setOnSelect(std::function<void(ui::Key)> onSelect) { _o
 void DropdownSelectImpl::setOnOpen(ui::Action onOpen) { _onOpen = std::move(onOpen); }
 
 ::core::tui::Size DropdownSelectImpl::naturalSize() const {
-    return withFieldCaption({.width = widestLabel(_options) + 4, .height = 1}, caption());
+    return withCaption({.width = widestLabel(_options) + 4, .height = 1});
 }
 
 std::string DropdownSelectImpl::probeText() const { return labelOf(_options, _selected); }
@@ -393,7 +393,7 @@ void DropdownSelectImpl::paint(::core::tui::Canvas& canvas) {
     if (actionable()) {
         style = hasFocus() || _open ? &theme.buttonFocused : &theme.buttonNormal;
     }
-    auto control = paintFieldCaption(canvas, caption());
+    auto control = paintCaption(canvas);
     control.putString(0, 0, "[" + labelOf(_options, _selected) + " ▾]", *style);
     paintMarks(control);
     if (_open) {

@@ -93,6 +93,9 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   face, and every run's text as its characters. The mount calls `setSpans` in place of `setText` for a node that has
   spans. Both are pure, so a backend cannot drop the emphasis silently. What a probe and assistive technology read
   of such a widget is the runs' text joined (`spansText`).
+- **Required mark.** `setRequired(true)` marks a field that must be given. The mark follows the caption, on the
+  caption's line, while the field draws one (`setCaption(label, true)`), so the control keeps the field's whole
+  width; without a caption it sits beside the control. A required text's mark follows the end of its last line.
 - **Key-values.** Each caption sits beside its value, or above it once `setCaptionPlacement(Above)` is called. A
   toned value (`KeyValueItem::tone` other than `Neutral`) is drawn in the tone's colour and the strong weight, and a
   value with spans draws them as a text does; its accessible text is the runs' text joined.

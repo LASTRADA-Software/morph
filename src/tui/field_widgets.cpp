@@ -335,13 +335,13 @@ void TextInputImpl::setIcon(std::string_view icon) {
     int const icon = glyph.empty() ? 0 : displayWidth(glyph) + 1;
     int const width = std::max({20, displayWidth(_field->text()) + 1, displayWidth(_placeholder)}) + unit + icon;
     int const height = _mode == ui::TextInputMode::Multiline ? std::max(3, _field->lineCount()) : 1;
-    return withFieldCaption({.width = width, .height = height}, caption());
+    return withCaption({.width = width, .height = height});
 }
 
 std::string TextInputImpl::probeText() const { return std::string{_field->text()}; }
 
 void TextInputImpl::paint(::core::tui::Canvas& canvas) {
-    auto control = paintFieldCaption(canvas, caption());
+    auto control = paintCaption(canvas);
     std::string_view const glyph = ui::iconGlyph(_icon);
     int const iconWidth = glyph.empty() ? 0 : displayWidth(glyph) + 1;
     if (iconWidth > 0) {
@@ -413,13 +413,13 @@ void DateTimeInputImpl::setOnChange(std::function<void(std::optional<morph::time
 }
 
 ::core::tui::Size DateTimeInputImpl::naturalSize() const {
-    return withFieldCaption({.width = _mode == ui::DateMode::Date ? 12 : 18, .height = 1}, caption());
+    return withCaption({.width = _mode == ui::DateMode::Date ? 12 : 18, .height = 1});
 }
 
 std::string DateTimeInputImpl::probeText() const { return std::string{_field->text()}; }
 
 void DateTimeInputImpl::paint(::core::tui::Canvas& canvas) {
-    auto control = paintFieldCaption(canvas, caption());
+    auto control = paintCaption(canvas);
     paintField(*_field, *this, actionable(), control);
     paintMarks(control);
 }

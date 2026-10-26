@@ -156,7 +156,7 @@ Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, Fil
 | Field | Meaning |
 |---|---|
 | `readonly` | The user may not change the value: the widget shows it, takes focus and lets its text be selected, and reports no edit, submit or commit. Changes nothing on text |
-| `required` | A mark that the field must be given. Whether a value is missing is the application's to decide, and to show through `errors` |
+| `required` | A mark that the field must be given, after its caption when the field draws one, else beside its control; a text's follows its last line. Whether a value is missing is the application's to decide, and to show through `errors` |
 | `errors` | The messages shown with the field, in order. Which errors show, and when (spec 5's `shownErrors`), is decided before they reach this property |
 | `stale` | The value shown is the last known one while a newer one is computed |
 
