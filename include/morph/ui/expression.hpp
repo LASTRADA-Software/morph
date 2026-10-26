@@ -79,6 +79,7 @@ enum class ExprKind : std::uint8_t {
     Map,        ///< `{"map": e, "as": "x", "to": e}`.
     Filter,     ///< `{"filter": e, "as": "x", "where": e}`.
     Sort,       ///< `{"sort": e, "as": "x", "by": e, "order": e}`.
+    Runs,       ///< `{"runs": e, "as": "x", "by": e}`.
     Env,        ///< `{"env": "name"}`: the client environment.
     Session,    ///< `{"session": "name"}`: a session attribute.
     Host,       ///< `{"host": "name"}`: a value the application registered with the client.
@@ -160,9 +161,24 @@ struct Expr {
 
 /// @brief Whether a form names each element of its list with `as`, for its second operand alone.
 /// @param kind The form.
-/// @return True for `map`, `filter` and `sort`.
+/// @return True for `map`, `filter`, `sort` and `runs`.
 [[nodiscard]] constexpr bool bindsElement(ExprKind kind) noexcept {
-    return kind == ExprKind::Map || kind == ExprKind::Filter || kind == ExprKind::Sort;
+    return kind == ExprKind::Map || kind == ExprKind::Filter || kind == ExprKind::Sort || kind == ExprKind::Runs;
+}
+
+/// @brief One run of adjacent elements of a list that share a value, as `runs` and a table's group heading read
+///        it: `{"key": <the shared value>, "count": n, "first": <element>, "last": <element>, "items": [...]}`.
+/// @param key   The shared value.
+/// @param items The run's elements, in order; not empty.
+/// @return The record.
+[[nodiscard]] inline Value runRecord(Value key, ValueList items) {
+    ValueRecord record;
+    record.insert_or_assign("key", std::move(key));
+    record.insert_or_assign("count", static_cast<std::int64_t>(items.size()));
+    record.insert_or_assign("first", items.front());
+    record.insert_or_assign("last", items.back());
+    record.insert_or_assign("items", Value{std::move(items)});
+    return Value{std::move(record)};
 }
 
 namespace detail {
@@ -335,7 +351,7 @@ public:
 
 private:
     // NOLINTBEGIN(modernize-use-designated-initializers): one row per form reads as a table.
-    static constexpr std::array<FormKeys, 21> kForms = {{
+    static constexpr std::array<FormKeys, 22> kForms = {{
         {"lit", ExprKind::Literal, {}},
         {"ref", ExprKind::Ref, {}},
         {"row", ExprKind::Row, {}},
@@ -354,6 +370,7 @@ private:
         {"map", ExprKind::Map, {"as", "to"}},
         {"filter", ExprKind::Filter, {"as", "where"}},
         {"sort", ExprKind::Sort, {"as", "by", "order"}},
+        {"runs", ExprKind::Runs, {"as", "by"}},
         {"env", ExprKind::Env, {}},
         {"session", ExprKind::Session, {}},
         {"host", ExprKind::Host, {}},
@@ -476,6 +493,7 @@ private:
             case ExprKind::Map:
             case ExprKind::Filter:
             case ExprKind::Sort:
+            case ExprKind::Runs:
             default:
                 return comprehension(made, object, path);
         }
@@ -644,6 +662,9 @@ private:
             bodyKey = "to";
         } else if (made.kind == ExprKind::Sort) {
             sourceKey = "sort";
+            bodyKey = "by";
+        } else if (made.kind == ExprKind::Runs) {
+            sourceKey = "runs";
             bodyKey = "by";
         }
         Json const* const variable = member(object, "as");
@@ -874,6 +895,7 @@ public:
             case ExprKind::Map:
             case ExprKind::Filter:
             case ExprKind::Sort:
+            case ExprKind::Runs:
                 return comprehension(expr);
             case ExprKind::Call:
             default:
@@ -943,6 +965,8 @@ private:
             form = "map";
         } else if (expr.kind == ExprKind::Sort) {
             form = "sort";
+        } else if (expr.kind == ExprKind::Runs) {
+            form = "runs";
         }
         if (!admitsKind(*source, kindBit(TypeKind::List))) {
             return refuse(*expr.args.at(0), "`" + std::string{form} + "` runs over a list, not " + source->name());
@@ -957,6 +981,9 @@ private:
         }
         if (expr.kind == ExprKind::Map) {
             return Type::listOf(*body);
+        }
+        if (expr.kind == ExprKind::Runs) {
+            return Type::listOf(Type::of(TypeKind::Record));
         }
         if (expr.kind == ExprKind::Sort && expr.args.size() > 2) {
             auto order = check(*expr.args.at(2));
@@ -1362,6 +1389,8 @@ public:
                 return comprehension(expr);
             case ExprKind::Sort:
                 return sorted(expr);
+            case ExprKind::Runs:
+                return grouped(expr);
             case ExprKind::Call:
             default:
                 return call(expr);
@@ -1414,8 +1443,16 @@ public:
         return indices;
     }
 
+    /// @brief Whether two `by` values put their elements in one run: `eq`'s comparison, except that `null` equals
+    ///        `null`, so the elements without the value make one run.
+    /// @param lhs A value.
+    /// @param rhs A value.
+    /// @return Whether they are the same run's.
+    [[nodiscard]] bool sameRun(Value const& lhs, Value const& rhs) { return sameElement(lhs, rhs); }
+
 private:
     Value mismatch(Expr const& expr, std::string_view reason) {
+        ++_mismatches;
         _env->report(expr.path, reason);
         return Value{};
     }
@@ -1492,6 +1529,41 @@ private:
             return ordering;
         }
         return ordering == std::strong_ordering::less ? std::strong_ordering::greater : std::strong_ordering::less;
+    }
+
+    /// `runs`: the list split into runs of adjacent elements whose `by` values are equal.
+    Value grouped(Expr const& expr) {
+        Value const source = eval(*expr.args.at(0));
+        if (source.isNull()) {
+            return Value{};
+        }
+        ValueList const* const items = source.asList();
+        if (items == nullptr) {
+            return mismatch(expr, "`runs` runs over a list");
+        }
+        ValueList out;
+        Value key;
+        ValueList run;
+        for (Value const& item : *items) {
+            std::size_t const before = _mismatches;
+            _locals.emplace_back(expr.name, item);
+            Value value = eval(*expr.args.at(1));
+            _locals.pop_back();
+            // A `by` that fails for an element fails the whole form, as a mismatch inside any operand does.
+            if (_mismatches != before) {
+                return Value{};
+            }
+            if (run.empty()) {
+                key = std::move(value);
+            } else if (!sameRun(key, value)) {
+                out.push_back(runRecord(std::exchange(key, std::move(value)), std::exchange(run, {})));
+            }
+            run.push_back(item);
+        }
+        if (!run.empty()) {
+            out.push_back(runRecord(std::move(key), std::move(run)));
+        }
+        return out;
     }
 
     /// `sort`: the list ordered by `by`, ascending unless `order` is `"desc"`.
@@ -2219,6 +2291,8 @@ private:
 
     Environment const* _env;
     std::vector<std::pair<std::string, Value>> _locals;
+    // The mismatches reported so far, so a form can tell that an operand failed rather than gave `null`.
+    std::size_t _mismatches = 0;
     // NOLINTEND(misc-no-recursion)
 };
 

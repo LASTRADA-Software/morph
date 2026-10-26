@@ -61,6 +61,7 @@ by name.
 | `cond(c, a, b)`, `obj({{"k", e}})`, `list({...})` | `{"if": [...]}`, `{"obj": ...}`, `{"list": ...}` |
 | `map(list, "x", fn)`, `filter(list, "x", fn)`, `filter(list, &T::flag)` | The comprehensions; `fn` receives the element's handle |
 | `sorted(list, "x", by, order?)` | The `sort` form: `by` receives the element's handle and gives the value to order by; `order` is absent for ascending |
+| `runs(list, "x", by)` | The `runs` form: `by` receives the element's handle and gives the value a run shares |
 | `sortKey(column, SortOrder)` | One key of a table's `sort`, `{"column", "direction"}`; a `list` of them is a sort |
 | `call<R>(name, {...})` and `engaged`, `coalesce`, `concat`, `concatLists`, `slice(list, start, count?)`, `format`, `count`, `sum`, `includes`, `isEmpty`, `round`, `parseDecimal`, `quantity`, `t(key, fallback, {{"n", e}})` | Library calls, and `{"t": ...}` |
 | `env(name)`, `session(name)`, `hostValue(name)`, `prop(name)`, `event()` | `{"env"}`, `{"session"}`, `{"host"}`, `{"ref": "props.name"}`, `{"ref": "event"}` |

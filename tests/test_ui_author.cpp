@@ -342,6 +342,8 @@ TEST_CASE("the library and reading forms have builders", "[ui][author]") {
     CHECK(text(ui::sorted(ui::ref("a"), "x", [](ui::AnyHandle const& item) { return item; }, "desc")) ==
           R"({"sort":{"ref":"a"},"as":"x","by":{"ref":"x"},"order":"desc"})");
     CHECK(text(ui::sortKey("due", ui::SortOrder::Descending)) == R"({"lit":{"column":"due","direction":"desc"}})");
+    CHECK(text(ui::runs(ui::ref("a"), "w", [](ui::AnyHandle const& well) { return well.at("empty"); })) ==
+          R"({"runs":{"ref":"a"},"as":"w","by":{"ref":"w.empty"}})");
     CHECK(text(ui::format("{0} of {1}", {1, 2})) == R"({"fn":"format","args":["{0} of {1}",1,2]})");
     CHECK(text(ui::count(items)) == R"({"fn":"count","args":[{"ref":"items"}]})");
     CHECK(text(ui::sum(items)) == R"({"fn":"sum","args":[{"ref":"items"}]})");

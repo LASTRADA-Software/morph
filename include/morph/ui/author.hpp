@@ -1234,6 +1234,23 @@ template <typename E = Any>
     return AnyHandle::raw(std::move(json));
 }
 
+/// @brief `runs`, `{"runs": e, "as": "x", "by": e}`: the list split into runs of adjacent elements whose @p groupBy
+///        values are equal, each a record `{key, count, first, last, items}`.
+/// @tparam E The element type.
+/// @param source  The list.
+/// @param name    The element's name inside @p groupBy.
+/// @param groupBy Builds the value a run shares from the element's handle.
+/// @return The runs.
+template <typename E = Any>
+[[nodiscard]] AnyHandle runs(AnyHandle const& source, std::string const& name,
+                             std::type_identity_t<std::function<AnyHandle(Handle<E> const&)>> const& groupBy) {
+    Json json = Json::object_t{};
+    detail::put(json, "runs", source.json());
+    detail::put(json, "as", name);
+    detail::put(json, "by", groupBy(author::ref<E>(name)).json());
+    return AnyHandle::raw(std::move(json));
+}
+
 /// @brief One key of a table's `sort`, `{"column": id, "direction": "asc" | "desc"}`; a `list` of them, most
 ///        significant first, is a sort.
 /// @param column The id of a sortable column.

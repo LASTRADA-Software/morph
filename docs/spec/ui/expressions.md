@@ -41,6 +41,7 @@ clients keeps such documents free of it. The shared corpus is
 | `{"if": [c, a, b]}` | `If` | |
 | `{"obj": {...}}`, `{"list": [...]}` | `Object`, `List` | Constructors |
 | `{"map": e, "as": "x", "to": e}`, `{"filter": e, "as": "x", "where": e}` | `Map`, `Filter` | Comprehensions over a list |
+| `{"runs": e, "as": "x", "by": e}` | `Runs` | The list split into runs of adjacent elements whose `by` values are equal, each a record `{key, count, first, last, items}` |
 | `{"sort": e, "as": "x", "by": e, "order": e}` | `Sort` | The list ordered by the value `by` gives each element; `order` is `"asc"` (also when absent or `null`) or `"desc"` |
 | `{"env": "name"}` | `Env` | `widthClass`, `locale`, `platform`, `online`, `backend` (see below) |
 | `{"session": "name"}` | `Session` | `principal`, `userName`, `displayName`, `userKey`, `tenant`, `authenticated` |
@@ -53,7 +54,7 @@ Quick counts the window's width in `Theme.unitWidth`s. A document's breakpoints 
 its own units on both frontends.
 
 An expression object has one form key and only that form's companion keys (`fn` with `args`; `t`
-with `fallback` and `args`; `map` with `as` and `to`; `filter` with `as` and `where`; `sort` with `as`, `by` and `order`). An array is
+with `fallback` and `args`; `map` with `as` and `to`; `filter` with `as` and `where`; `sort` with `as`, `by` and `order`; `runs` with `as` and `by`). An array is
 not an expression — a list is `{"list": [...]}` or `{"lit": [...]}` — and a number with a fraction
 is refused: an exact value is `{"num", "den", "dp"}`. Every node carries its JSON Pointer, which
 refusals and diagnostics name.
@@ -103,6 +104,12 @@ over the tree recurse, and a few hundred levels exhaust a 1 MB thread stack.
   yields `null` and reports it. `order` other than `"asc"` or `"desc"` is a mismatch too, and a
   `null` list yields `null`. `by` reads the element as `x`; `order` is read once, outside it. Folding
   covers ASCII and Latin-1 case only, not accents or other scripts, as the engine's collator does.
+- **Runs.** `runs` splits a list into runs of adjacent elements whose `by` values are equal, in the
+  list's order: `eq`'s equality, except that `null` equals `null`, so the elements without the value
+  make one run. Each run is `{"key": <the shared value>, "count": n, "first": <element>, "last":
+  <element>, "items": [...]}`, and a table's group heading reads the same record. An empty list gives
+  `[]` and a `null` list `null`; a `by` that fails for an element fails the form, which yields `null`.
+  Elements that share a value but are not adjacent make separate runs; sort first to group them all.
 ## Static checking
 
 `checkExpression(expr, resolver)` walks the tree once. Every name is resolved through the
