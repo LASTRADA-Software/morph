@@ -45,8 +45,11 @@ struct MountError {
     std::string reason;
 };
 
-/// @brief A screen's head beside its title: the subtitle, the status badges and the actions a shell shows above the
-///        screen (the document's `subtitle`, `status` and `actions`).
+/// @brief A screen's head beside its title: the subtitle, the status badges, the actions and the head's own menu a
+///        shell shows above the screen (the document's `subtitle`, `status`, `actions` and `menu`).
+///
+/// The head is data: the screen evaluates it and the shell draws it, so a host screen's handle can implement it too.
+/// The menu members have defaults, for a head that has no menu.
 class ScreenHead {
 public:
     ScreenHead() = default;
@@ -73,6 +76,23 @@ public:
     /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold enabled and visible, and
     ///         `false` for a closed screen.
     virtual bool run(std::string_view actionId) = 0;
+
+    /// @brief The head's own menu: its visible entries, in order, each one that is chosen with its id.
+    /// @return They, valid as long as the head; null for a head that has no menu, as a host screen's by default.
+    [[nodiscard]] virtual reactive::Computed<std::vector<HeadMenuEntry>> const* menu() const { return nullptr; }
+
+    /// @brief The accessible name of the head menu's trigger.
+    /// @return It, valid as long as the head; null for a head that has no menu, which a shell labels "More actions".
+    [[nodiscard]] virtual reactive::Computed<std::string> const* menuLabel() const { return nullptr; }
+
+    /// @brief Runs a head menu entry's `onClick` as a user event in the screen scope, in one batch.
+    /// @param entryId The entry's id.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the menu does not hold enabled and visible, and
+    ///         `false` for a closed screen or a head without a menu.
+    virtual bool choose(std::string_view entryId) {
+        static_cast<void>(entryId);
+        return false;
+    }
 };
 
 /// @brief One mounted screen, as its host sees it.
@@ -656,6 +676,13 @@ private:
         bool run(std::string_view actionId) override {
             return _state->screen != nullptr && _state->screen->runAction(actionId);
         }
+        [[nodiscard]] reactive::Computed<std::vector<HeadMenuEntry>> const* menu() const override {
+            return &_state->menu;
+        }
+        [[nodiscard]] reactive::Computed<std::string> const* menuLabel() const override { return &_state->menuLabel; }
+        bool choose(std::string_view entryId) override {
+            return _state->screen != nullptr && _state->screen->chooseMenuEntry(entryId);
+        }
 
         void requestClose(std::function<void(bool closed)> done) override { State::request(_state, std::move(done)); }
 
@@ -761,10 +788,22 @@ private:
                              return !closed.get() && generation.get() >= 0 ? screen->status()
                                                                            : std::vector<HeadBadge>{};
                          }},
-                  actions{*runtime, [this] {
+                  actions{*runtime,
+                          [this] {
                               return !closed.get() && generation.get() >= 0 ? screen->actions()
                                                                             : std::vector<HeadAction>{};
-                          }} {}
+                          }},
+                  menu{*runtime,
+                       [this] {
+                           return !closed.get() && generation.get() >= 0 ? screen->menu()
+                                                                         : std::vector<HeadMenuEntry>{};
+                       }},
+                  menuLabel{*runtime, [this] {
+                                if (!closed.get() && generation.get() >= 0) {
+                                    lastMenuLabel = screen->menuLabel();
+                                }
+                                return lastMenuLabel;
+                            }} {}
 
             State(State const&) = delete;
             State& operator=(State const&) = delete;
@@ -955,6 +994,7 @@ private:
             std::string lastTitle;
             Value lastIdentity;
             std::string lastSubtitle;
+            std::string lastMenuLabel = "More actions";
             // What the screen was mounted with, for a remount.
             ParamMap params;
             ContainerWidget* parent = nullptr;
@@ -967,6 +1007,8 @@ private:
             reactive::Computed<std::string> subtitle;
             reactive::Computed<std::vector<HeadBadge>> status;
             reactive::Computed<std::vector<HeadAction>> actions;
+            reactive::Computed<std::vector<HeadMenuEntry>> menu;
+            reactive::Computed<std::string> menuLabel;
         };
 
         std::shared_ptr<State> _state;

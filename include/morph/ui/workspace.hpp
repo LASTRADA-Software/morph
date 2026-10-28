@@ -243,7 +243,8 @@ public:
         return ui::row(std::move(empty));
     }
 
-    /// @brief Whether the active tab's head shows anything: a subtitle, a badge or an action. A tracked read, so a
+    /// @brief Whether the active tab's head shows anything: a subtitle, a badge, an action or a menu entry. A tracked
+    ///        read, so a
     ///        shell that shows the head on a line of its own follows a tab switch and a head's own changes; the head
     ///        row's own visibility is the same rule.
     /// @return Whether there is an active tab whose head has content.
@@ -296,6 +297,90 @@ private:
         std::size_t index = 0;
         HeadBadge badge;
     };
+
+    // The head menu as the row draws it: its visible entries, keyed by their shape (the ids, separators and
+    // submenus), so the menu is drawn again when an entry is shown or hidden and only rebinds when a label changes.
+    struct ShapedMenu {
+        std::string shape;
+        std::vector<HeadMenuEntry> entries;
+
+        bool operator==(ShapedMenu const&) const = default;
+    };
+
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static std::string shapeOf(std::vector<HeadMenuEntry> const& entries) {
+        std::string shape;
+        for (HeadMenuEntry const& entry : entries) {
+            if (entry.separator) {
+                shape += '|';
+            } else if (!entry.items.empty()) {
+                shape += '(' + shapeOf(entry.items) + ')';
+            } else {
+                shape += entry.id + ';';
+            }
+        }
+        return shape;
+    }
+
+    // The entry at @p path through @p entries; null past the end, which a binding reads only in the moment before
+    // the menu is drawn again for a new shape.
+    [[nodiscard]] static HeadMenuEntry const* entryAt(std::vector<HeadMenuEntry> const& entries,
+                                                      std::vector<std::size_t> const& path) {
+        std::vector<HeadMenuEntry> const* level = &entries;
+        HeadMenuEntry const* entry = nullptr;
+        for (std::size_t const index : path) {
+            if (index >= level->size()) {
+                return nullptr;
+            }
+            entry = &level->at(index);
+            level = &entry->items;
+        }
+        return entry;
+    }
+
+    // The menu items of one level of the head menu: each bound to its entry by its place, which the shape keeps, and
+    // each chosen by its id, so the screen refuses an entry hidden since by name rather than running its neighbour.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] std::vector<MenuItem> headMenuItems(WorkspaceTabId tab, reactive::Signal<ShapedMenu> const& menu,
+                                                      std::vector<HeadMenuEntry> const& level,
+                                                      std::vector<std::size_t> const& outer) const {
+        std::vector<MenuItem> items;
+        for (std::size_t index = 0; index < level.size(); ++index) {
+            HeadMenuEntry const& entry = level.at(index);
+            MenuItem item;
+            if (entry.separator) {
+                item.separator = true;
+                items.push_back(std::move(item));
+                continue;
+            }
+            std::vector<std::size_t> path = outer;
+            path.push_back(index);
+            auto const read = [&menu, path](auto field, auto const& fallback) {
+                return [&menu, path, field, fallback] {
+                    HeadMenuEntry const* const shown = entryAt(menu.get().entries, path);
+                    return shown == nullptr ? fallback : std::invoke(field, *shown);
+                };
+            };
+            item.label = Prop<std::string>{read(&HeadMenuEntry::label, std::string{})};
+            item.description = Prop<std::string>{read(&HeadMenuEntry::description, std::string{})};
+            item.enabled = Prop<bool>{read(&HeadMenuEntry::enabled, false)};
+            item.checked = Prop<std::optional<bool>>{read(&HeadMenuEntry::checked, std::optional<bool>{})};
+            item.icon = entry.icon;
+            item.keys = entry.keys;
+            if (entry.items.empty()) {
+                item.onSelect = [this, tab, entryId = entry.id] {
+                    ScreenHandle* const handle = _model->handleOf(tab);
+                    if (ScreenHead* const head = handle == nullptr ? nullptr : handle->head()) {
+                        head->choose(entryId);
+                    }
+                };
+            } else {
+                item.items = headMenuItems(tab, menu, entry.items, path);
+            }
+            items.push_back(std::move(item));
+        }
+        return items;
+    }
 
     [[nodiscard]] std::optional<WorkspaceTabId> tabAt(std::size_t index) const {
         std::vector<WorkspaceTabId> const order = _model->order();
@@ -367,15 +452,22 @@ private:
         return handle == nullptr ? nullptr : handle->head();
     }
 
-    // Whether a tab's head has a subtitle, a badge or an action; a tracked read.
+    // The visible entries of a tab's head menu; a tracked read.
+    [[nodiscard]] std::vector<HeadMenuEntry> headMenuOf(WorkspaceTabId tab) const {
+        ScreenHead const* const head = headOf(tab);
+        reactive::Computed<std::vector<HeadMenuEntry>> const* const menu = head == nullptr ? nullptr : head->menu();
+        return menu == nullptr ? std::vector<HeadMenuEntry>{} : menu->get();
+    }
+
+    // Whether a tab's head has a subtitle, a badge, an action or a menu entry; a tracked read.
     [[nodiscard]] bool headHasContent(WorkspaceTabId tab) const {
         ScreenHead const* const head = headOf(tab);
-        return head != nullptr &&
-               (!head->subtitle().get().empty() || !head->status().get().empty() || !head->actions().get().empty());
+        return head != nullptr && (!head->subtitle().get().empty() || !head->status().get().empty() ||
+                                   !head->actions().get().empty() || !headMenuOf(tab).empty());
     }
 
     // The head row's own content, built but not yet wrapped into an immutable Node: the subtitle (muted), the
-    // badges, a spacer and the actions as buttons. Hidden while the head has none of them, so a screen without a
+    // badges, a spacer, the actions as buttons and the head's own menu behind one icon button. Hidden while the head has none of them, so a screen without a
     // head looks as it would without the row. Factored out of headRow() so a caller needing to set additional
     // layout fields on the row -- which a Node, once built, can no longer be mutated to carry -- can do so on the
     // still-mutable Row this returns, before wrapping it itself.
@@ -440,6 +532,36 @@ private:
                 button.common.testId = "head_action_" + action.peek().id;
                 button.common.enabled = Prop<bool>{[&action] { return action.get().enabled; }};
                 return ui::button(std::move(button));
+            },
+            Axis::Horizontal, 1));
+        row.children.push_back(ui::forEach<ShapedMenu>(
+            [this, tab] {
+                std::vector<HeadMenuEntry> entries = headMenuOf(tab);
+                if (entries.empty()) {
+                    return std::vector<ShapedMenu>{};
+                }
+                std::string shape = shapeOf(entries);
+                return std::vector<ShapedMenu>{ShapedMenu{.shape = std::move(shape), .entries = std::move(entries)}};
+            },
+            [](ShapedMenu const& menu) { return Key{menu.shape}; },
+            [this, tab](reactive::Signal<ShapedMenu> const& menu) {
+                Menu spec{.items = headMenuItems(tab, menu, menu.peek().entries, {}),
+                          .common = {},
+                          .style = MenuStyle::Button,
+                          .label = {},
+                          .icon = "more",
+                          .emphasis = ButtonEmphasis::Normal};
+                // The trigger draws the icon alone; its name is the head's `menuLabel`.
+                Prop<std::string> const name{[this, tab] {
+                    ScreenHead const* const head = headOf(tab);
+                    reactive::Computed<std::string> const* const label =
+                        head == nullptr ? nullptr : head->menuLabel();
+                    return label == nullptr ? std::string{"More actions"} : label->get();
+                }};
+                spec.common.a11y.name = name;
+                spec.common.tooltip = name;
+                spec.common.testId = "head_menu";
+                return ui::menu(std::move(spec));
             },
             Axis::Horizontal, 1));
         return row;

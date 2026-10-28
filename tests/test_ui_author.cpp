@@ -1483,6 +1483,28 @@ TEST_CASE("a screen's head writes its subtitle, status badges and actions beside
         R"("actions":[{"id":"save","label":"Save","emphasis":"primary","onClick":[{"set":"stage","value":"Saved"}]}])"));
 }
 
+// Mutation: leave the id out of a menu item's JSON (the head menu entry has nothing to be chosen by).
+TEST_CASE("a screen's head writes its own menu, each entry with its id, and the menu's label", "[ui][author]") {
+    auto const emitted = ui::screen("author.head.menu", [](ui::Scope& screen) {
+                             auto stage = screen.state<std::string>("stage", ui::AnyHandle{"Draft"});
+                             screen.title(ui::AnyHandle{"Instrument"});
+                             screen.menuLabel(ui::AnyHandle{"More"});
+                             screen.menu({.id = "calibrate",
+                                          .label = ui::AnyHandle{"Calibrate"},
+                                          .onClick = {ui::set(stage, ui::AnyHandle{"Calibrated"})}});
+                             screen.menu(ui::menuSeparator());
+                             screen.menu({.id = "retire",
+                                          .label = ui::AnyHandle{"Retire"},
+                                          .description = ui::AnyHandle{"needs reason"}});
+                             return ui::spacer();
+                         }).write();
+    REQUIRE(emitted.has_value());
+    CHECK(emitted->text.contains(R"("menuLabel":"More")"));
+    CHECK(emitted->text.contains(
+        R"("menu":[{"id":"calibrate","label":"Calibrate","onClick":[{"set":"stage","value":"Calibrated"}]},)"
+        R"({"separator":true},{"id":"retire","label":"Retire","description":"needs reason"}])"));
+}
+
 // Mutation: leave the options' actions out of the overlay (the dialog carries no footer buttons).
 TEST_CASE("a dialog's actions are written as its footer buttons, in its scope", "[ui][author]") {
     auto const emitted = ui::screen("author.dialog.actions", [](ui::Scope& screen) {

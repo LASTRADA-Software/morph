@@ -2228,6 +2228,32 @@ struct BadgeModel {
     Prop<bool> visible = true;
 };
 
+/// @brief A `headMenuItem` part, lowered in the screen scope: the entry as a menu item, with the id
+///        `ScreenHead::choose` takes and its submenu's entries beside it.
+struct HeadMenuModel {
+    /// @brief The entry's id; empty for a separator or a submenu.
+    std::string id;
+    /// @brief The part's JSON Pointer, where a diagnostic about it is reported.
+    std::string path;
+    /// @brief The entry, its own `items` empty.
+    MenuItem item;
+    /// @brief The submenu's entries; empty for an entry that is chosen.
+    std::vector<HeadMenuModel> items;
+};
+
+/// @brief Collects the `onClick` lists of menu entries, submenus included.
+/// @param entries The entries.
+/// @param lists Where they go, in document order.
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+inline void menuCommandLists(std::span<DocNodePtr const> entries, std::vector<Commands const*>& lists) {
+    for (DocNodePtr const& entry : entries) {
+        if (Commands const* const commands = entry->event("onClick")) {
+            lists.push_back(commands);
+        }
+        menuCommandLists(entry->partList("items"), lists);
+    }
+}
+
 /// @brief A kind's key spec, from the kind table.
 /// @param kind The kind spec.
 /// @param key  The key.
@@ -2510,6 +2536,12 @@ public:
     /// @return The models, in the parts' order.
     [[nodiscard]] ActionModels lowerActionParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
 
+    /// @brief Lowers a screen head's `menu` in the scope @p ctx names.
+    /// @param parts The `headMenuItem` parts.
+    /// @param ctx   The scope.
+    /// @return The entries, in document order, submenus included.
+    [[nodiscard]] std::vector<HeadMenuModel> lowerHeadMenu(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
+
     /// @brief An overlay's actions as the action bar its footer shows: a button per action, test id
     ///        `action_<id>`, shown and enabled as the action is.
     /// @param actions The lowered actions, in order.
@@ -2714,6 +2746,7 @@ private:
     void layoutOf(DocNode const& node, LowerCtx const& ctx, LayoutHints& layout);
     void fieldOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, FieldState& field);
     std::vector<MenuItem> menuItems(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
+    MenuItem menuItemOf(DocNode const& part, LowerCtx const& ctx);
     void ownQueries(DocNode const& node, RtScope const& scope, BoundaryRuntime& boundary,
                     std::set<std::string, std::less<>>& seen);
     void ownQueriesOf(ExprPtr const& expr, RtScope const& scope, BoundaryRuntime& boundary,
@@ -2826,6 +2859,33 @@ struct HeadAction {
     bool operator==(HeadAction const&) const = default;
 };
 
+/// @brief An entry of a screen head's own menu, as its handle answers it: a menu entry with the id
+///        `ScreenHead::choose` takes.
+struct HeadMenuEntry {
+    /// @brief The entry's id, what `ScreenHead::choose` takes; empty for a separator or a submenu.
+    std::string id;
+    /// @brief The caption.
+    std::string label;
+    /// @brief The name of an icon; empty for none.
+    std::string icon;
+    /// @brief The chord shown beside the label; empty for none.
+    std::string keys;
+    /// @brief Engaged: a checkable entry with this mark; `nullopt`: not checkable.
+    std::optional<bool> checked;
+    /// @brief Whether it can be chosen, or its submenu opened.
+    bool enabled = true;
+    /// @brief The submenu's visible entries; empty for an entry that is chosen.
+    std::vector<HeadMenuEntry> items;
+    /// @brief Whether it is a line between entries.
+    bool separator = false;
+    /// @brief A muted line of help with the entry; empty for none.
+    std::string description;
+
+    /// @brief Memberwise equality, submenus included.
+    /// @return Whether every member matches.
+    bool operator==(HeadMenuEntry const&) const = default;
+};
+
 /// @brief A mounted screen: its scopes, its view mounted through `Mounted`, and what its host asks of it.
 ///
 /// Neither copyable nor movable. It belongs to the runtime's owner; the runtime, the session, the dispatcher and
@@ -2849,6 +2909,7 @@ public:
         _mounted.reset();
         _headActions.clear();
         _headStatus.clear();
+        _headMenu.clear();
         _scope.reset();
     }
 
@@ -2936,6 +2997,42 @@ public:
         }
         if (found->run) {
             found->run();
+        }
+        return true;
+    }
+
+    /// @brief The head menu's visible entries, in order, each with whether it is enabled. A separator that hidden
+    ///        entries leave first, last or next to another is left out, as a menu's mount leaves it out. A tracked
+    ///        read.
+    /// @return They; empty when the document declares no `menu`.
+    [[nodiscard]] std::vector<HeadMenuEntry> menu() const { return shownHeadMenu(_headMenu); }
+
+    /// @brief Evaluates the document's `menuLabel`, the accessible name of the head menu's trigger.
+    /// @return It, or "More actions" when the document declares none.
+    [[nodiscard]] std::string menuLabel() const {
+        if (!_core->doc().menuLabel) {
+            return "More actions";
+        }
+        return detail::textOf(detail::evalIn(*_scope, nullptr, _core->doc().menuLabel), _core->session.formatting());
+    }
+
+    /// @brief Runs a head menu entry's `onClick` as a user event in the screen scope, in one batch.
+    /// @param entryId The entry's id.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the menu does not hold, or holds hidden or
+    ///         disabled (the entry itself or a submenu it is in).
+    bool chooseMenuEntry(std::string_view entryId) {
+        FoundEntry const found = runtime().untracked([&] { return findHeadEntry(_headMenu, entryId, FoundEntry{}); });
+        if (found.model == nullptr) {
+            _core->report("/menu", "head menu entry " + std::string{entryId} + " is unknown");
+            return false;
+        }
+        if (!found.visible || !found.enabled) {
+            _core->report(found.model->path,
+                          "head menu entry " + found.model->id + (found.visible ? " is disabled" : " is hidden"));
+            return false;
+        }
+        if (found.model->item.onSelect) {
+            found.model->item.onSelect();
         }
         return true;
     }
@@ -3072,12 +3169,69 @@ private:
         return std::ranges::find(options, text) != options.end();
     }
 
+    // A head menu entry by id, with whether it and every submenu it is in are visible and enabled.
+    struct FoundEntry {
+        detail::HeadMenuModel const* model = nullptr;
+        bool visible = true;
+        bool enabled = true;
+    };
+
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static FoundEntry findHeadEntry(std::vector<detail::HeadMenuModel> const& level,
+                                                  std::string_view entryId, FoundEntry const& outer) {
+        for (detail::HeadMenuModel const& model : level) {
+            FoundEntry const here{.model = &model,
+                                  .visible = outer.visible && model.item.visible.evaluate(),
+                                  .enabled = outer.enabled && model.item.enabled.evaluate()};
+            if (!model.id.empty() && model.id == entryId) {
+                return here;
+            }
+            if (FoundEntry const inner = findHeadEntry(model.items, entryId, here); inner.model != nullptr) {
+                return inner;
+            }
+        }
+        return FoundEntry{};
+    }
+
+    // One level of the head menu as it shows now: hidden entries left out, and a separator they leave first, last or
+    // next to another with them.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static std::vector<HeadMenuEntry> shownHeadMenu(std::vector<detail::HeadMenuModel> const& level) {
+        std::vector<HeadMenuEntry> shown;
+        for (detail::HeadMenuModel const& model : level) {
+            MenuItem const& item = model.item;
+            if (item.separator) {
+                if (!shown.empty() && !shown.back().separator) {
+                    shown.push_back(HeadMenuEntry{.separator = true});
+                }
+                continue;
+            }
+            if (!item.visible.evaluate()) {
+                continue;
+            }
+            shown.push_back(HeadMenuEntry{.id = model.id,
+                                          .label = item.label.evaluate(),
+                                          .icon = item.icon,
+                                          .keys = item.keys,
+                                          .checked = item.checked.evaluate(),
+                                          .enabled = item.enabled.evaluate(),
+                                          .items = shownHeadMenu(model.items),
+                                          .separator = false,
+                                          .description = item.description.evaluate()});
+        }
+        if (!shown.empty() && shown.back().separator) {
+            shown.pop_back();
+        }
+        return shown;
+    }
+
     std::unique_ptr<detail::ScreenCore> _core;
     std::shared_ptr<detail::RtScope> _scope;
     std::optional<Mounted> _mounted;
     // The head's parts, bound in the screen scope.
     std::vector<detail::BadgeModel> _headStatus;
     detail::ActionModels _headActions;
+    std::vector<detail::HeadMenuModel> _headMenu;
 };
 
 /// @brief The app document mounted as the root scope every screen of the session shares (spec 6 §5).
@@ -6392,38 +6546,58 @@ inline void ScreenCore::fieldOf(DocNode const& node, LowerCtx const& ctx, Elemen
     }
 }
 
+inline MenuItem ScreenCore::menuItemOf(DocNode const& part, LowerCtx const& ctx) {
+    MenuItem item;
+    if (part.flag("separator")) {
+        item.separator = true;
+        return item;
+    }
+    item.label = bindProp<std::string>(ctx, part.prop("label"), std::string{}, stringOf);
+    item.description = bindProp<std::string>(ctx, part.prop("description"), std::string{}, stringOf);
+    item.visible = bindProp<bool>(ctx, part.prop("visible"), true, boolOf);
+    if (Commands const* const commands = part.event("onClick")) {
+        item.onSelect = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
+    }
+    if (ExprPtr const icon = part.prop("icon")) {
+        item.icon = textOf(once(ctx, icon), session.formatting());
+    }
+    item.keys = std::string{part.name("keys")};
+    if (ExprPtr const checked = part.prop("checked")) {
+        item.checked = slotProp<std::optional<bool>>(
+            [scope = ctx.scope, bindings = ctx.bindings, checked]() -> std::optional<bool> {
+                Value const value = evalIn(*scope, bindings.get(), checked);
+                bool const* const flag = value.asBool();
+                return flag == nullptr ? std::nullopt : std::optional<bool>{*flag};
+            });
+    }
+    item.enabled = bindProp<bool>(ctx, part.prop("enabled"), true, boolOf);
+    return item;
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
 inline std::vector<MenuItem> ScreenCore::menuItems(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
     std::vector<MenuItem> items;
     for (DocNodePtr const& part : parts) {
-        MenuItem item;
-        if (part->flag("separator")) {
-            item.separator = true;
-            items.push_back(std::move(item));
-            continue;
+        MenuItem item = menuItemOf(*part, ctx);
+        if (!item.separator) {
+            item.items = menuItems(part->partList("items"), ctx);
         }
-        item.label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf);
-        item.description = bindProp<std::string>(ctx, part->prop("description"), std::string{}, stringOf);
-        item.visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf);
-        if (Commands const* const commands = part->event("onClick")) {
-            item.onSelect = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
-        }
-        if (ExprPtr const icon = part->prop("icon")) {
-            item.icon = textOf(once(ctx, icon), session.formatting());
-        }
-        item.keys = std::string{part->name("keys")};
-        if (ExprPtr const checked = part->prop("checked")) {
-            item.checked = slotProp<std::optional<bool>>(
-                [scope = ctx.scope, bindings = ctx.bindings, checked]() -> std::optional<bool> {
-                    Value const value = evalIn(*scope, bindings.get(), checked);
-                    bool const* const flag = value.asBool();
-                    return flag == nullptr ? std::nullopt : std::optional<bool>{*flag};
-                });
-        }
-        item.enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf);
-        item.items = menuItems(part->partList("items"), ctx);
         items.push_back(std::move(item));
     }
     return items;
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+inline std::vector<HeadMenuModel> ScreenCore::lowerHeadMenu(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
+    std::vector<HeadMenuModel> models;
+    models.reserve(parts.size());
+    for (DocNodePtr const& part : parts) {
+        models.push_back(HeadMenuModel{.id = part->id,
+                                       .path = part->path,
+                                       .item = menuItemOf(*part, ctx),
+                                       .items = lowerHeadMenu(part->partList("items"), ctx)});
+    }
+    return models;
 }
 
 inline ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
@@ -8925,6 +9099,7 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
             lists.push_back(commands);
         }
     }
+    detail::menuCommandLists(doc->menu, lists);
     Node root = runtime.untracked([&] {
         core.declare(scope, &doc->scope, {doc->view.get()}, lists);
         detail::LowerCtx const ctx{
@@ -8932,6 +9107,7 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
         Node lowered = core.lower(*doc->view, ctx);
         screen->_headStatus = core.lowerBadgeParts(doc->status, ctx);
         screen->_headActions = core.lowerActionParts(doc->actions, ctx);
+        screen->_headMenu = core.lowerHeadMenu(doc->menu, ctx);
         if (!doc->keys.empty()) {
             std::vector<KeyBinding> keys;
             for (auto const& [chord, commands] : doc->keys) {

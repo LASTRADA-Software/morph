@@ -60,7 +60,7 @@ declare the app-only customization kinds.
 | `vocab` | `vocab` | `ui/1` (`kVocabulary`) |
 | `id` | `id` | Non-empty |
 | `title`, `identity`, `dirty` | same | Expressions; `dirty` is a condition |
-| `subtitle`, `status`, `actions` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
+| `subtitle`, `status`, `actions`, `menu`, `menuLabel` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
 | `params` | `params` | Name to type, in declaration order |
 | `scope` | `models`, `state`, `let`, `queries`, `mutations`, `watch`, `checks` | The screen scope's declarations |
 | `lifecycle` | `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange` | Command lists |
@@ -85,8 +85,16 @@ rather than having it ignored: the author meant a refresh the client would silen
 ### The head
 
 A screen's head is what a shell shows above it beside the title: `subtitle` (an expression), `status` (parts
-`headBadge`: `{tone, text, icon, visible}`) and `actions` (parts `actionButton`). All are evaluated in the screen
-scope, and the app document, which has no view, refuses them.
+`headBadge`: `{tone, text, icon, visible}`), `actions` (parts `actionButton`) and its own `menu` (parts
+`headMenuItem`), with `menuLabel` (an expression, the menu trigger's accessible name; default `More actions`). All
+are evaluated in the screen scope, and the app document, which has no view, refuses them.
+
+A `headMenuItem` part takes a `menu` entry's keys (`label`, `icon`, `keys`, `checked`, `enabled`, `onClick`,
+`items`, `separator`, `description`, `visible`; `items` are head menu items too) and `id`, a name. An entry that is
+chosen, neither a separator nor a submenu, has an `id`, unique across the whole menu, which the shell names it by
+(`ScreenHead::choose`); a separator or a submenu takes none. The shell draws the menu after the actions as one
+icon button (`more`) that opens the entries; the head's actions are never moved into it, so an author who wants an
+action there on `compact` writes it in both with opposite `visible` conditions.
 
 An `actionButton` part is one button of a list:
 

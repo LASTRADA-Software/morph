@@ -68,6 +68,23 @@ constexpr std::string_view kHeaded = R"({
   "state": { "stage": { "init": "Editing" } },
   "view": { "kind": "text", "testId": "body", "text": { "ref": "stage" } } })";
 
+/// A screen whose head has only a menu: an entry, a separator, an entry shown while `retireShown`, and a submenu.
+constexpr std::string_view kMenued = R"({
+  "vocab": "ui/1", "id": "menued", "title": "Instrument", "menuLabel": "More instrument actions",
+  "menu": [
+    { "id": "calibrate", "label": "Calibrate", "onClick": [ { "set": "log", "value": "calibrated" } ] },
+    { "separator": true },
+    { "id": "retire", "label": "Take out of service", "description": "needs reason",
+      "visible": { "ref": "retireShown" }, "onClick": [ { "set": "log", "value": "retired" } ] },
+    { "label": "Export", "items": [
+      { "id": "csv", "label": "CSV", "onClick": [ { "set": "log", "value": "csv" } ] } ] }
+  ],
+  "state": { "log": { "init": "" }, "retireShown": { "init": true } },
+  "view": { "kind": "column", "children": [
+    { "kind": "text", "testId": "log", "text": { "ref": "log" } },
+    { "kind": "button", "testId": "hide", "label": "hide", "onClick": [ { "set": "retireShown", "value": false } ] }
+  ] } })";
+
 /// What the document host reported, across the tests that read it.
 std::vector<std::string>& reported() {
     static std::vector<std::string> reasons;
@@ -96,7 +113,8 @@ private:
             {"note", loadOrFail(kNote, morph::ui::testing::corpusCatalog())},
             {"home", loadOrFail(kHome, morph::ui::testing::corpusCatalog())},
             {"draft", loadOrFail(kDraft, morph::ui::testing::corpusCatalog())},
-            {"headed", loadOrFail(kHeaded, morph::ui::testing::corpusCatalog())}};
+            {"headed", loadOrFail(kHeaded, morph::ui::testing::corpusCatalog())},
+            {"menued", loadOrFail(kMenued, morph::ui::testing::corpusCatalog())}};
         DocumentScreenHostOptions made;
         made.documents = [](std::string_view id) -> std::shared_ptr<Document const> {
             auto const found = documents.find(id);
@@ -397,6 +415,68 @@ TEST_CASE("workspace: a tab's handle is reachable, and forceCloseAll closes ever
     harness.settle();
     CHECK(shell.tabs().empty());
     CHECK(shell.activeHandle() == nullptr);
+}
+
+// Mutation: leave the menu out of buildHeadRow (no `head_menu`), or out of headHasContent (a head with a menu only is
+// hidden); let a hidden entry be chosen (no "is hidden").
+TEST_CASE("workspace: a head's own menu is drawn behind one button, and an entry is chosen by its id",
+          "[ui][workspace]") {
+    using morph::ui::HeadMenuEntry;
+    reported().clear();
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("menued", {}) == 0U);
+    harness.settle();
+    morph::ui::ScreenHead* const head = shell.handleOf(0)->head();
+    REQUIRE(head != nullptr);
+    REQUIRE(head->menu() != nullptr);
+    CHECK(head->menu()->peek() ==
+          std::vector<HeadMenuEntry>{
+              {.id = "calibrate", .label = "Calibrate"},
+              {.separator = true},
+              {.id = "retire", .label = "Take out of service", .description = "needs reason"},
+              {.label = "Export", .items = {{.id = "csv", .label = "CSV"}}}});
+    REQUIRE(head->menuLabel() != nullptr);
+    CHECK(head->menuLabel()->peek() == "More instrument actions");
+    CHECK(shell.activeHeadShown());
+
+    // The row draws the menu as a button-style menu: the icon alone, named by the head's menuLabel.
+    CHECK(harness.backend.prop(harness.byTestId("Row", "head"), "visible") != "false");
+    int const menu = harness.byTestId("Menu", "head_menu");
+    CHECK(harness.backend.prop(menu, "style") == "Button");
+    CHECK(harness.backend.prop(menu, "icon") == "more");
+    CHECK(harness.backend.prop(menu, "items") ==
+          "[Calibrate,;separator,Take out of service;description=needs reason,Export[CSV]]");
+    CHECK(harness.backend.dump().contains("More instrument actions"));
+
+    harness.backend.chooseMenuEntry(menu, {2});
+    harness.settle();
+    CHECK(harness.text("log") == "retired");
+    harness.backend.chooseMenuEntry(menu, {3, 0});
+    harness.settle();
+    CHECK(harness.text("log") == "csv");
+
+    // Hiding an entry draws the menu again without it; the entry past it keeps its own handler.
+    harness.backend.click(harness.byTestId("Button", "hide"));
+    harness.settle();
+    int const redrawn = harness.byTestId("Menu", "head_menu");
+    CHECK(harness.backend.prop(redrawn, "items") == "[Calibrate,;separator,Export[CSV]]");
+    harness.backend.chooseMenuEntry(redrawn, {0});
+    harness.settle();
+    CHECK(harness.text("log") == "calibrated");
+    harness.backend.chooseMenuEntry(redrawn, {2, 0});
+    harness.settle();
+    CHECK(harness.text("log") == "csv");
+
+    // Choosing by id refuses a hidden or an unknown entry by name, and runs nothing.
+    CHECK_FALSE(head->choose("retire"));
+    CHECK_FALSE(head->choose("nowhere"));
+    CHECK(head->choose("calibrate"));
+    harness.settle();
+    CHECK(harness.text("log") == "calibrated");
+    CHECK(reported() ==
+          std::vector<std::string>{"head menu entry retire is hidden", "head menu entry nowhere is unknown"});
 }
 
 // Mutation: answer null from a document screen's `head()` (nothing reaches the head or the row).

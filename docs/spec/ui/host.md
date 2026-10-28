@@ -32,7 +32,7 @@ and is its `InterpreterHost` for `navigate`.
 | `ParamMap` | A screen's params by name: `ValueRecord`, what `Interpreter::mount` takes. |
 | `MountError` | `{screenId, reason}`: an unknown screen, a refused param, a refused mount. |
 | `ScreenHandle` | One mounted screen: `title()`, `dirty()` and `identity()` as `reactive::Computed`, `requestClose(done)`, `forceClose()`, the save seam `canSave()` and `save(done)`, and `head()`. |
-| `ScreenHead` | A screen's head beside its title: `subtitle()`, `status()` (the visible `HeadBadge{text, tone, icon}`s) and `actions()` (the visible `HeadAction{id, label, icon, emphasis, enabled}`s) as `reactive::Computed`, and `run(actionId)`. |
+| `ScreenHead` | A screen's head beside its title: `subtitle()`, `status()` (the visible `HeadBadge{text, tone, icon}`s) and `actions()` (the visible `HeadAction{id, label, icon, emphasis, enabled}`s) as `reactive::Computed`, and `run(actionId)`; the head's own menu, `menu()` (the visible `HeadMenuEntry`s) and `menuLabel()`, nullable `reactive::Computed` pointers, and `choose(entryId)`, with defaults for a head without a menu. |
 | `ScreenHost` | `mount(screenId, params)`, `identityOf(screenId, params)`, and `onNavigate(screenId, params)`, which the host implements. |
 
 `identity()` is beside spec 6 §4's `title` and `dirty` because a host re-keys a tab when a screen's identity
@@ -117,6 +117,16 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
   (`head action <id> is unknown`, `… is hidden`, `… is disabled`). `subtitle()` keeps its last value once the screen
   has closed, `status()` and `actions()` are then empty, and after a `remount` the head follows the new screen.
   `HeadBadge` and `HeadAction` are declared in `interpreter.hpp`, since `Screen` answers them.
+- The head's own menu is data too. `menu()` of a document screen is never null: its visible entries, each a
+  `HeadMenuEntry{id, label, icon, keys, checked, enabled, items, separator, description}`, with a separator that
+  hidden entries leave first, last or beside another left out, as a `menu` node's mount leaves it out; empty when
+  the document declares no `menu`, and once the screen has closed. `menuLabel()` is the document's `menuLabel` as
+  text, `More actions` by default, and keeps its last value once the screen has closed. `choose(id)` runs the entry's
+  `onClick` as a user event in the screen scope, in one batch, and answers `true`; for an id the menu does not hold,
+  or holds hidden or disabled (itself or a submenu it is in), it answers `false` and reports `head menu entry <id> is
+  unknown`, `… is hidden` or `… is disabled`. Choosing by id rather than by place is what keeps an entry hidden
+  between drawing and choosing from running its neighbour. A host screen's head answers null for both, and `false`
+  from `choose`, unless it overrides them.
 
 ## The close protocol
 

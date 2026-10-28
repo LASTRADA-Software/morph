@@ -105,7 +105,7 @@ case, the rows of a `forEach` or `table` — takes a builder function that recei
 | `mutation<A>(name, model, {.body, .concurrency, .serialKey, .optimistic, .onSuccess, .onError, .offlineQueue})` | `mutations.name`; `.optimistic` is an `Optimistic{.query, .at, .key, .with}`, read against the run's body bound as `body` |
 | `watch(on, commands, Source::User)`, `check({.name, .assertion, .message, .targets, .blocking})` | `watch`, `checks` |
 | `title`, `identity`, `dirty`, `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange`, `key(chord, commands)`, `showErrors`, `prefetch(query)` | The screen's own keys |
-| `subtitle(expr)`, `status(HeadBadgeOptions)`, `action(ActionButtonOptions)` | The screen's head: its subtitle, and a status badge or an action appended in order |
+| `subtitle(expr)`, `status(HeadBadgeOptions)`, `action(ActionButtonOptions)`, `menu(MenuItem)`, `menuLabel(expr)` | The screen's head: its subtitle, and a status badge, an action or an entry of its own menu appended in order; the menu trigger's accessible name |
 | `component(name, {.qml \| .host + .version, .props, .events, .fallback})` | `components.name`, returning the `ComponentRef` `custom` names |
 | `columnsPoint`, `arrangePoint`, `choicePoint`, `valuePoint<T>`, `point(name, "layout" \| "saved")` | `customize.name`, returning the `Point` `customize`, `resetPrefs` and `pref` name |
 
@@ -176,8 +176,9 @@ expression of one),
 
 - **`badge`** takes its text, tone and icon, or `BadgeOptions{text, tone, icon, onRemove, removeLabel}` for one the
   user can remove.
-- **`menu`** takes `MenuItem{label, icon, keys, checked, enabled, onClick, items, separator, description, visible}`
-  entries, each key written only when given; `menuSeparator()` is an entry with `separator`, which writes nothing else.
+- **`menu`** takes `MenuItem{id, label, icon, keys, checked, enabled, onClick, items, separator, description,
+  visible}` entries, each key written only when given (`id` names an entry of a screen head's own menu, `Scope::menu`;
+  a `menu` node's entries give none); `menuSeparator()` is an entry with `separator`, which writes nothing else.
   `menuButton(MenuButtonOptions{label, icon, emphasis}, items)` writes a `style: button` menu; an icon-only one names
   itself with `.a11y(...)`.
 - **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected}`: an absent `style`
