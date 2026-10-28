@@ -1345,3 +1345,35 @@ TEST_CASE("qt_quick widgets: a danger outlined button, an outline badge, and a s
     CHECK(std::abs(segments.at(0)->width() - segments.at(1)->width()) <= 1);
     CHECK(segments.at(0)->width() > 100);
 }
+
+// Mutation: leave the content column outside the `Button` (the press on the third line then reaches nothing).
+TEST_CASE("qt_quick widgets: a list entry's content fills the entry, and a press anywhere on it clicks the entry",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const item = scene.backend().createButton(column.get());
+    item->setLabel("WS-2026-0412, 2 h");
+    item->setStyle(ui::ButtonStyle::Item);
+    item->setSelected(true);
+    int clicks = 0;
+    item->setOnClick([&clicks] { ++clicks; });
+    auto const lines = scene.backend().createStack(&item->content(), ui::Axis::Vertical);
+    auto const first = scene.backend().createText(lines.get());
+    first->setText("WS-2026-0412");
+    auto const second = scene.backend().createText(lines.get());
+    second->setText("Assay");
+    auto const third = scene.backend().createText(lines.get());
+    third->setText("Tags");
+    scene.settle();
+    QQuickItem& entry = Scene::itemOf(*item);
+    QList<QQuickItem*> const buttons = Scene::itemsOf(entry, "QQuickButton");
+    REQUIRE_FALSE(buttons.isEmpty());
+    auto const* const background = buttons.front()->property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    CHECK(background->height() == entry.height());
+    CHECK(entry.height() >= 3 * Scene::itemOf(*first).height());
+    CHECK(Scene::itemOf(*third).isVisible());
+    CHECK(entry.property("accessibleName").toString() == QStringLiteral("WS-2026-0412, 2 h"));
+    scene.click(Scene::itemOf(*third));
+    CHECK(clicks == 1);
+}

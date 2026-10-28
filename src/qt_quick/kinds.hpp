@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <morph/qt_quick/backend.hpp>
 #include <morph/ui/backend.hpp>
 #include <optional>
@@ -149,16 +150,31 @@ public:
 
 // ── Leaves ────────────────────────────────────────────────────────────────
 
-class ButtonImpl final : public ItemWidget<ui::ButtonWidget> {
+/// A button; a list entry with content holds it in a slot inside the `Button`, so a press on it is the button's.
+class ButtonImpl final : public ItemWidget<ui::ButtonWidget>, public ContainerCore {
 public:
     ButtonImpl(Context& context, ui::ContainerWidget* parent);
+    ~ButtonImpl() override;
+    ButtonImpl(ButtonImpl const&) = delete;
+    ButtonImpl& operator=(ButtonImpl const&) = delete;
+    ButtonImpl(ButtonImpl&&) = delete;
+    ButtonImpl& operator=(ButtonImpl&&) = delete;
     void setLabel(std::string_view label) override;
     void setOnClick(ui::Action onClick) override;
     void setEmphasis(ui::ButtonEmphasis emphasis) override;
     void setIcon(std::string_view icon) override;
     void setStyle(ui::ButtonStyle style) override;
     void setSelected(bool selected) override;
+    /// The content, a `MorphSlot` in the button's `content` item, made the first time it is asked for.
+    ui::ContainerWidget& content() override;
     [[nodiscard]] std::string shownText() const override;
+
+protected:
+    [[nodiscard]] QQuickItem* contentFor(ItemBase& child) override;
+    [[nodiscard]] QObject* scheme() const override { return part("scheme"); }
+
+private:
+    std::unique_ptr<ContainerItemWidget<ui::SlotWidget>> _content;
 };
 
 class MenuImpl final : public ItemWidget<ui::MenuWidget> {

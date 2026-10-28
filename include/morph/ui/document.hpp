@@ -749,13 +749,14 @@ inline constexpr std::array<std::string_view, 3> kTransferValues = {"progress", 
 inline constexpr std::array<KeySpec, 3> kTextKeys = {
     {{"text", Shape::Expr}, {"spans", Shape::Expr}, {"role", Shape::Expr}}};
 /// @brief The keys of `button`.
-inline constexpr std::array<KeySpec, 7> kButtonKeys = {{{"label", Shape::Expr},
+inline constexpr std::array<KeySpec, 8> kButtonKeys = {{{"label", Shape::Expr},
                                                         {"icon", Shape::Expr},
                                                         {"emphasis", Shape::Text},
                                                         {"style", Shape::Text},
                                                         {"selected", Shape::Condition},
                                                         {"onClick", Shape::Commands},
-                                                        {"onActivate", Shape::Commands}}};
+                                                        {"onActivate", Shape::Commands},
+                                                        {"children", Shape::Nodes}}};
 /// @brief The keys of `textInput`.
 inline constexpr std::array<KeySpec, 11> kTextInputKeys = {{{"value", Shape::Expr},
                                                             {"placeholder", Shape::Expr},
@@ -3477,6 +3478,7 @@ private:
             checkChoice(node, "emphasis", kEmphasis);
             static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
             checkChoice(node, "style", kStyles);
+            checkEntryContent(node);
         } else if (node.kind == "grid") {
             checkGrid(node);
         } else if (node.kind == "menu") {
@@ -3759,6 +3761,59 @@ private:
                 checkLiteralRun(run->literal, run->path);
             } else if (run->kind == ExprKind::Object) {
                 checkRunRecord(*run);
+            }
+        }
+    }
+
+    // A button's `children`: only on a list entry, and display kinds only, at any depth, so the entry stays one
+    // control with one activation. A list of what is allowed keeps a kind added later out until it is judged.
+    static void checkEntryContent(DocNode const& button) {
+        auto const found = button.children.find("children");
+        if (found == button.children.end() || found->second.empty()) {
+            return;
+        }
+        if (button.name("style") != "item") {
+            refuse(pointerAppend(button.path, "children"), "only a list entry holds content; a push button has a label");
+        }
+        for (DocNodePtr const& child : found->second) {
+            checkReadOnlyContent(*child);
+        }
+    }
+
+    // NOLINTNEXTLINE(misc-no-recursion): an entry's content is a tree of nodes.
+    static void checkReadOnlyContent(DocNode const& node) {
+        static constexpr std::array<std::string_view, 12> kDisplay = {
+            "text", "badge", "keyValue", "progress", "steps", "busy", "spacer", "column", "row", "grid", "forEach",
+            "switch"};
+        static constexpr std::string_view kReason = "an entry's content is read-only; put the control beside the entry";
+        if (!listed(kDisplay, node.kind)) {
+            refuse(node.path, std::string{kReason});
+        }
+        for (std::string_view const key : {std::string_view{"autofocus"}}) {
+            if (node.prop(key) != nullptr) {
+                refuse(pointerAppend(node.path, key), std::string{kReason});
+            }
+        }
+        if (!node.keys.empty()) {
+            refuse(pointerAppend(node.path, "keys"), std::string{kReason});
+        }
+        for (std::string_view const part : {std::string_view{"drag"}, std::string_view{"drop"}}) {
+            if (!node.partList(part).empty()) {
+                refuse(pointerAppend(node.path, part), std::string{kReason});
+            }
+        }
+        for (auto const& [key, nodes] : node.children) {
+            for (DocNodePtr const& child : nodes) {
+                checkReadOnlyContent(*child);
+            }
+        }
+        for (auto const& [key, parts] : node.parts) {
+            for (DocNodePtr const& part : parts) {
+                for (auto const& [childKey, nodes] : part->children) {
+                    for (DocNodePtr const& child : nodes) {
+                        checkReadOnlyContent(*child);
+                    }
+                }
             }
         }
     }

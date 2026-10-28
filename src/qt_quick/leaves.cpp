@@ -53,12 +53,35 @@ QVariantList menuEntries(std::vector<ui::MenuEntry> const& entries) {
 }
 // NOLINTEND(misc-no-recursion)
 
+// A list entry's content: a slot that never scrolls, since the entry grows with what it holds.
+class EntryContent final : public ContainerItemWidget<ui::SlotWidget> {
+public:
+    using ContainerItemWidget<ui::SlotWidget>::ContainerItemWidget;
+    void setScrollable(bool scrollable) override { static_cast<void>(scrollable); }
+};
+
 }  // namespace
 
 // ── Button ────────────────────────────────────────────────────────────────
 
 ButtonImpl::ButtonImpl(Context& context, ui::ContainerWidget* parent)
     : ItemWidget{context, QStringLiteral("MorphButton"), parent} {}
+
+ButtonImpl::~ButtonImpl() { _content.reset(); }
+
+ui::ContainerWidget& ButtonImpl::content() {
+    if (_content == nullptr) {
+        write("hasContent", true);
+        _content =
+            std::make_unique<EntryContent>(context(), QStringLiteral("MorphSlot"), static_cast<ContainerCore&>(*this));
+    }
+    return *_content;
+}
+
+QQuickItem* ButtonImpl::contentFor(ItemBase& child) {
+    static_cast<void>(child);
+    return qobject_cast<QQuickItem*>(part("content"));
+}
 
 void ButtonImpl::setLabel(std::string_view label) { write("label", toQString(label)); }
 

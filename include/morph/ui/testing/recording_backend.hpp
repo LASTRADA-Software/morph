@@ -565,7 +565,7 @@ public:
     /// @param widget The fake widget.
     /// @param initial Properties fixed at creation; recorded without a log line.
     /// @return The new widget's id.
-    int create(std::string kind, ContainerWidget const* parent, Widget& widget, PropList initial) {
+    int create(std::string kind, Widget const* parent, Widget& widget, PropList initial) {
         int const widgetId = ++_nextId;
         int const parentId = parent == nullptr ? 0 : idOf(*parent);
         Record record{.id = widgetId, .kind = std::move(kind), .parent = parentId, .widget = &widget};
@@ -753,9 +753,9 @@ public:
     /// @brief Records the new widget, appended to @p parent, and logs its creation.
     /// @param store Where the widget records itself.
     /// @param kind The kind shown in the log and the dump.
-    /// @param parent The container it is appended to, or null for a root.
+    /// @param parent The container it is appended to (or the button whose content it is), or null for a root.
     /// @param initial Properties fixed at creation.
-    FakeLeaf(std::shared_ptr<RecordStore> store, std::string kind, ContainerWidget const* parent,
+    FakeLeaf(std::shared_ptr<RecordStore> store, std::string kind, Widget const* parent,
              PropList initial = {})
         : _store{std::move(store)}, _id{_store->create(std::move(kind), parent, *this, std::move(initial))} {}
 
@@ -949,16 +949,40 @@ public:
     void setRole(TextRole role) override { set("role", enumName(role)); }
 };
 
-/// @brief A fake `ButtonWidget`: properties `label`, `emphasis`, `icon`, `style` and `selected`.
+/// @brief A fake `SlotWidget`: property `scrollable`, recorded once set.
+class FakeSlot final : public FakeContainer<SlotWidget> {
+public:
+    using FakeContainer<SlotWidget>::FakeContainer;
+    void setScrollable(bool scrollable) override { set("scrollable", scrollable ? "true" : "false"); }
+};
+
+/// @brief A fake `ButtonWidget`: properties `label`, `emphasis`, `icon`, `style` and `selected`; a `Column` child
+///        once its content is asked for.
 class FakeButton final : public FakeLeaf<ButtonWidget> {
 public:
     using FakeLeaf<ButtonWidget>::FakeLeaf;
+    ~FakeButton() override { _content.reset(); }
+    FakeButton(FakeButton const&) = delete;
+    FakeButton& operator=(FakeButton const&) = delete;
+    FakeButton(FakeButton&&) = delete;
+    FakeButton& operator=(FakeButton&&) = delete;
+    /// @brief The entry's content, a `Column` child of the button.
+    /// @return It.
+    ContainerWidget& content() override {
+        if (_content == nullptr) {
+            _content = std::make_unique<FakeSlot>(sharedStore(), "Column", this);
+        }
+        return *_content;
+    }
     void setLabel(std::string_view label) override { set("label", formatText(label)); }
     void setOnClick(Action onClick) override { callbacks().click = std::move(onClick); }
     void setEmphasis(ButtonEmphasis emphasis) override { set("emphasis", enumName(emphasis)); }
     void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
     void setStyle(ButtonStyle style) override { set("style", enumName(style)); }
     void setSelected(bool selected) override { set("selected", selected ? "true" : "false"); }
+
+private:
+    std::unique_ptr<FakeSlot> _content;
 };
 
 /// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `decimals`, `icon`, `caption`,
@@ -1248,13 +1272,6 @@ public:
     void setOnPicked(std::function<void(std::string)> onPicked) override { callbacks().picked = std::move(onPicked); }
 };
 
-/// @brief A fake `SlotWidget`: property `scrollable`, recorded once set.
-class FakeSlot final : public FakeContainer<SlotWidget> {
-public:
-    using FakeContainer<SlotWidget>::FakeContainer;
-    void setScrollable(bool scrollable) override { set("scrollable", scrollable ? "true" : "false"); }
-};
-
 /// @brief A fake `TabsWidget`: properties `tabs`, `selected`, `barShown`.
 class FakeTabs final : public FakeContainer<TabsWidget> {
 public:
@@ -1288,7 +1305,8 @@ private:
     std::unique_ptr<FakeSlot> _footer;
 };
 
-/// @brief A fake `DialogWidget`: properties `open`, `title`, `description`; a `Footer` child once its footer is asked for.
+/// @brief A fake `DialogWidget`: properties `open`, `title`, `description`; a `Footer` child once its footer is asked
+///        for.
 class FakeDialog final : public FakeOverlay<DialogWidget> {
 public:
     using FakeOverlay<DialogWidget>::FakeOverlay;
@@ -1500,7 +1518,8 @@ public:
     void setOnAction(Action onAction) override { callbacks().action = std::move(onAction); }
 };
 
-/// @brief A fake `DrawerWidget`: properties `side`, `open`, `title`, `description`; a `Footer` child once its footer is asked for.
+/// @brief A fake `DrawerWidget`: properties `side`, `open`, `title`, `description`; a `Footer` child once its footer
+///        is asked for.
 class FakeDrawer final : public FakeOverlay<DrawerWidget> {
 public:
     using FakeOverlay<DrawerWidget>::FakeOverlay;
@@ -2250,11 +2269,20 @@ public:
         }
     }
 
-    /// @brief Activates a button, or the action button of a banner or an empty state.
-    /// @param widgetId The button, banner or empty state.
+    /// @brief Activates a button, or the action button of a banner or an empty state. A widget inside a list entry's
+    ///        content activates the entry: its content takes no input of its own.
+    /// @param widgetId The button, banner or empty state, or a widget inside an entry's content.
     /// @throws std::logic_error when the widget is none of those, or is a banner or empty state that shows no action
     ///         button.
     void click(int widgetId) {
+        if (std::string const kind = kindOf(widgetId); kind != "Button" && kind != "Banner" && kind != "EmptyState") {
+            for (int outer = _store->at(widgetId).parent; outer != 0; outer = _store->at(outer).parent) {
+                if (_store->at(outer).kind == "Button") {
+                    widgetId = outer;
+                    break;
+                }
+            }
+        }
         detail::Record const& record = expectKind(widgetId, "click", {"Button", "Banner", "EmptyState"});
         if (record.kind != "Button" && prop(widgetId, "actionLabel").empty()) {
             throw std::logic_error{"RecordingBackend: click of " + record.kind + "#" + std::to_string(widgetId) +

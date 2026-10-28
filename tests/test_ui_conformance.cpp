@@ -353,7 +353,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 53);
+    REQUIRE(cases.size() == 54);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);

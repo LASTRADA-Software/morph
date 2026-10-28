@@ -345,26 +345,27 @@ inline constexpr std::string_view kRequiredMark = " *";
 /// that sees the class then instantiates this template's virtual members along with its vtable; with the
 /// constructor out of line, a unit that only uses the widget instantiates the class but not its virtual members,
 /// which compilers are free to do differently (MSVC instantiates them all).
-template <class Interface>
-class TuiWidget : public Interface, public WidgetBase {
+/// @tparam Base `WidgetBase`, or `ContainerBase` for a widget that holds a part of its own (a list entry's content).
+template <class Interface, class Base = WidgetBase>
+class TuiWidget : public Interface, public Base {
 public:
-    explicit TuiWidget(Context& context) noexcept : WidgetBase{context} {}
-    void setVisible(bool visible) override { applyVisible(visible); }
-    void setEnabled(bool enabled) override { applyEnabled(enabled); }
-    void setLayout(ui::LayoutHints const& hints) override { applyLayout(hints); }
-    void setDragKey(std::optional<ui::Key> const& key) override { applyDragKey(key); }
+    explicit TuiWidget(Context& context) noexcept : Base{context} {}
+    void setVisible(bool visible) override { this->applyVisible(visible); }
+    void setEnabled(bool enabled) override { this->applyEnabled(enabled); }
+    void setLayout(ui::LayoutHints const& hints) override { this->applyLayout(hints); }
+    void setDragKey(std::optional<ui::Key> const& key) override { this->applyDragKey(key); }
     void setDropHandler(std::function<bool(ui::Key const&)> accepts, std::function<void(ui::Key)> onDrop) override {
-        applyDropHandler(std::move(accepts), std::move(onDrop));
+        this->applyDropHandler(std::move(accepts), std::move(onDrop));
     }
-    void setAccessibleName(std::string_view name) override { applyAccessibleName(name); }
-    void setAccessibleRole(std::string_view role) override { applyAccessibleRole(role); }
-    void setTestId(std::string_view testId) override { applyTestId(testId); }
-    void setTooltip(std::string_view text) override { applyTooltip(text); }
-    void setSurface(std::string_view surface) override { applySurface(surface); }
+    void setAccessibleName(std::string_view name) override { this->applyAccessibleName(name); }
+    void setAccessibleRole(std::string_view role) override { this->applyAccessibleRole(role); }
+    void setTestId(std::string_view testId) override { this->applyTestId(testId); }
+    void setTooltip(std::string_view text) override { this->applyTooltip(text); }
+    void setSurface(std::string_view surface) override { this->applySurface(surface); }
     void setKeys(std::vector<std::string> const& chords, std::function<void(std::string)> onChord) override {
-        applyKeys(chords, std::move(onChord));
+        this->applyKeys(chords, std::move(onChord));
     }
-    void focus() override { takeFocus(); }
+    void focus() override { this->takeFocus(); }
     [[nodiscard]] ui::Widget const& asWidget() const noexcept override { return *this; }
 };
 

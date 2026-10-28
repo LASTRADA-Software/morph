@@ -2572,6 +2572,51 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: a list entry with content holds it, and a click on the entry or anywhere on its content runs the
+///        entry's action once; inside a hidden container neither does.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> entryContentIsTheEntrys(ConformanceProbe& probe) {
+    reactive::Signal<bool> shown{probe.runtime(), true};
+    int clicks = 0;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {ui::button({.label = "WS-2026-0412, 2 h",
+                                             .onClick = [&clicks] { ++clicks; },
+                                             .style = ButtonStyle::Item,
+                                             .child = ui::column({.children = {ui::text({.text = "WS-2026-0412"}),
+                                                                               ui::text({.text = "Assay"})}}),
+                                             .selected = true})},
+                    .common = {.visible = [&shown] { return shown.get(); }}})};
+    probe.settle();
+    auto* const item = dynamic_cast<ButtonWidget*>(childOf(probe, &view.root(), 0));
+    if (item == nullptr) {
+        return "an item button in a Column is not shown";
+    }
+    Checks checks;
+    ContainerWidget const& content = item->content();
+    checks.that(probe.childCount(content) == 1, "the entry's content holds one column");
+    auto* const column = dynamic_cast<ContainerWidget*>(probe.childAt(content, 0));
+    Widget* const first = column != nullptr ? probe.childAt(*column, 0) : nullptr;
+    if (first == nullptr) {
+        return "the entry's content shows no text";
+    }
+    checks.text("the content's first text", "WS-2026-0412", probe.textOf(*first));
+    probe.click(*item);
+    probe.settle();
+    checks.that(clicks == 1, "a click on the entry ran its action " + std::to_string(clicks) + " times");
+    probe.click(*first);
+    probe.settle();
+    checks.that(clicks == 2, "a click on its content ran the entry's action " + std::to_string(clicks - 1) + " times");
+    shown.set(false);
+    probe.settle();
+    probe.click(*item);
+    probe.click(*first);
+    probe.settle();
+    checks.that(clicks == 2, "a hidden entry took a click");
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
@@ -2609,7 +2654,7 @@ struct SelectionReport {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 53> const cases{{
+    static std::array<ConformanceCase, 54> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -2687,6 +2732,8 @@ struct SelectionReport {
          .run = detail::dialogDescriptionFollowsBinding},
         {.name = "a segmented select chooses with the arrows and lets Enter go on",
          .run = detail::segmentedSelectTakesArrows},
+        {.name = "a list entry's content is the entry's: one click, wherever it lands",
+         .run = detail::entryContentIsTheEntrys},
     }};
     return cases;
 }

@@ -65,6 +65,15 @@ ItemBase::ItemBase(Context& context, Context::Made made, ui::ContainerWidget* pa
     }
 }
 
+ItemBase::ItemBase(Context& context, QString const& type, ContainerCore& container)
+    : _context{&context}, _relay{nullptr}, _container{&container} {
+    Context::Made const made = context.make(type, {});
+    _item = made.item;
+    _relay = made.relay;
+    registry().push_back(this);
+    container.adopt(*this);
+}
+
 ItemBase::~ItemBase() {
     _relay->kill();
     std::erase(registry(), this);

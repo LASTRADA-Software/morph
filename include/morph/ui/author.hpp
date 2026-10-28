@@ -3348,6 +3348,9 @@ struct ButtonOptions {
     std::optional<ButtonStyle> style;
     /// @brief A condition: whether a list entry is the current one, or a push button is pressed in.
     AnyHandle selected;
+    /// @brief A list entry's content, drawn in place of its label, which still names it; display kinds only, and only
+    ///        with `ButtonStyle::Item`, which the loader checks.
+    Nodes children;
 };
 
 /// @brief A `button` node.
@@ -3367,6 +3370,7 @@ struct ButtonOptions {
         .put("selected", options.selected)
         .put("onClick", options.onClick)
         .put("onActivate", options.onActivate)
+        .put("children", options.children)
         .done();
 }
 

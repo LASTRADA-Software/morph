@@ -512,6 +512,8 @@ struct Button {
     std::string icon;
     /// @brief A push button or a list entry; set once.
     ButtonStyle style = ButtonStyle::Push;
+    /// @brief An entry's content, drawn in place of its label, which then names it; only on an `Item`. May be null.
+    Node child;
     /// @brief Whether the button is selected: a list entry is the current one, a push button is pressed in.
     Prop<bool> selected = false;
 };

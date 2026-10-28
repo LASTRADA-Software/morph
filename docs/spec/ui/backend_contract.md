@@ -211,6 +211,15 @@ accent tint, so selection reads apart from focus, whose border sits inside; assi
 button as checked. The terminal draws an item, and a push button's caption inside its brackets, in the list's
 selected-item style.
 
+An item may hold content: `ButtonWidget::content()` is a container the button owns, asked for only when an item has
+content, as an overlay's `footer()` is asked for only when an action bar mounts. The button draws it as the entry in
+place of its label, which stays its accessible name and is not drawn, and it stays one button: one focus stop, one
+activation, one current mark across all its lines. A click anywhere on the content activates the button: its
+widgets take no input of their own, which the loader guarantees for documents. Qt Quick puts the content inside the
+`Button`, whose background and bar span its height; the terminal paints the item's line style across every row and
+the content over it, its cells keeping that background; RecordingBackend makes a `Column` child of
+the button, and its `click` on a widget inside an entry's content clicks the entry.
+
 **The cross axis.** A child sized `content` fills its container across the container's axis; `fixed(n)` gets `n`
 units, at most the space there is; `stretch` is unchanged. In a column every content child is as wide as the column,
 in a row as tall as the row; a grid cell, and the content of a panel, scroll area, slot, tab page, dialog or drawer,
@@ -262,7 +271,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `ContainerWidget` | `moveChild(child, index)` | — |
 | `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale`, `setDescription`, `setTone` (a text refuses the last two) | — |
 | `TextWidget` | `setText`, `setRole`, `setSpans` | — |
-| `ButtonWidget` | `setLabel`, `setEmphasis`, `setIcon` (once, for a button with an icon), `setStyle` (once, for an item), `setSelected` | `setOnClick` (Enter, Space or a click) |
+| `ButtonWidget` | `setLabel`, `setEmphasis`, `setIcon` (once, for a button with an icon), `setStyle` (once, for an item), `setSelected`, `content()` (an item's content, asked for only when it has some) | `setOnClick` (Enter, Space or a click) |
 | `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only), `setIcon` (an icon of the theme's icon set, drawn at the leading edge; single-line and password only, called once), `setCaption(label, shown)` (the field's label, and whether the input draws it as a visible caption above its control) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)` | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
@@ -643,6 +652,8 @@ Each case is named by the rule it checks:
     `Signing as Approved.` once the binding changes.
 53. A segmented select over `A`, `B`, `C` with `B` marked reads `B`; Right chooses `C` and reports it once, a
     second Right at the end reports nothing, and Enter reaches the enclosing column's chord.
+54. A list entry holding a column of two texts shows them in its `content()`; a click on the entry and a click on its
+    first text each run the entry's action once, and inside a hidden column neither does.
 
 ### What the probe cannot reach
 

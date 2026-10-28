@@ -34,6 +34,9 @@ public:
     ItemBase(Context& context, QString const& type, ui::ContainerWidget* parent, QVariantMap initial = {});
     /// Takes an item already made and appends it to @p parent, or to the backend's roots when it is null.
     ItemBase(Context& context, Context::Made made, ui::ContainerWidget* parent);
+    /// Makes the item of @p type and appends it to @p container: a part a widget that is not a container owns, such as
+    /// a list entry's content.
+    ItemBase(Context& context, QString const& type, ContainerCore& container);
     virtual ~ItemBase();
     ItemBase(ItemBase const&) = delete;
     ItemBase& operator=(ItemBase const&) = delete;
@@ -203,6 +206,7 @@ public:
     ItemWidget(Context& context, QString const& type, ui::ContainerWidget* parent, QVariantMap initial = {})
         : ItemBase{context, type, parent, std::move(initial)} {}
     ItemWidget(Context& context, Context::Made made, ui::ContainerWidget* parent) : ItemBase{context, made, parent} {}
+    ItemWidget(Context& context, QString const& type, ContainerCore& container) : ItemBase{context, type, container} {}
 
     void setVisible(bool visible) override { showVisible(visible); }
     void setEnabled(bool enabled) override { showEnabled(enabled); }

@@ -6755,6 +6755,12 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         }
         if (node.prop("selected")) {
             spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
+            // An entry's content, drawn in place of its label: one node as it is, several in a column.
+            if (std::vector<Node> content = children("children"); content.size() == 1) {
+                spec.child = std::move(content.front());
+            } else if (!content.empty()) {
+                spec.child = ui::column(Column{.children = std::move(content)});
+            }
         }
         Commands const* const onClick = node.event("onClick");
         Commands const* const onActivate = node.event("onActivate");

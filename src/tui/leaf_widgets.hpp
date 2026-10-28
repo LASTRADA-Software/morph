@@ -3,9 +3,12 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <morph/ui/backend.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "tui/widget.hpp"
 
@@ -35,10 +38,21 @@ private:
     ui::TextRole _role = ui::TextRole::Normal;
 };
 
-/// Button: `[ label ]`, activated by Enter, Space or a click; a list item draws ` label` across its whole slot.
-class ButtonImpl final : public TuiWidget<ui::ButtonWidget> {
+/// Button: `[ label ]`, activated by Enter, Space or a click; a list item draws ` label` across its whole slot. A list
+/// item with content draws it in place of the label, a column across every row of its slot over the line style the
+/// label would have, which the content's cells keep, and a click on any row activates it.
+class ButtonImpl final : public TuiWidget<ui::ButtonWidget, ContainerBase> {
 public:
     explicit ButtonImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
+    ~ButtonImpl() override;
+    ButtonImpl(ButtonImpl const&) = delete;
+    ButtonImpl& operator=(ButtonImpl const&) = delete;
+    ButtonImpl(ButtonImpl&&) = delete;
+    ButtonImpl& operator=(ButtonImpl&&) = delete;
+    /// The content, a vertical stack, made and attached the first time it is asked for.
+    ui::ContainerWidget& content() override;
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
+    void click(::core::tui::Point cell) override;
     void setLabel(std::string_view label) override;
     void setOnClick(ui::Action onClick) override;
     void setEmphasis(ui::ButtonEmphasis emphasis) override;
@@ -63,6 +77,7 @@ private:
     ui::ButtonEmphasis _emphasis = ui::ButtonEmphasis::Normal;
     ui::ButtonStyle _style = ui::ButtonStyle::Push;
     bool _selected = false;
+    std::unique_ptr<ContainerBase> _content;
 };
 
 /// Checkbox: `[x] label`; Enter, Space or a click flips it and reports the new state.

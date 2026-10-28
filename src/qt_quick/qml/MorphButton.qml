@@ -5,7 +5,9 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // A button: a click, Space or Enter activates it. A list item (`style` 1) is the same button drawn as a line of a
-// list: as wide as its line, its label at the start, unframed, and marked while `selected`.
+// list: as wide as its line, its label at the start, unframed, and marked while `selected`. An item with content
+// draws it in place of its label, inside the `Button`, so a press anywhere on it is the button's; the label still
+// names it.
 MorphWidget {
     id: root
 
@@ -25,6 +27,10 @@ MorphWidget {
     // to assistive technology. The control is not `checkable`, since a click would flip `checked` whatever the
     // document answers.
     property bool selectable: false
+    // Set by C++ once an item has content: the content column becomes the button's content item.
+    property bool hasContent: false
+    // Where C++ puts an item's content.
+    readonly property Item content: contentColumn
     readonly property bool ghost: emphasis === 3
     readonly property color fill: emphasis === 1 ? root.scheme.accent
                                  : emphasis === 2 ? root.scheme.error
@@ -46,8 +52,19 @@ MorphWidget {
     // An item's content: the icon, then the label at the start of the line, in the accent while selected. The push
     // button keeps its style's own centred content.
     onStyleChanged: {
-        if (root.style === 1)
+        if (root.style === 1 && !root.hasContent)
             button.contentItem = itemContent.createObject(button)
+    }
+    onHasContentChanged: {
+        if (root.hasContent)
+            button.contentItem = contentColumn
+    }
+
+    ColumnLayout {
+        id: contentColumn
+        objectName: "content"
+        visible: root.hasContent
+        spacing: 0
     }
 
     Component {

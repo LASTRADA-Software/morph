@@ -793,3 +793,37 @@ TEST_CASE("tui widgets: a danger outlined button is red and not bold, a danger o
     CHECK(buffer.at(1, 2).style.fg == harness.screen().theme().error.fg);
     CHECK(buffer.at(1, 2).style.bold);
 }
+
+// Mutation: leave out the fill of the line's style under the content (its rows lose the selected line's colour).
+TEST_CASE("tui widgets: a selected list entry with content paints its line on every row, and takes a click on any",
+          "[tui][widgets]") {
+    Harness harness{30, 4};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const item = harness.make<ButtonImpl>(column.get());
+    item->setLabel("WS-2026-0412");
+    item->setStyle(ui::ButtonStyle::Item);
+    item->setSelected(true);
+    int clicks = 0;
+    item->setOnClick([&clicks] { ++clicks; });
+    auto& content = item->content();
+    auto const lines = harness.make<StackImpl>(&content, ui::Axis::Vertical);
+    auto const first = harness.make<TextImpl>(lines.get());
+    first->setText("WS-2026-0412");
+    auto const second = harness.make<TextImpl>(lines.get());
+    second->setText("Assay");
+    auto const third = harness.make<TextImpl>(lines.get());
+    third->setText("Tags");
+    CHECK(harness.draw() == Rows{" WS-2026-0412", " Assay", " Tags"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    // The line's style is under every row: in the leading cell and past the content's text.
+    auto const& selected = harness.screen().theme().listItemSelected;
+    for (int row = 0; row < 3; ++row) {
+        INFO("row " << row);
+        for (int const cell : {0, 20}) {
+            CHECK(buffer.at(row, cell).style.fg == selected.fg);
+            CHECK(buffer.at(row, cell).style.bold == selected.bold);
+        }
+    }
+    static_cast<void>(harness.click({.x = 3, .y = 2}));
+    CHECK(clicks == 1);
+}

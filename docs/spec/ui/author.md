@@ -186,7 +186,7 @@ expression of one),
   `text({.spans = spans({"Lot ", mono(lot)}), .role = "muted"})`. `styled` is not `span`, which a node's `span`
   already means.
 - **`group`** takes its children and `GroupOptions{label, required, description, errors, gap}`.
-- **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected}`: an absent `style`
+- **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected, children}`: an absent `style`
   writes no key, and `selected`, a condition, is written as given: an item's current entry, a push button pressed in.
 - **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, tracks, align, justify}`; an
   absent `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` and `tracks`
@@ -282,6 +282,8 @@ load-time validation:
 
 - A label, title or name written as the constant `""` or `null` does not count; any other
   expression does, since its value is not known until the client evaluates it.
+- An item with content is named by its label, not by its content: a screen reader reads the label, so whatever a
+  listener needs from the content (an out-of-specification tag) belongs in the label too.
 - A `form` is not checked: each field takes its label from the schema or the `fields` overlay.
 - The view is walked through every node list and every part's nodes (tab pages, `switch` cases,
   table cells, a boundary's `loading` and `error`), and so is each component's fallback.

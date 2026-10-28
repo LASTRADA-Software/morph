@@ -17,6 +17,7 @@
 #include <string_view>
 #include <utility>
 
+#include "tui/container_widgets.hpp"
 #include "tui/drag.hpp"
 
 namespace morph::tui::detail {
@@ -175,7 +176,40 @@ std::string ButtonImpl::caption() const {
 }
 
 // A push button's brackets and their spaces, or an item's space either side.
+ButtonImpl::~ButtonImpl() {
+    if (_content != nullptr) {
+        forget(*_content);
+    }
+}
+
+ui::ContainerWidget& ButtonImpl::content() {
+    if (_content == nullptr) {
+        auto stack = std::make_unique<StackImpl>(context(), ui::Axis::Vertical);
+        attach(*stack);
+        _content = std::move(stack);
+        refresh();
+    }
+    return dynamic_cast<ui::ContainerWidget&>(*_content);
+}
+
+std::vector<::core::tui::Rect> ButtonImpl::childAreas(::core::tui::Size size) const {
+    if (_content == nullptr) {
+        return {};
+    }
+    // One cell in from the leading edge, where an item's label starts.
+    return {{.x = 1, .y = 0, .width = std::max(0, size.width - 1), .height = size.height}};
+}
+
+void ButtonImpl::click(::core::tui::Point cell) {
+    static_cast<void>(cell);
+    activate();
+}
+
 ::core::tui::Size ButtonImpl::naturalSize() const {
+    if (_content != nullptr) {
+        ::core::tui::Size const inner = requestedSize(*_content);
+        return {.width = inner.width + 1, .height = std::max(1, inner.height)};
+    }
     return {.width = displayWidth(caption()) + (_style == ui::ButtonStyle::Item ? 2 : 4), .height = 1};
 }
 
@@ -195,6 +229,12 @@ void ButtonImpl::paint(::core::tui::Canvas& canvas) {
         // a highlighted row. Focus wins over selection, as the cursor row of a list does.
         ::core::tui::Theme const& theme = canvas.theme();
         ::core::tui::Style const& line = itemStyle(theme, actionable(), hasFocus(), _selected);
+        if (_content != nullptr) {
+            // Every row of the slot on the line's style, and the content over it.
+            canvas.fill(canvas.area(), ' ', line);
+            placeChildren(childAreas(canvas.size()));
+            return;
+        }
         std::string text = " " + caption();
         text.append(static_cast<std::size_t>(std::max(0, canvas.width() - displayWidth(text))), ' ');
         canvas.putString(0, 0, text, line);

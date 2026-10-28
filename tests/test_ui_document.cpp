@@ -411,3 +411,27 @@ TEST_CASE("ui document: dangerOutline, an outline badge and a segmented select l
     CHECK(select.error().path == "/view/style");
     CHECK(select.error().reason == "`radios` is not one of the values of `style`");
 }
+
+// Mutation: drop checkEntryContent (the push button and the nested input load).
+TEST_CASE("ui document: only a list entry holds content, and only display kinds", "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "style": "item", "label": "x",
+        "children": [{"kind": "column", "children": [{"kind": "text", "text": "a"}, {"kind": "badge", "text": "b"}]}]}})")
+              .has_value());
+    auto const push = loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "label": "x",
+        "children": [{"kind": "text", "text": "a"}]}})");
+    REQUIRE_FALSE(push.has_value());
+    CHECK(push.error().reason == "only a list entry holds content; a push button has a label");
+    auto const input = loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "style": "item",
+        "label": "x", "children": [{"kind": "column", "children": [{"kind": "row", "children": [
+          {"kind": "textInput", "label": "y"}]}]}]}})");
+    REQUIRE_FALSE(input.has_value());
+    CHECK(input.error().path == "/view/children/0/children/0/children/0");
+    CHECK(input.error().reason == "an entry's content is read-only; put the control beside the entry");
+    CHECK_FALSE(loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "style": "item",
+        "label": "x", "children": [{"kind": "banner", "text": "b"}]}})")
+                    .has_value());
+    auto const keys = loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "style": "item",
+        "label": "x", "children": [{"kind": "text", "text": "a", "keys": {"Enter": []}}]}})");
+    REQUIRE_FALSE(keys.has_value());
+    CHECK(keys.error().path == "/view/children/0/keys");
+}

@@ -807,6 +807,9 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, Button const& spec, ContainerWidget* parent) {
+        if (spec.style == ButtonStyle::Push && spec.child != nullptr) {
+            throw std::logic_error{"morph::ui: only a list entry holds content; a push button has a label"};
+        }
         ButtonWidget& widget = scope.adopt(_backend->createButton(parent));
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.label, [&widget](std::string const& label) { widget.setLabel(label); });
@@ -823,6 +826,9 @@ private:
             bind(scope, spec.selected, [&widget](bool selected) { widget.setSelected(selected); });
         }
         widget.setOnClick(event(spec.onClick));
+        if (spec.child != nullptr) {
+            static_cast<void>(mount(scope, spec.child, &widget.content()));
+        }
         return widget;
     }
 

@@ -192,6 +192,12 @@ public:
     ///        either style, only when `selected` is bound or `true`.
     /// @param selected Whether it is selected.
     virtual void setSelected(bool selected) = 0;
+
+    /// @brief The entry's content: a container the button owns and draws as the entry in place of its label, which
+    ///        then names it without being drawn. The mount asks for it only for an `Item` that has content. The entry
+    ///        stays one button: one focus stop, and a click anywhere on its content is the button's.
+    /// @return It, owned by the button and valid as long as the button.
+    virtual ContainerWidget& content() = 0;
 };
 
 /// @brief An editable text field.
