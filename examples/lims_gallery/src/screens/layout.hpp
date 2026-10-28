@@ -62,4 +62,12 @@ using morph::ui::Justify;
     return ui::badge(text, tone);
 }
 
+/// @brief A priority tag: outlined, so a red outline (STAT) reads apart from a red fill (out of specification).
+/// @param text The text.
+/// @param tone `ok`, `warn`, `err`, `info` or `neutral`.
+/// @return The node.
+[[nodiscard]] inline ui::Node outlineTag(ui::AnyHandle const& text, ui::AnyHandle const& tone) {
+    return ui::badge(text, tone, {}, morph::ui::BadgeStyle::Outline);
+}
+
 }  // namespace lims_gallery::layout

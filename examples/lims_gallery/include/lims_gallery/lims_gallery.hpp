@@ -19,7 +19,18 @@ inline constexpr std::string_view kApplicationId = "lims-gallery";
 /// @brief The index screen's id: the list of designs.
 inline constexpr std::string_view kIndexScreen = "lims-gallery.index";
 
-/// @brief The application's bundle: every built design, the index, and the green theme.
+/// @brief The form every date of the gallery is written and read in: day, month name, year, which a regulated lab
+///        cannot misread across locales.
+inline constexpr std::string_view kDatePattern = "dd-MMM-yyyy";
+
+/// @brief The form every date and time of the gallery is written and read in.
+inline constexpr std::string_view kDateTimePattern = "dd-MMM-yyyy HH:mm";
+
+/// @brief The gallery's app document: the date patterns, which a client that mounts it gives every screen.
+/// @return Its text.
+[[nodiscard]] std::string appDocument();
+
+/// @brief The application's bundle: every built design, the index, the app document and the green theme.
 /// @return The bundle, or the refusal.
 [[nodiscard]] std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle();
 

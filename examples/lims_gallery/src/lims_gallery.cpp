@@ -105,6 +105,11 @@ struct Registered {
 
 }  // namespace
 
+std::string appDocument() {
+    return R"({"vocab": "ui/1", "id": "app", "formatting": {"date": ")" + std::string{kDatePattern} +
+           R"(", "dateTime": ")" + std::string{kDateTimePattern} + R"("}})";
+}
+
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle() {
     ui::ScreenRegistry screens;
     std::vector<Registered> registered;
@@ -137,6 +142,10 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
         if (auto added = served.addScreen(std::move(entry), std::move(screen.text)); !added) {
             return std::unexpected(std::move(added.error()));
         }
+    }
+    if (auto added = served.addFile(morph::ui::BundleFile{.kind = "app", .id = "app", .bytes = appDocument()});
+        !added) {
+        return std::unexpected(std::move(added.error()));
     }
     for (auto [kind, fileId, bytes] : {std::tuple{"theme", "theme/index.json", kThemeIndex},
                                        std::tuple{"theme", "theme/base.tokens.json", kThemeBase},

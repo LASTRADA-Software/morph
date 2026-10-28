@@ -18,10 +18,10 @@ TEST_CASE("e-signature, expanded: a dialog over the worksheet, opened on the ref
     GalleryScreen screen{kScreen, "expanded"};
     screen.requireNoProblems();
     CHECK(screen.find("Text", "signing-at").has_value());
-    CHECK(screen.text("signing-at") == "Signing at 24-Oct-2026 09:40 CEST as Approved.");
+    CHECK(screen.prop("Text", "signing-at", "spans") == "[Signing at 24-Oct-2026 09:40 CEST as ,Approved;strong,.]");
     CHECK(screen.shows("Banner", "refused"));
-    CHECK(screen.prop("Banner", "refused", "text") ==
-          "Password incorrect. 3 of 5 attempts left before the account locks.");
+    CHECK(screen.prop("Banner", "refused", "spans") ==
+          "[Password incorrect.;strong, 3 of 5 attempts left before the account locks.]");
     CHECK(screen.backend().all("Dialog").size() == 1);
     CHECK(screen.backend().all("KeyValue").size() == 1);
     CHECK(screen.shows("Panel", "record"));
@@ -38,13 +38,15 @@ TEST_CASE("e-signature, expanded: a dialog over the worksheet, opened on the ref
 TEST_CASE("e-signature, expanded: a wrong password costs an attempt, the right one signs", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
     screen.choose("meaning", "reviewed");
-    CHECK(screen.waitForText("signing-at", "Signing at 24-Oct-2026 09:40 CEST as Reviewed."));
+    CHECK(screen.waitFor([&screen] {
+        return screen.prop("Text", "signing-at", "spans") == "[Signing at 24-Oct-2026 09:40 CEST as ,Reviewed;strong,.]";
+    }));
 
     // The field holds the refused attempt; signing it again costs another.
     screen.click("action_sign");
     CHECK(screen.waitFor([&screen] {
-        return screen.prop("Banner", "refused", "text") ==
-               "Password incorrect. 2 of 5 attempts left before the account locks.";
+        return screen.prop("Banner", "refused", "spans") ==
+               "[Password incorrect.;strong, 2 of 5 attempts left before the account locks.]";
     }));
     CHECK(screen.shows("Banner", "refused"));
     CHECK(screen.prop("TextInput", "password", "value") == "");
@@ -68,7 +70,7 @@ TEST_CASE("e-signature, compact: the same fields as a sheet, signed from the bot
     CHECK(screen.find("TextInput", "signer").has_value());
     CHECK(screen.find("Select", "meaning").has_value());
     CHECK(screen.find("TextInput", "reason").has_value());
-    CHECK(screen.text("signing-at") == "Signing at 24-Oct-2026 09:40 CEST as Approved.");
+    CHECK(screen.prop("Text", "signing-at", "spans") == "[Signing at 24-Oct-2026 09:40 CEST as ,Approved;strong,.]");
 
     screen.edit("password", "meyer-2026");
     REQUIRE(screen.waitFor([&screen] { return screen.prop("Button", "sign", "enabled") != "false"; }));

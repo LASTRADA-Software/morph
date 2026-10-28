@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <cstddef>
+#include <morph/ui/document.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -65,4 +66,12 @@ TEST_CASE("lims gallery: every built design mounts at both widths without a prob
         CHECK(screen.mounted() == std::vector<std::string>{std::string{design.id}});
         screen.requireNoProblems();
     }
+}
+
+// Mutation: leave `formatting` out of the app document (the patterns are empty).
+TEST_CASE("lims gallery: the app document gives every screen the gallery's date patterns", "[lims-gallery]") {
+    auto const app = morph::ui::loadDocumentText(lims_gallery::appDocument());
+    REQUIRE(app.has_value());
+    CHECK(app->datePattern == lims_gallery::kDatePattern);
+    CHECK(app->dateTimePattern == lims_gallery::kDateTimePattern);
 }

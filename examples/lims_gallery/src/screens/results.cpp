@@ -571,15 +571,20 @@ ui::Node resultField(Worksheet const& sheet) {
         ui::cond(evaluation.calculated,
                  Text{ui::format("{0} · calculated · spec {1} {2}", {field("analyte"), field("spec"), field("unit")})},
                  Text{ui::format("{0} · spec {1} {2}", {field("analyte"), field("spec"), field("unit")})});
+    // The field carries its unit and its evaluation, outlined red while it is out of specification; an out of
+    // specification value is valid and saveable, so the evaluation is a tone, not an error.
+    auto const input = resultInput(sheet, evaluation, field)
+                           .with("unit", field("unit"))
+                           .description(evaluation.label)
+                           .tone(ui::cond(evaluation.outOfSpec, Text{"err"}, Text{"neutral"}));
     return ui::column(
         {ui::row({ui::text({.text = caption}),
                   layout::tag("Changed", "warn")
                       .visible(ui::ne(field("value"), field("original")) && ui::eq(field("kind"), "entered"))
                       .testId("changed")},
                  {.gap = 1, .align = Align::Center}),
-         resultInput(sheet, evaluation, field),
-         ui::row({layout::tag(evaluation.label, evaluation.tone).testId("evaluation"),
-                  layout::muted(ui::format("was {0} {1}", {field("original"), field("unit")}))
+         input,
+         ui::row({layout::muted(ui::format("was {0} {1}", {field("original"), field("unit")}))
                       .visible(ui::eq(field("kind"), "entered") && ui::ne(field("value"), field("original"))),
                   layout::muted(ui::format("RSD {0} %", {sheet.rsd})).visible(ui::eq(field("kind"), "mean"))},
                  {.gap = 1, .align = Align::Center}),

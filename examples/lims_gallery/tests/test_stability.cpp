@@ -46,10 +46,9 @@ TEST_CASE("stability, expanded: step 2 of the wizard, the matrix and the summary
     CHECK(screen.backend().prop(monthBox(screen, "25 °C", "T0"), "checked") == "true");
     CHECK(screen.backend().prop(monthBox(screen, "25 °C", "1 m"), "checked") == "false");
     CHECK(holdsPair(screen, "summary-pairs", "Pulls:15"));
-    CHECK(holdsPair(screen, "summary-pairs", "First pull:2026-12-03 (40 °C\\, 1 m)"));
-    CHECK(holdsPair(screen, "summary-pairs", "Last pull:2029-11-03"));
-    CHECK(screen.text("summary-containers") == "180 needed, 150 in stock");
-    CHECK(screen.prop("Text", "summary-containers", "role") == "Error");
+    CHECK(holdsPair(screen, "summary-pairs", "First pull:03-Dec-2026 (40 °C\\, 1 m)"));
+    CHECK(holdsPair(screen, "summary-pairs", "Last pull:03-Nov-2029"));
+    CHECK(holdsPair(screen, "summary-pairs", "Containers:180 needed\\, 150 in stock;tone=Err"));
     CHECK(screen.prop("TextInput", "per-pull", "errors") ==
           "[15 pulls × 12 \\= 180 units needed\\, 150 in stock for lot L-26-0381.]");
     CHECK(screen.shows("Banner", "attention"));
@@ -64,7 +63,7 @@ TEST_CASE("stability, expanded: a timepoint changes the summary, and enough cont
     screen.backend().toggle(monthBox(screen, "40 °C", "1 m"));
     CHECK(screen.waitFor([&screen] {
         return holdsPair(screen, "summary-pairs", "Pulls:14") &&
-               holdsPair(screen, "summary-pairs", "First pull:2027-02-03 (25 °C\\, 3 m)");
+               holdsPair(screen, "summary-pairs", "First pull:03-Feb-2027 (25 °C\\, 3 m)");
     }));
     screen.edit("per-pull", "10");
     CHECK(screen.waitFor([&screen] { return !screen.shows("Banner", "attention"); }));
@@ -78,7 +77,7 @@ TEST_CASE("stability, expanded: a timepoint changes the summary, and enough cont
 }
 
 // Mutation: look the pull's date up in a table from the design's T0 (the batch E1 workaround) -> the first pull reads
-// 2026-12-03 whatever the start.
+// 03-Dec-2026 whatever the start.
 TEST_CASE("stability: the pull dates follow the study start, a month on from 31 January clamped to February",
           "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
@@ -88,8 +87,8 @@ TEST_CASE("stability: the pull dates follow the study start, a month on from 31 
     REQUIRE(instant.has_value());
     screen.backend().setDateTime(start.value_or(0), morph::time::Timestamp{*instant});
     CHECK(screen.waitFor([&screen] {
-        return holdsPair(screen, "summary-pairs", "First pull:2027-02-28 (40 °C\\, 1 m)") &&
-               holdsPair(screen, "summary-pairs", "Last pull:2030-01-31");
+        return holdsPair(screen, "summary-pairs", "First pull:28-Feb-2027 (40 °C\\, 1 m)") &&
+               holdsPair(screen, "summary-pairs", "Last pull:31-Jan-2030");
     }));
     screen.requireNoProblems();
 }
@@ -102,7 +101,7 @@ TEST_CASE("stability, compact: one condition open at a time, every field kept", 
     CHECK(screen.text("shell_title") == "Conditions and timepoints");
     CHECK(screen.backend().find("Collapsible", "title", "25 °C / 60 % RH · 8 pulls").has_value());
     CHECK(screen.backend().find("Collapsible", "title", "40 °C / 75 % RH · 3 pulls").has_value());
-    CHECK(screen.prop("Collapsible", "summary-section", "title") == "Summary · first pull 2026-12-03");
+    CHECK(screen.prop("Collapsible", "summary-section", "title") == "Summary · first pull 03-Dec-2026");
     CHECK(screen.prop("TextInput", "per-pull", "errors") == "[180 units needed\\, 150 in stock for lot L-26-0381.]");
     screen.click("add-condition");
     CHECK(screen.waitFor(
@@ -118,8 +117,8 @@ TEST_CASE("stability: the lot chosen in step 1 sets the stock the containers are
     CHECK(screen.prop("Select", "lot", "selected") == "\"L-26-0381\"");
     screen.choose("lot", "L-26-0377");
     screen.click("continue");
-    CHECK(screen.waitFor([&screen] { return screen.text("summary-containers") == "180 needed, 420 in stock"; }));
-    CHECK(screen.prop("Text", "summary-containers", "role") == "Normal");
+    CHECK(screen.waitFor(
+        [&screen] { return holdsPair(screen, "summary-pairs", "Containers:180 needed\\, 420 in stock]"); }));
     CHECK_FALSE(screen.shows("Banner", "attention"));
     screen.requireNoProblems();
 }
@@ -137,7 +136,7 @@ TEST_CASE("stability: tests per timepoint, then review and sign", "[lims-gallery
         screen.click("continue");
         REQUIRE(screen.waitFor([&screen] { return screen.find("Checkbox", "confirm").has_value(); }));
         CHECK(holdsPair(screen, "review-pairs", "Tests:6 tests\\, 77 runs"));
-        CHECK(screen.text("review-containers") == "150 needed, 150 in stock");
+        CHECK(holdsPair(screen, "review-pairs", "Containers:150 needed\\, 150 in stock]"));
         CHECK(screen.prop("Button", "continue", "enabled") == "false");
         screen.toggle("confirm");
         CHECK(screen.waitFor([&screen] { return screen.prop("Button", "continue", "enabled") == "true"; }));

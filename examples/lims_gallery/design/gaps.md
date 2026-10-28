@@ -18,7 +18,7 @@
   width.
 - **Weight:** High
 
-### G2: Monospace text for identifiers — fixed in batch B (in tables and texts; inline spans wait for batch C)
+### G2: Monospace text for identifiers — fixed in batch B (in tables and texts) and batch C (inline spans)
 - **Design(s):** 01, 02, 03, 04, 05, 07, 08, 09
 - **Needs:** record, lot, sample, equipment and investigation ids (`WS-2026-0412`, `L-26-0381`, `OOS-2026-031`) set
   in a monospace face, the LIMS convention that makes ids scannable and unambiguous (0/O, 1/l).
@@ -28,7 +28,7 @@
 - **Workaround used:** ids are plain text.
 - **Weight:** Medium
 
-### G3: Inline emphasis inside one text
+### G3: Inline emphasis inside one text — fixed in batch C
 - **Design(s):** 01
 - **Needs:** a bold run inside a sentence: "**Password incorrect.** 3 of 5 attempts left…", "Signing at … as
   **Approved**."
@@ -58,7 +58,7 @@
 - **Workaround used:** none; compact controls keep the theme's height.
 - **Weight:** Medium
 
-### G6: A dialog's description line
+### G6: A dialog's description line — fixed in batch C
 - **Design(s):** 01, 08
 - **Needs:** a muted line under the dialog's title ("Your signature is stored with the record and cannot be
   removed."), part of the dialog's head, divided from the body.
@@ -79,7 +79,7 @@
 - **Workaround used:** none.
 - **Weight:** Medium
 
-### G8: The required mark sits beside the control, not the caption
+### G8: The required mark sits beside the control, not the caption — fixed in batch C
 - **Design(s):** 01, 02, 08
 - **Needs:** "Meaning \*": the mark after the field's caption.
 - **ui/1 today:** `required` draws a mark the frontend places (`docs/spec/ui/view_tree.md:158`); on Qt Quick it is a
@@ -88,7 +88,7 @@
 - **Workaround used:** none; the frontend's placement.
 - **Weight:** Low
 
-### G9: A unit beside a free input
+### G9: A unit beside a free input — fixed in batch C
 - **Design(s):** 02, 06, 08
 - **Needs:** "Temperature on arrival" with `°C` drawn inside the field's trailing edge; a result field with `%` inside
   it (08, compact).
@@ -100,7 +100,7 @@
   column (expanded) or in the field's caption (compact).
 - **Weight:** Medium
 
-### G10: Help text under an input
+### G10: Help text under an input — fixed in batch C
 - **Design(s):** 02, 08
 - **Needs:** a muted line tied to a field ("Required range 2–8 °C"; "The field keeps focus after every scan. Press
   Enter to look up a typed ID."), announced with it (`aria-describedby`); a result field tied to its evaluation
@@ -108,11 +108,12 @@
 - **ui/1 today:** inputs carry `label`, `placeholder` and `errors` (`docs/spec/ui/document.md:159-166`); there is no
   hint or description key, and `a11y` has only `name` and `role`. Inferred from reading.
 - **Workaround used:** a muted `text` under the input, in a column with it; not associated for assistive technology.
-  08 draws the evaluation as a tag beside the field and tints the row (`rowTone`); the field itself is outlined only
-  while its text cannot be read, through `errors`, since an out-of-specification message there would repeat the tag.
+  08 draws the evaluation as a tag beside the field and tints the row (`rowTone`). The field itself is not outlined:
+  no Qt Quick input was outlined for its errors either (the input background took no errors), so errors showed only
+  as red messages under the control.
 - **Weight:** Medium
 
-### G11: A scanner field that stands out
+### G11: A scanner field that stands out — fixed in batch C
 - **Design(s):** 02
 - **Needs:** the scan field as the screen's focal control: larger monospace text, an accent outline and a soft glow.
 - **ui/1 today:** a `textInput` has no size or emphasis (`docs/spec/ui/document.md:166`); its leading `icon` works,
@@ -134,17 +135,18 @@
 - **Workaround used:** the dialog's actions close it by its element, `ui::close(element)`.
 - **Weight:** Medium
 
-### G13: A date and time display format
+### G13: A date and time display format — fixed in batch C
 - **Design(s):** 02, 04, 06
 - **Needs:** "24-Oct-2026 09:41": the unambiguous day-month-name-year form regulated labs use.
 - **ui/1 today:** `dateTimeInput` takes `value`, `mode`, `label`, `showLabel` and events, no format
   (`docs/spec/ui/document.md:181`); on Qt Quick it shows `2026-10-24 09:41` (seen in the grab). The `date` and
-  `dateTime` functions have only `short`, `medium` and `long` styles (`docs/spec/ui/expressions.md:141-143`).
-  Verified by trying.
+  `dateTime` functions have only `short`, `medium` and `long` styles (`docs/spec/ui/expressions.md:141-143`), whose
+  formatting hook (`FormatContext::dates`) no client ever sets, and no client calls `Session::setFormatting` at all
+  (related to #1056). Verified by trying.
 - **Workaround used:** none; the frontend's format.
 - **Weight:** Low
 
-### G14: A secondary destructive button
+### G14: A secondary destructive button — fixed in batch C
 - **Design(s):** 02, 09
 - **Needs:** "Reject sample…" as an outlined button with red text, so the filled primary "Receive and scan next"
   stays the one action that stands out.
@@ -174,7 +176,7 @@
   scrolls with the step.
 - **Weight:** Medium
 
-### G17: A group of checkboxes with a legend and a required mark
+### G17: A group of checkboxes with a legend and a required mark — fixed in batch C
 - **Design(s):** 02
 - **Needs:** "Condition on receipt \*" as the legend of four checkboxes (a `fieldset`), required as a group.
 - **ui/1 today:** no group node; `required` on a `checkbox` marks that one box, and an element's `Required` error
@@ -260,7 +262,7 @@
   not cells of one grid, so a grid per event would only restate the row.
 - **Weight:** Low
 
-### G24: Label-over-value pairs
+### G24: Label-over-value pairs — fixed in batch C
 - **Design(s):** 03
 - **Needs:** on compact, the details as a stacked definition list: a small muted label above each value, divided by
   rules.
@@ -363,7 +365,7 @@
   one differ only by their label, `S12` or `·`.
 - **Weight:** Low
 
-### G33: An outlined tag
+### G33: An outlined tag — fixed in batch C
 - **Design(s):** 05
 - **Needs:** priority tags ("STAT", "Urgent", "Routine") drawn outlined on white, so priority does not read as a status
   tone: a red filled tag means out of specification, a red outlined one means STAT.
@@ -451,7 +453,7 @@
 - **Workaround used:** `steps` plus a `switch` on a `step` state and hand-made Back and Continue buttons (see G35).
 - **Weight:** Medium
 
-### G39: A key-value pair with a tone
+### G39: A key-value pair with a tone — fixed in batch C
 - **Design(s):** 06
 - **Needs:** the summary's "Containers: 180 needed, 150 in stock" in red, bold, while stock is short.
 - **ui/1 today:** `keyValue` takes `items` of `{label, value}` (`docs/spec/ui/document.md:188`); no tone or role per
@@ -611,7 +613,7 @@
   WS-2026-0409). The switch also resets the pick to the first tab.
 - **Weight:** Low
 
-### G52: A selectable list entry of several lines
+### G52: A selectable list entry of several lines — fixed in batch C
 - **Design(s):** 09
 - **Needs:** a review queue entry as one selectable card: id and age, test and analyst, its tags, tinted with an
   accent bar while it is the one under review, the whole card clickable.
@@ -622,7 +624,7 @@
   and, for the reviewer's own worksheet, the muted reason; only the first line is clickable.
 - **Weight:** Medium
 
-### G53: A segmented control
+### G53: A segmented control — fixed in batch C
 - **Design(s):** 09
 - **Needs:** "Show: All 24 | Flagged 2" as a compact two-segment switch.
 - **ui/1 today:** a `select`'s `style` is `dropdown` or `radio` (`include/morph/ui/interpreter.hpp:6095`); `radio`

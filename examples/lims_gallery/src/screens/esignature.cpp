@@ -66,25 +66,30 @@ ui::Handle<bool> canSign(Signature const& sign) { return !ui::isEmpty(sign.reaso
 
 ui::Node summary(bool compact) {
     ui::Node const body =
-        compact ? ui::column({ui::text({.text = "WS-2026-0412 · worksheet"}),
-                              ui::text({.text = "24 results · Assay and impurities · Lot L-26-0381"}),
-                              ui::text({.text = "2 out of specification, OOS-2026-031 linked"})},
+        compact ? ui::column({ui::text({.spans = ui::spans({ui::mono("WS-2026-0412"), " · worksheet"})}),
+                              ui::text({.spans = ui::spans({"24 results · Assay and impurities · Lot ",
+                                                            ui::mono("L-26-0381")})}),
+                              ui::text({.spans = ui::spans({"2 out of specification, ", ui::mono("OOS-2026-031"),
+                                                            " linked"})})},
                              {.gap = 0})
                 : ui::keyValue(ui::list({
-                      ui::obj({{"label", "Record"}, {"value", "WS-2026-0412 · worksheet"}}),
-                      ui::obj({{"label", "Content"}, {"value", "24 results · Assay and impurities · Lot L-26-0381"}}),
+                      ui::obj({{"label", "Record"},
+                               {"spans", ui::spans({ui::mono("WS-2026-0412"), " · worksheet"})}}),
+                      ui::obj({{"label", "Content"},
+                               {"spans",
+                                ui::spans({"24 results · Assay and impurities · Lot ", ui::mono("L-26-0381")})}}),
                       ui::obj({{"label", "Flags"},
-                               {"value",
-                                "2 out of specification, investigation OOS-2026-031 "
-                                "linked"}}),
+                               {"spans", ui::spans({"2 out of specification, investigation ",
+                                                    ui::mono("OOS-2026-031"), " linked"})}}),
                   }));
     return ui::panel({body}, {.padding = 2}).surface("page").testId("record");
 }
 
 ui::Node refusedBanner(Signature const& sign) {
     return ui::banner({.tone = "err",
-                       .text = ui::format("Password incorrect. {0} of 5 attempts left before the account locks.",
-                                          {sign.attempts})})
+                       .spans = ui::spans({ui::strong("Password incorrect."),
+                                           ui::format(" {0} of 5 attempts left before the account locks.",
+                                                      {sign.attempts})})})
         .visible(sign.refused)
         .testId("refused");
 }
@@ -128,7 +133,8 @@ ui::Node passwordField(Signature const& sign) {
 }
 
 ui::Node signingAt(Signature const& sign) {
-    return layout::muted(ui::format("Signing at 24-Oct-2026 09:40 CEST as {0}.", {sign.meaningLabel}))
+    return ui::text({.spans = ui::spans({"Signing at 24-Oct-2026 09:40 CEST as ", ui::strong(sign.meaningLabel), "."}),
+                     .role = "muted"})
         .testId("signing-at");
 }
 
@@ -159,10 +165,10 @@ ui::Node expandedLayout(Signature const& sign) {
     return ui::column(
         {worksheet(sign),
          ui::dialog(dialog,
-                    {layout::muted("Your signature is stored with the record and cannot be removed."), summary(false),
-                     refusedBanner(sign), ui::grid({signerField(), meaningField(sign)}, {.gap = 2, .columns = 2}),
+                    {summary(false), refusedBanner(sign), ui::grid({signerField(), meaningField(sign)}, {.gap = 2, .columns = 2}),
                      reasonField(sign), passwordField(sign), signingAt(sign)},
                     {.title = "Sign to approve results",
+                     .description = "Your signature is stored with the record and cannot be removed.",
                      .open = sign.open,
                      .showErrors = ui::ShowErrors::Always,
                      .cancel = close,

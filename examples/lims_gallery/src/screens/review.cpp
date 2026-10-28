@@ -437,16 +437,23 @@ ui::Commands choose(Review const& review) {
             ui::set(review.comment, std::string{}), ui::set(review.showQueue, false)};
 }
 
+// One entry of the queue: the whole card takes the click and the current mark; its label names it.
 ui::Node queueEntry(Review const& review) {
-    return ui::column({ui::button({.label = ui::format("{0} · {1}", {ui::row("id"), ui::row("age")}),
-                                   .onClick = choose(review),
-                                   .style = morph::ui::ButtonStyle::Item,
-                                   .selected = ui::eq(review.selected, ui::row("id"))})
-                           .testId("queue-entry"),
-                       ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("analyst")})}),
-                       tagRow(ui::row("tags"), "queue-tags"),
-                       layout::muted(kSelfReview).visible(Flag{ui::row("self")}).testId("queue-self")},
-                      {.gap = 1});
+    auto const content =
+        ui::column({ui::text({.text = ui::format("{0} · {1}", {ui::row("id"), ui::row("age")}),
+                              .spans = ui::spans({ui::styled(ui::row("id"), {.strong = true, .mono = true}), " · ",
+                                                  ui::row("age")})}),
+                    ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("analyst")}),
+                              .role = "muted"}),
+                    tagRow(ui::row("tags"), "queue-tags"),
+                    layout::muted(kSelfReview).visible(Flag{ui::row("self")}).testId("queue-self")},
+                   {.gap = 1});
+    return ui::button({.label = ui::format("{0} · {1}", {ui::row("id"), ui::row("age")}),
+                       .onClick = choose(review),
+                       .style = morph::ui::ButtonStyle::Item,
+                       .selected = ui::eq(review.selected, ui::row("id")),
+                       .children = {content}})
+        .testId("queue-entry");
 }
 
 ui::AnyHandle filteredQueue(Review const& review) {
@@ -479,7 +486,7 @@ ui::Node showChoice(Review const& review) {
     return ui::row({layout::muted("Show"), ui::select({.options = options,
                                                        .selected = review.show,
                                                        .label = "Show results",
-                                                       .style = "radio",
+                                                       .style = "segmented",
                                                        .onChoose = ui::set(review.show, ui::event())})
                                                .testId("show")},
                    {.gap = 1, .align = Align::Center});
@@ -682,7 +689,8 @@ ui::Node returnButton(Review const& review, char const* label) {
 }
 
 ui::Node rejectButton(Review const& review, char const* label) {
-    return ui::button({.label = label, .emphasis = ButtonEmphasis::Danger, .onClick = decide(review, "reject")})
+    return ui::button(
+               {.label = label, .emphasis = ButtonEmphasis::DangerOutline, .onClick = decide(review, "reject")})
         .testId("reject");
 }
 

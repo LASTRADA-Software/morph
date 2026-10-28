@@ -307,12 +307,17 @@ ui::Node expandedLayout(Instrument const& instrument) {
 // Compact stacks every section: the details as label-over-value pairs, the rest folded.
 ui::Node compactDetails() {
     auto const pair = [](char const* label, char const* value) {
-        return ui::column({layout::muted(label), ui::text({.text = value})}, {.gap = 0});
+        return ui::obj({{"label", label}, {"value", value}});
     };
-    return ui::column({pair("Model", "[Manufacturer] 1290 series"), pair("Serial number", "DEAB-902114"),
-                       pair("Location", "QC lab 2, bench 4"), pair("Owner · Software", "Dr. Anna Meyer · CDS 3.4.1"),
-                       pair("Methods", "Assay and impurities, dissolution")},
-                      {.gap = 2})
+    return ui::keyValue(
+               {.items = ui::list({pair("Model", "[Manufacturer] 1290 series"),
+                                   ui::obj({{"label", "Serial number"},
+                                            {"value", "DEAB-902114"},
+                                            {"spans", ui::spans({ui::mono("DEAB-902114")})}}),
+                                   pair("Location", "QC lab 2, bench 4"),
+                                   pair("Owner · Software", "Dr. Anna Meyer · CDS 3.4.1"),
+                                   pair("Methods", "Assay and impurities, dissolution")}),
+                .fieldLayout = morph::forms::FieldLayout::Stacked})
         .testId("details");
 }
 

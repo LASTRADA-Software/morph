@@ -328,27 +328,23 @@ ui::Node attention(Study const& study, bool compact) {
         .testId("attention");
 }
 
-// Captions beside their values.
-ui::Node pairs(std::vector<std::pair<char const*, ui::AnyHandle>> const& items, std::string const& testId) {
+// Captions beside their values, then @p toned, pairs written whole.
+ui::Node pairs(std::vector<std::pair<char const*, ui::AnyHandle>> const& items, std::string const& testId,
+               std::vector<ui::AnyHandle> const& toned = {}) {
     std::vector<ui::AnyHandle> listed;
-    listed.reserve(items.size());
+    listed.reserve(items.size() + toned.size());
     for (auto const& [label, value] : items) {
         listed.push_back(ui::obj({{"label", label}, {"value", value}}));
     }
+    listed.insert(listed.end(), toned.begin(), toned.end());
     return ui::keyValue(ui::list(listed)).testId(testId);
 }
 
-// A caption beside a value that takes a tone, which a `keyValue` pair cannot: the containers, red while stock is
-// short.
-ui::Node tonedPair(char const* label, ui::AnyHandle const& value, std::string const& testId,
-                   ui::AnyHandle const& role) {
-    return ui::row({layout::muted(label).sizing(ui::fixed(13)),
-                    ui::text({.text = value, .role = role}).sizing(ui::stretch()).testId(testId)},
-                   {.gap = 1, .align = Align::Start});
-}
-
-ui::AnyHandle containersText(Study const& study) {
-    return ui::format("{0} needed, {1} in stock", {study.needed, study.stock});
+// The containers the study needs against the stock, red and bold while the stock is short.
+ui::AnyHandle containersPair(Study const& study) {
+    return ui::obj({{"label", "Containers"},
+                    {"value", ui::format("{0} needed, {1} in stock", {study.needed, study.stock})},
+                    {"tone", ui::cond(study.enough, Text{"neutral"}, Text{"err"})}});
 }
 
 ui::Node summary(Study const& study) {
@@ -358,9 +354,7 @@ ui::Node summary(Study const& study) {
                               {"Pulls", ui::format("{0}", {study.pulls})},
                               {"First pull", study.firstPull},
                               {"Last pull", study.lastPull}},
-                             "summary-pairs"),
-                       tonedPair("Containers", containersText(study), "summary-containers",
-                                 ui::cond(study.enough, Text{"normal"}, Text{"error"}))},
+                             "summary-pairs", {containersPair(study)})},
                       {.gap = 1})
         .testId("summary");
 }
@@ -521,9 +515,7 @@ ui::Node reviewStep(Study const& study) {
                                   {"Pulls", ui::format("{0}, first {1}, last {2}",
                                                        {study.pulls, study.firstDate, study.lastPull})},
                                   {"Tests", ui::format("{0} tests, {1} runs", {study.testCount, study.runs})}},
-                                 "review-pairs"),
-                           tonedPair("Containers", containersText(study), "review-containers",
-                                     ui::cond(study.enough, Text{"normal"}, Text{"error"}))},
+                                 "review-pairs", {containersPair(study)})},
                           {.title = "Review", .padding = 2}),
                 ui::checkbox(
                     {.label = "I have checked the conditions, the pulls and the tests against protocol STP-0114 v2.",

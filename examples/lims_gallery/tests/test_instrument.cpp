@@ -86,7 +86,9 @@ TEST_CASE("instrument, compact: stacked sections, actions in the page, the secti
     CHECK_FALSE(screen.shows("Button", "head_action_book"));
     CHECK(screen.shows("Button", "book"));
     CHECK(screen.shows("Button", "maintenance"));
-    CHECK(screen.find("Column", "details").has_value());
+    CHECK(screen.prop("KeyValue", "details", "captions") == "Above");
+    CHECK(screen.prop("KeyValue", "details", "items").value_or(std::string{}).contains(
+        "Serial number:[DEAB-902114;mono]"));
     CHECK(screen.prop("Collapsible", "booking-section", "open") == "true");
     CHECK(screen.prop("Collapsible", "qualification-section", "open") == "false");
     CHECK(screen.prop("Collapsible", "events-section", "title") == "Recent events · 3");

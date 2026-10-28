@@ -172,18 +172,24 @@ ui::Commands scanCommands(Receipt const& receipt) {
             ui::set(receipt.scan, std::string{}), ui::focus(receipt.scanField)};
 }
 
-// Compact drops the caption, as the design does; the label still names the field.
+// The screen's focal field. Compact drops the caption and the help, as the design does; the label still names the
+// field.
 ui::Node scanField(Receipt const& receipt, bool compact) {
-    return ui::textInput({.value = receipt.scan,
-                          .label = "Scan a sample barcode",
-                          .placeholder = "Waiting for scan…",
-                          .icon = "scan",
-                          .onChange = ui::set(receipt.scan, ui::event()),
-                          .onSubmit = scanCommands(receipt)})
-        .id(receipt.scanField)
-        .autofocus(true)
-        .with("showLabel", ui::AnyHandle{!compact})
-        .testId("scan");
+    ui::Node field = ui::textInput({.value = receipt.scan,
+                                    .label = "Scan a sample barcode",
+                                    .placeholder = "Waiting for scan…",
+                                    .icon = "scan",
+                                    .emphasis = morph::ui::InputEmphasis::Prominent,
+                                    .onChange = ui::set(receipt.scan, ui::event()),
+                                    .onSubmit = scanCommands(receipt)})
+                         .id(receipt.scanField)
+                         .autofocus(true)
+                         .with("showLabel", ui::AnyHandle{!compact})
+                         .testId("scan");
+    if (!compact) {
+        field = field.description("The field keeps focus after every scan. Press Enter to look up a typed ID.");
+    }
+    return field;
 }
 
 ui::Node notices(Receipt const& receipt) {
@@ -209,14 +215,13 @@ ui::Node temperatureField(Receipt const& receipt) {
         ui::cond(receipt.inRange, ui::AnyHandle{std::vector<std::string>{}},
                  ui::AnyHandle{std::vector<std::string>{"Outside 2–8 °C: reject the sample or record a "
                                                         "deviation."}});
-    return layout::captioned(
-               ui::textInput(
-                   {.value = receipt.temperature,
-                    .label = ui::cond(receipt.compact, ui::Handle<std::string>{"Temperature on arrival, °C · 2–8 °C"},
-                                      ui::Handle<std::string>{"Temperature on arrival, °C"}),
-                    .onChange = ui::set(receipt.temperature, ui::event())}))
+    return layout::captioned(ui::textInput({.value = receipt.temperature,
+                                            .label = "Temperature on arrival",
+                                            .unit = "°C",
+                                            .onChange = ui::set(receipt.temperature, ui::event())}))
         .required(true)
         .errors(errors)
+        .description("Required range 2–8 °C")
         .testId("temperature");
 }
 
@@ -279,7 +284,7 @@ ui::Node conditions(Receipt const& receipt, bool compact) {
               "labelled"),
         check(receipt.logger, "Temperature logger attached", "logger")};
     ui::Node const boxes = compact ? ui::column(checks, {.gap = 1}) : ui::grid(checks, {.gap = 1, .columns = 2});
-    return ui::column({ui::text({.text = "Condition on receipt *"}), boxes}, {.gap = 1}).testId("conditions");
+    return ui::group({boxes}, {.label = "Condition on receipt", .required = true, .gap = 1}).testId("conditions");
 }
 
 ui::Node sampleHeading(Receipt const& receipt) {
@@ -289,7 +294,8 @@ ui::Node sampleHeading(Receipt const& receipt) {
 }
 
 ui::Node rejectButton(Receipt const& receipt, char const* label) {
-    return ui::button({.label = label, .emphasis = ButtonEmphasis::Danger, .onClick = ui::open(receipt.rejectDialog)})
+    return ui::button(
+               {.label = label, .emphasis = ButtonEmphasis::DangerOutline, .onClick = ui::open(receipt.rejectDialog)})
         .enabled(ui::engaged(receipt.sample))
         .testId("reject");
 }
@@ -302,16 +308,18 @@ ui::Node receiveButton(Receipt const& receipt, char const* label) {
 
 // The sample being checked, as the expanded layout's card.
 ui::Node sampleCard(Receipt const& receipt) {
-    auto const lotLine = ui::format("Lot {0} · {1}", {receipt.sample.at("lot"), receipt.sample.at("product")});
+    auto const lotLine =
+        ui::text({.text = ui::format("Lot {0} · {1}", {receipt.sample.at("lot"), receipt.sample.at("product")}),
+                  .spans = ui::spans({"Lot ", ui::mono(receipt.sample.at("lot")),
+                                      ui::format(" · {0}", {receipt.sample.at("product")})}),
+                  .role = "muted"});
     auto const type = layout::captioned(ui::textInput({.value = receipt.sample.at("type"), .label = "Sample type"}))
                           .readonly(true)
                           .testId("type");
-    auto const temperature =
-        ui::column({temperatureField(receipt), layout::muted("Required range 2–8 °C")}, {.gap = 0});
     return ui::panel(
-               {ui::row({sampleHeading(receipt), ui::spacer().sizing(ui::stretch()), layout::muted(lotLine)},
+               {ui::row({sampleHeading(receipt), ui::spacer().sizing(ui::stretch()), lotLine},
                         {.gap = 1, .align = Align::Center}),
-                ui::grid({type, temperature, receivedAtField(receipt), locationField(receipt),
+                ui::grid({type, temperatureField(receipt), receivedAtField(receipt), locationField(receipt),
                           containersField(receipt), courierField(receipt)},
                          {.gap = 2, .columns = 3}),
                 conditions(receipt, false), noteField(receipt),
@@ -356,14 +364,14 @@ ui::Node rejectDialog(Receipt const& receipt) {
         ui::seq(recordOutcome(receipt, "Rejected")), ui::close(ui::self)};
     return ui::dialog(
         receipt.rejectDialog,
-        {layout::muted("The sample is recorded as rejected in this session and is not received."),
-         layout::captioned(ui::select({.options = reasons,
+        {layout::captioned(ui::select({.options = reasons,
                                        .selected = receipt.rejectReason,
                                        .label = "Reason",
                                        .onChoose = ui::set(receipt.rejectReason, ui::event())}))
              .required(true)
              .testId("reject-reason")},
         {.title = ui::format("Reject sample {0}", {receipt.sample.at("id")}),
+         .description = "The sample is recorded as rejected in this session and is not received.",
          .cancel = ui::close(ui::self),
          .actions = {
              {.id = "cancel", .label = "Cancel", .onClick = ui::close(ui::self)},
@@ -371,12 +379,7 @@ ui::Node rejectDialog(Receipt const& receipt) {
 }
 
 ui::Node expandedLayout(Receipt const& receipt) {
-    auto const left = ui::column({ui::column({scanField(receipt, false),
-                                              layout::muted("The field keeps focus after every scan. Press Enter to "
-                                                            "look up a typed ID.")},
-                                             {.gap = 0}),
-                                  notices(receipt), sampleCard(receipt)},
-                                 {.gap = 2})
+    auto const left = ui::column({scanField(receipt, false), notices(receipt), sampleCard(receipt)}, {.gap = 2})
                           .sizing(ui::stretch());
     auto const session =
         ui::panel({sessionTable(receipt), layout::muted(receipt.lastRejection).testId("last-rejection")},
