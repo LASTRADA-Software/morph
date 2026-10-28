@@ -947,3 +947,11 @@ TEST_CASE("interpreter control: the app document's date patterns reach a screen'
     CHECK(h.backend.prop(h.byTestId("DateTimeInput", "day"), "pattern") == "dd-MMM-yyyy");
     CHECK(h.text("shown") == "24-Oct-2026 09:41");
 }
+
+// Mutation: drop the emphasis in the textInput lowering (no `emphasis` is recorded).
+TEST_CASE("interpreter control: a prominent text input records its emphasis", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "scan",
+      "view": {"kind": "textInput", "testId": "scan", "label": "Scan", "emphasis": "prominent"}})");
+    CHECK(h.backend.prop(h.byTestId("TextInput", "scan"), "emphasis") == "Prominent");
+}

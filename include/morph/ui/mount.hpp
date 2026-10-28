@@ -838,6 +838,9 @@ private:
             throw std::logic_error{
                 "morph::ui: a multiline text input holds no number, so it takes no unit, places or icon"};
         }
+        if (spec.emphasis != InputEmphasis::Normal && spec.mode == TextInputMode::Multiline) {
+            throw std::logic_error{"morph::ui: a multiline text input's size is its own; it takes no emphasis"};
+        }
         TextInputWidget& widget = scope.adopt(_backend->createTextInput(parent, spec.mode));
         applyCommon(scope, widget, spec.common);
         applyField(scope, widget, spec.field);
@@ -852,6 +855,9 @@ private:
         }
         if (!spec.icon.empty()) {
             widget.setIcon(spec.icon);
+        }
+        if (spec.emphasis != InputEmphasis::Normal) {
+            widget.setEmphasis(spec.emphasis);
         }
         applyCaption(scope, widget, spec.label, spec.showLabel);
         widget.setOnChange(inputEvent(spec.onChange, reassert));

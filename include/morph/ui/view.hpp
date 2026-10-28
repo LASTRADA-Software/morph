@@ -22,6 +22,7 @@
 #include "button_emphasis.hpp"
 #include "badge_style.hpp"
 #include "button_style.hpp"
+#include "input_emphasis.hpp"
 
 /// @file
 /// @brief The toolkit-agnostic view tree: props, node kinds and their builders.
@@ -552,6 +553,9 @@ struct TextInput {
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief How much it stands out; set once, and never on a multiline input. The mount tells the widget only
+    ///        `Prominent`.
+    InputEmphasis emphasis = InputEmphasis::Normal;
 };
 
 /// @brief A labelled check box.

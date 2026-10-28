@@ -63,7 +63,9 @@ public:
 /// Draws @p field into @p canvas as InputField does (muted while the user cannot reach it), then @p fields'
 /// placeholder while it is empty and a `!` in the last column while @p fields marks it invalid. The text cursor is
 /// left as it was unless @p field has the focus: InputField always sets it, and the last field drawn would win.
-void paintField(::core::tui::InputField& field, FieldOwner const& fields, bool reachable, ::core::tui::Canvas& canvas);
+/// The text is bold while @p strong: a prominent input's.
+void paintField(::core::tui::InputField& field, FieldOwner const& fields, bool reachable, ::core::tui::Canvas& canvas,
+                bool strong = false);
 
 /// @p instant as text in the display zone @p offsetMinutes east of UTC: `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`.
 [[nodiscard]] std::string formatLocal(morph::time::DateTime instant, ui::DateMode mode, int offsetMinutes);
@@ -95,6 +97,8 @@ public:
     void setUnit(std::string_view unit) override;
     void setDecimals(int decimals) override;
     void setIcon(std::string_view icon) override;
+    /// A prominent input draws its text bold; the field's background is unchanged.
+    void setEmphasis(ui::InputEmphasis emphasis) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     /// Where the cursor is, as a byte offset into the text shown.
     [[nodiscard]] std::size_t cursor() const noexcept { return _field->cursor(); }
@@ -133,6 +137,7 @@ private:
     std::function<void(std::string)> _onSubmit;
     std::function<void(std::string)> _onCommit;
     bool _uncommitted = false;  ///< Whether the user edited the text since the last commit.
+    bool _prominent = false;    ///< Whether it is the screen's focal field.
 };
 
 /// DateTimeInput: an ISO-style field in a display zone. Up/Down step by a day (Date) or a minute (DateTime),

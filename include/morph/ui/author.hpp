@@ -38,6 +38,7 @@
 #include "badge_style.hpp"
 #include "button_emphasis.hpp"
 #include "button_style.hpp"
+#include "input_emphasis.hpp"
 
 /// @file
 /// @brief Server-side authoring of UI documents (spec 5 §11): typed builders that write a screen's JSON, and the
@@ -3397,6 +3398,9 @@ struct TextInputOptions {
     /// @brief The unit the input shows, muted, at its trailing edge, and announces after its description, such as
     ///        `°C`; refused on a multiline input.
     AnyHandle unit;
+    /// @brief How much it stands out: `Prominent` for the screen's focal field, such as a scanner's; `Normal` writes
+    ///        no key. Refused on a multiline input.
+    InputEmphasis emphasis = InputEmphasis::Normal;
     /// @brief When the draft commits.
     std::optional<Commit> commitOn;
     /// @brief Commands run on every edit.
@@ -3419,6 +3423,9 @@ struct TextInputOptions {
         .put("mode", options.mode)
         .put("icon", options.icon)
         .put("unit", options.unit);
+    if (options.emphasis == InputEmphasis::Prominent) {
+        node.text("emphasis", "prominent");
+    }
     if (options.commitOn) {
         node.text("commitOn", kCommits.at(static_cast<std::size_t>(*options.commitOn)));
     }

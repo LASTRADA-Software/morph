@@ -877,3 +877,20 @@ TEST_CASE("qt_quick theme: a toned or refused input is outlined in the tone, wit
     CHECK(Scene::itemOf(*toned).property("accessibleDescription").toString() ==
           QStringLiteral("Out of spec: above 0.20"));
 }
+
+// Mutation: ignore `prominent` in MorphInputBackground (the border is then 1 px of `color.border`).
+TEST_CASE("qt_quick theme: a prominent input keeps the touch height and an accent border", "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), brandTheme()).empty());
+    auto const input = scene.backend().createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    input->setEmphasis(ui::InputEmphasis::Prominent);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto* const background = Scene::controlOf(*input).property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    CHECK(Scene::controlOf(*input).height() >= theme->property("touchHeight").toReal());
+    QObject const* const border = background->property("border").value<QObject*>();
+    CHECK(border->property("width").toInt() == 2);
+    CHECK(border->property("color").value<QColor>() == QColor{"#aa0055"});
+}

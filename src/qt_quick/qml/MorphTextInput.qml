@@ -14,6 +14,8 @@ MorphField {
     property bool edited: false
     // The unit, drawn muted at the trailing edge inside the field; empty draws none.
     property string unit: ""
+    // The screen's focal field, such as a scanner's: larger text, the touch height, and an accent outline; set once.
+    property bool prominent: false
     announcedUnit: unit
     // The fraction digits a number is entered with, -1 for an input that holds no number: carried for a kit's
     // restyle to read; the stock input draws nothing from it.
@@ -49,7 +51,8 @@ MorphField {
     defaultRole: Accessible.EditableText
 
     TextField {
-        font: Theme.figuresOf(Theme.bodyFont, Theme.families, root.tabularFigures)
+        font: root.prominent ? Theme.fontOf(Theme.headingPixels, Font.DemiBold)
+                             : Theme.figuresOf(Theme.bodyFont, Theme.families, root.tabularFigures)
         id: field
         width: root.controlWidth
         horizontalAlignment: root.textAlign
@@ -69,6 +72,7 @@ MorphField {
         rightPadding: Theme.spaceOf(3) + (unitLabel.visible ? unitLabel.implicitWidth + Theme.spaceOf(1) : 0)
         background: MorphInputBackground {
             tone: root.shownTone
+            prominent: root.prominent
             scheme: root.scheme
             focused: field.activeFocus
             readOnly: root.readOnly

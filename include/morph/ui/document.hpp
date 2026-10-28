@@ -763,11 +763,12 @@ inline constexpr std::array<KeySpec, 8> kButtonKeys = {{{"label", Shape::Expr},
                                                         {"onActivate", Shape::Commands},
                                                         {"children", Shape::Nodes}}};
 /// @brief The keys of `textInput`.
-inline constexpr std::array<KeySpec, 11> kTextInputKeys = {{{"value", Shape::Expr},
+inline constexpr std::array<KeySpec, 12> kTextInputKeys = {{{"value", Shape::Expr},
                                                             {"placeholder", Shape::Expr},
                                                             {"mode", Shape::Expr},
                                                             {"icon", Shape::Expr},
                                                             {"unit", Shape::Expr},
+                                                            {"emphasis", Shape::Text},
                                                             {"commitOn", Shape::Text},
                                                             {"label", Shape::Expr},
                                                             {"showLabel", Shape::Flag},
@@ -3520,6 +3521,8 @@ private:
         } else if (node.kind == "textInput") {
             static constexpr std::array<std::string_view, 3> kCommit = {"change", "blur", "enter"};
             checkChoice(node, "commitOn", kCommit);
+            static constexpr std::array<std::string_view, 2> kInputEmphases = {"normal", "prominent"};
+            checkChoice(node, "emphasis", kInputEmphases);
             checkMultilineExtras(node);
         } else if (node.kind == "select") {
             static constexpr std::array<std::string_view, 2> kStale = {"clear", "keep"};
@@ -3877,6 +3880,9 @@ private:
             if (node.prop(key) != nullptr) {
                 refuse(pointerAppend(node.path, key), "a multiline input shows no " + std::string{key});
             }
+        }
+        if (!node.name("emphasis").empty() && node.name("emphasis") != "normal") {
+            refuse(pointerAppend(node.path, "emphasis"), "a multiline input's size is its own; it takes no emphasis");
         }
     }
 

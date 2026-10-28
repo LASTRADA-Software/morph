@@ -985,8 +985,8 @@ private:
     std::unique_ptr<FakeSlot> _content;
 };
 
-/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `decimals`, `icon`, `caption`,
-///        `captionShown`, the field state, and a text cursor.
+/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `decimals`, `icon`, `emphasis`,
+///        `caption`, `captionShown`, the field state, and a text cursor.
 ///
 /// The cursor is a byte offset into the text. A user's edit puts it where the edit left it; `setText` with the text
 /// the field shows leaves it alone, as the contract requires, and `setText` with another text puts it at the end.
@@ -1029,6 +1029,9 @@ public:
     void setUnit(std::string_view unit) override { set("unit", formatText(unit)); }
     void setDecimals(int decimals) override { set("decimals", std::to_string(decimals)); }
     void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
+    void setEmphasis(InputEmphasis emphasis) override {
+        set("emphasis", emphasis == InputEmphasis::Prominent ? "Prominent" : "Normal");
+    }
     void setCaption(std::string_view label, bool shown) override {
         set("caption", formatText(label));
         set("captionShown", formatBool(shown));

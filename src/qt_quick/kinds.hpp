@@ -59,6 +59,7 @@ public:
     void setDecimals(int decimals) override;
     void setIcon(std::string_view icon) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
+    void setEmphasis(ui::InputEmphasis emphasis) override;
     [[nodiscard]] std::string shownText() const override;
     /// The cursor, as a byte offset into the UTF-8 text.
     [[nodiscard]] std::size_t cursor() const;

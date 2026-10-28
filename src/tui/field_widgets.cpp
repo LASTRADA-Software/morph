@@ -165,17 +165,21 @@ std::unique_ptr<::core::tui::InputField> makeFieldView(WidgetBase& owner, FieldO
     return std::make_unique<FieldView>(owner, fields);
 }
 
-void paintField(::core::tui::InputField& field, FieldOwner const& fields, bool reachable,
-                ::core::tui::Canvas& canvas) {
+void paintField(::core::tui::InputField& field, FieldOwner const& fields, bool reachable, ::core::tui::Canvas& canvas,
+                bool strong) {
     auto const& theme = canvas.theme();
     auto& buffer = canvas.buffer();
     auto const cursor = buffer.cursor();
     bool const cursorShown = buffer.cursorVisible();
-    field.setStyles(reachable ? ::core::tui::InputFieldStyles{}
-                              : ::core::tui::InputFieldStyles{.text = theme.textMuted,
-                                                              .ghost = std::nullopt,
-                                                              .selection = std::nullopt,
-                                                              .background = std::nullopt});
+    ::core::tui::InputFieldStyles styles{};
+    if (!reachable) {
+        styles.text = theme.textMuted;
+    } else if (strong) {
+        ::core::tui::Style text = field.focused() ? theme.inputFocused : theme.inputNormal;
+        text.bold = true;
+        styles.text = text;
+    }
+    field.setStyles(styles);
     field.InputField::render(canvas);
     if (!field.focused()) {
         buffer.setCursor(cursor.y, cursor.x);
@@ -322,6 +326,14 @@ void TextInputImpl::setDecimals(int decimals) {
 }
 
 // The mount never asks a multiline input for an icon.
+void TextInputImpl::setEmphasis(ui::InputEmphasis emphasis) {
+    if (_mode == ui::TextInputMode::Multiline) {
+        throw std::logic_error{"morph::tui: a multiline text input takes no emphasis"};
+    }
+    _prominent = emphasis == ui::InputEmphasis::Prominent;
+    refresh();
+}
+
 void TextInputImpl::setIcon(std::string_view icon) {
     if (_mode == ui::TextInputMode::Multiline) {
         throw std::logic_error{"morph::tui: a multiline text input shows no icon"};
@@ -351,11 +363,11 @@ void TextInputImpl::paintControl(::core::tui::Canvas& canvas) {
     auto field = control.subcanvas(
         {.x = iconWidth, .y = 0, .width = std::max(0, control.width() - iconWidth), .height = control.height()});
     if (_unit.empty()) {
-        paintField(*_field, *this, actionable(), field);
+        paintField(*_field, *this, actionable(), field, _prominent);
     } else {
         int const unitX = std::max(0, field.width() - marksWidth() - displayWidth(_unit));
         auto text = field.subcanvas({.x = 0, .y = 0, .width = std::max(0, unitX - 1), .height = field.height()});
-        paintField(*_field, *this, actionable(), text);
+        paintField(*_field, *this, actionable(), text, _prominent);
         field.putString(0, unitX, _unit, field.theme().textMuted);
     }
     paintMarks(control);

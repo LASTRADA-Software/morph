@@ -1050,3 +1050,13 @@ TEST_CASE("tui fields: a date input with a pattern shows and reads in it", "[tui
     CHECK(changes.back()->value == at(2026, 10, 25, 10, 0));
     CHECK(harness.draw() == Rows{"25-Oct-2026 10:00"});
 }
+
+// Mutation: leave `_prominent` out of paintField's call (the text is not bold).
+TEST_CASE("tui fields: a prominent input draws its text bold", "[tui][fields]") {
+    Harness harness{30, 1};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    input->setEmphasis(ui::InputEmphasis::Prominent);
+    input->setText("S-123");
+    CHECK(harness.draw() == Rows{"S-123"});
+    CHECK(harness.screen().renderedBuffer().at(0, 0).style.bold);
+}

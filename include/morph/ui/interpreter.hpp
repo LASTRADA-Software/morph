@@ -6841,6 +6841,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             }
         }
         if (spec.mode != TextInputMode::Multiline) {
+            spec.emphasis = node.name("emphasis") == "prominent" ? InputEmphasis::Prominent : InputEmphasis::Normal;
             spec.icon = onceText("icon");
             if (node.prop("unit")) {
                 spec.unit = textProp("unit");

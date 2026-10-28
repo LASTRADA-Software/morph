@@ -451,3 +451,18 @@ TEST_CASE("ui document: the app document's formatting is checked, and a screen h
     REQUIRE_FALSE(screen.has_value());
     CHECK(screen.error().path == "/formatting");
 }
+
+// Mutation: leave `emphasis` out of checkMultilineExtras (the multiline document loads).
+TEST_CASE("ui document: a text input's emphasis is normal or prominent, and a multiline one takes none",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "textInput", "label": "Scan",
+        "emphasis": "prominent"}})")
+              .has_value());
+    auto const multiline = loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "textInput",
+        "label": "Note", "mode": "multiline", "emphasis": "prominent"}})");
+    REQUIRE_FALSE(multiline.has_value());
+    CHECK(multiline.error().path == "/view/emphasis");
+    CHECK_FALSE(loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "textInput", "label": "Scan",
+        "emphasis": "loud"}})")
+                    .has_value());
+}

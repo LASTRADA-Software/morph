@@ -16,26 +16,30 @@ Rectangle {
     property bool readOnly: false
     // The `Tone` index the field is outlined in (0 none): its errors, or its evaluation.
     property int tone: 0
+    // The screen's focal field: a 2 px accent border at all times and, while focused, a 3 px ring of the accent,
+    // faint. A tone wins over the accent, so a refused scan looks refused.
+    property bool prominent: false
     readonly property color toneColor: [scheme.border, scheme.info, scheme.success, scheme.warn, scheme.error][tone]
                                        ?? scheme.border
     readonly property color toneFill: [scheme.surface, scheme.infoBg, scheme.successBg, scheme.warnBg,
                                        scheme.errorBg][tone] ?? scheme.surface
 
-    implicitHeight: Theme.targetHeight
+    // A prominent field keeps the touch height on every window.
+    implicitHeight: prominent ? Math.max(Theme.targetHeight, Theme.touchHeight) : Theme.targetHeight
     implicitWidth: Theme.unitWidth * 20
     radius: Theme.radiusControl
     color: readOnly ? Theme.background : scheme.surface
-    border.width: focused ? 2 : 1
-    border.color: tone !== 0 ? toneColor : focused ? scheme.focus : scheme.border
+    border.width: focused || prominent ? 2 : 1
+    border.color: tone !== 0 ? toneColor : prominent ? scheme.accent : focused ? scheme.focus : scheme.border
 
     // The ring: a sibling's outline, since a Rectangle draws nothing outside itself.
     Rectangle {
         objectName: "toneRing"
         z: -1
         anchors.fill: parent
-        anchors.margins: -2
-        visible: background.tone !== 0
-        radius: background.radius + 2
-        color: background.toneFill
+        anchors.margins: background.tone === 0 && background.prominent ? -3 : -2
+        visible: background.tone !== 0 || (background.prominent && background.focused)
+        radius: background.radius - anchors.margins
+        color: background.tone !== 0 ? background.toneFill : Qt.alpha(background.scheme.accent, 0.2)
     }
 }

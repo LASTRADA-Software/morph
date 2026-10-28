@@ -246,6 +246,12 @@ public:
     /// @param label The label, UTF-8.
     /// @param shown Whether the input shows it.
     virtual void setCaption(std::string_view label, bool shown) = 0;
+
+    /// @brief Sets how much the input stands out: a prominent one is drawn as the screen's focal control, on Qt
+    ///        Quick larger and outlined in the accent, on the terminal in bold. The mount calls it once, only for
+    ///        `Prominent`, and never on a multiline input.
+    /// @param emphasis The emphasis.
+    virtual void setEmphasis(InputEmphasis emphasis) = 0;
 };
 
 /// @brief A labelled check box.
