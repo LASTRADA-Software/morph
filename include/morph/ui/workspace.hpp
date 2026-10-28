@@ -27,7 +27,8 @@
 #include "workspace_model.hpp"
 
 /// @file
-/// @brief The workspace shell (spec 6 §7, §15): tabs over screens, mounted through a `DocumentScreenHost`.
+/// @brief The workspace shell (spec 6 §7, §15): tabs over screens, and overlays over the tabs, mounted through a
+///        `DocumentScreenHost`.
 ///
 /// Specified in `docs/spec/ui/workspace.md`.
 
@@ -58,8 +59,9 @@ enum class HeadPlacement : std::uint8_t {
 /// The model holds the tab logic: tabs keep the order they were opened in, opening a screen whose identity an open
 /// tab already has focuses that tab, a singleton screen has one tab, and closing runs each screen's close protocol
 /// (spec 6 §3), one tab at a time, a walk over several tabs stopping at the first veto. The bar shows the model's tabs
-/// and takes Ctrl+Tab, Ctrl+Shift+Tab and Ctrl+W, which documents may not declare. Neither copyable nor movable;
-/// owned by the owner thread of its runtime.
+/// and takes Ctrl+Tab, Ctrl+Shift+Tab and Ctrl+W, which documents may not declare. A screen a document navigates to as
+/// a dialog or a drawer is shown over the tabs (`openOverlay`). Neither copyable nor movable; owned by the owner
+/// thread of its runtime.
 class Workspace {
 public:
     /// @brief The shell, its tab bar appended to @p parent.
@@ -76,10 +78,12 @@ public:
         : _runtime{&runtime},
           _backend{&backend},
           _host{&host},
+          _parent{parent},
           _bar{backend.createTabs(parent)},
           _hosts{options.hosts},
           _screens{options.screens},
           _onChanged{std::move(options.onChanged)},
+          _diagnostics{options.diagnostics},
           _headPlacement{headPlacement} {
         // The bar and each page fill what they are given, so a screen whose root stretches fills the page.
         _bar->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
@@ -112,8 +116,13 @@ public:
         _model = std::make_unique<WorkspaceModel>(runtime, host, std::move(modelOptions));
     }
 
-    /// @brief Unmounts every screen without asking, newest first, then the pages.
-    ~Workspace() { _model.reset(); }
+    /// @brief Closes every overlay without asking, newest first, then unmounts every tab's screen the same way, then
+    ///        the pages: a callee goes before the opener its call answers.
+    ~Workspace() {
+        *_alive = false;
+        closeOverlays();
+        _model.reset();
+    }
 
     Workspace(Workspace const&) = delete;
     Workspace& operator=(Workspace const&) = delete;
@@ -138,6 +147,101 @@ public:
             return std::unexpected(std::move(opened.error()));
         }
         return indexOf(*opened);
+    }
+
+    /// @brief Opens a screen as `open` does, and says whether it mounted one (`WorkspaceModel::openTab`): what a host
+    ///        needs to settle the call of a navigation that only focused a tab.
+    /// @param screenId The screen id.
+    /// @param params   Its params.
+    /// @return The tab and whether a screen was mounted for it, or why the screen could not be mounted.
+    std::expected<WorkspaceOpened, MountError> openTab(std::string_view screenId, ParamMap const& params) {
+        return _model->openTab(screenId, params);
+    }
+
+    /// @brief Shows a document screen over the tabs, as a dialog (`as: dialog`) or a drawer on the end side
+    ///        (`as: drawer`), mounted with `DocumentScreenHost::mountInto`, so the mount adopts the navigation's call.
+    ///
+    /// It always mounts a new instance: it never focuses an open tab, so a call is never left unclaimed. The
+    /// overlay is titled by the screen's title, and the screen's head actions are its footer's buttons; its badges,
+    /// menu and tools are not shown, and a head with a menu or tools is reported once. A dialog is a sheet while the
+    /// width class is `compact`, and follows `setWidthClass` while it is open. A user's dismissal opens it again at
+    /// once and asks the screen to close (`requestClose`); it goes only when the screen closed. A screen that closes
+    /// itself goes through `screenClosed`. An overlay adds no tab, no record entry and no route.
+    /// @param request The navigation: a screen, its params, and `as` either `dialog` or `drawer`.
+    /// @return Nothing, or why nothing was shown: an `as` that is not an overlay, a host screen, or a refused mount.
+    std::expected<void, MountError> openOverlay(NavigateRequest const& request) {
+        if (request.as != "dialog" && request.as != "drawer") {
+            return std::unexpected(MountError{.screenId = request.screen,
+                                              .reason = "`as: " + request.as + "` is not a dialog or a drawer"});
+        }
+        if (_screens && !_screens(request.screen).host.empty()) {
+            return std::unexpected(
+                MountError{.screenId = request.screen, .reason = "a host screen opens as a tab, not an overlay"});
+        }
+        ValueRecord const* const record = request.params.asRecord();
+        ParamMap const params = record == nullptr ? ParamMap{} : *record;
+        auto overlay = std::make_unique<Overlay>();
+        overlay->id = ++_lastOverlay;
+        overlay->screenId = request.screen;
+        ContainerWidget* content = nullptr;
+        ContainerWidget* footer = nullptr;
+        if (request.as == "drawer") {
+            overlay->drawer = _backend->createDrawer(_parent, Side::End);
+            content = overlay->drawer.get();
+            footer = &overlay->drawer->footer();
+        } else {
+            overlay->dialog = _backend->createDialog(_parent);
+            content = overlay->dialog.get();
+            footer = &overlay->dialog->footer();
+        }
+        auto handle = _host->mountInto(request.screen, params, *content);
+        if (!handle) {
+            return std::unexpected(std::move(handle.error()));
+        }
+        overlay->handle = std::move(*handle);
+        showOverlay(*overlay, *footer);
+        _overlays.push_back(std::move(overlay));
+        return {};
+    }
+
+    /// @brief A screen the workspace shows closed itself, by `return` or `close: self`: its overlay goes, or its tab
+    ///        does. What a host's `DocumentScreenHost::onScreenClosed` forwards here.
+    /// @param screen The closed screen's handle; one the workspace does not show does nothing.
+    void screenClosed(ScreenHandle const& screen) {
+        auto const overlay = std::ranges::find_if(
+            _overlays, [&screen](std::unique_ptr<Overlay> const& open) { return open->handle.get() == &screen; });
+        if (overlay != _overlays.end()) {
+            _overlays.erase(overlay);
+            return;
+        }
+        for (WorkspaceTabId const tab : _model->order()) {
+            if (_model->handleOf(tab) == &screen) {
+                // The screen is closed, so its close answers at once and the tab goes.
+                _model->close(tab, {});
+                return;
+            }
+        }
+    }
+
+    /// @brief The screens shown over the tabs, oldest first.
+    /// @return Each overlay's screen id.
+    [[nodiscard]] std::vector<std::string> overlays() const {
+        std::vector<std::string> out;
+        out.reserve(_overlays.size());
+        for (auto const& overlay : _overlays) {
+            out.push_back(overlay->screenId);
+        }
+        return out;
+    }
+
+    /// @brief Tells the workspace the window's width class changed, as the backend's `setOnWidthClass` listener
+    ///        reports it: each open dialog overlay is a sheet while it is `compact`.
+    /// @param widthClass The class.
+    void setWidthClass(std::string_view widthClass) {
+        bool const sheet = widthClass == "compact";
+        for (auto const& overlay : _overlays) {
+            showSheet(*overlay, sheet);
+        }
     }
 
     /// @brief Opens the start screens (`WorkspaceModel::start`).
@@ -253,9 +357,13 @@ public:
         return tab.has_value() && headHasContent(*tab);
     }
 
-    /// @brief Closes every tab without asking, newest first: what signing out does, since no close guard may keep a
-    ///        screen of the principal who is leaving.
-    void forceCloseAll() { _model->forceCloseAll(); }
+    /// @brief Closes every overlay, then every tab, without asking, newest first: what signing out does, since no
+    ///        close guard may keep a screen of the principal who is leaving. A callee goes before the opener its call
+    ///        answers, so the opener's `onCancel` runs in a live scope; then every call no mount adopted is cancelled.
+    void forceCloseAll() {
+        closeOverlays();
+        _model->forceCloseAll();
+    }
 
     /// @brief The open tabs, in order.
     /// @return Each tab's screen, identity and caption.
@@ -291,6 +399,143 @@ private:
             slot.reset();
         }
     };
+
+    // A screen shown over the tabs: its dialog or drawer, its handle, the footer of its head's actions and the scope
+    // of the effects that follow it, destroyed in the reverse order, so the handle goes before its container.
+    struct Overlay {
+        std::uint64_t id = 0;
+        std::string screenId;
+        std::unique_ptr<DialogWidget> dialog;
+        std::unique_ptr<DrawerWidget> drawer;
+        std::unique_ptr<ScreenHandle> handle;
+        std::optional<Mounted> footer;
+        std::unique_ptr<reactive::Scope> scope;
+        bool sheet = false;
+        bool reported = false;
+
+        Overlay() = default;
+        Overlay(Overlay const&) = delete;
+        Overlay& operator=(Overlay const&) = delete;
+        Overlay(Overlay&&) = delete;
+        Overlay& operator=(Overlay&&) = delete;
+        ~Overlay() {
+            scope.reset();
+            footer.reset();
+            handle.reset();
+            drawer.reset();
+            dialog.reset();
+        }
+
+        void setOpen(bool open) const {
+            if (dialog) {
+                dialog->setOpen(open);
+            } else {
+                drawer->setOpen(open);
+            }
+        }
+    };
+
+    // Draws a dialog overlay as a sheet, or as a centred dialog again; a drawer has no sheet.
+    static void showSheet(Overlay& overlay, bool sheet) {
+        if (overlay.dialog && sheet != overlay.sheet) {
+            overlay.sheet = sheet;
+            overlay.dialog->setSheet(sheet);
+        }
+    }
+
+    // Titles a mounted overlay, puts its head's actions in its footer, opens it and makes a dismissal ask its screen.
+    void showOverlay(Overlay& overlay, ContainerWidget& footer) {
+        ScreenHandle const* const handle = overlay.handle.get();
+        ScreenHead* const head = overlay.handle->head();
+        overlay.scope = std::make_unique<reactive::Scope>(*_runtime);
+        overlay.scope->effect([&overlay, handle] {
+            std::string const title = handle->title().get();
+            if (overlay.dialog) {
+                overlay.dialog->setTitle(title);
+            } else {
+                overlay.drawer->setTitle(title);
+            }
+        });
+        if (head != nullptr) {
+            overlay.footer.emplace(*_runtime, *_backend, overlayActions(*head), &footer);
+            overlay.scope->effect([this, &overlay, head] {
+                bool const menu = head->menu() != nullptr && !head->menu()->get().empty();
+                bool const tools = head->tools() != nullptr && !head->tools()->get().empty();
+                if ((menu || tools) && !overlay.reported) {
+                    overlay.reported = true;
+                    _runtime->untracked([this, &overlay] {
+                        if (_diagnostics) {
+                            _diagnostics(Refusal{.document = overlay.screenId,
+                                                 .path = {},
+                                                 .reason = "a dialog or drawer does not show the head menu or tools "
+                                                           "of " +
+                                                           overlay.screenId});
+                        }
+                    });
+                }
+            });
+        }
+        showSheet(overlay, _backend->widthClass() == "compact");
+        std::uint64_t const overlayId = overlay.id;
+        auto const dismissed = [this, overlayId] {
+            Overlay const* const shown = overlayOf(overlayId);
+            if (shown == nullptr) {
+                return;
+            }
+            // The dismissal closed the widget. It is opened again at once, so the screen stays reachable while its
+            // close protocol runs, and goes only when the screen closed: a dirty screen without a guard stays.
+            shown->setOpen(true);
+            shown->handle->requestClose([this, alive = std::weak_ptr<bool>{_alive}, overlayId](bool closed) {
+                if (auto const live = alive.lock(); live != nullptr && *live && closed) {
+                    removeOverlay(overlayId);
+                }
+            });
+        };
+        if (overlay.dialog) {
+            overlay.dialog->setOnDismiss(dismissed);
+        } else {
+            overlay.drawer->setOnDismiss(dismissed);
+        }
+        overlay.setOpen(true);
+    }
+
+    // The footer of an overlay: a button per visible head action, each running the action by its id.
+    [[nodiscard]] static Node overlayActions(ScreenHead& head) {
+        Row row{.children = {}, .gap = 2, .common = {}, .tone = std::nullopt};
+        row.common.testId = "overlay_actions";
+        row.common.visible = Prop<bool>{[&head] { return !head.actions().get().empty(); }};
+        row.children.push_back(ui::forEach<HeadAction>(
+            [&head] { return head.actions().get(); }, [](HeadAction const& action) { return Key{action.id}; },
+            [&head](reactive::Signal<HeadAction> const& action) {
+                Button button{.label = Prop<std::string>{[&action] { return action.get().label; }},
+                              .emphasis = action.peek().emphasis,
+                              .onClick = [&head, actionId = action.peek().id] { head.run(actionId); },
+                              .common = {}};
+                button.common.testId = "overlay_action_" + action.peek().id;
+                button.common.enabled = Prop<bool>{[&action] { return action.get().enabled; }};
+                return ui::button(std::move(button));
+            },
+            Axis::Horizontal, 2));
+        return ui::row(std::move(row));
+    }
+
+    [[nodiscard]] Overlay const* overlayOf(std::uint64_t overlayId) const {
+        auto const found = std::ranges::find(_overlays, overlayId, [](auto const& open) { return open->id; });
+        return found == _overlays.end() ? nullptr : found->get();
+    }
+
+    void removeOverlay(std::uint64_t overlayId) {
+        std::erase_if(_overlays, [overlayId](std::unique_ptr<Overlay> const& open) { return open->id == overlayId; });
+    }
+
+    // Closes every overlay without asking, newest first; each one's close answers its call with a cancel.
+    void closeOverlays() {
+        while (!_overlays.empty()) {
+            std::unique_ptr<Overlay> const last = std::move(_overlays.back());
+            _overlays.pop_back();
+            last->handle->forceClose();
+        }
+    }
 
     // A badge of the head row, by its place among the visible badges.
     struct PlacedBadge {
@@ -669,15 +914,21 @@ private:
     reactive::Runtime* _runtime;
     IViewBackend* _backend;
     DocumentScreenHost* _host;
+    ContainerWidget* _parent;
     std::unique_ptr<TabsWidget> _bar;
     ScreenHostRegistry const* _hosts = nullptr;
     std::function<WorkspaceScreen(std::string_view)> _screens;
     std::function<void()> _onChanged;
+    std::function<void(Refusal const&)> _diagnostics;
     HeadPlacement _headPlacement = HeadPlacement::InPage;
+    std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
     std::map<std::uint64_t, std::unique_ptr<Page>> _pages;
     // The pages in the bar's order.
     std::vector<WorkspaceTabId> _shownOrder;
     std::unique_ptr<WorkspaceModel> _model;
+    // The overlays, oldest first; declared after the model, so they go before the tabs they were opened from.
+    std::vector<std::unique_ptr<Overlay>> _overlays;
+    std::uint64_t _lastOverlay = 0;
 };
 
 }  // namespace morph::ui

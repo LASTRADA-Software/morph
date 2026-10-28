@@ -47,22 +47,37 @@ constexpr std::chrono::seconds kDevPollEvery{1};
 // The explorer's screen id, and the host screen it names.
 constexpr std::string_view kExplorer = "explorer";
 
-/// The library's document host, with `navigate` handed to the shell.
+/// The library's document host, with `navigate` and a screen that closed itself handed to the shell, and the call of a
+/// navigation that mounted nothing settled by it.
 class Host final : public ui::DocumentScreenHost {
 public:
     Host(ui::Session& session, ui::Dispatcher& dispatcher, ui::DocumentScreenHostOptions options,
-         std::function<void(std::string, ui::ParamMap)> navigate)
-        : DocumentScreenHost{session, dispatcher, std::move(options)}, _navigate{std::move(navigate)} {}
+         std::function<void(ui::NavigateRequest)> navigate, std::function<void(ui::ScreenHandle&)> closed)
+        : DocumentScreenHost{session, dispatcher, std::move(options)},
+          _navigate{std::move(navigate)},
+          _closed{std::move(closed)} {}
 
     void onNavigate(std::string_view screenId, ui::ParamMap const& params) override {
-        _navigate(std::string{screenId}, params);
+        _navigate(ui::NavigateRequest{
+            .screen = std::string{screenId}, .route = {}, .params = ui::Value{params}, .as = {}, .call = false});
     }
 
-    using DocumentScreenHost::onNavigate;
+    void onNavigate(ui::NavigateRequest const& request) override { _navigate(request); }
+
+    void onScreenClosed(ui::ScreenHandle& screen) override { _closed(screen); }
+
+    using DocumentScreenHost::settleCall;
 
 private:
-    std::function<void(std::string, ui::ParamMap)> _navigate;
+    std::function<void(ui::NavigateRequest)> _navigate;
+    std::function<void(ui::ScreenHandle&)> _closed;
 };
+
+/// A navigation's params, as a record.
+ui::ParamMap paramsOf(ui::NavigateRequest const& request) {
+    ui::ValueRecord const* const params = request.params.asRecord();
+    return params == nullptr ? ui::ParamMap{} : *params;
+}
 
 // notify's role ("info", "success", "warning", "error"; empty for the default) as a Tone, matching Banner::tone's
 // own default for an unknown or empty role.
@@ -184,20 +199,12 @@ public:
         hostOptions.application = _application.get();
         hostOptions.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         _host = std::make_unique<Host>(
-            *_session, source.dispatcher(), std::move(hostOptions), [this](std::string screenId, ui::ParamMap params) {
-                // A navigation a sign-in asks for waits for the catalog the sign-in reloads, which lists the screen.
-                if (_reloading) {
-                    _pending = std::pair{std::move(screenId), std::move(params)};
-                    return;
+            *_session, source.dispatcher(), std::move(hostOptions),
+            [this](ui::NavigateRequest request) { navigate(std::move(request)); },
+            [this](ui::ScreenHandle& screen) {
+                if (_workspace) {
+                    _workspace->screenClosed(screen);
                 }
-                // Posted: the current screen is replaced, which must not happen inside
-                // the handler of one of its own elements.
-                _context->executor().post([alive = std::weak_ptr<bool>{_alive}, this, screenId = std::move(screenId),
-                                           params = std::move(params)] {
-                    if (auto const live = alive.lock(); live != nullptr && *live) {
-                        mount(screenId, params);
-                    }
-                });
             });
         _hosts.add(std::string{kExplorer}, [this](ui::ParamMap const& params, ui::ContainerWidget& page) {
             static_cast<void>(params);
@@ -235,6 +242,9 @@ public:
         _backend->setOnWidthClass([this, alive = std::weak_ptr<bool>{_alive}](std::string const& widthClass) {
             if (auto const live = alive.lock(); live != nullptr && *live && _session) {
                 _session->setEnvironmentValue("widthClass", ui::Value{widthClass});
+                if (_workspace) {
+                    _workspace->setWidthClass(widthClass);
+                }
             }
         });
     }
@@ -379,6 +389,7 @@ private:
             return ui::WorkspaceScreen{};
         };
         tabs.onChanged = [this] { showActiveTitle(); };
+        tabs.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         tabs.hosts = &_hosts;
         // The shell mounts the head row itself, in its top bar: an in-page head would show it a second time.
         _workspace = std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs),
@@ -506,7 +517,9 @@ private:
     // is.
     void reloadThen(bool signingIn, std::function<void(std::function<void(bool)>)> const& change) {
         _reloading = true;
-        _pending.reset();
+        if (std::optional<ui::NavigateRequest> const dropped = std::exchange(_pending, std::nullopt)) {
+            settle(*dropped);
+        }
         change([this, signingIn, alive = std::weak_ptr<bool>{_alive}](bool loaded) {
             // Posted, even when the reload answered at once: the document that signed in may still ask to navigate
             // in the same handler, and that navigation is what this mounts.
@@ -540,7 +553,7 @@ private:
                     return;
                 }
                 if (pending) {
-                    mount(pending->first, pending->second);
+                    open(*pending);
                     return;
                 }
                 // A screen that signed in in place, and is still listed, stays as it is, unless it is a public login
@@ -553,8 +566,75 @@ private:
         });
     }
 
-    // Opens a screen as a tab, or focuses the tab that already shows it.
-    void mount(std::string const& screenId, ui::ParamMap const& params) {
+    // A document's navigation. One a sign-in asks for waits for the catalog the sign-in reloads, which lists the
+    // screen, and one that replaces it mounts nothing. Otherwise it is posted: the current screen is replaced, which
+    // must not happen inside the handler of one of its own elements.
+    void navigate(ui::NavigateRequest request) {
+        if (_reloading) {
+            if (_pending) {
+                settle(*_pending);
+            }
+            _pending = std::move(request);
+            return;
+        }
+        _context->executor().post([alive = std::weak_ptr<bool>{_alive}, this, request = std::move(request)] {
+            if (auto const live = alive.lock(); live != nullptr && *live) {
+                open(request);
+            }
+        });
+    }
+
+    // Opens what a document's navigation asks for: a document screen as a dialog or a drawer over the tabs when `as`
+    // says so, anything else as a tab. A host screen and `as: window` open as a tab, which is reported once. A call
+    // whose navigation mounted no document screen (a focused tab, a refused mount, a host screen) is cancelled, so
+    // its opener is answered and no later mount answers it.
+    void open(ui::NavigateRequest const& request) {
+        ui::ParamMap const params = paramsOf(request);
+        bool const overlay = request.as == "dialog" || request.as == "drawer";
+        bool const hostScreen = isHostScreen(request.screen);
+        if (overlay && !hostScreen && _workspace) {
+            _message.reset();
+            if (auto const shown = _workspace->openOverlay(request); !shown) {
+                problem("Cannot open " + shown.error().screenId + ": " + shown.error().reason);
+                settle(request);
+            }
+            return;
+        }
+        if (overlay && _hostAsOverlay.insert(request.screen).second) {
+            problem(request.screen + " is a host screen: it opens as a tab, not as a " + request.as);
+        }
+        if (request.as == "window" && !_windowReported) {
+            _windowReported = true;
+            problem("`as: window` opens a tab: this client has one window");
+        }
+        bool const mounted = mount(request.screen, params);
+        if (!mounted || hostScreen) {
+            settle(request);
+        }
+    }
+
+    // Cancels the call of a navigation that mounted no document screen; one that filed none is left alone.
+    void settle(ui::NavigateRequest const& request) {
+        if (request.call && _host) {
+            _host->settleCall(request.screen, paramsOf(request));
+        }
+    }
+
+    // Whether the catalog names a host screen for @p screenId, as the explorer is.
+    [[nodiscard]] bool isHostScreen(std::string_view screenId) const {
+        if (screenId == kExplorer) {
+            return true;
+        }
+        ui::CatalogReply const* const catalog = _source == nullptr ? nullptr : _source->catalogReply();
+        if (catalog == nullptr) {
+            return false;
+        }
+        auto const entry = std::ranges::find(catalog->entries, screenId, &ui::CatalogEntry::id);
+        return entry != catalog->entries.end() && entry->host.has_value() && !entry->host->empty();
+    }
+
+    // Opens a screen as a tab, or focuses the tab that already shows it; answers whether a screen was mounted.
+    bool mount(std::string const& screenId, ui::ParamMap const& params) {
         _message.reset();
         if (!_workspace) {
             buildFrame();
@@ -565,10 +645,10 @@ private:
             _signedIn = true;
             showSignedIn();
         }
-        auto const opened = _workspace->open(screenId, params);
+        auto const opened = _workspace->openTab(screenId, params);
         if (!opened) {
             show("Cannot open " + opened.error().screenId + ": " + opened.error().reason);
-            return;
+            return false;
         }
         if (_routes) {
             auto const route = _host->routeOf(screenId, params);
@@ -577,6 +657,7 @@ private:
         if (_options.onMounted) {
             _options.onMounted(screenId);
         }
+        return opened->mounted;
     }
 
     // Opens the route the history held at start, once the catalog lists its screen.
@@ -680,7 +761,12 @@ private:
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
     Source* _source = nullptr;
     bool _reloading = false;
-    std::optional<std::pair<std::string, ui::ParamMap>> _pending;
+    // The navigation a sign-in asked for, held until the catalog it reloads is current.
+    std::optional<ui::NavigateRequest> _pending;
+    // The host screens a navigation asked for as a dialog or drawer, each reported once, and whether `as: window`
+    // was.
+    std::set<std::string, std::less<>> _hostAsOverlay;
+    bool _windowReported = false;
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _documents;
     // The app document: mounted as the session's root scope with each frame, and read by the explorer.
     std::shared_ptr<ui::Document const> _appDocument;

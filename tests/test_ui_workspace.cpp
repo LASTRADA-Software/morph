@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -104,6 +105,57 @@ constexpr std::string_view kTooled = R"({
     { "kind": "button", "testId": "upper", "label": "upper", "onClick": [ { "set": "q", "value": "HPLC-7" } ] }
   ] } })";
 
+/// A screen that asks the picker for a value, and shows the answer it got.
+constexpr std::string_view kAsker = R"({
+  "vocab": "ui/1", "id": "asker", "title": "Asker",
+  "state": { "got": { "init": "none" } },
+  "view": { "kind": "column", "children": [
+    { "kind": "text", "testId": "got", "text": { "ref": "got" } },
+    { "kind": "button", "testId": "ask", "label": "ask",
+      "onClick": { "navigate": "picker",
+                   "onResult": [ { "set": "got", "value": { "ref": "event" } } ],
+                   "onCancel": [ { "set": "got", "value": "cancelled" } ] } },
+    { "kind": "button", "testId": "show", "label": "show the picker", "onClick": { "navigate": "picker" } },
+    { "kind": "button", "testId": "askDialog", "label": "ask in a dialog",
+      "onClick": { "navigate": "picker", "as": "dialog",
+                   "onResult": [ { "set": "got", "value": { "ref": "event" } } ],
+                   "onCancel": [ { "set": "got", "value": "cancelled" }, { "notify": "cancelled" } ] } },
+    { "kind": "button", "testId": "askDrawer", "label": "ask in a drawer",
+      "onClick": { "navigate": "picker", "as": "drawer",
+                   "onResult": [ { "set": "got", "value": { "ref": "event" } } ],
+                   "onCancel": [ { "set": "got", "value": "cancelled" } ] } },
+    { "kind": "button", "testId": "askNote", "label": "edit a note in a dialog",
+      "onClick": { "navigate": "note", "params": { "obj": { "noteId": 3 } }, "as": "dialog",
+                   "onCancel": [ { "set": "got", "value": "cancelled" } ] } },
+    { "kind": "button", "testId": "askTooled", "label": "samples in a dialog",
+      "onClick": { "navigate": "tooled", "as": "dialog",
+                   "onCancel": [ { "set": "got", "value": "cancelled" } ] } } ] } })";
+
+/// The picker, a singleton by its catalog facts: it answers 42.
+constexpr std::string_view kPicker = R"({
+  "vocab": "ui/1", "id": "picker", "title": "Picker",
+  "view": { "kind": "button", "testId": "answer", "label": "answer", "onClick": [ { "return": 42 } ] } })";
+
+/// The application's side of the host: it counts the `return`s no call answered.
+class Application final : public morph::ui::InterpreterHost {
+public:
+    bool closeSelf(std::string const& screen, std::optional<Value> result) override {
+        static_cast<void>(result);
+        returned.push_back(screen);
+        return true;
+    }
+
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): InterpreterHost's signature.
+    bool notify(std::string const& text, std::string const& role) override {
+        static_cast<void>(role);
+        notified.push_back(text);
+        return true;
+    }
+
+    std::vector<std::string> returned;
+    std::vector<std::string> notified;
+};
+
 /// What the document host reported, across the tests that read it.
 std::vector<std::string>& reported() {
     static std::vector<std::string> reasons;
@@ -113,10 +165,9 @@ std::vector<std::string>& reported() {
 /// A host over the harness that routes navigation to the shell and decides a dirty screen's close by a script.
 class Host final : public DocumentScreenHost {
 public:
-    Host(Harness& harness, std::optional<bool> guardAnswer)
-        : DocumentScreenHost{harness.session, harness.dispatcher, options(harness, guardAnswer)} {}
+    Host(Harness& harness, std::optional<bool> guardAnswer, morph::ui::InterpreterHost* application = nullptr)
+        : DocumentScreenHost{harness.session, harness.dispatcher, options(harness, guardAnswer, application)} {}
 
-    using DocumentScreenHost::onNavigate;
     void onNavigate(std::string_view screenId, ParamMap const& params) override {
         if (shell != nullptr) {
             auto const opened = shell->open(screenId, params);  // a refused mount opens nothing
@@ -124,23 +175,52 @@ public:
         }
     }
 
+    // A dialog or drawer over the tabs, the rest as a tab; a call whose navigation mounted no screen is settled.
+    void onNavigate(morph::ui::NavigateRequest const& request) override {
+        morph::ui::ValueRecord const* const record = request.params.asRecord();
+        ParamMap const params = record == nullptr ? ParamMap{} : *record;
+        if (shell == nullptr) {
+            return;
+        }
+        if (request.as == "dialog" || request.as == "drawer") {
+            if (!shell->openOverlay(request) && request.call) {
+                settleCall(request.screen, params);
+            }
+            return;
+        }
+        auto const opened = shell->openTab(request.screen, params);
+        if (request.call && (!opened || !opened->mounted)) {
+            settleCall(request.screen, params);
+        }
+    }
+
+    void onScreenClosed(ScreenHandle& screen) override {
+        if (shell != nullptr) {
+            shell->screenClosed(screen);
+        }
+    }
+
     Workspace* shell = nullptr;
 
 private:
-    static DocumentScreenHostOptions options(Harness& harness, std::optional<bool> guardAnswer) {
+    static DocumentScreenHostOptions options(Harness& harness, std::optional<bool> guardAnswer,
+                                             morph::ui::InterpreterHost* application) {
         static std::map<std::string, std::shared_ptr<Document const>, std::less<>> const documents{
             {"note", loadOrFail(kNote, morph::ui::testing::corpusCatalog())},
             {"home", loadOrFail(kHome, morph::ui::testing::corpusCatalog())},
             {"draft", loadOrFail(kDraft, morph::ui::testing::corpusCatalog())},
             {"headed", loadOrFail(kHeaded, morph::ui::testing::corpusCatalog())},
             {"menued", loadOrFail(kMenued, morph::ui::testing::corpusCatalog())},
-            {"tooled", loadOrFail(kTooled, morph::ui::testing::corpusCatalog())}};
+            {"tooled", loadOrFail(kTooled, morph::ui::testing::corpusCatalog())},
+            {"asker", loadOrFail(kAsker, morph::ui::testing::corpusCatalog())},
+            {"picker", loadOrFail(kPicker, morph::ui::testing::corpusCatalog())}};
         DocumentScreenHostOptions made;
         made.documents = [](std::string_view id) -> std::shared_ptr<Document const> {
             auto const found = documents.find(id);
             return found == documents.end() ? nullptr : found->second;
         };
         made.backend = &harness.backend;
+        made.application = application;
         made.diagnostics = [](morph::ui::Refusal const& refusal) { reported().push_back(refusal.reason); };
         if (guardAnswer) {
             made.guard = [answer = *guardAnswer](ScreenHandle&,
@@ -154,7 +234,7 @@ private:
 
 WorkspaceOptions catalog() {
     return WorkspaceOptions{.screens = [](std::string_view id) {
-        return WorkspaceScreen{.singleton = id == "home", .reuseEmpty = id == "draft"};
+        return WorkspaceScreen{.singleton = id == "home" || id == "picker", .reuseEmpty = id == "draft"};
     }};
 }
 
@@ -365,6 +445,198 @@ TEST_CASE("workspace: a refused mount opens nothing; a document's navigate opens
     harness.settle();
     REQUIRE(shell.tabs().size() == 1);
     CHECK(shell.tabs()[0].screenId == "home");
+}
+
+// Control: drop the host's settleCall (the asker reads `none`, and the reopened picker answers it).
+TEST_CASE("workspace: a call to a screen whose tab is open is cancelled, and no later mount answers it",
+          "[ui][workspace]") {
+    Harness harness;
+    Application application;
+    Host host{harness, std::nullopt, &application};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    host.shell = &shell;
+    REQUIRE(shell.open("picker", {}) == 0U);
+    REQUIRE(shell.open("asker", {}) == 1U);
+    harness.settle();
+    harness.backend.click(harness.byTestId("Button", "ask"));
+    harness.settle();
+    // The navigation focused the picker's tab and mounted nothing, so its call was answered with a cancel.
+    CHECK(shell.active() == 0U);
+    CHECK(shell.tabs().size() == 2);
+    CHECK(harness.text("got") == "cancelled");
+
+    // The picker the user opened answers no call: its return is the application's.
+    harness.backend.click(harness.byTestId("Button", "answer"));
+    harness.settle();
+    CHECK(application.returned == std::vector<std::string>{"picker"});
+    shell.activate(1);
+    harness.settle();
+    CHECK(harness.text("got") == "cancelled");
+
+    // Nor does a later mount of the picker: the call is gone, not waiting for it.
+    std::optional<bool> closed;
+    shell.close(0, [&closed](bool done) { closed = done; });
+    harness.settle();
+    REQUIRE(closed == true);
+    REQUIRE(shell.open("picker", {}) == 1U);
+    harness.settle();
+    harness.backend.click(harness.byTestId("Button", "answer"));
+    harness.settle();
+    CHECK(application.returned == std::vector<std::string>{"picker", "picker"});
+    shell.activate(0);
+    harness.settle();
+    CHECK(harness.text("got") == "cancelled");
+    CHECK(shell.tabs().size() == 2);
+}
+
+// Control: let a navigation without onResult and onCancel file a call (the picker answers it and closes itself, so
+// the application hears no return and its tab goes).
+TEST_CASE("workspace: a navigate that asks for no answer files no call, so its screen's return is the application's",
+          "[ui][workspace]") {
+    Harness harness;
+    Application application;
+    Host host{harness, std::nullopt, &application};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    host.shell = &shell;
+    REQUIRE(shell.open("asker", {}) == 0U);
+    harness.settle();
+    harness.backend.click(harness.byTestId("Button", "show"));
+    harness.settle();
+    REQUIRE(shell.tabs().size() == 2);
+    harness.backend.click(harness.byTestId("Button", "answer"));
+    harness.settle();
+    CHECK(application.returned == std::vector<std::string>{"picker"});
+    CHECK(shell.tabs().size() == 2);
+    CHECK(harness.text("got") == "none");
+}
+
+// Control: route `as` to the tab path (no dialog is recorded, and the bar gains a tab); or leave the overlay open
+// after its screen returned (the dialog stays).
+TEST_CASE("workspace: a navigate as a dialog shows the callee over the tabs, and its return answers the opener",
+          "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    host.shell = &shell;
+    REQUIRE(shell.open("asker", {}) == 0U);
+    harness.settle();
+    int const bar = harness.backend.idOf(shell.root());
+    harness.backend.click(harness.byTestId("Button", "askDialog"));
+    harness.settle();
+    CHECK(shell.tabs().size() == 1);
+    CHECK(harness.backend.prop(bar, "tabs") == "[Asker]");
+    CHECK(shell.overlays() == std::vector<std::string>{"picker"});
+    std::vector<int> const dialogs = harness.backend.all("Dialog");
+    REQUIRE(dialogs.size() == 1);
+    CHECK(harness.backend.prop(dialogs[0], "open") == "true");
+    CHECK(harness.backend.prop(dialogs[0], "title") == "Picker");
+    std::vector<int> const held = harness.backend.children(dialogs[0]);
+    CHECK(std::ranges::contains(held, harness.byTestId("Button", "answer")));
+
+    harness.backend.click(harness.byTestId("Button", "answer"));
+    harness.settle();
+    CHECK(harness.text("got") == "42");
+    CHECK(shell.overlays().empty());
+    CHECK(harness.backend.all("Dialog").empty());
+    CHECK(shell.tabs().size() == 1);
+}
+
+// Control: drop the overlay's reopening in its dismissal (the dirty note's dialog stays closed); or remove it before
+// its screen answers (the dirty note's dialog goes).
+TEST_CASE("workspace: dismissing an overlay asks its screen: a clean one is cancelled, a dirty one stays open",
+          "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};  // no guard: a dirty screen stays open
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    host.shell = &shell;
+    REQUIRE(shell.open("asker", {}) == 0U);
+    harness.settle();
+
+    harness.backend.click(harness.byTestId("Button", "askDrawer"));
+    harness.settle();
+    std::vector<int> const drawers = harness.backend.all("Drawer");
+    REQUIRE(drawers.size() == 1);
+    CHECK(harness.backend.prop(drawers[0], "side") == "End");
+    harness.backend.dismiss(drawers[0]);
+    harness.settle();
+    CHECK(harness.text("got") == "cancelled");
+    CHECK(shell.overlays().empty());
+
+    harness.backend.click(harness.byTestId("Button", "askNote"));
+    harness.settle();
+    REQUIRE(shell.overlays() == std::vector<std::string>{"note"});
+    harness.backend.click(harness.byTestId("Button", "edit"));
+    harness.settle();
+    int const dialog = harness.backend.all("Dialog").at(0);
+    harness.backend.dismiss(dialog);
+    harness.settle();
+    CHECK(shell.overlays() == std::vector<std::string>{"note"});
+    CHECK(harness.backend.prop(dialog, "open") == "true");
+    CHECK(harness.backend.log().back().contains("open=true"));
+}
+
+// Control: drop the sheet on a compact class (no `sheet=true`); or leave setWidthClass out (it stays a sheet).
+TEST_CASE("workspace: a dialog overlay is a sheet while the width class is compact, and follows it",
+          "[ui][workspace]") {
+    Harness harness;
+    harness.backend.setWidthClass("compact");
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    host.shell = &shell;
+    REQUIRE(shell.open("asker", {}) == 0U);
+    harness.settle();
+    harness.backend.click(harness.byTestId("Button", "askDialog"));
+    harness.settle();
+    int const dialog = harness.backend.all("Dialog").at(0);
+    CHECK(harness.backend.prop(dialog, "sheet") == "true");
+    shell.setWidthClass("expanded");
+    CHECK(harness.backend.prop(dialog, "sheet") == "false");
+}
+
+// Control: close the tabs before the overlays in forceCloseAll (the asker is gone when the picker's close cancels its
+// call, so its onCancel notifies nothing); or drop the report of a head's menu and tools.
+TEST_CASE(
+    "workspace: forceCloseAll closes the overlays first, so the opener's onCancel runs; a head's menu and tools "
+    "are reported once",
+    "[ui][workspace]") {
+    Harness harness;
+    Application application;
+    Host host{harness, std::nullopt, &application};
+    WorkspaceOptions options = catalog();
+    options.diagnostics = [](morph::ui::Refusal const& refusal) { reported().push_back(refusal.reason); };
+    Workspace shell{harness.runtime, harness.backend, host, std::move(options)};
+    host.shell = &shell;
+    REQUIRE(shell.open("asker", {}) == 0U);
+    harness.settle();
+    harness.backend.click(harness.byTestId("Button", "askDialog"));
+    harness.settle();
+    int const dialog = harness.backend.all("Dialog").at(0);
+    int const answer = harness.byTestId("Button", "answer");
+    std::size_t const before = harness.backend.log().size();
+    shell.forceCloseAll();
+    harness.settle();
+    // The opener's onCancel ran while it was still mounted, and the callee went before its dialog.
+    CHECK(application.notified == std::vector<std::string>{"cancelled"});
+    std::vector<std::string> const& log = harness.backend.log();
+    auto const at = [&log, before](std::string const& line) {
+        return std::find(log.begin() + static_cast<std::ptrdiff_t>(before), log.end(), line) - log.begin();
+    };
+    CHECK(at("destroy Button#" + std::to_string(answer)) < at("destroy Dialog#" + std::to_string(dialog)));
+    CHECK(at("destroy Dialog#" + std::to_string(dialog)) < static_cast<std::ptrdiff_t>(log.size()));
+    CHECK(shell.overlays().empty());
+    CHECK(shell.tabs().empty());
+
+    REQUIRE(shell.open("asker", {}) == 0U);
+    harness.settle();
+    reported().clear();
+    harness.backend.click(harness.byTestId("Button", "askTooled"));
+    harness.settle();
+    REQUIRE(shell.overlays() == std::vector<std::string>{"tooled"});
+    // A change of the head's tools reports nothing more.
+    harness.backend.click(harness.byTestId("Button", "upper"));
+    harness.settle();
+    CHECK(std::ranges::count(reported(),
+                             std::string{"a dialog or drawer does not show the head menu or tools of tooled"}) == 1);
 }
 
 // Mutation: close the tab at a clamped index when the index is past the end, or let closeOthers close the kept one.

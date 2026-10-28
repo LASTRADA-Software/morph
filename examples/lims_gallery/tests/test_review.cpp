@@ -75,13 +75,13 @@ TEST_CASE("review: the splitter's sizes reach the splitter", "[lims-gallery]") {
     CHECK(screen.prop("Splitter", "split", "sizes") == "[37,96]");
 }
 
-// The generic client opens every `navigate` as a tab: the signature opens beside the review, not over it.
-TEST_CASE("review: approve and sign opens the e-signature screen as a tab", "[lims-gallery][gap]") {
+// The review's `navigate` asks for a dialog, and the generic client draws one over the review: no tab is added.
+TEST_CASE("review: approve and sign opens the e-signature screen as a dialog over the review", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
     screen.click("approve");
-    CHECK(screen.waitFor([&screen] { return screen.mounted().size() == 2; }));
-    CHECK(screen.mounted().back() == "lims-gallery.esignature");
-    CHECK(workspaceTabs(screen) == "[Review and approval,E-signature]");
+    CHECK(screen.waitFor([&screen] { return screen.backend().find("Dialog", "title", "E-signature").has_value(); }));
+    CHECK(workspaceTabs(screen) == "[Review and approval]");
+    CHECK(screen.mounted().size() == 1);
     screen.requireNoProblems();
 }
 

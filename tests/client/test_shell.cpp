@@ -22,6 +22,7 @@
 #include <testkit/fake_app_context.hpp>
 #include <testkit/wait.hpp>
 #include <utility>
+#include <vector>
 
 namespace client = morph::client;
 namespace ui = morph::ui;
@@ -71,6 +72,60 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> headBundle()
         }
     }
     return served.build();
+}
+
+/// A screen that asks the callee for an answer, in a dialog or as a tab, and shows what it got.
+constexpr std::string_view kAsker = R"({
+  "vocab": "ui/1", "id": "probe.asker", "title": "Asker",
+  "state": { "got": { "init": "none" } },
+  "view": { "kind": "column", "children": [
+    { "kind": "text", "testId": "got", "text": { "ref": "got" } },
+    { "kind": "button", "testId": "askDialog", "label": "ask in a dialog",
+      "onClick": { "navigate": "probe.callee", "as": "dialog",
+                   "onResult": [ { "set": "got", "value": { "ref": "event" } } ],
+                   "onCancel": [ { "set": "got", "value": "cancelled" } ] } },
+    { "kind": "button", "testId": "askTab", "label": "ask in a tab",
+      "onClick": { "navigate": "probe.callee",
+                   "onResult": [ { "set": "got", "value": { "ref": "event" } } ],
+                   "onCancel": [ { "set": "got", "value": "cancelled" } ] } } ] } })";
+
+/// The callee, a singleton: it answers `yes`.
+constexpr std::string_view kCallee = R"({
+  "vocab": "ui/1", "id": "probe.callee", "title": "Callee",
+  "view": { "kind": "button", "testId": "answer", "label": "answer", "onClick": [ { "return": "yes" } ] } })";
+
+/// The bundle of the asker and the callee, neither public.
+/// @return It, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> callBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    for (auto const& [screenId, text] : {std::pair{"probe.asker", kAsker}, std::pair{"probe.callee", kCallee}}) {
+        ui::CatalogEntry entry;
+        entry.id = screenId;
+        entry.title = screenId;
+        entry.singleton = screenId == std::string_view{"probe.callee"};
+        if (auto added = served.addScreen(std::move(entry), std::string{text}); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    return served.build();
+}
+
+/// A widget's property, or nothing while no widget of that kind has that test id.
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): a kind, a test id and a property name, as the backend reads them.
+std::optional<std::string> propOf(ui::testing::RecordingBackend const& backend, std::string_view kind,
+                                  std::string_view testId, std::string_view name) {
+    auto const widget = backend.find(kind, "testId", testId);
+    if (!widget) {
+        return std::nullopt;
+    }
+    return backend.prop(*widget, name);
+}
+// NOLINTEND(bugprone-easily-swappable-parameters)
+
+/// The workspace's tab captions, as its bar shows them.
+std::string tabCaptions(ui::testing::RecordingBackend const& backend) {
+    std::vector<int> const bars = backend.all("Tabs");
+    return bars.empty() ? std::string{} : backend.prop(bars.front(), "tabs");
 }
 
 /// The text the screen's `width` text shows, or nothing before it is mounted.
@@ -134,4 +189,71 @@ TEST_CASE("Client shell: the top bar's head line shows while the active tab's he
         CHECK(pumpUntil(context.owner(), [&lineShown] { return !lineShown(); }));
     }
     source.close();
+}
+
+// Control: route `as` to the tab path in the shell's navigation (the bar gains a tab, and no dialog is drawn); or drop
+// the host's onScreenClosed (the callee's tab stays after its return).
+TEST_CASE("Client shell: a navigate as a dialog draws a dialog, and a screen that returns from a tab loses it",
+          "[client][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &callBundle}, client::LocalSetup{}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    std::vector<std::string> problems;
+    {
+        auto const shell = client::mountShell(
+            context, backend, std::move(*opened), source,
+            client::ShellOptions{.startScreen = "probe.asker",
+                                 .onProblem = [&problems](std::string const& text) { problems.push_back(text); }});
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return propOf(backend, "Text", "got", "text") == "none"; }));
+        backend.click(*backend.find("Button", "testId", "askDialog"));
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return !backend.all("Dialog").empty(); }));
+        CHECK(backend.prop(backend.all("Dialog").front(), "open") == "true");
+        CHECK(tabCaptions(backend) == "[Asker]");
+        backend.click(*backend.find("Button", "testId", "answer"));
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return propOf(backend, "Text", "got", "text") == "yes"; }));
+        CHECK(pumpUntil(context.owner(), [&backend] { return backend.all("Dialog").empty(); }));
+
+        backend.click(*backend.find("Button", "testId", "askTab"));
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return tabCaptions(backend) == "[Asker,Callee]"; }));
+        backend.click(*backend.find("Button", "testId", "answer"));
+        CHECK(pumpUntil(context.owner(), [&backend] { return tabCaptions(backend) == "[Asker]"; }));
+        CHECK(propOf(backend, "Text", "got", "text") == "yes");
+    }
+    source.close();
+    CHECK(problems.empty());
+}
+
+// Control: drop the shell's settle of a navigation that only focused a tab (the asker reads `none`).
+TEST_CASE("Client shell: a navigate with a call to a screen whose tab is open is cancelled, and reported",
+          "[client][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &callBundle}, client::LocalSetup{}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    std::vector<std::string> problems;
+    {
+        auto const shell = client::mountShell(
+            context, backend, std::move(*opened), source,
+            client::ShellOptions{.startScreen = "probe.callee",
+                                 .onProblem = [&problems](std::string const& text) { problems.push_back(text); }});
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return tabCaptions(backend) == "[Callee]"; }));
+        backend.click(*backend.find("Button", "testId", "nav_probe.asker"));
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return propOf(backend, "Text", "got", "text") == "none"; }));
+        backend.click(*backend.find("Button", "testId", "askTab"));
+        CHECK(
+            pumpUntil(context.owner(), [&backend] { return propOf(backend, "Text", "got", "text") == "cancelled"; }));
+        CHECK(tabCaptions(backend) == "[Callee,Asker]");
+    }
+    source.close();
+    REQUIRE(problems.size() == 1);
+    CHECK(problems.front().contains("navigate to probe.callee mounted no screen; its call was cancelled"));
 }

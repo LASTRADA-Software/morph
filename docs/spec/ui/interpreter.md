@@ -273,7 +273,9 @@ its target does not resolve, and when the host does not support it.
   no dialog or drawer of the component's own around the command, is reported ("`close: self` inside a component
   names no dialog or drawer") and fails the command: it never closes the screen the component sits in. A
   mutation's `onSuccess` runs in the scope that declares the mutation, so the same lexical rule applies to it.
-- `navigate` runs `onResult` with the returned value as `event`, or `onCancel`.
+- `navigate` runs `onResult` with the returned value as `event`, or `onCancel`. A `navigate` with neither asks
+  the host with no handlers, so it files no call ([host.md](host.md#documentscreenhost)): the screen it opens
+  answers nobody.
 - `focus` moves keyboard focus to the declaration its target resolved to at load (`Document::focusTargets`), in the
   screen's mounted tree (`Mounted::focus`). The lowering gives every element the focus key of its declaration: the
   node's JSON Pointer, after the key of the `custom` node whose fallback lowered it, followed by `@<canonical row

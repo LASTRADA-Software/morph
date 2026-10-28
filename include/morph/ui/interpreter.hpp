@@ -193,6 +193,10 @@ struct NavigateRequest {
     Value params;
     /// @brief `tab`, `dialog`, `drawer` or `window`; empty for the shell's choice.
     std::string as;
+    /// @brief Whether the navigation filed a call (the command has `onResult` or `onCancel`), which the next mount of
+    ///        the screen with these params adopts. Set by the host that filed it, `DocumentScreenHost`; a host that
+    ///        handles such a navigation without mounting that screen settles the call.
+    bool call = false;
 };
 
 /// @brief What an `upload` command asks the host to send, and the mutation that will reference the file, which is what
@@ -5470,9 +5474,16 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
             NavigateRequest const request{.screen = command.target,
                                           .route = eval(command.extra),
                                           .params = eval(command.value),
-                                          .as = command.option};
+                                          .as = command.option,
+                                          .call = false};
             if (host == nullptr) {
                 finish(unsupported(command, "`navigate`"));
+                return;
+            }
+            // A navigation without `onResult` and `onCancel` asks for no answer, so it files no call: the screen it
+            // opens answers nobody, and its `return` is the application's.
+            if (command.commands.empty() && command.alternative.empty()) {
+                finish(host->navigate(request, {}, {}) || unsupported(command, "`navigate`"));
                 return;
             }
             std::weak_ptr<RtScope> const weak = ctx.scope;

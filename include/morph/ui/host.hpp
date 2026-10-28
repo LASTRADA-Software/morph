@@ -577,12 +577,50 @@ public:
         return Inspector::over(*screen);
     }
 
+    /// @brief Cancels every call no mount has adopted: each one's `onCancel` runs, oldest first. What a shell does
+    ///        when it closes every screen, so no call outlives the screens it was filed among and a later mount never
+    ///        answers an opener that is gone.
+    void cancelUnclaimedCalls() {
+        for (std::shared_ptr<Call> const& call : std::exchange(_unclaimed, {})) {
+            call->answer(std::nullopt);
+        }
+    }
+
     /// @brief The root widget of a handle this host mounted, which a host places in its own layout.
     /// @param handle A handle this host mounted.
     /// @return Its root widget, or `nullptr` for a closed or foreign handle.
     [[nodiscard]] static Widget* rootOf(ScreenHandle const& handle) {
         auto const* const own = dynamic_cast<Handle const*>(&handle);
         return own == nullptr ? nullptr : own->root();
+    }
+
+protected:
+    /// @brief Answers with a cancel the call of a navigation this host handled without mounting a document screen:
+    ///        the oldest unclaimed call of that screen and params, the one a mount would have adopted. Its `onCancel`
+    ///        runs, and the cancel is reported to `diagnostics`.
+    ///
+    /// A host calls it once for each navigation whose `NavigateRequest::call` is set and that mounted no document
+    /// screen: one that focused an open tab, a refused mount, a host screen (which adopts no call) and a navigation
+    /// it dropped. A call left unclaimed would otherwise never be answered, and the next mount of that screen with
+    /// those params, opened for any reason, would answer an opener that never opened it.
+    /// @param screenId The screen the navigation named.
+    /// @param params   Its params.
+    void settleCall(std::string_view screenId, ParamMap const& params) {
+        auto const found = std::ranges::find_if(_unclaimed, [&](std::shared_ptr<Call> const& call) {
+            return call->screen == screenId && call->params == params;
+        });
+        if (found == _unclaimed.end()) {
+            return;
+        }
+        std::shared_ptr<Call> const call = std::move(*found);
+        _unclaimed.erase(found);
+        if (_options.diagnostics) {
+            _options.diagnostics(Refusal{
+                .document = std::string{screenId},
+                .path = {},
+                .reason = "navigate to " + std::string{screenId} + " mounted no screen; its call was cancelled"});
+        }
+        call->answer(std::nullopt);
     }
 
 private:
@@ -1061,7 +1099,9 @@ private:
             return _options.application != nullptr &&
                    _options.application->navigate(request, std::move(onResult), std::move(onCancel));
         }
-        if (onResult || onCancel) {
+        NavigateRequest forwarded = request;
+        forwarded.call = onResult || onCancel;
+        if (forwarded.call) {
             ValueRecord const* const params = request.params.asRecord();
             _unclaimed.push_back(std::make_shared<Call>(Call{.screen = request.screen,
                                                              .params = params == nullptr ? ParamMap{} : *params,
@@ -1069,7 +1109,7 @@ private:
                                                              .onCancel = std::move(onCancel),
                                                              .answered = false}));
         }
-        onNavigate(request);
+        onNavigate(forwarded);
         return true;
     }
 

@@ -13,6 +13,7 @@ tab logic with no widgets, for an application's own tab strip; `Workspace` is th
 - [Switching](#switching)
 - [Captions](#captions)
 - [Start and record](#start-and-record)
+- [Overlays](#overlays)
 - [Host screens](#host-screens)
 - [Navigator and pins](#navigator-and-pins)
 - [Design decisions](#design-decisions)
@@ -24,11 +25,11 @@ one is active, and how they open, close and are recorded. The rules of the secti
 answers them by index over its order.
 
 - **Options.** `WorkspaceModelOptions` is `WorkspaceOptions` (`screens`, `hosts`, `onRecord`, `scheduler`,
-  `recordDelay`, `onChanged`) and two callbacks. `mountPage(tab, screenId, params)` makes the tab's page and mounts
+  `recordDelay`, `onChanged`, `diagnostics`) and two callbacks. `mountPage(tab, screenId, params)` makes the tab's page and mounts
   the screen in it, a document screen or a host screen alike, and answers its handle, which the model owns.
   `unmountPage(tab)` is called after the tab's handle is destroyed, so the application destroys the page.
 - **Tabs.** A tab is a `WorkspaceTabId`, issued when it opens and never reused. `open` answers the tab it opened or
-  focused; `activate`, `close`, `closeOthers` take one; `closeAll`, `closeSaved`, `forceCloseAll`, `start`, `next`,
+  focused, and `openTab` the same as a `WorkspaceOpened{tab, mounted}`, `mounted` false when an open tab was focused; `activate`, `close`, `closeOthers` take one; `closeAll`, `closeSaved`, `forceCloseAll`, `start`, `next`,
   `previous`, `record` and `flushRecord` are as below.
 - **Observed values.** `tabs()` is a `reactive::Computed` of the open tabs in order, each a
   `WorkspaceTabState{id, screenId, identity, title, dirty}` that follows its handle; `active()` one of the active
@@ -40,7 +41,8 @@ answers them by index over its order.
 - **Misuse.** An empty `mountPage` is `std::invalid_argument` at construction; a `mountPage` that throws is answered
   as a `MountError` with the exception's text, and opens nothing; a `WorkspaceTabId` the model does not hold (never
   issued, or closed) is `std::out_of_range` from every member that takes one, except `handleOf`, which answers null.
-- The destructor unmounts every screen without asking, newest first, each followed by its `unmountPage`.
+- The destructor unmounts every screen without asking, newest first, each followed by its `unmountPage`, then
+  cancels every call no mount adopted (`DocumentScreenHost::cancelUnclaimedCalls`), as `forceCloseAll` does.
 
 ## Shape
 
@@ -61,13 +63,17 @@ answers them by index over its order.
   available}`; empty treats every screen as a plain, available document screen.
 - Tabs keep the order they were opened in, so a page slot's index is its tab's. `tabs()` lists them as
   `WorkspaceTab{screenId, identity, caption}`; `active()` is the shown tab's index, `std::nullopt` while none is open.
-- An application routes its host's `onNavigate` to `open`, so a document's `navigate` opens or focuses a tab.
-- The destructor unmounts every screen without asking, newest first.
+- An application routes its host's `onNavigate` to `openTab`, so a document's `navigate` opens or focuses a tab, or
+  to `openOverlay` when `as` asks for a dialog or a drawer ([Overlays](#overlays)), and settles the call of a
+  navigation that mounted nothing ([host.md](host.md#documentscreenhost)).
+- The destructor closes every overlay without asking, newest first, then unmounts every tab's screen the same way.
 
 - `handleOf(index)` is a tab's `ScreenHandle`, and `activeHandle()` the active tab's; null past the end or with no
   tab. A client remounts a tab's screen through it on a development reload and reaches its inspector.
-- `forceCloseAll()` closes every tab without running a close guard, newest first: what signing out does, since no
-  guard may keep a screen of the principal who is leaving.
+- `forceCloseAll()` closes every overlay, then every tab, without running a close guard, newest first: what signing
+  out does, since no guard may keep a screen of the principal who is leaving. A callee goes before the opener its
+  call answers, so the opener's `onCancel` runs in a live scope, as closing tabs newest first already does; then
+  every call no mount adopted is cancelled.
 - `WorkspaceOptions::onChanged` is called after the open tabs, their captions or the active tab changed, so a client's
   top bar can follow the active tab's title.
 
@@ -83,7 +89,9 @@ answers them by index over its order.
    holds nothing;
 4. otherwise a new tab is appended.
 
-A refused mount answers its `MountError` and opens nothing; its page is destroyed with it.
+A refused mount answers its `MountError` and opens nothing; its page is destroyed with it. `openTab(screenId,
+params)` opens the same way and answers `WorkspaceOpened{tab, mounted}`: `mounted` is false when step 2 focused an
+open tab, which is when a host settles the navigation's call rather than leave it for a later mount.
 
 ## Closing
 
@@ -161,6 +169,42 @@ re-keyed without any action: `open` reads each tab's identity from its handle wh
     order. Skipped: an unknown screen, a param that no longer parses, and an unavailable entry. The `fallback`
     opens when none did.
   - Any other `start` is the screen id to open.
+
+## Overlays
+
+`openOverlay(request)` shows a document screen over the tabs, as `NavigateRequest::as` asks: `dialog` a
+`DialogWidget`, `drawer` a `DrawerWidget` on the end side, made under the workspace's parent (a backend root when it
+has none). It is what a host's `onNavigate` calls for those two, and stays inside the call protocol of
+[host.md](host.md#documentscreenhost):
+
+- **The call.** The screen is mounted into the overlay with `DocumentScreenHost::mountInto`, so the mount adopts the
+  navigation's call. An overlay always mounts a new instance and never focuses an open tab, so a call is never left
+  unclaimed; a catalog `singleton` limits tabs, and a singleton screen open in a tab may be open in an overlay too.
+- **Documents only.** An `as` other than `dialog` or `drawer`, and a screen whose catalog entry names a `host`
+  screen, are refused with a `MountError` and show nothing, as is a refused mount. A host screen adopts no call, so a
+  host opens it as a tab and settles its call.
+- **What it shows.** The overlay's title follows the screen's `title()`. Its footer holds a button per visible head
+  action (`overlay_action_<id>` in a row `overlay_actions`, hidden while there is none), each running the action by
+  its id, as the head row's do. Its badges are not shown, nor its head menu or tools: the first time the head has
+  either, the workspace reports it once to `WorkspaceOptions::diagnostics` (`a dialog or drawer does not show the
+  head menu or tools of <screen>`).
+- **Sheets.** A dialog is a sheet (`DialogWidget::setSheet`) while the backend's `widthClass()` is `compact` when it
+  opens, and follows `setWidthClass(widthClass)`, which a host calls from its backend's width-class listener, while
+  it is open. A drawer has no sheet. This is the host's own chrome, so it follows the class directly; a dialog node in
+  a document is a sheet only where its `sheet` says.
+- **Closing.** A user's dismissal closes the widget first (`DialogWidget`'s contract). The workspace opens it again
+  at once, inside the dismissal, so the screen stays reachable, and calls `requestClose`; the overlay goes only when
+  that answers `true`. So a host never destroys a handle whose close is pending, a dirty screen without a guard stays,
+  and a close the screen refuses leaves the overlay as it was.
+- **Answers.** A screen that `return`s or runs `close: self` reaches the host's `onScreenClosed(handle)`, which a host
+  forwards to `screenClosed(handle)`: the overlay of that handle goes, or, for a tab's screen, its tab (the closed
+  screen answers its close at once).
+- **Lifetimes.** An overlay's handle is destroyed before its widget, as `mountInto` requires of any container. The
+  destructor and `forceCloseAll` close the overlays without asking, newest first, before the tabs, so a callee goes
+  before the opener its call answers. `closeAll`, `closeOthers` and `closeSaved` walk tabs only: a dialog is modal
+  over them, so no user reaches those walks while one is open.
+- **Not a tab.** An overlay adds no tab, no record entry and no route. `overlays()` lists the open overlays' screen
+  ids, oldest first. Overlays stack: a screen in an overlay may open another, and each closes on its own.
 
 ## Host screens
 

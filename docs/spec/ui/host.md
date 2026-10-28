@@ -99,14 +99,28 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
   this host's documents.
 - **`navigate`.** A document's `navigate` to a screen reaches `onNavigate(NavigateRequest)`, which by default
   calls `onNavigate(screenId, params)`; a host that shows dialogs, drawers or windows overrides the first to read
-  `as`. A `navigate` that names no screen (a route) goes to the application's host.
-- **Call and return** (§16). A `navigate` with `onResult` or `onCancel` files a call. The next `mount` of that
-  screen with equal params adopts it, so the host decides how to show the callee and the framework still ties the
-  answer to the opener. The callee answers exactly once: `{"return": e}` runs `onResult` with `e`; `close: self`
-  outside any dialog or drawer, and any other close (the platform's, `forceClose`, a destroyed handle), run
-  `onCancel`. After `return` or such a `close: self` the host closes the callee (posted, since the command is still
-  running in it) and calls `onScreenClosed(handle)`, so the host drops its tab or dialog. A `return` from a screen that answers no call goes to the application's
-  host.
+  `as`. The framework's workspace is such a host: `Workspace::openOverlay` shows a document screen as a dialog or a
+  drawer over the tabs ([workspace.md](workspace.md#overlays)), and the generic client routes `as: dialog` and
+  `as: drawer` there. A `navigate` that names no screen (a route) goes to the application's host.
+- **Call and return** (§16). A `navigate` with `onResult` or `onCancel` files a call, and its `NavigateRequest`
+  says so (`call`); one with neither files none, so the screen it opens answers nobody. The next `mount` of that
+  screen with equal params adopts the oldest such call, so the host decides how to show the callee and the framework
+  still ties the answer to the opener. The callee answers exactly once: `{"return": e}` runs `onResult` with `e`;
+  `close: self` outside any dialog or drawer, and any other close (the platform's, `forceClose`, a destroyed handle),
+  run `onCancel`. After `return` or such a `close: self` the host closes the callee (posted, since the command is
+  still running in it) and calls `onScreenClosed(handle)`, so the host drops its tab or dialog; the workspace does
+  this in `Workspace::screenClosed`. A `return` from a screen that answers no call goes to the application's host.
+- **A navigation that mounts nothing.** A host that handles a navigation whose `call` is set without mounting that
+  document screen (it focused an open tab, the mount was refused, the screen is a host screen, or it dropped the
+  navigation) calls the protected `settleCall(screenId, params)`: the oldest unclaimed call of that screen and params,
+  the one a mount would have adopted, is answered with `onCancel`, and the cancel is reported to `diagnostics`
+  (`navigate to <screen> mounted no screen; its call was cancelled`). One call per such navigation, oldest first as
+  adoption is, so a second navigation filed before the first was handled keeps its own call for its own mount. Left
+  unclaimed, the call would never be answered, and the next mount of that screen with those params, opened for any
+  reason, would answer an opener that never opened it, and close itself as a callee does. A focused tab never adopts
+  the call: a screen the user opened for their own purpose would otherwise answer, and close itself, for an opener
+  it never saw. `cancelUnclaimedCalls()` cancels every call no mount has adopted, oldest first; the workspace calls
+  it when it closes every tab, so no call outlives the screens it was filed among.
 - `title()` is the document's `title` as text: a string as is, `null` as empty, anything else as its canonical JSON.
   `dirty()` is whether `dirty` is `true`. `title()` and `identity()` keep their last values once the screen has
   closed, and `dirty()` is then `false`.

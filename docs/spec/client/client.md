@@ -73,9 +73,27 @@ otherwise (Qt Quick). A transport the frontend needs that is not built is refuse
 `mountShell(context, backend, opened, source, options)` mounts the library's `ShellFrame` with a `Workspace` of tabs
 in its page for what the source delivered, or shows why it did not open. `ShellOptions` holds the start screen and
 params, `onProblem`, `onMounted`, the downloads directory, the history, development mode, `onReloaded` and
-`signIn`. A sign-in or sign-out closes every tab and rebuilds the frame for the new catalog; a document's
-`navigate` and a navigator choice open the screen as a tab from a task posted to the owner. An empty `signIn` is
-`std::invalid_argument`.
+`signIn`. A sign-in or sign-out closes every tab and rebuilds the frame for the new catalog; a navigator choice
+opens the screen as a tab from a task posted to the owner. An empty `signIn` is `std::invalid_argument`.
+
+A document's `navigate` is handled from a task posted to the owner too, since the screen that asked is still
+running its command:
+
+- `as: dialog` and `as: drawer` show a document screen over the tabs (`Workspace::openOverlay`,
+  [workspace.md](../ui/workspace.md#overlays)); a refused one is reported and shows nothing. Anything else opens it
+  as a tab, or focuses the tab that shows it.
+- A host screen asked for as a dialog or drawer opens as a tab, and the substitution is reported once per screen.
+  `as: window` opens a tab, since the client has one window, and is reported once per session.
+- A screen that closes itself by `return` or `close: self` loses its tab or overlay: the shell's host forwards
+  `onScreenClosed` to `Workspace::screenClosed`.
+- A navigation with a call that mounted no document screen (it focused an open tab, its mount was refused, or the
+  screen is a host screen) settles the call (`DocumentScreenHost::settleCall`): the opener's `onCancel` runs, once,
+  and no later mount answers it. A navigation that waits for a sign-in's catalog and is replaced by another, or
+  dropped when the next session change starts, is settled the same way; one that waited while the frame was rebuilt
+  had its call cancelled when the old workspace's tabs went (`WorkspaceModel`'s destructor).
+- The width-class listener also tells the workspace (`Workspace::setWidthClass`), so an open dialog overlay is a
+  sheet while the window is `compact`. Problems the workspace reports, such as a callee head's menu an overlay leaves
+  out, go to `onProblem`.
 
 The shell mounts the bundle's app document (`DocumentScreenHost::mountApp`), so `{"ref": "app.name"}` in any screen
 reads the session's app state, lets and queries. The root lives as long as the frame it was mounted for, and is
@@ -144,7 +162,8 @@ there itself. An empty mapper is `std::invalid_argument`.
 
 `tests/client/` (`morph_client_tests`, label `client`), headless over a `FakeAppContext` and `RecordingBackend`:
 the arguments, both sources and the shell over a two-screen probe application (and the same behind a public login,
-for when the frame shows its chrome), the waits the tests use, and the
+for when the frame shows its chrome), a navigation as a dialog and a callee that returns from a tab, a call to a
+screen whose tab is open, the waits the tests use, and the
 sign-in mapping: a mapper reading `{user, jwt}` signs in, an empty principal is reported, and an `ApplicationHost`
 passed to a hand-built `DocumentScreenHost` runs a document's `signIn` and inline `upload`, while the same host
 without it reports both as not supported.
