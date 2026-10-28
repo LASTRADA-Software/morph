@@ -2650,6 +2650,48 @@ struct ActionButtonOptions {
     Commands onClick;
 };
 
+/// @brief A search field of a screen's head (`screen.tool`): a controlled line of text.
+struct HeadSearchOptions {
+    /// @brief The tool's id, unique among the head's tools: a name.
+    std::string id;
+    /// @brief The accessible name; required. The head draws no caption.
+    AnyHandle label;
+    /// @brief The text it shows; the user's edits come back through `onChange`.
+    AnyHandle value;
+    /// @brief Shown while it is empty.
+    AnyHandle placeholder;
+    /// @brief Commands run after each user edit, with `event` the text.
+    Commands onChange;
+    /// @brief Commands run when the user submits it, with `event` its text.
+    Commands onSubmit;
+    /// @brief The width in units; 0 writes no key, which is 30.
+    int width = 0;
+    /// @brief Whether it is shown; absent shows it.
+    AnyHandle visible;
+    /// @brief Whether it can be used; absent enables it.
+    AnyHandle enabled;
+};
+
+/// @brief A select of a screen's head (`screen.tool`): a controlled choice of one option.
+struct HeadSelectOptions {
+    /// @brief The tool's id, unique among the head's tools: a name.
+    std::string id;
+    /// @brief The accessible name; required. The head draws no caption.
+    AnyHandle label;
+    /// @brief The options, as a `select`'s; required.
+    AnyHandle options;
+    /// @brief The chosen key; the user's choice comes back through `onChoose`.
+    AnyHandle selected;
+    /// @brief Commands run when the user chooses, with `event` the chosen key.
+    Commands onChoose;
+    /// @brief The width in units; 0 writes no key, which is the content's.
+    int width = 0;
+    /// @brief Whether it is shown; absent shows it.
+    AnyHandle visible;
+    /// @brief Whether it can be used; absent enables it.
+    AnyHandle enabled;
+};
+
 namespace detail {
 
 /// @brief An expression key of a part, left out when absent.
@@ -2671,6 +2713,29 @@ inline void putPresent(Json& json, char const* key, AnyHandle const& value) {
     putPresent(json, "text", badge.text);
     putPresent(json, "icon", badge.icon);
     putPresent(json, "visible", badge.visible);
+    return json;
+}
+
+/// @brief A `headTool` part's JSON, the keys both kinds share.
+/// @param toolId  The id.
+/// @param kind    `search` or `select`.
+/// @param label   The accessible name.
+/// @param width   The width in units; 0 writes none.
+/// @param visible Whether it is shown.
+/// @param enabled Whether it can be used.
+/// @return The JSON.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the part's keys, in the order the document lists them.
+[[nodiscard]] inline Json headTool(std::string const& toolId, char const* kind, AnyHandle const& label, int width,
+                                   AnyHandle const& visible, AnyHandle const& enabled) {
+    Json json = Json::object_t{};
+    detail::put(json, "id", toolId);
+    detail::put(json, "kind", std::string{kind});
+    putPresent(json, "label", label);
+    if (width > 0) {
+        detail::put(json, "width", static_cast<std::int64_t>(width));
+    }
+    putPresent(json, "visible", visible);
+    putPresent(json, "enabled", enabled);
     return json;
 }
 
@@ -2749,6 +2814,33 @@ public:
     /// @brief Appends an action to the head, run in the screen scope.
     /// @param action The action; its id is unique among the head's actions.
     void action(ActionButtonOptions const& action) { detail::append(_head, "actions", detail::actionButton(action)); }
+
+    /// @brief Appends a search field to the head's tools, run in the screen scope.
+    /// @param search The field; its id is unique among the head's tools.
+    void tool(HeadSearchOptions const& search) {
+        Json json = detail::headTool(search.id, "search", search.label, search.width, search.visible, search.enabled);
+        detail::putPresent(json, "value", search.value);
+        detail::putPresent(json, "placeholder", search.placeholder);
+        if (!search.onChange.empty()) {
+            detail::put(json, "onChange", search.onChange.json());
+        }
+        if (!search.onSubmit.empty()) {
+            detail::put(json, "onSubmit", search.onSubmit.json());
+        }
+        detail::append(_head, "tools", std::move(json));
+    }
+
+    /// @brief Appends a select to the head's tools, run in the screen scope.
+    /// @param select The select; its id is unique among the head's tools.
+    void tool(HeadSelectOptions const& select) {
+        Json json = detail::headTool(select.id, "select", select.label, select.width, select.visible, select.enabled);
+        detail::putPresent(json, "options", select.options);
+        detail::putPresent(json, "selected", select.selected);
+        if (!select.onChoose.empty()) {
+            detail::put(json, "onChoose", select.onChoose.json());
+        }
+        detail::append(_head, "tools", std::move(json));
+    }
 
     /// @brief Appends an entry to the head's own menu, drawn behind one icon button after the actions and run in the
     ///        screen scope.

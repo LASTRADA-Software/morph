@@ -1505,6 +1505,27 @@ TEST_CASE("a screen's head writes its own menu, each entry with its id, and the 
         R"({"separator":true},{"id":"retire","label":"Retire","description":"needs reason"}])"));
 }
 
+// Mutation: write a head select's kind as `search`, or write a width of 0 (a key the default leaves out).
+TEST_CASE("a screen's head writes its search and select tools in order", "[ui][author]") {
+    auto const emitted = ui::screen("author.head.tools", [](ui::Scope& screen) {
+                             auto query = screen.state<std::string>("query", ui::AnyHandle{""});
+                             screen.title(ui::AnyHandle{"Samples"});
+                             screen.tool(ui::HeadSearchOptions{.id = "q",
+                                                               .label = ui::AnyHandle{"Search"},
+                                                               .value = query,
+                                                               .onChange = {ui::set(query, ui::event())},
+                                                               .width = 24});
+                             screen.tool(ui::HeadSelectOptions{.id = "lab",
+                                                               .label = ui::AnyHandle{"Lab"},
+                                                               .options = ui::AnyHandle{"North"}});
+                             return ui::spacer();
+                         }).write();
+    REQUIRE(emitted.has_value());
+    CHECK(emitted->text.contains(
+        R"("tools":[{"id":"q","kind":"search","label":"Search","width":24,"value":{"ref":"query"},)"
+        R"("onChange":[{"set":"query","value":{"ref":"event"}}]},{"id":"lab","kind":"select","label":"Lab","options":"North"}])"));
+}
+
 // Mutation: leave the options' actions out of the overlay (the dialog carries no footer buttons).
 TEST_CASE("a dialog's actions are written as its footer buttons, in its scope", "[ui][author]") {
     auto const emitted = ui::screen("author.dialog.actions", [](ui::Scope& screen) {

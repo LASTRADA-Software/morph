@@ -85,6 +85,25 @@ constexpr std::string_view kMenued = R"({
     { "kind": "button", "testId": "hide", "label": "hide", "onClick": [ { "set": "retireShown", "value": false } ] }
   ] } })";
 
+/// A screen whose head has only tools: a search bound to `q`, a select bound to `lab`, and a hidden search.
+constexpr std::string_view kTooled = R"({
+  "vocab": "ui/1", "id": "tooled", "title": "Samples",
+  "tools": [
+    { "id": "q", "kind": "search", "label": "Search samples", "placeholder": "Sample ID",
+      "value": { "ref": "q" }, "onChange": [ { "set": "q", "value": { "ref": "event" } } ],
+      "onSubmit": [ { "set": "submitted", "value": { "ref": "event" } } ] },
+    { "id": "lab", "kind": "select", "label": "Lab", "options": { "lit": ["North", "South"] },
+      "selected": { "ref": "lab" }, "onChoose": [ { "set": "lab", "value": { "ref": "event" } } ] },
+    { "id": "later", "kind": "search", "label": "Later", "visible": false }
+  ],
+  "state": { "q": { "init": "" }, "lab": { "init": "North" }, "submitted": { "init": "" } },
+  "view": { "kind": "column", "children": [
+    { "kind": "text", "testId": "q", "text": { "ref": "q" } },
+    { "kind": "text", "testId": "lab", "text": { "ref": "lab" } },
+    { "kind": "text", "testId": "submitted", "text": { "ref": "submitted" } },
+    { "kind": "button", "testId": "upper", "label": "upper", "onClick": [ { "set": "q", "value": "HPLC-7" } ] }
+  ] } })";
+
 /// What the document host reported, across the tests that read it.
 std::vector<std::string>& reported() {
     static std::vector<std::string> reasons;
@@ -114,7 +133,8 @@ private:
             {"home", loadOrFail(kHome, morph::ui::testing::corpusCatalog())},
             {"draft", loadOrFail(kDraft, morph::ui::testing::corpusCatalog())},
             {"headed", loadOrFail(kHeaded, morph::ui::testing::corpusCatalog())},
-            {"menued", loadOrFail(kMenued, morph::ui::testing::corpusCatalog())}};
+            {"menued", loadOrFail(kMenued, morph::ui::testing::corpusCatalog())},
+            {"tooled", loadOrFail(kTooled, morph::ui::testing::corpusCatalog())}};
         DocumentScreenHostOptions made;
         made.documents = [](std::string_view id) -> std::shared_ptr<Document const> {
             auto const found = documents.find(id);
@@ -477,6 +497,74 @@ TEST_CASE("workspace: a head's own menu is drawn behind one button, and an entry
     CHECK(harness.text("log") == "calibrated");
     CHECK(reported() ==
           std::vector<std::string>{"head menu entry retire is hidden", "head menu entry nowhere is unknown"});
+}
+
+// Mutation: leave the tools out of buildHeadRow (no `head_tool_q`), or out of headHasContent (a head with tools only
+// is hidden); let a hidden tool be edited (no "is hidden").
+TEST_CASE("workspace: a head's search and select are drawn in its row, controlled by the document",
+          "[ui][workspace]") {
+    using morph::ui::HeadTool;
+    using morph::ui::HeadToolKind;
+    reported().clear();
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("tooled", {}) == 0U);
+    harness.settle();
+    morph::ui::ScreenHead* const head = shell.handleOf(0)->head();
+    REQUIRE(head != nullptr);
+    REQUIRE(head->tools() != nullptr);
+    CHECK(head->tools()->peek() ==
+          std::vector<HeadTool>{{.id = "q",
+                                 .kind = HeadToolKind::Search,
+                                 .label = "Search samples",
+                                 .value = "",
+                                 .placeholder = "Sample ID",
+                                 .options = {},
+                                 .selected = std::nullopt,
+                                 .width = 30,
+                                 .enabled = true},
+                                {.id = "lab",
+                                 .kind = HeadToolKind::Select,
+                                 .label = "Lab",
+                                 .value = "",
+                                 .placeholder = "",
+                                 .options = {{.key = morph::ui::Key{"North"}, .label = "North"},
+                                             {.key = morph::ui::Key{"South"}, .label = "South"}},
+                                 .selected = morph::ui::Key{"North"},
+                                 .width = 0,
+                                 .enabled = true}});
+    CHECK(shell.activeHeadShown());
+    CHECK(harness.backend.prop(harness.byTestId("Row", "head"), "visible") != "false");
+
+    // The search: typing runs onChange, the field shows the state's value, and a change of the state shows in it.
+    int const search = harness.byTestId("TextInput", "head_tool_q");
+    CHECK(harness.backend.prop(search, "placeholder") == "Sample ID");
+    CHECK(harness.backend.dump().contains("Search samples"));
+    harness.backend.edit(search, "HPLC");
+    harness.settle();
+    CHECK(harness.text("q") == "HPLC");
+    CHECK(harness.backend.prop(search, "text") == "HPLC");
+    harness.backend.click(harness.byTestId("Button", "upper"));
+    harness.settle();
+    CHECK(harness.backend.prop(search, "text") == "HPLC-7");
+    harness.backend.submit(search, "HPLC-7");
+    harness.settle();
+    CHECK(harness.text("submitted") == "HPLC-7");
+
+    // The select: a choice runs onChoose with the key.
+    int const select = harness.byTestId("Select", "head_tool_lab");
+    harness.backend.choose(select, morph::ui::Key{"South"});
+    harness.settle();
+    CHECK(harness.text("lab") == "South");
+
+    // A hidden tool is not drawn, and is refused by name; an unknown one too.
+    CHECK_FALSE(harness.backend.find("TextInput", "testId", "head_tool_later").has_value());
+    CHECK_FALSE(head->edit("later", Value{std::string{"x"}}));
+    CHECK_FALSE(head->edit("x", Value{std::string{"x"}}));
+    CHECK_FALSE(head->submit("lab"));
+    CHECK(reported() == std::vector<std::string>{"head tool later is hidden", "head tool x is unknown",
+                                                 "head tool lab is a select, which is not submitted"});
 }
 
 // Mutation: answer null from a document screen's `head()` (nothing reaches the head or the row).

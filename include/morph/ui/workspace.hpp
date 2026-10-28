@@ -459,15 +459,71 @@ private:
         return menu == nullptr ? std::vector<HeadMenuEntry>{} : menu->get();
     }
 
-    // Whether a tab's head has a subtitle, a badge, an action or a menu entry; a tracked read.
+    // The visible tools of a tab's head; a tracked read.
+    [[nodiscard]] std::vector<HeadTool> headToolsOf(WorkspaceTabId tab) const {
+        ScreenHead const* const head = headOf(tab);
+        reactive::Computed<std::vector<HeadTool>> const* const tools = head == nullptr ? nullptr : head->tools();
+        return tools == nullptr ? std::vector<HeadTool>{} : tools->get();
+    }
+
+    // Whether a tab's head has a subtitle, a badge, a tool, an action or a menu entry; a tracked read.
     [[nodiscard]] bool headHasContent(WorkspaceTabId tab) const {
         ScreenHead const* const head = headOf(tab);
         return head != nullptr && (!head->subtitle().get().empty() || !head->status().get().empty() ||
-                                   !head->actions().get().empty() || !headMenuOf(tab).empty());
+                                   !headToolsOf(tab).empty() || !head->actions().get().empty() ||
+                                   !headMenuOf(tab).empty());
+    }
+
+    // A tool of the head row: a search field or a select bound to the tool's value, its label the accessible name and
+    // no caption, reporting each edit to the head, which runs the document's commands.
+    [[nodiscard]] Node headTool(WorkspaceTabId tab, reactive::Signal<HeadTool> const& tool) const {
+        std::string const toolId = tool.peek().id;
+        auto const report = [this, tab, toolId](Value const& value) {
+            ScreenHandle* const handle = _model->handleOf(tab);
+            if (ScreenHead* const head = handle == nullptr ? nullptr : handle->head()) {
+                head->edit(toolId, value);
+            }
+        };
+        Common common;
+        common.testId = "head_tool_" + toolId;
+        common.enabled = Prop<bool>{[&tool] { return tool.get().enabled; }};
+        common.a11y.name = Prop<std::string>{[&tool] { return tool.get().label; }};
+        if (int const width = tool.peek().width; width > 0) {
+            common.layout.width = Sizing::fixed(width);
+        }
+        if (tool.peek().kind == HeadToolKind::Select) {
+            Select select;
+            select.options = Prop<std::vector<SelectOption>>{[&tool] { return tool.get().options; }};
+            select.selected = Prop<std::optional<Key>>{[&tool] { return tool.get().selected; }};
+            select.onSelect = [report](Key const& key) { report(detail::valueOfKey(key)); };
+            select.label = Prop<std::string>{[&tool] { return tool.get().label; }};
+            select.common = std::move(common);
+            return ui::select(std::move(select));
+        }
+        TextInput input;
+        input.value = Prop<std::string>{[&tool] { return tool.get().value; }};
+        input.placeholder = Prop<std::string>{[&tool] { return tool.get().placeholder; }};
+        input.label = Prop<std::string>{[&tool] { return tool.get().label; }};
+        input.onChange = [report](std::string text) { report(Value{std::move(text)}); };
+        // A submit of text the tool does not show yet reports it as an edit first, so `onSubmit` reads what was
+        // submitted.
+        input.onSubmit = [this, tab, toolId, &tool](std::string const& text) {
+            ScreenHandle* const handle = _model->handleOf(tab);
+            ScreenHead* const head = handle == nullptr ? nullptr : handle->head();
+            if (head == nullptr) {
+                return;
+            }
+            if (text != tool.peek().value) {
+                head->edit(toolId, Value{text});
+            }
+            head->submit(toolId);
+        };
+        input.common = std::move(common);
+        return ui::textInput(std::move(input));
     }
 
     // The head row's own content, built but not yet wrapped into an immutable Node: the subtitle (muted), the
-    // badges, a spacer, the actions as buttons and the head's own menu behind one icon button. Hidden while the head has none of them, so a screen without a
+    // badges, a spacer, the tools, the actions as buttons and the head's own menu behind one icon button. Hidden while the head has none of them, so a screen without a
     // head looks as it would without the row. Factored out of headRow() so a caller needing to set additional
     // layout fields on the row -- which a Node, once built, can no longer be mutated to carry -- can do so on the
     // still-mutable Row this returns, before wrapping it itself.
@@ -516,6 +572,10 @@ private:
         filler.common.testId = "head_spacer";
         filler.common.layout.width = Sizing::stretch();
         row.children.push_back(ui::spacer(std::move(filler)));
+        row.children.push_back(ui::forEach<HeadTool>(
+            [this, tab] { return headToolsOf(tab); }, [](HeadTool const& tool) { return Key{tool.id}; },
+            [this, tab](reactive::Signal<HeadTool> const& tool) { return headTool(tab, tool); }, Axis::Horizontal,
+            1));
         row.children.push_back(ui::forEach<HeadAction>(
             actions, [](HeadAction const& action) { return Key{action.id}; },
             [this, tab](reactive::Signal<HeadAction> const& action) {

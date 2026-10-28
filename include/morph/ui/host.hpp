@@ -45,11 +45,11 @@ struct MountError {
     std::string reason;
 };
 
-/// @brief A screen's head beside its title: the subtitle, the status badges, the actions and the head's own menu a
-///        shell shows above the screen (the document's `subtitle`, `status`, `actions` and `menu`).
+/// @brief A screen's head beside its title: the subtitle, the status badges, the tools, the actions and the head's own
+///        menu a shell shows above the screen (the document's `subtitle`, `status`, `tools`, `actions` and `menu`).
 ///
 /// The head is data: the screen evaluates it and the shell draws it, so a host screen's handle can implement it too.
-/// The menu members have defaults, for a head that has no menu.
+/// The menu and tool members have defaults, for a head that has neither.
 class ScreenHead {
 public:
     ScreenHead() = default;
@@ -91,6 +91,33 @@ public:
     ///         `false` for a closed screen or a head without a menu.
     virtual bool choose(std::string_view entryId) {
         static_cast<void>(entryId);
+        return false;
+    }
+
+    /// @brief The head's tools that are visible, in order: search fields and selects, each with its value.
+    /// @return They, valid as long as the head; null for a head that has no tools, as a host screen's by default.
+    [[nodiscard]] virtual reactive::Computed<std::vector<HeadTool>> const* tools() const { return nullptr; }
+
+    /// @brief Reports a user's edit of a tool: runs a search's `onChange` with `event` the text, or a select's
+    ///        `onChoose` with `event` the chosen key, as a user event in the screen scope, in one batch. The tool's
+    ///        value changes only when the document's binding does.
+    /// @param toolId The tool's id.
+    /// @param value  A search's text, or a select's key.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold enabled and visible, and
+    ///         `false` for a closed screen or a head without tools.
+    virtual bool edit(std::string_view toolId, Value const& value) {
+        static_cast<void>(toolId);
+        static_cast<void>(value);
+        return false;
+    }
+
+    /// @brief Reports a user's submit of a search tool: runs its `onSubmit` with `event` its text, as a user event in
+    ///        the screen scope, in one batch.
+    /// @param toolId The tool's id.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold enabled and visible, or
+    ///         holds as a select, and `false` for a closed screen or a head without tools.
+    virtual bool submit(std::string_view toolId) {
+        static_cast<void>(toolId);
         return false;
     }
 };
@@ -683,6 +710,13 @@ private:
         bool choose(std::string_view entryId) override {
             return _state->screen != nullptr && _state->screen->chooseMenuEntry(entryId);
         }
+        [[nodiscard]] reactive::Computed<std::vector<HeadTool>> const* tools() const override { return &_state->tools; }
+        bool edit(std::string_view toolId, Value const& value) override {
+            return _state->screen != nullptr && _state->screen->editTool(toolId, value);
+        }
+        bool submit(std::string_view toolId) override {
+            return _state->screen != nullptr && _state->screen->submitTool(toolId);
+        }
 
         void requestClose(std::function<void(bool closed)> done) override { State::request(_state, std::move(done)); }
 
@@ -798,12 +832,16 @@ private:
                            return !closed.get() && generation.get() >= 0 ? screen->menu()
                                                                          : std::vector<HeadMenuEntry>{};
                        }},
-                  menuLabel{*runtime, [this] {
+                  menuLabel{*runtime,
+                            [this] {
                                 if (!closed.get() && generation.get() >= 0) {
                                     lastMenuLabel = screen->menuLabel();
                                 }
                                 return lastMenuLabel;
-                            }} {}
+                            }},
+                  tools{*runtime, [this] {
+                            return !closed.get() && generation.get() >= 0 ? screen->tools() : std::vector<HeadTool>{};
+                        }} {}
 
             State(State const&) = delete;
             State& operator=(State const&) = delete;
@@ -1009,6 +1047,7 @@ private:
             reactive::Computed<std::vector<HeadAction>> actions;
             reactive::Computed<std::vector<HeadMenuEntry>> menu;
             reactive::Computed<std::string> menuLabel;
+            reactive::Computed<std::vector<HeadTool>> tools;
         };
 
         std::shared_ptr<State> _state;
