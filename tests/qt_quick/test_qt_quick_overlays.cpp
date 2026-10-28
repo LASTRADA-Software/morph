@@ -255,3 +255,63 @@ TEST_CASE("qt_quick dialog: an explicit Fixed width overrides the content-driven
 
     CHECK(wideWidth > narrowWidth);
 }
+
+namespace {
+/// The item named @p name at or below @p root, by its object name; null when there is none.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+QQuickItem* namedItem(QQuickItem* root, QString const& name) {
+    if (root == nullptr || root->objectName() == name) {
+        return root;
+    }
+    for (QQuickItem* const child : root->childItems()) {
+        if (QQuickItem* const found = namedItem(child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+}  // namespace
+
+// Mutation: ignore `sheet` in MorphDialog (the popup keeps its content's size and shows no dismiss button).
+TEST_CASE("qt_quick dialog: a sheet fills the window, its dismiss button dismisses once, and turning it off keeps "
+          "the content",
+          "[qt_quick]") {
+    Scene scene;
+    auto dialog = scene.backend().createDialog(nullptr);
+    dialog->setTitle("Sign to approve");
+    int dismissals = 0;
+    dialog->setOnDismiss([&dismissals] { ++dismissals; });
+    auto const input = scene.backend().createTextInput(dialog.get(), ui::TextInputMode::SingleLine);
+    dialog->setSheet(true);
+    dialog->setDismissLabel("Cancel");
+    dialog->setOpen(true);
+    scene.settle();
+    QObject const* const popup = popupOf(Scene::itemOf(static_cast<ui::Widget&>(*dialog)));
+    REQUIRE(popup != nullptr);
+    CHECK(popup->property("width").toReal() == scene.window().width());
+    CHECK(popup->property("height").toReal() == scene.window().height());
+    QQuickItem* const dismiss = namedItem(scene.window().contentItem(), QStringLiteral("sheetDismiss"));
+    REQUIRE(dismiss != nullptr);
+    CHECK(dismiss->isVisible());
+    CHECK(dismiss->property("text").toString() == QStringLiteral("Cancel"));
+
+    // Escape still dismisses a sheet.
+    scene.key(Qt::Key_Escape);
+    CHECK(dismissals == 1);
+    dialog->setOpen(true);
+    scene.settle();
+
+    // Typed text survives turning the sheet off while it is open.
+    scene.click(Scene::itemOf(*input));
+    scene.type(QStringLiteral("abc"));
+    dialog->setSheet(false);
+    scene.settle();
+    CHECK(Scene::controlOf(*input).property("text").toString() == QStringLiteral("abc"));
+    CHECK(popup->property("width").toReal() < scene.window().width());
+    dialog->setSheet(true);
+    scene.settle();
+
+    scene.click(*dismiss);
+    CHECK(dismissals == 2);
+    CHECK_FALSE(dynamic_cast<detail::DialogImpl&>(*dialog).open());
+}

@@ -785,6 +785,11 @@ struct Dialog {
     Action onDismiss;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief Whether it is drawn as a sheet that fills the window, with a head holding a dismiss control and the
+    ///        title. Changing it while open keeps the content and its state.
+    Prop<bool> sheet = false;
+    /// @brief The label of a sheet's dismiss control, which dismisses as Escape does.
+    Prop<std::string> dismissLabel = std::string{"Close"};
 };
 
 /// @brief A progress indicator.

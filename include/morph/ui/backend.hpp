@@ -480,6 +480,21 @@ public:
     ///        The mount puts the dialog's actions here.
     /// @return It, owned by the dialog and valid as long as the dialog.
     virtual ContainerWidget& footer() = 0;
+
+    /// @brief Draws the dialog as a sheet, or as a centred overlay again.
+    ///
+    /// A sheet fills the window, with no margin and no rounding, and keeps every rule of the dialog: the focus trap,
+    /// the footer, Escape as a dismissal. A press outside is not possible, so its head holds a dismiss control
+    /// (labelled by `setDismissLabel`) before the title, which dismisses exactly as Escape does. Changing it while
+    /// the dialog is open keeps the content and its state. A new dialog is not a sheet; the mount calls this only
+    /// when the document binds `sheet` or sets it.
+    /// @param sheet Whether it is a sheet.
+    virtual void setSheet(bool sheet) = 0;
+
+    /// @brief Sets the label of a sheet's dismiss control; a new dialog's is "Close". The mount calls this only when
+    ///        the label is bound or not the default.
+    /// @param label The label, UTF-8.
+    virtual void setDismissLabel(std::string_view label) = 0;
 };
 
 /// @brief A progress indicator.

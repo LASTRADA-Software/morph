@@ -762,3 +762,26 @@ TEST_CASE("interpreter control: a grid's tracks reach the grid in place of a col
     CHECK(h.backend.prop(plain, "columns") == "2");
     CHECK_FALSE(h.backend.hasProp(plain, "tracks"));
 }
+
+// Mutation: leave the mount's setSheet out for a bound `sheet` (no `sheet` property at all).
+TEST_CASE("interpreter control: a dialog's sheet follows the width class, and its dismiss label is sent",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "sign",
+      "state": { "open": { "init": true } },
+      "view": { "kind": "dialog", "id": "signature", "testId": "signature", "title": "Sign",
+        "open": { "ref": "open" }, "dismissLabel": "Cancel",
+        "sheet": { "fn": "eq", "args": [ { "env": "widthClass" }, "compact" ] },
+        "children": [ { "kind": "text", "testId": "inside", "text": "inside" } ] } })");
+    int const dialog = h.byTestId("Dialog", "signature");
+    CHECK(h.backend.prop(dialog, "sheet") == "false");
+    CHECK(h.backend.prop(dialog, "dismissLabel") == "Cancel");
+    h.session.setEnvironmentValue("widthClass", ui::Value{"compact"});
+    h.settle();
+    CHECK(h.backend.prop(dialog, "sheet") == "true");
+    CHECK(h.text("inside") == "inside");
+    h.session.setEnvironmentValue("widthClass", ui::Value{"expanded"});
+    h.settle();
+    CHECK(h.backend.prop(dialog, "sheet") == "false");
+}

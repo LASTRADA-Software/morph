@@ -162,7 +162,8 @@ disabled on the first. The three labels are plain text and default to English (`
 `testIdPrefix`, empty included, names the indicator, Back and Continue `<prefix>steps`, `<prefix>back` and
 `<prefix>continue`.
 `DialogOptions::actions` (a `dialog`'s or `drawer`'s) lists its footer buttons as
-`ActionButtonOptions`, run in its scope.
+`ActionButtonOptions`, run in its scope. `DialogOptions::sheet` and `dismissLabel` are a dialog's: the condition for drawing it as a sheet,
+and its dismiss control's label.
 
 The keys every node takes are member functions of `Node`, each returning a copy with the key set:
 `id(element)`, `visible`, `enabled`, `tooltip`, `sizing`, `span`, `autofocus`, `testId`, `surface` (a name, or an

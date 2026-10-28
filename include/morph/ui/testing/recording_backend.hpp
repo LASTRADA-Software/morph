@@ -1230,13 +1230,16 @@ private:
     std::unique_ptr<FakeSlot> _footer;
 };
 
-/// @brief A fake `DialogWidget`: properties `open`, `title`; a `Footer` child once its footer is asked for.
+/// @brief A fake `DialogWidget`: properties `open`, `title`, `sheet` and `dismissLabel` (when set); a `Footer` child
+///        once its footer is asked for.
 class FakeDialog final : public FakeOverlay<DialogWidget> {
 public:
     using FakeOverlay<DialogWidget>::FakeOverlay;
     void setOpen(bool open) override { set("open", formatBool(open)); }
     void setTitle(std::string_view title) override { set("title", formatText(title)); }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
+    void setSheet(bool sheet) override { set("sheet", formatBool(sheet)); }
+    void setDismissLabel(std::string_view label) override { set("dismissLabel", formatText(label)); }
 };
 
 /// @brief A fake `BannerWidget`: properties `tone`, `text`, `actionLabel`, `dismissible`.

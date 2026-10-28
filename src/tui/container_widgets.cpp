@@ -692,6 +692,18 @@ void OverlayCore::setTitle(std::string_view title) {
     _self->refresh();
 }
 
+void OverlayCore::setSheet(bool sheet) {
+    _sheet = sheet;
+    _self->refresh();
+}
+
+void OverlayCore::setDismissLabel(std::string_view label) {
+    _dismissLabel = std::string{label};
+    _self->refresh();
+}
+
+std::pair<int, int> OverlayCore::dismissCells() const { return {2, displayWidth(_dismissLabel) + 2}; }
+
 ::core::tui::Size FooterImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Horizontal, 1); }
 
 std::vector<::core::tui::Rect> FooterImpl::childAreas(::core::tui::Size size) const {
@@ -713,9 +725,22 @@ ui::ContainerWidget& OverlayFooter::of(ContainerBase& overlay) {
 }
 
 std::vector<::core::tui::Rect> OverlayCore::childAreas(::core::tui::Size size) const {
-    return stackAreas(_self->children(),
-                      {.x = 2, .y = 1, .width = std::max(0, size.width - 4), .height = std::max(0, size.height - 2)},
-                      StackSpec{.axis = ui::Axis::Vertical});
+    ::core::tui::Rect const inner{
+        .x = 2, .y = 1, .width = std::max(0, size.width - 4), .height = std::max(0, size.height - 2)};
+    std::span<WidgetBase* const> const children = _self->children();
+    // A sheet's footer stands at the bottom of the box, under content that takes the rest of its height.
+    bool const footerLast = _sheet && !children.empty() && children.back() == _footer && _footer->shown();
+    if (!footerLast) {
+        return stackAreas(children, inner, StackSpec{.axis = ui::Axis::Vertical});
+    }
+    int const footerHeight = std::min(inner.height, requestedSize(*_footer).height);
+    std::vector<::core::tui::Rect> areas =
+        stackAreas(children.first(children.size() - 1),
+                   {.x = inner.x, .y = inner.y, .width = inner.width, .height = inner.height - footerHeight},
+                   StackSpec{.axis = ui::Axis::Vertical});
+    areas.push_back(
+        {.x = inner.x, .y = inner.y + inner.height - footerHeight, .width = inner.width, .height = footerHeight});
+    return areas;
 }
 
 bool OverlayCore::showsFrame() const {
@@ -735,6 +760,9 @@ bool OverlayCore::showsFrame() const {
 ::core::tui::Size OverlayCore::frameSize() const {
     auto const inner = stackNaturalSize(_self->children(), ui::Axis::Vertical, 0);
     auto const area = _self->context().screen->viewportArea();
+    if (_sheet && !_side.has_value()) {
+        return {.width = area.width, .height = area.height};
+    }
     int const width = std::max(inner.width + 4, displayWidth(_title) + 4);
     if (_side.has_value()) {
         return {.width = std::min(width, area.width), .height = area.height};
@@ -745,6 +773,10 @@ bool OverlayCore::showsFrame() const {
 // A dialog is centred; a drawer stands against its side, the whole height of the screen.
 ::core::tui::Point OverlayCore::framePosition() const {
     auto const& screen = *_self->context().screen;
+    if (_sheet && !_side.has_value()) {
+        auto const area = screen.viewportArea();
+        return {.x = area.x, .y = area.y};
+    }
     if (!_side.has_value()) {
         return centredIn(screen, frameSize());
     }
@@ -760,7 +792,13 @@ void OverlayCore::paintFrame(::core::tui::Canvas& canvas) {
     canvas.fill(canvas.area(), ' ', theme.dialogBackground);
     canvas.drawBox(canvas.area(), ::core::tui::BorderStyle::Single, theme.dialogBorder);
     auto title = canvas.subcanvas({.x = 2, .y = 0, .width = std::max(0, canvas.width() - 4), .height = 1});
-    title.putString(0, 0, _title, theme.dialogTitle);
+    if (_sheet) {
+        std::string const control = "[" + _dismissLabel + "]";
+        title.putString(0, 0, control, theme.dialogTitle);
+        title.putString(0, displayWidth(control) + 1, _title, theme.dialogTitle);
+    } else {
+        title.putString(0, 0, _title, theme.dialogTitle);
+    }
     _self->placeChildren(childAreas(canvas.size()));
 }
 
@@ -773,6 +811,13 @@ void OverlayCore::paintFrame(::core::tui::Canvas& canvas) {
     if (auto const* const mouse = std::get_if<::core::tui::MouseEvent>(&event)) {
         if (mouse->type == ::core::tui::MouseEvent::Type::Press) {
             _self->context().endPress();
+            // core::tui made the event relative to the box, so this is the cell in it.
+            auto const [first, width] = dismissCells();
+            int const column = mouse->x - 1;
+            bool const onDismiss = _sheet && mouse->y - 1 == 0 && column >= first && column < first + width;
+            if (onDismiss && _open && _self->actionable()) {
+                dismiss();
+            }
         }
         return ::core::tui::EventResult::Handled;
     }

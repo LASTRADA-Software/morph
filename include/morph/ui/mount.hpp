@@ -1134,6 +1134,12 @@ private:
         checkOverlayLayout(spec.common, "dialog");
         DialogWidget& widget = scope.adopt(_backend->createDialog(parent));
         applyCommon(scope, widget, spec.common);
+        if (spec.sheet.isBound() || spec.sheet.constant()) {
+            bind(scope, spec.sheet, [&widget](bool sheet) { widget.setSheet(sheet); });
+        }
+        if (spec.dismissLabel.isBound() || spec.dismissLabel.constant() != "Close") {
+            bind(scope, spec.dismissLabel, [&widget](std::string const& label) { widget.setDismissLabel(label); });
+        }
         return mountOverlay(scope, spec, widget);
     }
 

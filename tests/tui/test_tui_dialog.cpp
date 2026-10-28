@@ -114,6 +114,39 @@ TEST_CASE("tui dialog: an open dialog is a centred box over the tree, and takes 
     scene.buttons.clear();
 }
 
+// Control: ignore setSheet in the overlay (the box stays centred at its content's size, and a press on its top row
+// dismisses nothing), or draw the footer after the content (the OK row is not the last one inside).
+TEST_CASE("tui dialog: a sheet fills the screen, its footer at the bottom, and its dismiss control dismisses",
+          "[tui][dialog]") {
+    Harness harness{30, 7};
+    Scene scene{harness, {}};
+    auto const text = harness.make<TextImpl>(scene.body.get());
+    text->setText("Sign?");
+    auto const ok = harness.make<ButtonImpl>(&scene.dialog->footer());
+    ok->setLabel("OK");
+    int dismissed = 0;
+    scene.dialog->setOnDismiss([&] { ++dismissed; });
+    scene.dialog->setSheet(true);
+    scene.dialog->setDismissLabel("Cancel");
+    scene.dialog->setOpen(true);
+    Rows const rows = harness.draw();
+    REQUIRE(rows.size() == 7);
+    CHECK(rows.front() == "┌─[Cancel]─Confirm───────────┐");
+    CHECK(rows.at(1) == "│ Sign?                      │");
+    CHECK(rows.at(5) == "│                     [ OK ] │");
+    CHECK(rows.back() == "└────────────────────────────┘");
+    // A press inside the box but off the control does nothing; a click on it dismisses once, and closes the sheet.
+    static_cast<void>(harness.click({.x = 20, .y = 0}));
+    CHECK(dismissed == 0);
+    static_cast<void>(harness.click({.x = 4, .y = 0}));
+    CHECK(dismissed == 1);
+    CHECK_FALSE(scene.dialog->isOpen());
+    // Turned off, the dialog is centred at its content's size again.
+    scene.dialog->setSheet(false);
+    scene.dialog->setOpen(true);
+    CHECK(harness.draw().front().starts_with("[ Behind ]"));
+}
+
 TEST_CASE("tui dialog: Esc anywhere inside calls onDismiss", "[tui][dialog]") {
     Harness harness{30, 10};
     Scene scene{harness, {"OK"}};

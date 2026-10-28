@@ -2471,13 +2471,49 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: an open dialog drawn as a sheet fills the surface: a stretching text inside it is as wide as a
+///        stretching text beside it, less the sheet's own padding, where a centred dialog would be its content's
+///        width.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> sheetFillsSurface(ConformanceProbe& probe) {
+    // What a sheet's border and padding may take off its width, in units; far less than the root is wide.
+    static constexpr double kSheetPadding = 10;
+    Column column{.children = {sizedText("beside", {.width = Sizing::stretch()}),
+                               ui::dialog({.open = true,
+                                           .title = "Sign",
+                                           .child = sizedText("inside", {.width = Sizing::stretch()}),
+                                           .onDismiss = {},
+                                           .common = {},
+                                           .sheet = true})}};
+    column.common.layout = {.width = Sizing::stretch()};
+    Mounted const view{probe.runtime(), probe.backend(), ui::column(std::move(column))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    ContainerWidget const& root = rootContainer(view);
+    Widget const* const beside = probe.childCount(root) == 2 ? probe.childAt(root, 0) : nullptr;
+    Widget const* const sheet = probe.childCount(root) == 2 ? probe.childAt(root, 1) : nullptr;
+    ContainerWidget const* const overlay = sheet == nullptr ? nullptr : asContainer(*sheet);
+    Widget const* const inside =
+        overlay != nullptr && probe.childCount(*overlay) > 0 ? probe.childAt(*overlay, 0) : nullptr;
+    checks.that(beside != nullptr && inside != nullptr, "the root holds a text, and the open sheet holds one");
+    if (beside != nullptr && inside != nullptr) {
+        double const full = geometry.of(*beside).width;
+        double const within = geometry.of(*inside).width;
+        checks.that(within >= full - kSheetPadding, "a sheet's stretching text is " + std::to_string(within) +
+                                                        " wide, beside a root " + std::to_string(full) + " wide");
+    }
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 15> const cases{{
+    static std::array<ConformanceCase, 16> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -2498,6 +2534,7 @@ struct SelectionReport {
         {.name = "grid tracks of fixed and stretch width", .run = detail::gridTracksSizeColumns},
         {.name = "a centred track centres a label-width cell", .run = detail::centredTrackCentresBadge},
         {.name = "a chart's content size is 40 by 8 units", .run = detail::chartHasContentSize},
+        {.name = "a sheet fills the surface", .run = detail::sheetFillsSurface},
     }};
     return cases;
 }
