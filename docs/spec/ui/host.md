@@ -32,7 +32,7 @@ and is its `InterpreterHost` for `navigate`.
 | `ParamMap` | A screen's params by name: `ValueRecord`, what `Interpreter::mount` takes. |
 | `MountError` | `{screenId, reason}`: an unknown screen, a refused param, a refused mount. |
 | `ScreenHandle` | One mounted screen: `title()`, `dirty()` and `identity()` as `reactive::Computed`, `requestClose(done)`, `forceClose()`, the save seam `canSave()` and `save(done)`, and `head()`. |
-| `ScreenHead` | A screen's head beside its title: `subtitle()`, `status()` (the visible `HeadBadge{text, tone, icon}`s) and `actions()` (the visible `HeadAction{id, label, icon, emphasis, enabled}`s) as `reactive::Computed`, and `run(actionId)`; the head's own menu, `menu()` (the visible `HeadMenuEntry`s) and `menuLabel()`, nullable `reactive::Computed` pointers, and `choose(entryId)`, with defaults for a head without a menu. |
+| `ScreenHead` | A screen's head beside its title: `subtitle()`, `status()` (the visible `HeadBadge{text, tone, icon}`s) and `actions()` (the visible `HeadAction{id, label, icon, emphasis, enabled}`s) as `reactive::Computed`, and `run(actionId)`; the head's own menu, `menu()` (the visible `HeadMenuEntry`s) and `menuLabel()`, nullable `reactive::Computed` pointers, and `choose(entryId)`; `tools()` (the visible `HeadTool`s), a nullable `reactive::Computed` pointer, and `edit(toolId, value)` and `submit(toolId)`; the menu and tool members have defaults for a head without them. |
 | `ScreenHost` | `mount(screenId, params)`, `identityOf(screenId, params)`, and `onNavigate(screenId, params)`, which the host implements. |
 
 `identity()` is beside spec 6 §4's `title` and `dirty` because a host re-keys a tab when a screen's identity
@@ -127,6 +127,15 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
   unknown`, `… is hidden` or `… is disabled`. Choosing by id rather than by place is what keeps an entry hidden
   between drawing and choosing from running its neighbour. A host screen's head answers null for both, and `false`
   from `choose`, unless it overrides them.
+- The head's tools are data as well. `tools()` of a document screen is never null: its visible tools, each a
+  `HeadTool{id, kind, label, value, placeholder, options, selected, width, enabled}` (`kind` a `HeadToolKind`,
+  `Search` or `Select`; `width` 0 for the content's), empty when the document declares none and once the screen has
+  closed. `edit(id, value)` reports a user's edit: a search's text runs its `onChange`, a select's key (as a value)
+  its `onChoose`, with `event` the edit, as a user event in the screen scope in one batch; `submit(id)` runs a
+  search's `onSubmit` with `event` its text. Both answer `true` when they ran; `false`, reporting `head tool <id> is
+  unknown`, `… is hidden` or `… is disabled`, for an id the head does not hold enabled and visible, and for a search
+  edited with anything but text or a select submitted. A tool's value changes only when the document's binding does.
+  A host screen's head answers null and `false` unless it overrides them.
 
 ## The close protocol
 

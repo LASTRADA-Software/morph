@@ -63,7 +63,7 @@ refused: a lab writes dates one way everywhere, so the pattern is the applicatio
 | `vocab` | `vocab` | `ui/1` (`kVocabulary`) |
 | `id` | `id` | Non-empty |
 | `title`, `identity`, `dirty` | same | Expressions; `dirty` is a condition |
-| `subtitle`, `status`, `actions`, `menu`, `menuLabel` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
+| `subtitle`, `status`, `tools`, `actions`, `menu`, `menuLabel` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
 | `params` | `params` | Name to type, in declaration order |
 | `scope` | `models`, `state`, `let`, `queries`, `mutations`, `watch`, `checks` | The screen scope's declarations |
 | `lifecycle` | `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange` | Command lists |
@@ -88,9 +88,30 @@ rather than having it ignored: the author meant a refresh the client would silen
 ### The head
 
 A screen's head is what a shell shows above it beside the title: `subtitle` (an expression), `status` (parts
-`headBadge`: `{tone, text, icon, visible}`), `actions` (parts `actionButton`) and its own `menu` (parts
-`headMenuItem`), with `menuLabel` (an expression, the menu trigger's accessible name; default `More actions`). All
-are evaluated in the screen scope, and the app document, which has no view, refuses them.
+`headBadge`: `{tone, text, icon, visible}`), `tools` (parts `headTool`), `actions` (parts `actionButton`) and its own
+`menu` (parts `headMenuItem`), with `menuLabel` (an expression, the menu trigger's accessible name; default `More
+actions`). All are evaluated in the screen scope, and the app document, which has no view, refuses them. A shell
+draws them in that order on one line: the subtitle, the badges, then at the trailing edge the tools, the actions and
+the menu.
+
+A `headTool` part is a search field or a select the shell draws in the head, as data the screen evaluates: no node of
+the screen is mounted in the shell's widgets.
+
+| Key | Kinds | Shape | Notes |
+|---|---|---|---|
+| `id` | both | name, required | unique among the tools |
+| `kind` | both | text, required | `search` or `select` |
+| `label` | both | expression, required | the accessible name; the head draws no caption |
+| `value`, `placeholder` | search | expressions | the text it shows, and what shows while it is empty |
+| `onChange`, `onSubmit` | search | commands | after each user edit, and on Enter; `event` is the text |
+| `options`, `selected` | select | expressions | as a `select`'s; `options` is required |
+| `style` | select | text | `dropdown`, the default and the only one |
+| `onChoose` | select | commands | after the user chooses; `event` is the chosen key |
+| `width` | both | literal integer, 1 or more | in units; default 30 for a search, the content's for a select |
+| `visible`, `enabled` | both | conditions | default `true` |
+
+A tool is controlled: it shows `value` or `selected` and reports the user's edit through its commands, as a bound
+input does; it changes only when the document's binding does. A key of the other kind is refused.
 
 A `headMenuItem` part takes a `menu` entry's keys (`label`, `icon`, `keys`, `checked`, `enabled`, `onClick`,
 `items`, `separator`, `description`, `visible`; `items` are head menu items too) and `id`, a name. An entry that is

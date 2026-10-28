@@ -581,6 +581,8 @@ struct Document {
     std::vector<DocNodePtr> menu;
     /// @brief The accessible name of the head menu's trigger; `nullptr` for the default, "More actions".
     ExprPtr menuLabel;
+    /// @brief The head's tools: `headTool` parts, a search field or a select each, in order.
+    std::vector<DocNodePtr> tools;
     /// @brief The typed params, in declaration order.
     std::vector<std::pair<std::string, Type>> params;
     /// @brief The screen scope's declarations.
@@ -821,6 +823,21 @@ inline constexpr std::array<KeySpec, 11> kHeadMenuItemKeys = {{{"id", Shape::Nam
                                                                {"separator", Shape::Flag},
                                                                {"description", Shape::Expr},
                                                                {"visible", Shape::Condition}}};
+/// @brief The keys of a `headTool` part: a search field or a select of a screen's head.
+inline constexpr std::array<KeySpec, 14> kHeadToolKeys = {{{"id", Shape::Name, {}, kRequired},
+                                                           {"kind", Shape::Text, {}, kRequired},
+                                                           {"label", Shape::Expr, {}, kRequired},
+                                                           {"value", Shape::Expr},
+                                                           {"placeholder", Shape::Expr},
+                                                           {"onChange", Shape::Commands},
+                                                           {"onSubmit", Shape::Commands},
+                                                           {"options", Shape::Expr},
+                                                           {"selected", Shape::Expr},
+                                                           {"style", Shape::Text},
+                                                           {"onChoose", Shape::Commands},
+                                                           {"width", Shape::Expr},
+                                                           {"visible", Shape::Condition},
+                                                           {"enabled", Shape::Condition}}};
 /// @brief The keys of `column` and `row`.
 inline constexpr std::array<KeySpec, 4> kContainerKeys = {
     {{"children", Shape::Nodes}, {"gap", Shape::Expr}, {"align", Shape::Text}, {"justify", Shape::Text}}};
@@ -1054,7 +1071,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 55> kKinds = {{
+inline constexpr std::array<KindSpec, 56> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -1107,6 +1124,7 @@ inline constexpr std::array<KindSpec, 55> kKinds = {{
     {"actionButton", kActionButtonKeys, kPart},
     {"headBadge", kHeadBadgeKeys, kPart},
     {"headMenuItem", kHeadMenuItemKeys, kPart},
+    {"headTool", kHeadToolKeys, kPart},
     {"fields", {}, kPart},
     {"series", kSeriesKeys, kPart | kRowScope},
     {"line", kLineKeys, kPart},
@@ -1219,9 +1237,10 @@ public:
         doc.actions = topParts(*object, "actions", "actionButton");
         doc.menu = topParts(*object, "menu", "headMenuItem");
         doc.menuLabel = optionalExpr(*object, "menuLabel", "");
+        doc.tools = topParts(*object, "tools", "headTool");
         if (doc.id == "app") {
             // The head belongs to a screen's tab; the app document has no view and so no head.
-            for (std::string_view const key : {"subtitle", "status", "actions", "menu", "menuLabel"}) {
+            for (std::string_view const key : {"subtitle", "status", "actions", "menu", "menuLabel", "tools"}) {
                 if (member(*object, key) != nullptr) {
                     refuse(pointerAppend("", key),
                            "`" + std::string{key} + "` is a screen's; the app document has none");
@@ -2476,6 +2495,7 @@ public:
         checkActionButtons(_doc->actions, "/actions");
         std::set<std::string_view> menuIds;
         checkHeadMenu(_doc->menu, menuIds);
+        checkHeadTools(_doc->tools);
         for (auto const& [key, commands] : _doc->lifecycle) {
             CheckContext context = root;
             context.onClose = key == "onClose";
@@ -3636,7 +3656,52 @@ private:
         std::vector<DocNodePtr> parts = _doc->status;
         parts.insert(parts.end(), _doc->actions.begin(), _doc->actions.end());
         parts.insert(parts.end(), _doc->menu.begin(), _doc->menu.end());
+        parts.insert(parts.end(), _doc->tools.begin(), _doc->tools.end());
         return parts;
+    }
+
+    // The head's tools: each id once, and each one its kind's.
+    static void checkHeadTools(std::span<DocNodePtr const> tools) {
+        std::set<std::string_view> ids;
+        for (DocNodePtr const& tool : tools) {
+            if (!ids.insert(tool->id).second) {
+                refuse(pointerAppend(tool->path, "id"),
+                       "the head tool id `" + tool->id + "` is used twice; each tool has its own");
+            }
+            checkHeadTool(*tool);
+        }
+    }
+
+    // One head tool: a kind of the two, only its kind's keys, a select's options in a dropdown, a literal width.
+    static void checkHeadTool(DocNode const& tool) {
+        static constexpr std::array<std::string_view, 4> kSearchOnly = {"value", "placeholder", "onChange", "onSubmit"};
+        static constexpr std::array<std::string_view, 4> kSelectOnly = {"options", "selected", "style", "onChoose"};
+        std::string_view const kind = tool.name("kind");
+        if (kind != "search" && kind != "select") {
+            refuse(pointerAppend(tool.path, "kind"),
+                   "`" + std::string{kind} + "` is not one of the values of `kind`: search or select");
+        }
+        bool const search = kind == "search";
+        for (std::string_view const key : search ? kSelectOnly : kSearchOnly) {
+            if (tool.prop(key) || tool.event(key) != nullptr || !tool.name(key).empty()) {
+                refuse(pointerAppend(tool.path, key),
+                       "`" + std::string{key} + "` is a " + (search ? "select" : "search") + " tool's");
+            }
+        }
+        if (!search && !tool.prop("options")) {
+            refuse(tool.path, "a select tool has `options`");
+        }
+        if (std::string_view const style = tool.name("style"); !style.empty() && style != "dropdown") {
+            refuse(pointerAppend(tool.path, "style"),
+                   "`" + std::string{style} + "` is not one of the values of `style`: dropdown");
+        }
+        ExprPtr const width = tool.prop("width");
+        std::int64_t const* const units = width && width->kind == ExprKind::Literal
+                                              ? width->literal.asInt()
+                                              : static_cast<std::int64_t const*>(nullptr);
+        if (width && (units == nullptr || *units < 1)) {
+            refuse(pointerAppend(tool.path, "width"), "`width` is a literal whole number of units, 1 or more");
+        }
     }
 
     // The head menu's entries, at every level: an entry that is chosen has an id, unique across the whole menu, since
@@ -4053,6 +4118,9 @@ private:
     }
 
     // A separator is a line between entries: `true`, and nothing else beside it.
+    // Whether a part kind is a menu entry: a `menu` node's or a screen head's.
+    [[nodiscard]] static bool isMenuEntry(std::string_view kind) { return kind == "menuItem" || kind == "headMenuItem"; }
+
     static void checkMenuItem(DocNode const& node) {
         if (!node.flags.contains("separator")) {
             return;
@@ -4113,9 +4181,6 @@ private:
 
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per command of ui/1.
     void checkCommand(Command const& cmd, CheckContext const& context) {
-    // Whether a part kind is a menu entry: a `menu` node's or a screen head's.
-    [[nodiscard]] static bool isMenuEntry(std::string_view kind) { return kind == "menuItem" || kind == "headMenuItem"; }
-
         std::string const where = cmd.path;
         switch (cmd.kind) {
             case CommandKind::Set:

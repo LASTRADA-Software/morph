@@ -2170,6 +2170,12 @@ struct InterpreterOptions {
     std::function<void(Refusal const&)> diagnostics;
 };
 
+/// @brief The kind of a tool of a screen's head.
+enum class HeadToolKind : std::uint8_t {
+    Search,  ///< A search field: one line of text.
+    Select,  ///< A choice of one option.
+};
+
 namespace detail {
 
 /// @brief Where a command list runs: its scope, the names bound there, and what it may answer.
@@ -2256,6 +2262,36 @@ struct HeadMenuModel {
     std::vector<HeadMenuModel> items;
 };
 
+/// @brief A `headTool` part, lowered in the screen scope.
+struct HeadToolModel {
+    /// @brief The tool's id, unique among the head's tools.
+    std::string id;
+    /// @brief The part's JSON Pointer, where a diagnostic about it is reported.
+    std::string path;
+    /// @brief A search field or a select.
+    HeadToolKind kind = HeadToolKind::Search;
+    /// @brief The accessible name.
+    Prop<std::string> label;
+    /// @brief A search's text.
+    Prop<std::string> value;
+    /// @brief A search's placeholder.
+    Prop<std::string> placeholder;
+    /// @brief A select's options.
+    Prop<std::vector<SelectOption>> options;
+    /// @brief A select's chosen key, or none.
+    Prop<std::optional<Key>> selected;
+    /// @brief The width in units; 0 for the content's.
+    int width = 0;
+    /// @brief Whether it can be used.
+    Prop<bool> enabled = true;
+    /// @brief Whether it is shown.
+    Prop<bool> visible = true;
+    /// @brief Runs a search's `onChange` or a select's `onChoose` with `event` the edit, as a user event.
+    std::function<void(Value)> edit;
+    /// @brief Runs a search's `onSubmit` with `event` its text, as a user event; empty for a select.
+    std::function<void(Value)> submit;
+};
+
 /// @brief Collects the `onClick` lists of menu entries, submenus included.
 /// @param entries The entries.
 /// @param lists Where they go, in document order.
@@ -2266,6 +2302,25 @@ inline void menuCommandLists(std::span<DocNodePtr const> entries, std::vector<Co
             lists.push_back(commands);
         }
         menuCommandLists(entry->partList("items"), lists);
+    }
+}
+
+/// @brief Collects the command lists of a screen's head: its actions', its menu entries' and its tools'.
+/// @param doc The screen's document.
+/// @param lists Where they go, in document order.
+inline void headCommandLists(Document const& doc, std::vector<Commands const*>& lists) {
+    for (DocNodePtr const& action : doc.actions) {
+        if (Commands const* const commands = action->event("onClick")) {
+            lists.push_back(commands);
+        }
+    }
+    menuCommandLists(doc.menu, lists);
+    for (DocNodePtr const& tool : doc.tools) {
+        for (std::string_view const key : {"onChange", "onSubmit", "onChoose"}) {
+            if (Commands const* const commands = tool->event(key)) {
+                lists.push_back(commands);
+            }
+        }
     }
 }
 
@@ -2559,6 +2614,12 @@ public:
     /// @param ctx   The scope.
     /// @return The entries, in document order, submenus included.
     [[nodiscard]] std::vector<HeadMenuModel> lowerHeadMenu(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
+
+    /// @brief Lowers a screen head's `tools` in the scope @p ctx names.
+    /// @param parts The `headTool` parts.
+    /// @param ctx   The scope.
+    /// @return The tools, in document order.
+    [[nodiscard]] std::vector<HeadToolModel> lowerHeadTools(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
 
     /// @brief An overlay's actions as the action bar its footer shows: a button per action, test id
     ///        `action_<id>`, shown and enabled as the action is.
@@ -2911,6 +2972,32 @@ struct HeadMenuEntry {
     bool operator==(HeadMenuEntry const&) const = default;
 };
 
+/// @brief A tool of a screen's head, as its handle answers it: a search field or a select the shell draws.
+struct HeadTool {
+    /// @brief The tool's id, what `ScreenHead::edit` and `submit` take.
+    std::string id;
+    /// @brief A search field or a select.
+    HeadToolKind kind = HeadToolKind::Search;
+    /// @brief The accessible name; the shell draws no caption.
+    std::string label;
+    /// @brief A search's text.
+    std::string value;
+    /// @brief A search's placeholder.
+    std::string placeholder;
+    /// @brief A select's options.
+    std::vector<SelectOption> options;
+    /// @brief A select's chosen key, or none.
+    std::optional<Key> selected;
+    /// @brief The width in units; 0 for the content's.
+    int width = 0;
+    /// @brief Whether it can be used now.
+    bool enabled = true;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(HeadTool const&) const = default;
+};
+
 /// @brief A mounted screen: its scopes, its view mounted through `Mounted`, and what its host asks of it.
 ///
 /// Neither copyable nor movable. It belongs to the runtime's owner; the runtime, the session, the dispatcher and
@@ -2935,6 +3022,7 @@ public:
         _headActions.clear();
         _headStatus.clear();
         _headMenu.clear();
+        _headTools.clear();
         _scope.reset();
     }
 
@@ -3059,6 +3147,66 @@ public:
         if (found.model->item.onSelect) {
             found.model->item.onSelect();
         }
+        return true;
+    }
+
+    /// @brief The head's tools that are visible now, in order, each with its value and whether it is enabled. A
+    ///        tracked read.
+    /// @return They; empty when the document declares no `tools`.
+    [[nodiscard]] std::vector<HeadTool> tools() const {
+        std::vector<HeadTool> shown;
+        for (detail::HeadToolModel const& tool : _headTools) {
+            if (!tool.visible.evaluate()) {
+                continue;
+            }
+            bool const search = tool.kind == HeadToolKind::Search;
+            shown.push_back(HeadTool{.id = tool.id,
+                                     .kind = tool.kind,
+                                     .label = tool.label.evaluate(),
+                                     .value = search ? tool.value.evaluate() : std::string{},
+                                     .placeholder = search ? tool.placeholder.evaluate() : std::string{},
+                                     .options = search ? std::vector<SelectOption>{} : tool.options.evaluate(),
+                                     .selected = search ? std::nullopt : tool.selected.evaluate(),
+                                     .width = tool.width,
+                                     .enabled = tool.enabled.evaluate()});
+        }
+        return shown;
+    }
+
+    /// @brief Reports a user's edit of a head tool: runs a search's `onChange` with `event` the text, or a select's
+    ///        `onChoose` with `event` the chosen key, as a user event in the screen scope, in one batch.
+    /// @param toolId The tool's id.
+    /// @param value  A search's text, or a select's key.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold, or holds hidden or
+    ///         disabled, and for a search given anything but a string.
+    bool editTool(std::string_view toolId, Value const& value) {
+        detail::HeadToolModel const* const tool = usableTool(toolId);
+        if (tool == nullptr) {
+            return false;
+        }
+        if (tool->kind == HeadToolKind::Search && value.asString() == nullptr) {
+            _core->report(tool->path, "head tool " + tool->id + " is a search, edited with text");
+            return false;
+        }
+        tool->edit(value);
+        return true;
+    }
+
+    /// @brief Reports a user's submit of a head search: runs its `onSubmit` with `event` its text, as a user event in
+    ///        the screen scope, in one batch.
+    /// @param toolId The tool's id.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold, or holds hidden or
+    ///         disabled, and for a select.
+    bool submitTool(std::string_view toolId) {
+        detail::HeadToolModel const* const tool = usableTool(toolId);
+        if (tool == nullptr) {
+            return false;
+        }
+        if (tool->kind != HeadToolKind::Search) {
+            _core->report(tool->path, "head tool " + tool->id + " is a select, which is not submitted");
+            return false;
+        }
+        tool->submit(Value{runtime().untracked([&] { return tool->value.evaluate(); })});
         return true;
     }
 
@@ -3194,6 +3342,22 @@ private:
         return std::ranges::find(options, text) != options.end();
     }
 
+    // A head tool by id that is visible and enabled; null, with a diagnostic, for any other.
+    [[nodiscard]] detail::HeadToolModel const* usableTool(std::string_view toolId) const {
+        auto const found = std::ranges::find(_headTools, toolId, &detail::HeadToolModel::id);
+        if (found == _headTools.end()) {
+            _core->report("/tools", "head tool " + std::string{toolId} + " is unknown");
+            return nullptr;
+        }
+        auto const [visible, enabled] =
+            runtime().untracked([&] { return std::pair{found->visible.evaluate(), found->enabled.evaluate()}; });
+        if (!visible || !enabled) {
+            _core->report(found->path, "head tool " + found->id + (visible ? " is disabled" : " is hidden"));
+            return nullptr;
+        }
+        return &*found;
+    }
+
     // A head menu entry by id, with whether it and every submenu it is in are visible and enabled.
     struct FoundEntry {
         detail::HeadMenuModel const* model = nullptr;
@@ -3257,6 +3421,7 @@ private:
     std::vector<detail::BadgeModel> _headStatus;
     detail::ActionModels _headActions;
     std::vector<detail::HeadMenuModel> _headMenu;
+    std::vector<detail::HeadToolModel> _headTools;
 };
 
 /// @brief The app document mounted as the root scope every screen of the session shares (spec 6 §5).
@@ -6808,6 +6973,54 @@ inline std::vector<HeadMenuModel> ScreenCore::lowerHeadMenu(std::span<DocNodePtr
     return models;
 }
 
+inline std::vector<HeadToolModel> ScreenCore::lowerHeadTools(std::span<DocNodePtr const> parts,
+                                                            LowerCtx const& ctx) {
+    static constexpr int kSearchWidth = 30;
+    std::vector<HeadToolModel> models;
+    models.reserve(parts.size());
+    for (DocNodePtr const& part : parts) {
+        bool const search = part->name("kind") == "search";
+        HeadToolModel model{.id = part->id,
+                            .path = part->path,
+                            .kind = search ? HeadToolKind::Search : HeadToolKind::Select,
+                            .label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf),
+                            .value = bindProp<std::string>(ctx, part->prop("value"), std::string{}, stringOf),
+                            .placeholder = bindProp<std::string>(ctx, part->prop("placeholder"), std::string{}, stringOf),
+                            .options = {},
+                            .selected = {},
+                            .width = search ? kSearchWidth : 0,
+                            .enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf),
+                            .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
+                            .edit = {},
+                            .submit = {}};
+        if (ExprPtr const width = part->prop("width")) {
+            if (std::int64_t const* const units = width->literal.asInt()) {
+                model.width = static_cast<int>(*units);
+            }
+        }
+        if (!search) {
+            model.options = slotProp<std::vector<SelectOption>>(
+                [this, scope = ctx.scope, bindings = ctx.bindings, options = part->prop("options")] {
+                    return selectOptions(evalIn(*scope, bindings.get(), options), session.formatting());
+                });
+            model.selected = slotProp<std::optional<Key>>(
+                [scope = ctx.scope, bindings = ctx.bindings, selected = part->prop("selected")]() -> std::optional<Key> {
+                    Value const value = selected ? evalIn(*scope, bindings.get(), selected) : Value{};
+                    return value.isNull() ? std::nullopt : std::optional<Key>{keyOf(value)};
+                });
+        }
+        Commands const* const edited = part->event(search ? "onChange" : "onChoose");
+        model.edit = [this, ctx, edited](Value event) { runEvent(edited, ctx, std::move(event)); };
+        if (search) {
+            model.submit = [this, ctx, onSubmit = part->event("onSubmit")](Value event) {
+                runEvent(onSubmit, ctx, std::move(event));
+            };
+        }
+        models.push_back(std::move(model));
+    }
+    return models;
+}
+
 inline ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
     ActionModels models;
     models.reserve(parts.size());
@@ -9327,12 +9540,7 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
         static_cast<void>(chord);
         lists.push_back(&commands);
     }
-    for (DocNodePtr const& action : doc->actions) {
-        if (Commands const* const commands = action->event("onClick")) {
-            lists.push_back(commands);
-        }
-    }
-    detail::menuCommandLists(doc->menu, lists);
+    detail::headCommandLists(*doc, lists);
     Node root = runtime.untracked([&] {
         core.declare(scope, &doc->scope, {doc->view.get()}, lists);
         detail::LowerCtx const ctx{
@@ -9341,6 +9549,7 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
         screen->_headStatus = core.lowerBadgeParts(doc->status, ctx);
         screen->_headActions = core.lowerActionParts(doc->actions, ctx);
         screen->_headMenu = core.lowerHeadMenu(doc->menu, ctx);
+        screen->_headTools = core.lowerHeadTools(doc->tools, ctx);
         if (!doc->keys.empty()) {
             std::vector<KeyBinding> keys;
             for (auto const& [chord, commands] : doc->keys) {

@@ -108,15 +108,18 @@ A refused mount answers its `MountError` and opens nothing; its page is destroye
 ## The head row
 
 With `HeadPlacement::InPage`, the default, the shell mounts a row over the handle's `head()` above each tab's
-screen, in its page: the subtitle (muted), the badges, a spacer, the actions as buttons and the head's own menu, with
-test ids `head`, `head_subtitle`, `head_spacer`, `head_status_<n>` (the badge's place among the visible ones),
-`head_action_<id>` and `head_menu`. A button is disabled while its action is, and a click runs the action through
+screen, in its page: the subtitle (muted), the badges, a spacer, the tools, the actions as buttons and the head's own
+menu, with test ids `head`, `head_subtitle`, `head_spacer`, `head_status_<n>` (the badge's place among the visible
+ones), `head_tool_<id>`, `head_action_<id>` and `head_menu`. A tool is a `TextInput` (a search) or a dropdown
+`Select`, keyed by its id: its value is bound to the tool's, it draws no caption, its label is its accessible name,
+its width is the tool's (none for 0), and it is disabled while the tool is; an edit or a choice goes to
+`ScreenHead::edit`, Enter in a search to `ScreenHead::submit`, and the field shows what the document binds. A button is disabled while its action is, and a click runs the action through
 `ScreenHead::run`. The menu is a button-style `menu` drawing the framework icon `more` alone, its accessible name and
 tooltip the head's `menuLabel()` (`More actions` for a head that has none); it is drawn again whenever the entries'
 shape (their ids, separators and submenus) changes, and each entry's label, description, check mark and enablement
 are bound to the head's. Choosing an entry calls `ScreenHead::choose` with the id of the entry that was drawn, so an
 entry the screen has hidden since is refused by name and never mistaken for its neighbour. The row is hidden while
-the head has no subtitle, badges, actions or menu entries, so a screen without them looks as it would without the
+the head has no subtitle, badges, tools, actions or menu entries, so a screen without them looks as it would without the
 row; a handle without a
 head (a host screen) gets no row. The row is mounted after the screen, since it reads the handle, and moved above it.
 It reads the head through the model, a tracked read of `tabs()`, so a row mounted while the model is still opening
@@ -130,7 +133,7 @@ it, so the actions sit at the trailing edge in either placement.
 somewhere else entirely (a client's own shell chrome) — `morph::client::Shell` constructs its `Workspace` with
 `HeadPlacement::External` and mounts this row into `ShellFrame::headSlot()`, the top bar's second line, below the
 title, and shows that line while `activeHeadShown()` holds, so the head shows once. `activeHeadShown()` is a tracked
-read: true while the active tab's head has a subtitle, a badge, an action or a menu entry. It and the row's own visibility share one
+read: true while the active tab's head has a subtitle, a badge, a tool, an action or a menu entry. It and the row's own visibility share one
 rule, so the two cannot disagree. It reads
 `WorkspaceModel::active()` directly, not the public `Workspace::active()` index, since the index is a position in
 the tab bar, not an identity, and is unsafe to compare across a close. With no tab open it returns a defined,
