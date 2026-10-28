@@ -435,3 +435,19 @@ TEST_CASE("ui document: only a list entry holds content, and only display kinds"
     REQUIRE_FALSE(keys.has_value());
     CHECK(keys.error().path == "/view/children/0/keys");
 }
+
+// Mutation: skip the pattern check (the four-M pattern loads).
+TEST_CASE("ui document: the app document's formatting is checked, and a screen has none", "[ui][document]") {
+    auto const app = loadDocumentText(R"({"vocab": "ui/1", "id": "app",
+        "formatting": {"date": "dd-MMM-yyyy", "dateTime": "dd-MMM-yyyy HH:mm"}})");
+    REQUIRE(app.has_value());
+    CHECK(app->datePattern == "dd-MMM-yyyy");
+    CHECK(app->dateTimePattern == "dd-MMM-yyyy HH:mm");
+    auto const bad = loadDocumentText(R"({"vocab": "ui/1", "id": "app", "formatting": {"date": "dd-MMMM-yyyy"}})");
+    REQUIRE_FALSE(bad.has_value());
+    CHECK(bad.error().path == "/formatting/date");
+    auto const screen = loadDocumentText(R"({"vocab": "ui/1", "id": "s", "formatting": {"date": "dd-MMM-yyyy"},
+        "view": {"kind": "spacer"}})");
+    REQUIRE_FALSE(screen.has_value());
+    CHECK(screen.error().path == "/formatting");
+}

@@ -1032,3 +1032,21 @@ TEST_CASE("tui fields: a description takes the row under the control, in the ton
     CHECK(input->accessibleDescription() == "Not a number\nOut of spec");
     CHECK(input->hoverText() == "Not a number\nOut of spec");
 }
+
+// Mutation: ignore the pattern in shownOf (the field then shows `2026-10-24 09:41`).
+TEST_CASE("tui fields: a date input with a pattern shows and reads in it", "[tui][fields]") {
+    Harness harness{40, 2};
+    auto const field = harness.make<DateTimeInputImpl>(nullptr, ui::DateMode::DateTime, 0);
+    std::vector<std::optional<Timestamp>> changes;
+    field->setOnChange([&](std::optional<Timestamp> value) { changes.push_back(value); });
+    field->setPattern("dd-MMM-yyyy HH:mm");
+    field->setValue(Timestamp{at(2026, 10, 24, 9, 41)});
+    CHECK(harness.draw() == Rows{"24-Oct-2026 09:41"});
+    harness.focus(*field);
+    field->setValue(std::nullopt);
+    static_cast<void>(harness.type("25-Oct-2026 10:00"));
+    static_cast<void>(harness.key(KeyCode::Enter));
+    REQUIRE_FALSE(changes.empty());
+    CHECK(changes.back()->value == at(2026, 10, 25, 10, 0));
+    CHECK(harness.draw() == Rows{"25-Oct-2026 10:00"});
+}

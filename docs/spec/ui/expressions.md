@@ -272,10 +272,23 @@ the `render::TranslationProvider`, the `UnitTable`, the display zone's offset an
   and the like, otherwise 2) followed by the code. All go through `render::formatCanonicalNumber`.
 - `date` and `dateTime` take a date, a timestamp or ISO-8601 date-time text, and format it in a
   style (`short`, `medium`, the default, or `long`) through the `DateFormatter`; without one they
-  write `2026-10-11` and `2026-10-11 08:30` (`long` adds seconds). An instant is shifted to the
-  display zone first. A date is that calendar day at any offset, and `dateTime` shows it as
-  midnight of that day in the display zone, as a date input does. `""` is `null` without a
-  report.
+  write `FormatContext::datePattern` or `dateTimePattern` when it is set, in every style alike, so
+  one screen never mixes two forms of a date; without a pattern they write `2026-10-11` and
+  `2026-10-11 08:30` (`long` adds seconds). An instant is shifted to the display zone first. A date
+  is that calendar day at any offset, and `dateTime` shows it as midnight of that day in the display
+  zone, as a date input does. `""` is `null` without a report.
+
+**Date patterns** (`ui/date_pattern.hpp`: `checkDatePattern`, `formatDate`, `parseDate`, which the formatter, the
+interpreter and both frontends share). The tokens are `yyyy`, `MM`, `MMM` (`Jan` … `Dec`, in English whatever the
+locale, read without regard to case: the regulated convention, and a localized name would read back differently per
+locale), `dd`, `HH`, `mm`, `ss` and `xxx` (the display zone's offset from UTC as `+02:00`, `+00:00` for UTC: the
+client holds an offset, not zone data, so zone names are not a token); the literals are `-`, `/`, `.`, `:`, `,` and a
+space. A pattern holds `yyyy`, `dd` and one of `MM` or `MMM` once each; a date pattern no time token; a date-and-time
+pattern `HH` and `mm` once each and `ss` and `xxx` at most once; and no two tokens touch without a literal between them,
+except `MMM` beside a number, so `ddMMyyyy` is refused. So every text it writes reads back to the same instant. Text is
+read in the pattern and then as ISO 8601 (`yyyy-MM-dd`, `yyyy-MM-dd HH:mm`, `yyyy-MM-ddTHH:mm` in the display zone, or
+a full instant), so a pasted ISO date still works; text read with `xxx` takes its instant from the offset it names,
+so `24-Oct-2026 09:41 +02:00` is 07:41 UTC whatever the display zone.
 
 ## Messages
 

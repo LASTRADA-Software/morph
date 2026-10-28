@@ -327,3 +327,23 @@ TEST_CASE("ui expressions: a resolver decides what names mean", "[ui][expr]") {
     CHECK(checkExpression(**local, resolver).has_value());
     CHECK(checkExpression(**local, PermissiveResolver{}).has_value());
 }
+
+// Mutation: apply the pattern to `medium` only (the `long` case then writes ISO with seconds).
+TEST_CASE("ui expressions: a date pattern writes every style, and a host's formatter still wins", "[ui][expr]") {
+    StaticEnvironment env;
+    env.format.utcOffsetMinutes = 120;
+    env.format.datePattern = "dd-MMM-yyyy";
+    env.format.dateTimePattern = "dd-MMM-yyyy HH:mm";
+    env.names.insert_or_assign("when", Value{*morph::time::DateTime::fromIso8601("2026-10-24T07:41:00Z")});
+    auto run = [&env](std::string_view text) {
+        auto parsed = parseExpression(*parseJson(text));
+        REQUIRE(parsed.has_value());
+        return evaluate(**parsed, env);
+    };
+    CHECK(run(R"({"fn": "dateTime", "args": [{"ref": "when"}]})") == Value{"24-Oct-2026 09:41"});
+    CHECK(run(R"({"fn": "dateTime", "args": [{"ref": "when"}, "short"]})") == Value{"24-Oct-2026 09:41"});
+    CHECK(run(R"({"fn": "dateTime", "args": [{"ref": "when"}, "long"]})") == Value{"24-Oct-2026 09:41"});
+    CHECK(run(R"({"fn": "date", "args": [{"ref": "when"}, "long"]})") == Value{"24-Oct-2026"});
+    env.format.dates = [](morph::time::DateTime, std::string_view style, bool) { return std::string{style}; };
+    CHECK(run(R"({"fn": "dateTime", "args": [{"ref": "when"}, "long"]})") == Value{"long"});
+}

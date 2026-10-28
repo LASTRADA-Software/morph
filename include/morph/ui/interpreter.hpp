@@ -942,6 +942,21 @@ public:
     /// @return They.
     [[nodiscard]] FormatContext const& formatting() const { return *_format.get(); }
 
+    /// @brief The formatting facts, read without tracking: what a value set once at mount reads.
+    /// @return They.
+    [[nodiscard]] FormatContext const& formattingNow() const { return *_format.peek(); }
+
+    /// @brief Sets the patterns every date and every date and time is written and read in, keeping the other
+    ///        formatting facts; an empty one keeps ISO.
+    /// @param date     The date pattern, such as `dd-MMM-yyyy`.
+    /// @param dateTime The date-and-time pattern, such as `dd-MMM-yyyy HH:mm`.
+    void setDatePatterns(std::string date, std::string dateTime) {
+        FormatContext next = *_format.peek();
+        next.datePattern = std::move(date);
+        next.dateTimePattern = std::move(dateTime);
+        setFormatting(std::move(next));
+    }
+
     /// @brief Changes the active locale, keeping the other formatting facts.
     /// @param locale The BCP 47 locale.
     void setLocale(std::string locale) {
@@ -6977,6 +6992,9 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         };
         spec.mode = mode;
         spec.offsetMinutes = offsetMinutes;
+        // Read once and untracked, like the zone: a pattern changed after mount applies to inputs mounted later.
+        FormatContext const& now = session.formattingNow();
+        spec.pattern = mode == DateMode::Date ? now.datePattern : now.dateTimePattern;
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);
@@ -9186,6 +9204,10 @@ inline std::expected<std::unique_ptr<AppRoot>, Refusal> Interpreter::mountApp(st
         lists.push_back(&commands);
     }
     _session->runtime().untracked([&] { core.declare(*root->_scope, &doc->scope, {}, lists); });
+    // The app document's date patterns are the application's: every screen of the bundle shows and reads dates so.
+    if (!doc->datePattern.empty() || !doc->dateTimePattern.empty()) {
+        _session->setDatePatterns(doc->datePattern, doc->dateTimePattern);
+    }
     _session->setAppScope(root->_scope.get());
     if (auto const found = doc->lifecycle.find("onMount"); found != doc->lifecycle.end()) {
         root->runCommands(found->second);

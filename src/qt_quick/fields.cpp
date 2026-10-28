@@ -8,9 +8,11 @@
 #include <QStringList>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <morph/ui/date_pattern.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -318,7 +320,11 @@ std::string SelectImpl::shownText() const {
 
 // ── DateTimeInput ─────────────────────────────────────────────────────────
 
-QString formatDateTime(morph::time::DateTime const& instant, ui::DateMode mode, int offsetMinutes) {
+QString formatDateTime(morph::time::DateTime const& instant, ui::DateMode mode, int offsetMinutes,
+                       std::string_view pattern) {
+    if (!pattern.empty()) {
+        return toQString(ui::formatDate(pattern, instant + std::chrono::minutes{offsetMinutes}, offsetMinutes));
+    }
     auto const local = instant.value + std::chrono::minutes{offsetMinutes};
     auto const day = std::chrono::floor<std::chrono::days>(local);
     std::chrono::year_month_day const date{day};
@@ -335,7 +341,11 @@ QString formatDateTime(morph::time::DateTime const& instant, ui::DateMode mode, 
     return text;
 }
 
-std::optional<morph::time::DateTime> parseDateTime(QString const& text, ui::DateMode mode, int offsetMinutes) {
+std::optional<morph::time::DateTime> parseDateTime(QString const& text, ui::DateMode mode, int offsetMinutes,
+                                                   std::string_view pattern) {
+    if (!pattern.empty()) {
+        return ui::parseDate(pattern, toUtf8(text.trimmed()), offsetMinutes);
+    }
     static QRegularExpression const dateOnly{QStringLiteral(R"(^\s*(\d{4})-(\d{2})-(\d{2})\s*$)")};
     static QRegularExpression const withTime{QStringLiteral(R"(^\s*(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})\s*$)")};
     QRegularExpressionMatch const match = (mode == ui::DateMode::DateTime ? withTime : dateOnly).match(text);
@@ -377,7 +387,7 @@ DateTimeImpl::DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::Da
             }
             return;
         }
-        std::optional<morph::time::DateTime> const parsed = parseDateTime(text, _mode, _offsetMinutes);
+        std::optional<morph::time::DateTime> const parsed = parseDateTime(text, _mode, _offsetMinutes, _pattern);
         if (!parsed) {
             // Text that names no instant is not a request: the field shows its value again. Forced, because the
             // user's text may already read the same as the held value, and the held value stays for the next edit.
@@ -385,10 +395,47 @@ DateTimeImpl::DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::Da
             return;
         }
         _shown = text;
+        show(text);
         if (_onChange) {
             _onChange(morph::time::Timestamp{*parsed});
         }
     });
+    relay().on(QStringLiteral("pick"), [this](QVariant const& payload) { picked(payload); });
+}
+
+void DateTimeImpl::setPattern(std::string_view pattern) {
+    _pattern = std::string{pattern};
+    write("pattern", toQString(pattern));
+}
+
+void DateTimeImpl::picked(QVariant const& day) {
+    QVariantList const parts = day.toList();
+    if (parts.size() != 3) {
+        return;
+    }
+    std::chrono::year_month_day const date{std::chrono::year{parts.at(0).toInt()},
+                                           std::chrono::month{parts.at(1).toUInt() + 1},
+                                           std::chrono::day{parts.at(2).toUInt()}};
+    if (!date.ok()) {
+        return;
+    }
+    // The time of day the field holds, in the display zone; midnight for an empty or unreadable field.
+    std::chrono::minutes timeOfDay{0};
+    if (_mode == ui::DateMode::DateTime) {
+        if (auto const held = parseDateTime(_shown, _mode, _offsetMinutes, _pattern)) {
+            auto const local = held->value + std::chrono::minutes{_offsetMinutes};
+            timeOfDay = std::chrono::floor<std::chrono::minutes>(local - std::chrono::floor<std::chrono::days>(local));
+        }
+    }
+    auto const local = std::chrono::sys_days{date} + timeOfDay;
+    morph::time::DateTime const instant{
+        std::chrono::time_point_cast<std::chrono::milliseconds>(local - std::chrono::minutes{_offsetMinutes})};
+    QString const text = formatDateTime(instant, _mode, _offsetMinutes, _pattern);
+    _shown = text;
+    show(text, true);
+    if (_onChange) {
+        _onChange(morph::time::Timestamp{instant});
+    }
 }
 
 void DateTimeImpl::show(QString const& text, bool force) const {
@@ -396,12 +443,21 @@ void DateTimeImpl::show(QString const& text, bool force) const {
     if (control != nullptr && (force || control->property("text").toString() != text)) {
         control->setProperty("text", text);
     }
+    QVariant chosen;
+    if (auto const instant = text.isEmpty() ? std::nullopt : parseDateTime(text, _mode, _offsetMinutes, _pattern)) {
+        std::chrono::year_month_day const date{
+            std::chrono::floor<std::chrono::days>(instant->value + std::chrono::minutes{_offsetMinutes})};
+        chosen = QVariantMap{{QStringLiteral("year"), static_cast<int>(date.year())},
+                             {QStringLiteral("month"), static_cast<int>(static_cast<unsigned>(date.month())) - 1},
+                             {QStringLiteral("day"), static_cast<int>(static_cast<unsigned>(date.day()))}};
+    }
+    write("chosen", chosen);
 }
 
 void DateTimeImpl::setValue(std::optional<morph::time::Timestamp> const& value) {
     QString text;
     if (value && value->value) {
-        text = formatDateTime(*value->value, _mode, _offsetMinutes);
+        text = formatDateTime(*value->value, _mode, _offsetMinutes, _pattern);
     }
     _shown = text;
     show(text);

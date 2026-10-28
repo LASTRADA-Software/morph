@@ -1074,6 +1074,9 @@ struct DateTimeInput {
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief The pattern the value is shown and read in (`checkDatePattern`), ISO being always read too; empty
+    ///        means ISO. Set once.
+    std::string pattern;
 };
 
 /// @brief An integer chosen on a range.

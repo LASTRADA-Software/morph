@@ -1377,3 +1377,36 @@ TEST_CASE("qt_quick widgets: a list entry's content fills the entry, and a press
     scene.click(Scene::itemOf(*third));
     CHECK(clicks == 1);
 }
+
+// Mutation: keep the QML string builder for a calendar day (the calendar then writes `2026-10-26 10:00`).
+TEST_CASE("qt_quick widgets: a date input with a pattern shows, reads and picks in it", "[qt_quick]") {
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const input = scene.backend().createDateTimeInput(column.get(), ui::DateMode::DateTime, 0);
+    auto const other = scene.backend().createButton(column.get());
+    std::vector<std::optional<morph::time::Timestamp>> changes;
+    input->setOnChange([&changes](std::optional<morph::time::Timestamp> value) { changes.push_back(value); });
+    input->setPattern("dd-MMM-yyyy HH:mm");
+    input->setValue(morph::time::Timestamp{DateTime{year{2026}, month{10}, day{24}, hours{9}, minutes{41}, seconds{0}}});
+    scene.settle();
+    CHECK(base(*input).shownText() == "24-Oct-2026 09:41");
+    CHECK(Scene::controlOf(*input).property("placeholderText").toString() == QStringLiteral("dd-mmm-yyyy hh:mm"));
+    scene.click(Scene::controlOf(*input));
+    scene.standardKey(QKeySequence::SelectAll);
+    scene.enter(QStringLiteral("25-Oct-2026 10:00"));
+    scene.click(Scene::itemOf(*other));
+    REQUIRE(changes.size() == 1);
+    REQUIRE(changes.back().has_value());
+    CHECK(changes.back()->value->toIso8601() == "2026-10-25T10:00:00.000Z");
+    QQuickItem const* const button = findNamed(Scene::itemOf(*input), QStringLiteral("datePickerButton"));
+    REQUIRE(button != nullptr);
+    scene.click(*button);
+    QQuickItem const* const cell = findNamed(*scene.window().contentItem(), QStringLiteral("day_2026-9-26"));
+    REQUIRE(cell != nullptr);
+    scene.click(*cell);
+    REQUIRE(changes.size() == 2);
+    CHECK(base(*input).shownText() == "26-Oct-2026 10:00");
+    CHECK(changes.back()->value->toIso8601() == "2026-10-26T10:00:00.000Z");
+}

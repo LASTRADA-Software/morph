@@ -675,6 +675,12 @@ public:
     /// @param onChange The handler; empty does nothing.
     virtual void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) = 0;
 
+    /// @brief Sets the pattern the field shows its value in and reads typed text in (`formatDate`, `parseDate`), ISO
+    ///        being always read too. The mount calls it once, before the value, and only for a pattern that is not
+    ///        empty; a new field shows ISO.
+    /// @param pattern The pattern, such as `dd-MMM-yyyy HH:mm`.
+    virtual void setPattern(std::string_view pattern) = 0;
+
     /// @brief Sets the field's label, and whether the input draws it as a visible caption above its control.
     ///        Without `shown`, the caption is drawn elsewhere (a form's cell), or not at all.
     /// @param label The label, UTF-8.

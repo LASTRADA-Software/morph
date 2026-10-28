@@ -31,6 +31,7 @@
 #include "../table/data_source.hpp"
 #include "../util/datetime.hpp"
 #include "../util/rational.hpp"
+#include "date_pattern.hpp"
 #include "message.hpp"
 #include "value.hpp"
 
@@ -1246,8 +1247,13 @@ struct FormatContext {
     UnitTable units;
     /// @brief The display zone's offset from UTC, in minutes.
     std::int32_t utcOffsetMinutes = 0;
-    /// @brief The date formatter; empty uses ISO 8601 (`2026-10-11`, `2026-10-11 08:30`).
+    /// @brief The date formatter; empty uses the patterns below, else ISO 8601 (`2026-10-11`, `2026-10-11 08:30`).
     DateFormatter dates;
+    /// @brief The pattern every date is written in, whatever its style (`checkDatePattern`), such as `dd-MMM-yyyy`;
+    ///        empty keeps ISO.
+    std::string datePattern;
+    /// @brief The pattern every date and time is written in, such as `dd-MMM-yyyy HH:mm`; empty keeps ISO.
+    std::string dateTimePattern;
 };
 
 /// @brief What an evaluated expression reads: the interpreter implements it over its reactive values.
@@ -2283,6 +2289,11 @@ private:
         FormatContext const& context = _env->formatting();
         if (context.dates) {
             return context.dates(local, style, withTime);
+        }
+        // One pattern for every style, so a screen never mixes two forms of a date; the style chooses a form only
+        // while no pattern is set.
+        if (std::string const& pattern = withTime ? context.dateTimePattern : context.datePattern; !pattern.empty()) {
+            return formatDate(pattern, local, context.utcOffsetMinutes);
         }
         std::string const iso = local.toIso8601();
         if (!withTime) {

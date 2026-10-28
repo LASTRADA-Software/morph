@@ -928,3 +928,22 @@ TEST_CASE("interpreter control: a computed select style naming none is reported 
               return refusal.reason.contains("a select's style is dropdown, radio or segmented");
           }) == 1);
 }
+
+// Mutation: have mountApp skip `formatting` (both the input and the text read ISO).
+TEST_CASE("interpreter control: the app document's date patterns reach a screen's inputs and its date texts",
+          "[ui][interpreter]") {
+    Harness h;
+    auto root = h.interpreter.mountApp(ui::testing::loadOrFail(
+        R"({"vocab": "ui/1", "id": "app", "formatting": {"date": "dd-MMM-yyyy", "dateTime": "dd-MMM-yyyy HH:mm"}})",
+        ui::testing::corpusCatalog()));
+    REQUIRE(root.has_value());
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "dates",
+      "state": {"when": {"init": "2026-10-24T09:41:00Z"}},
+      "view": {"kind": "column", "children": [
+        {"kind": "dateTimeInput", "testId": "pulled", "label": "Pulled", "value": {"ref": "when"}},
+        {"kind": "dateTimeInput", "testId": "day", "label": "Day", "mode": "date", "value": {"ref": "when"}},
+        {"kind": "text", "testId": "shown", "text": {"fn": "dateTime", "args": [{"ref": "when"}]}}]}})");
+    CHECK(h.backend.prop(h.byTestId("DateTimeInput", "pulled"), "pattern") == "dd-MMM-yyyy HH:mm");
+    CHECK(h.backend.prop(h.byTestId("DateTimeInput", "day"), "pattern") == "dd-MMM-yyyy");
+    CHECK(h.text("shown") == "24-Oct-2026 09:41");
+}

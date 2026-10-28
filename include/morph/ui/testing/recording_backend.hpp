@@ -1234,7 +1234,7 @@ public:
     void setLabel(std::string_view label) override { set("label", formatText(label)); }
 };
 
-/// @brief A fake `DateTimeInputWidget`: properties `mode`, `offset`, `value`, `caption`, `captionShown`.
+/// @brief A fake `DateTimeInputWidget`: properties `mode`, `offset`, `value`, `pattern`, `caption`, `captionShown`.
 class FakeDateTimeInput final : public FakeField<DateTimeInputWidget> {
 public:
     using FakeField<DateTimeInputWidget>::FakeField;
@@ -1244,6 +1244,7 @@ public:
     void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) override {
         callbacks().dateTime = std::move(onChange);
     }
+    void setPattern(std::string_view pattern) override { set("pattern", formatText(pattern)); }
     void setCaption(std::string_view label, bool shown) override {
         set("caption", formatText(label));
         set("captionShown", formatBool(shown));

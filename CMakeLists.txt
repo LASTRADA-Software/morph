@@ -507,6 +507,7 @@ target_sources(morph
         include/morph/ui/author_forms.hpp
         include/morph/ui/bundle.hpp
         include/morph/ui/alignment.hpp
+        include/morph/ui/date_pattern.hpp
         include/morph/ui/button_emphasis.hpp
         include/morph/ui/badge_style.hpp
         include/morph/ui/button_style.hpp

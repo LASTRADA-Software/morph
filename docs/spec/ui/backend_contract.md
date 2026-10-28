@@ -79,7 +79,9 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
 - **Date inputs.** A graphical backend offers a calendar beside the typed date field, opening on
   the field's date or on today in the display zone. A day chosen produces the same text an edit
   would and reaches `onChange` the same way, so the field's text is the one source of the value.
-  The terminal offers typed text only. A read-only date input shows no calendar.
+  The terminal offers typed text only. A read-only date input shows no calendar. `setPattern(pattern)`, called once
+  before the value and only for a pattern that is not empty, makes the field show its value with `formatDate` and
+  read typed text with `parseDate`, ISO always being read too; the calendar writes its day in the same pattern.
 - **Menus.** `createMenu(parent, style)` makes a bar of top-level entries (`MenuStyle::Bar`) or one
   button that opens the top level as a popup (`MenuStyle::Button`), whose trigger `setTrigger(MenuTrigger{label,
   icon, emphasis})` sets: the label is its text and accessible name; an icon-only trigger draws its
@@ -398,7 +400,7 @@ The headless reference backend and the test double for everything above the cont
   `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title`, `description` (Dialog); `active`, `label` (Busy);
   `columns` (each `label:width`, then `;align=` and `;valign=` for a place other than the default),
   `selectionMode`, `selection` (the requested keys it marks, in the order requested),
-  and `rowKey` on a row (Table); `mode`, `offset`, `value` (DateTimeInput); `range`, `value`
+  and `rowKey` on a row (Table); `mode`, `offset`, `value`, `pattern` (DateTimeInput); `range`, `value`
   (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `spans`, `actionLabel`, `dismissible` (Banner);
   `tone`, `text`, `icon`, `style`, and `removable` (the remove control's name) of a removable one (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
   and `captions` (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title`, `description` (Drawer);

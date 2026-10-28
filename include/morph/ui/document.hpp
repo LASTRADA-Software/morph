@@ -587,6 +587,11 @@ struct Document {
     std::map<std::string, Commands, std::less<>> keys;
     /// @brief When errors show: `touched`, `submit` or `always`; empty for the default.
     std::string showErrors;
+    /// @brief The app document's date pattern (`formatting.date`), which `mountApp` gives the session; empty keeps
+    ///        ISO, and a screen has none.
+    std::string datePattern;
+    /// @brief The app document's date-and-time pattern (`formatting.dateTime`), as `datePattern`.
+    std::string dateTimePattern;
     /// @brief Queries started before the screen mounts.
     std::vector<std::string> prefetch;
     /// @brief Custom components, by name.
@@ -1203,6 +1208,7 @@ public:
             }
         }
         doc.showErrors = showErrors(*object, "");
+        datePatterns(*object, doc);
         if (Json const* const params = member(*object, "params")) {
             for (auto const& [name, type] : objectOf(*params, "/params", "`params` maps names to types")) {
                 std::string const path = pointerAppend("/params", name);
@@ -1241,6 +1247,31 @@ public:
     }
 
 private:
+    // The app document's `formatting`: a record of the date pattern and the date-and-time pattern, each checked.
+    static void datePatterns(Json::object_t const& object, Document& doc) {
+        Json const* const formatting = member(object, "formatting");
+        if (formatting == nullptr) {
+            return;
+        }
+        if (doc.id != "app") {
+            refuse("/formatting", "`formatting` is the application's; only the app document declares it");
+        }
+        for (auto const& [key, value] : objectOf(*formatting, "/formatting", "`formatting` is a record")) {
+            std::string const path = pointerAppend("/formatting", key);
+            if (key != "date" && key != "dateTime") {
+                refuse(path, "`formatting` takes `date` and `dateTime`");
+            }
+            std::string const* const pattern = std::get_if<std::string>(&value.data);
+            if (pattern == nullptr) {
+                refuse(path, "a date pattern is a string, such as `dd-MMM-yyyy`");
+            }
+            if (auto const checked = checkDatePattern(*pattern, key == "dateTime"); !checked) {
+                refuse(path, checked.error());
+            }
+            (key == "date" ? doc.datePattern : doc.dateTimePattern) = *pattern;
+        }
+    }
+
     [[nodiscard]] static Json const* member(Json::object_t const& object, std::string_view key) {
         auto const* const found = object.find(key);
         return found == object.end() ? nullptr : &found->second;

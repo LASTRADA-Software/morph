@@ -53,7 +53,10 @@ Read this before changing what a document may say. The expression language insid
 ## The document
 
 `ui::Document` is a screen, or the app document (id `app`, spec 6 §5), which has no view and may
-declare the app-only customization kinds.
+declare the app-only customization kinds and `formatting`: a literal record `{"date": "dd-MMM-yyyy", "dateTime":
+"dd-MMM-yyyy HH:mm"}` of the patterns every date the client shows is written and read in ([`expressions.md`, Date
+patterns](expressions.md)). Each pattern is checked where it is declared, and a screen that declares `formatting` is
+refused: a lab writes dates one way everywhere, so the pattern is the application's, not a node's.
 
 | Member | JSON key | Notes |
 |---|---|---|

@@ -52,7 +52,10 @@ throws `std::invalid_argument` for 0 and for a cap above `kMaxInlineFileBytes`, 
 ## The app root scope
 
 `Interpreter::mountApp(doc)` mounts the app document (id `app`) as an `AppRoot`: its state, lets,
-queries and mutations, declared once for the session, and its `onMount`. A second root on the same
+queries and mutations, declared once for the session, and its `onMount`. Its `formatting` patterns become the
+session's (`Session::setDatePatterns`), so every screen of the bundle writes and reads dates in them; a C++ host may
+set the same `FormatContext` fields directly. A `dateTimeInput` reads the pattern of its mode once, untracked, when
+it is lowered, as it reads the zone: a pattern changed later applies to inputs mounted later. A second root on the same
 session, and a document whose id is not `app`, are refused. While it lives, `Session::appScope()`
 names its scope: `{"ref": "app.name"}` in any screen reads the name there, reactively, so a query of
 the app document runs once however many screens read it, and `{"set": "app.name"}` writes the root's

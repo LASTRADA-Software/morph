@@ -3,9 +3,10 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 
-// A date, or a date and a time, typed in the display zone as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm`. C++ formats and
-// parses it; an edit is reported once the user finishes it, and an empty field is a cleared value. A calendar beside
-// the field produces the same text an edit would.
+// A date, or a date and a time, typed in the display zone in the application's pattern, or as `yyyy-MM-dd` or
+// `yyyy-MM-dd HH:mm` without one. C++ formats and parses it; an edit is reported once the user finishes it, and an
+// empty field is a cleared value. A day chosen in the calendar beside the field is written by C++ too, in the same
+// pattern, so the field's text is the one source of the value.
 MorphField {
     id: root
 
@@ -13,6 +14,10 @@ MorphField {
     property bool edited: false
     // The display zone, minutes from UTC: the calendar's today is the zone's, not the system's.
     property int offsetMinutes: 0
+    // The pattern the field shows and reads its value in; empty is ISO. Set once.
+    property string pattern: ""
+    // The field's day as C++ last read it, `{year, month (zero-based), day}`, or null when it names none.
+    property var chosen: null
 
     control: field
     accessibleItem: field
@@ -22,15 +27,8 @@ MorphField {
     property int pickerMonth: 0
     property int pickerYear: 0
 
-    // The field's date as its `yyyy-MM-dd` prefix names it, or null when it names none.
-    readonly property var chosenDate: {
-        const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(field.text)
-        return match ? {
-            year: Number(match[1]),
-            month: Number(match[2]) - 1,
-            day: Number(match[3])
-        } : null
-    }
+    // The field's date, which the calendar opens on and marks.
+    readonly property var chosenDate: root.chosen
 
     // The zone's today, from UTC fields so the system time zone never moves it.
     function today(): var {
@@ -63,23 +61,11 @@ MorphField {
         }
     }
 
-    // The text a day chosen builds: `yyyy-MM-dd`, and the time of day already in the field for a date-time input.
-    function textOf(year: int, month: int, day: int): string {
-        let text = year.toString().padStart(4, "0") + "-" + (month + 1).toString().padStart(2, "0") + "-" +
-                day.toString().padStart(2, "0")
-        if (root.withTime) {
-            const time = /[ T](\d{2}):(\d{2})/.exec(field.text)
-            text += " " + (time !== null ? time[1] + ":" + time[2] : "00:00")
-        }
-        return text
-    }
-
+    // C++ writes the day, with the time of day already in the field, in the field's pattern, and reports it.
     function pickDay(year: int, month: int, day: int): void {
-        const text = root.textOf(year, month, day)
-        field.text = text
         // The pick reports its own change: a later blur must not report it again.
         root.edited = false
-        root.fire("edit", text)
+        root.fire("pick", [year, month, day])
         picker.close()
     }
 
@@ -102,7 +88,8 @@ MorphField {
             readOnly: root.readOnly
         }
         readOnly: root.readOnly
-        placeholderText: root.withTime ? "yyyy-mm-dd hh:mm" : "yyyy-mm-dd"
+        placeholderText: root.pattern !== "" ? root.pattern.toLowerCase().replace("xxx", "+hh:mm")
+                                             : root.withTime ? "yyyy-mm-dd hh:mm" : "yyyy-mm-dd"
         // Declared, as the text input's field declares them.
         Accessible.role: root.accessibleRole
         Accessible.name: root.accessibleName

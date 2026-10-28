@@ -147,6 +147,8 @@ public:
         : TuiField{context}, _mode{mode}, _offsetMinutes{offsetMinutes}, _field{&adopt(makeFieldView(*this, *this))} {}
     void setValue(std::optional<morph::time::Timestamp> const& value) override;
     void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) override;
+    /// Shows the value and reads typed text in @p pattern; ISO is always read too.
+    void setPattern(std::string_view pattern) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
@@ -154,6 +156,10 @@ public:
     void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
+    /// The text an instant shows as: in the pattern, else as `formatLocal` writes it.
+    [[nodiscard]] std::string shownOf(morph::time::DateTime instant) const;
+    /// The instant a text names: in the pattern or ISO, else as `parseLocal` reads it.
+    [[nodiscard]] std::optional<morph::time::DateTime> instantOf(std::string_view text) const;
     void edited() override;
     void submitted() override;
     /// Enter commits what was typed, and stops here.
@@ -168,6 +174,7 @@ private:
 
     ui::DateMode _mode;
     int _offsetMinutes;
+    std::string _pattern;
     ::core::tui::InputField* _field;
     std::optional<morph::time::DateTime> _committed;  ///< The instant last set or committed; none for an empty field.
     bool _invalid = false;

@@ -105,27 +105,35 @@ public:
     DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::DateMode mode, int offsetMinutes);
     void setValue(std::optional<morph::time::Timestamp> const& value) override;
     void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) override;
+    void setPattern(std::string_view pattern) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] std::string shownText() const override;
 
 private:
-    /// @brief Shows @p text, unless the control already shows it.
+    /// @brief Shows @p text, unless the control already shows it, and the day it names as the calendar's.
     /// @param text  The text to show.
     /// @param force Whether to write it even when the control already shows it.
     void show(QString const& text, bool force = false) const;
+    /// @brief A day the calendar chose: written with the time of day the field holds, shown and reported.
+    /// @param day The day's `[year, month (zero-based), day]`.
+    void picked(QVariant const& day);
 
     ui::DateMode _mode;
     int _offsetMinutes;
+    std::string _pattern;
     std::function<void(std::optional<morph::time::Timestamp>)> _onChange;
     QString _shown;
 };
 
-/// The text a date-time field shows for an instant, in a zone @p offsetMinutes from UTC.
-[[nodiscard]] QString formatDateTime(morph::time::DateTime const& instant, ui::DateMode mode, int offsetMinutes);
+/// The text a date-time field shows for an instant, in a zone @p offsetMinutes from UTC: in @p pattern, or ISO for
+/// an empty one.
+[[nodiscard]] QString formatDateTime(morph::time::DateTime const& instant, ui::DateMode mode, int offsetMinutes,
+                                     std::string_view pattern = {});
 
-/// The instant a date-time field's text names in a zone @p offsetMinutes from UTC; none for text that names none.
+/// The instant a date-time field's text names in a zone @p offsetMinutes from UTC, in @p pattern or ISO; none for
+/// text that names none.
 [[nodiscard]] std::optional<morph::time::DateTime> parseDateTime(QString const& text, ui::DateMode mode,
-                                                                 int offsetMinutes);
+                                                                 int offsetMinutes, std::string_view pattern = {});
 
 class SliderImpl final : public FieldItemWidget<ui::SliderWidget> {
 public:

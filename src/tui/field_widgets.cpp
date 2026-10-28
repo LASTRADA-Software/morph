@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <format>
 #include <memory>
+#include <morph/ui/date_pattern.hpp>
 #include <morph/ui/theme.hpp>
 #include <stdexcept>
 #include <string>
@@ -398,12 +399,31 @@ void TextInputImpl::left() {
     }
 }
 
+void DateTimeInputImpl::setPattern(std::string_view pattern) {
+    _pattern = std::string{pattern};
+    refresh();
+}
+
+std::string DateTimeInputImpl::shownOf(morph::time::DateTime instant) const {
+    if (_pattern.empty()) {
+        return formatLocal(instant, _mode, _offsetMinutes);
+    }
+    return ui::formatDate(_pattern, instant + std::chrono::minutes{_offsetMinutes}, _offsetMinutes);
+}
+
+std::optional<morph::time::DateTime> DateTimeInputImpl::instantOf(std::string_view text) const {
+    if (_pattern.empty()) {
+        return parseLocal(text, _mode, _offsetMinutes);
+    }
+    return ui::parseDate(_pattern, text, _offsetMinutes);
+}
+
 void DateTimeInputImpl::setValue(std::optional<morph::time::Timestamp> const& value) {
-    auto const text = value && value->hasValue() ? formatLocal(**value, _mode, _offsetMinutes) : std::string{};
+    auto const text = value && value->hasValue() ? shownOf(**value) : std::string{};
     if (text != _field->text()) {
         _field->setText(text);
     }
-    _committed = parseLocal(text, _mode, _offsetMinutes);
+    _committed = instantOf(text);
     _invalid = false;
     refresh();
 }
@@ -413,7 +433,12 @@ void DateTimeInputImpl::setOnChange(std::function<void(std::optional<morph::time
 }
 
 ::core::tui::Size DateTimeInputImpl::controlSize() const {
-    return withCaption({.width = _mode == ui::DateMode::Date ? 12 : 18, .height = 1});
+    // A pattern is as wide as what it writes, and a cell for the cursor.
+    int width = _mode == ui::DateMode::Date ? 12 : 18;
+    if (!_pattern.empty()) {
+        width = displayWidth(ui::formatDate(_pattern, {}, _offsetMinutes)) + 2;
+    }
+    return withCaption({.width = width, .height = 1});
 }
 
 std::string DateTimeInputImpl::probeText() const { return std::string{_field->text()}; }
@@ -432,7 +457,7 @@ void DateTimeInputImpl::submitted() { commitTyped(); }
 // same instant.
 void DateTimeInputImpl::left() {
     auto const text = _field->text();
-    auto const typed = text.empty() ? std::nullopt : parseLocal(text, _mode, _offsetMinutes);
+    auto const typed = text.empty() ? std::nullopt : instantOf(text);
     if (!text.empty() && !typed) {
         commitTyped();
         return;
@@ -441,7 +466,7 @@ void DateTimeInputImpl::left() {
         commit(typed);
         return;
     }
-    auto const shown = typed ? formatLocal(*typed, _mode, _offsetMinutes) : std::string{};
+    auto const shown = typed ? shownOf(*typed) : std::string{};
     if (shown != text) {
         _field->setText(shown);
         refresh();
@@ -453,7 +478,7 @@ void DateTimeInputImpl::commitTyped() {
         commit(std::nullopt);
         return;
     }
-    if (auto const parsed = parseLocal(_field->text(), _mode, _offsetMinutes); parsed.has_value()) {
+    if (auto const parsed = instantOf(_field->text()); parsed.has_value()) {
         commit(parsed);
         return;
     }
@@ -484,7 +509,7 @@ std::optional<EventResult> DateTimeInputImpl::intercept(::core::tui::KeyEvent co
 void DateTimeInputImpl::step(std::chrono::minutes delta) {
     auto const text = _field->text();
     auto const current =
-        text.empty() ? std::optional{morph::time::DateTime::now()} : parseLocal(text, _mode, _offsetMinutes);
+        text.empty() ? std::optional{morph::time::DateTime::now()} : instantOf(text);
     if (!current) {
         _invalid = true;
         refresh();
@@ -496,8 +521,8 @@ void DateTimeInputImpl::step(std::chrono::minutes delta) {
 // What is reported is read back from the text shown, so it is the instant the user sees: local midnight in Date
 // mode, the whole minute in DateTime mode.
 void DateTimeInputImpl::commit(std::optional<morph::time::DateTime> value) {
-    auto const text = value ? formatLocal(*value, _mode, _offsetMinutes) : std::string{};
-    auto const shown = parseLocal(text, _mode, _offsetMinutes);
+    auto const text = value ? shownOf(*value) : std::string{};
+    auto const shown = instantOf(text);
     _invalid = false;
     _field->setText(text);
     _committed = shown;
