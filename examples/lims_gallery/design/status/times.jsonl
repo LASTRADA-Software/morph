@@ -53,3 +53,5 @@
 {"logged": "2026-10-26 15:51:30", "event": "start", "task": "FOLD.1", "title": "Rebase E1 and D parts 1-2 onto batch B part 2, then the chart", "group": "FOLD"}
 {"logged": "2026-10-28 19:31:08", "event": "idle", "where": "C.1", "since": "2026-10-28 18:00:00", "what": "weekly usage limit; resumed after the Oct 28 18:00 reset (stopped on Oct 26 around 16:00; the exact stop time is not recorded)"}
 {"logged": "2026-10-28 19:31:08", "event": "idle", "where": "FOLD.1", "since": "2026-10-28 18:00:00", "what": "weekly usage limit; resumed after the Oct 28 18:00 reset (stopped on Oct 26 around 16:00; the exact stop time is not recorded)"}
+{"logged": "2026-10-28 20:19:09", "event": "report", "task": "FOLD.1"}
+{"logged": "2026-10-28 20:24:55", "event": "done", "task": "FOLD.1", "fix_rounds": 1}
