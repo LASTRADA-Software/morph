@@ -5,13 +5,16 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // A modal dialog: an overlay holding its content, which traps focus while open. Escape or a click outside closes it
-// and reports a dismissal; `show` opens and closes it without one.
+// and reports a dismissal; `show` opens and closes it without one. As a sheet it fills the window, square, with a head
+// row of a dismiss button and the title: a phone has no Escape key and no outside to press.
 MorphWidget {
     id: root
 
     property string title: ""
     // A line under the title, in the head, divided from the body by a rule: the overlay's accessible description.
     property string description: ""
+    property bool sheet: false
+    property string dismissLabel: "Close"
     // Set while C++ opens or closes it, so that is not taken for a dismissal.
     property bool programmatic: false
     readonly property Item content: column
@@ -56,17 +59,25 @@ MorphWidget {
 
     Popup {
         id: popup
-        anchors.centerIn: Overlay.overlay
+        // A sheet is placed in the overlay's own coordinates, at its origin; a centred dialog anchors to it.
+        parent: root.sheet ? root.Overlay.overlay : root
+        anchors.centerIn: root.sheet ? undefined : Overlay.overlay
+        x: 0
+        y: 0
+        height: root.sheet ? (root.Overlay.overlay?.height ?? 0) : undefined
+        margins: root.sheet ? 0 : -1
         modal: true
         focus: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        closePolicy: root.sheet ? Popup.CloseOnEscape : Popup.CloseOnEscape | Popup.CloseOnPressOutside
         // An explicit width (widthKind Fixed) wins outright over the Popup's own default sizing. The fallback branch
         // evaluates to `undefined`, not a captured number, so it resets rather than sets the Popup's own `hasWidth`
         // state -- a bound value here, even one equal to the Popup's own implicitWidth, would otherwise silently
         // disable QQuickPopupPositioner's window-edge clamping for every dialog, not just ones using the new lever.
-        width: root.widthKind === 1
-            ? Math.min(root.widthAmount * Theme.unitWidth, (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
-            : undefined
+        width: root.sheet
+            ? (root.Overlay.overlay?.width ?? 0)
+            : root.widthKind === 1
+                ? Math.min(root.widthAmount * Theme.unitWidth, (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
+                : undefined
         onAboutToHide: {
             if (!root.programmatic)
                 root.fire("dismiss", undefined)
@@ -78,9 +89,10 @@ MorphWidget {
             color: Theme.cardScheme.surface
             border.width: 1
             border.color: Theme.cardScheme.border
-            radius: Theme.radiusCard
+            radius: root.sheet ? 0 : Theme.radiusCard
 
             Rectangle {
+                visible: !root.sheet
                 anchors.fill: parent
                 anchors.leftMargin: Theme.cardShadowOffsetX - Theme.cardShadowSpread
                 anchors.rightMargin: -Theme.cardShadowOffsetX - Theme.cardShadowSpread
@@ -105,16 +117,44 @@ MorphWidget {
             // trigger points (not from a plain change of contentItem's own implicit size), so this must track the
             // Popup's own availableWidth directly rather than keep deriving from its own (by then stale) implicit
             // size, or later content changes would silently drift out of sync with the pinned width.
-            width: root.widthKind === 1
+            width: root.sheet || root.widthKind === 1
                 ? popup.availableWidth
                 : Math.min(implicitWidth, (popup.Overlay.overlay?.width ?? implicitWidth) - 4 * Theme.unitWidth)
+            // A sheet's content fills the window's height between its head and its footer.
+            height: root.sheet ? popup.availableHeight : undefined
+
+            // A sheet's head: the dismiss control, which closes it as Escape does, then the title.
+            RowLayout {
+                id: sheetHead
+                objectName: "sheetHead"
+                visible: root.sheet
+                Layout.fillWidth: true
+                spacing: Theme.spaceOf(2)
+
+                Button {
+                    id: dismissButton
+                    objectName: "sheetDismiss"
+                    flat: true
+                    text: root.dismissLabel
+                    Accessible.name: root.dismissLabel
+                    onClicked: popup.close()
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    font: Theme.strongFont
+                    color: Theme.cardScheme.text
+                    elide: Text.ElideRight
+                    text: root.title
+                }
+            }
 
             Label {
                 textFormat: Text.PlainText
                 id: titleLabel
                 font: Theme.strongFont
                 color: Theme.cardScheme.text
-                visible: root.title !== ""
+                visible: root.title !== "" && !root.sheet
                 text: root.title
             }
 
@@ -150,11 +190,12 @@ MorphWidget {
                 id: scroll
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.maximumHeight: Math.max(0, (popup.Overlay.overlay?.height ?? Infinity) - 4 * Theme.unitHeight -
-                                               titleLabel.height - footerArea.height - contentColumn.spacing * 2 -
-                                               (root.description === "" ? 0 : descriptionLabel.height +
-                                                                              headRule.height +
-                                                                              contentColumn.spacing * 2))
+                Layout.maximumHeight: root.sheet
+                    ? Infinity
+                    : Math.max(0, (popup.Overlay.overlay?.height ?? Infinity) - 4 * Theme.unitHeight -
+                               titleLabel.height - footerArea.height - contentColumn.spacing * 2 -
+                               (root.description === "" ? 0 : descriptionLabel.height + headRule.height +
+                                                              contentColumn.spacing * 2))
                 clip: true
 
                 ColumnLayout {

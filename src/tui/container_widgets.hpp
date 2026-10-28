@@ -11,6 +11,7 @@
 #include <morph/ui/backend.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
+#include <utility>
 #include <span>
 #include <string>
 #include <string_view>
@@ -252,6 +253,9 @@ private:
 /// top, or of the roots, and nowhere only when nothing can take it. A box that vanishes while the widget stays open
 /// (it or a container around it hidden) hands the focus back the same way, and takes it again when it shows. Esc
 /// inside the open, actionable box closes it and then calls `onDismiss`; no setter calls it.
+///
+/// A dialog drawn as a sheet fills the viewport; its top row draws `[dismissLabel]` before the title, and a press on
+/// it dismisses as Esc does. Its footer, when it holds anything, takes the box's bottom rows.
 class OverlayCore {
 public:
     /// @param self The dialog or drawer this is the overlay of.
@@ -269,6 +273,10 @@ public:
     /// content, which loses those two rows.
     void setDescription(std::string_view description);
     void setOnDismiss(ui::Action onDismiss) { _onDismiss = std::move(onDismiss); }
+    void setSheet(bool sheet);
+    void setDismissLabel(std::string_view label);
+    /// The footer, which a sheet lays out at the bottom of its box.
+    void setFooter(WidgetBase const* footer) noexcept { _footer = footer; }
     /// Closes the overlay and calls `onDismiss`, as Esc does.
     void dismiss();
     [[nodiscard]] std::string const& title() const noexcept { return _title; }
@@ -284,6 +292,8 @@ private:
     class Frame;
     [[nodiscard]] bool showsFrame() const;
     [[nodiscard]] ::core::tui::Size frameSize() const;
+    /// The cells of a sheet's dismiss control in the box's top row: its first column and its width.
+    [[nodiscard]] std::pair<int, int> dismissCells() const;
     void paintFrame(::core::tui::Canvas& canvas);
     [[nodiscard]] ::core::tui::EventResult frameEvent(::core::tui::InputEvent const& event);
     [[nodiscard]] bool holdsFocus() const;
@@ -302,6 +312,9 @@ private:
     std::string _title;
     std::string _description;
     ui::Action _onDismiss;
+    std::string _dismissLabel = "Close";
+    WidgetBase const* _footer = nullptr;
+    bool _sheet = false;
     bool _open = false;
     bool _framed = false;  ///< Whether the box showed when last seen.
     WidgetBase* _restore = nullptr;
@@ -345,7 +358,13 @@ public:
     void setDescription(std::string_view description) override { _overlay.setDescription(description); }
     [[nodiscard]] std::string accessibleDescription() const override { return _overlay.description(); }
     void setOnDismiss(ui::Action onDismiss) override { _overlay.setOnDismiss(std::move(onDismiss)); }
-    [[nodiscard]] ui::ContainerWidget& footer() override { return _footer.of(*this); }
+    void setSheet(bool sheet) override { _overlay.setSheet(sheet); }
+    void setDismissLabel(std::string_view label) override { _overlay.setDismissLabel(label); }
+    [[nodiscard]] ui::ContainerWidget& footer() override {
+        ui::ContainerWidget& footer = _footer.of(*this);
+        _overlay.setFooter(dynamic_cast<WidgetBase const*>(&footer));
+        return footer;
+    }
     [[nodiscard]] ::core::tui::Size naturalSize() const override { return {.width = 0, .height = 0}; }
     [[nodiscard]] std::string probeText() const override { return _overlay.title(); }
     [[nodiscard]] ::core::tui::Component& host() override { return _overlay.frame(); }

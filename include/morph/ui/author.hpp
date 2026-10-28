@@ -4043,6 +4043,11 @@ struct DialogOptions {
     Commands onDismiss;
     /// @brief The buttons of its footer, run in its scope; each id once.
     std::vector<ActionButtonOptions> actions;
+    /// @brief A dialog's condition for being drawn as a sheet that fills the window, such as
+    ///        `eq(env("widthClass"), "compact")`; a drawer takes none.
+    AnyHandle sheet;
+    /// @brief The label of a sheet's dismiss control; absent is "Close". Only with `sheet`.
+    AnyHandle dismissLabel;
 };
 
 namespace detail {
@@ -4074,6 +4079,8 @@ namespace detail {
         node.raw("actions", std::move(actions));
     }
     return node.put("side", options.side)
+        .put("sheet", options.sheet)
+        .put("dismissLabel", options.dismissLabel)
         .scope(scope)
         .put("children", children)
         .put("default", options.defaultAction)

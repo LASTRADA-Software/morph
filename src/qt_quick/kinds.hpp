@@ -382,7 +382,7 @@ public:
 
 /// A dialog or a drawer: a modal overlay whose content is shown only while it is open.
 template <class Interface>
-class OverlayImpl final : public ContainerItemWidget<Interface> {
+class OverlayImpl : public ContainerItemWidget<Interface> {
 public:
     OverlayImpl(Context& context, QString const& type, ui::ContainerWidget* parent, QVariantMap initial = {})
         : ContainerItemWidget<Interface>{context, type, parent, std::move(initial)} {}
@@ -441,7 +441,14 @@ private:
     bool _makingFooter = false;
 };
 
-using DialogImpl = OverlayImpl<ui::DialogWidget>;
+/// A dialog: an overlay that can be drawn as a sheet filling the window.
+class DialogImpl final : public OverlayImpl<ui::DialogWidget> {
+public:
+    using OverlayImpl<ui::DialogWidget>::OverlayImpl;
+    void setSheet(bool sheet) override { write("sheet", sheet); }
+    void setDismissLabel(std::string_view label) override { write("dismissLabel", toQString(label)); }
+};
+
 using DrawerImpl = OverlayImpl<ui::DrawerWidget>;
 
 class SplitterImpl final : public ContainerItemWidget<ui::SplitterWidget> {

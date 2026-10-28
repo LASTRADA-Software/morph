@@ -8227,7 +8227,10 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
                 .title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf),
                 .description = bindProp<std::string>(ctx, node.prop("description"), std::string{}, stringOf),
                 .child = std::move(body),
-                .onDismiss = std::move(onDismiss)};
+                .onDismiss = std::move(onDismiss),
+                .common = {},
+                .sheet = bindProp<bool>(ctx, node.prop("sheet"), false, boolOf),
+                .dismissLabel = bindProp<std::string>(ctx, node.prop("dismissLabel"), std::string{"Close"}, stringOf)};
     commonOf(node, ctx, element, spec.common);
     return ui::dialog(std::move(spec));
 }

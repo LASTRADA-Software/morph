@@ -558,6 +558,7 @@ TEST_CASE("qt_quick components: a dialog restyle without the footer part is refu
         "BareDialog", 1,
         writeFile(dir, QStringLiteral("BareDialog.qml"),
                   "import QtQuick\nimport MorphUi\nMorphWidget { property string title; property bool programmatic;"
+                  " property bool sheet; property string dismissLabel;"
                   " readonly property Item content: null; readonly property bool shown: false;"
                   " function show(open: bool) {} function dismiss() {} }\n"));
     QQmlEngine probeEngine;

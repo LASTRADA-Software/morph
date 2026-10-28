@@ -955,3 +955,26 @@ TEST_CASE("interpreter control: a prominent text input records its emphasis", "[
       "view": {"kind": "textInput", "testId": "scan", "label": "Scan", "emphasis": "prominent"}})");
     CHECK(h.backend.prop(h.byTestId("TextInput", "scan"), "emphasis") == "Prominent");
 }
+
+// Mutation: leave the mount's setSheet out for a bound `sheet` (no `sheet` property at all).
+TEST_CASE("interpreter control: a dialog's sheet follows the width class, and its dismiss label is sent",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "sign",
+      "state": { "open": { "init": true } },
+      "view": { "kind": "dialog", "id": "signature", "testId": "signature", "title": "Sign",
+        "open": { "ref": "open" }, "dismissLabel": "Cancel",
+        "sheet": { "fn": "eq", "args": [ { "env": "widthClass" }, "compact" ] },
+        "children": [ { "kind": "text", "testId": "inside", "text": "inside" } ] } })");
+    int const dialog = h.byTestId("Dialog", "signature");
+    CHECK(h.backend.prop(dialog, "sheet") == "false");
+    CHECK(h.backend.prop(dialog, "dismissLabel") == "Cancel");
+    h.session.setEnvironmentValue("widthClass", ui::Value{"compact"});
+    h.settle();
+    CHECK(h.backend.prop(dialog, "sheet") == "true");
+    CHECK(h.text("inside") == "inside");
+    h.session.setEnvironmentValue("widthClass", ui::Value{"expanded"});
+    h.settle();
+    CHECK(h.backend.prop(dialog, "sheet") == "false");
+}

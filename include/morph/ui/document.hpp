@@ -873,7 +873,7 @@ inline constexpr std::array<KeySpec, 3> kTabsKeys = {
 inline constexpr std::array<KeySpec, 3> kTabKeys = {
     {{"id", Shape::Name}, {"label", Shape::Expr}, {"children", Shape::Nodes}}};
 /// @brief The keys of `dialog` and `drawer`.
-inline constexpr std::array<KeySpec, 10> kDialogKeys = {{{"open", Shape::Condition},
+inline constexpr std::array<KeySpec, 12> kDialogKeys = {{{"open", Shape::Condition},
                                                          {"title", Shape::Expr},
                                                          {"description", Shape::Expr},
                                                         {"showErrors", Shape::Text},
@@ -882,7 +882,9 @@ inline constexpr std::array<KeySpec, 10> kDialogKeys = {{{"open", Shape::Conditi
                                                         {"default", Shape::Commands, {}, kInner},
                                                         {"cancel", Shape::Commands, {}, kInner},
                                                         {"actions", Shape::Parts, "actionButton", kInner},
-                                                        {"side", Shape::Expr}}};
+                                                        {"side", Shape::Expr},
+                                                        {"sheet", Shape::Condition},
+                                                        {"dismissLabel", Shape::Expr}}};
 /// @brief The keys of `group`: a labelled set of inputs, lowered to a column of existing kinds.
 inline constexpr std::array<KeySpec, 6> kGroupKeys = {{{"label", Shape::Expr},
                                                        {"required", Shape::Condition},
@@ -3340,6 +3342,7 @@ private:
                    "`" + std::string{node.name("point")} + "` is not a customization point of this document");
         }
         checkKindValues(node);
+        checkSheet(node);
         std::string_view const model = node.name("model");
         if (!model.empty()) {
             if (node.name("action").empty()) {
@@ -3356,6 +3359,22 @@ private:
             checkTablePaging(node);
             checkTableGroup(node);
             checkRowsTableKeys(node);
+        }
+    }
+
+    // A dialog's `sheet` and the label of its dismiss control: a drawer already fills the height on a phone and takes
+    // neither, and a `dismissLabel` labels only a sheet's control.
+    static void checkSheet(DocNode const& node) {
+        if (node.kind == "drawer") {
+            for (std::string_view const key : {"sheet", "dismissLabel"}) {
+                if (node.prop(key)) {
+                    refuse(pointerAppend(node.path, key), "`" + std::string{key} +
+                                                              "` is a dialog's; a drawer already fills the height");
+                }
+            }
+        } else if (node.kind == "dialog" && node.prop("dismissLabel") && !node.prop("sheet")) {
+            refuse(pointerAppend(node.path, "dismissLabel"),
+                   "`dismissLabel` labels a sheet's dismiss control; give the dialog `sheet`");
         }
     }
 
