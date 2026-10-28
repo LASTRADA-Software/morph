@@ -88,7 +88,9 @@ TEST_CASE("plate, expanded: filling the selection, then clearing it", "[lims-gal
     screen.click("clear-wells");
     CHECK(screen.waitFor([&screen] { return wellLabel(screen, "A3") == "·"; }));
     CHECK(screen.prop("Panel", "to-place", "title") == "To place · 10");
-    screen.click("auto-fill");
+    // Auto-fill is a head action on the expanded layout, beside the template, a head tool.
+    CHECK(screen.shows("Select", "head_tool_template"));
+    screen.click("head_action_autoFill");
     // Ten samples fill the first ten empty wells in plate order: A3, A4, A10 to A12, D5 and H5 to H8.
     CHECK(screen.waitFor([&screen] { return wellLabel(screen, "H8") != "·"; }));
     CHECK(wellLabel(screen, "H9") == "·");

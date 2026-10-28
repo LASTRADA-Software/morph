@@ -37,7 +37,7 @@
 - **Workaround used:** the whole sentence in one weight.
 - **Weight:** Low
 
-### G4: An overlay that becomes a full-screen sheet on compact
+### G4: An overlay that becomes a full-screen sheet on compact — fixed in batch D
 - **Design(s):** 01
 - **Needs:** the same signature dialog as a centred 480 px dialog when expanded and as a full-screen sheet, with its
   own top bar (Cancel, title) and a full-width bottom button, when compact.
@@ -46,7 +46,10 @@
   full-screen or sheet presentation and no way to choose one per width class. Verified by trying.
 - **Workaround used:** compact renders the dialog's fields in the page under a `switch` on the `open` state, with an
   in-page Cancel row and a stretched primary button; the expanded layout keeps the real `dialog`. The two layouts
-  share the field builders but not the overlay's `ready`/`submitted` semantics.
+  share the field builders but not the overlay's `ready`/`submitted` semantics. Now one `dialog` for both, a sheet
+  (`sheet`, `dismissLabel: "Cancel"`) on compact, its footer Cancel hidden there. The line under the title is still a
+  muted text in the content until batch C's dialog `description`, and the footer's button keeps its own width rather
+  than spanning the sheet.
 - **Weight:** Medium
 
 ### G5: Touch-sized controls on compact — fixed in batch A
@@ -195,8 +198,9 @@
 - **Workaround used:** a `menu` with one top-level entry labelled "More actions", placed in the page above the tabs
   (expanded) or after the two large buttons (compact); no separator; the hint is part of the entry's label. Instrument's
   "More actions" and samples' bulk "⋯" are now `style: button` menus, the instrument's with a separator before
-  "Take out of service…" and its hint as the entry's `description`. Instrument's still sits in the page: the head's
-  own menu is batch D's next part.
+  "Take out of service…" and its hint as the entry's `description`. On the expanded layout instrument's is now the
+  head's own `menu`, after its actions; compact hides those entries and keeps the page's menu after its two large
+  buttons.
 - **Weight:** Medium
 
 ### G19: The screen head overflows the shell's top bar (defect) — filed as #1049 — fixed in batch A
@@ -283,13 +287,16 @@
 - **Workaround used:** each `forEach` sits alone in a `column` that carries the test id (and, in 05, `visible`).
 - **Weight:** Medium
 
-### G26: Toolbar controls in the screen head
+### G26: Toolbar controls in the screen head — fixed in batch D
 - **Design(s):** 04, 05, 07
 - **Needs:** the head row's search field ("Search record, field or reason", "Sample, lot or product") and filter
   selects ("Status: open", "Priority: any", "Template: HCP 96, 8 standards") beside the title and its buttons.
 - **ui/1 today:** a screen head has `title`, `subtitle`, `status` badges and `actions`, which are buttons
   (`docs/spec/ui/document.md:63`, `91-100`); no input can sit in it. Inferred from reading.
-- **Workaround used:** the inputs in a row at the top of the page, right-aligned under the head.
+- **Workaround used:** the inputs in a row at the top of the page, right-aligned under the head. Now head `tools`
+  on the expanded layouts, hidden on compact, where the designs draw them in the page: audit's search, samples'
+  search and two filters, plate's template (with its two buttons as head actions) and the console's lab and sample
+  search. The console's search loses its scan icon, which a head tool does not take.
 - **Weight:** Medium
 
 ### G27: Removable filter chips — fixed in batch D

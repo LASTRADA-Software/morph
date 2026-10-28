@@ -19,8 +19,12 @@ constexpr char const* kScreen = "lims-gallery.instrument";
 constexpr std::size_t kRecordCalibration = 0;
 constexpr std::size_t kTakeOutOfService = 4;
 
+// The overflow: the head's own menu on expanded, the page's after the large buttons on compact.
 void chooseMore(GalleryScreen& screen, std::size_t entry) {
-    auto const menu = screen.find("Menu", "more");
+    auto menu = screen.find("Menu", "head_menu");
+    if (!menu) {
+        menu = screen.find("Menu", "more");
+    }
     if (!menu) {
         throw std::runtime_error{"no overflow menu is mounted"};
     }
@@ -39,7 +43,11 @@ TEST_CASE("instrument, expanded: the head's status and actions, the overflow men
     CHECK(screen.prop("Badge", "head_status_2", "text") == "Calibration due 27-Oct-2026, in 3 days");
     CHECK(screen.shows("Button", "head_action_maintenance"));
     CHECK(screen.shows("Button", "head_action_book"));
-    CHECK(screen.find("Menu", "more").has_value());
+    // The overflow is the head's own menu, after its actions, and not in the page.
+    CHECK(screen.prop("Menu", "head_menu", "items") ==
+          "[Record calibration…,Print equipment label,Export history (PDF),;separator,"
+          "Take out of service…;description=needs reason]");
+    CHECK_FALSE(screen.find("Menu", "more").has_value());
     CHECK(screen.find("Tabs", "tabs").has_value());
     CHECK(screen.shows("Panel", "details"));
     CHECK(screen.find("Column", "qualification").has_value());
@@ -86,6 +94,9 @@ TEST_CASE("instrument, compact: stacked sections, actions in the page, the secti
     CHECK_FALSE(screen.shows("Button", "head_action_book"));
     CHECK(screen.shows("Button", "book"));
     CHECK(screen.shows("Button", "maintenance"));
+    // Compact hides the head's menu entries, so the head draws no menu and the page's follows the large buttons.
+    CHECK_FALSE(screen.find("Menu", "head_menu").has_value());
+    CHECK(screen.find("Menu", "more").has_value());
     CHECK(screen.find("Column", "details").has_value());
     CHECK(screen.prop("Collapsible", "booking-section", "open") == "true");
     CHECK(screen.prop("Collapsible", "qualification-section", "open") == "false");

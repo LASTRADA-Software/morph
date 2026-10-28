@@ -48,7 +48,8 @@ TEST_CASE("console: the pane steps through the worklist, and a held sample alone
     screen.backend().activateRow(worklist.value_or(0), morph::ui::Key{std::string{"S-26-104159"}});
     CHECK(screen.waitForText("pane-id", "S-26-104159"));
     CHECK(screen.prop("Button", "submit", "enabled") == "false");
-    screen.submit("find", "S-26-104176");
+    // The sample search is a head tool on the expanded layout.
+    screen.submit("head_tool_find", "S-26-104176");
     CHECK(screen.waitForText("pane-id", "S-26-104176"));
     screen.requireNoProblems();
 }

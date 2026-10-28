@@ -97,10 +97,11 @@ TEST_CASE("samples, expanded: the pager turns the page, and a header sorts from 
 
 TEST_CASE("samples, expanded: a filter with no match shows the empty state", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
-    screen.choose("priority-filter", "Urgent");
+    // The search and the filters are head tools on the expanded layout.
+    screen.choose("head_tool_priority", "Urgent");
     CHECK(screen.waitFor([&screen] { return !showsText(screen, "Paracetamol 500 mg · L-26-0377"); }));
     CHECK(showsText(screen, "Lactose monohydrate · RM-0912"));
-    screen.edit("search", "no such sample");
+    screen.edit("head_tool_search", "no such sample");
     CHECK(screen.waitFor([&screen] { return screen.shows("EmptyState", "no-samples"); }));
     screen.requireNoProblems();
 }
