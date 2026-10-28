@@ -10,17 +10,15 @@ below). It lists every lane, its commits, the decisions and the follow-ups; read
 
 | Branch | Holds | State |
 |---|---|---|
-| `feat/lims-gallery` | the gallery, batches A, B part 1 and B part 2 | pushed; the PR's branch |
-| `feat/lims-gallery-e1` | E1 (expressions), D part 1, D part 2 (in progress), rebased onto B part 1 | pushed up to its last commit |
-| `feat/lims-gallery-e2` | E2 (the chart), on the old E1 base | pushed; **needs E1**: it calls E1's checked rounding |
-| `feat/lims-gallery-c` | batch C (in progress), from B part 1 | pushed up to its last commit |
-| `lg-fold-e2-on-b2` | a first try at putting the chart on B part 2: it does not compile without E1, but its conformance merge can be reused; drop its stray `backend_conformance.hpp.orig` | pushed for reference only |
+| `feat/lims-gallery` | the gallery, batches A, B, E1, E2 (the chart) and D parts 1–2 | pushed; the PR's branch; built and green |
+| `feat/lims-gallery-c` | batch C (in progress), from B part 1 | pushed up to its last commit; to be rebased onto `feat/lims-gallery` |
+| `feat/lims-gallery-d3` | batch D part 3 (in progress), from `feat/lims-gallery` | not pushed until its first commits land |
+| `feat/lims-gallery-e1`, `feat/lims-gallery-e2`, `lg-fold-e2-on-b2` | already folded into `feat/lims-gallery` | kept for reference only |
 
-Worktrees: `../morph-lims-gallery` (`feat/lims-gallery`), `../morph-lims-e1` (`feat/lims-gallery-e1`),
+Worktrees: `../morph-lims-gallery` (`feat/lims-gallery`), `../morph-lims-e1` (`feat/lims-gallery-d3`),
 `../morph-lims-e2` (`feat/lims-gallery-c`), each with its own build tree `build/linux-everything`.
 
-Designs, all reviewed, in `docs/superpowers/specs/`: `2026-10-25-lims-gallery-batch-{b,c}-design.md` on this branch;
-`…-batch-{d,e}-design.md` on `feat/lims-gallery-e1`.
+Designs, all reviewed, are in `docs/superpowers/specs/2026-10-25-lims-gallery-batch-{b,c,d,e}-design.md`.
 
 ## Batch B, landed
 
@@ -34,10 +32,10 @@ runs. The plate's empty rows are not folded into one section.
 
 ## How to continue
 
-1. Let batch D part 2 (G23, G18's menu node, G27, cleanup) and batch C finish on their branches.
-2. Fold onto `feat/lims-gallery`, in this order: `feat/lims-gallery-e1`; E2's three commits; batch C. Build and run
-   the six suites once after the fold, then push.
-3. Batch D part 3 (the head's menu G18, G26, G4) and part 4 (G50 with #1064, G56), per the batch D design.
+1. Let batch C and batch D part 3 (the head's menu G18, G26, G4) finish on their branches.
+2. Rebase each onto `feat/lims-gallery` (batch C from `7c7f9d708`: `git rebase --onto origin/feat/lims-gallery
+   7c7f9d708`), build and run the six suites and qmllint, then push.
+3. Batch D part 4 (G50 with #1064, G56), per the batch D design.
 4. Take the PR out of draft and update its body (the closes list is in the tracker).
 
 **Expect folding conflicts** in `include/morph/ui/testing/backend_conformance.hpp`, `tests/test_ui_conformance.cpp`

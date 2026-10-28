@@ -53,3 +53,16 @@
 {"logged": "2026-10-26 15:51:30", "event": "start", "task": "FOLD.1", "title": "Rebase E1 and D parts 1-2 onto batch B part 2, then the chart", "group": "FOLD"}
 {"logged": "2026-10-28 19:31:08", "event": "idle", "where": "C.1", "since": "2026-10-28 18:00:00", "what": "weekly usage limit; resumed after the Oct 28 18:00 reset (stopped on Oct 26 around 16:00; the exact stop time is not recorded)"}
 {"logged": "2026-10-28 19:31:08", "event": "idle", "where": "FOLD.1", "since": "2026-10-28 18:00:00", "what": "weekly usage limit; resumed after the Oct 28 18:00 reset (stopped on Oct 26 around 16:00; the exact stop time is not recorded)"}
+{"logged": "2026-10-28 20:19:09", "event": "report", "task": "FOLD.1"}
+{"logged": "2026-10-28 20:24:55", "event": "done", "task": "FOLD.1", "fix_rounds": 1}
+{"logged": "2026-10-28 20:25:04", "event": "group", "group": "D3", "name": "Batch D part 3: the head and overlays"}
+{"logged": "2026-10-28 20:25:05", "event": "start", "task": "D3.1", "title": "Batch D part 3: G18 head menu, G26, G4 and the gallery cleanup", "group": "D3"}
+{"logged": "2026-10-28 22:47:49", "event": "report", "task": "C.1"}
+{"logged": "2026-10-28 22:47:49", "event": "done", "task": "C.1", "fix_rounds": 0}
+{"logged": "2026-10-28 22:47:49", "event": "start", "task": "FOLD.2", "title": "Rebase batch C onto feat/lims-gallery", "group": "FOLD"}
+{"logged": "2026-10-28 23:07:04", "event": "report", "task": "D3.1"}
+{"logged": "2026-10-28 23:07:04", "event": "done", "task": "D3.1", "fix_rounds": 0}
+{"logged": "2026-10-28 23:07:04", "event": "group", "group": "D4", "name": "Batch D part 4: navigation"}
+{"logged": "2026-10-28 23:07:04", "event": "start", "task": "D4.1", "title": "Batch D part 4: G50 (#1064), G56 and the gallery cleanup", "group": "D4"}
+{"logged": "2026-10-29 01:24:28", "event": "report", "task": "D4.1"}
+{"logged": "2026-10-29 01:24:28", "event": "done", "task": "D4.1", "fix_rounds": 0}

@@ -2,7 +2,7 @@
 
 The run's tracker, committed so another agent can pick it up; `next.md` says how to update and publish it. Times are local, from `date`, to the second.
 
-**Last updated:** 2026-10-28 19:43:48
+**Last updated:** 2026-10-29 01:24:28
 
 ## Current plan: LIMS gallery and the declarative-UI batches it found
 
@@ -25,36 +25,40 @@ as one PR, #1045 (draft), which leaves draft when every batch is in.
 | Batch A: defects and responsive layout | 15/15 | done | 14 fixes and the gallery cleanup, `b6581747a`..`1e4c9cf34`; closes #1046–#1052, #1054, #1055 |
 | Batch B part 1: columns and the selection | 6/6 | done | `27c072205`..`7c7f9d708` on `feat/lims-gallery`, pushed; G2, G47, G29 (closes #1053), G43 (closes #1059), G30 and the gallery cleanup |
 | Batch B part 2: the row pipeline | 7/7 | done | `8215ca989`..`cdb41fe9f` on `feat/lims-gallery`, pushed: G41 selected button, G31 sort, G28 paging, G44 `runs`, G46 group headings, the `showHeader` flag fix, and the gallery cleanup; all six suites pass |
-| Batch C: text, fields and small controls | 9/16 | running | in `morph-lims-e2`, branch `feat/lims-gallery-c` (pushed), committed: plain text on Qt Quick (#1058), spans, G24/G39 label-over-value and toned values, G8 required mark after the caption, G10 help text and value evaluation, G6 dialog and drawer description line, G17 a group of inputs with a legend, G9 a text input's unit, announced, G14/G33/G53 outlined destructive button, outlined badge and segmented select (#1061); next G52, G13, G11, cleanup |
+| Batch C: text, fields and small controls | 16/16 | done | 13 commits on `feat/lims-gallery-c` (pushed): plain text (#1058), spans, key-value, required mark, help text, dialog description, input group, unit (#1060, #1062), outlined and segmented controls (#1061), multi-line list entries, the date pattern, the focal scanner field, gallery cleanup; all suites and qmllint pass |
+| Folding batch C onto `feat/lims-gallery` | 0/1 | running | an agent rebases C over the 35 commits it is behind (4 of 13 replayed), then switches E1's ISO pull dates to C's date pattern |
 | Batch D design | 2/2 | done | written and reviewed, `84d3b53cc` (D4 fixes #1063 and #1064) |
-| Batch D part 1: following the data | 8/8 | done | on `feat/lims-gallery-e1` (pushed) over B part 1 and E1: #1063, G51, G20, G32, G35, G16, G38 and the cleanup; I built it: no warnings, all six suites pass |
-| Batch D part 2: layout and controls | 4/4 | done | `572fcc7ec`..`e96f52973` on `feat/lims-gallery-e1` (pushed): G23 grid column widths, G18 menu drawn as one button, G27 removable badges as filter chips, the gallery cleanup, and a qmllint fix for part 1's tab bar; all suites and qmllint pass |
-| Folding E1, D parts 1–2 and the chart onto `feat/lims-gallery` | 0/1 | running | an agent rebases `feat/lims-gallery-e1` onto batch B part 2, then adds the chart; 18 of 22 commits replayed (E1 and D part 1 done, now in D part 2) |
-| Batch D parts 3 and 4: head, overlays, navigation | 0/6 | queued | G18 head menu, G26, G4; then G50 (#1064) and G56 |
+| Batch D part 1: following the data | 8/8 | done | on `feat/lims-gallery`. on `feat/lims-gallery-e1` (pushed) over B part 1 and E1: #1063, G51, G20, G32, G35, G16, G38 and the cleanup; I built it: no warnings, all six suites pass |
+| Batch D part 2: layout and controls | 4/4 | done | on `feat/lims-gallery`. `572fcc7ec`..`e96f52973` on `feat/lims-gallery-e1` (pushed): G23 grid column widths, G18 menu drawn as one button, G27 removable badges as filter chips, the gallery cleanup, and a qmllint fix for part 1's tab bar; all suites and qmllint pass |
+| Folding E1, D parts 1–2 and the chart onto `feat/lims-gallery` | 1/1 | done | `feat/lims-gallery` now holds batches A, B, E1, E2 and D parts 1–2 (`620ad5378`, pushed). I built it with no warnings; all six suites and qmllint pass. 49 conformance and 15 layout cases |
+| Batch D part 3: the head and overlays | 4/4 | done | `17d45396c`..`f1cb577fe` on `feat/lims-gallery-d3` (pushed): G18 the head's own menu, G26 search and select in the head, G4 a dialog as a sheet (layout case 16), the gallery cleanup; all suites and qmllint pass |
+| Batch D part 4: navigation | 3/3 | done | `7f84dadca`..`9771a177c` on `feat/lims-gallery-d4` (pushed): G50 navigate as a dialog that answers its opener (closes #1064, reproduced first: the call was never answered and a later mount answered it with its own value), G56 navigation counts and the compact shell, the gallery cleanup; all suites, qmllint and Doxygen pass |
 | Batch E design | 2/2 | done | written and reviewed, `36d08c929` |
-| Batch E1: expressions | 7/7 | done | on `feat/lims-gallery-e1` under D part 1; closes #1066 and #1065 |
-| Batch E2: the chart | 2/2 | done | on `feat/lims-gallery-e2` (pushed); it uses E1's checked rounding, so it goes in after `feat/lims-gallery-e1`. A first try on batch B part 2 alone failed to compile; that resolution is kept on local branch `lg-fold-e2-on-b2` (drop its stray `backend_conformance.hpp.orig`). Tidy 22 on `chart_scale.hpp`: 0 warnings |
+| Batch E1: expressions | 7/7 | done | on `feat/lims-gallery`. on `feat/lims-gallery-e1` under D part 1; closes #1066 and #1065 |
+| Batch E2: the chart | 2/2 | done | on `feat/lims-gallery`. on `feat/lims-gallery-e2` (pushed); it uses E1's checked rounding, so it goes in after `feat/lims-gallery-e1`. A first try on batch B part 2 alone failed to compile; that resolution is kept on local branch `lg-fold-e2-on-b2` (drop its stray `backend_conformance.hpp.orig`). Tidy 22 on `chart_scale.hpp`: 0 warnings |
 
-**Now:** two agents run: batch C (9 of 16) and the fold (18 of 22 commits replayed, then the chart).
-**Next:** verify the fold and push it as `feat/lims-gallery`; start D part 3 on it; then fold batch C; then D part 4; take the PR out of draft.
+**Now:** every batch is implemented. One agent folds batch C onto `feat/lims-gallery`; D parts 3–4 wait on `feat/lims-gallery-d4` to be rebased onto it.
+**Next:** push the C fold; rebase D parts 3 and 4 onto it; verify once; take the PR out of draft and update its body.
 
 ## Time spent
 
-From the time log, stamped as each event happened. *Implement* runs from a task's dispatch to its first commit or report, *review & fixes* from there to done, and *wall time* from the first dispatch to the last completion: less than their sum where work ran in parallel. Work still running counts to 2026-10-28 19:43:48.
+From the time log, stamped as each event happened. *Implement* runs from a task's dispatch to its first commit or report, *review & fixes* from there to done, and *wall time* from the first dispatch to the last completion: less than their sum where work ran in parallel. Work still running counts to 2026-10-29 01:24:28.
 
 | Lane or phase | Finished | Wall time | Implement | Review & fixes | Mean per task | Idle |
 |---|---|---|---|---|---|---|
 | B1 · Batch B part 1: columns and the selection | 1 | 4h 27m | 4h 27m | 0m 00s | 4h 27m | — |
 | B2 · Batch B part 2: the row pipeline | 1 | 16h 49m | 16h 49m | 0m 00s | 16h 49m | 6h 38m |
-| C · Batch C: text, fields and small controls (running) | 0 | 68h 37m | 68h 37m | — | — | 8h 10m |
+| C · Batch C: text, fields and small controls | 1 | 71h 41m | 71h 41m | 0m 00s | 71h 41m | 8h 10m |
 | D · Batch D: layout, overlays and navigation | 2 | 3h 00m | 35m 00s | 0m 11s | 17m 36s | — |
 | E · Batch E: expressions and charts | 2 | 44m 03s | 44m 03s | 0m 00s | 22m 02s | — |
 | E1 · Batch E1: expressions | 1 | 2h 58m | 2h 57m | 1m 16s | 2h 58m | — |
 | D1 · Batch D part 1: following the data | 1 | 15h 12m | 15h 12m | 0m 00s | 15h 12m | 7h 05m |
 | E2 · Batch E2: the chart | 1 | 4h 41m | 4h 41m | 0m 00s | 4h 41m | 35m 09s |
 | D2 · Batch D part 2: layout and controls | 1 | 6h 14m | 6h 14m | 0m 00s | 6h 14m | 8m 06s |
-| FOLD · Folding the side branches (running) | 0 | 51h 52m | 51h 52m | — | — | 1h 31m |
-| **All** (running) | 10 | 79h 31m | 172h 12m | 1m 27s | 5h 10m | 24h 09m |
+| FOLD · Folding the side branches (running) | 1 | 57h 32m | 55h 04m | 5m 46s | 52h 33m | 1h 31m |
+| D3 · Batch D part 3: the head and overlays | 1 | 2h 41m | 2h 41m | 0m 00s | 2h 41m | — |
+| D4 · Batch D part 4: navigation | 1 | 2h 17m | 2h 17m | 0m 00s | 2h 17m | — |
+| **All** (running) | 14 | 85h 12m | 183h 27m | 7m 13s | 12h 55m | 24h 09m |
 
 ### B1 · Batch B part 1: columns and the selection
 
@@ -72,7 +76,7 @@ From the time log, stamped as each event happened. *Implement* runs from a task'
 
 | Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
 |---|---|---|---|---|---|---|---|
-| C.1 | Batch C: plain text (#1058) first, then the design's order, and the gallery cleanup (running) | 2026-10-25 23:06:07 | 68h 37m | — | 68h 37m | 8h 10m | — |
+| C.1 | Batch C: plain text (#1058) first, then the design's order, and the gallery cleanup | 2026-10-25 23:06:07 | 71h 41m | 0m 00s | 71h 41m | 8h 10m | 0 |
 
 ### D · Batch D: layout, overlays and navigation
 
@@ -116,7 +120,20 @@ From the time log, stamped as each event happened. *Implement* runs from a task'
 
 | Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
 |---|---|---|---|---|---|---|---|
-| FOLD.1 | Rebase E1 and D parts 1-2 onto batch B part 2, then the chart (running) | 2026-10-26 15:51:30 | 51h 52m | — | 51h 52m | 1h 31m | — |
+| FOLD.1 | Rebase E1 and D parts 1-2 onto batch B part 2, then the chart | 2026-10-26 15:51:30 | 52h 27m | 5m 46s | 52h 33m | 1h 31m | 1 |
+| FOLD.2 | Rebase batch C onto feat/lims-gallery (running) | 2026-10-28 22:47:49 | 2h 36m | — | 2h 36m | — | — |
+
+### D3 · Batch D part 3: the head and overlays
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| D3.1 | Batch D part 3: G18 head menu, G26, G4 and the gallery cleanup | 2026-10-28 20:25:05 | 2h 41m | 0m 00s | 2h 41m | — | 0 |
+
+### D4 · Batch D part 4: navigation
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| D4.1 | Batch D part 4: G50 (#1064), G56 and the gallery cleanup | 2026-10-28 23:07:04 | 2h 17m | 0m 00s | 2h 17m | — | 0 |
 
 ### Idle stalls
 
@@ -162,6 +179,7 @@ From the time log, stamped as each event happened. *Implement* runs from a task'
 
 ## Follow-ups
 
+- From batch C: a check box toggle and a select choice now mark the field touched, so a required group's message shows under the default policy (new behaviour, in `interpreter.md`); the Doxygen build was not run on C's new public symbols.
 - From D part 2: the plate's well grid uses stretch tracks, and on Qt Quick at 1280 × 900 "STD1" is elided to "S…"; the old equal-column grid let a column take its widest cell's width, which tracked grids do not. Whether stretch tracks should is a framework decision (a visible regression in the gallery).
 - From D part 1: stability's Continue is not pinned on compact, because `stepper` has no option to pin its footer; the rule refusing a focus into two switches cannot tell that two cases under one width switch are never mounted together.
 - E2's `chart_scale.hpp`: the editor's clang-tidy flagged `chartTicks` at cognitive complexity 31 and an identical-branch conditional; the lane reported tidy clean, so re-run tidy on it when folding.
