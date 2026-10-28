@@ -488,27 +488,47 @@ ui::Node selectionBar(Plate const& plate) {
 
 // ── Actions and the assign dialog ────────────────────────────────────────────────────────────────────────────────
 
+// Whether auto-fill has anything to place and anywhere to place it.
+ui::Handle<bool> canAutoFill(Plate const& plate) {
+    return Count{plate.toPlaceCount} > 0 && Count{ui::call("count", {plate.emptyWells})} > 0;
+}
+
+ui::Commands saveCommands(Plate const& plate) {
+    return {ui::notify(ui::format("Layout of PL-0193 saved: {0} samples to place.", {plate.toPlaceCount}))};
+}
+
+// Compact's two large buttons; the expanded layout's are head actions beside the template.
 ui::Node autoFill(Plate const& plate) {
     return ui::button({.label = "Auto-fill samples", .onClick = fillWells(plate, plate.emptyWells)})
-        .enabled(Count{plate.toPlaceCount} > 0 && Count{ui::call("count", {plate.emptyWells})} > 0)
+        .enabled(canAutoFill(plate))
         .testId("auto-fill");
 }
 
 ui::Node saveLayout(Plate const& plate) {
-    return ui::button({.label = "Save layout",
-                       .emphasis = ButtonEmphasis::Primary,
-                       .onClick = ui::notify(
-                           ui::format("Layout of PL-0193 saved: {0} samples to place.", {plate.toPlaceCount}))})
+    return ui::button({.label = "Save layout", .emphasis = ButtonEmphasis::Primary, .onClick = saveCommands(plate)})
         .testId("save");
 }
 
-ui::Node templateSelect(Plate const& plate) {
-    return ui::select({.options = ui::list({ui::obj({{"key", "hcp96"}, {"label", "Template: HCP 96, 8 standards"}})}),
-                       .selected = plate.layoutTemplate,
-                       .label = "Template",
-                       .onChoose = ui::set(plate.layoutTemplate, ui::event())})
-        .sizing(ui::fixed(30))
-        .testId("template");
+// The expanded layout's head: the template, a head tool, and the two actions.
+void declareHead(ui::Scope& screen, Plate const& plate) {
+    screen.tool(ui::HeadSelectOptions{
+        .id = "template",
+        .label = "Template",
+        .options = ui::list({ui::obj({{"key", "hcp96"}, {"label", "Template: HCP 96, 8 standards"}})}),
+        .selected = plate.layoutTemplate,
+        .onChoose = {ui::set(plate.layoutTemplate, ui::event())},
+        .width = 30,
+        .visible = !plate.compact});
+    screen.action({.id = "autoFill",
+                   .label = "Auto-fill samples",
+                   .enabled = canAutoFill(plate),
+                   .visible = !plate.compact,
+                   .onClick = fillWells(plate, plate.emptyWells)});
+    screen.action({.id = "save",
+                   .label = "Save layout",
+                   .emphasis = ButtonEmphasis::Primary,
+                   .visible = !plate.compact,
+                   .onClick = saveCommands(plate)});
 }
 
 ui::Node assignDialog(Plate const& plate) {
@@ -545,16 +565,12 @@ ui::Node assignDialog(Plate const& plate) {
 // ── Expanded ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
 ui::Node expandedLayout(Plate const& plate) {
-    auto const toolbar =
-        ui::row({ui::spacer().sizing(ui::stretch()), templateSelect(plate), autoFill(plate), saveLayout(plate)},
-                {.gap = 1, .align = Align::Center});
     auto const plateColumn = ui::column(
         {selectionBar(plate), ui::panel({plateGrid(plate)}, {.padding = 2}), legend(),
          layout::muted("Click selects a well. Arrow keys move between wells, Shift with an arrow key extends the "
                        "selection, and Enter assigns a sample to the focused well.")},
         {.gap = 2});
-    return ui::column({toolbar,
-                       ui::row({sources(plate).sizing(ui::fixed(30)), plateColumn.sizing(ui::stretch())},
+    return ui::column({ui::row({sources(plate).sizing(ui::fixed(30)), plateColumn.sizing(ui::stretch())},
                                {.gap = 2, .align = Align::Start}),
                        assignDialog(plate)},
                       {.gap = 2});
@@ -667,6 +683,7 @@ ui::Screen plateScreen() {
         screen.title("Plate PL-0193");
         screen.subtitle(ui::cond(plate.compact, Text{"ELISA, host cell protein"},
                                  Text{"ELISA, host cell protein · worksheet WS-2026-0415"}));
+        declareHead(screen, plate);
         return layout::byWidth(plate.width, compactLayout(plate), expandedLayout(plate));
     });
 }

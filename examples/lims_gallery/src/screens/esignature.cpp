@@ -17,7 +17,7 @@ namespace {
 
 namespace ui = layout::ui;
 using layout::ButtonEmphasis;
-using layout::Justify;
+using Text = ui::Handle<std::string>;
 
 constexpr char const* kSigner = "Dr. Anna Meyer (ameyer)";
 // The password that signs as the signer in this gallery: with no backend, the screen checks it itself.
@@ -48,7 +48,6 @@ Signature declare(ui::Scope& screen) {
         .done = screen.state("signed", false),
         .meaningLabel = {},
     };
-    using Text = ui::Handle<std::string>;
     sign.meaningLabel = screen.let(
         "meaningLabel", ui::cond(ui::eq(sign.meaning, "approved"), Text{"Approved"},
                                  ui::cond(ui::eq(sign.meaning, "reviewed"), Text{"Reviewed"}, Text{"Authored"})));
@@ -159,51 +158,34 @@ ui::Node worksheet(Signature const& sign) {
         {.gap = 2});
 }
 
-ui::Node expandedLayout(Signature const& sign) {
+// One dialog for both layouts: centred at the design's 480 px when expanded, and on compact a sheet that fills the
+// screen, its Cancel in the sheet's head and the signing button across the footer.
+ui::Node signatureDialog(ui::AnyHandle const& width, Signature const& sign) {
     auto const dialog = ui::element("signature");
+    auto const compact = ui::Handle<bool>{ui::eq(width, "compact")};
     ui::Commands const close = ui::set(sign.open, false);
-    return ui::column(
-        {worksheet(sign),
-         ui::dialog(dialog,
-                    {summary(false), refusedBanner(sign), ui::grid({signerField(), meaningField(sign)}, {.gap = 2, .columns = 2}),
-                     reasonField(sign), passwordField(sign), signingAt(sign)},
-                    {.title = "Sign to approve results",
-                     .description = "Your signature is stored with the record and cannot be removed.",
-                     .open = sign.open,
-                     .showErrors = ui::ShowErrors::Always,
-                     .cancel = close,
-                     .onDismiss = close,
-                     .actions = {{.id = "cancel", .label = "Cancel", .onClick = close},
-                                 {.id = "sign",
-                                  .label = "Sign and approve",
-                                  .emphasis = ButtonEmphasis::Primary,
-                                  .enabled = canSign(sign),
-                                  .onClick = signCommands(sign)}}})
-             // The design's 480 px, in the frontend's character widths.
-             .sizing(ui::fixed(64))},
-        {.gap = 3});
-}
-
-// Compact: the dialog's fields as a sheet that fills the screen, its own Cancel at the top and the signing button
-// across the bottom.
-ui::Node compactSheet(Signature const& sign) {
-    return ui::column(
-        {ui::row(
-             {ui::button({.label = "Cancel", .emphasis = ButtonEmphasis::Ghost, .onClick = ui::set(sign.open, false)})
-                  .testId("cancel"),
-              ui::text({.text = "Sign to approve", .role = "heading"}), ui::spacer().sizing(ui::fixed(8))},
-             {.gap = 1, .align = layout::Align::Center, .justify = Justify::Between}),
-         summary(true), refusedBanner(sign), signerField(), meaningField(sign), reasonField(sign), passwordField(sign),
-         signingAt(sign),
-         ui::button({.label = "Sign and approve", .emphasis = ButtonEmphasis::Primary, .onClick = signCommands(sign)})
-             .enabled(canSign(sign))
-             .sizing(ui::stretch())
-             .testId("sign")},
-        {.gap = 3});
-}
-
-ui::Node compactLayout(Signature const& sign) {
-    return ui::switchOn(sign.open, {ui::Case{true, compactSheet(sign)}}, worksheet(sign));
+    return ui::dialog(dialog,
+                      {layout::byWidth(width, {summary(true)}, {summary(false)}), refusedBanner(sign),
+                       layout::byWidth(width, {signerField(), meaningField(sign)},
+                                       {ui::grid({signerField(), meaningField(sign)}, {.gap = 2, .columns = 2})}),
+                       reasonField(sign), passwordField(sign), signingAt(sign)},
+                      {.title = ui::cond(compact, Text{"Sign to approve"}, Text{"Sign to approve results"}),
+                       .description = "Your signature is stored with the record and cannot be removed.",
+                       .open = sign.open,
+                       .showErrors = ui::ShowErrors::Always,
+                       .cancel = close,
+                       .onDismiss = close,
+                       .actions = {{.id = "cancel", .label = "Cancel", .visible = !compact, .onClick = close},
+                                   {.id = "sign",
+                                    .label = "Sign and approve",
+                                    .emphasis = ButtonEmphasis::Primary,
+                                    .enabled = canSign(sign),
+                                    .onClick = signCommands(sign)}},
+                       .sheet = compact,
+                       .dismissLabel = "Cancel"})
+        // The design's 480 px, in the frontend's character widths; a sheet is the window's width.
+        .sizing(ui::fixed(64))
+        .testId("signature");
 }
 
 }  // namespace
@@ -215,7 +197,7 @@ ui::Screen eSignatureScreen() {
         screen.showErrors(ui::ShowErrors::Always);
         auto const width = layout::widthClass(screen);
         Signature const sign = declare(screen);
-        return layout::byWidth(width, compactLayout(sign), expandedLayout(sign));
+        return ui::column({worksheet(sign), signatureDialog(width, sign)}, {.gap = 3});
     });
 }
 

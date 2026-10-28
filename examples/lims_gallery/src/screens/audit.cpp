@@ -310,6 +310,7 @@ ui::Node pager(Audit const& audit) {
         .testId("pager");
 }
 
+// Compact's search, in the filters drawer; the expanded layout's is a head tool.
 ui::Node searchField(Audit const& audit) {
     return ui::textInput({.value = audit.search,
                           .label = "Search audit trail",
@@ -320,8 +321,7 @@ ui::Node searchField(Audit const& audit) {
 }
 
 ui::Node expandedLayout(Audit const& audit) {
-    auto const main = ui::column({ui::row({ui::spacer().sizing(ui::stretch()), searchField(audit)}, {.gap = 1}),
-                                  chips(audit), ui::panel({trailTable(audit), pager(audit)}, {.padding = 0})},
+    auto const main = ui::column({chips(audit), ui::panel({trailTable(audit), pager(audit)}, {.padding = 0})},
                                  {.gap = 2})
                           .sizing(ui::stretch());
     return ui::row({facetsPanel(audit), main}, {.gap = 2, .align = Align::Start});
@@ -383,6 +383,14 @@ ui::Screen auditScreen() {
     return ui::screen("lims-gallery.audit", [](ui::Scope& screen) {
         Audit const audit = declare(screen);
         screen.title("Audit trail");
+        // The search sits in the head on the expanded layout; compact draws it in the filters drawer.
+        screen.tool(ui::HeadSearchOptions{.id = "search",
+                                          .label = "Search audit trail",
+                                          .value = audit.search,
+                                          .placeholder = "Search record, field or reason",
+                                          .onChange = {ui::set(audit.search, ui::event())},
+                                          .width = 32,
+                                          .visible = !audit.compact});
         screen.action({.id = "csv",
                        .label = "Export CSV",
                        .visible = !audit.compact,

@@ -50,7 +50,8 @@ TEST_CASE("audit, expanded: a facet narrows the trail and its chip removes it", 
     screen.choose("user", "jruiz");
     CHECK(screen.waitFor([&screen] { return !showsText(screen, "WS-2026-0412"); }));
     CHECK(showsText(screen, "S-26-104217"));
-    screen.edit("search", "no such record");
+    // The search is a head tool on the expanded layout.
+    screen.edit("head_tool_search", "no such record");
     CHECK(screen.waitFor([&screen] { return screen.shows("EmptyState", "no-entries"); }));
     screen.click("clear-all");
     CHECK(

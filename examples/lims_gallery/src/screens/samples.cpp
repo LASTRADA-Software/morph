@@ -408,6 +408,7 @@ ui::Node priorityDialog(Samples const& list) {
 
 // ── Filters ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
+// The search and the filters are head tools on the expanded layout; compact draws them in the page and its drawer.
 ui::Node searchField(Samples const& list) {
     return ui::textInput({.value = list.search,
                           .label = "Search samples",
@@ -416,13 +417,48 @@ ui::Node searchField(Samples const& list) {
         .testId("search");
 }
 
-ui::Node statusFilter(Samples const& list) {
+ui::AnyHandle statusOptions() {
     std::vector<ui::AnyHandle> options{ui::obj({{"key", "open"}, {"label", "Status: open"}})};
     for (char const* const status :
          {"Registered", "Queued", "In progress", "Incubating", "Measured", "In review", "Investigation", "Assigned"}) {
         options.push_back(ui::obj({{"key", status}, {"label", std::string{"Status: "} + status}}));
     }
-    return ui::select({.options = ui::list(options),
+    return ui::list(options);
+}
+
+ui::AnyHandle priorityOptions() {
+    return ui::list({ui::obj({{"key", "any"}, {"label", "Priority: any"}}),
+                     ui::obj({{"key", "STAT"}, {"label", "Priority: STAT"}}),
+                     ui::obj({{"key", "Urgent"}, {"label", "Priority: urgent"}}),
+                     ui::obj({{"key", "Routine"}, {"label", "Priority: routine"}})});
+}
+
+void declareTools(ui::Scope& screen, Samples const& list) {
+    screen.tool(ui::HeadSearchOptions{.id = "search",
+                                      .label = "Search samples",
+                                      .value = list.search,
+                                      .placeholder = "Sample, lot or product",
+                                      .onChange = {ui::set(list.search, ui::event())},
+                                      .width = 30,
+                                      .visible = !list.compact});
+    screen.tool(ui::HeadSelectOptions{.id = "status",
+                                      .label = "Status",
+                                      .options = statusOptions(),
+                                      .selected = list.status,
+                                      .onChoose = {ui::set(list.status, ui::event())},
+                                      .width = 19,
+                                      .visible = !list.compact});
+    screen.tool(ui::HeadSelectOptions{.id = "priority",
+                                      .label = "Priority",
+                                      .options = priorityOptions(),
+                                      .selected = list.priority,
+                                      .onChoose = {ui::set(list.priority, ui::event())},
+                                      .width = 18,
+                                      .visible = !list.compact});
+}
+
+ui::Node statusFilter(Samples const& list) {
+    return ui::select({.options = statusOptions(),
                        .selected = list.status,
                        .label = "Status",
                        .onChoose = ui::set(list.status, ui::event())})
@@ -430,11 +466,7 @@ ui::Node statusFilter(Samples const& list) {
 }
 
 ui::Node priorityFilter(Samples const& list) {
-    auto const options = ui::list({ui::obj({{"key", "any"}, {"label", "Priority: any"}}),
-                                   ui::obj({{"key", "STAT"}, {"label", "Priority: STAT"}}),
-                                   ui::obj({{"key", "Urgent"}, {"label", "Priority: urgent"}}),
-                                   ui::obj({{"key", "Routine"}, {"label", "Priority: routine"}})});
-    return ui::select({.options = options,
+    return ui::select({.options = priorityOptions(),
                        .selected = list.priority,
                        .label = "Priority",
                        .onChoose = ui::set(list.priority, ui::event())})
@@ -532,12 +564,8 @@ ui::Node pageFooter(Samples const& list) {
 }
 
 ui::Node expandedLayout(Samples const& list) {
-    auto const toolbar =
-        ui::row({ui::spacer().sizing(ui::stretch()), searchField(list).sizing(ui::fixed(30)),
-                 statusFilter(list).sizing(ui::fixed(19)), priorityFilter(list).sizing(ui::fixed(18))},
-                {.gap = 1, .align = Align::Center});
     return ui::pinned(ui::column(
-        {toolbar, bulkBar(list), ui::panel({samplesTable(list), pageFooter(list)}, {.padding = 0}),
+        {bulkBar(list), ui::panel({samplesTable(list), pageFooter(list)}, {.padding = 0}),
          layout::muted("Rows with a tinted background have a result out of specification. A checked box marks a "
                        "row as selected."),
          assignDialog(list), priorityDialog(list)},
@@ -664,6 +692,7 @@ ui::Screen samplesScreen() {
     return ui::screen("lims-gallery.samples", [](ui::Scope& screen) {
         Samples const list = declare(screen);
         screen.title("Samples");
+        declareTools(screen, list);
         screen.action({.id = "register",
                        .label = ui::cond(list.compact, Text{"Register"}, Text{"Register samples"}),
                        .emphasis = ButtonEmphasis::Primary,

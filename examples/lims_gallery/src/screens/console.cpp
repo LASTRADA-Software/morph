@@ -482,25 +482,32 @@ ui::Commands findSample(Console const& console) {
                       ui::notify(ui::format("No sample {0} on today's worklist.", {ui::event()}), ui::Role::Warning));
 }
 
-ui::Node toolbar(Console const& console) {
+// The lab and the sample search are head tools on the expanded layout, the one that draws them; the connection and
+// the user stay in the page, as the application's chrome.
+void declareTools(ui::Scope& screen, Console const& console) {
     auto const labs = ui::list({ui::obj({{"key", "qc-chem-a"}, {"label", "QC chemistry, site A"}}),
                                 ui::obj({{"key", "qc-micro-a"}, {"label", "QC microbiology, site A"}})});
-    return ui::row(
-        {ui::select(
-             {.options = labs, .selected = console.lab, .label = "Lab", .onChoose = ui::set(console.lab, ui::event())})
-             .sizing(ui::fixed(22))
-             .testId("lab"),
-         ui::spacer().sizing(ui::stretch()),
-         ui::textInput({.value = console.search,
-                        .label = "Find a sample",
-                        .placeholder = "Scan or type a sample ID",
-                        .icon = "scan",
-                        .onChange = ui::set(console.search, ui::event()),
-                        .onSubmit = findSample(console)})
-             .sizing(ui::fixed(28))
-             .testId("find"),
-         layout::tag("Connected", "ok"), layout::muted("Dr. A. Meyer")},
-        {.gap = 1, .align = Align::Center});
+    Flag const expanded = !Flag{ui::eq(console.width, "compact")};
+    screen.tool(ui::HeadSelectOptions{.id = "lab",
+                                      .label = "Lab",
+                                      .options = labs,
+                                      .selected = console.lab,
+                                      .onChoose = {ui::set(console.lab, ui::event())},
+                                      .width = 22,
+                                      .visible = expanded});
+    screen.tool(ui::HeadSearchOptions{.id = "find",
+                                      .label = "Find a sample",
+                                      .value = console.search,
+                                      .placeholder = "Scan or type a sample ID",
+                                      .onChange = {ui::set(console.search, ui::event())},
+                                      .onSubmit = findSample(console),
+                                      .width = 28,
+                                      .visible = expanded});
+}
+
+ui::Node toolbar() {
+    return ui::row({ui::spacer().sizing(ui::stretch()), layout::tag("Connected", "ok"), layout::muted("Dr. A. Meyer")},
+                   {.gap = 1, .align = Align::Center});
 }
 
 // ── The dashboard ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -819,7 +826,7 @@ ui::Node samplePane(Console const& console) {
 ui::Node expandedLayout(Console const& console) {
     // The design's 360 px sample pane, in the frontend's character widths, beside the worklist.
     auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{70, 45}};
-    auto const dashboard = ui::column({toolbar(console), alert(false), kpis(false),
+    auto const dashboard = ui::column({toolbar(), alert(false), kpis(false),
                                        ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
                                                 ui::panel({instruments()}, {.padding = 2}).sizing(ui::stretch(10))},
                                                {.gap = 1, .align = Align::Start}),
@@ -884,6 +891,7 @@ ui::Screen consoleScreen() {
     return ui::screen("lims-gallery.console", [](ui::Scope& screen) {
         Console const console = declare(screen);
         screen.title("Overview");
+        declareTools(screen, console);
         return layout::byWidth(console.width, compactLayout(console), expandedLayout(console));
     });
 }

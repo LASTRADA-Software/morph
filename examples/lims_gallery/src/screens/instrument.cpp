@@ -106,9 +106,30 @@ void declareHead(ui::Scope& screen, Instrument const& instrument) {
                    .emphasis = ButtonEmphasis::Primary,
                    .visible = !compact && instrument.inService,
                    .onClick = book(instrument)});
+    // The head's own overflow, after its actions; compact draws it in the page after the large buttons.
+    screen.menuLabel("More actions");
+    screen.menu({.id = "calibration",
+                 .label = "Record calibration…",
+                 .onClick = {ui::set(instrument.logKind, std::string{"calibration"}), ui::open(instrument.logDialog)},
+                 .visible = !compact});
+    screen.menu({.id = "label",
+                 .label = "Print equipment label",
+                 .onClick = ui::notify("Printing the equipment label for EQ-0142"),
+                 .visible = !compact});
+    screen.menu({.id = "export",
+                 .label = "Export history (PDF)",
+                 .onClick = ui::notify("Exporting the history of EQ-0142 as PDF"),
+                 .visible = !compact});
+    screen.menu(ui::menuSeparator());
+    screen.menu({.id = "outOfService",
+                 .label = "Take out of service…",
+                 .enabled = instrument.inService,
+                 .onClick = ui::open(instrument.serviceDialog),
+                 .description = "needs reason",
+                 .visible = !compact});
 }
 
-// The overflow menu: the actions the head has no room for.
+// The compact overflow menu, after the large buttons: the head's own menu's entries, which compact hides.
 ui::Node moreMenu(Instrument const& instrument) {
     return ui::menuButton({.icon = "more"},
                           {{.label = "Record calibration…",
@@ -299,9 +320,7 @@ ui::Node expandedLayout(Instrument const& instrument) {
              // The design's 320 px column, in the frontend's character widths.
              .sizing(ui::fixed(44))},
         {.gap = 2, .align = Align::Start});
-    return ui::column({ui::row({ui::spacer().sizing(ui::stretch()), moreMenu(instrument)}),
-                       recordTabs(instrument, overview), dialogs(instrument)},
-                      {.gap = 2});
+    return ui::column({recordTabs(instrument, overview), dialogs(instrument)}, {.gap = 2});
 }
 
 // Compact stacks every section: the details as label-over-value pairs, the rest folded.
