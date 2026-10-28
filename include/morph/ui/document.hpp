@@ -577,6 +577,10 @@ struct Document {
     std::vector<DocNodePtr> status;
     /// @brief The head's actions: `actionButton` parts, in order.
     std::vector<DocNodePtr> actions;
+    /// @brief The head's own menu: `headMenuItem` parts, in order.
+    std::vector<DocNodePtr> menu;
+    /// @brief The accessible name of the head menu's trigger; `nullptr` for the default, "More actions".
+    ExprPtr menuLabel;
     /// @brief The typed params, in declaration order.
     std::vector<std::pair<std::string, Type>> params;
     /// @brief The screen scope's declarations.
@@ -804,6 +808,19 @@ inline constexpr std::array<KeySpec, 10> kMenuItemKeys = {{{"label", Shape::Expr
                                                            {"separator", Shape::Flag},
                                                            {"description", Shape::Expr},
                                                            {"visible", Shape::Condition}}};
+/// @brief The keys of a `headMenuItem` part: an entry of a screen head's own menu, a menu item with the `id` that
+///        `ScreenHead::choose` takes; its submenu's entries are head menu items too.
+inline constexpr std::array<KeySpec, 11> kHeadMenuItemKeys = {{{"id", Shape::Name},
+                                                               {"label", Shape::Expr},
+                                                               {"icon", Shape::Expr},
+                                                               {"keys", Shape::Text},
+                                                               {"checked", Shape::Expr},
+                                                               {"enabled", Shape::Condition},
+                                                               {"onClick", Shape::Commands},
+                                                               {"items", Shape::Parts, "headMenuItem"},
+                                                               {"separator", Shape::Flag},
+                                                               {"description", Shape::Expr},
+                                                               {"visible", Shape::Condition}}};
 /// @brief The keys of `column` and `row`.
 inline constexpr std::array<KeySpec, 4> kContainerKeys = {
     {{"children", Shape::Nodes}, {"gap", Shape::Expr}, {"align", Shape::Text}, {"justify", Shape::Text}}};
@@ -1037,7 +1054,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 54> kKinds = {{
+inline constexpr std::array<KindSpec, 55> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -1089,6 +1106,7 @@ inline constexpr std::array<KindSpec, 54> kKinds = {{
     {"drop", kDropKeys, kPart},
     {"actionButton", kActionButtonKeys, kPart},
     {"headBadge", kHeadBadgeKeys, kPart},
+    {"headMenuItem", kHeadMenuItemKeys, kPart},
     {"fields", {}, kPart},
     {"series", kSeriesKeys, kPart | kRowScope},
     {"line", kLineKeys, kPart},
@@ -1199,9 +1217,11 @@ public:
         doc.subtitle = optionalExpr(*object, "subtitle", "");
         doc.status = topParts(*object, "status", "headBadge");
         doc.actions = topParts(*object, "actions", "actionButton");
+        doc.menu = topParts(*object, "menu", "headMenuItem");
+        doc.menuLabel = optionalExpr(*object, "menuLabel", "");
         if (doc.id == "app") {
             // The head belongs to a screen's tab; the app document has no view and so no head.
-            for (std::string_view const key : {"subtitle", "status", "actions"}) {
+            for (std::string_view const key : {"subtitle", "status", "actions", "menu", "menuLabel"}) {
                 if (member(*object, key) != nullptr) {
                     refuse(pointerAppend("", key),
                            "`" + std::string{key} + "` is a screen's; the app document has none");
@@ -2447,10 +2467,15 @@ public:
         if (_doc->subtitle) {
             checkExpr(*_doc->subtitle, root);
         }
+        if (_doc->menuLabel) {
+            checkExpr(*_doc->menuLabel, root);
+        }
         for (DocNodePtr const& part : headParts()) {
             checkElement(*part, root, true);
         }
         checkActionButtons(_doc->actions, "/actions");
+        std::set<std::string_view> menuIds;
+        checkHeadMenu(_doc->menu, menuIds);
         for (auto const& [key, commands] : _doc->lifecycle) {
             CheckContext context = root;
             context.onClose = key == "onClose";
@@ -3180,7 +3205,7 @@ private:
             checkColumnPart(node);
         } else if (part && node.kind == "track") {
             checkCellPlace(node, "align");
-        } else if (part && node.kind == "menuItem") {
+        } else if (part && isMenuEntry(node.kind)) {
             checkMenuItem(node);
         }
         if (!part) {
@@ -3606,11 +3631,37 @@ private:
         }
     }
 
-    // The screen head's parts: its status badges, then its actions.
+    // The screen head's parts: its status badges, its actions, then its menu's entries.
     [[nodiscard]] std::vector<DocNodePtr> headParts() const {
         std::vector<DocNodePtr> parts = _doc->status;
         parts.insert(parts.end(), _doc->actions.begin(), _doc->actions.end());
+        parts.insert(parts.end(), _doc->menu.begin(), _doc->menu.end());
         return parts;
+    }
+
+    // The head menu's entries, at every level: an entry that is chosen has an id, unique across the whole menu, since
+    // `ScreenHead::choose` names it by that id; a separator or a submenu is never chosen and takes none.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    static void checkHeadMenu(std::span<DocNodePtr const> entries, std::set<std::string_view>& ids) {
+        for (DocNodePtr const& entry : entries) {
+            bool const submenu = !entry->partList("items").empty();
+            if (entry->flag("separator") || submenu) {
+                if (!entry->id.empty()) {
+                    refuse(pointerAppend(entry->path, "id"),
+                           submenu ? "a submenu is opened, not chosen, and takes no `id`"
+                                   : "a separator is a line between entries and takes no other key");
+                }
+                checkHeadMenu(entry->partList("items"), ids);
+                continue;
+            }
+            if (entry->id.empty()) {
+                refuse(entry->path, "a head menu entry has an `id`, which choosing it names");
+            }
+            if (!ids.insert(entry->id).second) {
+                refuse(pointerAppend(entry->path, "id"), "the head menu entry id `" + entry->id +
+                                                             "` is used twice; each entry has its own");
+            }
+        }
     }
 
     // A list of `actionButton` parts: each id once, and each emphasis one of a button's.
@@ -4062,6 +4113,9 @@ private:
 
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per command of ui/1.
     void checkCommand(Command const& cmd, CheckContext const& context) {
+    // Whether a part kind is a menu entry: a `menu` node's or a screen head's.
+    [[nodiscard]] static bool isMenuEntry(std::string_view kind) { return kind == "menuItem" || kind == "headMenuItem"; }
+
         std::string const where = cmd.path;
         switch (cmd.kind) {
             case CommandKind::Set:

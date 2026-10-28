@@ -2558,6 +2558,82 @@ private:
     std::string _name;
 };
 
+/// @brief An item of a `menu`; `items` nests a submenu.
+struct MenuItem {
+    /// @brief The entry's id, a name: what choosing an entry of a screen head's own menu (`Scope::menu`) names. A
+    ///        `menu` node's entries take none.
+    std::string id;
+    /// @brief The label.
+    AnyHandle label;
+    /// @brief An icon.
+    AnyHandle icon;
+    /// @brief The shortcut shown beside it.
+    std::string keys;
+    /// @brief Whether a checkable item is checked.
+    AnyHandle checked;
+    /// @brief Whether it is enabled.
+    AnyHandle enabled;
+    /// @brief Commands run when it is chosen.
+    Commands onClick;
+    /// @brief A submenu.
+    std::vector<MenuItem> items;
+    /// @brief Whether the item is a line between entries; a separator writes no other key.
+    bool separator = false;
+    /// @brief A muted line of help with the entry.
+    AnyHandle description;
+    /// @brief Whether the entry is shown, a condition; absent shows it.
+    AnyHandle visible;
+};
+
+/// @brief A line between menu entries.
+/// @return The item.
+[[nodiscard]] inline MenuItem menuSeparator() { return MenuItem{.separator = true}; }
+
+namespace detail {
+
+/// @brief A menu item's JSON.
+/// @param item The item.
+/// @return The JSON.
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is written item by item; the nesting is the document's own.
+[[nodiscard]] inline Json menuItem(MenuItem const& item) {
+    Json json = Json::object_t{};
+    if (item.separator) {
+        detail::put(json, "separator", true);
+        return json;
+    }
+    auto put = [&json](char const* key, AnyHandle const& value) {
+        if (value.present()) {
+            detail::put(json, key, value.json());
+        }
+    };
+    if (!item.id.empty()) {
+        detail::put(json, "id", item.id);
+    }
+    put("label", item.label);
+    put("icon", item.icon);
+    if (!item.keys.empty()) {
+        detail::put(json, "keys", item.keys);
+    }
+    put("checked", item.checked);
+    put("enabled", item.enabled);
+    put("description", item.description);
+    put("visible", item.visible);
+    if (!item.onClick.empty()) {
+        detail::put(json, "onClick", item.onClick.json());
+    }
+    if (!item.items.empty()) {
+        Json::array_t items;
+        items.reserve(item.items.size());
+        for (MenuItem const& child : item.items) {
+            items.push_back(menuItem(child));
+        }
+        detail::put(json, "items", std::move(items));
+    }
+    return json;
+}
+
+}  // namespace detail
+
 /// @brief A status badge of the screen's head (`screen.status`).
 struct HeadBadgeOptions {
     /// @brief The badge's text.
@@ -2683,6 +2759,16 @@ public:
     /// @brief Appends an action to the head, run in the screen scope.
     /// @param action The action; its id is unique among the head's actions.
     void action(ActionButtonOptions const& action) { detail::append(_head, "actions", detail::actionButton(action)); }
+
+    /// @brief Appends an entry to the head's own menu, drawn behind one icon button after the actions and run in the
+    ///        screen scope.
+    /// @param item The entry: one that is chosen has an id, unique across the head's menu; a separator or a submenu
+    ///        has none.
+    void menu(MenuItem const& item) { detail::append(_head, "menu", detail::menuItem(item)); }
+
+    /// @brief The accessible name of the head menu's trigger; absent is "More actions".
+    /// @param label The expression.
+    void menuLabel(AnyHandle const& label) { detail::put(_head, "menuLabel", label.json()); }
 
     /// @brief Commands run when the screen mounts.
     /// @param commands The commands.
@@ -3498,75 +3584,6 @@ struct SelectOptions {
     return node.put("onChoose", options.onChoose).put("onChange", options.onChange).done();
 }
 
-/// @brief An item of a `menu`; `items` nests a submenu.
-struct MenuItem {
-    /// @brief The label.
-    AnyHandle label;
-    /// @brief An icon.
-    AnyHandle icon;
-    /// @brief The shortcut shown beside it.
-    std::string keys;
-    /// @brief Whether a checkable item is checked.
-    AnyHandle checked;
-    /// @brief Whether it is enabled.
-    AnyHandle enabled;
-    /// @brief Commands run when it is chosen.
-    Commands onClick;
-    /// @brief A submenu.
-    std::vector<MenuItem> items;
-    /// @brief Whether the item is a line between entries; a separator writes no other key.
-    bool separator = false;
-    /// @brief A muted line of help with the entry.
-    AnyHandle description;
-    /// @brief Whether the entry is shown, a condition; absent shows it.
-    AnyHandle visible;
-};
-
-/// @brief A line between menu entries.
-/// @return The item.
-[[nodiscard]] inline MenuItem menuSeparator() { return MenuItem{.separator = true}; }
-
-namespace detail {
-
-/// @brief A menu item's JSON.
-/// @param item The item.
-/// @return The JSON.
-// NOLINTNEXTLINE(misc-no-recursion): a submenu is written item by item; the nesting is the document's own.
-[[nodiscard]] inline Json menuItem(MenuItem const& item) {
-    Json json = Json::object_t{};
-    if (item.separator) {
-        detail::put(json, "separator", true);
-        return json;
-    }
-    auto put = [&json](char const* key, AnyHandle const& value) {
-        if (value.present()) {
-            detail::put(json, key, value.json());
-        }
-    };
-    put("label", item.label);
-    put("icon", item.icon);
-    if (!item.keys.empty()) {
-        detail::put(json, "keys", item.keys);
-    }
-    put("checked", item.checked);
-    put("enabled", item.enabled);
-    put("description", item.description);
-    put("visible", item.visible);
-    if (!item.onClick.empty()) {
-        detail::put(json, "onClick", item.onClick.json());
-    }
-    if (!item.items.empty()) {
-        Json::array_t items;
-        items.reserve(item.items.size());
-        for (MenuItem const& child : item.items) {
-            items.push_back(menuItem(child));
-        }
-        detail::put(json, "items", std::move(items));
-    }
-    return json;
-}
-
-}  // namespace detail
 
 /// @brief A `menu` node.
 /// @param items The items.
