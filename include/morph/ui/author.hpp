@@ -35,6 +35,7 @@
 #include "../util/datetime.hpp"
 #include "../util/rational.hpp"
 #include "alignment.hpp"
+#include "badge_style.hpp"
 #include "button_emphasis.hpp"
 #include "button_style.hpp"
 
@@ -2618,12 +2619,8 @@ inline void putPresent(Json& json, char const* key, AnyHandle const& value) {
     detail::put(json, "id", action.id);
     putPresent(json, "label", action.label);
     putPresent(json, "icon", action.icon);
-    if (action.emphasis == ButtonEmphasis::Primary) {
-        detail::put(json, "emphasis", std::string{"primary"});
-    } else if (action.emphasis == ButtonEmphasis::Danger) {
-        detail::put(json, "emphasis", std::string{"danger"});
-    } else if (action.emphasis == ButtonEmphasis::Ghost) {
-        detail::put(json, "emphasis", std::string{"ghost"});
+    if (action.emphasis != ButtonEmphasis::Normal) {
+        detail::put(json, "emphasis", std::string{emphasisName(action.emphasis)});
     }
     putPresent(json, "enabled", action.enabled);
     putPresent(json, "visible", action.visible);
@@ -3358,12 +3355,8 @@ struct ButtonOptions {
 /// @return The node.
 [[nodiscard]] inline Node button(ButtonOptions const& options) {
     detail::NodeWriter writer{"button"};
-    if (options.emphasis == ButtonEmphasis::Primary) {
-        writer.put("emphasis", std::string{"primary"});
-    } else if (options.emphasis == ButtonEmphasis::Danger) {
-        writer.put("emphasis", std::string{"danger"});
-    } else if (options.emphasis == ButtonEmphasis::Ghost) {
-        writer.put("emphasis", std::string{"ghost"});
+    if (options.emphasis != ButtonEmphasis::Normal) {
+        writer.put("emphasis", std::string{emphasisName(options.emphasis)});
     }
     if (options.style) {
         writer.text("style", *options.style == ButtonStyle::Item ? "item" : "push");
@@ -4469,12 +4462,20 @@ struct BannerOptions {
 }
 
 /// @brief A `badge` node.
-/// @param text The text.
-/// @param tone The tone.
-/// @param icon An icon.
+/// @param text  The text.
+/// @param tone  The tone.
+/// @param icon  An icon.
+/// @param style Filled, the default, which writes no key, or outlined: the surface's fill with the tone's colour as
+///              border and text.
 /// @return The node.
-[[nodiscard]] inline Node badge(AnyHandle const& text, AnyHandle const& tone = {}, AnyHandle const& icon = {}) {
-    return detail::NodeWriter{"badge"}.put("tone", tone).put("text", text).put("icon", icon).done();
+[[nodiscard]] inline Node badge(AnyHandle const& text, AnyHandle const& tone = {}, AnyHandle const& icon = {},
+                                BadgeStyle style = BadgeStyle::Filled) {
+    detail::NodeWriter node{"badge"};
+    node.put("tone", tone).put("text", text).put("icon", icon);
+    if (style == BadgeStyle::Outline) {
+        node.text("style", "outline");
+    }
+    return node.done();
 }
 
 /// @brief Options of a `badge` that may be removed.

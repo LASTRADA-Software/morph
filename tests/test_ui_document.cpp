@@ -388,3 +388,26 @@ TEST_CASE("ui document: a multiline text input refuses a unit and an icon", "[ui
     REQUIRE_FALSE(icon.has_value());
     CHECK(icon.error().path == "/view/icon");
 }
+
+// Mutation: leave `dangerOutline` out of a button's emphases (the first document is refused).
+TEST_CASE("ui document: dangerOutline, an outline badge and a segmented select load; other names are refused",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "c", "view": {"kind": "column", "children": [
+        {"kind": "button", "label": "Reject", "emphasis": "dangerOutline"},
+        {"kind": "badge", "text": "STAT", "tone": "err", "style": "outline"},
+        {"kind": "select", "label": "Show", "style": "segmented", "options": {"list": []}}]}})")
+              .has_value());
+    auto const emphasis = loadDocumentText(R"({"vocab": "ui/1", "id": "c", "view": {"kind": "button", "label": "x",
+        "emphasis": "outline"}})");
+    REQUIRE_FALSE(emphasis.has_value());
+    CHECK(emphasis.error().path == "/view/emphasis");
+    auto const badge = loadDocumentText(R"({"vocab": "ui/1", "id": "c", "view": {"kind": "badge", "text": "x",
+        "style": "ghost"}})");
+    REQUIRE_FALSE(badge.has_value());
+    CHECK(badge.error().path == "/view/style");
+    auto const select = loadDocumentText(R"({"vocab": "ui/1", "id": "c", "view": {"kind": "select", "label": "x",
+        "style": "radios"}})");
+    REQUIRE_FALSE(select.has_value());
+    CHECK(select.error().path == "/view/style");
+    CHECK(select.error().reason == "`radios` is not one of the values of `style`");
+}

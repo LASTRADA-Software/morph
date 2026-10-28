@@ -779,6 +779,11 @@ public:
     /// @param label    The remove control's accessible name.
     // NOLINTNEXTLINE(performance-unnecessary-value-param): a sink every override moves from.
     virtual void setOnRemove(Action onRemove, std::string_view label) = 0;
+
+    /// @brief Sets how the badge is drawn. A new badge is filled; the mount calls it once, only for `Outline`, which
+    ///        draws the surface's fill with the tone's colour as border and text.
+    /// @param style The style.
+    virtual void setStyle(BadgeStyle style) = 0;
 };
 
 /// @brief A progress bar.
@@ -1002,7 +1007,7 @@ public:
 
     /// @brief Makes a choice of one option.
     /// @param parent The container to append to, or null for a root.
-    /// @param style Dropdown or radio.
+    /// @param style Dropdown, radio or segmented.
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<SelectWidget> createSelect(ContainerWidget* parent, SelectStyle style) = 0;
 

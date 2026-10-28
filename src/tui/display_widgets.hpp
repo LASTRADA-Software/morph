@@ -90,6 +90,11 @@ public:
         refresh();
     }
     void setOnRemove(ui::Action onRemove, std::string_view label) override;
+    /// An outline badge is drawn in parentheses, a filled one in brackets.
+    void setStyle(ui::BadgeStyle style) override {
+        _style = style;
+        refresh();
+    }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::string probeText() const override { return _text; }
     [[nodiscard]] bool placedAcrossColumn() const override { return true; }
@@ -107,6 +112,7 @@ private:
     std::string _text;
     std::string _icon;
     ui::Action _onRemove;
+    ui::BadgeStyle _style = ui::BadgeStyle::Filled;
 };
 
 /// Progress: a bar of `#` over `.` and the percentage, or `<=>` for an indeterminate one, then the label.

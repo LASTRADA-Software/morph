@@ -14,8 +14,8 @@ MorphWidget {
     property string label: ""
     // An icon of the theme's icon set, drawn beside the label when the set names it; set once.
     property string icon: ""
-    // 0 normal (outlined), 1 primary (accent-filled), 2 danger (error-filled), 3 ghost (no chrome of its own); set
-    // once.
+    // 0 normal (outlined), 1 primary (accent-filled), 2 danger (error-filled), 3 ghost (no chrome of its own), 4
+    // danger outlined (a normal frame with the error colour's border and label); set once.
     property int emphasis: 0
     // 0 push, 1 item; set once.
     property int style: 0
@@ -82,8 +82,9 @@ MorphWidget {
         text: root.label
         leftPadding: root.ghost ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
         rightPadding: root.ghost ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
-        palette.buttonText: root.emphasis === 0 || root.ghost ? root.scheme.text : "white"
-        font: root.emphasis === 0 || root.ghost ? Theme.bodyFont : Theme.strongFont
+        palette.buttonText: root.emphasis === 4 ? root.scheme.error
+                                                : root.emphasis === 0 || root.ghost ? root.scheme.text : "white"
+        font: root.emphasis === 0 || root.emphasis === 4 || root.ghost ? Theme.bodyFont : Theme.strongFont
         icon.source: Theme.iconSource(root.icon)
         icon.color: "transparent"
         contentItem: MorphPlainContent {
@@ -96,6 +97,7 @@ MorphWidget {
             filled: root.emphasis === 1 || root.emphasis === 2
             item: root.style === 1
             ghost: root.ghost
+            borderColor: root.emphasis === 4 ? root.scheme.errorBorder : root.scheme.border
             selected: root.selected
             hovered: button.hovered
             pressed: button.down

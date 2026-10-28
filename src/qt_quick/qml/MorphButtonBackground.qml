@@ -23,6 +23,8 @@ Rectangle {
     property bool selected: false
     // A ghost button: no border or fill, no accent-bar "current" concept, just a neutral tint on hover or press.
     property bool ghost: false
+    // The outline's colour while it is not focused: the border, or the error colour's for a danger outlined button.
+    property color borderColor: scheme.border
 
     implicitHeight: Theme.targetHeight
     implicitWidth: ghost ? 0 : Theme.unitWidth * 8
@@ -34,7 +36,7 @@ Rectangle {
                 : ghost ? (hovered || pressed ? scheme.neutral : "transparent")
                         : pressed ? Qt.darker(restFill, 1.12) : hovered ? Qt.darker(restFill, 1.05) : restFill
     border.width: focused ? 2 : filled || item || ghost ? 0 : 1
-    border.color: focused ? scheme.focus : scheme.border
+    border.color: focused ? scheme.focus : borderColor
 
     Rectangle {
         visible: background.item && background.selected

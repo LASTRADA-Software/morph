@@ -775,3 +775,21 @@ TEST_CASE("tui widgets: a required text draws its mark after its last line, at i
     after->setText("|");
     CHECK(harness.draw().at(0).starts_with("Condition on receipt *"));
 }
+
+// Mutation: make dangerOutline bold (it then reads as danger).
+TEST_CASE("tui widgets: a danger outlined button is red and not bold, a danger one red and bold", "[tui][widgets]") {
+    Harness harness{30, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const outlined = harness.make<ButtonImpl>(column.get());
+    outlined->setLabel("Reject");
+    outlined->setEmphasis(ui::ButtonEmphasis::DangerOutline);
+    auto const danger = harness.make<ButtonImpl>(column.get());
+    danger->setLabel("Drop");
+    danger->setEmphasis(ui::ButtonEmphasis::Danger);
+    static_cast<void>(harness.draw());
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 2).style.fg == harness.screen().theme().error.fg);
+    CHECK_FALSE(buffer.at(0, 2).style.bold);
+    CHECK(buffer.at(1, 2).style.fg == harness.screen().theme().error.fg);
+    CHECK(buffer.at(1, 2).style.bold);
+}

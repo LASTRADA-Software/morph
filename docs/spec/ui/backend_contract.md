@@ -57,7 +57,10 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
      key means something else there;
   2. then to the widget's own handling of the key, for the keys its kind takes. A button takes Enter and Space,
      which click it. A single-line or password text input takes Enter only when it has a submit handler: it commits,
-     submits, and the key stops there; without one it commits, and Enter goes on. A check box takes Space, which
+     submits, and the key stops there; without one it commits, and Enter goes on. A segmented select takes Left and Right, which
+     choose the previous or the next option (`onSelect` once) and stop at the ends; Space and Enter on it go on, so
+     Enter reaches a dialog's `default`. It is one Tab stop, entered at the marked option, as ARIA's radio group is.
+     A check box takes Space, which
      toggles it, and lets Enter go on. A table takes Enter, which activates the current row, and, while it or one of
      its rows holds the focus itself, the arrows, Home, End, PageUp, PageDown, Space, Shift+Up, Shift+Down and, in
      `Multiple` mode, Ctrl+A ([Selection by key](#selection-by-key)); a `Single` table's Ctrl+A, and a key a control
@@ -181,13 +184,21 @@ reorders children, and only through this.
 value with `spacingStep`, so a backend never sees another. Each backend maps a step to its own distance: the theme's
 `space.<step>` in px on Qt Quick, cells by axis on the terminal.
 
-**Button emphasis.** `ButtonWidget::setEmphasis(ButtonEmphasis)` takes `Normal`, `Primary`, `Danger` or `Ghost`; the
-mount calls it only for another value than `Normal`, so a document without the `emphasis` key (`normal`, `primary`,
-`danger`, `ghost`) records nothing new. Qt Quick fills a primary button in the accent and a danger one in the error
+**Button emphasis.** `ButtonWidget::setEmphasis(ButtonEmphasis)` takes `Normal`, `Primary`, `Danger`, `Ghost` or
+`DangerOutline`; the mount calls it only for another value than `Normal`, so a document without the `emphasis` key
+(`normal`, `primary`, `danger`, `ghost`, `dangerOutline`) records nothing new. `DangerOutline` is a destructive action
+that is not the screen's main one: Qt Quick draws it as a normal button (the surface's fill, a 1 px border) with the
+border in `color.err.border` and the label in the error colour, and the terminal in the error colour and not bold,
+which keeps it apart from both `Danger` and `Normal`. Qt Quick fills a primary button in the accent and a danger one in the error
 colour, and draws a ghost button with no border or fill, minimal padding, and a faint neutral tint on hover or press
 — for an action embedded in other content (a table row's remove, a disclosure chevron) where full button chrome would
 read as a second control beside it rather than part of it. The terminal draws `Primary`/`Danger` bold, a danger one
 in the error colour, and falls back to `Normal`'s plain style for `Ghost`.
+
+**Badge style.** `BadgeWidget::setStyle(BadgeStyle::Outline)` draws a badge outlined: the surface's fill with the
+tone's colour as border and text, where a filled one is drawn in the tone's fill. A red outline then means one thing
+(STAT) and a red fill another (out of specification). The terminal draws an outline badge as `(text)`, a filled one
+as `[text]`.
 
 **Button style and selection.** `ButtonWidget::setStyle(ButtonStyle)` makes a button an entry of a list (`Item`): it
 behaves as a push button (activation, enablement, tooltip, hover) and is drawn as a line, as wide as its line, its
@@ -271,7 +282,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)`, `setOnCommit(value)` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
 | `BannerWidget` | `setTone`, `setText`, `setSpans`, `setActionLabel`, `setDismissible` (once) | `setOnAction`, `setOnDismiss` |
-| `BadgeWidget` | `setTone`, `setText`, `setIcon` (once) | `setOnRemove(onRemove, label)`: only for a removable badge, which then draws a remove control after its text (the framework icon `close`) named `label`, and takes the focus; Delete, Backspace, Enter or Space on it, or a click on its control, calls `onRemove`. A badge without it takes no focus |
+| `BadgeWidget` | `setTone`, `setText`, `setIcon` (once), `setStyle` (once, only for `Outline`) | `setOnRemove(onRemove, label)`: only for a removable badge, which then draws a remove control after its text (the framework icon `close`) named `label`, and takes the focus; Delete, Backspace, Enter or Space on it, or a click on its control, calls `onRemove`. A badge without it takes no focus |
 | `ProgressWidget` | `setValue(optional<double>)`, `setLabel` | — |
 | `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)` | — |
 | `KeyValueWidget` | `setItems(vector<KeyValueItem>)`, `setCaptionPlacement` (once, only for `Above`) | — |
@@ -372,7 +383,7 @@ The headless reference backend and the test double for everything above the cont
   and ` max=<n>` for its bounds, then ` self=<align>` for an `alignSelf`), `dragKey`, `drop`, `a11yName`,
   `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run; text and the six
   inputs record `readonly`, `required`, `errors`, `stale`, `description` and `tone`; and each kind its own: `text`, `spans`, `role` (Text); `label`, `emphasis`, `icon`, `style`, `selected` (Button); `mode`, `text`, `placeholder`,
-  `unit`, `decimals`, `icon`, `caption`, `captionShown` (TextInput); `label`, `checked` (Checkbox); `style`, `options`, `selected` (Select, where
+  `unit`, `decimals`, `icon`, `caption`, `captionShown` (TextInput); `label`, `checked` (Checkbox); `style` (`Dropdown`, `Radio` or `Segmented`), `options`, `selected` (Select, where
   `selected` is the option it marks, else `none`); `items` (Menu, as below), and a button-style menu's `style=Button` (at creation), `label`, `icon` and `emphasis`; `gap`, `align`, `justify` (Column, Row); `columns`,
   `tracks` (each width, then `;align=` where it is not `start`), `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
   `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title`, `description` (Dialog); `active`, `label` (Busy);
@@ -380,7 +391,7 @@ The headless reference backend and the test double for everything above the cont
   `selectionMode`, `selection` (the requested keys it marks, in the order requested),
   and `rowKey` on a row (Table); `mode`, `offset`, `value` (DateTimeInput); `range`, `value`
   (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `spans`, `actionLabel`, `dismissible` (Banner);
-  `tone`, `text`, `icon`, and `removable` (the remove control's name) of a removable one (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
+  `tone`, `text`, `icon`, `style`, and `removable` (the remove control's name) of a removable one (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
   and `captions` (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title`, `description` (Drawer);
   `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
   `accept`, `multiple` (DropZone); `component`, `minVersion` and each prop as `prop.<name>` (Custom);
@@ -630,6 +641,8 @@ Each case is named by the rule it checks:
     `Outside 2–8 °C` it reads the error, a line feed and the description; the error cleared, the description again.
 52. An open dialog described `Enter your password to sign.` reads that as its accessible description, and
     `Signing as Approved.` once the binding changes.
+53. A segmented select over `A`, `B`, `C` with `B` marked reads `B`; Right chooses `C` and reports it once, a
+    second Right at the end reports nothing, and Enter reaches the enclosing column's chord.
 
 ### What the probe cannot reach
 

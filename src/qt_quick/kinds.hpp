@@ -220,6 +220,7 @@ public:
     void setText(std::string_view text) override;
     void setIcon(std::string_view icon) override;
     void setOnRemove(ui::Action onRemove, std::string_view label) override;
+    void setStyle(ui::BadgeStyle style) override;
     [[nodiscard]] std::string shownText() const override;
 };
 

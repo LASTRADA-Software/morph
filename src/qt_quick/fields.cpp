@@ -243,7 +243,8 @@ bool CheckboxImpl::checked() const {
 
 SelectImpl::SelectImpl(Context& context, ui::ContainerWidget* parent, ui::SelectStyle style)
     : FieldItemWidget{context, QStringLiteral("MorphSelect"), parent,
-                      QVariantMap{{QStringLiteral("radio"), style == ui::SelectStyle::Radio}}} {
+                      QVariantMap{{QStringLiteral("radio"), style == ui::SelectStyle::Radio},
+                                  {QStringLiteral("segmented"), style == ui::SelectStyle::Segmented}}} {
     if (style == ui::SelectStyle::Dropdown) {
         exposeShownOption(part("control"));
     }

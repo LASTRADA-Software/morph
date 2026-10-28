@@ -358,6 +358,100 @@ DropdownSelectImpl::~DropdownSelectImpl() {
     context().screen->hideOverlay(*_popup);
 }
 
+// ── Segmented ─────────────────────────────────────────────────────────────
+
+namespace {
+
+// A segment's text: its label padded by a space on each side.
+std::string segmentText(ui::SelectOption const& option) { return " " + option.label + " "; }
+
+}  // namespace
+
+void SegmentedSelectImpl::setOptions(std::vector<ui::SelectOption> const& options) {
+    _options = options;
+    refresh();
+}
+
+void SegmentedSelectImpl::setSelected(std::optional<ui::Key> const& selected) {
+    _selected = selected;
+    refresh();
+}
+
+::core::tui::Size SegmentedSelectImpl::controlSize() const {
+    int width = 0;
+    for (ui::SelectOption const& option : _options) {
+        width += displayWidth(segmentText(option)) + (width == 0 ? 0 : 1);
+    }
+    return withCaption({.width = width, .height = 1});
+}
+
+std::string SegmentedSelectImpl::probeText() const { return labelOf(_options, _selected); }
+
+void SegmentedSelectImpl::paintControl(::core::tui::Canvas& canvas) {
+    auto const& theme = canvas.theme();
+    auto control = paintCaption(canvas);
+    auto const marked = indexOf(_options, _selected);
+    int column = 0;
+    for (std::size_t index = 0; index < _options.size(); ++index) {
+        if (index > 0) {
+            column += control.putString(0, column, "│", theme.textMuted);
+        }
+        ::core::tui::Style style = theme.textNormal;
+        if (!actionable()) {
+            style = theme.textMuted;
+        } else if (marked == index) {
+            style = hasFocus() ? theme.buttonFocused : theme.listItemSelected;
+        }
+        column += control.putString(0, column, segmentText(_options.at(index)), style);
+    }
+    paintMarks(control);
+}
+
+EventResult SegmentedSelectImpl::key(::core::tui::KeyEvent const& key) {
+    if (!isPlain(key) || (!isKey(key, KeyCode::Left) && !isKey(key, KeyCode::Right))) {
+        return EventResult::Ignored;
+    }
+    auto const marked = indexOf(_options, _selected);
+    if (!marked) {
+        return EventResult::Ignored;
+    }
+    bool const left = isKey(key, KeyCode::Left);
+    if ((left && *marked > 0) || (!left && *marked + 1 < _options.size())) {
+        choose(left ? *marked - 1 : *marked + 1);
+    }
+    return EventResult::Handled;
+}
+
+void SegmentedSelectImpl::click(::core::tui::Point cell) {
+    int const top = captionRows();
+    if (cell.y != top) {
+        return;
+    }
+    int column = 0;
+    for (std::size_t index = 0; index < _options.size(); ++index) {
+        int const width = displayWidth(segmentText(_options.at(index)));
+        if (cell.x >= column && cell.x < column + width) {
+            choose(index);
+            return;
+        }
+        column += width + 1;
+    }
+}
+
+// Optimistic, like the other choosers: the segment shows the choice at once.
+void SegmentedSelectImpl::choose(std::size_t index) {
+    if (index >= _options.size() || !actionable() || readOnly()) {
+        return;
+    }
+    auto picked = _options.at(index).key;
+    _selected = picked;
+    refresh();
+    auto const handler = _onSelect;
+    if (handler) {
+        handler(std::move(picked));
+    }
+}
+
 void DropdownSelectImpl::setOptions(std::vector<ui::SelectOption> const& options) {
     _options = options;
     if (_open && _options.empty()) {

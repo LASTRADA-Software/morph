@@ -6631,13 +6631,7 @@ inline ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> par
                           .enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf),
                           .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
                           .run = {}};
-        if (part->name("emphasis") == "primary") {
-            model.emphasis = ButtonEmphasis::Primary;
-        } else if (part->name("emphasis") == "danger") {
-            model.emphasis = ButtonEmphasis::Danger;
-        } else if (part->name("emphasis") == "ghost") {
-            model.emphasis = ButtonEmphasis::Ghost;
-        }
+        model.emphasis = emphasisNamed(part->name("emphasis")).value_or(ButtonEmphasis::Normal);
         if (Commands const* const commands = part->event("onClick")) {
             model.run = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
         }
@@ -6755,13 +6749,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     if (kind == "button") {
         Button spec{.label = textProp("label")};
         spec.icon = onceText("icon");
-        if (node.name("emphasis") == "primary") {
-            spec.emphasis = ButtonEmphasis::Primary;
-        } else if (node.name("emphasis") == "danger") {
-            spec.emphasis = ButtonEmphasis::Danger;
-        } else if (node.name("emphasis") == "ghost") {
-            spec.emphasis = ButtonEmphasis::Ghost;
-        }
+        spec.emphasis = emphasisNamed(node.name("emphasis")).value_or(ButtonEmphasis::Normal);
         if (node.name("style") == "item") {
             spec.style = ButtonStyle::Item;
         }
@@ -6888,7 +6876,17 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             runEvent(onChoose, ctx, chosen);
             runEvent(onChange, ctx, chosen);
         };
-        spec.style = onceText("style") == "radio" ? SelectStyle::Radio : SelectStyle::Dropdown;
+        // A computed style of no known name is reported once and drawn as a dropdown; the loader refuses a constant one.
+        if (ExprPtr const style = node.prop("style")) {
+            std::string const name = textOf(once(ctx, style), session.formatting());
+            if (name == "radio") {
+                spec.style = SelectStyle::Radio;
+            } else if (name == "segmented") {
+                spec.style = SelectStyle::Segmented;
+            } else if (name != "dropdown") {
+                report(style->path, "style is `" + name + "`; a select's style is dropdown, radio or segmented");
+            }
+        }
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);
@@ -7112,6 +7110,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     if (kind == "badge") {
         Badge spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Neutral, toneOf), .text = textProp("text")};
         spec.icon = onceText("icon");
+        spec.style = node.name("style") == "outline" ? BadgeStyle::Outline : BadgeStyle::Filled;
         if (Commands const* const onRemove = node.event("onRemove")) {
             spec.onRemove = [this, ctx, onRemove] { runEvent(onRemove, ctx, Value{}); };
             spec.removeLabel = textProp("removeLabel");

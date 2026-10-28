@@ -20,6 +20,7 @@
 #include "../util/datetime.hpp"
 #include "alignment.hpp"
 #include "button_emphasis.hpp"
+#include "badge_style.hpp"
 #include "button_style.hpp"
 
 /// @file
@@ -215,8 +216,9 @@ enum class TextInputMode : std::uint8_t {
 
 /// @brief How a `Select` presents its options.
 enum class SelectStyle : std::uint8_t {
-    Dropdown,  ///< A closed field that opens a list.
-    Radio,     ///< Every option visible, one marked.
+    Dropdown,   ///< A closed field that opens a list.
+    Radio,      ///< Every option visible, one marked.
+    Segmented,  ///< Every option visible as one row of joined segments, one marked.
 };
 
 /// @brief How a `Menu` presents its entries.
@@ -1141,6 +1143,8 @@ struct Badge {
     Prop<std::string> text;
     /// @brief The name of an icon in the theme's icon map; empty shows none. Set once.
     std::string icon;
+    /// @brief Filled or outlined; set once.
+    BadgeStyle style = BadgeStyle::Filled;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
     /// @brief Called when the user removes the badge; empty: the badge has no remove control and takes no focus.

@@ -2537,6 +2537,41 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: a segmented select shows its marked option; Right chooses the next one and reports it once, and stops
+///        at the end; Enter goes on to the enclosing column's chord.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> segmentedSelectTakesArrows(ConformanceProbe& probe) {
+    std::vector<Key> chosen;
+    int chords = 0;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {ui::select({.options = std::vector<SelectOption>{{.key = Key{std::int64_t{1}}, .label = "A"},
+                                                                              {.key = Key{std::int64_t{2}}, .label = "B"},
+                                                                              {.key = Key{std::int64_t{3}}, .label = "C"}},
+                                             .selected = std::optional<Key>{Key{std::int64_t{2}}},
+                                             .onSelect = [&chosen](Key const& key) { chosen.push_back(key); },
+                                             .style = SelectStyle::Segmented})},
+                    .common = {.keys = {{.chord = "Enter", .onPress = [&chords] { ++chords; }}}}})};
+    probe.settle();
+    Widget* const select = childOf(probe, &view.root(), 0);
+    if (select == nullptr) {
+        return "a segmented Select in a Column is not shown";
+    }
+    Checks checks;
+    checks.text("the marked option", "B", probe.textOf(*select));
+    probe.press(*select, "Right");
+    probe.settle();
+    checks.text("the options chosen by Right", "3", keyTexts(chosen));
+    probe.press(*select, "Right");
+    probe.settle();
+    checks.text("the options chosen by a Right at the end", "3", keyTexts(chosen));
+    probe.press(*select, "Enter");
+    probe.settle();
+    checks.that(chords == 1, "Enter on a segmented select ran the column's chord " + std::to_string(chords) + " times");
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
@@ -2574,7 +2609,7 @@ struct SelectionReport {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 52> const cases{{
+    static std::array<ConformanceCase, 53> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -2650,6 +2685,8 @@ struct SelectionReport {
          .run = detail::fieldDescriptionFollowsErrors},
         {.name = "an open dialog's description is its accessible description",
          .run = detail::dialogDescriptionFollowsBinding},
+        {.name = "a segmented select chooses with the arrows and lets Enter go on",
+         .run = detail::segmentedSelectTakesArrows},
     }};
     return cases;
 }

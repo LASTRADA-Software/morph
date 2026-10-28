@@ -1642,6 +1642,9 @@ private:
         bind(scope, spec.tone, [&widget](Tone tone) { widget.setTone(tone); });
         bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
         widget.setIcon(spec.icon);
+        if (spec.style != BadgeStyle::Filled) {
+            widget.setStyle(spec.style);
+        }
         if (spec.onRemove) {
             // An empty label names the control after the badge's text, which may be bound as well.
             auto const labelOf = [removeLabel = spec.removeLabel, text = spec.text] {

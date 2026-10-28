@@ -224,11 +224,14 @@ void BadgeImpl::setOnRemove(ui::Action onRemove, std::string_view label) {
 
 void BadgeImpl::paint(::core::tui::Canvas& canvas) {
     ::core::tui::Style style = toneStyle(canvas.theme(), _tone);
+    bool const outline = _style == ui::BadgeStyle::Outline;
     if (_onRemove && hasFocus()) {
         style.inverse = true;
     }
     std::string const glyph{ui::iconGlyph("close")};
-    canvas.putString(0, 0, "[" + caption() + (_onRemove ? " " + glyph : std::string{}) + "]", style);
+    canvas.putString(
+        0, 0, (outline ? "(" : "[") + caption() + (_onRemove ? " " + glyph : std::string{}) + (outline ? ")" : "]"),
+        style);
 }
 
 EventResult BadgeImpl::key(::core::tui::KeyEvent const& key) {

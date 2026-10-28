@@ -66,6 +66,9 @@ std::unique_ptr<ui::SelectWidget> Backend::createSelect(ui::ContainerWidget* par
     if (style == ui::SelectStyle::Radio) {
         return make<detail::RadioSelectImpl>(_impl->context, parent);
     }
+    if (style == ui::SelectStyle::Segmented) {
+        return make<detail::SegmentedSelectImpl>(_impl->context, parent);
+    }
     return make<detail::DropdownSelectImpl>(_impl->context, parent);
 }
 

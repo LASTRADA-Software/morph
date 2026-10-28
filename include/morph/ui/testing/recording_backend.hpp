@@ -274,6 +274,8 @@ template <typename T, typename F>
             return "Danger";
         case ButtonEmphasis::Ghost:
             return "Ghost";
+        case ButtonEmphasis::DangerOutline:
+            return "DangerOutline";
         case ButtonEmphasis::Normal:
         default:
             return "Normal";
@@ -344,6 +346,8 @@ template <typename T, typename F>
             return "Dropdown";
         case SelectStyle::Radio:
             return "Radio";
+        case SelectStyle::Segmented:
+            return "Segmented";
         default:
             return "unknown";
     }
@@ -1077,6 +1081,24 @@ public:
         store().setByUser(id(), "selected", marked());
     }
 
+    /// @brief The key of the option @p step places from the marked one, as Left and Right on a segmented select move.
+    /// @param step -1 for the previous option, 1 for the next.
+    /// @return The neighbour's key; `nullopt` when none is marked or the marked one is at that end.
+    [[nodiscard]] std::optional<Key> neighbour(int step) const {
+        if (!_requested.has_value() || !_requested->has_value()) {
+            return std::nullopt;
+        }
+        auto const found = std::ranges::find(_options, **_requested, &SelectOption::key);
+        if (found == _options.end()) {
+            return std::nullopt;
+        }
+        auto const index = std::distance(_options.begin(), found) + step;
+        if (index < 0 || index >= std::ssize(_options)) {
+            return std::nullopt;
+        }
+        return _options.at(static_cast<std::size_t>(index)).key;
+    }
+
 private:
     [[nodiscard]] std::string marked() const {
         if (!_requested.has_value() || !_requested->has_value() || !offers(**_requested)) {
@@ -1305,13 +1327,15 @@ private:
     int _shown = 0;
 };
 
-/// @brief A fake `BadgeWidget`: properties `tone`, `text`, `icon`, and `removable` of a removable one.
+/// @brief A fake `BadgeWidget`: properties `tone`, `text`, `icon`, `style`, and `removable` of a removable one.
 class FakeBadge final : public FakeLeaf<BadgeWidget> {
 public:
     using FakeLeaf<BadgeWidget>::FakeLeaf;
     void setTone(Tone tone) override { set("tone", enumName(tone)); }
     void setText(std::string_view text) override { set("text", formatText(text)); }
     void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
+
+    void setStyle(BadgeStyle style) override { set("style", style == BadgeStyle::Outline ? "Outline" : "Filled"); }
 
     /// @brief Records property `removable`, the remove control's name, and keeps @p onRemove for
     ///        `RecordingBackend::dismiss`.
@@ -2185,7 +2209,8 @@ public:
     /// First a chord @p widgetId declares itself through `setKeys`. Then the built-in keys of its kind: a `Button`'s
     /// `Enter` or `Space` clicks it; a single-line or password `TextInput`'s `Enter` commits, then submits and stops
     /// when the field has a submit handler, and goes on after the commit when it has none; a `Checkbox`'s `Space`
-    /// toggles it; a `Table`'s `Enter` activates its first marked row, and stops whether or not one is marked; a
+    /// toggles it; a segmented `Select`'s `Left` and `Right` choose the previous or the next option, stopping at the
+    /// ends; a `Table`'s `Enter` activates its first marked row, and stops whether or not one is marked; a
     /// `Multiple` table's `Ctrl+A` selects every row, or clears them when every row is selected, as `Extend`. Then
     /// the chords of its ancestors, innermost first. A handler that destroys the focused widget stops the key there.
     /// Like every helper it acts only when a user could reach @p widgetId.
@@ -2660,6 +2685,15 @@ private:
 
     // The built-in keys of the focused widget's kind, `press`'s second step: whether the key stops here. A text input
     // without a submit handler commits on Enter and lets the key go on.
+    // Left or Right on a segmented select: chooses the neighbour, if any, as a user's choice.
+    void stepSegmented(int widgetId, bool forward) {
+        auto const* const select = dynamic_cast<detail::FakeSelect const*>(_store->at(widgetId).widget);
+        std::optional<Key> next = select == nullptr ? std::nullopt : select->neighbour(forward ? 1 : -1);
+        if (next.has_value()) {
+            choose(widgetId, std::move(*next));
+        }
+    }
+
     bool ownKey(int widgetId, std::string const& chord) {
         detail::Record const& record = _store->at(widgetId);
         bool const enter = chord == "Enter";
@@ -2669,6 +2703,11 @@ private:
         }
         if (record.kind == "Checkbox" && chord == "Space") {
             toggle(widgetId);
+            return true;
+        }
+        if (record.kind == "Select" && prop(widgetId, "style") == "Segmented" &&
+            (chord == "Left" || chord == "Right")) {
+            stepSegmented(widgetId, chord == "Right");
             return true;
         }
         if (record.kind == "TextInput" && enter && prop(widgetId, "mode") != "Multiline") {

@@ -941,9 +941,10 @@ inline constexpr std::array<KeySpec, 7> kActionButtonKeys = {{{"id", Shape::Name
 inline constexpr std::array<KeySpec, 4> kHeadBadgeKeys = {
     {{"tone", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}, {"visible", Shape::Condition}}};
 /// @brief The keys of `badge`.
-inline constexpr std::array<KeySpec, 5> kBadgeKeys = {{{"tone", Shape::Expr},
+inline constexpr std::array<KeySpec, 6> kBadgeKeys = {{{"tone", Shape::Expr},
                                                        {"text", Shape::Expr},
                                                        {"icon", Shape::Expr},
+                                                       {"style", Shape::Text},
                                                        {"onRemove", Shape::Commands},
                                                        {"removeLabel", Shape::Expr}}};
 /// @brief The keys of `progress`.
@@ -3471,7 +3472,8 @@ private:
     // The keys of a kind that take one of a closed set of values, and the pairs of keys that need each other.
     static void checkKindValues(DocNode const& node) {
         if (node.kind == "button") {
-            static constexpr std::array<std::string_view, 4> kEmphasis = {"normal", "primary", "danger", "ghost"};
+            static constexpr std::array<std::string_view, 5> kEmphasis = {"normal", "primary", "danger", "ghost",
+                                                                           "dangerOutline"};
             checkChoice(node, "emphasis", kEmphasis);
             static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
             checkChoice(node, "style", kStyles);
@@ -3489,6 +3491,7 @@ private:
         } else if (node.kind == "select") {
             static constexpr std::array<std::string_view, 2> kStale = {"clear", "keep"};
             checkChoice(node, "onStale", kStale);
+            checkSelectStyle(node);
         } else if (node.kind == "dialog" || node.kind == "drawer" || node.kind == "form") {
             static constexpr std::array<std::string_view, 3> kPolicies = {"touched", "submit", "always"};
             checkChoice(node, "showErrors", kPolicies);
@@ -3505,6 +3508,9 @@ private:
             }
         } else if (node.kind == "banner") {
             checkSpans(node.prop("spans"));
+        } else if (node.kind == "badge") {
+            static constexpr std::array<std::string_view, 2> kBadgeStyles = {"filled", "outline"};
+            checkChoice(node, "style", kBadgeStyles);
         } else if (node.kind == "keyValue") {
             static constexpr std::array<std::string_view, 2> kCaptionPlaces = {"inline", "stacked"};
             checkChoice(node, "fieldLayout", kCaptionPlaces);
@@ -3573,7 +3579,8 @@ private:
 
     // A list of `actionButton` parts: each id once, and each emphasis one of a button's.
     static void checkActionButtons(std::span<DocNodePtr const> buttons, std::string const& path) {
-        static constexpr std::array<std::string_view, 4> kEmphasis = {"normal", "primary", "danger", "ghost"};
+        static constexpr std::array<std::string_view, 5> kEmphasis = {"normal", "primary", "danger", "ghost",
+                                                                       "dangerOutline"};
         std::set<std::string_view> ids;
         for (DocNodePtr const& button : buttons) {
             if (!ids.insert(button->id).second) {
@@ -3753,6 +3760,22 @@ private:
             } else if (run->kind == ExprKind::Object) {
                 checkRunRecord(*run);
             }
+        }
+    }
+
+    // A select's style written as a constant: one of the three it may be. A computed one is read as it is drawn.
+    static void checkSelectStyle(DocNode const& node) {
+        ExprPtr const style = node.prop("style");
+        if (style == nullptr || style->kind != ExprKind::Literal) {
+            return;
+        }
+        static constexpr std::array<std::string_view, 3> kStyles = {"dropdown", "radio", "segmented"};
+        std::string const* const name = style->literal.asString();
+        if (name == nullptr) {
+            refuse(pointerAppend(node.path, "style"), "`style` is a name");
+        }
+        if (!listed(kStyles, *name)) {
+            refuse(pointerAppend(node.path, "style"), "`" + *name + "` is not one of the values of `style`");
         }
     }
 

@@ -1306,3 +1306,42 @@ TEST_CASE("qt_quick widgets: a text input announces its unit after its descripti
     QString const declared = Scene::itemOf(*input).property("accessibleDescription").toString();
     CHECK(declared == QStringLiteral("Required range 2–8 °C\n°C"));
 }
+
+// Mutation: map DangerOutline to Danger in ButtonImpl::setEmphasis (the fill then reads the error colour).
+TEST_CASE("qt_quick widgets: a danger outlined button, an outline badge, and a stretched segmented select",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const reject = scene.backend().createButton(column.get());
+    reject->setLabel("Reject");
+    reject->setEmphasis(ui::ButtonEmphasis::DangerOutline);
+    auto const stat = scene.backend().createBadge(column.get());
+    stat->setTone(ui::Tone::Err);
+    stat->setText("STAT");
+    stat->setStyle(ui::BadgeStyle::Outline);
+    auto const show = scene.backend().createSelect(column.get(), ui::SelectStyle::Segmented);
+    show->setLayout({.width = ui::Sizing::stretch(1), .height = {}});
+    show->setOptions(
+        {{.key = std::string{"all"}, .label = "All 24"}, {.key = std::string{"flagged"}, .label = "Flagged 2"}});
+    show->setSelected(std::string{"all"});
+    scene.window().resize(300, 600);
+    scene.settle();
+    QObject const* const scheme = Scene::itemOf(*reject).property("scheme").value<QObject*>();
+    REQUIRE(scheme != nullptr);
+    auto const surface = scheme->property("surface").value<QColor>();
+    auto const error = scheme->property("error").value<QColor>();
+    CHECK(Scene::itemOf(*reject).property("fill").value<QColor>() == surface);
+    QList<QQuickItem*> const buttons = Scene::itemsOf(Scene::itemOf(*reject), "QQuickButton");
+    REQUIRE_FALSE(buttons.isEmpty());
+    auto const* const content = buttons.front()->property("contentItem").value<QQuickItem*>();
+    REQUIRE(content != nullptr);
+    CHECK(content->property("color").value<QColor>() == error);
+    QQuickItem const* const fill = findNamed(Scene::itemOf(*stat), QStringLiteral("fill"));
+    REQUIRE(fill != nullptr);
+    CHECK(fill->property("color").value<QColor>() == surface);
+    CHECK(fill->property("border").value<QObject*>()->property("color").value<QColor>() == error);
+    QList<QQuickItem*> const segments = named(Scene::itemOf(*show), QStringLiteral("segment"));
+    REQUIRE(segments.size() == 2);
+    CHECK(std::abs(segments.at(0)->width() - segments.at(1)->width()) <= 1);
+    CHECK(segments.at(0)->width() > 100);
+}

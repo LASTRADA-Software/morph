@@ -186,3 +186,13 @@ TEST_CASE("tui key-value: a stacked pair takes two rows, and a toned value is bo
     CHECK_FALSE(buffer.at(1, 0).style.bold);
     CHECK(kv->probeText() == "Serial: D-9\nContainers: 180 needed");
 }
+
+// Mutation: draw an outline badge in brackets (it then reads as a filled one).
+TEST_CASE("tui badge: an outline badge is drawn in parentheses", "[tui][display]") {
+    Harness harness{20, 1};
+    auto const badge = harness.make<BadgeImpl>(nullptr);
+    badge->setTone(ui::Tone::Err);
+    badge->setText("STAT");
+    badge->setStyle(ui::BadgeStyle::Outline);
+    CHECK(harness.draw() == Rows{"(STAT)"});
+}

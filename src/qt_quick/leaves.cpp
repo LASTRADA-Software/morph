@@ -68,7 +68,7 @@ void ButtonImpl::setIcon(std::string_view icon) {
 }
 
 void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
-    // MorphButton's `emphasis`: 0 normal, 1 primary, 2 danger, 3 ghost.
+    // MorphButton's `emphasis`: 0 normal, 1 primary, 2 danger, 3 ghost, 4 danger outlined.
     int shown = 0;
     if (emphasis == ui::ButtonEmphasis::Primary) {
         shown = 1;
@@ -76,6 +76,8 @@ void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
         shown = 2;
     } else if (emphasis == ui::ButtonEmphasis::Ghost) {
         shown = 3;
+    } else if (emphasis == ui::ButtonEmphasis::DangerOutline) {
+        shown = 4;
     }
     write("emphasis", shown);
 }
@@ -255,6 +257,8 @@ void BadgeImpl::setOnRemove(ui::Action onRemove, std::string_view label) {
     write("removeLabel", toQString(label));
     relay().on(QStringLiteral("remove"), actionHandler(std::move(onRemove)));
 }
+
+void BadgeImpl::setStyle(ui::BadgeStyle style) { write("outline", style == ui::BadgeStyle::Outline); }
 
 std::string BadgeImpl::shownText() const { return toUtf8(read("text").toString()); }
 

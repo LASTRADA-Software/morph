@@ -72,6 +72,33 @@ private:
     std::function<void(ui::Key)> _onSelect;
 };
 
+/// Select, segmented: one row of the options, each padded by a space and joined by `│`, the marked one in the list's
+/// selected-item style. Left and Right choose the previous or the next option and stop at the ends; a click on a
+/// segment chooses it. It is one focus stop; Space and Enter go on outwards, so Enter reaches a dialog's default.
+class SegmentedSelectImpl final : public TuiField<ui::SelectWidget> {
+public:
+    explicit SegmentedSelectImpl(Context& context) : TuiField{context} { adopt(makeView(*this)); }
+    void setOptions(std::vector<ui::SelectOption> const& options) override;
+    void setSelected(std::optional<ui::Key> const& selected) override;
+    void setOnSelect(std::function<void(ui::Key)> onSelect) override { _onSelect = std::move(onSelect); }
+    void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
+    [[nodiscard]] bool wantsFocus() const override { return true; }
+    /// The label of the marked option; empty when none is marked.
+    [[nodiscard]] std::string probeText() const override;
+    void paintControl(::core::tui::Canvas& canvas) override;
+    [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
+    void click(::core::tui::Point cell) override;
+
+private:
+    /// Marks option @p index and reports it, as a user's choice.
+    void choose(std::size_t index);
+
+    std::vector<ui::SelectOption> _options;
+    std::optional<ui::Key> _selected;
+    std::function<void(ui::Key)> _onSelect;
+};
+
 /// Select, dropdown style: one row `[label ▾]`; Enter, Space, Down or a click opens the options as a list overlay
 /// below it (above it, when there is more room there), which takes the focus. It opens only from a field drawn in the
 /// last frame and only where there is room for a row.

@@ -46,6 +46,7 @@ std::vector<morph::ui::MenuEntry> entries(std::initializer_list<char const*> lab
 }  // namespace
 using morph::tui::detail::PanelImpl;
 using morph::tui::detail::RadioSelectImpl;
+using morph::tui::detail::SegmentedSelectImpl;
 using morph::tui::detail::ScrollImpl;
 using morph::tui::detail::SpacerImpl;
 using morph::tui::detail::StackImpl;
@@ -1049,4 +1050,28 @@ TEST_CASE("tui lists: an open list that loses its room to a shrinking terminal c
     CHECK_FALSE(select->isOpen());
     CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
     CHECK(chosen == 0);
+}
+
+// Mutation: drop the Right handling in SegmentedSelectImpl::key (the press then chooses nothing).
+TEST_CASE("tui lists: a segmented select draws its options in one row and chooses with the arrows and a click",
+          "[tui][lists]") {
+    Harness harness{40, 2};
+    auto const select = harness.make<SegmentedSelectImpl>(nullptr);
+    select->setOptions({{.key = ui::Key{std::int64_t{1}}, .label = "All 24"},
+                        {.key = ui::Key{std::int64_t{2}}, .label = "Flagged 2"}});
+    select->setSelected(ui::Key{std::int64_t{1}});
+    std::vector<ui::Key> chosen;
+    select->setOnSelect([&chosen](ui::Key key) { chosen.push_back(std::move(key)); });
+    CHECK(harness.draw() == Rows{" All 24 │ Flagged 2"});
+    CHECK(harness.screen().renderedBuffer().at(0, 1).style.bg == harness.screen().theme().listItemSelected.bg);
+    harness.focus(*select);
+    CHECK(harness.key(KeyCode::Right) == EventResult::Handled);
+    CHECK(chosen == std::vector<ui::Key>{ui::Key{std::int64_t{2}}});
+    CHECK(select->probeText() == "Flagged 2");
+    CHECK(harness.key(KeyCode::Right) == EventResult::Handled);
+    CHECK(chosen.size() == 1);
+    CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
+    static_cast<void>(harness.draw());
+    static_cast<void>(harness.click({.x = 2, .y = 0}));
+    CHECK(chosen.back() == ui::Key{std::int64_t{1}});
 }

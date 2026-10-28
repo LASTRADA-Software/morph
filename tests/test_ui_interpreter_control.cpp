@@ -909,3 +909,22 @@ TEST_CASE("interpreter control: a text input's unit is bound, and a computed mul
               return refusal.reason == "a multiline input shows no icon";
           }) == 1);
 }
+
+// Mutation: take a computed style of no known name as radio (the select records `style=Radio`).
+TEST_CASE("interpreter control: a computed select style naming none is reported once and drawn as a dropdown",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "style", "state": {"style": {"init": "radios"}},
+      "view": {"kind": "column", "children": [
+        {"kind": "select", "testId": "odd", "label": "Show", "style": {"ref": "style"}, "options": {"list": []}},
+        {"kind": "select", "testId": "seg", "label": "Show", "style": "segmented", "options": {"list": []}},
+        {"kind": "badge", "testId": "stat", "text": "STAT", "style": "outline"},
+        {"kind": "button", "testId": "reject", "label": "Reject", "emphasis": "dangerOutline"}]}})");
+    CHECK(h.backend.prop(h.byTestId("Select", "odd"), "style") == "Dropdown");
+    CHECK(h.backend.prop(h.byTestId("Select", "seg"), "style") == "Segmented");
+    CHECK(h.backend.prop(h.byTestId("Badge", "stat"), "style") == "Outline");
+    CHECK(h.backend.prop(h.byTestId("Button", "reject"), "emphasis") == "DangerOutline");
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.reason.contains("a select's style is dropdown, radio or segmented");
+          }) == 1);
+}

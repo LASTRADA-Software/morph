@@ -3,8 +3,9 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 
-// A short label in a tone, with an optional icon. A removable badge draws a remove button after its text, which
-// takes the focus; a click on it, or Delete, Backspace, Enter or Space while it has the focus, removes the badge.
+// A short label in a tone, with an optional icon: filled in the tone, or outlined on the surface. A removable badge
+// draws a remove button after its text, which takes the focus; a click on it, or Delete, Backspace, Enter or Space
+// while it has the focus, removes the badge.
 MorphWidget {
     id: root
 
@@ -13,6 +14,8 @@ MorphWidget {
     property int tone: 0
     property string text: ""
     property string icon: ""
+    // Outlined: the surface's fill, with the tone's colour as border and text; set once.
+    property bool outline: false
     // Whether the badge has a remove button, and the button's accessible name; set by C++ before the first frame.
     property bool removable: false
     property string removeLabel: ""
@@ -35,8 +38,8 @@ MorphWidget {
         objectName: "fill"
         anchors.fill: parent
         radius: height / 2
-        color: root.toneBgOf(root.tone)
-        border.color: root.toneBorderOf(root.tone)
+        color: root.outline ? root.scheme.surface : root.toneBgOf(root.tone)
+        border.color: root.outline ? root.toneOf(root.tone) : root.toneBorderOf(root.tone)
     }
 
     Row {

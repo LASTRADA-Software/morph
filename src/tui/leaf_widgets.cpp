@@ -180,14 +180,15 @@ std::string ButtonImpl::caption() const {
 }
 
 void ButtonImpl::paint(::core::tui::Canvas& canvas) {
-    // Primary is bold, danger bold in the error colour; ghost falls back to Normal's plain style; neither changes a
-    // disabled button's look.
+    // Primary is bold, danger bold in the error colour, danger outlined in the error colour and not bold, which
+    // keeps it apart from both; ghost falls back to Normal's plain style; none changes a disabled button's look.
     ::core::tui::Style style = buttonStyle(canvas.theme(), actionable(), hasFocus());
-    if (actionable() && _emphasis != ui::ButtonEmphasis::Normal && _emphasis != ui::ButtonEmphasis::Ghost) {
+    if (actionable() && (_emphasis == ui::ButtonEmphasis::Primary || _emphasis == ui::ButtonEmphasis::Danger)) {
         style.bold = true;
-        if (_emphasis == ui::ButtonEmphasis::Danger) {
-            style.fg = canvas.theme().error.fg;
-        }
+    }
+    if (actionable() &&
+        (_emphasis == ui::ButtonEmphasis::Danger || _emphasis == ui::ButtonEmphasis::DangerOutline)) {
+        style.fg = canvas.theme().error.fg;
     }
     if (_style == ui::ButtonStyle::Item) {
         // An item is a line of a list: unbracketed and padded to its slot, so the selected and the focused one read as
