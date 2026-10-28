@@ -176,7 +176,7 @@ MorphWidget {
         target: backgroundLoader.item
         property: "heading"
         value: root.heading
-        when: backgroundLoader.item !== null && backgroundLoader.item.heading !== undefined
+        when: backgroundLoader.item !== null && ("heading" in backgroundLoader.item)
     }
     Binding {
         target: backgroundLoader.item
