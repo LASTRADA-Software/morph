@@ -11,6 +11,7 @@
 #include <initializer_list>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -250,14 +251,23 @@ inline constexpr double kPixelsPerRem = 16.0;
     return static_cast<std::uint8_t>(std::lround(value * 255.0));
 }
 
+/// @brief The member name that holds a group's own token.
+inline constexpr std::string_view kRootMember = "$root";
+
 /// @brief Whether a string is an alias, `{a.b}`.
 /// @param text The text.
-/// @return The path it names, or nothing.
+/// @return The path it names, or nothing. A trailing `.$root` is dropped: `{color.ok.$root}` names `color.ok`, the
+///         group's own token.
 [[nodiscard]] inline std::optional<std::string_view> aliasOf(std::string_view text) {
     if (text.size() < 3 || !text.starts_with('{') || !text.ends_with('}')) {
         return std::nullopt;
     }
-    return text.substr(1, text.size() - 2);
+    std::string_view path = text.substr(1, text.size() - 2);
+    constexpr std::string_view suffix = ".$root";
+    if (path.size() > suffix.size() && path.ends_with(suffix)) {
+        path.remove_suffix(suffix.size());
+    }
+    return path;
 }
 
 /// @brief Whether a value holds an alias anywhere.
@@ -494,6 +504,13 @@ inline std::optional<std::string> checkTokenValue(std::string_view type, Json co
 /// @return Why the file is refused, or nothing.
 [[nodiscard]] inline std::optional<std::string> readToken(std::string const& path, Json::object_t const& object,
                                                           Json const& value, std::string const& type, TokenSet& out) {
+    for (auto const& [name, member] : object) {
+        static_cast<void>(member);
+        if (!name.starts_with('$')) {
+            return joined({"the token `", path, "` holds `", name, "`: a token holds no tokens; write `", path,
+                           "` as a group whose `$root` is the token"});
+        }
+    }
     auto tokenType = declaredType(object, path + ".", type);
     if (!tokenType) {
         return std::move(tokenType.error());
@@ -507,6 +524,8 @@ inline std::optional<std::string> checkTokenValue(std::string_view type, Json co
         return joined({"the token `", path, "` has no `$type`"});
     }
     if (std::ranges::find(kKnownTokenTypes, *tokenType) == kKnownTokenTypes.end()) {
+        // Kept unchecked with its type, so the report of tokens nothing reads can name it.
+        out.insert_or_assign(path, Token{.type = std::move(*tokenType), .value = value});
         return std::nullopt;
     }
     if (!alias) {
@@ -532,6 +551,26 @@ inline std::optional<std::string> checkTokenValue(std::string_view type, Json co
     return std::nullopt;
 }
 
+/// @brief Reads a group's `$root` token: the token at the group's own path.
+/// @param member    The `$root` member.
+/// @param prefix    The group's path, with a trailing `.`; empty at the top, where there is no path to name.
+/// @param inherited The group's `$type`.
+/// @param out       Where the token goes.
+/// @return Why the file is refused, or nothing.
+[[nodiscard]] inline std::optional<std::string> readRoot(Json const& member, std::string const& prefix,
+                                                         std::string const& inherited, TokenSet& out) {
+    if (prefix.empty()) {
+        return std::string{"`$root` names a group's own token, and the top of a file is no group"};
+    }
+    std::string const path = prefix.substr(0, prefix.size() - 1);
+    auto const* const object = std::get_if<Json::object_t>(&member.data);
+    Json const* const value = object != nullptr ? memberOf(*object, "$value") : nullptr;
+    if (value == nullptr) {
+        return joined({"`", prefix, "$root` is a token, an object with a `$value`"});
+    }
+    return readToken(path, *object, *value, inherited, out);
+}
+
 /// @brief Reads the tokens of one group into @p out.
 /// @param group     The group's members.
 /// @param prefix    The group's path, with a trailing `.`; empty at the top.
@@ -551,6 +590,12 @@ inline std::optional<std::string> checkTokenValue(std::string_view type, Json co
         return joined({"`", prefix, "$extends`: group inheritance is not supported"});
     }
     for (auto const& [name, member] : group) {
+        if (name == kRootMember) {
+            if (auto reason = readRoot(member, prefix, *type, out)) {
+                return reason;
+            }
+            continue;
+        }
         if (name.starts_with('$')) {
             continue;
         }
@@ -753,8 +798,10 @@ private:
 /// Groups nest; a token is an object with `$value`, and its `$type` is its own or the nearest group's. Refused: text
 /// that is not a JSON object or nests deeper than `kMaxJsonDepth`, a must-understand (`!`) name, a name with `.`, `{`
 /// or `}`, a member that is not an object, a token with no type that is not a plain alias, a value that does not
-/// have its checked type's shape, `$extends`, and more than `kMaxThemeTokens` tokens. A token of a `$type` the client
-/// does not know is dropped.
+/// have its checked type's shape, `$extends`, and more than `kMaxThemeTokens` tokens, and a token that holds members
+/// of its own: write it as a group whose `$root` member is the token. A group's `$root` is the token at the group's
+/// own path, and an alias may name it either as `{a.b}` or as `{a.b.$root}`. A token of a `$type` the client does not
+/// know is kept unchecked with its type, which `unreadThemeTokens` names.
 /// @param text The file.
 /// @return The tokens by path, aliases unresolved, or why the file is refused.
 [[nodiscard]] inline std::expected<TokenSet, std::string> parseTokens(std::string_view text) {
@@ -1025,13 +1072,13 @@ inline constexpr std::array<ThemeTokenSpec, 46> kThemeTokens = {{
     {.path = "radius.card", .kind = ThemeTokenKind::Dimension, .color = "", .number = 10.0},
     {.path = "control.height", .kind = ThemeTokenKind::Dimension, .color = "", .number = 32.0},
     // The least height of a control while the window is compact: the common minimum touch target. A sibling of
-    // `control.height`, not a child: a token's object is never read for tokens inside it.
+    // `control.height`: the set keeps one spelling per path.
     {.path = "control.touchHeight", .kind = ThemeTokenKind::Dimension, .color = "", .number = 44.0},
     {.path = "font.size.body", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.size.heading", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.family", .kind = ThemeTokenKind::FontFamily, .color = "", .number = 0.0},
     // The fixed-pitch family of the `mono` text role; none draws in the platform's fixed-pitch font. A sibling of
-    // `font.family`, not a child: a token's object is never read for tokens inside it.
+    // `font.family`: the set keeps one spelling per path.
     {.path = "font.mono", .kind = ThemeTokenKind::FontFamily, .color = "", .number = 0.0},
     {.path = "elevation.card",
      .kind = ThemeTokenKind::Shadow,
@@ -1202,6 +1249,134 @@ namespace detail {
         }
     }
     return values;
+}
+
+namespace detail {
+
+/// @brief The `$type`s the set's kinds are read as.
+inline constexpr std::array<std::string_view, 5> kReadTokenTypes = {"color", "number", "dimension", "shadow",
+                                                                    "fontFamily"};
+
+/// @brief Calls @p reach with the path of every alias inside a value.
+/// @param value The value.
+/// @param reach The callback.
+// NOLINTNEXTLINE(misc-no-recursion): a composite value is walked member by member, bounded by kMaxJsonDepth.
+inline void forEachAlias(Json const& value, std::function<void(std::string_view)> const& reach) {
+    if (auto const* const text = std::get_if<std::string>(&value.data)) {
+        if (auto const target = aliasOf(*text)) {
+            reach(*target);
+        }
+    } else if (auto const* const array = std::get_if<Json::array_t>(&value.data)) {
+        for (Json const& item : *array) {
+            forEachAlias(item, reach);
+        }
+    } else if (auto const* const object = std::get_if<Json::object_t>(&value.data)) {
+        for (auto const& [name, member] : *object) {
+            static_cast<void>(name);
+            forEachAlias(member, reach);
+        }
+    }
+}
+
+}  // namespace detail
+
+/// @brief A token of a theme's files that nothing reads.
+struct UnreadThemeToken {
+    /// @brief The id of the first file that has it.
+    std::string file;
+    /// @brief The token's path.
+    std::string path;
+    /// @brief Its `$type` when ui-theme/1 reads no token of that type; empty when it reads the type and the path is
+    ///        merely not in the set.
+    std::string unreadType;
+
+    /// @brief What the report says about it.
+    /// @return The sentence, starting with the file.
+    [[nodiscard]] std::string message() const {
+        if (unreadType.empty()) {
+            return file + ": the token `" + path +
+                   "` is not a ui-theme/1 token and no token of the set refers to it, so nothing draws it";
+        }
+        return file + ": the token `" + path + "` is of type " + unreadType + ", which ui-theme/1 does not read";
+    }
+};
+
+/// @brief The tokens of a theme's files that nothing reads: neither a path of `kThemeTokens` nor reachable from one
+///        through aliases, a plain alias or one inside a composite value, followed transitively.
+///
+/// Every file the index names is walked, and a path is followed through every file that has it, so a palette token
+/// that any combination's set token refers to is read. A path is reported once, with the first file that has it.
+/// @param index The theme index.
+/// @param files The bundle's token files.
+/// @return The unread tokens, in file order, then by path.
+[[nodiscard]] inline std::vector<UnreadThemeToken> unreadThemeTokens(ThemeIndex const& index,
+                                                                     TokenFileLookup const& files) {
+    std::vector<std::string> ids{index.base};
+    for (auto const* const named : {&index.variants, &index.densities, &index.surfaces}) {
+        for (auto const& [name, fileId] : *named) {
+            static_cast<void>(name);
+            if (std::ranges::find(ids, fileId) == ids.end()) {
+                ids.push_back(fileId);
+            }
+        }
+    }
+    std::map<std::string, std::vector<Token const*>, std::less<>> defined;
+    for (std::string const& id : ids) {
+        if (TokenSet const* const set = files(id)) {
+            for (auto const& [path, token] : *set) {
+                defined[path].push_back(&token);
+            }
+        }
+    }
+    std::set<std::string, std::less<>> read;
+    std::vector<std::string> pending;
+    auto const reach = [&read, &pending](std::string_view path) {
+        if (read.emplace(path).second) {
+            pending.emplace_back(path);
+        }
+    };
+    for (ThemeTokenSpec const& spec : kThemeTokens) {
+        reach(spec.path);
+    }
+    while (!pending.empty()) {
+        std::string const path = std::move(pending.back());
+        pending.pop_back();
+        if (auto const found = defined.find(path); found != defined.end()) {
+            for (Token const* const token : found->second) {
+                detail::forEachAlias(token->value, reach);
+            }
+        }
+    }
+    std::vector<UnreadThemeToken> unread;
+    std::set<std::string, std::less<>> reported;
+    for (std::string const& id : ids) {
+        TokenSet const* const set = files(id);
+        if (set == nullptr) {
+            continue;
+        }
+        for (auto const& [path, token] : *set) {
+            if (read.contains(path) || !reported.insert(path).second) {
+                continue;
+            }
+            bool const readType = token.type.empty() || std::ranges::find(detail::kReadTokenTypes, token.type) !=
+                                                            detail::kReadTokenTypes.end();
+            unread.push_back(
+                UnreadThemeToken{.file = id, .path = path, .unreadType = readType ? std::string{} : token.type});
+        }
+    }
+    return unread;
+}
+
+/// @brief What is wrong with a theme that does not refuse it: its unread tokens, one sentence each.
+/// @param index The theme index.
+/// @param files The bundle's token files.
+/// @return The sentences, each starting with the token file it concerns; empty for a theme that is all read.
+[[nodiscard]] inline std::vector<std::string> themeProblems(ThemeIndex const& index, TokenFileLookup const& files) {
+    std::vector<std::string> problems;
+    for (UnreadThemeToken const& token : unreadThemeTokens(index, files)) {
+        problems.push_back(token.message());
+    }
+    return problems;
 }
 
 }  // namespace morph::ui

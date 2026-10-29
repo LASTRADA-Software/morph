@@ -311,7 +311,11 @@ std::vector<std::string> applyIndex(QQmlEngine& engine,
         }
         surfaces.insert_or_assign(name, ui::themeValues(*layered));
     }
-    return applyTheme(engine, ui::themeValues(*base), surfaces);
+    std::vector<std::string> problems = applyTheme(engine, ui::themeValues(*base), surfaces);
+    for (std::string const& problem : ui::themeProblems(*index, lookup)) {
+        problems.push_back("theme: " + problem);
+    }
+    return problems;
 }
 
 }  // namespace

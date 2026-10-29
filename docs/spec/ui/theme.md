@@ -7,7 +7,7 @@ token set, and applied to the renderer. This implements the token parts of spec 
 
 | Header | What it holds |
 |---|---|
-| `include/morph/ui/theme.hpp` | `parseTokens`, `resolveTokens`, `parseThemeIndex`, `resolveTheme`, `checkTheme`, `colorOf`, `kThemeTokens`, `themeValues` |
+| `include/morph/ui/theme.hpp` | `parseTokens`, `resolveTokens`, `parseThemeIndex`, `resolveTheme`, `checkTheme`, `colorOf`, `kThemeTokens`, `themeValues`, `unreadThemeTokens`, `themeProblems` |
 | `include/morph/ui/service.hpp` | `UiRegistry` checks themes at `addFile` and `build` |
 | `include/morph/qt_quick/theme.hpp` | `qt_quick::applyTheme` |
 
@@ -17,6 +17,7 @@ token set, and applied to the renderer. This implements the token parts of spec 
 - [Aliases and layering](#aliases-and-layering)
 - [The theme index](#the-theme-index)
 - [At registration](#at-registration)
+- [What the client reads](#what-the-client-reads)
 - [The closed set](#the-closed-set)
 - [On Qt Quick](#on-qt-quick)
 - [Design decisions](#design-decisions)
@@ -27,6 +28,20 @@ token set, and applied to the renderer. This implements the token parts of spec 
 A token file is a JSON object of groups and tokens. A **token** is an object with `$value`; a **group** is any other
 object, and groups nest. A token's `$type` is its own or the nearest enclosing group's. `$description`,
 `$extensions`, `$deprecated` and other `$` keys are ignored.
+
+A token holds no tokens, as DTCG requires: an object with `$value` and a member that does not start with `$` is
+refused, naming the token and the member. A name cannot be a token and a group at once in nested JSON, so a token
+that has parts is written as a group whose **`$root`** member is the token. `$root` is the token at the group's own
+path, so `color.ok.$root` is `color.ok`:
+
+```json
+{ "color": { "$type": "color",
+             "ok": { "$root": { "$value": "#17602F" }, "bg": { "$value": "#E2F4E8" } } } }
+```
+
+gives `color.ok` and `color.ok.bg`, and a file that writes `"ok": { "$value": "#17602F" }` gives the same `color.ok`.
+An alias names either spelling: `{color.ok.$root}` is read as `{color.ok}`. Across layers the later file wins, as for
+any path. `$root` at the top of a file is refused, since there is no group path to name.
 
 ```json
 { "color": { "$type": "color",
@@ -48,10 +63,12 @@ object, and groups nest. A token's `$type` is its own or the nearest enclosing g
 | `shadow` | `{"color", "offsetX", "offsetY", "blur", "spread"}` with a colour and four dimensions, or a non-empty list of them |
 | `typography`, `border`, `strokeStyle`, `gradient`, `transition`, `cubicBezier` | accepted unchecked |
 
-A token of another `$type` is dropped, as spec 6 §6 says. Refused: text that is not a JSON object or nests deeper
+A token of another `$type` stays in the parsed set with its type and no value check; `themeValues` ignores a path
+whose type is not the set's, and the report in [What the client reads](#what-the-client-reads) names it. Refused: text that is not a JSON object or nests deeper
 than `kMaxJsonDepth`, a must-understand (`!`) name, a name with `.`, `{` or `}`, a member that is not an object, a
 token with no type that is not a plain alias, a value that does not have its type's shape, `$extends`, and more than
-16384 tokens. A colour in another colour space with no `hex` is refused rather than converted.
+16384 tokens, and a token that holds members. A colour in another colour space with no `hex` is refused rather than
+converted.
 
 ## Aliases and layering
 
@@ -89,6 +106,20 @@ and refuses one that does not parse. `build` checks each index with `checkTheme`
 none), a density (or none) and a surface (or none) over `base` must resolve from the bundle's token files, so a
 cycle, a missing reference, or a file the index names that the bundle lacks refuses the bundle, naming the index and
 the combination (`base + dark + density compact: …`). At most 17³ combinations are resolved.
+
+## What the client reads
+
+The closed set below is all that draws. A token file may hold more: a design tool's export carries tokens for other
+platforms, and a palette that the set's tokens alias. `unreadThemeTokens(index, files)` names, over every file the
+index lists, each token that is neither a path of the set nor reachable from one through aliases (a plain alias, or one
+inside a composite value, followed transitively through every file that has the path), and each token of a `$type`
+ui-theme/1 reads no token of. A palette token that a set token aliases is read; `color.sucess` is not. A path is
+reported once, with the first file that has it.
+
+The report is not a refusal: the application still starts. `UiRegistry::build` logs each at warn
+(`[ui-serve] theme <index>: <file>: the token <path> is not a ui-theme/1 token and no token of the set refers to it,
+so nothing draws it`, or `… is of type <t>, which ui-theme/1 does not read`), and `applyBundleTheme` returns them among
+its problems, which the Qt Quick frontend logs. `themeProblems` gives both channels the same sentences.
 
 ## Surfaces
 
@@ -128,10 +159,10 @@ built in nor in the theme draws nothing and changes no colour.
 | `space.0` … `space.5`, defaults 0, 4, 8, 12, 16, 24 | dimension, in px |
 | `color.background` (`#f2f3f7`) | colour |
 | `radius.control` (6), `radius.card` (10), `control.height` (32) | dimension, in px |
-| `control.touchHeight` (44, the common minimum touch target): a sibling of `control.height`, since a token's object is never read for tokens inside it | dimension, in px |
+| `control.touchHeight` (44, the common minimum touch target): a sibling of `control.height` | dimension, in px |
 | `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3) | dimension, in px |
 | `font.family` (none: the platform font) | font family: a name, or a list of names in order of preference |
-| `font.mono` (none: the platform's fixed-pitch font), the family of the `mono` text role: a sibling of `font.family`, since a token's object is never read for tokens inside it, so a `font.family.mono` beside a `font.family` would never be read | font family, as `font.family` |
+| `font.mono` (none: the platform's fixed-pitch font), the family of the `mono` text role: a sibling of `font.family`, as the set keeps one spelling per path | font family, as `font.family` |
 | `elevation.card` (`#00000014`, offsets 0 and 2, blur 10, spread 0) | shadow; of a list of layers, the first |
 
 `themeValues(resolved)` gives every path of the set the theme's value when the theme has it with the set's type, and

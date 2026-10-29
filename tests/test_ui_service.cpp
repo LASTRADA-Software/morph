@@ -554,3 +554,26 @@ TEST_CASE("isUiServiceRead admits the login screen before sign-in, and no other 
         ask(service, authorizer, request("ui-fetch", "", fetchBody(hashOf("screen", "lims.results"))));
     CHECK(results.message == "unauthorized");
 }
+
+TEST_CASE("UiRegistry: a theme token nothing reads is logged once at build and does not refuse it",
+          "[ui][ui-service][theme]") {
+    UiRegistry registry = emptyRegistry();
+    auto const theme = [](std::string id, std::string bytes) {
+        return morph::ui::BundleFile{
+            .kind = "theme", .id = std::move(id), .bytes = std::move(bytes), .isPublic = true};
+    };
+    REQUIRE(registry.addFile(theme("theme", R"({"vocab": "ui-theme/1", "base": "theme/base.tokens.json"})")));
+    REQUIRE(registry.addFile(
+        theme("theme/base.tokens.json",
+              R"({"color": {"$type": "color", "accent": {"$value": "#17784A"}, "sucess": {"$value": "#00ff00"}}})")));
+    std::vector<std::string> lines;
+    morph::log::ScopedLoggerOverride const logs{
+        [&lines](morph::log::LogLevel, std::string_view message) { lines.emplace_back(message); },
+        morph::log::LogLevel::warn};
+    REQUIRE(registry.build());
+    auto const warnings = std::ranges::count_if(lines, [](std::string const& line) {
+        return line.contains("theme theme: theme/base.tokens.json: the token `color.sucess`");
+    });
+    CHECK(warnings == 1);
+    CHECK(lines.size() == 1);
+}

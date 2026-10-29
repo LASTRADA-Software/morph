@@ -331,6 +331,33 @@ TEST_CASE("qt_quick theme: a bundle's theme index applies its base and its surfa
     CHECK(theme->property("accent").value<QColor>() == QColor{"#1565c0"});
 }
 
+// Mutation: skip `$root` in the token reader (warnBg keeps its default, and the tone's text colour goes with it).
+TEST_CASE("qt_quick theme: a bundle writes a tone with its parts as a group with a $root, and they load",
+          "[qt_quick]") {
+    Scene scene;
+    std::map<std::string, std::string, std::less<>> const themes{
+        {"theme/index.json", R"({"vocab": "ui-theme/1", "base": "theme/base.json"})"},
+        {"theme/base.json", R"({"color": {"$type": "color",
+            "warn": {"$root": {"$value": "#7A4A00"}, "bg": {"$value": "#FFF1D6"}, "border": {"$value": "#F1D49A"}}}})"}};
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), themes).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("warn").value<QColor>() == QColor{"#7A4A00"});
+    CHECK(theme->property("warnBg").value<QColor>() == QColor{"#FFF1D6"});
+    CHECK(theme->property("warnBorder").value<QColor>() == QColor{"#F1D49A"});
+}
+
+TEST_CASE("qt_quick theme: a bundle's token that nothing reads is reported with its file", "[qt_quick]") {
+    Scene scene;
+    std::map<std::string, std::string, std::less<>> const themes{
+        {"theme/index.json", R"({"vocab": "ui-theme/1", "base": "theme/base.json"})"},
+        {"theme/base.json",
+         R"({"color": {"$type": "color", "accent": {"$value": "#aa0055"}, "sucess": {"$value": "#00ff00"}}})"}};
+    auto const problems = morph::qt_quick::applyBundleTheme(scene.engine(), themes);
+    REQUIRE(problems.size() == 1);
+    CHECK(problems.front().contains("theme/base.json: the token `color.sucess`"));
+}
+
 // Mutation: write the scheme only at adoption (the text keeps the theme's colour).
 TEST_CASE("qt_quick theme: a surface set after its children exist still colours them", "[qt_quick]") {
     Scene scene;
