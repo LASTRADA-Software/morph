@@ -87,7 +87,7 @@ TEST_CASE("e-signature, compact: the same dialog as a sheet, signed from its foo
     screen.requireNoProblems();
 }
 
-TEST_CASE("e-signature, compact: Cancel closes the sheet, and Sign… opens it again", "[lims-gallery]") {
+TEST_CASE("e-signature, compact: Cancel closes the sheet, and the sign button opens it again", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "compact"};
     // The sheet's Cancel dismisses it, as Escape does.
     screen.backend().dismiss(screen.find("Dialog", "signature").value_or(0));
