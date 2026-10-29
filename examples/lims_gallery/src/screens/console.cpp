@@ -456,7 +456,7 @@ ui::Node kpis(bool compact) {
     for (Kpi const& kpi : kKpis) {
         char const* const note = compact ? kpi.compactNote : kpi.note;
         std::vector<ui::Node> lines{layout::muted(kpi.label),
-                                    ui::text({.text = kpi.value, .role = kpi.alarming ? "error" : "heading"})
+                                    ui::text({.text = kpi.value, .role = kpi.alarming ? "error" : "display"})
                                         .testId(std::string{"kpi-"} + kpi.key)};
         if (std::string_view{note}.empty()) {
             lines.push_back(ui::spacer());
