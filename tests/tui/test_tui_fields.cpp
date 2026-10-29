@@ -1004,7 +1004,8 @@ TEST_CASE("tui fields: a captioned required input draws its mark after the capti
     Rows const rows = harness.draw();
     REQUIRE_FALSE(rows.empty());
     CHECK(rows.at(0) == "Meaning *");
-    CHECK(std::ranges::none_of(rows.begin() + 1, rows.end(), [](std::string const& row) { return row.contains('*'); }));
+    CHECK(
+        std::ranges::none_of(rows.begin() + 1, rows.end(), [](std::string const& row) { return row.contains('*'); }));
     CHECK(harness.screen().renderedBuffer().at(0, 8).style.fg == harness.screen().theme().error.fg);
     // Without a caption the mark stays at the control's right edge.
     input->setCaption("", false);
@@ -1014,9 +1015,10 @@ TEST_CASE("tui fields: a captioned required input draws its mark after the capti
 }
 
 // Mutation: leave the tone out of the control's marks (the control row then ends in no `!`).
-TEST_CASE("tui fields: a description takes the row under the control, in the tone's style, and a toned err field "
-          "is marked",
-          "[tui][fields]") {
+TEST_CASE(
+    "tui fields: a description takes the row under the control, in the tone's style, and a toned err field "
+    "is marked",
+    "[tui][fields]") {
     Harness harness{30, 2};
     auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
     input->setText("0.31");

@@ -748,7 +748,9 @@ private:
         bool choose(std::string_view entryId) override {
             return _state->screen != nullptr && _state->screen->chooseMenuEntry(entryId);
         }
-        [[nodiscard]] reactive::Computed<std::vector<HeadTool>> const* tools() const override { return &_state->tools; }
+        [[nodiscard]] reactive::Computed<std::vector<HeadTool>> const* tools() const override {
+            return &_state->tools;
+        }
         bool edit(std::string_view toolId, Value const& value) override {
             return _state->screen != nullptr && _state->screen->editTool(toolId, value);
         }

@@ -316,7 +316,8 @@ ChartImpl::ChartImpl(Context& context, ui::ContainerWidget* parent)
 void ChartImpl::setData(ui::ChartData const& data) {
     QVariantList ticks;
     for (ui::ChartTick const& tick : data.yTicks) {
-        ticks.append(QVariantMap{{QStringLiteral("value"), tick.value}, {QStringLiteral("text"), toQString(tick.text)}});
+        ticks.append(
+            QVariantMap{{QStringLiteral("value"), tick.value}, {QStringLiteral("text"), toQString(tick.text)}});
     }
     QVariantList lines;
     for (ui::ChartLine const& line : data.lines) {
@@ -363,11 +364,10 @@ void KeyValueImpl::setItems(std::vector<ui::KeyValueItem> const& items) {
     QStringList const monoFamilies = monoFamiliesOf(context());
     for (ui::KeyValueItem const& item : items) {
         bool const runs = !item.spans.empty();
-        list.append(
-            QVariantMap{{QStringLiteral("label"), toQString(item.label)},
-                        {QStringLiteral("value"), toQString(runs ? ui::spansText(item.spans) : item.value)},
-                        {QStringLiteral("richText"), runs ? richTextOf(item.spans, monoFamilies) : QString{}},
-                        {QStringLiteral("tone"), static_cast<int>(item.tone)}});
+        list.append(QVariantMap{{QStringLiteral("label"), toQString(item.label)},
+                                {QStringLiteral("value"), toQString(runs ? ui::spansText(item.spans) : item.value)},
+                                {QStringLiteral("richText"), runs ? richTextOf(item.spans, monoFamilies) : QString{}},
+                                {QStringLiteral("tone"), static_cast<int>(item.tone)}});
     }
     write("items", list);
 }

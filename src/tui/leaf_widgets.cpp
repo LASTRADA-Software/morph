@@ -220,8 +220,7 @@ void ButtonImpl::paint(::core::tui::Canvas& canvas) {
     if (actionable() && (_emphasis == ui::ButtonEmphasis::Primary || _emphasis == ui::ButtonEmphasis::Danger)) {
         style.bold = true;
     }
-    if (actionable() &&
-        (_emphasis == ui::ButtonEmphasis::Danger || _emphasis == ui::ButtonEmphasis::DangerOutline)) {
+    if (actionable() && (_emphasis == ui::ButtonEmphasis::Danger || _emphasis == ui::ButtonEmphasis::DangerOutline)) {
         style.fg = canvas.theme().error.fg;
     }
     if (_style == ui::ButtonStyle::Item) {

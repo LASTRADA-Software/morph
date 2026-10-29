@@ -80,9 +80,9 @@ QString richTextOf(std::vector<ui::TextSpan> const& spans, QStringList const& mo
         family.replace(QLatin1Char('\\'), QStringLiteral("\\\\")).replace(QLatin1Char('\''), QStringLiteral("\\'"));
         quoted.append(QLatin1Char('\'') + family + QLatin1Char('\''));
     }
-    QString const monoOpen = QStringLiteral("<span style=\"font-family:%1\">")
-                                 .arg((quoted.isEmpty() ? QStringLiteral("monospace") : quoted.join(QLatin1Char(',')))
-                                          .toHtmlEscaped());
+    QString const monoOpen =
+        QStringLiteral("<span style=\"font-family:%1\">")
+            .arg((quoted.isEmpty() ? QStringLiteral("monospace") : quoted.join(QLatin1Char(','))).toHtmlEscaped());
     QString html = QStringLiteral("<span style=\"white-space:pre-wrap\">");
     for (ui::TextSpan const& span : spans) {
         QString run = toQString(span.text).toHtmlEscaped();

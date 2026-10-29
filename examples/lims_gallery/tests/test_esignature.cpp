@@ -43,7 +43,8 @@ TEST_CASE("e-signature, expanded: a wrong password costs an attempt, the right o
     GalleryScreen screen{kScreen, "expanded"};
     screen.choose("meaning", "reviewed");
     CHECK(screen.waitFor([&screen] {
-        return screen.prop("Text", "signing-at", "spans") == "[Signing at 24-Oct-2026 09:40 CEST as ,Reviewed;strong,.]";
+        return screen.prop("Text", "signing-at", "spans") ==
+               "[Signing at 24-Oct-2026 09:40 CEST as ,Reviewed;strong,.]";
     }));
 
     // The field holds the refused attempt; signing it again costs another.

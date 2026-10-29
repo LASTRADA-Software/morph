@@ -444,9 +444,10 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 /// @brief One field's cell: the label, the control (an override's, else the built-in) and the help text; shown while
 ///        the field is visible. A built-in control draws the help as its description, so it is tied to the control
 ///        on every kit; a control an override draws, an Object's panel and an ObjectArray's rows are not one control
-///        that reads the field state, so the cell draws their help as a muted text. The control marks a required field, so the label carries no mark of its own. The
-///        options' `fieldLayout` puts the label over the control, or beside it (`inlineCell`); an Object's panel and
-///        an ObjectArray's rows are stacked either way, and their members follow the form's layout.
+///        that reads the field state, so the cell draws their help as a muted text. The control marks a required
+///        field, so the label carries no mark of its own. The options' `fieldLayout` puts the label over the control,
+///        or beside it (`inlineCell`); an Object's panel and an ObjectArray's rows are stacked either way, and their
+///        members follow the form's layout.
 /// @param session The session.
 /// @param state   The field.
 /// @param options The view options.

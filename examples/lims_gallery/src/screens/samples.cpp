@@ -48,8 +48,9 @@ struct Sample {
 };
 
 // Every field of a sample record; a bulk action rebuilds a record from them with one field changed.
-constexpr std::array<char const*, 13> kFields{"id",      "product", "short", "lot",  "tests",   "priority", "status",
-                                              "statusTone", "due",  "dueAt", "overdue", "spec", "specTone"};
+constexpr std::array<char const*, 13> kFields{"id",       "product", "short",      "lot", "tests",
+                                              "priority", "status",  "statusTone", "due", "dueAt",
+                                              "overdue",  "spec",    "specTone"};
 
 // When a sample is due, as text that sorts by time: the design's "24-Oct 10:30" is 2026-10-24T10:30, and an overdue
 // sample was due before the first of them.
@@ -83,19 +84,20 @@ std::vector<Value> routineSamples() {
     for (int index = 0; index < kRoutine; ++index) {
         std::string const day = std::to_string(29 + (index / 10));
         std::string const hour = std::to_string(10 + (index % 10));
-        routine.push_back(Value{ValueRecord{{"id", Value{"S-26-1042" + std::to_string(40 + index)}},
-                                            {"product", Value{"Purified water · loop " + std::to_string((index % 4) + 1)}},
-                                            {"short", Value{"Purified water"}},
-                                            {"lot", Value{""}},
-                                            {"tests", Value{"TOC, conductivity"}},
-                                            {"priority", Value{"Routine"}},
-                                            {"status", Value{"Registered"}},
-                                            {"statusTone", Value{"neutral"}},
-                                            {"due", Value{day + "-Oct " + hour + ":00"}},
-                                            {"dueAt", Value{"2026-10-" + day + "T" + hour + ":00"}},
-                                            {"overdue", Value{false}},
-                                            {"spec", Value{""}},
-                                            {"specTone", Value{""}}}});
+        routine.push_back(
+            Value{ValueRecord{{"id", Value{"S-26-1042" + std::to_string(40 + index)}},
+                              {"product", Value{"Purified water · loop " + std::to_string((index % 4) + 1)}},
+                              {"short", Value{"Purified water"}},
+                              {"lot", Value{""}},
+                              {"tests", Value{"TOC, conductivity"}},
+                              {"priority", Value{"Routine"}},
+                              {"status", Value{"Registered"}},
+                              {"statusTone", Value{"neutral"}},
+                              {"due", Value{day + "-Oct " + hour + ":00"}},
+                              {"dueAt", Value{"2026-10-" + day + "T" + hour + ":00"}},
+                              {"overdue", Value{false}},
+                              {"spec", Value{""}},
+                              {"specTone", Value{""}}}});
     }
     return routine;
 }
@@ -493,27 +495,28 @@ ui::Node samplesTable(Samples const& list) {
     return ui::table(
                list.shown,
                {.key = ui::row("id"),
-                .columns = {{.name = "id", .label = "Sample", .width = ui::fixed(12), .role = "mono", .sortable = true},
-                            {.name = "product",
-                             .label = "Product · lot",
-                             .width = ui::stretch(),
-                             .cell = ui::text({.text = lotLine})},
-                            {.name = "tests", .label = "Tests", .width = ui::fixed(16)},
-                            {.name = "priority",
-                             .label = "Priority",
-                             .width = ui::fixed(8),
-                             .cell = layout::outlineTag(ui::row("priority"), priorityTone(ui::row("priority")))},
-                            {.name = "status",
-                             .label = "Status",
-                             .width = ui::fixed(12),
-                             .cell = layout::tag(ui::row("status"), ui::row("statusTone"))},
-                            {.name = "due",
-                             .label = "Due",
-                             .width = ui::fixed(13),
-                             .cell = dueText(),
-                             .sortable = true,
-                             .sortBy = ui::row("dueAt")},
-                            {.name = "spec", .label = "Specification", .width = ui::fixed(14), .cell = specCell()}},
+                .columns =
+                    {{.name = "id", .label = "Sample", .width = ui::fixed(12), .role = "mono", .sortable = true},
+                     {.name = "product",
+                      .label = "Product · lot",
+                      .width = ui::stretch(),
+                      .cell = ui::text({.text = lotLine})},
+                     {.name = "tests", .label = "Tests", .width = ui::fixed(16)},
+                     {.name = "priority",
+                      .label = "Priority",
+                      .width = ui::fixed(8),
+                      .cell = layout::outlineTag(ui::row("priority"), priorityTone(ui::row("priority")))},
+                     {.name = "status",
+                      .label = "Status",
+                      .width = ui::fixed(12),
+                      .cell = layout::tag(ui::row("status"), ui::row("statusTone"))},
+                     {.name = "due",
+                      .label = "Due",
+                      .width = ui::fixed(13),
+                      .cell = dueText(),
+                      .sortable = true,
+                      .sortBy = ui::row("dueAt")},
+                     {.name = "spec", .label = "Specification", .width = ui::fixed(14), .cell = specCell()}},
                 // The table draws the selection the cards share: its own boxes, and a header box for the page.
                 .selectionMode = ui::Selection::Multiple,
                 .selection = list.selected,
@@ -535,14 +538,15 @@ ui::Node samplesTable(Samples const& list) {
 
 // The table's pager: where the page is, how many rows a page holds, and the previous and next page.
 ui::Node pageFooter(Samples const& list) {
-    auto const sizes =
-        ui::list({ui::obj({{"key", std::int64_t{25}}, {"label", "25"}}), ui::obj({{"key", std::int64_t{50}}, {"label", "50"}}),
-                  ui::obj({{"key", std::int64_t{100}}, {"label", "100"}})});
+    auto const sizes = ui::list({ui::obj({{"key", std::int64_t{25}}, {"label", "25"}}),
+                                 ui::obj({{"key", std::int64_t{50}}, {"label", "50"}}),
+                                 ui::obj({{"key", std::int64_t{100}}, {"label", "100"}})});
     auto const page = ui::Handle<std::int64_t>{ui::ref("sampleTable.page")};
     auto const pageCount = ui::Handle<std::int64_t>{ui::ref("sampleTable.pageCount")};
     return ui::row(
-               {layout::muted(ui::format("{0}–{1} of {2}", {ui::ref("sampleTable.pageFirst"), ui::ref("sampleTable.pageLast"),
-                                                            ui::ref("sampleTable.viewCount")}))
+               {layout::muted(
+                    ui::format("{0}–{1} of {2}", {ui::ref("sampleTable.pageFirst"), ui::ref("sampleTable.pageLast"),
+                                                  ui::ref("sampleTable.viewCount")}))
                     .sizing(ui::stretch())
                     .testId("range"),
                 ui::select({.options = sizes,
@@ -607,20 +611,19 @@ ui::Node compactFilters(Samples const& list) {
 }
 
 ui::Node compactBulkBar(Samples const& list) {
-    return ui::panel(
-               {ui::row({ui::text({.text = selectedLabel(list, true), .role = "section"})
-                             .sizing(ui::stretch())
-                             .testId("selected"),
-                         ui::button({.label = "Assign to worksheet", .onClick = ui::open(list.assignDialog)})
-                             .testId("assign"),
-                         ui::menuButton({.icon = "more"},
-                                        {{.label = "Change priority…", .onClick = ui::open(list.priorityDialog)},
-                                         {.label = "Print labels", .onClick = printLabels(list)},
-                                         {.label = "Clear selection", .onClick = clearSelection(list)}})
-                             .a11y("More bulk actions")
-                             .testId("more-bulk")},
-                        {.gap = 1, .align = Align::Center})},
-               {.padding = 1})
+    return ui::panel({ui::row({ui::text({.text = selectedLabel(list, true), .role = "section"})
+                                   .sizing(ui::stretch())
+                                   .testId("selected"),
+                               ui::button({.label = "Assign to worksheet", .onClick = ui::open(list.assignDialog)})
+                                   .testId("assign"),
+                               ui::menuButton({.icon = "more"},
+                                              {{.label = "Change priority…", .onClick = ui::open(list.priorityDialog)},
+                                               {.label = "Print labels", .onClick = printLabels(list)},
+                                               {.label = "Clear selection", .onClick = clearSelection(list)}})
+                                   .a11y("More bulk actions")
+                                   .testId("more-bulk")},
+                              {.gap = 1, .align = Align::Center})},
+                     {.padding = 1})
         .surface("selected")
         .a11y("Bulk actions")
         .visible(list.selectedCount > 0)
@@ -635,7 +638,9 @@ ui::AnyHandle sortDirection() { return ui::ref("order.0.direction"); }
 ui::AnyHandle cardOrder(Samples const& list) {
     return ui::sorted(
         list.shown, "entry",
-        [](ui::AnyHandle const& item) { return ui::cond(ui::eq(sortColumn(), "id"), item.at("id"), item.at("dueAt")); },
+        [](ui::AnyHandle const& item) {
+            return ui::cond(ui::eq(sortColumn(), "id"), item.at("id"), item.at("dueAt"));
+        },
         sortDirection());
 }
 
@@ -644,13 +649,13 @@ ui::Node sortChoice(Samples const& list) {
     auto const option = [](char const* column, char const* direction, char const* label) {
         return ui::obj({{"key", std::string{column} + "-" + direction}, {"label", label}});
     };
-    auto const choices = ui::list({option("due", "asc", "Sort: due, earliest first"),
-                                   option("due", "desc", "Sort: due, latest first"),
-                                   option("id", "asc", "Sort: sample, ascending"),
-                                   option("id", "desc", "Sort: sample, descending")});
+    auto const choices =
+        ui::list({option("due", "asc", "Sort: due, earliest first"), option("due", "desc", "Sort: due, latest first"),
+                  option("id", "asc", "Sort: sample, ascending"), option("id", "desc", "Sort: sample, descending")});
     auto const chosen = ui::Handle<std::string>{ui::event()};
-    auto const key = ui::obj({{"column", ui::cond(Flag{ui::call("contains", {chosen, "due"})}, Text{"due"}, Text{"id"})},
-                              {"direction", ui::cond(Flag{ui::call("contains", {chosen, "desc"})}, Text{"desc"}, Text{"asc"})}});
+    auto const key =
+        ui::obj({{"column", ui::cond(Flag{ui::call("contains", {chosen, "due"})}, Text{"due"}, Text{"id"})},
+                 {"direction", ui::cond(Flag{ui::call("contains", {chosen, "desc"})}, Text{"desc"}, Text{"asc"})}});
     return ui::select({.options = choices,
                        .selected = ui::format("{0}-{1}", {sortColumn(), sortDirection()}),
                        .label = "Sort",

@@ -131,19 +131,17 @@ void declareHead(ui::Scope& screen, Instrument const& instrument) {
 
 // The compact overflow menu, after the large buttons: the head's own menu's entries, which compact hides.
 ui::Node moreMenu(Instrument const& instrument) {
-    return ui::menuButton({.icon = "more"},
-                          {{.label = "Record calibration…",
-                            .onClick = {ui::set(instrument.logKind, std::string{"calibration"}),
-                                        ui::open(instrument.logDialog)}},
-                           {.label = "Print equipment label",
-                            .onClick = ui::notify("Printing the equipment label for EQ-0142")},
-                           {.label = "Export history (PDF)",
-                            .onClick = ui::notify("Exporting the history of EQ-0142 as PDF")},
-                           ui::menuSeparator(),
-                           {.label = "Take out of service…",
-                            .enabled = instrument.inService,
-                            .onClick = ui::open(instrument.serviceDialog),
-                            .description = "needs reason"}})
+    return ui::menuButton(
+               {.icon = "more"},
+               {{.label = "Record calibration…",
+                 .onClick = {ui::set(instrument.logKind, std::string{"calibration"}), ui::open(instrument.logDialog)}},
+                {.label = "Print equipment label", .onClick = ui::notify("Printing the equipment label for EQ-0142")},
+                {.label = "Export history (PDF)", .onClick = ui::notify("Exporting the history of EQ-0142 as PDF")},
+                ui::menuSeparator(),
+                {.label = "Take out of service…",
+                 .enabled = instrument.inService,
+                 .onClick = ui::open(instrument.serviceDialog),
+                 .description = "needs reason"}})
         .a11y("More actions")
         .testId("more");
 }
@@ -328,15 +326,14 @@ ui::Node compactDetails() {
     auto const pair = [](char const* label, char const* value) {
         return ui::obj({{"label", label}, {"value", value}});
     };
-    return ui::keyValue(
-               {.items = ui::list({pair("Model", "[Manufacturer] 1290 series"),
-                                   ui::obj({{"label", "Serial number"},
-                                            {"value", "DEAB-902114"},
-                                            {"spans", ui::spans({ui::mono("DEAB-902114")})}}),
-                                   pair("Location", "QC lab 2, bench 4"),
-                                   pair("Owner · Software", "Dr. Anna Meyer · CDS 3.4.1"),
-                                   pair("Methods", "Assay and impurities, dissolution")}),
-                .fieldLayout = morph::forms::FieldLayout::Stacked})
+    return ui::keyValue({.items = ui::list({pair("Model", "[Manufacturer] 1290 series"),
+                                            ui::obj({{"label", "Serial number"},
+                                                     {"value", "DEAB-902114"},
+                                                     {"spans", ui::spans({ui::mono("DEAB-902114")})}}),
+                                            pair("Location", "QC lab 2, bench 4"),
+                                            pair("Owner · Software", "Dr. Anna Meyer · CDS 3.4.1"),
+                                            pair("Methods", "Assay and impurities, dissolution")}),
+                         .fieldLayout = morph::forms::FieldLayout::Stacked})
         .testId("details");
 }
 

@@ -5072,8 +5072,10 @@ inline void ScreenCore::sortedRows(ElementState const& element, Bindings const* 
     std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, sort);
     std::string const sortPath = pointerAppend(node.path, "sort");
     if (!keys) {
-        report(sortPath, "sort is " + canonicalJson(sort) +
-                             R"(; a table's sort is a list of {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
+        report(
+            sortPath,
+            "sort is " + canonicalJson(sort) +
+                R"(; a table's sort is a list of {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
         return;
     }
     if (keys->empty()) {
@@ -6780,8 +6782,8 @@ inline Node ScreenCore::lowerGroup(DocNode const& node, LowerCtx const& ctx, Ele
                   .role = TextRole::Error};
     messages.common.visible = slotProp<bool>([shown] { return !shown().empty(); });
     column.push_back(ui::text(std::move(messages)));
-    Column spec{.children = std::move(column), .gap = static_cast<int>(intOf(
-                                                    node.prop("gap") ? once(ctx, node.prop("gap")) : Value{}, 0))};
+    Column spec{.children = std::move(column),
+                .gap = static_cast<int>(intOf(node.prop("gap") ? once(ctx, node.prop("gap")) : Value{}, 0))};
     commonOf(node, ctx, element, spec.common);
     if (spec.common.a11y.role.empty()) {
         spec.common.a11y.role = "group";
@@ -7017,26 +7019,26 @@ inline std::vector<HeadMenuModel> ScreenCore::lowerHeadMenu(std::span<DocNodePtr
     return models;
 }
 
-inline std::vector<HeadToolModel> ScreenCore::lowerHeadTools(std::span<DocNodePtr const> parts,
-                                                            LowerCtx const& ctx) {
+inline std::vector<HeadToolModel> ScreenCore::lowerHeadTools(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
     static constexpr int kSearchWidth = 30;
     std::vector<HeadToolModel> models;
     models.reserve(parts.size());
     for (DocNodePtr const& part : parts) {
         bool const search = part->name("kind") == "search";
-        HeadToolModel model{.id = part->id,
-                            .path = part->path,
-                            .kind = search ? HeadToolKind::Search : HeadToolKind::Select,
-                            .label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf),
-                            .value = bindProp<std::string>(ctx, part->prop("value"), std::string{}, stringOf),
-                            .placeholder = bindProp<std::string>(ctx, part->prop("placeholder"), std::string{}, stringOf),
-                            .options = {},
-                            .selected = {},
-                            .width = search ? kSearchWidth : 0,
-                            .enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf),
-                            .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
-                            .edit = {},
-                            .submit = {}};
+        HeadToolModel model{
+            .id = part->id,
+            .path = part->path,
+            .kind = search ? HeadToolKind::Search : HeadToolKind::Select,
+            .label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf),
+            .value = bindProp<std::string>(ctx, part->prop("value"), std::string{}, stringOf),
+            .placeholder = bindProp<std::string>(ctx, part->prop("placeholder"), std::string{}, stringOf),
+            .options = {},
+            .selected = {},
+            .width = search ? kSearchWidth : 0,
+            .enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf),
+            .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
+            .edit = {},
+            .submit = {}};
         if (ExprPtr const width = part->prop("width")) {
             if (std::int64_t const* const units = width->literal.asInt()) {
                 model.width = static_cast<int>(*units);
@@ -7047,11 +7049,11 @@ inline std::vector<HeadToolModel> ScreenCore::lowerHeadTools(std::span<DocNodePt
                 [this, scope = ctx.scope, bindings = ctx.bindings, options = part->prop("options")] {
                     return selectOptions(evalIn(*scope, bindings.get(), options), session.formatting());
                 });
-            model.selected = slotProp<std::optional<Key>>(
-                [scope = ctx.scope, bindings = ctx.bindings, selected = part->prop("selected")]() -> std::optional<Key> {
-                    Value const value = selected ? evalIn(*scope, bindings.get(), selected) : Value{};
-                    return value.isNull() ? std::nullopt : std::optional<Key>{keyOf(value)};
-                });
+            model.selected = slotProp<std::optional<Key>>([scope = ctx.scope, bindings = ctx.bindings,
+                                                           selected = part->prop("selected")]() -> std::optional<Key> {
+                Value const value = selected ? evalIn(*scope, bindings.get(), selected) : Value{};
+                return value.isNull() ? std::nullopt : std::optional<Key>{keyOf(value)};
+            });
         }
         Commands const* const edited = part->event(search ? "onChange" : "onChoose");
         model.edit = [this, ctx, edited](Value event) { runEvent(edited, ctx, std::move(event)); };
@@ -7329,7 +7331,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             runEvent(onChoose, ctx, chosen);
             runEvent(onChange, ctx, chosen);
         };
-        // A computed style of no known name is reported once and drawn as a dropdown; the loader refuses a constant one.
+        // A computed style of no known name is reported once and drawn as a dropdown; the loader refuses a constant
+        // one.
         if (ExprPtr const style = node.prop("style")) {
             std::string const name = textOf(once(ctx, style), session.formatting());
             if (name == "radio") {
@@ -7498,9 +7501,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                   .align = alignOf(node.name("align"))};
         for (DocNodePtr const& track : node.partList("tracks")) {
             ExprPtr const width = track->prop("width");
-            spec.tracks.push_back(
-                GridTrack{.width = width ? sizingOf(once(ctx, width)) : Sizing::stretch(),
-                          .align = cellPlaceNamed(track->name("align")).value_or(Align::Start)});
+            spec.tracks.push_back(GridTrack{.width = width ? sizingOf(once(ctx, width)) : Sizing::stretch(),
+                                            .align = cellPlaceNamed(track->name("align")).value_or(Align::Start)});
         }
         for (DocNodePtr const& cell : node.nodes("children")) {
             ExprPtr const span = cell->prop("span");
@@ -8713,8 +8715,8 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     // A header click makes its column the single key: descending when it already is the first key ascending,
     // ascending otherwise. The table's own sort takes it when no key binds one, then `onSortChange` runs with
     // `event` the new sort.
-    options.onSort = [this, ctx, element, &node, derivedCount, commands = node.event("onSortChange")](
-                         std::size_t index) {
+    options.onSort = [this, ctx, element, &node, derivedCount,
+                      commands = node.event("onSortChange")](std::size_t index) {
         auto const parts = node.partList("columns");
         if (index < derivedCount || index - derivedCount >= parts.size() ||
             !parts.subspan(index - derivedCount).front()->flag("sortable")) {
@@ -8777,7 +8779,7 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
 }
 
 inline TableRowView ScreenCore::headingRow(DocNode const& node, LowerCtx const& ctx,
-                                            reactive::Signal<Value> const& row, std::string key) {
+                                           reactive::Signal<Value> const& row, std::string key) {
     auto const heading = node.partList("group").front()->nodes("heading");
     std::vector<DocNode const*> content;
     content.reserve(heading.size());
@@ -8793,9 +8795,8 @@ inline TableRowView ScreenCore::headingRow(DocNode const& node, LowerCtx const& 
 
 inline Node ScreenCore::lowerChart(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     Chart spec;
-    spec.data = slotProp<ChartData>([this, &node, scope = ctx.scope, bindings = ctx.bindings] {
-        return chartData(node, *scope, bindings.get());
-    });
+    spec.data = slotProp<ChartData>(
+        [this, &node, scope = ctx.scope, bindings = ctx.bindings] { return chartData(node, *scope, bindings.get()); });
     commonOf(node, ctx, element, spec.common);
     return ui::chart(std::move(spec));
 }
@@ -8932,7 +8933,6 @@ inline std::vector<detail::ChartRawPoint> ScreenCore::chartPoints(DocNode const&
     return textOf(Value{Decimal{*rounded}}, format);
 }
 
-
 /// @brief A reference line's stroke by its document name.
 /// @param name `solid`, `dashed`, `dotted`, or empty for solid; the loader refuses any other.
 /// @return The stroke.
@@ -8948,7 +8948,7 @@ inline std::vector<detail::ChartRawPoint> ScreenCore::chartPoints(DocNode const&
 /// @param range The axis.
 /// @return The value drawn, the axis end for a value outside, and the side it lies beyond.
 [[nodiscard]] inline std::pair<math::Rational, ChartClip> chartClipped(math::Rational const& value,
-                                                                        ChartRange const& range) {
+                                                                       ChartRange const& range) {
     if (value < range.low) {
         return {range.low, ChartClip::Below};
     }

@@ -1068,8 +1068,7 @@ void markupTexts(QQuickItem const& root, QList<QQuickItem const*>& found) {
 }  // namespace
 
 // Mutation: drop one Label's `textFormat`, or the tooltip's content item, and the walk names it.
-TEST_CASE("qt_quick widgets: every text a document gives is drawn as its characters, never as markup",
-          "[qt_quick]") {
+TEST_CASE("qt_quick widgets: every text a document gives is drawn as its characters, never as markup", "[qt_quick]") {
     Scene scene;
     QString const tagged = QStringLiteral("<b>x</b> & <i>y</i>");
     std::string const raw = tagged.toStdString();
@@ -1389,7 +1388,8 @@ TEST_CASE("qt_quick widgets: a date input with a pattern shows, reads and picks 
     std::vector<std::optional<morph::time::Timestamp>> changes;
     input->setOnChange([&changes](std::optional<morph::time::Timestamp> value) { changes.push_back(value); });
     input->setPattern("dd-MMM-yyyy HH:mm");
-    input->setValue(morph::time::Timestamp{DateTime{year{2026}, month{10}, day{24}, hours{9}, minutes{41}, seconds{0}}});
+    input->setValue(
+        morph::time::Timestamp{DateTime{year{2026}, month{10}, day{24}, hours{9}, minutes{41}, seconds{0}}});
     scene.settle();
     CHECK(base(*input).shownText() == "24-Oct-2026 09:41");
     CHECK(Scene::controlOf(*input).property("placeholderText").toString() == QStringLiteral("dd-mmm-yyyy hh:mm"));

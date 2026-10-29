@@ -261,7 +261,8 @@ public:
         settle();
         // A button-style menu: a click on the trigger opens the list, from its top, and each index is a click on that
         // row of the list. A list left open by an earlier path is closed first.
-        if (auto const* const button = dynamic_cast<morph::tui::detail::MenuButtonImpl const*>(&WidgetBase::of(menu))) {
+        if (auto const* const button =
+                dynamic_cast<morph::tui::detail::MenuButtonImpl const*>(&WidgetBase::of(menu))) {
             if (button->isOpen()) {
                 send(special(KeyCode::Escape));
                 settle();

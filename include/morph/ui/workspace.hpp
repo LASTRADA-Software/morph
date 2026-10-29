@@ -714,9 +714,9 @@ private:
     // Whether a tab's head has a subtitle, a badge, a tool, an action or a menu entry; a tracked read.
     [[nodiscard]] bool headHasContent(WorkspaceTabId tab) const {
         ScreenHead const* const head = headOf(tab);
-        return head != nullptr && (!head->subtitle().get().empty() || !head->status().get().empty() ||
-                                   !headToolsOf(tab).empty() || !head->actions().get().empty() ||
-                                   !headMenuOf(tab).empty());
+        return head != nullptr &&
+               (!head->subtitle().get().empty() || !head->status().get().empty() || !headToolsOf(tab).empty() ||
+                !head->actions().get().empty() || !headMenuOf(tab).empty());
     }
 
     // A tool of the head row: a search field or a select bound to the tool's value, its label the accessible name and
@@ -768,10 +768,10 @@ private:
     }
 
     // The head row's own content, built but not yet wrapped into an immutable Node: the subtitle (muted), the
-    // badges, a spacer, the tools, the actions as buttons and the head's own menu behind one icon button. Hidden while the head has none of them, so a screen without a
-    // head looks as it would without the row. Factored out of headRow() so a caller needing to set additional
-    // layout fields on the row -- which a Node, once built, can no longer be mutated to carry -- can do so on the
-    // still-mutable Row this returns, before wrapping it itself.
+    // badges, a spacer, the tools, the actions as buttons and the head's own menu behind one icon button. Hidden while
+    // the head has none of them, so a screen without a head looks as it would without the row. Factored out of
+    // headRow() so a caller needing to set additional layout fields on the row -- which a Node, once built, can no
+    // longer be mutated to carry -- can do so on the still-mutable Row this returns, before wrapping it itself.
     [[nodiscard]] Row buildHeadRow(WorkspaceTabId tab) const {
         auto const subtitle = [this, tab] {
             ScreenHead const* const head = headOf(tab);
@@ -819,8 +819,7 @@ private:
         row.children.push_back(ui::spacer(std::move(filler)));
         row.children.push_back(ui::forEach<HeadTool>(
             [this, tab] { return headToolsOf(tab); }, [](HeadTool const& tool) { return Key{tool.id}; },
-            [this, tab](reactive::Signal<HeadTool> const& tool) { return headTool(tab, tool); }, Axis::Horizontal,
-            1));
+            [this, tab](reactive::Signal<HeadTool> const& tool) { return headTool(tab, tool); }, Axis::Horizontal, 1));
         row.children.push_back(ui::forEach<HeadAction>(
             actions, [](HeadAction const& action) { return Key{action.id}; },
             [this, tab](reactive::Signal<HeadAction> const& action) {
@@ -859,8 +858,7 @@ private:
                 // The trigger draws the icon alone; its name is the head's `menuLabel`.
                 Prop<std::string> const name{[this, tab] {
                     ScreenHead const* const head = headOf(tab);
-                    reactive::Computed<std::string> const* const label =
-                        head == nullptr ? nullptr : head->menuLabel();
+                    reactive::Computed<std::string> const* const label = head == nullptr ? nullptr : head->menuLabel();
                     return label == nullptr ? std::string{"More actions"} : label->get();
                 }};
                 spec.common.a11y.name = name;

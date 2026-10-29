@@ -936,22 +936,23 @@ struct Entry {
                                     data.summary = "c" + std::to_string(phase.get());
                                     return data;
                                 }}),
-                 entryTable(rows, {.selectionMode = SelectionMode::Multiple,
-                                   .selection =
-                                       [&phase] {
-                                           return phase.get() < 2
-                                                      ? std::vector<Key>{Key{std::int64_t{3}}}
-                                                      : std::vector<Key>{Key{std::int64_t{1}}, Key{std::int64_t{2}}};
-                                       },
-                                   .onSelectionChange = note("Table onSelectionChange"),
-                                   .sort =
-                                       [odd] {
-                                           return odd() ? std::optional<TableSort>{TableSort{
-                                                              .column = 0, .direction = SortDirection::Descending}}
-                                                        : std::nullopt;
-                                       },
-                                   .onSort = note("Table onSort"),
-                                   .onActivate = note("Table onActivate")},
+                 entryTable(rows,
+                            {.selectionMode = SelectionMode::Multiple,
+                             .selection =
+                                 [&phase] {
+                                     return phase.get() < 2
+                                                ? std::vector<Key>{Key{std::int64_t{3}}}
+                                                : std::vector<Key>{Key{std::int64_t{1}}, Key{std::int64_t{2}}};
+                                 },
+                             .onSelectionChange = note("Table onSelectionChange"),
+                             .sort =
+                                 [odd] {
+                                     return odd() ? std::optional<TableSort>{TableSort{
+                                                        .column = 0, .direction = SortDirection::Descending}}
+                                                  : std::nullopt;
+                                 },
+                             .onSort = note("Table onSort"),
+                             .onActivate = note("Table onActivate")},
                             true),
              }})};
     probe.settle();
@@ -1586,9 +1587,9 @@ private:
     probe.settle();
     probe.chooseMenuEntry(view.root(), {1});  // the separator
     probe.settle();
-    checks.that(chosen == std::vector<std::string>{"B"},
-                "choosing [2] and then the separator [1] ran " + std::to_string(chosen.size()) +
-                    " handlers, not B's alone");
+    checks.that(
+        chosen == std::vector<std::string>{"B"},
+        "choosing [2] and then the separator [1] ran " + std::to_string(chosen.size()) + " handlers, not B's alone");
     return checks.result();
 }
 
@@ -1713,16 +1714,14 @@ private:
 [[nodiscard]] inline std::optional<std::string> chartShowsCurrentSummary(ConformanceProbe& probe) {
     reactive::Signal<std::string> summary{probe.runtime(), std::string{"A"}};
     Mounted const view{probe.runtime(), probe.backend(), ui::chart({.data = [&summary] {
-                                                                        ChartData data;
-                                                                        data.yMax = 1.0;
-                                                                        data.xMax = 1.0;
-                                                                        data.series.push_back(ChartSeries{
-                                                                            .label = {},
-                                                                            .joined = true,
-                                                                            .points = {ChartPoint{.x = 0.5, .y = 0.5}}});
-                                                                        data.summary = summary.get();
-                                                                        return data;
-                                                                    }})};
+                           ChartData data;
+                           data.yMax = 1.0;
+                           data.xMax = 1.0;
+                           data.series.push_back(
+                               ChartSeries{.label = {}, .joined = true, .points = {ChartPoint{.x = 0.5, .y = 0.5}}});
+                           data.summary = summary.get();
+                           return data;
+                       }})};
     probe.settle();
     Checks checks;
     checks.text("a chart's summary", "A", probe.textOf(view.root()));
@@ -2035,19 +2034,21 @@ struct Measured {
 [[nodiscard]] inline std::optional<std::string> headingSpansColumns(ConformanceProbe& probe) {
     reactive::Signal<std::vector<Entry>> const rows{probe.runtime(),
                                                     {{.id = 0, .label = "group"}, {.id = 1, .label = "x"}}};
-    auto const filled = [](std::string text) { return ui::column({.children = {ui::text({.text = std::move(text)})}}); };
-    Mounted const view{probe.runtime(), probe.backend(),
-                       insideColumn(ui::table<Entry>(
-                           {{.label = "First", .width = Sizing::fixed(10)},
-                            {.label = "Second", .width = Sizing::fixed(20)}},
-                           [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
-                           std::function<TableRowView(reactive::Signal<Entry> const&)>{
-                               [filled](reactive::Signal<Entry> const& entry) {
-                                   if (entry.peek().id == 0) {
-                                       return TableRowView{.cells = {filled("group")}, .heading = true};
-                                   }
-                                   return TableRowView{.cells = {filled("a"), filled("b")}};
-                               }}))};
+    auto const filled = [](std::string text) {
+        return ui::column({.children = {ui::text({.text = std::move(text)})}});
+    };
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        insideColumn(ui::table<Entry>(
+            {{.label = "First", .width = Sizing::fixed(10)}, {.label = "Second", .width = Sizing::fixed(20)}},
+            [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+            std::function<TableRowView(reactive::Signal<Entry> const&)>{
+                [filled](reactive::Signal<Entry> const& entry) {
+                    if (entry.peek().id == 0) {
+                        return TableRowView{.cells = {filled("group")}, .heading = true};
+                    }
+                    return TableRowView{.cells = {filled("a"), filled("b")}};
+                }}))};
     probe.settle();
     Checks checks;
     Geometry geometry{probe, checks};
@@ -2265,8 +2266,9 @@ struct SelectionReport {
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> headingIsNeverSelected(ConformanceProbe& probe) {
-    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), {{.id = 0, .label = "group"}, {.id = 1, .label = "a"},
-                                                                      {.id = 2, .label = "b"}, {.id = 3, .label = "c"}}};
+    reactive::Signal<std::vector<Entry>> const rows{
+        probe.runtime(),
+        {{.id = 0, .label = "group"}, {.id = 1, .label = "a"}, {.id = 2, .label = "b"}, {.id = 3, .label = "c"}}};
     std::vector<SelectionReport> reports;
     Mounted const view{
         probe.runtime(), probe.backend(),
@@ -2277,11 +2279,10 @@ struct SelectionReport {
                                     .heading = entry.peek().id == 0};
             }},
             TableOptions{.selectionMode = SelectionMode::Multiple,
-                         .onSelectionChange =
-                             [&reports](std::vector<Key> keys, SelectionChange change) {
-                                 std::ranges::sort(keys);
-                                 reports.push_back({.keys = std::move(keys), .change = change});
-                             }})};
+                         .onSelectionChange = [&reports](std::vector<Key> keys, SelectionChange change) {
+                             std::ranges::sort(keys);
+                             reports.push_back({.keys = std::move(keys), .change = change});
+                         }})};
     probe.settle();
     Checks checks;
     probe.press(view.root(), "Ctrl+A");
@@ -2304,17 +2305,17 @@ struct SelectionReport {
     reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
     reactive::Signal<std::optional<TableSort>> shown{probe.runtime(), std::nullopt};
     std::vector<std::size_t> asked;
-    Mounted const view{
-        probe.runtime(), probe.backend(),
-        ui::table<Entry>(
-            {{.label = "Name", .sortable = true}, {.label = "Id"}}, [&rows] { return rows.get(); },
-            [](Entry const& entry) { return Key{entry.id}; },
-            [](reactive::Signal<Entry> const& entry) {
-                return std::vector<Node>{ui::text({.text = [&entry] { return entry.get().label; }}),
-                                         ui::text({.text = [&entry] { return std::to_string(entry.get().id); }})};
-            },
-            TableOptions{.sort = [&shown] { return shown.get(); },
-                         .onSort = [&asked](std::size_t column) { asked.push_back(column); }})};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::table<Entry>(
+                           {{.label = "Name", .sortable = true}, {.label = "Id"}}, [&rows] { return rows.get(); },
+                           [](Entry const& entry) { return Key{entry.id}; },
+                           [](reactive::Signal<Entry> const& entry) {
+                               return std::vector<Node>{
+                                   ui::text({.text = [&entry] { return entry.get().label; }}),
+                                   ui::text({.text = [&entry] { return std::to_string(entry.get().id); }})};
+                           },
+                           TableOptions{.sort = [&shown] { return shown.get(); },
+                                        .onSort = [&asked](std::size_t column) { asked.push_back(column); }})};
     probe.settle();
     Checks checks;
     shown.set(TableSort{.column = 0, .direction = SortDirection::Descending});
@@ -2485,10 +2486,10 @@ struct SelectionReport {
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> textSpansReadAsCharacters(ConformanceProbe& probe) {
-    Mounted const view{probe.runtime(), probe.backend(),
-                       ui::text({.spans = std::vector<TextSpan>{{.text = "Lot "},
-                                                                {.text = "L-26-0381", .mono = true},
-                                                                {.text = " <b>x</b>", .strong = true}}})};
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::text({.spans = std::vector<TextSpan>{
+                      {.text = "Lot "}, {.text = "L-26-0381", .mono = true}, {.text = " <b>x</b>", .strong = true}}})};
     probe.settle();
     Checks checks;
     checks.text("a Text with spans", "Lot L-26-0381 <b>x</b>", probe.textOf(view.root()));
@@ -2546,12 +2547,13 @@ struct SelectionReport {
     int chords = 0;
     Mounted const view{
         probe.runtime(), probe.backend(),
-        ui::column({.children = {ui::select({.options = std::vector<SelectOption>{{.key = Key{std::int64_t{1}}, .label = "A"},
-                                                                              {.key = Key{std::int64_t{2}}, .label = "B"},
-                                                                              {.key = Key{std::int64_t{3}}, .label = "C"}},
-                                             .selected = std::optional<Key>{Key{std::int64_t{2}}},
-                                             .onSelect = [&chosen](Key const& key) { chosen.push_back(key); },
-                                             .style = SelectStyle::Segmented})},
+        ui::column({.children = {ui::select(
+                        {.options = std::vector<SelectOption>{{.key = Key{std::int64_t{1}}, .label = "A"},
+                                                              {.key = Key{std::int64_t{2}}, .label = "B"},
+                                                              {.key = Key{std::int64_t{3}}, .label = "C"}},
+                         .selected = std::optional<Key>{Key{std::int64_t{2}}},
+                         .onSelect = [&chosen](Key const& key) { chosen.push_back(key); },
+                         .style = SelectStyle::Segmented})},
                     .common = {.keys = {{.chord = "Enter", .onPress = [&chords] { ++chords; }}}}})};
     probe.settle();
     Widget* const select = childOf(probe, &view.root(), 0);
@@ -2568,7 +2570,8 @@ struct SelectionReport {
     checks.text("the options chosen by a Right at the end", "3", keyTexts(chosen));
     probe.press(*select, "Enter");
     probe.settle();
-    checks.that(chords == 1, "Enter on a segmented select ran the column's chord " + std::to_string(chords) + " times");
+    checks.that(chords == 1,
+                "Enter on a segmented select ran the column's chord " + std::to_string(chords) + " times");
     return checks.result();
 }
 

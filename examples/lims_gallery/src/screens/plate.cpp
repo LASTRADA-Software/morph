@@ -435,15 +435,14 @@ ui::Node sourceRow(Plate const& plate) {
 ui::Node sources(Plate const& plate) {
     // The first five, then how many more: the design lists a few and counts the rest.
     auto const more = Count{plate.toPlaceCount} - kListed;
-    return ui::panel({ui::forEach(ui::slice(plate.toPlace, std::int64_t{0}, kListed), {.key = ui::row("n"), .gap = 1},
-                                  [&plate](ui::DeclScope&) { return ui::Nodes{sourceRow(plate)}; })
-                          .testId("sources"),
-                      ui::text({.text = ui::format("+ {0} more", {more}), .role = "muted"})
-                          .visible(more > 0)
-                          .testId("more"),
-                      ui::text({.text = "All samples are placed.", .role = "muted"})
-                          .visible(ui::eq(plate.toPlaceCount, std::int64_t{0}))},
-                     {.title = ui::format("To place · {0}", {plate.toPlaceCount}), .padding = 1})
+    return ui::panel(
+               {ui::forEach(ui::slice(plate.toPlace, std::int64_t{0}, kListed), {.key = ui::row("n"), .gap = 1},
+                            [&plate](ui::DeclScope&) { return ui::Nodes{sourceRow(plate)}; })
+                    .testId("sources"),
+                ui::text({.text = ui::format("+ {0} more", {more}), .role = "muted"}).visible(more > 0).testId("more"),
+                ui::text({.text = "All samples are placed.", .role = "muted"})
+                    .visible(ui::eq(plate.toPlaceCount, std::int64_t{0}))},
+               {.title = ui::format("To place · {0}", {plate.toPlaceCount}), .padding = 1})
         .a11y("Samples to place")
         .testId("to-place");
 }
@@ -589,11 +588,10 @@ ui::AnyHandle rowWells(Plate const& plate, std::size_t row) {
             continue;
         }
         auto const sample = plate.samples.at(well.name);
-        wells.push_back(
-            ui::obj({{"name", well.name},
-                     {"text", ui::cond(ui::engaged(sample), Text{ui::format("Sample {0}", {fullId(sample)})},
-                                       Text{"Empty"})},
-                     {"run", ui::cond(ui::engaged(sample), ui::AnyHandle{well.name}, ui::AnyHandle{"empty"})}}));
+        wells.push_back(ui::obj(
+            {{"name", well.name},
+             {"text", ui::cond(ui::engaged(sample), Text{ui::format("Sample {0}", {fullId(sample)})}, Text{"Empty"})},
+             {"run", ui::cond(ui::engaged(sample), ui::AnyHandle{well.name}, ui::AnyHandle{"empty"})}}));
     }
     return ui::list(wells);
 }

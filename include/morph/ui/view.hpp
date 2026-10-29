@@ -19,8 +19,8 @@
 #include "../reactive/signal.hpp"
 #include "../util/datetime.hpp"
 #include "alignment.hpp"
-#include "button_emphasis.hpp"
 #include "badge_style.hpp"
+#include "button_emphasis.hpp"
 #include "button_style.hpp"
 #include "input_emphasis.hpp"
 

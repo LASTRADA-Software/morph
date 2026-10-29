@@ -297,7 +297,7 @@ ui::Node pager(Audit const& audit) {
     auto const page = ui::Handle<std::int64_t>{ui::ref("trail.page")};
     auto const pageCount = ui::Handle<std::int64_t>{ui::ref("trail.pageCount")};
     return ui::row({layout::muted(ui::format("{0}–{1} of {2}", {ui::ref("trail.pageFirst"), ui::ref("trail.pageLast"),
-                                                                 ui::ref("trail.viewCount")}))
+                                                                ui::ref("trail.viewCount")}))
                         .sizing(ui::stretch())
                         .testId("range"),
                     ui::button({.label = "‹", .onClick = ui::set(audit.page, page - 1)})
@@ -321,9 +321,9 @@ ui::Node searchField(Audit const& audit) {
 }
 
 ui::Node expandedLayout(Audit const& audit) {
-    auto const main = ui::column({chips(audit), ui::panel({trailTable(audit), pager(audit)}, {.padding = 0})},
-                                 {.gap = 2})
-                          .sizing(ui::stretch());
+    auto const main =
+        ui::column({chips(audit), ui::panel({trailTable(audit), pager(audit)}, {.padding = 0})}, {.gap = 2})
+            .sizing(ui::stretch());
     return ui::row({facetsPanel(audit), main}, {.gap = 2, .align = Align::Start});
 }
 

@@ -188,8 +188,8 @@ void TableImpl::mark() const {
         if (row == nullptr) {
             continue;
         }
-        bool const selected = row->key() && !heading(*row) &&
-                              std::ranges::find(_requested, *row->key()) != _requested.end();
+        bool const selected =
+            row->key() && !heading(*row) && std::ranges::find(_requested, *row->key()) != _requested.end();
         row->write("selected", selected);
     }
 }

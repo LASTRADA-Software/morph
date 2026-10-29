@@ -390,7 +390,8 @@ TEST_CASE("the library and reading forms have builders", "[ui][author]") {
     CHECK(text(ui::slice(ui::ref("a"), 5)) == R"({"fn":"slice","args":[{"ref":"a"},5]})");
     CHECK(text(ui::sorted(ui::ref("a"), "x", [](ui::AnyHandle const& item) { return item.at("due"); })) ==
           R"({"sort":{"ref":"a"},"as":"x","by":{"ref":"x.due"}})");
-    CHECK(text(ui::sorted(ui::ref("a"), "x", [](ui::AnyHandle const& item) { return item; }, "desc")) ==
+    CHECK(text(ui::sorted(
+              ui::ref("a"), "x", [](ui::AnyHandle const& item) { return item; }, "desc")) ==
           R"({"sort":{"ref":"a"},"as":"x","by":{"ref":"x"},"order":"desc"})");
     CHECK(text(ui::sortKey("due", ui::SortOrder::Descending)) == R"({"lit":{"column":"due","direction":"desc"}})");
     CHECK(text(ui::runs(ui::ref("a"), "w", [](ui::AnyHandle const& well) { return well.at("empty"); })) ==
@@ -689,22 +690,21 @@ ui::Screen declarationsScreen() {
 
 // Mutation: write `x` from the `xLabel` reader in `ui::chart` (the series' `x` then reads the run).
 TEST_CASE("author: a chart writes its series per point from the row, and its lines", "[ui][author]") {
-    ui::Node const node = ui::chart(
-        {.summary = ui::ref("trendSummary"),
-         .series = {{.label = "25 °C",
-                     .points = ui::ref("assay25"),
-                     .y = [](ui::AnyHandle const& point) { return point.at("value"); },
-                     .x = [](ui::AnyHandle const& point) { return point.at("month"); },
-                     .xLabel = [](ui::AnyHandle const& point) { return point.at("run"); },
-                     .joined = false}},
-         .lines = {{.value = 95, .label = "LSL 95.0", .tone = "err", .style = ui::LineStyle::Dashed}},
-         .yPlaces = 1,
-         .yLabel = "Assay, % LC"});
-    CHECK(text(node) ==
-          R"({"kind":"chart","summary":{"ref":"trendSummary"},"series":[{"label":"25 °C",)"
-          R"("points":{"ref":"assay25"},"y":{"row":"value"},"x":{"row":"month"},"xLabel":{"row":"run"},)"
-          R"("joined":false}],"lines":[{"value":95,"label":"LSL 95.0","tone":"err","style":"dashed"}],)"
-          R"("yPlaces":1,"yLabel":"Assay, % LC"})");
+    ui::Node const node =
+        ui::chart({.summary = ui::ref("trendSummary"),
+                   .series = {{.label = "25 °C",
+                               .points = ui::ref("assay25"),
+                               .y = [](ui::AnyHandle const& point) { return point.at("value"); },
+                               .x = [](ui::AnyHandle const& point) { return point.at("month"); },
+                               .xLabel = [](ui::AnyHandle const& point) { return point.at("run"); },
+                               .joined = false}},
+                   .lines = {{.value = 95, .label = "LSL 95.0", .tone = "err", .style = ui::LineStyle::Dashed}},
+                   .yPlaces = 1,
+                   .yLabel = "Assay, % LC"});
+    CHECK(text(node) == R"({"kind":"chart","summary":{"ref":"trendSummary"},"series":[{"label":"25 °C",)"
+                        R"("points":{"ref":"assay25"},"y":{"row":"value"},"x":{"row":"month"},"xLabel":{"row":"run"},)"
+                        R"("joined":false}],"lines":[{"value":95,"label":"LSL 95.0","tone":"err","style":"dashed"}],)"
+                        R"("yPlaces":1,"yLabel":"Assay, % LC"})");
 }
 
 /// Every node kind of the palette, and the properties every node takes.
@@ -810,21 +810,19 @@ ui::Screen paletteScreen() {
                              auto rowHeader = rowScope.query<GetHeader>("rowHeader", rowSample);
                              return ui::text({.text = rowHeader.at(&Header::sampleNumber)});
                          }),
-             ui::table(
-                 results.value(),
-                 {.key = ui::row(&ResultView::id),
-                  .columns = {{.name = "id",
-                               .label = "Id",
-                               .width = 80,
-                               .cell = ui::text({.text = ui::row("id")}),
-                               .sortable = true,
-                               .sortBy = ui::row("id")},
-                              {.name = "flag"}},
-                  .selectionMode = ui::Selection::Multiple,
-                  .sort = ui::list({ui::sortKey("id", ui::SortOrder::Descending)}),
-                  .onSortChange = ui::set(choice, "sorted"),
-                  .rowTone = "neutral",
-                  .onActivate = ui::set(choice, ui::row("id"))})
+             ui::table(results.value(), {.key = ui::row(&ResultView::id),
+                                         .columns = {{.name = "id",
+                                                      .label = "Id",
+                                                      .width = 80,
+                                                      .cell = ui::text({.text = ui::row("id")}),
+                                                      .sortable = true,
+                                                      .sortBy = ui::row("id")},
+                                                     {.name = "flag"}},
+                                         .selectionMode = ui::Selection::Multiple,
+                                         .sort = ui::list({ui::sortKey("id", ui::SortOrder::Descending)}),
+                                         .onSortChange = ui::set(choice, "sorted"),
+                                         .rowTone = "neutral",
+                                         .onActivate = ui::set(choice, ui::row("id"))})
                  .a11y("Results"),
              ui::dataTable<ListProjects>(sample, {{&ListProjects::page, 0}},
                                          {.selectionMode = ui::Selection::Single,
@@ -846,11 +844,10 @@ ui::Screen paletteScreen() {
              ui::banner({.text = "Bare", .action = ui::ActionPart{}}), ui::badge("New", "info", "star"),
              ui::badge("Plain"), ui::progress(ui::AnyHandle{nullptr}, "Working"), ui::progress(1),
              ui::steps(ui::list({}), 0), ui::steps(ui::list({})), ui::keyValue(ui::list({})),
-             ui::chart({.summary = "Runs within limits",
-                        .series = {{.points = ui::list({}), .y = [](ui::AnyHandle const& run) {
-                                        return run.at("value");
-                                    }}},
-                        .lines = {{.value = 100, .label = "mean"}}}),
+             ui::chart(
+                 {.summary = "Runs within limits",
+                  .series = {{.points = ui::list({}), .y = [](ui::AnyHandle const& run) { return run.at("value"); }}},
+                  .lines = {{.value = 100, .label = "mean"}}}),
              ui::emptyState({.title = "Nothing",
                              .text = "No rows",
                              .icon = "empty",
@@ -1485,19 +1482,19 @@ TEST_CASE("a screen's head writes its subtitle, status badges and actions beside
 
 // Mutation: leave the id out of a menu item's JSON (the head menu entry has nothing to be chosen by).
 TEST_CASE("a screen's head writes its own menu, each entry with its id, and the menu's label", "[ui][author]") {
-    auto const emitted = ui::screen("author.head.menu", [](ui::Scope& screen) {
-                             auto stage = screen.state<std::string>("stage", ui::AnyHandle{"Draft"});
-                             screen.title(ui::AnyHandle{"Instrument"});
-                             screen.menuLabel(ui::AnyHandle{"More"});
-                             screen.menu({.id = "calibrate",
-                                          .label = ui::AnyHandle{"Calibrate"},
-                                          .onClick = {ui::set(stage, ui::AnyHandle{"Calibrated"})}});
-                             screen.menu(ui::menuSeparator());
-                             screen.menu({.id = "retire",
-                                          .label = ui::AnyHandle{"Retire"},
-                                          .description = ui::AnyHandle{"needs reason"}});
-                             return ui::spacer();
-                         }).write();
+    auto const emitted =
+        ui::screen("author.head.menu", [](ui::Scope& screen) {
+            auto stage = screen.state<std::string>("stage", ui::AnyHandle{"Draft"});
+            screen.title(ui::AnyHandle{"Instrument"});
+            screen.menuLabel(ui::AnyHandle{"More"});
+            screen.menu({.id = "calibrate",
+                         .label = ui::AnyHandle{"Calibrate"},
+                         .onClick = {ui::set(stage, ui::AnyHandle{"Calibrated"})}});
+            screen.menu(ui::menuSeparator());
+            screen.menu(
+                {.id = "retire", .label = ui::AnyHandle{"Retire"}, .description = ui::AnyHandle{"needs reason"}});
+            return ui::spacer();
+        }).write();
     REQUIRE(emitted.has_value());
     CHECK(emitted->text.contains(R"("menuLabel":"More")"));
     CHECK(emitted->text.contains(
@@ -1515,9 +1512,8 @@ TEST_CASE("a screen's head writes its search and select tools in order", "[ui][a
                                                                .value = query,
                                                                .onChange = {ui::set(query, ui::event())},
                                                                .width = 24});
-                             screen.tool(ui::HeadSelectOptions{.id = "lab",
-                                                               .label = ui::AnyHandle{"Lab"},
-                                                               .options = ui::AnyHandle{"North"}});
+                             screen.tool(ui::HeadSelectOptions{
+                                 .id = "lab", .label = ui::AnyHandle{"Lab"}, .options = ui::AnyHandle{"North"}});
                              return ui::spacer();
                          }).write();
     REQUIRE(emitted.has_value());
@@ -1545,8 +1541,9 @@ TEST_CASE("a dialog's actions are written as its footer buttons, in its scope", 
 // Mutation: leave `spans` out of text() (the node is written without its runs).
 TEST_CASE("a text's spans are written as runs that the loader takes", "[ui][author]") {
     auto const lot = ui::ref<std::string>("lot");
-    CHECK(text(ui::text({.text = "Lot", .spans = ui::spans({"Lot ", ui::mono(lot), ui::strong("!"),
-                                                           ui::styled("x", {.strong = true, .mono = true})}),
+    CHECK(text(ui::text({.text = "Lot",
+                         .spans = ui::spans({"Lot ", ui::mono(lot), ui::strong("!"),
+                                             ui::styled("x", {.strong = true, .mono = true})}),
                          .role = "muted"})
                    .json()) ==
           R"({"kind":"text","text":"Lot","spans":{"list":["Lot ",{"obj":{"text":{"ref":"lot"},"mono":true}},)"
@@ -1562,8 +1559,8 @@ TEST_CASE("a text's spans are written as runs that the loader takes", "[ui][auth
 // Mutation: leave `description` out of the dialog writer (the key is not written).
 TEST_CASE("a dialog's description is written beside its title", "[ui][author]") {
     auto const sign = ui::element("sign");
-    auto const json = text(ui::dialog(sign, {ui::text({.text = "x"})}, {.title = "Sign", .description = "Stored"})
-                               .json());
+    auto const json =
+        text(ui::dialog(sign, {ui::text({.text = "x"})}, {.title = "Sign", .description = "Stored"}).json());
     CHECK(json.contains(R"("title":"Sign","description":"Stored")"));
 }
 

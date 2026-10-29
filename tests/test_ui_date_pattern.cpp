@@ -14,8 +14,8 @@ using morph::time::DateTime;
 namespace {
 
 DateTime at(int year, unsigned month, unsigned day, int hour, int minute) {
-    return DateTime{std::chrono::sys_days{std::chrono::year_month_day{std::chrono::year{year}, std::chrono::month{month},
-                                                                      std::chrono::day{day}}} +
+    return DateTime{std::chrono::sys_days{std::chrono::year_month_day{
+                        std::chrono::year{year}, std::chrono::month{month}, std::chrono::day{day}}} +
                     std::chrono::hours{hour} + std::chrono::minutes{minute}};
 }
 

@@ -603,7 +603,8 @@ TEST_CASE("qt_quick containers: the shell frame fills the window, its sidebar 28
 }
 
 // Control: drop `nav.menu` from MorphMenu's triggerText (the trigger draws its name, "Navigation", instead).
-TEST_CASE("qt_quick containers: the compact shell hides its sidebar and draws its navigation menu as ☰", "[qt_quick]") {
+TEST_CASE("qt_quick containers: the compact shell hides its sidebar and draws its navigation menu as ☰",
+          "[qt_quick]") {
     Scene scene;
     morph::ui::ShellFrameOptions options;
     options.applicationName = "App";

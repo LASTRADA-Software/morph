@@ -444,15 +444,14 @@ ui::Commands choose(Review const& review) {
 
 // One entry of the queue: the whole card takes the click and the current mark; its label names it.
 ui::Node queueEntry(Review const& review) {
-    auto const content =
-        ui::column({ui::text({.text = ui::format("{0} · {1}", {ui::row("id"), ui::row("age")}),
-                              .spans = ui::spans({ui::styled(ui::row("id"), {.strong = true, .mono = true}), " · ",
-                                                  ui::row("age")})}),
-                    ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("analyst")}),
-                              .role = "muted"}),
-                    tagRow(ui::row("tags"), "queue-tags"),
-                    layout::muted(kSelfReview).visible(Flag{ui::row("self")}).testId("queue-self")},
-                   {.gap = 1});
+    auto const content = ui::column(
+        {ui::text(
+             {.text = ui::format("{0} · {1}", {ui::row("id"), ui::row("age")}),
+              .spans = ui::spans({ui::styled(ui::row("id"), {.strong = true, .mono = true}), " · ", ui::row("age")})}),
+         ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("analyst")}), .role = "muted"}),
+         tagRow(ui::row("tags"), "queue-tags"),
+         layout::muted(kSelfReview).visible(Flag{ui::row("self")}).testId("queue-self")},
+        {.gap = 1});
     return ui::button({.label = ui::format("{0} · {1}", {ui::row("id"), ui::row("age")}),
                        .onClick = choose(review),
                        .style = morph::ui::ButtonStyle::Item,
@@ -707,8 +706,7 @@ ui::Node returnButton(Review const& review, char const* label) {
 }
 
 ui::Node rejectButton(Review const& review, char const* label) {
-    return ui::button(
-               {.label = label, .emphasis = ButtonEmphasis::DangerOutline, .onClick = decide(review, "reject")})
+    return ui::button({.label = label, .emphasis = ButtonEmphasis::DangerOutline, .onClick = decide(review, "reject")})
         .testId("reject");
 }
 

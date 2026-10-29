@@ -202,8 +202,7 @@ void RadioSelectImpl::setOnSelect(std::function<void(ui::Key)> onSelect) { _onSe
 
 ::core::tui::Size RadioSelectImpl::controlSize() const {
     // "▶ " or "  ", then "(•) " or "( ) ", then the label.
-    return withCaption(
-        {.width = widestLabel(_options) + 6, .height = std::max(1, static_cast<int>(_options.size()))});
+    return withCaption({.width = widestLabel(_options) + 6, .height = std::max(1, static_cast<int>(_options.size()))});
 }
 
 std::string RadioSelectImpl::probeText() const { return labelOf(_options, _selected); }
@@ -688,9 +687,8 @@ std::vector<::core::tui::ListItem> menuRows(std::vector<ui::MenuEntry> const& le
         if (entry.separator) {
             rows.push_back(::core::tui::ListItem{.filterText = std::string{kSeparatorRow}, .enabled = false});
         } else {
-            rows.push_back(::core::tui::ListItem{.label = menuRowLabel(entry),
-                                                 .description = entry.description,
-                                                 .enabled = enabled && entry.enabled});
+            rows.push_back(::core::tui::ListItem{
+                .label = menuRowLabel(entry), .description = entry.description, .enabled = enabled && entry.enabled});
         }
     }
     return rows;
@@ -1143,10 +1141,9 @@ MenuButtonImpl::Placement MenuButtonImpl::placement() const {
     int const below = std::max(0, viewport.y + viewport.height - (trigger.y + 1));
     int const above = std::max(0, trigger.y - viewport.y);
     int const width = popupSize().width;
-    Placement place{
-        .origin = {.x = std::max(viewport.x, std::min(trigger.x, viewport.x + viewport.width - width)),
-                   .y = trigger.y + 1},
-        .rows = std::min(count, below)};
+    Placement place{.origin = {.x = std::max(viewport.x, std::min(trigger.x, viewport.x + viewport.width - width)),
+                               .y = trigger.y + 1},
+                    .rows = std::min(count, below)};
     if (below < count && above > below) {
         place.rows = std::min(count, above);
         place.origin.y = trigger.y - place.rows;

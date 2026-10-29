@@ -750,8 +750,8 @@ inline constexpr std::array<std::string_view, 2> kSelectValues = {"selected", "s
 inline constexpr std::array<std::string_view, 1> kTabsValues = {"selected"};
 /// @brief The element values of a table.
 inline constexpr std::array<std::string_view, 14> kTableValues = {
-    "selection",     "activeKey", "sort",  "filters",   "viewCount", "sourceCount", "selectedCount",
-    "pending",       "error",     "hoveredKey", "page", "pageCount", "pageFirst",   "pageLast"};
+    "selection", "activeKey", "sort",       "filters", "viewCount", "sourceCount", "selectedCount",
+    "pending",   "error",     "hoveredKey", "page",    "pageCount", "pageFirst",   "pageLast"};
 /// @brief The element values of a dialog or drawer.
 inline constexpr std::array<std::string_view, 3> kDialogValues = {"open", "ready", "submitted"};
 /// @brief The element values of a form, beside its fields.
@@ -879,15 +879,15 @@ inline constexpr std::array<KeySpec, 3> kTabKeys = {
 inline constexpr std::array<KeySpec, 12> kDialogKeys = {{{"open", Shape::Condition},
                                                          {"title", Shape::Expr},
                                                          {"description", Shape::Expr},
-                                                        {"showErrors", Shape::Text},
-                                                        {"children", Shape::Nodes, {}, kInner},
-                                                        {"onDismiss", Shape::Commands},
-                                                        {"default", Shape::Commands, {}, kInner},
-                                                        {"cancel", Shape::Commands, {}, kInner},
-                                                        {"actions", Shape::Parts, "actionButton", kInner},
-                                                        {"side", Shape::Expr},
-                                                        {"sheet", Shape::Condition},
-                                                        {"dismissLabel", Shape::Expr}}};
+                                                         {"showErrors", Shape::Text},
+                                                         {"children", Shape::Nodes, {}, kInner},
+                                                         {"onDismiss", Shape::Commands},
+                                                         {"default", Shape::Commands, {}, kInner},
+                                                         {"cancel", Shape::Commands, {}, kInner},
+                                                         {"actions", Shape::Parts, "actionButton", kInner},
+                                                         {"side", Shape::Expr},
+                                                         {"sheet", Shape::Condition},
+                                                         {"dismissLabel", Shape::Expr}}};
 /// @brief The keys of `group`: a labelled set of inputs, lowered to a column of existing kinds.
 inline constexpr std::array<KeySpec, 6> kGroupKeys = {{{"label", Shape::Expr},
                                                        {"required", Shape::Condition},
@@ -3393,8 +3393,8 @@ private:
         if (node.kind == "drawer") {
             for (std::string_view const key : {"sheet", "dismissLabel"}) {
                 if (node.prop(key)) {
-                    refuse(pointerAppend(node.path, key), "`" + std::string{key} +
-                                                              "` is a dialog's; a drawer already fills the height");
+                    refuse(pointerAppend(node.path, key),
+                           "`" + std::string{key} + "` is a dialog's; a drawer already fills the height");
                 }
             }
         } else if (node.kind == "dialog" && node.prop("dismissLabel") && !node.prop("sheet")) {
@@ -3441,7 +3441,9 @@ private:
                                  std::set<std::string, std::less<>> const& sortable) {
         ValueList const* const keys = sort.asList();
         if (keys == nullptr) {
-            refuse(where, R"(a table's sort is a list of keys, each {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
+            refuse(
+                where,
+                R"(a table's sort is a list of keys, each {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
         }
         std::set<std::string, std::less<>> named;
         for (Value const& key : *keys) {
@@ -3478,7 +3480,8 @@ private:
                    "a model-backed table's engine pages; `pageSize` and `page` are for a table over `rows`");
         }
         if (page != nullptr && size == nullptr) {
-            refuse(pointerAppend(node.path, "page"), "`page` picks a page of `pageSize` rows; give the table `pageSize`");
+            refuse(pointerAppend(node.path, "page"),
+                   "`page` picks a page of `pageSize` rows; give the table `pageSize`");
         }
         if (size != nullptr && size->kind == ExprKind::Literal && !size->literal.isNull()) {
             std::int64_t const* const rows = size->literal.asInt();
@@ -3595,7 +3598,7 @@ private:
     static void checkKindValues(DocNode const& node) {
         if (node.kind == "button") {
             static constexpr std::array<std::string_view, 5> kEmphasis = {"normal", "primary", "danger", "ghost",
-                                                                           "dangerOutline"};
+                                                                          "dangerOutline"};
             checkChoice(node, "emphasis", kEmphasis);
             static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
             checkChoice(node, "style", kStyles);
@@ -3720,7 +3723,8 @@ private:
 
     // One head tool: a kind of the two, only its kind's keys, a select's options in a dropdown, a literal width.
     static void checkHeadTool(DocNode const& tool) {
-        static constexpr std::array<std::string_view, 4> kSearchOnly = {"value", "placeholder", "onChange", "onSubmit"};
+        static constexpr std::array<std::string_view, 4> kSearchOnly = {"value", "placeholder", "onChange",
+                                                                        "onSubmit"};
         static constexpr std::array<std::string_view, 4> kSelectOnly = {"options", "selected", "style", "onChoose"};
         std::string_view const kind = tool.name("kind");
         if (kind != "search" && kind != "select") {
@@ -3769,8 +3773,8 @@ private:
                 refuse(entry->path, "a head menu entry has an `id`, which choosing it names");
             }
             if (!ids.insert(entry->id).second) {
-                refuse(pointerAppend(entry->path, "id"), "the head menu entry id `" + entry->id +
-                                                             "` is used twice; each entry has its own");
+                refuse(pointerAppend(entry->path, "id"),
+                       "the head menu entry id `" + entry->id + "` is used twice; each entry has its own");
             }
         }
     }
@@ -3778,7 +3782,7 @@ private:
     // A list of `actionButton` parts: each id once, and each emphasis one of a button's.
     static void checkActionButtons(std::span<DocNodePtr const> buttons, std::string const& path) {
         static constexpr std::array<std::string_view, 5> kEmphasis = {"normal", "primary", "danger", "ghost",
-                                                                       "dangerOutline"};
+                                                                      "dangerOutline"};
         std::set<std::string_view> ids;
         for (DocNodePtr const& button : buttons) {
             if (!ids.insert(button->id).second) {
@@ -3969,7 +3973,8 @@ private:
             return;
         }
         if (button.name("style") != "item") {
-            refuse(pointerAppend(button.path, "children"), "only a list entry holds content; a push button has a label");
+            refuse(pointerAppend(button.path, "children"),
+                   "only a list entry holds content; a push button has a label");
         }
         for (DocNodePtr const& child : found->second) {
             checkReadOnlyContent(*child);
@@ -3978,10 +3983,11 @@ private:
 
     // NOLINTNEXTLINE(misc-no-recursion): an entry's content is a tree of nodes.
     static void checkReadOnlyContent(DocNode const& node) {
-        static constexpr std::array<std::string_view, 12> kDisplay = {
-            "text", "badge", "keyValue", "progress", "steps", "busy", "spacer", "column", "row", "grid", "forEach",
-            "switch"};
-        static constexpr std::string_view kReason = "an entry's content is read-only; put the control beside the entry";
+        static constexpr std::array<std::string_view, 12> kDisplay = {"text",  "badge", "keyValue", "progress",
+                                                                      "steps", "busy",  "spacer",   "column",
+                                                                      "row",   "grid",  "forEach",  "switch"};
+        static constexpr std::string_view kReason =
+            "an entry's content is read-only; put the control beside the entry";
         if (!listed(kDisplay, node.kind)) {
             refuse(node.path, std::string{kReason});
         }
@@ -4145,8 +4151,9 @@ private:
         if (node.name("style") != "button") {
             for (std::string_view const key : {"label", "icon"}) {
                 if (node.prop(key) != nullptr) {
-                    refuse(pointerAppend(node.path, key),
-                           "`" + std::string{key} + "` is a button-style menu's trigger; give the menu `style: button`");
+                    refuse(
+                        pointerAppend(node.path, key),
+                        "`" + std::string{key} + "` is a button-style menu's trigger; give the menu `style: button`");
                 }
             }
             if (!node.name("emphasis").empty()) {
@@ -4158,14 +4165,17 @@ private:
         auto const a11y = node.partList("a11y");
         bool const named = !a11y.empty() && a11y.front()->prop("name") != nullptr;
         if (node.prop("label") == nullptr && !named) {
-            refuse(node.path, "a button-style menu has a `label` or an `a11y` name, so its trigger has a name for "
-                              "assistive technology");
+            refuse(node.path,
+                   "a button-style menu has a `label` or an `a11y` name, so its trigger has a name for "
+                   "assistive technology");
         }
     }
 
     // A separator is a line between entries: `true`, and nothing else beside it.
     // Whether a part kind is a menu entry: a `menu` node's or a screen head's.
-    [[nodiscard]] static bool isMenuEntry(std::string_view kind) { return kind == "menuItem" || kind == "headMenuItem"; }
+    [[nodiscard]] static bool isMenuEntry(std::string_view kind) {
+        return kind == "menuItem" || kind == "headMenuItem";
+    }
 
     static void checkMenuItem(DocNode const& node) {
         if (!node.flags.contains("separator")) {

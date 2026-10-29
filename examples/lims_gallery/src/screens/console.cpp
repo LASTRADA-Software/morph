@@ -497,21 +497,22 @@ ui::Node controlChart() {
         {ui::row({layout::section("Assay control, HPLC-02 · last 20 runs").sizing(ui::stretch()),
                   layout::muted("mean 100.0 % · SD 0.4")},
                  {.gap = 1, .align = Align::Center}),
-         ui::chart({.summary = "Levey-Jennings chart: 19 runs within 2 SD, the latest run at plus 3.4 SD, beyond the 3 SD "
-                               "limit",
-                    .series = {{.points = controlRuns(),
-                                .y = [](ui::AnyHandle const& run) { return run.at("value"); },
-                                .xLabel = [](ui::AnyHandle const& run) { return run.at("run"); },
-                                .tone = [](ui::AnyHandle const& run) { return run.at("tone"); },
-                                .note = [](ui::AnyHandle const& run) { return run.at("violation"); }}},
-                    .lines = {controlLine(3, "+3SD", "err", LineStyle::Dashed),
-                              controlLine(2, "+2SD", "warn", LineStyle::Dashed),
-                              controlLine(1, "+1SD", "", LineStyle::Dotted), controlLine(0, "mean", "", LineStyle::Solid),
-                              controlLine(-1, "−1SD", "", LineStyle::Dotted),
-                              controlLine(-2, "−2SD", "warn", LineStyle::Dashed),
-                              controlLine(-3, "−3SD", "err", LineStyle::Dashed)},
-                    .yPlaces = 1,
-                    .yLabel = "% LC"})
+         ui::chart(
+             {.summary = "Levey-Jennings chart: 19 runs within 2 SD, the latest run at plus 3.4 SD, beyond the 3 SD "
+                         "limit",
+              .series = {{.points = controlRuns(),
+                          .y = [](ui::AnyHandle const& run) { return run.at("value"); },
+                          .xLabel = [](ui::AnyHandle const& run) { return run.at("run"); },
+                          .tone = [](ui::AnyHandle const& run) { return run.at("tone"); },
+                          .note = [](ui::AnyHandle const& run) { return run.at("violation"); }}},
+              .lines = {controlLine(3, "+3SD", "err", LineStyle::Dashed),
+                        controlLine(2, "+2SD", "warn", LineStyle::Dashed),
+                        controlLine(1, "+1SD", "", LineStyle::Dotted), controlLine(0, "mean", "", LineStyle::Solid),
+                        controlLine(-1, "−1SD", "", LineStyle::Dotted),
+                        controlLine(-2, "−2SD", "warn", LineStyle::Dashed),
+                        controlLine(-3, "−3SD", "err", LineStyle::Dashed)},
+              .yPlaces = 1,
+              .yLabel = "% LC"})
              .sizing(ui::stretch(), ui::fixed(12))
              .testId("chart"),
          ui::text({.text = "Run 20: 101.4 % LC, +3.4 SD, rule 1-3s", .role = "error"}).testId("chart-violation")},

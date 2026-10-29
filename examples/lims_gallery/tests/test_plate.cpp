@@ -146,9 +146,8 @@ TEST_CASE("plate, compact: the wells listed by row, empty wells as one line a ru
     CHECK(screen.prop("Collapsible", "row-A", "title") == "Row A · 1 standard, 2 controls, 9 empty");
     CHECK(screen.prop("Collapsible", "row-B", "title") == "Row B · 1 standard, 1 blank, 10 samples");
     CHECK(screen.prop("Collapsible", "row-D", "title") == "Row D · 1 standard, 10 samples, 1 empty");
-    CHECK(runLines(screen, "A") ==
-          std::vector<std::string>{"Standard 1, 100 ng/mL", "Control, low", "Empty, 6 wells", "Control, high",
-                                   "Empty, 3 wells"});
+    CHECK(runLines(screen, "A") == std::vector<std::string>{"Standard 1, 100 ng/mL", "Control, low", "Empty, 6 wells",
+                                                            "Control, high", "Empty, 3 wells"});
     CHECK(runLines(screen, "B").at(2) == "Sample S-26-104234");
     // The run's one Assign places a sample in its first well, which leaves the rest a shorter run.
     // Every run line has an Assign, shown for an empty run alone; the first shown is row A's first empty run's.

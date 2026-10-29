@@ -453,13 +453,12 @@ TEST_CASE("ui::Mounted: a hidden menu entry is not sent, and the shown one after
     RecordingBackend backend;
     Signal<bool> shown{runtime, false};
     Lines ran;
-    ui::Mounted const view{
-        runtime, backend,
-        ui::menu({.items = {{.label = "Undo", .onSelect = [&] { ran.emplace_back("undo"); }},
-                            {.label = "Redo",
-                             .onSelect = [&] { ran.emplace_back("redo"); },
-                             .visible = [&] { return shown.get(); }},
-                            {.label = "Cut", .onSelect = [&] { ran.emplace_back("cut"); }}}})};
+    ui::Mounted const view{runtime, backend,
+                           ui::menu({.items = {{.label = "Undo", .onSelect = [&] { ran.emplace_back("undo"); }},
+                                               {.label = "Redo",
+                                                .onSelect = [&] { ran.emplace_back("redo"); },
+                                                .visible = [&] { return shown.get(); }},
+                                               {.label = "Cut", .onSelect = [&] { ran.emplace_back("cut"); }}}})};
     CHECK(backend.prop(1, "items") == "[Undo,Cut]");
     backend.chooseMenuEntry(1, {1});
     CHECK(ran == Lines{"cut"});
@@ -476,18 +475,17 @@ TEST_CASE("ui::Mounted: a separator hidden entries leave at an end or beside ano
     Runtime runtime{owner};
     RecordingBackend backend;
     Lines ran;
-    ui::Mounted const view{
-        runtime, backend,
-        ui::menu({.items = {{.label = "Hidden", .visible = false},
-                            {.separator = true},
-                            {.label = "Print", .onSelect = [&] { ran.emplace_back("print"); }},
-                            {.separator = true},
-                            {.label = "Gone", .visible = false},
-                            {.separator = true},
-                            {.label = "Export", .description = std::string{"as PDF"}},
-                            {.separator = true}},
-                  .style = ui::MenuStyle::Button,
-                  .label = std::string{"More"}})};
+    ui::Mounted const view{runtime, backend,
+                           ui::menu({.items = {{.label = "Hidden", .visible = false},
+                                               {.separator = true},
+                                               {.label = "Print", .onSelect = [&] { ran.emplace_back("print"); }},
+                                               {.separator = true},
+                                               {.label = "Gone", .visible = false},
+                                               {.separator = true},
+                                               {.label = "Export", .description = std::string{"as PDF"}},
+                                               {.separator = true}},
+                                     .style = ui::MenuStyle::Button,
+                                     .label = std::string{"More"}})};
     CHECK(backend.prop(1, "items") == "[Print,;separator,Export;description=as PDF]");
     CHECK(backend.prop(1, "style") == "Button");
     CHECK(backend.prop(1, "label") == "More");
@@ -503,10 +501,11 @@ TEST_CASE("ui::Mounted: a removable badge names its control after its text, and 
     RecordingBackend backend;
     Signal<std::string> text{runtime, std::string{"Result"}};
     int removals = 0;
-    ui::Mounted const view{runtime, backend,
-                           ui::column({.children = {ui::badge({.text = [&] { return text.get(); },
-                                                                .onRemove = [&removals] { ++removals; }}),
-                                                     ui::badge({.text = std::string{"Plain"}})}})};
+    ui::Mounted const view{
+        runtime, backend,
+        ui::column(
+            {.children = {ui::badge({.text = [&] { return text.get(); }, .onRemove = [&removals] { ++removals; }}),
+                          ui::badge({.text = std::string{"Plain"}})}})};
     CHECK(backend.prop(2, "removable") == "Remove Result");
     CHECK_FALSE(backend.hasProp(3, "removable"));
     text.set("Sample");

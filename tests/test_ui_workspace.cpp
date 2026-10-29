@@ -724,11 +724,10 @@ TEST_CASE("workspace: a head's own menu is drawn behind one button, and an entry
     REQUIRE(head != nullptr);
     REQUIRE(head->menu() != nullptr);
     CHECK(head->menu()->peek() ==
-          std::vector<HeadMenuEntry>{
-              {.id = "calibrate", .label = "Calibrate"},
-              {.separator = true},
-              {.id = "retire", .label = "Take out of service", .description = "needs reason"},
-              {.label = "Export", .items = {{.id = "csv", .label = "CSV"}}}});
+          std::vector<HeadMenuEntry>{{.id = "calibrate", .label = "Calibrate"},
+                                     {.separator = true},
+                                     {.id = "retire", .label = "Take out of service", .description = "needs reason"},
+                                     {.label = "Export", .items = {{.id = "csv", .label = "CSV"}}}});
     REQUIRE(head->menuLabel() != nullptr);
     CHECK(head->menuLabel()->peek() == "More instrument actions");
     CHECK(shell.activeHeadShown());

@@ -146,7 +146,7 @@ char const* lotOf(char const* sample) {
 }
 
 // The record fields a line keeps; an edit rewrites `value` alone.
-constexpr std::array<char const*, 13> kFields{"id",   "kind",   "sample", "lot",  "analyte", "area", "value",
+constexpr std::array<char const*, 13> kFields{"id",       "kind", "sample", "lot", "analyte", "area", "value",
                                               "original", "unit", "places", "low", "high",    "spec"};
 
 std::int64_t scaleOf(std::int64_t places) {
@@ -432,11 +432,10 @@ ui::Node analyteCell(Evaluation const& evaluation) {
 }
 
 ui::Node evaluationCell(Worksheet const& sheet, Evaluation const& evaluation) {
-    return ui::row({layout::tag(evaluation.label, evaluation.tone).testId("evaluation"),
-                    layout::muted(ui::format("RSD {0} %", {sheet.rsd}))
-                        .visible(ui::eq(ui::row("kind"), "mean"))
-                        .testId("rsd")},
-                   {.gap = 1, .align = Align::Center});
+    return ui::row(
+        {layout::tag(evaluation.label, evaluation.tone).testId("evaluation"),
+         layout::muted(ui::format("RSD {0} %", {sheet.rsd})).visible(ui::eq(ui::row("kind"), "mean")).testId("rsd")},
+        {.gap = 1, .align = Align::Center});
 }
 
 ui::Node resultTable(Worksheet const& sheet) {
@@ -459,17 +458,19 @@ ui::Node resultTable(Worksheet const& sheet) {
          .label = "Evaluation",
          .width = ui::fixed(26),
          .cell = evaluationCell(sheet, evaluation)}};
-    return ui::table(sheet.lines,
-                     {.key = ui::row("id"),
-                      .columns = columns,
-                      // Each sample's results under a heading across the worksheet: its id and its lot.
-                      .group = ui::TableGroup{.by = ui::row("sample"),
-                                              .heading = {ui::row({ui::text({.text = ui::row("key"), .role = "mono"}),
-                                                                   ui::text({.text = ui::format("· lot {0}",
-                                                                                                {ui::row("first.lot")})})},
-                                                                  {.gap = 1})
-                                                              .testId("group")}},
-                      .rowTone = ui::cond(evaluation.outOfSpec, ui::AnyHandle{"err"}, ui::AnyHandle{nullptr})})
+    return ui::table(
+               sheet.lines,
+               {.key = ui::row("id"),
+                .columns = columns,
+                // Each sample's results under a heading across the worksheet: its id and its lot.
+                .group =
+                    ui::TableGroup{
+                        .by = ui::row("sample"),
+                        .heading = {ui::row({ui::text({.text = ui::row("key"), .role = "mono"}),
+                                             ui::text({.text = ui::format("· lot {0}", {ui::row("first.lot")})})},
+                                            {.gap = 1})
+                                        .testId("group")}},
+                .rowTone = ui::cond(evaluation.outOfSpec, ui::AnyHandle{"err"}, ui::AnyHandle{nullptr})})
         .a11y("Results of worksheet WS-2026-0412")
         .testId("results");
 }

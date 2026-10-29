@@ -302,8 +302,9 @@ TEMPLATE_TEST_CASE("qt_quick overlays: a description sits in the head under the 
     }
     overlay->setTitle("Sign");
     // Tall enough that a scroll area capped without it would push the footer past the window.
-    overlay->setDescription("Enter your password to sign the results.\nSecond line\nThird line\nFourth line\n"
-                            "Fifth line\nSixth line\nSeventh line\nEighth line");
+    overlay->setDescription(
+        "Enter your password to sign the results.\nSecond line\nThird line\nFourth line\n"
+        "Fifth line\nSixth line\nSeventh line\nEighth line");
     std::vector<std::unique_ptr<ui::TextWidget>> rows;
     for (int i = 0; i < 60; ++i) {
         rows.push_back(scene.backend().createText(overlay.get()));
@@ -337,9 +338,10 @@ TEMPLATE_TEST_CASE("qt_quick overlays: a description sits in the head under the 
 }
 
 // Mutation: ignore `sheet` in MorphDialog (the popup keeps its content's size and shows no dismiss button).
-TEST_CASE("qt_quick dialog: a sheet fills the window, its dismiss button dismisses once, and turning it off keeps "
-          "the content",
-          "[qt_quick]") {
+TEST_CASE(
+    "qt_quick dialog: a sheet fills the window, its dismiss button dismisses once, and turning it off keeps "
+    "the content",
+    "[qt_quick]") {
     Scene scene;
     auto dialog = scene.backend().createDialog(nullptr);
     dialog->setTitle("Sign to approve");

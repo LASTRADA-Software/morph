@@ -46,8 +46,8 @@ std::vector<morph::ui::MenuEntry> entries(std::initializer_list<char const*> lab
 }  // namespace
 using morph::tui::detail::PanelImpl;
 using morph::tui::detail::RadioSelectImpl;
-using morph::tui::detail::SegmentedSelectImpl;
 using morph::tui::detail::ScrollImpl;
+using morph::tui::detail::SegmentedSelectImpl;
 using morph::tui::detail::SpacerImpl;
 using morph::tui::detail::StackImpl;
 using morph::tui::detail::TabsImpl;

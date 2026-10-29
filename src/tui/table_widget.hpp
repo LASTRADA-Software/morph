@@ -117,7 +117,8 @@ private:
     [[nodiscard]] bool isHeading(WidgetBase const* row) const { return _headings.contains(row); }
     /// The first place from @p place among @p rows, toward the end (or the start when there is none there), that is
     /// not a heading; @p place itself when every row is one.
-    [[nodiscard]] std::size_t dataPlace(std::span<WidgetBase* const> rows, std::size_t place, Direction direction) const;
+    [[nodiscard]] std::size_t dataPlace(std::span<WidgetBase* const> rows, std::size_t place,
+                                        Direction direction) const;
     /// The cursor's position among @p rows (the shown rows); 0 when there are none.
     [[nodiscard]] std::size_t cursorPlace(std::span<WidgetBase* const> rows) const;
     /// Puts the cursor on the row at @p place of @p rows, and has the next frame bring it into view.

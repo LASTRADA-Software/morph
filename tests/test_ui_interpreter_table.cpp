@@ -202,7 +202,8 @@ std::string rowOrder(Harness const& h, int table) {
     std::string order;
     for (int const row : h.backend.children(table)) {
         std::string const shown = h.backend.prop(row, "rowKey");
-        order += (order.empty() ? "" : " ") + (shown.size() >= 2 && shown.front() == '"' ? shown.substr(1, shown.size() - 2) : shown);
+        order += (order.empty() ? "" : " ") +
+                 (shown.size() >= 2 && shown.front() == '"' ? shown.substr(1, shown.size() - 2) : shown);
     }
     return order;
 }
@@ -213,7 +214,8 @@ std::string sortTable(std::string_view state, std::string_view extra) {
       "vocab": "ui/1", "id": "sorted",
       "state": { "seen": { "init": null }, "items": { "init": { "lit": [ { "id": "x" }, { "id": "z" }, { "id": "y" } ] } })"} +
            std::string{state} + R"( },
-      "view": { "kind": "table", "id": "t", "rows": { "ref": "items" })" + std::string{extra} + R"(,
+      "view": { "kind": "table", "id": "t", "rows": { "ref": "items" })" +
+           std::string{extra} + R"(,
                 "columns": [ { "id": "id", "label": "Id", "sortable": true }, { "id": "other", "label": "Other" } ] } })";
 }
 
@@ -227,12 +229,14 @@ long sortReports(Harness const& h) {
 }  // namespace
 
 // Mutation: skip the sort in `tableView` (the rows keep their source order).
-TEST_CASE("table: a bound sort orders the rows and is the element's sort; a bare record keeps the order, reported once",
-          "[ui][interpreter]") {
+TEST_CASE(
+    "table: a bound sort orders the rows and is the element's sort; a bare record keeps the order, reported once",
+    "[ui][interpreter]") {
     {
         Harness h;
-        auto screen = h.mount(sortTable(R"(, "order": { "init": { "lit": [ { "column": "id", "direction": "desc" } ] } })",
-                                        R"(, "sort": { "ref": "order" })"));
+        auto screen =
+            h.mount(sortTable(R"(, "order": { "init": { "lit": [ { "column": "id", "direction": "desc" } ] } })",
+                              R"(, "sort": { "ref": "order" })"));
         int const table = h.backend.all("Table").front();
         CHECK(rowOrder(h, table) == "z y x");
         CHECK(readJson(*screen, R"({"ref":"t.sort"})") == R"([{"column":"id","direction":"desc"}])");
@@ -377,23 +381,29 @@ std::string pagedTable(std::string_view mode, std::string_view extra = "", std::
     std::string buttons;
     for (int const page : {0, 1, 2, 9}) {
         buttons += R"(, { "kind": "button", "testId": "to)" + std::to_string(page) + R"(", "label": "go",
-          "onClick": [ { "set": "page", "value": )" + std::to_string(page) + " } ] }";
+          "onClick": [ { "set": "page", "value": )" +
+                   std::to_string(page) + " } ] }";
     }
     return std::string{R"({
       "vocab": "ui/1", "id": "paged",
-      "state": { "page": { "init": 0 }, "size": { "init": )"} + std::string{pageSize} + R"( },
-                 "selected": { "init": { "lit": [] } }, "items": { "init": { "lit": [ )" + rows + R"( ] } } },
+      "state": { "page": { "init": 0 }, "size": { "init": )"} +
+           std::string{pageSize} + R"( },
+                 "selected": { "init": { "lit": [] } }, "items": { "init": { "lit": [ )" +
+           rows + R"( ] } } },
       "view": { "kind": "column", "children": [
         { "kind": "text", "testId": "pager", "text": { "fn": "format", "args": [ "{0}-{1} of {2}, page {3} of {4}",
             { "ref": "t.pageFirst" }, { "ref": "t.pageLast" }, { "ref": "t.viewCount" }, { "ref": "t.page" },
             { "ref": "t.pageCount" } ] } },
-        { "kind": "table", "id": "t", "rows": { "ref": "items" })" + std::string{extra} + R"(,
-          "selectionMode": ")" + std::string{mode} + R"(", "selection": { "ref": "selected" },
+        { "kind": "table", "id": "t", "rows": { "ref": "items" })" +
+           std::string{extra} + R"(,
+          "selectionMode": ")" +
+           std::string{mode} + R"(", "selection": { "ref": "selected" },
           "onSelectionChange": [ { "set": "selected", "value": { "ref": "event" } } ],
           "pageSize": { "ref": "size" }, "page": { "ref": "page" },
           "columns": [ { "id": "n", "label": "N", "sortable": true } ] },
         { "kind": "button", "testId": "pick51", "label": "51",
-          "onClick": [ { "set": "selected", "value": { "lit": [ 51 ] } } ] })" + buttons + R"( ] } })";
+          "onClick": [ { "set": "selected", "value": { "lit": [ 51 ] } } ] })" +
+           buttons + R"( ] } })";
 }
 
 void turnTo(Harness& h, int page) {
@@ -556,9 +566,11 @@ std::string groupedTable(std::string_view extra = "", std::string_view results =
                                              : std::string{results};
     return std::string{R"({
       "vocab": "ui/1", "id": "grouped",
-      "state": { "items": { "init": { "lit": )"} + rows + R"( } } },
+      "state": { "items": { "init": { "lit": )"} +
+           rows + R"( } } },
       "view": { "kind": "column", "children": [
-        { "kind": "table", "id": "t", "rows": { "ref": "items" }, "selectionMode": "multiple")" + std::string{extra} + R"(,
+        { "kind": "table", "id": "t", "rows": { "ref": "items" }, "selectionMode": "multiple")" +
+           std::string{extra} + R"(,
           "group": { "by": { "row": "sample" },
                      "heading": { "kind": "text", "text": { "fn": "format", "args": [ "{0} · lot {1} · {2}",
                          { "row": "key" }, { "row": "first.lot" }, { "row": "count" } ] } } },
@@ -616,9 +628,9 @@ TEST_CASE("table: groups A, B, A give three headings and no duplicate key", "[ui
 
 // Mutation: read `showHeader` as an expression again (it is a literal flag, so the table always shows its header).
 TEST_CASE("table: showHeader false hides the header, and absent shows it", "[ui][interpreter]") {
-    for (auto const& [flag, shown] : {std::pair{std::string_view{R"(, "showHeader": false)"}, "false"},
-                                      std::pair{std::string_view{R"(, "showHeader": true)"}, "true"},
-                                      std::pair{std::string_view{""}, "true"}}) {
+    for (auto const& [flag, shown] :
+         {std::pair{std::string_view{R"(, "showHeader": false)"}, "false"},
+          std::pair{std::string_view{R"(, "showHeader": true)"}, "true"}, std::pair{std::string_view{""}, "true"}}) {
         Harness h;
         auto screen = h.mount(std::string{R"({
           "vocab": "ui/1", "id": "header",

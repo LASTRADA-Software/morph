@@ -84,10 +84,9 @@ struct ChartTicks {
         return std::nullopt;
     }
     static math::Rational const kTwenty{20, math::DecimalPlaces{0}};
-    auto const pad = span->numerator == 0
-                         ? std::expected<math::Rational, math::RationalError>{chartPowerOfTen(
-                               -static_cast<int>(std::min(places, math::kMaxDecimalPlaces)))}
-                         : math::checkedDiv(*span, kTwenty);
+    auto const pad = span->numerator == 0 ? std::expected<math::Rational, math::RationalError>{chartPowerOfTen(
+                                                -static_cast<int>(std::min(places, math::kMaxDecimalPlaces)))}
+                                          : math::checkedDiv(*span, kTwenty);
     if (!pad) {
         return std::nullopt;
     }

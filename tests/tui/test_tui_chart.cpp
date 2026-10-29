@@ -43,14 +43,8 @@ TEST_CASE("tui chart: lines, ticks and points in cells, a marked point as a cros
     Harness harness{30, 8};
     auto const chart = harness.make<ChartImpl>(nullptr);
     chart->setData(sample());
-    CHECK(harness.draw() == Rows{"10",
-                                 "                       ✕ high",
-                                 "",
-                                 "                ●",
-                                 "   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌limit",
-                                 "",
-                                 "    ●",
-                                 " 0"});
+    CHECK(harness.draw() == Rows{"10", "                       ✕ high", "", "                ●",
+                                 "   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌limit", "", "    ●", " 0"});
     CHECK(chart->probeText() == "Three runs, the last one high");
 }
 

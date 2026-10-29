@@ -28,8 +28,8 @@ std::string hundredths(std::int64_t value) { return std::format(R"({{ "num": {},
 std::string runsList(std::size_t bound = kRuns.size()) {
     std::string list = R"({ "list": [)";
     for (std::size_t index = 0; index < kRuns.size(); ++index) {
-        std::string const value =
-            index == bound ? R"({ "ref": "fifth" })" : R"({ "lit": )" + hundredths(10000 + (4 * kRuns.at(index))) + "}";
+        std::string const value = index == bound ? R"({ "ref": "fifth" })"
+                                                 : R"({ "lit": )" + hundredths(10000 + (4 * kRuns.at(index))) + "}";
         std::string const violation = index + 1 == kRuns.size() ? R"("+3.4SD, rule 1-3s")" : "null";
         list += std::format(R"({}{{ "obj": {{ "run": {}, "value": {}, "violation": {} }} }})", index == 0 ? "" : ",",
                             index + 1, value, violation);

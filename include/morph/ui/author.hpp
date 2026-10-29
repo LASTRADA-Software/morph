@@ -1358,9 +1358,9 @@ template <typename E = Any>
 /// @param order  The direction.
 /// @return The key, a constant.
 [[nodiscard]] inline AnyHandle sortKey(std::string const& column, SortOrder order = SortOrder::Ascending) {
-    return AnyHandle::raw(detail::constant(Value{ValueRecord{
-        {"column", Value{column}},
-        {"direction", Value{std::string{order == SortOrder::Ascending ? "asc" : "desc"}}}}}));
+    return AnyHandle::raw(detail::constant(
+        Value{ValueRecord{{"column", Value{column}},
+                          {"direction", Value{std::string{order == SortOrder::Ascending ? "asc" : "desc"}}}}}));
 }
 
 /// @brief The elements of a list whose boolean member is true.
@@ -3676,7 +3676,6 @@ struct SelectOptions {
     return node.put("onChoose", options.onChoose).put("onChange", options.onChange).done();
 }
 
-
 /// @brief A `menu` node.
 /// @param items The items.
 /// @return The node.
@@ -5338,9 +5337,9 @@ inline std::optional<Refusal> accessibilityOf(DocNode const& node, std::string c
 ///
 /// Every text input, date-time input, slider, select, checkbox and file picker has a `label` or an `a11y.name`; a
 /// button without a `label`, every `custom` node and every `table` has an `a11y.name`; every `dialog` and `drawer`
-/// has a `title` or an `a11y.name`, and every `group` a `label` or an `a11y.name`. An `icon` never counts, and neither does a label or name written as the
-/// constant `""` or `null`. A form field takes its field's label, so a `form` is not checked. The view and every
-/// component's fallback are walked; the client does not run these rules.
+/// has a `title` or an `a11y.name`, and every `group` a `label` or an `a11y.name`. An `icon` never counts, and neither
+/// does a label or name written as the constant `""` or `null`. A form field takes its field's label, so a `form` is
+/// not checked. The view and every component's fallback are walked; the client does not run these rules.
 /// @param document The loaded document.
 /// @return The first rule broken, with the node's path, or nothing.
 [[nodiscard]] inline std::optional<Refusal> checkAccessibility(Document const& document) {

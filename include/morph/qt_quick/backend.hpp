@@ -94,7 +94,8 @@ public:
     [[nodiscard]] std::unique_ptr<ui::SelectWidget> createSelect(ui::ContainerWidget* parent,
                                                                  ui::SelectStyle style) override;
     /// @copydoc ui::IViewBackend::createMenu
-    [[nodiscard]] std::unique_ptr<ui::MenuWidget> createMenu(ui::ContainerWidget* parent, ui::MenuStyle style) override;
+    [[nodiscard]] std::unique_ptr<ui::MenuWidget> createMenu(ui::ContainerWidget* parent,
+                                                             ui::MenuStyle style) override;
     /// @copydoc ui::IViewBackend::createStack
     [[nodiscard]] std::unique_ptr<ui::StackWidget> createStack(ui::ContainerWidget* parent, ui::Axis axis) override;
     /// @copydoc ui::IViewBackend::createGrid

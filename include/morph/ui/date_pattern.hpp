@@ -196,7 +196,8 @@ struct Fields {
 /// @param cursor      Where to read; moved past it.
 /// @param fields  Where the value goes.
 /// @return Whether the text holds the element there.
-[[nodiscard]] inline bool readElement(Element const& element, std::string_view text, std::size_t& cursor, Fields& fields) {
+[[nodiscard]] inline bool readElement(Element const& element, std::string_view text, std::size_t& cursor,
+                                      Fields& fields) {
     if (element.token == Token::Literal) {
         if (cursor >= text.size() || text.at(cursor) != element.literal) {
             return false;
@@ -275,8 +276,8 @@ struct Fields {
 
 /// @brief Checks a date pattern: only the tokens `yyyy`, `MM`, `MMM`, `dd`, `HH`, `mm`, `ss` and `xxx` and the
 ///        literals `-`, `/`, `.`, `:`, `,` and a space; `yyyy`, `dd` and one of `MM` or `MMM` once each; for a date
-///        and time also `HH` and `mm` once each and `ss` and `xxx` cursor most once, and for a date no time token; and no
-///        two tokens touching without a literal between them, except `MMM` beside a number. So every text it writes
+///        and time also `HH` and `mm` once each and `ss` and `xxx` cursor most once, and for a date no time token; and
+///        no two tokens touching without a literal between them, except `MMM` beside a number. So every text it writes
 ///        reads back to the same instant.
 /// @param pattern  The pattern, such as `dd-MMM-yyyy HH:mm`.
 /// @param withTime Whether it is a date-and-time pattern rather than a date pattern.

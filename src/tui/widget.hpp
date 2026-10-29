@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <core/tui/Canvas.hpp>
 #include <core/tui/Component.hpp>
 #include <core/tui/InputEvent.hpp>
 #include <core/tui/Rect.hpp>
 #include <core/tui/Tooltip.hpp>
-#include <algorithm>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -439,8 +439,8 @@ public:
     }
     void paint(::core::tui::Canvas& canvas) final {
         int const rows = descriptionRows();
-        auto control = canvas.subcanvas(
-            {.x = 0, .y = 0, .width = canvas.width(), .height = std::max(0, canvas.height() - rows)});
+        auto control =
+            canvas.subcanvas({.x = 0, .y = 0, .width = canvas.width(), .height = std::max(0, canvas.height() - rows)});
         paintControl(control);
         if (rows > 0) {
             auto below = canvas.subcanvas({.x = 0,

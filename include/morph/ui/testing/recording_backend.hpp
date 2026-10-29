@@ -755,8 +755,7 @@ public:
     /// @param kind The kind shown in the log and the dump.
     /// @param parent The container it is appended to (or the button whose content it is), or null for a root.
     /// @param initial Properties fixed at creation.
-    FakeLeaf(std::shared_ptr<RecordStore> store, std::string kind, Widget const* parent,
-             PropList initial = {})
+    FakeLeaf(std::shared_ptr<RecordStore> store, std::string kind, Widget const* parent, PropList initial = {})
         : _store{std::move(store)}, _id{_store->create(std::move(kind), parent, *this, std::move(initial))} {}
 
     /// @brief Forgets the widget and logs its destruction; its remaining children become roots.

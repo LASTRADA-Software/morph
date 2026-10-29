@@ -520,8 +520,7 @@ std::optional<EventResult> DateTimeInputImpl::intercept(::core::tui::KeyEvent co
 // An empty field steps from now; text that does not parse is left alone and marked.
 void DateTimeInputImpl::step(std::chrono::minutes delta) {
     auto const text = _field->text();
-    auto const current =
-        text.empty() ? std::optional{morph::time::DateTime::now()} : instantOf(text);
+    auto const current = text.empty() ? std::optional{morph::time::DateTime::now()} : instantOf(text);
     if (!current) {
         _invalid = true;
         refresh();

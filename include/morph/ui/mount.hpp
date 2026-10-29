@@ -667,7 +667,8 @@ private:
     // path under its shown path in @p sources. A separator that hidden entries leave first, last or next to another
     // separator is left out.
     // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
-    [[nodiscard]] static std::vector<MenuEntry> shownLevel(std::vector<MenuItem> const& items, MenuLevelAt const& where,
+    [[nodiscard]] static std::vector<MenuEntry> shownLevel(std::vector<MenuItem> const& items,
+                                                           MenuLevelAt const& where,
                                                            std::map<MenuPath, MenuPath>& sources) {
         std::vector<MenuEntry> entries;
         auto const record = [&](std::size_t source) {
@@ -910,8 +911,8 @@ private:
             *sent = menu.sources;
             widget.setItems(menu.entries);
         });
-        widget.setOnActivate(event(std::function<void(std::vector<std::size_t>)>{
-            [items = items, sent](std::vector<std::size_t> const& path) {
+        widget.setOnActivate(event(
+            std::function<void(std::vector<std::size_t>)>{[items = items, sent](std::vector<std::size_t> const& path) {
                 MenuItem const* const item = itemAt(items, *sent, path);
                 if (item != nullptr && item->onSelect) {
                     item->onSelect();

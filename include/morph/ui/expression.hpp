@@ -2113,8 +2113,7 @@ private:
         }
         auto const from = static_cast<std::size_t>(std::min<std::int64_t>(*start, std::ssize(*items)));
         std::size_t const left = items->size() - from;
-        std::size_t const taken =
-            count == nullptr ? left : std::min(left, static_cast<std::size_t>(*count));
+        std::size_t const taken = count == nullptr ? left : std::min(left, static_cast<std::size_t>(*count));
         auto const first = items->begin() + static_cast<std::ptrdiff_t>(from);
         return ValueList{first, first + static_cast<std::ptrdiff_t>(taken)};
     }

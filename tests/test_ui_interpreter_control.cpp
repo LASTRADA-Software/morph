@@ -3,8 +3,8 @@
 // The control corpus of spec 5 §14: queries (latest wins, debounce, timed refresh, the cache), mutations (the four
 // concurrency modes and optimistic writes) and boundaries, mounted on RecordingBackend with a scripted dispatcher.
 
-#include <catch2/catch_test_macros.hpp>
 #include <algorithm>
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
 #include <string>
@@ -822,8 +822,9 @@ TEST_CASE("interpreter control: a stacked key-value records its captions, its it
         {"kind": "button", "testId": "stock", "label": "Stock", "onClick": [{"set": "enough", "value": true}]}]}})");
     int const kv = h.byTestId("KeyValue", "kv");
     CHECK(h.backend.prop(kv, "captions") == "Above");
-    CHECK(h.backend.prop(kv, "items") == "[Serial number:[DEAB-902114;mono],Containers:180 needed\\, 150 in "
-                                         "stock;tone=Err,Note\\; tone\\=Ok:a\\;b]");
+    CHECK(h.backend.prop(kv, "items") ==
+          "[Serial number:[DEAB-902114;mono],Containers:180 needed\\, 150 in "
+          "stock;tone=Err,Note\\; tone\\=Ok:a\\;b]");
     CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
               return refusal.path == "/view/children/0/items" && refusal.reason.contains("\"loud\"");
           }) == 1);

@@ -816,8 +816,7 @@ TEST_CASE("qt_quick theme: a selected push button keeps its size, rings in the a
     CHECK(std::abs(shown.alphaF() - 0.12F) < 0.01F);
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
-    CHECK(buttonBackground(*plain).property("color").value<QColor>() ==
-          theme->property("surface").value<QColor>());
+    CHECK(buttonBackground(*plain).property("color").value<QColor>() == theme->property("surface").value<QColor>());
 
     CHECK(accessibleOf(pickedItem)->property("checkable").toBool());
     CHECK(accessibleOf(pickedItem)->property("checked").toBool());
@@ -870,8 +869,7 @@ TEST_CASE("qt_quick theme: a toned or refused input is outlined in the tone, wit
     CHECK(borderOf(*toned) == QColor{"#c62828"});
     CHECK(backgroundOf(*toned)->property("border").value<QObject*>()->property("width").toInt() == 2);
     // The description is drawn under the control in the tone's colour, and is the control's accessible description.
-    QQuickItem const* const description =
-        Scene::itemOf(*toned).findChild<QQuickItem*>(QStringLiteral("description"));
+    QQuickItem const* const description = Scene::itemOf(*toned).findChild<QQuickItem*>(QStringLiteral("description"));
     REQUIRE(description != nullptr);
     CHECK(description->property("color").value<QColor>() == QColor{"#c62828"});
     CHECK(Scene::itemOf(*toned).property("accessibleDescription").toString() ==

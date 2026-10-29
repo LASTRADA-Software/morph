@@ -732,10 +732,8 @@ ui::ContainerWidget& OverlayFooter::of(ContainerBase& overlay) {
 // A description takes the first row inside the frame and a rule the second, so the content starts two rows lower.
 std::vector<::core::tui::Rect> OverlayCore::childAreas(::core::tui::Size size) const {
     int const head = _description.empty() ? 0 : 2;
-    ::core::tui::Rect const inner{.x = 2,
-                                  .y = 1 + head,
-                                  .width = std::max(0, size.width - 4),
-                                  .height = std::max(0, size.height - 2 - head)};
+    ::core::tui::Rect const inner{
+        .x = 2, .y = 1 + head, .width = std::max(0, size.width - 4), .height = std::max(0, size.height - 2 - head)};
     std::span<WidgetBase* const> const children = _self->children();
     // A sheet's footer stands at the bottom of the box, under content that takes the rest of its height.
     bool const footerLast = _sheet && !children.empty() && children.back() == _footer && _footer->shown();
