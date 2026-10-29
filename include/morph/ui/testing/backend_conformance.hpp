@@ -2370,6 +2370,60 @@ struct SelectionReport {
     return inner.height > 0 && inner.y >= outer.y - 0.5 && inner.y + inner.height <= outer.y + outer.height + 0.5;
 }
 
+/// @brief Case: a slot showing a one-row `ForEach`, which is how a switch case is mounted, fills the slot when that
+///        `ForEach` is sized as the content it holds, a column of a stretching scroll above a bar.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> slotShowingStretchingForEachFills(ConformanceProbe& probe) {
+    auto const row = [](reactive::Signal<int> const&) -> Node {
+        std::vector<Node> lines;
+        lines.reserve(40);
+        for (int line = 1; line <= 40; ++line) {
+            lines.push_back(sizedText("line " + std::to_string(line), {}));
+        }
+        Scroll scroll{.child = ui::column(Column{.children = std::move(lines)}), .axis = Axis::Vertical};
+        scroll.common.layout = {.width = Sizing::stretch(), .height = Sizing::stretch()};
+        Column held{.children = {ui::scroll(std::move(scroll)), sizedText("bar", {})}};
+        held.common.layout = {.width = Sizing::content(), .height = Sizing::stretch()};
+        return ui::column(std::move(held));
+    };
+    Common held;
+    held.layout = {.width = Sizing::content(), .height = Sizing::stretch()};
+    Switch shown{.selector = [] { return Key{std::int64_t{0}}; },
+                 .cases = {{.key = Key{std::int64_t{0}},
+                            .node = ui::forEach<int>([] { return std::vector<int>{0}; },
+                                                     [](int const&) { return Key{std::int64_t{0}}; }, row,
+                                                     Axis::Vertical, 0, held)}}};
+    shown.common.layout = {.width = Sizing::stretch(), .height = Sizing::stretch()};
+    Column column{.children = {ui::switchOf(std::move(shown))}};
+    column.common.layout = {.width = Sizing::fixed(30), .height = Sizing::fixed(20)};
+    Mounted const view{probe.runtime(), probe.backend(), insideRow(ui::column(std::move(column)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const inside = measured(probe, view);
+    checks.that(inside.children.size() == 1, "the column holds the switch's slot");
+    if (inside.children.size() != 1 || inside.children.front() == nullptr) {
+        return checks.result();
+    }
+    // The slot, then the one-row ForEach it shows, then the row it builds, then that row's bar.
+    Widget const* current = inside.children.front();
+    for (std::string_view const level : {"the slot", "the one-row ForEach"}) {
+        ContainerWidget const* const container = current == nullptr ? nullptr : asContainer(*current);
+        current = container != nullptr && probe.childCount(*container) == 1 ? probe.childAt(*container, 0) : nullptr;
+        checks.that(current != nullptr, std::string{level} + " holds one child");
+    }
+    ContainerWidget const* const content = current == nullptr ? nullptr : asContainer(*current);
+    if (content == nullptr || probe.childCount(*content) != 2) {
+        checks.that(false, "the row is a column of a scroll and a bar");
+        return checks.result();
+    }
+    WidgetBounds const outer = geometry.of(*inside.container);
+    WidgetBounds const bar = geometry.of(*probe.childAt(*content, 1));
+    geometry.near("the bar's bottom, at the column's", outer.y + outer.height, bar.y + bar.height);
+    return checks.result();
+}
+
 /// @brief Case: a scrollable slot of fixed height shows a column of 40 lines inside its own height and brings the
 ///        focused last one into view; holding a column that stretches in height, the column fills it exactly.
 /// @param probe The backend under test.
@@ -2779,7 +2833,7 @@ struct SelectionReport {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 19> const cases{{
+    static std::array<ConformanceCase, 20> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -2807,6 +2861,8 @@ struct SelectionReport {
          .run = detail::splitterPanesFillIt},
         {.name = "a stretching child of a scrollable slot below its minimum height scrolls",
          .run = detail::stretchingChildBelowMinimumScrolls},
+        {.name = "a slot showing a one-row ForEach whose holder stretches fills the slot",
+         .run = detail::slotShowingStretchingForEachFills},
     }};
     return cases;
 }

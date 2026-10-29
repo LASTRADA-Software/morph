@@ -6,7 +6,9 @@
 // shell hands that class to the screen, as a user resizing the window would. It fails when a mount saw another class,
 // on any problem the shell reports, and on any Qt warning, as the testkit's does.
 
+#include <QPointF>
 #include <QQmlEngine>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QString>
 #include <QtGlobal>
@@ -33,6 +35,10 @@ namespace {
 
 // Each width class and a window width in units inside it: below 80 units is compact, 160 and over expanded.
 constexpr std::array<std::pair<std::string_view, double>, 2> kWidths{{{"compact", 60.0}, {"expanded", 180.0}}};
+
+// The window of the footer probe, in pixels: a phone.
+constexpr int kProbeWidth = 390;
+constexpr int kProbeHeight = 844;
 
 // How long a mount waits for the backend to report the class its window was resized to.
 constexpr int kResizeAttempts = 50;
@@ -68,7 +74,25 @@ struct WidthReport {
     std::vector<std::string> mounted;
     std::vector<std::string> failures;
     int exitCode = -1;
+    // The footer probe: the receipt page's Receive button at the probe window's size.
+    bool footerFound = false;
+    double footerBottom = 0.0;
+    double windowHeight = 0.0;
+    double unitHeight = 0.0;
 };
+
+// The first item under @p root whose object name is @p name, depth first.
+QQuickItem* findItem(QQuickItem* root, QString const& name) {
+    if (root->objectName() == name) {
+        return root;
+    }
+    for (QQuickItem* child : root->childItems()) {
+        if (QQuickItem* const found = findItem(child, name); found != nullptr) {
+            return found;
+        }
+    }
+    return nullptr;
+}
 
 // Mounts each screen at each width in turn, one per settle period, and quits after the last.
 class WidthSmokeShell final : public morph::ui::MountedShell {
@@ -96,6 +120,9 @@ public:
                 _report->expected.push_back(screen + "@" + std::string{width});
             }
         }
+        // Last, so the window is left at the probe's size only after every other mount.
+        _mounts.push_back(Mount{.screen = "lims-gallery.receipt", .width = "compact", .units = 0.0, .probe = true});
+        _report->expected.push_back("lims-gallery.receipt@compact");
         next();
     }
 
@@ -104,6 +131,7 @@ private:
         std::string screen;
         std::string width;
         double units = 0.0;
+        bool probe = false;
     };
 
     void next() {
@@ -113,7 +141,11 @@ private:
             return;
         }
         Mount const& mount = _mounts.at(_index++);
-        _shown->window->resize(pixelsFor(*_shown->engine, mount.units), 900);
+        if (mount.probe) {
+            _shown->window->resize(kProbeWidth, kProbeHeight);
+        } else {
+            _shown->window->resize(pixelsFor(*_shown->engine, mount.units), 900);
+        }
         awaitWidth(mount, 0);
     }
 
@@ -134,7 +166,26 @@ private:
                     [this](std::string const& mounted) {
                         _report->mounted.push_back(mounted + "@" + _backend->widthClass());
                     }});
-        later(std::chrono::milliseconds{200}, [this] { next(); });
+        later(std::chrono::milliseconds{200}, [this, &mount] {
+            if (mount.probe) {
+                probe();
+            }
+            next();
+        });
+    }
+
+    // Reads where the receipt page's Receive button ended up in the probe window.
+    void probe() {
+        QQuickItem* const button = findItem(_shown->window->contentItem(), QStringLiteral("receive"));
+        _report->footerFound = button != nullptr;
+        if (button == nullptr) {
+            return;
+        }
+        _report->footerBottom = button->mapToScene(QPointF{0.0, button->height()}).y();
+        _report->windowHeight = _shown->window->height();
+        auto const* const theme =
+            _shown->engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+        _report->unitHeight = theme != nullptr ? theme->property("unitHeight").toDouble() : 0.0;
     }
 
     // Runs @p action after @p delay, posted from the timer rather than run in it: the action replaces the timer,
@@ -206,4 +257,11 @@ TEST_CASE("lims gallery render smoke: every screen at both width classes, offscr
         UNSCOPED_INFO(failure);
     }
     CHECK(report.failures.empty());
+    // The compact receipt page is a pinned page in a switch case: its bottom bar sits at the window's bottom, so
+    // "Receive" is on the screen at a phone's size. A case that does not stretch cuts the page short, and the bar
+    // ends far above the bottom.
+    REQUIRE(report.footerFound);
+    CHECK(report.footerBottom <= report.windowHeight);
+    // The page's padding is a few units.
+    CHECK(report.footerBottom >= report.windowHeight - 4.0 * report.unitHeight);
 }

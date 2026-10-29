@@ -532,6 +532,9 @@ the container it measures inside another, since a root fills the window or scree
     to read before any sizing.
 16. An open dialog drawn as a sheet fills the surface: a stretching text inside it is at least as wide as a
     stretching text beside it in the root, less 10 units for the sheet's border and padding.
+17. A slot of fixed height 20 showing a one-row `ForEach` sized as the content it holds, a column of a stretching
+    scroll above a one-line bar, ends the bar at the slot's end: the slot reads its direct child's sizing alone, so
+    that `ForEach` carries the stretch.
 
 ### The probe
 

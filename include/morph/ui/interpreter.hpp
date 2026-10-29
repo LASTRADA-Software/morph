@@ -2652,16 +2652,19 @@ public:
     /// @param ctx   Where.
     /// @return The node.
     // NOLINTNEXTLINE(misc-no-recursion): one level per nested node of the document.
-    [[nodiscard]] Node lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx) {
-        if (nodes.size() == 1) {
-            return lower(*nodes.front(), ctx);
-        }
-        Column column;
-        for (DocNodePtr const& child : nodes) {
-            column.children.push_back(lower(*child, ctx));
-        }
-        return ui::column(std::move(column));
-    }
+    [[nodiscard]] Node lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx);
+
+    /// @brief The size request of a holder of @p content: the largest stretch of its children on each axis.
+    ///
+    /// A literal sizing is read as written and a computed one is evaluated once in the enclosing scope. A computed
+    /// sizing that reads a name the holder's own scope declares cannot be evaluated before the holder mounts; it is
+    /// reported and counts as content.
+    /// @param content The holder's document children.
+    /// @param decl    The declarations of the holder's own scope; `nullptr` for none.
+    /// @param ctx     Where the holder is lowered.
+    /// @return The hints; bounds and `alignSelf` stay unset, because they belong to a child.
+    [[nodiscard]] LayoutHints holderHints(std::span<DocNode const* const> content, ScopeDecl const* decl,
+                                          LowerCtx const& ctx);
 
     // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the screen's shared state, which its
     // scopes and runtimes read and write directly.
@@ -6668,13 +6671,69 @@ inline constexpr std::string_view kToneNames = "a tone is neutral, info, ok, war
     return out;
 }
 
+/// @brief A node's size request.
+/// @param node The node; may be null.
+/// @return Its layout hints, or none for a null node or a kind that has no `Common`.
+[[nodiscard]] inline LayoutHints layoutHintsOf(Node const& node) {
+    if (!node) {
+        return {};
+    }
+    return std::visit(
+        [](auto const& spec) -> LayoutHints {
+            if constexpr (requires { spec.common.layout; }) {
+                return spec.common.layout;
+            } else {
+                return {};
+            }
+        },
+        node->kind);
+}
+
+/// @brief The size request of a holder of @p sizings: a stretch by the largest weight where any is a stretch, and
+///        content otherwise.
+/// @param sizings One dimension's sizing of each child.
+/// @return The holder's sizing.
+[[nodiscard]] inline Sizing holderSizing(std::span<Sizing const> sizings) {
+    int weight = 0;
+    for (Sizing const& sizing : sizings) {
+        if (sizing.kind == Sizing::Kind::Stretch) {
+            weight = std::max(weight, sizing.amount);
+        }
+    }
+    return weight > 0 ? Sizing::stretch(weight) : Sizing::content();
+}
+
+/// @brief The column that holds a node list. It stretches along an axis when one of its children does, so the
+///        content means what its nodes would mean written inline in the holder's parent.
+/// @param children The content.
+/// @param gap      The spacing step between children.
+/// @return The column; bounds and `alignSelf` stay unset, because they belong to a child.
+[[nodiscard]] inline Column listColumn(std::vector<Node> children, int gap = 0) {
+    std::vector<Sizing> widths;
+    std::vector<Sizing> heights;
+    for (Node const& child : children) {
+        LayoutHints const hints = layoutHintsOf(child);
+        widths.push_back(hints.width);
+        heights.push_back(hints.height);
+    }
+    Column column{.children = std::move(children), .gap = gap};
+    column.common.layout.width = holderSizing(widths);
+    column.common.layout.height = holderSizing(heights);
+    return column;
+}
+
 /// @brief Content whose scope is made when it mounts and released when it unmounts: a one-row `forEach` whose
 ///        row view builds it.
 /// @param build Builds the content, its scope included.
+/// @param hints The size request of the content. A slot reads the sizing of its direct child alone, which is this
+///        `forEach`, so the content's stretch reaches the slot only through these.
 /// @return The node.
-[[nodiscard]] inline Node lazy(std::function<Node()> build) {
+[[nodiscard]] inline Node lazy(std::function<Node()> build, LayoutHints const& hints = {}) {
+    Common common;
+    common.layout = hints;
     return ui::forEach<int>([] { return std::vector<int>{0}; }, [](int const&) { return Key{std::int64_t{0}}; },
-                            [build = std::move(build)](reactive::Signal<int> const&) { return build(); });
+                            [build = std::move(build)](reactive::Signal<int> const&) { return build(); },
+                            Axis::Vertical, 0, common);
 }
 
 /// @brief A column of content that holds its scope for as long as it is mounted: its `visible` is a binding
@@ -6685,10 +6744,106 @@ inline constexpr std::string_view kToneNames = "a tone is neutral, info, ok, war
 /// @return The node.
 [[nodiscard]] inline Node holding(std::vector<Node> children, std::shared_ptr<RtScope> scope,
                                   std::vector<KeyBinding> keys = {}) {
-    Column column{.children = std::move(children)};
+    Column column = listColumn(std::move(children));
     column.common.visible = Prop<bool>{[held = std::move(scope)] { return held != nullptr; }};
     column.common.keys = std::move(keys);
     return ui::column(std::move(column));
+}
+
+/// @brief Whether an expression reads a name in @p names.
+/// @param expr  The expression.
+/// @param names The names.
+/// @return Whether any form of the expression names one.
+[[nodiscard]] inline bool readsAny(ExprPtr const& expr, std::set<std::string, std::less<>> const& names) {
+    if (!expr) {
+        return false;
+    }
+    if (!expr->name.empty() && names.contains(expr->name)) {
+        return true;
+    }
+    return std::ranges::any_of(expr->args, [&](ExprPtr const& arg) { return readsAny(arg, names); }) ||
+           std::ranges::any_of(expr->fields, [&](auto const& field) { return readsAny(field.second, names); });
+}
+
+/// @brief Collects the element ids of a document subtree.
+/// @param node The root.
+/// @param out  Receives the ids.
+inline void collectIds(DocNode const& node, std::set<std::string, std::less<>>& out) {
+    if (!node.id.empty()) {
+        out.insert(node.id);
+    }
+    for (auto const* group : {&node.children, &node.parts}) {
+        for (auto const& [key, list] : *group) {
+            for (DocNodePtr const& child : list) {
+                collectIds(*child, out);
+            }
+        }
+    }
+}
+
+inline Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx) {
+    if (nodes.size() == 1) {
+        return lower(*nodes.front(), ctx);
+    }
+    std::vector<Node> children;
+    children.reserve(nodes.size());
+    for (DocNodePtr const& child : nodes) {
+        children.push_back(lower(*child, ctx));
+    }
+    return ui::column(listColumn(std::move(children)));
+}
+
+inline LayoutHints ScreenCore::holderHints(std::span<DocNode const* const> content, ScopeDecl const* decl,
+                                           LowerCtx const& ctx) {
+    std::set<std::string, std::less<>> own;
+    for (DocNode const* const node : content) {
+        collectIds(*node, own);
+    }
+    if (decl != nullptr) {
+        for (ModelDecl const& model : decl->models) {
+            own.insert(model.name);
+        }
+        for (StateDecl const& state : decl->state) {
+            own.insert(state.name);
+        }
+        for (LetDecl const& let : decl->lets) {
+            own.insert(let.name);
+        }
+        for (QueryDecl const& query : decl->queries) {
+            own.insert(query.name);
+        }
+        for (MutationDecl const& mutation : decl->mutations) {
+            own.insert(mutation.name);
+        }
+    }
+    std::vector<Sizing> widths;
+    std::vector<Sizing> heights;
+    for (DocNode const* const node : content) {
+        LayoutHints hints;
+        if (ExprPtr const sizing = node->prop("sizing")) {
+            if (sizing->kind != ExprKind::Literal && readsAny(sizing, own)) {
+                report(sizing->path,
+                       "this sizing reads a name the case declares, so the case is held at its "
+                       "content size");
+            } else {
+                Value const value = once(ctx, sizing);
+                Value const* const width = value.field("width");
+                Value const* const height = value.field("height");
+                if (width != nullptr || height != nullptr) {
+                    hints.width = width != nullptr && isSizing(*width) ? sizingOf(*width) : Sizing::content();
+                    hints.height = height != nullptr && isSizing(*height) ? sizingOf(*height) : Sizing::content();
+                } else if (isSizing(value)) {
+                    hints.width = sizingOf(value);
+                }
+            }
+        }
+        widths.push_back(hints.width);
+        heights.push_back(hints.height);
+    }
+    LayoutHints out;
+    out.width = holderSizing(widths);
+    out.height = holderSizing(heights);
+    return out;
 }
 
 // NOLINTBEGIN(misc-no-recursion): a menu nests, and lowering descends the document.
@@ -8215,50 +8370,59 @@ inline Node ScreenCore::lowerComposite(DocNode const& node, LowerCtx const& ctx,
 inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     Prop<bool> open = node.prop("open") ? bindProp<bool>(ctx, node.prop("open"), false, boolOf)
                                         : slotProp<bool>([element] { return element->open.get(); });
-    Node body = lazy([this, ctx, &node, element]() -> Node {
-        auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
-        inner->owner = element;
-        addPending(1);
-        inner->submitted = &element->submitted;
-        inner->showErrors = std::string{node.name("showErrors")};
-        std::vector<DocNode const*> content;
-        for (DocNodePtr const& child : node.nodes("children")) {
-            content.push_back(child.get());
-        }
-        std::vector<Commands const*> lists;
-        for (std::string_view const key : {"default", "cancel"}) {
-            if (Commands const* const commands = node.event(key)) {
-                lists.push_back(commands);
+    std::vector<DocNode const*> bodyContent;
+    for (DocNodePtr const& child : node.nodes("children")) {
+        bodyContent.push_back(child.get());
+    }
+    LayoutHints const bodyHints = holderHints(bodyContent, node.scope ? &*node.scope : nullptr, ctx);
+    Node body = lazy(
+        [this, ctx, &node, element]() -> Node {
+            auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
+            inner->owner = element;
+            addPending(1);
+            inner->submitted = &element->submitted;
+            inner->showErrors = std::string{node.name("showErrors")};
+            std::vector<DocNode const*> content;
+            for (DocNodePtr const& child : node.nodes("children")) {
+                content.push_back(child.get());
             }
-        }
-        for (DocNodePtr const& action : node.partList("actions")) {
-            if (Commands const* const commands = action->event("onClick")) {
-                lists.push_back(commands);
+            std::vector<Commands const*> lists;
+            for (std::string_view const key : {"default", "cancel"}) {
+                if (Commands const* const commands = node.event(key)) {
+                    lists.push_back(commands);
+                }
             }
-        }
-        declare(*inner, node.scope ? &*node.scope : nullptr, content, lists);
-        element->inner.set(inner.get());
-        LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
-        std::vector<Node> children;
-        children.reserve(content.size());
-        for (DocNode const* const child : content) {
-            children.push_back(lower(*child, innerCtx));
-        }
-        // The overlay's actions end its scoped content, so they bind in its scope; the mount puts them in its footer.
-        if (ActionModels actions = lowerActionParts(node.partList("actions"), innerCtx); !actions.empty()) {
-            children.push_back(actionBarOf(std::move(actions)));
-        }
-        std::vector<KeyBinding> keys;
-        if (Commands const* const commands = node.event("default")) {
-            keys.push_back(KeyBinding{
-                .chord = "Enter", .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); }});
-        }
-        if (Commands const* const commands = node.event("cancel")) {
-            keys.push_back(KeyBinding{
-                .chord = "Esc", .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); }});
-        }
-        return holding(std::move(children), inner, std::move(keys));
-    });
+            for (DocNodePtr const& action : node.partList("actions")) {
+                if (Commands const* const commands = action->event("onClick")) {
+                    lists.push_back(commands);
+                }
+            }
+            declare(*inner, node.scope ? &*node.scope : nullptr, content, lists);
+            element->inner.set(inner.get());
+            LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
+            std::vector<Node> children;
+            children.reserve(content.size());
+            for (DocNode const* const child : content) {
+                children.push_back(lower(*child, innerCtx));
+            }
+            // The overlay's actions end its scoped content, so they bind in its scope; the mount puts them in its
+            // footer.
+            if (ActionModels actions = lowerActionParts(node.partList("actions"), innerCtx); !actions.empty()) {
+                children.push_back(actionBarOf(std::move(actions)));
+            }
+            std::vector<KeyBinding> keys;
+            if (Commands const* const commands = node.event("default")) {
+                keys.push_back(KeyBinding{.chord = "Enter", .onPress = [this, innerCtx, commands] {
+                                              runEvent(commands, innerCtx, Value{});
+                                          }});
+            }
+            if (Commands const* const commands = node.event("cancel")) {
+                keys.push_back(KeyBinding{
+                    .chord = "Esc", .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); }});
+            }
+            return holding(std::move(children), inner, std::move(keys));
+        },
+        bodyHints);
     Action onDismiss = [this, ctx, element, commands = node.event("onDismiss")] {
         session.asUser([&] {
             session.noteWrite();
@@ -8297,23 +8461,30 @@ inline Node ScreenCore::lowerSwitch(DocNode const& node, LowerCtx const& ctx) {
     for (DocNodePtr const& part : node.partList("cases")) {
         whens.push_back(part->prop("when"));
         DocNode const* const casePart = part.get();
+        std::vector<DocNode const*> caseContent;
+        for (DocNodePtr const& child : casePart->nodes("children")) {
+            caseContent.push_back(child.get());
+        }
+        LayoutHints const caseHints = holderHints(caseContent, casePart->scope ? &*casePart->scope : nullptr, ctx);
         spec.cases.push_back(SwitchCase{
             .key = Key{index++},
-            .node = lazy([this, ctx, casePart]() -> Node {
-                auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
-                std::vector<DocNode const*> content;
-                for (DocNodePtr const& child : casePart->nodes("children")) {
-                    content.push_back(child.get());
-                }
-                declare(*inner, casePart->scope ? &*casePart->scope : nullptr, content, {});
-                LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
-                std::vector<Node> children;
-                children.reserve(content.size());
-                for (DocNode const* const child : content) {
-                    children.push_back(lower(*child, innerCtx));
-                }
-                return holding(std::move(children), inner);
-            })});
+            .node = lazy(
+                [this, ctx, casePart]() -> Node {
+                    auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
+                    std::vector<DocNode const*> content;
+                    for (DocNodePtr const& child : casePart->nodes("children")) {
+                        content.push_back(child.get());
+                    }
+                    declare(*inner, casePart->scope ? &*casePart->scope : nullptr, content, {});
+                    LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
+                    std::vector<Node> children;
+                    children.reserve(content.size());
+                    for (DocNode const* const child : content) {
+                        children.push_back(lower(*child, innerCtx));
+                    }
+                    return holding(std::move(children), inner);
+                },
+                caseHints)});
     }
     spec.selector = slotProp<Key>(
         [scope = ctx.scope, bindings = ctx.bindings, selected = node.prop("on"), whens = std::move(whens)] {

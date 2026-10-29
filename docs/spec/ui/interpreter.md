@@ -325,6 +325,17 @@ literal integers the loader checked, become `LayoutHints::minWidth`, `maxWidth`,
 `justify` and `alignSelf`, names the loader checked, become the stack's or grid's `align` and `justify` and
 `LayoutHints::alignSelf`.
 
+**Holders.** The interpreter mounts some content through a holder: a `switch` case, an overlay's body (a one-row
+`forEach`, so that the content's scope lives only while it is mounted), several nodes written where one is expected
+(a `default`, a panel's, a scroll's or a collapsible's content, a table cell, an `empty` state, a group heading, an
+error boundary's fallback) and a `forEach` row's content (a column). A holder's sizing on each axis is a stretch, by
+the largest weight, when one of its children's is, and content otherwise; a node's bounds and `alignSelf` stay with
+the node. The holder a slot sees is the one-row `forEach`, because a slot reads only its direct child's sizing, so
+that `forEach` carries the hints too; they are worked out from the document's children before the content mounts. A
+literal sizing is read as written and a computed one is evaluated once in the enclosing scope. A computed sizing that
+reads a name the case or overlay itself declares cannot be evaluated before the content mounts: it is reported at its
+path and the holder stays content-sized on that axis. A single node of a list is lowered unwrapped.
+
 A `group` lowers to a `Column` (gap `gap`) of existing kinds, so the view tree and the contract do not change: a
 `Text` of its `label` whose `field.required` is its `required` (so the mark follows the legend's last line), its
 children, a muted `Text` of its `description` shown while it is not empty, and an `Error` `Text` of its

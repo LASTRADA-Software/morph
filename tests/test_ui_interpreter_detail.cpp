@@ -485,3 +485,75 @@ TEST_CASE("interpreter: a sizing is \"content\", or one fixed or stretch member 
     CHECK_FALSE(isSizing(record({{"fixed", Value{std::int64_t{3}}}, {"stretch", Value{std::int64_t{1}}}})));
     CHECK_FALSE(isSizing(Value{std::int64_t{3}}));
 }
+
+namespace {
+
+/// @brief The `layout=` of the widget a slot shows, the slot's direct child, from the backend's dump.
+/// @param dump  The dump.
+/// @param slot  The line prefix of the slot whose child to read.
+/// @return The layout text; `content/content` for a child that records none, empty when the slot shows nothing.
+std::string slotChildLayout(std::string const& dump, std::string const& slot) {
+    std::size_t const at = dump.find(slot);
+    if (at == std::string::npos) {
+        return {};
+    }
+    std::size_t const child = dump.find('\n', at);
+    std::size_t const end = dump.find('\n', child + 1);
+    std::string const line = dump.substr(child + 1, end - child - 1);
+    std::size_t const key = line.find("layout=");
+    if (key == std::string::npos) {
+        return "content/content";  // A default request is never recorded.
+    }
+    std::size_t const stop = line.find(' ', key);
+    return line.substr(key + 7, stop == std::string::npos ? std::string::npos : stop - key - 7);
+}
+
+}  // namespace
+
+// A slot reads its direct child's sizing alone, and the node a `switch` mounts is that child; so the holder's own
+// sizing is what the checks read. Mutation: build `lazy` without the hints (the inner column still stretches, the
+// slot's child does not), or build the column without `listColumn`.
+TEST_CASE("interpreter: a switch case, a default and a dialog body pass their children's stretch to the slot",
+          "[ui][interpreter][layout]") {
+    auto const mounted = [](std::string const& cases, std::string const& fallback, ui::testing::Harness& h) {
+        return h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "switch", "on": 2, "cases": [)" + cases +
+                       R"(], "default": [)" + fallback + R"(] } })");
+    };
+    std::string const stretching =
+        R"({ "kind": "column", "sizing": { "lit": { "height": { "stretch": 1 } } }, "children": [ { "kind": "spacer" } ] })";
+    std::string const text = R"({ "kind": "text", "text": "a" })";
+    SECTION("a case holding a column that stretches down") {
+        ui::testing::Harness h;
+        auto screen = mounted(R"({ "when": 2, "children": [)" + stretching + "] }", text, h);
+        CHECK(slotChildLayout(h.backend.dump(), "Slot") == "content/stretch(1)");
+    }
+    SECTION("a case holding two texts") {
+        ui::testing::Harness h;
+        auto screen = mounted(R"({ "when": 2, "children": [)" + text + "," + text + "] }", text, h);
+        CHECK(slotChildLayout(h.backend.dump(), "Slot") == "content/content");
+    }
+    SECTION("a default of two nodes, one stretching across by 2") {
+        ui::testing::Harness h;
+        std::string const wide = R"({ "kind": "spacer", "sizing": { "lit": { "width": { "stretch": 2 } } } })";
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "switch", "on": 9, "cases": [],
+            "default": [)" + wide +
+                              "," + text + R"(] } })");
+        CHECK(slotChildLayout(h.backend.dump(), "Slot") == "stretch(2)/content");
+    }
+    SECTION("a dialog body holding a stretching text input") {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "dialog", "open": true,
+            "children": [ { "kind": "textInput", "sizing": { "lit": { "stretch": 1 } } } ] } })");
+        CHECK(slotChildLayout(h.backend.dump(), "Dialog") == "stretch(1)/content");
+    }
+    SECTION("a case whose child's sizing reads a name the case declares is held at its content size and reported") {
+        ui::testing::Harness h;
+        auto screen = mounted(
+            R"({ "when": 2, "scope": { "state": { "wide": { "init": true } } }, "children": [
+                 { "kind": "spacer", "sizing": { "if": [ { "ref": "wide" }, { "lit": { "stretch": 1 } }, "content" ] } } ] })",
+            text, h);
+        CHECK(slotChildLayout(h.backend.dump(), "Slot") == "content/content");
+        REQUIRE_FALSE(h.diagnostics.empty());
+        CHECK(h.diagnostics.front().path.contains("sizing"));
+    }
+}
