@@ -66,3 +66,8 @@
 {"logged": "2026-10-28 23:07:04", "event": "start", "task": "D4.1", "title": "Batch D part 4: G50 (#1064), G56 and the gallery cleanup", "group": "D4"}
 {"logged": "2026-10-29 01:24:28", "event": "report", "task": "D4.1"}
 {"logged": "2026-10-29 01:24:28", "event": "done", "task": "D4.1", "fix_rounds": 0}
+{"logged": "2026-10-29 07:39:11", "event": "report", "task": "FOLD.2"}
+{"logged": "2026-10-29 07:39:11", "event": "done", "task": "FOLD.2"}
+{"logged": "2026-10-29 07:39:12", "event": "start", "task": "FOLD.3", "title": "Rebase D parts 3-4 onto the C fold, verify everything once", "group": "FOLD"}
+{"logged": "2026-10-29 08:14:04", "event": "report", "task": "FOLD.3"}
+{"logged": "2026-10-29 08:14:04", "event": "done", "task": "FOLD.3", "fix_rounds": 3}

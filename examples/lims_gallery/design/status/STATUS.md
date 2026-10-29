@@ -26,7 +26,8 @@ as one PR, #1045 (draft), which leaves draft when every batch is in.
 | Batch B part 1: columns and the selection | 6/6 | done | `27c072205`..`7c7f9d708` on `feat/lims-gallery`, pushed; G2, G47, G29 (closes #1053), G43 (closes #1059), G30 and the gallery cleanup |
 | Batch B part 2: the row pipeline | 7/7 | done | `8215ca989`..`cdb41fe9f` on `feat/lims-gallery`, pushed: G41 selected button, G31 sort, G28 paging, G44 `runs`, G46 group headings, the `showHeader` flag fix, and the gallery cleanup; all six suites pass |
 | Batch C: text, fields and small controls | 16/16 | done | 13 commits on `feat/lims-gallery-c` (pushed): plain text (#1058), spans, key-value, required mark, help text, dialog description, input group, unit (#1060, #1062), outlined and segmented controls (#1061), multi-line list entries, the date pattern, the focal scanner field, gallery cleanup; all suites and qmllint pass |
-| Folding batch C onto `feat/lims-gallery` | 0/1 | running | an agent rebases C over the 35 commits it is behind (4 of 13 replayed), then switches E1's ISO pull dates to C's date pattern |
+| Rebasing D parts 3–4 onto the batch C fold, and the final check | 1/1 | done | `feat/lims-gallery` now holds every batch. The sheet and C's dialog description share one dialog; the app document carries C's date patterns and D4's navigation counts. Three fixes on the way: the node-kinds array size in each D commit that adds a kind, the e-signature's note, and clang-format 22 over 54 files plus four Doxygen gaps from C. Build with no warnings; `morph_tests` 3275 (1 failing as expected), qt 188, tui 367, client 38, gallery 54, render smoke, qmllint and Doxygen pass. 54 conformance and 16 layout cases |
+| Folding batch C onto `feat/lims-gallery` | 1/1 | done | `feat/lims-gallery-c` (`85ddd58b8`, pushed) is `feat/lims-gallery` plus C's 13 commits. Build clean; `morph_tests` 3260 (1 failing as expected), qt 186, tui 365, client 34, gallery 53, render smoke and qmllint pass. 54 conformance and 15 layout cases |
 | Batch D design | 2/2 | done | written and reviewed, `84d3b53cc` (D4 fixes #1063 and #1064) |
 | Batch D part 1: following the data | 8/8 | done | on `feat/lims-gallery`. on `feat/lims-gallery-e1` (pushed) over B part 1 and E1: #1063, G51, G20, G32, G35, G16, G38 and the cleanup; I built it: no warnings, all six suites pass |
 | Batch D part 2: layout and controls | 4/4 | done | on `feat/lims-gallery`. `572fcc7ec`..`e96f52973` on `feat/lims-gallery-e1` (pushed): G23 grid column widths, G18 menu drawn as one button, G27 removable badges as filter chips, the gallery cleanup, and a qmllint fix for part 1's tab bar; all suites and qmllint pass |
@@ -37,12 +38,12 @@ as one PR, #1045 (draft), which leaves draft when every batch is in.
 | Batch E1: expressions | 7/7 | done | on `feat/lims-gallery`. on `feat/lims-gallery-e1` under D part 1; closes #1066 and #1065 |
 | Batch E2: the chart | 2/2 | done | on `feat/lims-gallery`. on `feat/lims-gallery-e2` (pushed); it uses E1's checked rounding, so it goes in after `feat/lims-gallery-e1`. A first try on batch B part 2 alone failed to compile; that resolution is kept on local branch `lg-fold-e2-on-b2` (drop its stray `backend_conformance.hpp.orig`). Tidy 22 on `chart_scale.hpp`: 0 warnings |
 
-**Now:** every batch is implemented. One agent folds batch C onto `feat/lims-gallery`; D parts 3–4 wait on `feat/lims-gallery-d4` to be rebased onto it.
-**Next:** push the C fold; rebase D parts 3 and 4 onto it; verify once; take the PR out of draft and update its body.
+**Now:** every batch is folded into `feat/lims-gallery` and verified locally; PR #1045 is out of draft with its final body, and its CI is running.
+**Next:** watch CI, fix what fails in the commit that caused it, merge on green.
 
 ## Time spent
 
-From the time log, stamped as each event happened. *Implement* runs from a task's dispatch to its first commit or report, *review & fixes* from there to done, and *wall time* from the first dispatch to the last completion: less than their sum where work ran in parallel. Work still running counts to 2026-10-29 01:24:28.
+From the time log, stamped as each event happened. *Implement* runs from a task's dispatch to its first commit or report, *review & fixes* from there to done, and *wall time* from the first dispatch to the last completion: less than their sum where work ran in parallel. Work still running counts to 2026-10-29 07:39:19.
 
 | Lane or phase | Finished | Wall time | Implement | Review & fixes | Mean per task | Idle |
 |---|---|---|---|---|---|---|
@@ -55,10 +56,10 @@ From the time log, stamped as each event happened. *Implement* runs from a task'
 | D1 · Batch D part 1: following the data | 1 | 15h 12m | 15h 12m | 0m 00s | 15h 12m | 7h 05m |
 | E2 · Batch E2: the chart | 1 | 4h 41m | 4h 41m | 0m 00s | 4h 41m | 35m 09s |
 | D2 · Batch D part 2: layout and controls | 1 | 6h 14m | 6h 14m | 0m 00s | 6h 14m | 8m 06s |
-| FOLD · Folding the side branches (running) | 1 | 57h 32m | 55h 04m | 5m 46s | 52h 33m | 1h 31m |
+| FOLD · Folding the side branches (running) | 2 | 63h 47m | 61h 19m | 5m 46s | 30h 42m | 1h 31m |
 | D3 · Batch D part 3: the head and overlays | 1 | 2h 41m | 2h 41m | 0m 00s | 2h 41m | — |
 | D4 · Batch D part 4: navigation | 1 | 2h 17m | 2h 17m | 0m 00s | 2h 17m | — |
-| **All** (running) | 14 | 85h 12m | 183h 27m | 7m 13s | 12h 55m | 24h 09m |
+| **All** (running) | 15 | 91h 27m | 189h 42m | 7m 13s | 12h 39m | 24h 09m |
 
 ### B1 · Batch B part 1: columns and the selection
 
@@ -121,7 +122,8 @@ From the time log, stamped as each event happened. *Implement* runs from a task'
 | Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
 |---|---|---|---|---|---|---|---|
 | FOLD.1 | Rebase E1 and D parts 1-2 onto batch B part 2, then the chart | 2026-10-26 15:51:30 | 52h 27m | 5m 46s | 52h 33m | 1h 31m | 1 |
-| FOLD.2 | Rebase batch C onto feat/lims-gallery (running) | 2026-10-28 22:47:49 | 2h 36m | — | 2h 36m | — | — |
+| FOLD.2 | Rebase batch C onto feat/lims-gallery | 2026-10-28 22:47:49 | 8h 51m | 0m 00s | 8h 51m | — | — |
+| FOLD.3 | Rebase D parts 3-4 onto the C fold, verify everything once (running) | 2026-10-29 07:39:12 | 0m 08s | — | 0m 08s | — | — |
 
 ### D3 · Batch D part 3: the head and overlays
 

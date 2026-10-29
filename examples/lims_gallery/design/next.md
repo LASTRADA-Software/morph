@@ -1,6 +1,6 @@
 # LIMS gallery: where the work stands and how to continue
 
-The whole initiative lands as one PR, #1045 (draft), from `feat/lims-gallery`. Do not open separate PRs. Work runs in
+The whole initiative lands as one PR, #1045, from `feat/lims-gallery`. Do not open separate PRs. Work runs in
 side branches, each in its own worktree, and is rebased onto `feat/lims-gallery` when it is folded in.
 
 The live tracker is `status/STATUS.md` in this folder, published as a phone-friendly page (see "The status board"
@@ -10,12 +10,11 @@ below). It lists every lane, its commits, the decisions and the follow-ups; read
 
 | Branch | Holds | State |
 |---|---|---|
-| `feat/lims-gallery` | the gallery, batches A, B, C, E1, E2 (the chart) and D parts 1–2 | pushed; the PR's branch; built and green |
-| `feat/lims-gallery-d3` | batch D part 3 (in progress), from `feat/lims-gallery` | not pushed until its first commits land |
-| `feat/lims-gallery-c`, `feat/lims-gallery-e1`, `feat/lims-gallery-e2`, `lg-fold-e2-on-b2` | already folded into `feat/lims-gallery` | kept for reference only |
+| `feat/lims-gallery` | the gallery and every batch: A, B, C, D (parts 1–4), E1 and E2 (the chart) | pushed; the PR's branch; built and green |
+| `feat/lims-gallery-c`, `feat/lims-gallery-d3`, `feat/lims-gallery-d4`, `feat/lims-gallery-e1`, `feat/lims-gallery-e2`, `lg-fold-e2-on-b2` | already folded into `feat/lims-gallery` | kept for reference only |
 
-Worktrees: `../morph-lims-gallery` (`feat/lims-gallery`), `../morph-lims-e1` (`feat/lims-gallery-d3`),
-`../morph-lims-e2` (free since batch C was folded in), each with its own build tree `build/linux-everything`.
+Worktrees: `../morph-lims-gallery` (`feat/lims-gallery`), `../morph-lims-e1` and `../morph-lims-e2` (both free now),
+each with its own build tree `build/linux-everything`.
 
 Designs, all reviewed, are in `docs/superpowers/specs/2026-10-25-lims-gallery-batch-{b,c,d,e}-design.md`.
 
@@ -38,12 +37,10 @@ the app document, gives them to every screen.
 
 ## How to continue
 
-1. Let batch D part 3 (the head's menu G18, G26, G4) finish on its branch.
-2. Rebase it onto `feat/lims-gallery`, build and run the six suites and qmllint, then push.
-3. Batch D part 4 (G50 with #1064, G56), per the batch D design.
-4. Take the PR out of draft and update its body (the closes list is in the tracker).
+Every batch is folded in. What is left is the PR itself: watch its CI, fix what fails in the commit that caused it,
+and merge it once it is green. The follow-ups that stay open are listed in the tracker and in the PR's body.
 
-**Expect folding conflicts** in `include/morph/ui/testing/backend_conformance.hpp`, `tests/test_ui_conformance.cpp`
+**When folding a later branch, expect conflicts** in `include/morph/ui/testing/backend_conformance.hpp`, `tests/test_ui_conformance.cpp`
 and `docs/spec/ui/backend_contract.md`: every batch appends conformance and layout cases at the end of the same lists.
 Keep both sides, set the array sizes and the count check to the sum, and number each case's description in
 `backend_contract.md`'s lists by its position; the designs' own case numbers do not carry over. Where both sides add
