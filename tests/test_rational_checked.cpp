@@ -529,7 +529,6 @@ TEST_CASE("The 128-bit integer agrees with unsigned __int128", "[rational][check
     using morph::math::detail::checkedAddU128;
     using morph::math::detail::checkedMulU128;
     using morph::math::detail::checkedSubU128;
-    using morph::math::detail::divModU128;
     __extension__ using Native = unsigned __int128;
     auto const native = [](U128 value) { return (static_cast<Native>(value.hi) << 64U) | value.lo; };
     auto const limbs = [](Native value) {
@@ -560,12 +559,16 @@ TEST_CASE("The 128-bit integer agrees with unsigned __int128", "[rational][check
             CHECK(*subtracted == limbs(native(lhs) - native(rhs)));
         }
         CHECK((lhs < rhs) == (native(lhs) < native(rhs)));
+#ifndef _MSC_VER
+        // A native 128-bit divide compiles to a call to __udivti3/__umodti3. clang-cl defines __SIZEOF_INT128__,
+        // but the MSVC runtime it links against provides neither, so the division oracle runs on the other compilers.
         if (native(rhs) != 0) {
-            auto const divided = divModU128(lhs, rhs);
+            auto const divided = morph::math::detail::divModU128(lhs, rhs);
             REQUIRE(divided.has_value());
             CHECK(divided->quotient == limbs(native(lhs) / native(rhs)));
             CHECK(divided->remainder == limbs(native(lhs) % native(rhs)));
         }
+#endif
     }
 }
 #endif

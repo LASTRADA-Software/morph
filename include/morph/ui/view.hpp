@@ -152,6 +152,25 @@ public:
         refuseEmpty();
     }
 
+    /// @brief A copy: the same constant, or a slot with the same id and a copy of its read.
+    /// @param other The property to copy.
+    /// @throws std::bad_variant_access when @p other was left without a value by an assignment that threw.
+    Prop(Prop const& other) : _value{copyOf(other._value)} {}
+
+    /// @brief Moves the constant or the slot out of another property.
+    Prop(Prop&&) = default;
+
+    /// @brief Replaces this property with a copy of another.
+    /// @return This property.
+    Prop& operator=(Prop const&) = default;
+
+    /// @brief Replaces this property with another, moved from.
+    /// @return This property.
+    Prop& operator=(Prop&&) = default;
+
+    /// @brief Destroys the constant or the slot.
+    ~Prop() = default;
+
     /// @brief Whether this is a slot.
     /// @return True for a slot, false for a constant.
     [[nodiscard]] bool isBound() const noexcept { return _value.index() == 1; }
@@ -192,6 +211,22 @@ private:
         if (!std::get<1>(_value).read) {
             throw std::invalid_argument{"ui::Prop: a binding must not be empty"};
         }
+    }
+
+    /// @brief A copy of @p from, built in place as the alternative it holds.
+    ///
+    /// The copy constructor uses this rather than `std::variant`'s own. GCC 15 at -O3 warns
+    /// (-Wmaybe-uninitialized) about the variant's copy: on its exception path it destroys a `Slot` whose
+    /// `std::function` it cannot see was constructed. Constructing the chosen alternative in place leaves no
+    /// partly built variant to destroy, so that path does not exist.
+    /// @param from The value to copy.
+    /// @return The copy.
+    /// @throws std::bad_variant_access when @p from holds no alternative.
+    static std::variant<T, Slot> copyOf(std::variant<T, Slot> const& from) {
+        if (Slot const* const bound = std::get_if<1>(&from); bound != nullptr) {
+            return std::variant<T, Slot>{std::in_place_index<1>, *bound};
+        }
+        return std::variant<T, Slot>{std::in_place_index<0>, std::get<0>(from)};
     }
 
     std::variant<T, Slot> _value;
