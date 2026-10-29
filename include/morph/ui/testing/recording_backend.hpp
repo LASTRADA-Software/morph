@@ -934,12 +934,14 @@ public:
     void setText(std::string_view text) override { set("text", formatText(text)); }
     void setSpans(std::vector<TextSpan> const& spans) override { set("spans", formatSpans(spans)); }
     /// @brief Refuses a description: a text is not described.
+    /// @param description The description, ignored.
     /// @throws std::logic_error always.
     void setDescription(std::string_view description) override {
         static_cast<void>(description);
         throw std::logic_error{"RecordingBackend: a text is not described"};
     }
     /// @brief Refuses a tone: a text is not toned.
+    /// @param tone The tone, ignored.
     /// @throws std::logic_error always.
     void setTone(Tone tone) override {
         static_cast<void>(tone);
@@ -960,6 +962,7 @@ public:
 class FakeButton final : public FakeLeaf<ButtonWidget> {
 public:
     using FakeLeaf<ButtonWidget>::FakeLeaf;
+    /// @brief Destroys the content before the button, which the content names as its parent.
     ~FakeButton() override { _content.reset(); }
     FakeButton(FakeButton const&) = delete;
     FakeButton& operator=(FakeButton const&) = delete;

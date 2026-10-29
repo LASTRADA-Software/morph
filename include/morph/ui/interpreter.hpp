@@ -2566,8 +2566,10 @@ public:
     /// @param name    The value's name.
     /// @return The value.
     [[nodiscard]] Value elementValue(ElementState const& element, std::string_view name) const;
-    /// Whether @p element is a group with an element inside it the user touched: a group has no value of its own to
-    /// touch, so its errors show under the `touched` policy once any of its inputs is.
+    /// @brief Whether @p element is a group with an element inside it the user touched: a group has no value of its
+    ///        own to touch, so its errors show under the `touched` policy once any of its inputs is.
+    /// @param element The element.
+    /// @return True when it is such a group.
     [[nodiscard]] static bool touchedWithin(ElementState const& element);
 
     /// @brief The current value of an input, checkbox or select: what `required` tests.
