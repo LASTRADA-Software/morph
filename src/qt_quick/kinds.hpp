@@ -160,6 +160,9 @@ public:
 // ── Leaves ────────────────────────────────────────────────────────────────
 
 /// A button; a list entry with content holds it in a slot inside the `Button`, so a press on it is the button's.
+// The button is an item and the container of its content's slot at once, as a ContainerItemWidget is: a parent passes
+// its scheme down by cross-casting a child item to its ContainerCore, so the two cannot be split into members.
+// NOLINTNEXTLINE(misc-multiple-inheritance)
 class ButtonImpl final : public ItemWidget<ui::ButtonWidget>, public ContainerCore {
 public:
     ButtonImpl(Context& context, ui::ContainerWidget* parent);
@@ -381,6 +384,9 @@ public:
 };
 
 /// A dialog or a drawer: a modal overlay whose content is shown only while it is open.
+// NOLINTBEGIN(portability-template-virtual-member-function): the template implements the overlay interfaces' virtual
+// functions, and is instantiated only as the dialog's base and as the drawer, whose virtual functions are all used
+// through the interface; every compiler then instantiates all of them.
 template <class Interface>
 class OverlayImpl : public ContainerItemWidget<Interface> {
 public:
@@ -438,6 +444,7 @@ private:
     std::unique_ptr<FooterItem> _footer;
     bool _makingFooter = false;
 };
+// NOLINTEND(portability-template-virtual-member-function)
 
 /// A dialog: an overlay that can be drawn as a sheet filling the window.
 class DialogImpl final : public OverlayImpl<ui::DialogWidget> {

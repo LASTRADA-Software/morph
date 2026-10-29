@@ -348,8 +348,16 @@ private:
 
     [[nodiscard]] bool known(std::string_view screenId) const { return entryOf(screenId) != nullptr; }
 
-    [[nodiscard]] Item const* itemOf(std::string_view screenId) const {
-        for (Group const& group : _groups) {
+    [[nodiscard]] Item const* itemOf(std::string_view screenId) const { return itemIn(_groups, screenId); }
+
+    [[nodiscard]] Item* itemOf(std::string_view screenId) { return itemIn(_groups, screenId); }
+
+    // One search for both constnesses of itemOf: `Groups` is the const or the mutable group list, and the item
+    // pointer it returns carries the same constness.
+    template <typename Groups>
+    [[nodiscard]] static auto itemIn(Groups& groups, std::string_view screenId)
+        -> decltype(&groups.front().items.front()) {
+        for (auto& group : groups) {
             auto const found = std::ranges::find_if(
                 group.items, [screenId](Item const& item) { return !screenId.empty() && item.entry->id == screenId; });
             if (found != group.items.end()) {
@@ -357,11 +365,6 @@ private:
             }
         }
         return nullptr;
-    }
-
-    [[nodiscard]] Item* itemOf(std::string_view screenId) {
-        return const_cast<Item*>(
-            std::as_const(*this).itemOf(screenId));  // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
 
     [[nodiscard]] bool pinned(std::string_view screenId) const {

@@ -102,7 +102,6 @@ public:
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     /// Where the cursor is, as a byte offset into the text shown.
     [[nodiscard]] std::size_t cursor() const noexcept { return _field->cursor(); }
-    [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     /// The messages, the description, then the unit, so a listener hears the value with its unit.
     [[nodiscard]] std::string accessibleDescription() const override {
@@ -113,6 +112,9 @@ public:
         return text;
     }
     [[nodiscard]] std::string probeText() const override;
+
+protected:
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
     void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
@@ -155,9 +157,11 @@ public:
     /// Shows the value and reads typed text in @p pattern; ISO is always read too.
     void setPattern(std::string_view pattern) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
-    [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override;
+
+protected:
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
     void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
@@ -197,9 +201,11 @@ public:
     }
     void setPath(std::string_view path) override;
     void setOnPicked(std::function<void(std::string)> onPicked) override;
-    [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override;
+
+protected:
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
     void paintControl(::core::tui::Canvas& canvas) override;
 
 private:

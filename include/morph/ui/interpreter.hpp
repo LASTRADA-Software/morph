@@ -7658,12 +7658,12 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         if (ExprPtr const sizes = node.prop("sizes")) {
             spec.sizes = bindProp<std::vector<int>>(
                 ctx, sizes, {}, [this, path = sizes->path](Value const& value, FormatContext const& /*format*/) {
-                    std::optional<std::vector<int>> read = splitterSizesOf(value);
-                    if (!read) {
+                    std::optional<std::vector<int>> parsed = splitterSizesOf(value);
+                    if (!parsed) {
                         report(path,
                                "sizes is " + canonicalJson(value) + "; sizes is a list of numbers, one per pane");
                     }
-                    return std::move(read).value_or(std::vector<int>{});
+                    return std::move(parsed).value_or(std::vector<int>{});
                 });
         }
         commonOf(node, ctx, element, spec.common);
@@ -8606,18 +8606,18 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
             auto owner = std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(out.front(), scope);
             out.front() = Node{owner, owner->first.get()};
         }
-        TableRowView view{.cells = std::move(out), .tone = std::nullopt};
+        TableRowView rowView{.cells = std::move(out), .tone = std::nullopt};
         // The row's name, in its own scope: what its select box and assistive technology read.
         if (ExprPtr const labelExpr = node.prop("rowLabel")) {
-            view.label = bindProp<std::string>(rowCtx, labelExpr, std::string{}, stringOf);
+            rowView.label = bindProp<std::string>(rowCtx, labelExpr, std::string{}, stringOf);
         }
         if (ExprPtr const toneExpr = node.prop("rowTone")) {
-            view.tone = slotProp<std::optional<Tone>>(
+            rowView.tone = slotProp<std::optional<Tone>>(
                 [this, scope, bindings = ctx.bindings, toneExpr, toneReported]() -> std::optional<Tone> {
                     return rowToneOf(evalIn(*scope, bindings.get(), toneExpr), toneExpr->path, *toneReported);
                 });
         }
-        return view;
+        return rowView;
     };
     TableOptions options;
     options.showHeader = node.flag("showHeader", true);

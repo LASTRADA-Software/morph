@@ -25,9 +25,11 @@ public:
     void setDescription(std::string_view description) override;
     /// A text is not toned; the mount never asks.
     void setTone(ui::Tone tone) override;
-    [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] std::string probeText() const override { return _text; }
     [[nodiscard]] bool placedAcrossColumn() const override { return true; }
+
+protected:
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
     void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
@@ -87,13 +89,15 @@ public:
     void setLabel(std::string_view label) override;
     void setChecked(bool checked) override;
     void setOnToggle(std::function<void(bool)> onToggle) override;
-    [[nodiscard]] ::core::tui::Size controlSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override { return _label; }
     [[nodiscard]] bool placedAcrossColumn() const override { return true; }
-    void paintControl(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void activate() override;
+
+protected:
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
+    void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
     std::string _label;
@@ -145,14 +149,16 @@ public:
     void setValue(std::int64_t value) override;
     void setOnChange(std::function<void(std::int64_t)> onChange) override;
     void setOnCommit(std::function<void(std::int64_t)> onCommit) override;
-    [[nodiscard]] ::core::tui::Size controlSize() const override { return {.width = 24, .height = 1}; }
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override;
-    void paintControl(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void pressAt(::core::tui::Point cell) override;
     void dragTo(::core::tui::Point cell) override;
     [[nodiscard]] bool pressEnded() override;
+
+protected:
+    [[nodiscard]] ::core::tui::Size controlSize() const override { return {.width = 24, .height = 1}; }
+    void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
     /// The value at track cell @p position (0-based, held to the track), to the nearest step from the minimum.

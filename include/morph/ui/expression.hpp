@@ -1802,7 +1802,8 @@ public:
             }
         }
         std::vector<std::size_t> indices(keys.size());
-        std::ranges::iota(indices, std::size_t{0});
+        // NOLINTNEXTLINE(modernize-use-ranges): std::ranges::iota is missing from Emscripten's libc++.
+        std::iota(indices.begin(), indices.end(), std::size_t{0});
         std::ranges::stable_sort(indices, [&](std::size_t left, std::size_t right) {
             for (std::size_t level = 0; level < descending.size(); ++level) {
                 std::strong_ordering const ordering =
