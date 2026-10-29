@@ -229,7 +229,8 @@ fills its width. A kind whose width is its label (a button, a badge, a checkbox)
 natural width at the line's start, on Qt Quick as on the terminal. Along the axis a stack packs its children at the
 start, `setGap` apart; only a `stretch` child takes spare length, so a `stretch` child of a column takes the column's
 spare height, and a stretching scroll above a bar keeps the bar at the column's end. A content-sized splitter keeps each pane at its own
-size until the user drags. A splitter's panes are sized by the splitter, not by this rule.
+size until the user drags. A splitter's panes are sized by the splitter, not by this rule. A panel's or a collapsible's content starts under its
+header whatever the panel's height; only a stretching child takes the spare height.
 
 **Table cells.** A table sizes and places its cells itself. A cell fills its column's width, except a kind whose
 width is its label (a badge, a check box, a push button), which draws at its natural width at the column's start,

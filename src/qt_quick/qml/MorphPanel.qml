@@ -15,6 +15,15 @@ MorphWidget {
     property bool collapsed: false
     readonly property Item content: column
     readonly property Item headerArea: headerSlot
+    // Whether a shown content child stretches down; the content then takes the panel's spare height, else a filler
+    // does, which keeps the content under the header instead of centred in the spare height.
+    readonly property bool contentStretches: {
+        for (const child of column.children) {
+            if (child.visible && child.heightKind === 2)
+                return true
+        }
+        return false
+    }
     readonly property bool headerRowShown: root.title !== "" || root.collapsible || headerSlot.children.length > 0
 
     implicitWidth: frame.implicitWidth
@@ -80,6 +89,12 @@ MorphWidget {
                 id: column
                 visible: !root.collapsible || !root.collapsed
                 Layout.fillWidth: true
+                Layout.fillHeight: root.contentStretches
+            }
+
+            Item {
+                Layout.fillHeight: true
+                visible: !root.contentStretches
             }
         }
     }

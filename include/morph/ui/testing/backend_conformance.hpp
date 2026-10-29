@@ -2415,6 +2415,41 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: a titled panel of fixed height 20 holding one text keeps the text under its header, not centred; a
+///        panel holding a column that stretches in height gives the column the height left under its header.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> panelContentStartsAtTop(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    IViewBackend& backend = probe.backend();
+    auto const root = backend.createStack(nullptr, Axis::Vertical);
+    auto const plain = backend.createPanel(root.get());
+    plain->setTitle("panel");
+    plain->setLayout({.width = Sizing::fixed(30), .height = Sizing::fixed(20)});
+    auto const text = backend.createText(plain.get());
+    text->setText("text");
+    auto const stretched = backend.createPanel(root.get());
+    stretched->setTitle("panel");
+    stretched->setLayout({.width = Sizing::fixed(30), .height = Sizing::fixed(20)});
+    auto const column = backend.createStack(stretched.get(), Axis::Vertical);
+    column->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+    auto const inColumn = backend.createText(column.get());
+    inColumn->setText("text");
+    probe.settle();
+    WidgetBounds const box = geometry.of(*plain);
+    geometry.near("the plain panel's height", 20, box.height);
+    double const gap = geometry.of(*text).y - box.y;
+    checks.that(gap <= 3.0,
+                "the text sits " + std::to_string(gap) + " units below the panel's top, not under its header");
+    WidgetBounds const big = geometry.of(*stretched);
+    WidgetBounds const fill = geometry.of(*column);
+    checks.that(big.y + big.height - (fill.y + fill.height) <= 1.5,
+                "a stretching column ends " + std::to_string(big.y + big.height - (fill.y + fill.height)) +
+                    " units above the panel's bottom");
+    return checks.result();
+}
+
 /// @brief Case: in a 40-unit grid with no gap, a `fixed(10)` track and a stretch track give their texts cells 10 and
 ///        30 units wide.
 /// @param probe The backend under test.
@@ -2662,7 +2697,7 @@ struct SelectionReport {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 16> const cases{{
+    static std::array<ConformanceCase, 17> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -2684,6 +2719,8 @@ struct SelectionReport {
         {.name = "a centred track centres a label-width cell", .run = detail::centredTrackCentresBadge},
         {.name = "a chart's content size is 40 by 8 units", .run = detail::chartHasContentSize},
         {.name = "a sheet fills the surface", .run = detail::sheetFillsSurface},
+        {.name = "a panel taller than its content keeps the content under its header",
+         .run = detail::panelContentStartsAtTop},
     }};
     return cases;
 }

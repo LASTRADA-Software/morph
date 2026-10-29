@@ -162,6 +162,31 @@ TEST_CASE("qt_quick containers: a collapsible panel reports the state the user a
     CHECK(toggles.size() == 1);
 }
 
+TEST_CASE("qt_quick containers: a collapsible taller than its content keeps the content under its header",
+          "[qt_quick]") {
+    Scene scene;
+    auto root = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto section = scene.backend().createCollapsible(root.get());
+    section->setTitle("Section");
+    section->setLayout({.width = ui::Sizing::fixed(30), .height = ui::Sizing::fixed(20)});
+    auto inside = scene.backend().createText(section.get());
+    inside->setText("inside");
+    auto stretching = scene.backend().createCollapsible(root.get());
+    stretching->setTitle("Section");
+    stretching->setLayout({.width = ui::Sizing::fixed(30), .height = ui::Sizing::fixed(20)});
+    auto column = scene.backend().createStack(stretching.get(), ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    auto text = scene.backend().createText(column.get());
+    text->setText("inside");
+    scene.settle();
+    qreal const unit = Scene::itemOf(*section).height() / 20.0;
+    qreal const top = Scene::itemOf(*section).mapToScene(QPointF{0, 0}).y();
+    CHECK(Scene::itemOf(*inside).mapToScene(QPointF{0, 0}).y() - top <= 3.0 * unit);
+    QQuickItem const& big = Scene::itemOf(*stretching);
+    QQuickItem const& fill = Scene::itemOf(*column);
+    CHECK(big.mapToScene(QPointF{0, big.height()}).y() - fill.mapToScene(QPointF{0, fill.height()}).y() <= 1.5);
+}
+
 TEST_CASE("qt_quick containers: tabs show their labels, highlight on request and report a click", "[qt_quick]") {
     Scene scene;
     auto tabs = scene.backend().createTabs(nullptr);
