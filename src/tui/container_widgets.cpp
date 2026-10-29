@@ -26,8 +26,38 @@
 namespace morph::tui::detail {
 
 void StackImpl::setGap(int gap) {
+    _gapStep = gap;
     _gap = layout::stepCells(gap, _axis);
     refresh();
+}
+
+void StackImpl::setWrap(bool wrap) {
+    _wrap = wrap;
+    refresh();
+}
+
+StackImpl::WrappedLines StackImpl::wrappedLines(int width) const {
+    WrappedLines lines;
+    std::vector<layout::Item> items;
+    for (WidgetBase* const child : children()) {
+        if (!child->shown()) {
+            continue;
+        }
+        ui::LayoutHints const& hints = child->layout();
+        layout::Bounds const bounds = layout::boundsOf(hints.minWidth, hints.maxWidth);
+        lines.shown.push_back(child);
+        items.push_back(layout::Item{.sizing = hints.width,
+                                     .natural = child->naturalSize().width,
+                                     .minimum = bounds.minimum,
+                                     .maximum = bounds.maximum});
+    }
+    lines.plan = layout::planWrap(items, layout::Track{.length = width, .gap = _gap}, _justify);
+    lines.lineHeights.assign(static_cast<std::size_t>(lines.plan.lines), 0);
+    for (auto const [child, placed] : std::views::zip(lines.shown, lines.plan.placed)) {
+        int& height = lines.lineHeights.at(static_cast<std::size_t>(placed.line));
+        height = std::max(height, requestedSize(*child).height);
+    }
+    return lines;
 }
 
 void StackImpl::setAlign(ui::Align align) {
@@ -47,6 +77,23 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
 }
 
 ::core::tui::Size StackImpl::naturalSize() const {
+    if (_wrap && _axis == ui::Axis::Horizontal && _extents.empty()) {
+        // One line is the natural width; the height is that of the lines at the width the row was last drawn at.
+        auto const oneLine = stackNaturalSize(children(), _axis, _gap);
+        if (_drawnWidth <= 0) {
+            return oneLine;
+        }
+        WrappedLines const lines = wrappedLines(_drawnWidth);
+        int const rowGap = layout::stepCells(_gapStep, ui::Axis::Vertical);
+        int height = 0;
+        for (int const lineHeight : lines.lineHeights) {
+            height += lineHeight;
+        }
+        if (!lines.lineHeights.empty()) {
+            height += rowGap * (static_cast<int>(lines.lineHeights.size()) - 1);
+        }
+        return ::core::tui::Size{.width = oneLine.width, .height = std::max(height, oneLine.height)};
+    }
     if (_extents.empty()) {
         return stackNaturalSize(children(), _axis, _gap);
     }
@@ -58,6 +105,35 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
 }
 
 std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) const {
+    if (_wrap && _axis == ui::Axis::Horizontal && _extents.empty()) {
+        WrappedLines const lines = wrappedLines(size.width);
+        int const rowGap = layout::stepCells(_gapStep, ui::Axis::Vertical);
+        std::vector<int> lineY;
+        int y = 0;
+        for (int const lineHeight : lines.lineHeights) {
+            lineY.push_back(y);
+            y += lineHeight + rowGap;
+        }
+        std::vector<::core::tui::Rect> areas(children().size());
+        std::size_t shownIndex = 0;
+        for (auto const [child, area] : std::views::zip(children(), areas)) {
+            if (!child->shown()) {
+                continue;
+            }
+            layout::WrapPlaced const& placed = lines.plan.placed.at(shownIndex++);
+            auto const line = static_cast<std::size_t>(placed.line);
+            int const lineHeight = lines.lineHeights.at(line);
+            ui::LayoutHints const& hints = child->layout();
+            ui::Align const across = hints.alignSelf.value_or(_align);
+            int const height = alignedExtent(across, hints.height, requestedSize(*child).height, lineHeight,
+                                             layout::boundsOf(hints.minHeight, hints.maxHeight));
+            area = {.x = placed.x,
+                    .y = lineY.at(line) + alignedOffset(across, height, lineHeight),
+                    .width = placed.width,
+                    .height = height};
+        }
+        return areas;
+    }
     return stackAreas(children(), {.x = 0, .y = 0, .width = size.width, .height = size.height},
                       StackSpec{.axis = _axis,
                                 .gap = _extents.empty() ? _gap : _extentGap,
@@ -69,7 +145,14 @@ std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) con
                                 .justify = _justify});
 }
 
-void StackImpl::paint(::core::tui::Canvas& canvas) { placeChildren(childAreas(canvas.size())); }
+void StackImpl::paint(::core::tui::Canvas& canvas) {
+    if (_wrap && canvas.size().width != _drawnWidth) {
+        // The row's height follows its width, so its container lays it out again at the next frame.
+        _drawnWidth = canvas.size().width;
+        refresh();
+    }
+    placeChildren(childAreas(canvas.size()));
+}
 
 ::core::tui::Size ScrollImpl::naturalSize() const { return stackNaturalSize(children(), _scroller.axis(), 0); }
 

@@ -381,6 +381,21 @@ public:
     /// @brief Places the spare length along the axis while no shown child stretches. A new stack packs at the start.
     /// @param justify Where it goes.
     virtual void setJustify(Justify justify) = 0;
+
+    /// @brief Makes a horizontal stack wrap: its children fill lines in order, and a child that does not fit after
+    ///        the ones already on a line starts the next. The mount calls it once, before the stack's first child,
+    ///        and only for a stack that wraps.
+    ///
+    /// Each shown child has a basis along the row: a content child its natural width, a fixed child its amount, and
+    /// a stretch child its minimum width, else its natural width; each clamped into the child's bounds and at most
+    /// the row's width. A line always holds one child; a child whose basis is 0 takes no gap and never starts a
+    /// line. On a line, the stretch children share the spare width by weight, each stopping at its maximum; a line
+    /// with none places it by the stack's `justify`. A line is as tall as its tallest child, the stack's `align`
+    /// places a child down its line, and lines are `gap` apart, the step children are apart along a line. A child
+    /// wider than the stack sits alone on its line at the stack's width. The stack's natural width is its children's
+    /// on one line, and its natural height the height of its lines at the width it is given.
+    /// @param wrap Always true: a stack that does not wrap is never told.
+    virtual void setWrap(bool wrap) = 0;
 };
 
 /// @brief Children laid out row-major in columns.

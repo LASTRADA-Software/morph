@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
@@ -1025,4 +1026,31 @@ TEST_CASE(
     focal.emphasis = ui::InputEmphasis::Prominent;
     ui::Mounted const view{runtime, backend, ui::textInput(focal)};
     CHECK(backend.find("TextInput", "emphasis", "Prominent").has_value());
+}
+
+// Mutation: never call setWrap in mountStack (the log loses it), or call it after the children are mounted.
+TEST_CASE("ui::Mounted: a wrapping row records wrap before its first child, and a plain row records nothing", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    {
+        ui::Mounted const view{
+            runtime, backend, ui::row({.children = {ui::text({.text = "a"}), ui::text({.text = "b"})}, .wrap = true})};
+        CHECK(backend.dump() ==
+              "Row#1 gap=0 wrap=true\n"
+              "  Text#2 role=Normal text=a\n"
+              "  Text#3 role=Normal text=b\n");
+        auto const& log = backend.log();
+        auto const wrapped = std::ranges::find(log, "set Row#1 wrap=true");
+        auto const firstChild =
+            std::ranges::find_if(log, [](std::string const& entry) { return entry.starts_with("create Text"); });
+        REQUIRE(wrapped != log.end());
+        REQUIRE(firstChild != log.end());
+        CHECK(wrapped < firstChild);
+    }
+    RecordingBackend plain;
+    ui::Mounted const view{runtime, plain, ui::row({.children = {ui::text({.text = "a"})}})};
+    CHECK(plain.dump() ==
+          "Row#1 gap=0\n"
+          "  Text#2 role=Normal text=a\n");
 }

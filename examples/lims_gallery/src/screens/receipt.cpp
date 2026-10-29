@@ -290,7 +290,7 @@ ui::Node conditions(Receipt const& receipt, bool compact) {
 ui::Node sampleHeading(Receipt const& receipt) {
     return ui::row({layout::section(ui::format("Sample {0}", {receipt.sample.at("id")})).testId("sample-id"),
                     layout::tag(receipt.sample.at("status"), "neutral")},
-                   {.gap = 1, .align = Align::Center});
+                   {.gap = 1, .align = Align::Center, .wrap = true});
 }
 
 ui::Node rejectButton(Receipt const& receipt, char const* label) {

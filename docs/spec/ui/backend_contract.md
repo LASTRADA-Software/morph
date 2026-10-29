@@ -173,7 +173,7 @@ reorders children, and only through this.
 
 | Container | Children |
 |---|---|
-| `StackWidget` | In order along the axis fixed at creation, `setGap` apart; `setAlign` places them across the axis and `setJustify` the spare length along it |
+| `StackWidget` | In order along the axis fixed at creation, `setGap` apart; `setAlign` places them across the axis and `setJustify` the spare length along it. A wrapping row (`setWrap(true)`, called before its first child) fills lines in order: each shown child has a basis (a content child its natural width, a fixed child its amount, a stretch child its minimum width, else its natural width, each within its bounds and at most the row's width); a child starts a new line when its basis and a gap do not fit after those on the line (a line always holds one child; a child with no basis takes no gap and starts no line); on a line the stretch children share the spare width by weight, each stopping at its maximum, and a line with none places it by `justify`; a line is as tall as its tallest child, `align` places a child down it, and lines are a gap apart, the same step as between children; a child wider than the row sits alone at the row's width. Its natural width is its children's on one line, its natural height its lines' at the width it is given |
 | `GridWidget` | Row-major in `setColumns` columns sharing the width, or in `setTracks` columns sized by their tracks, `setGap` apart; `setSpan(child, n)` widens one, and a child spans 1 until told; `setAlign` places each cell's content in its row |
 | `PanelWidget` | A card unless the node names a surface: filled with the card scheme's surface, which its content inherits, with the card's border, radius and shadow; on a card it draws no shadow. Inside the frame, `setPadding` in; a collapsed panel hides its content, which takes no input. `setHeader`'s widget is not part of "its content" for this: it stays shown and usable while collapsed |
 | `ScrollWidget` | One scrolled viewport, on the axis fixed at creation, that keeps the focused child visible |
@@ -279,7 +279,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)`; a dropdown's list opens under the field, at the field's start when it fits in the window, else ending at the field's end, and always inside the window | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
 | `MenuWidget` | `setItems(entries)`, `setTrigger(MenuTrigger{label, icon, emphasis})` (a button-style menu's); a popup opens under its control, at the control's start when it fits in the window, else ending at the control's end, and always inside the window | `setOnActivate(path)` |
-| `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)` | — |
+| `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)`, `setWrap(bool)` | — |
 | `GridWidget` | `setColumns` (at least one), `setTracks(tracks)` (at least one, in place of `setColumns`), `setGap`, `setSpan(child, span)`, `setAlign(Align)` | — |
 | `SpacerWidget` | — | — |
 | `PanelWidget` | `setTitle`, `setHeader(Widget&)` (shown beside the title, called at most once), `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
@@ -535,6 +535,11 @@ the container it measures inside another, since a root fills the window or scree
 17. A slot of fixed height 20 showing a one-row `ForEach` sized as the content it holds, a column of a stretching
     scroll above a one-line bar, ends the bar at the slot's end: the slot reads its direct child's sizing alone, so
     that `ForEach` carries the stretch.
+18. A wrapping row with gap 1 and three `fixed(12)` texts keeps them on one line at 36 units plus two step-1
+    distances, and at 30 units puts the third at the row's left under the first, the row as tall as its two lines.
+19. In a wrapping row, a stretch text with `minWidth: 10` beside a `fixed(12)` text takes the line's spare width
+    (the row's width less 12 and a step) at 40 units, and sits alone at the row's width, the fixed text below it,
+    at 20: a stretch child's basis is its minimum width.
 
 ### The probe
 

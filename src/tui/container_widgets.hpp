@@ -31,6 +31,7 @@ public:
     void setGap(int gap) override;
     void setAlign(ui::Align align) override;
     void setJustify(ui::Justify justify) override;
+    void setWrap(bool wrap) override;
     [[nodiscard]] ui::Axis axis() const noexcept { return _axis; }
     /// The gap in cells along the axis: the spacing step `setGap` was given, mapped by `layout::stepCells`.
     [[nodiscard]] int gap() const noexcept { return _gap; }
@@ -43,8 +44,20 @@ public:
     void paint(::core::tui::Canvas& canvas) override;
 
 private:
+    /// The shown children's places along their lines when the row is @p width cells wide, and each line's height.
+    struct WrappedLines {
+        std::vector<WidgetBase*> shown;
+        layout::WrapPlan plan;
+        std::vector<int> lineHeights;
+    };
+    [[nodiscard]] WrappedLines wrappedLines(int width) const;
+
     ui::Axis _axis;
     int _gap = 0;
+    int _gapStep = 0;
+    bool _wrap = false;
+    /// The width the row was last drawn at; a wrapping row's height is its lines' at this width.
+    int _drawnWidth = 0;
     std::vector<int> _extents;
     std::vector<CellPlace> _places;
     int _extentGap = 0;

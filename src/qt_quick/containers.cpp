@@ -34,6 +34,36 @@ void StackImpl::setAlign(ui::Align align) {
 
 void StackImpl::setJustify(ui::Justify justify) { write("justify", static_cast<int>(justify)); }
 
+void StackImpl::setWrap(bool wrap) {
+    _wrap = wrap;
+    write("wrap", wrap);
+}
+
+namespace {
+
+// Has the container's `place` run again whenever a cell's implicit size or visibility changes. The container's item is
+// the connection's context, and the call goes through it, not through the widget, which may be gone while Qt still
+// holds the item.
+void placeOnChange(QQuickItem* container, QQuickItem const* cell) {
+    auto const place = [target = QPointer<QQuickItem>{container}] {
+        if (target != nullptr) {
+            QMetaObject::invokeMethod(target, "place", Qt::DirectConnection);
+        }
+    };
+    QObject::connect(cell, &QQuickItem::implicitWidthChanged, container, place);
+    QObject::connect(cell, &QQuickItem::implicitHeightChanged, container, place);
+    QObject::connect(cell, &QQuickItem::visibleChanged, container, place);
+}
+
+}  // namespace
+
+void StackImpl::adopted(ItemBase& child) {
+    QQuickItem const* const cell = child.item();
+    if (_wrap && cell != nullptr && item() != nullptr) {
+        placeOnChange(item(), cell);
+    }
+}
+
 GridImpl::GridImpl(Context& context, ui::ContainerWidget* parent)
     : ContainerItemWidget{context, QStringLiteral("MorphGrid"), parent} {}
 
@@ -54,16 +84,7 @@ void GridImpl::adopted(ItemBase& child) {
     if (cell == nullptr || item() == nullptr) {
         return;
     }
-    // The grid's item is the connection's context, and the call goes through it, not through this widget, which may
-    // be gone while Qt still holds the item.
-    auto const place = [grid = QPointer<QQuickItem>{item()}] {
-        if (grid != nullptr) {
-            QMetaObject::invokeMethod(grid, "place", Qt::DirectConnection);
-        }
-    };
-    QObject::connect(cell, &QQuickItem::implicitWidthChanged, item(), place);
-    QObject::connect(cell, &QQuickItem::implicitHeightChanged, item(), place);
-    QObject::connect(cell, &QQuickItem::visibleChanged, item(), place);
+    placeOnChange(item(), cell);
 }
 
 void GridImpl::place() const {

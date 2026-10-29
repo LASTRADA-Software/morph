@@ -190,10 +190,12 @@ expression of one),
 - **`group`** takes its children and `GroupOptions{label, required, description, errors, gap}`.
 - **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected, children}`: an absent `style`
   writes no key, and `selected`, a condition, is written as given: an item's current entry, a push button pressed in.
-- **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, tracks, align, justify}`; an
+- **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, tracks, align, justify, wrap}`; an
   absent `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` and `tracks`
   (`GridTrack{width, align}`, each key written only when given) are the grid's, and
-  a grid's `justify` is written so the loader refuses it rather than dropped.
+  a grid's `justify` is written so the loader refuses it rather than dropped. `wrap` is a row's: the children
+  continue on the next line when they do not fit; written on a column or a grid, the loader refuses it. `forEach`
+  takes the same `wrap` in its `ForEachOptions`, for a horizontal `axis`.
 - **`table`** takes its rows, its options (`key`, `columns` (each `TableColumn{name, label, width, role, align,
   valign, cell, sortable, sortBy}`; an absent `align` or `valign` is left out and a present one is written by name,
   `sortable` only when `true`), `selectionMode` (a

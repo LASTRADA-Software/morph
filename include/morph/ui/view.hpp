@@ -737,6 +737,9 @@ struct Row {
     Align align = Align::Stretch;
     /// @brief Where the spare width goes while no shown child stretches; set once.
     Justify justify = Justify::Start;
+    /// @brief Whether children that do not fit on one line continue on the next, as a flex row with `wrap` does;
+    ///        set once. A table row never wraps.
+    bool wrap = false;
 };
 
 /// @brief One cell of a `Grid`.
@@ -1040,6 +1043,9 @@ struct ForEach {
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop of the row container.
     Common common{};
+    /// @brief Whether rows that do not fit on one line continue on the next; set once. Only a horizontal `axis`
+    ///        wraps: the mount ignores it on a vertical one.
+    bool wrap = false;
 };
 
 /// @brief One column of a `Table`.
@@ -1716,18 +1722,20 @@ template <typename E>
 /// @param axis The stacking direction.
 /// @param gap Space between rows.
 /// @param common Visibility, enablement, layout and the rest of the row container's common properties.
+/// @param wrap Whether rows continue on the next line when they do not fit; only a horizontal @p axis wraps.
 /// @return The node.
 /// @throws std::invalid_argument when @p rows, @p keyOf or @p rowView is empty.
 template <typename RowT>
 [[nodiscard]] Node forEach(std::function<std::vector<RowT>()> rows, std::function<Key(RowT const&)> keyOf,
                            std::function<Node(reactive::Signal<RowT> const&)> rowView, Axis axis = Axis::Vertical,
-                           int gap = 0, Common const& common = {}) {
+                           int gap = 0, Common const& common = {}, bool wrap = false) {
     return detail::makeNode(ForEach{
         .model =
             std::make_shared<detail::TypedForEach<RowT> const>(std::move(rows), std::move(keyOf), std::move(rowView)),
         .axis = axis,
         .gap = gap,
         .common = common,
+        .wrap = wrap,
     });
 }
 
@@ -1739,13 +1747,15 @@ template <typename RowT>
 /// @param axis The stacking direction.
 /// @param gap Space between rows.
 /// @param common Visibility, enablement, layout and the rest of the row container's common properties.
+/// @param wrap Whether rows continue on the next line when they do not fit; only a horizontal @p axis wraps.
 /// @return The node.
 /// @throws std::invalid_argument when @p keyOf or @p rowView is empty.
 template <typename RowT>
 [[nodiscard]] Node forEach(reactive::Signal<std::vector<RowT>> const& rows, std::function<Key(RowT const&)> keyOf,
                            std::function<Node(reactive::Signal<RowT> const&)> rowView, Axis axis = Axis::Vertical,
-                           int gap = 0, Common const& common = {}) {
-    return forEach<RowT>([&rows] { return rows.get(); }, std::move(keyOf), std::move(rowView), axis, gap, common);
+                           int gap = 0, Common const& common = {}, bool wrap = false) {
+    return forEach<RowT>([&rows] { return rows.get(); }, std::move(keyOf), std::move(rowView), axis, gap, common,
+                         wrap);
 }
 
 /// @brief Everything about a `table` beyond its columns and rows.

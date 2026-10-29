@@ -7655,7 +7655,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         Row spec{.children = children("children"),
                  .gap = gap,
                  .align = alignOf(node.name("align")),
-                 .justify = justifyOf(node.name("justify"))};
+                 .justify = justifyOf(node.name("justify")),
+                 .wrap = node.flag("wrap")};
         commonOf(node, ctx, element, spec.common);
         return ui::row(std::move(spec));
     }
@@ -8646,9 +8647,16 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         ExprPtr const gap = node.prop("gap");
         Common common;
         commonOf(node, ctx, element, common);
-        return ui::forEach<Value>(std::move(rows), std::move(keyFn), std::move(rowView),
-                                  axis ? axisOf(once(ctx, axis)) : Axis::Vertical,
-                                  gap ? static_cast<int>(intOf(once(ctx, gap), 0)) : 0, common);
+        Axis const along = axis ? axisOf(once(ctx, axis)) : Axis::Vertical;
+        bool wrap = node.flag("wrap");
+        if (wrap && along != Axis::Horizontal) {
+            // Only a computed axis gets here: the loader refuses a literal one that is not horizontal.
+            report(node.path + "/wrap",
+                   "`wrap` fills lines along a row; this `forEach`'s `axis` is not \"horizontal\"");
+            wrap = false;
+        }
+        return ui::forEach<Value>(std::move(rows), std::move(keyFn), std::move(rowView), along,
+                                  gap ? static_cast<int>(intOf(once(ctx, gap), 0)) : 0, common, wrap);
     }
     // The table's rows, sorted: the element's own view, which its element values read too, unless names bound
     // where the table is lowered (a component's `props`) reach its rows, which the element cannot see.

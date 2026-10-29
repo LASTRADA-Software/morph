@@ -557,3 +557,16 @@ TEST_CASE("interpreter: a switch case, a default and a dialog body pass their ch
         CHECK(h.diagnostics.front().path.contains("sizing"));
     }
 }
+
+// Mutation: skip the report (the diagnostics stay empty), or keep `wrap` on a vertical stack.
+TEST_CASE("interpreter: a wrapping forEach whose computed axis is not horizontal is reported and does not wrap",
+          "[ui][interpreter][layout]") {
+    ui::testing::Harness h;
+    auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "state": { "on": { "init": false } },
+        "view": { "kind": "forEach", "rows": { "lit": [ 1, 2 ] }, "key": { "row": "" }, "wrap": true,
+                  "axis": { "if": [ { "ref": "on" }, "horizontal", "vertical" ] },
+                  "children": [ { "kind": "text", "text": "x" } ] } })");
+    REQUIRE_FALSE(h.diagnostics.empty());
+    CHECK(h.diagnostics.front().path == "/view/wrap");
+    CHECK_FALSE(h.backend.dump().contains("wrap=true"));
+}

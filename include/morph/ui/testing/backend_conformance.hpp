@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -2424,6 +2425,128 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief A mounted wrapping row and what it holds.
+struct WrappingRow {
+    /// @brief The mounted view.
+    std::unique_ptr<Mounted> view;
+    /// @brief The row and its children.
+    Measured measured;
+};
+
+/// @brief Mounts a wrapping row of gap 1 @p width units wide.
+/// @param probe    The backend under test.
+/// @param width    The row's width, in units.
+/// @param children The row's children.
+/// @return The row.
+[[nodiscard]] inline WrappingRow mountWrappingRow(ConformanceProbe& probe, int width, std::vector<Node> children) {
+    Row row{.children = std::move(children), .gap = 1, .wrap = true};
+    row.common.layout = {.width = Sizing::fixed(width)};
+    WrappingRow made;
+    // In a column, which gives a row its natural height; a row would stretch it to the window's.
+    made.view = std::make_unique<Mounted>(probe.runtime(), probe.backend(),
+                                          ui::column(Column{.children = {ui::row(std::move(row))}}));
+    probe.settle();
+    made.measured = measured(probe, *made.view);
+    return made;
+}
+
+/// @brief The distance between two fixed(12) texts of a row of gap 1: the backend's own step 1.
+/// @param probe The backend under test.
+/// @param geometry Reads bounds.
+/// @return The distance in units.
+[[nodiscard]] inline double stepOneDistance(ConformanceProbe& probe, Geometry& geometry) {
+    Row row{.children = {sizedText("a", {.width = Sizing::fixed(12)}), sizedText("b", {.width = Sizing::fixed(12)})},
+            .gap = 1};
+    row.common.layout = {.width = Sizing::fixed(40)};
+    Mounted const view{probe.runtime(), probe.backend(), insideRow(ui::row(std::move(row)))};
+    probe.settle();
+    Measured const found = measured(probe, view);
+    if (found.children.size() != 2) {
+        return 1.0;
+    }
+    return geometry.of(*found.children.at(1)).x - geometry.of(*found.children.at(0)).x - 12.0;
+}
+
+/// @brief Case: a wrapping row starts a line only when its next child does not fit.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> wrappingRowStartsLineWhenOutOfRoom(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    double const step = stepOneDistance(probe, geometry);
+    auto const texts = [] {
+        std::vector<Node> children;
+        for (char const* const label : {"one", "two", "three"}) {
+            children.push_back(sizedText(label, {.width = Sizing::fixed(12)}));
+        }
+        return children;
+    };
+    {
+        // Wide enough for all three on a line.
+        WrappingRow const wide =
+            mountWrappingRow(probe, static_cast<int>(std::ceil(36.0 + (2.0 * step))) + 1, texts());
+        checks.that(wide.measured.children.size() == 3, "the wrapping row holds three texts");
+        if (wide.measured.children.size() == 3) {
+            double const top = geometry.of(*wide.measured.children.at(0)).y;
+            geometry.near("the second text's top, on the first's line", top,
+                          geometry.of(*wide.measured.children.at(1)).y);
+            geometry.near("the third text's top, on the first's line", top,
+                          geometry.of(*wide.measured.children.at(2)).y);
+        }
+    }
+    {
+        // Room for two: the third starts the next line, under the first.
+        WrappingRow const narrow = mountWrappingRow(probe, 30, texts());
+        checks.that(narrow.measured.children.size() == 3, "the narrow wrapping row holds three texts");
+        if (narrow.measured.children.size() == 3) {
+            WidgetBounds const row = geometry.of(*narrow.measured.container);
+            WidgetBounds const first = geometry.of(*narrow.measured.children.at(0));
+            WidgetBounds const third = geometry.of(*narrow.measured.children.at(2));
+            geometry.near("the third text's left, at the row's", row.x, third.x);
+            checks.that(third.y >= first.y + first.height - 0.5, "the third text is below the first line");
+            geometry.near("the row's height, the two lines'", third.y + third.height - row.y, row.height);
+        }
+    }
+    return checks.result();
+}
+
+/// @brief Case: a stretch child of a wrapping row takes its line's spare width, and its minimum is its basis.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> wrappingRowStretchTakesLineSpare(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    double const step = stepOneDistance(probe, geometry);
+    auto const children = [] {
+        std::vector<Node> made;
+        made.push_back(sizedText("a stretch text of well over thirty characters, wider than the row", {.width = Sizing::stretch(), .minWidth = 10}));
+        made.push_back(sizedText("fixed", {.width = Sizing::fixed(12)}));
+        return made;
+    };
+    {
+        WrappingRow const wide = mountWrappingRow(probe, 40, children());
+        checks.that(wide.measured.children.size() == 2, "the wrapping row holds two texts");
+        if (wide.measured.children.size() == 2) {
+            WidgetBounds const stretch = geometry.of(*wide.measured.children.at(0));
+            WidgetBounds const fixed = geometry.of(*wide.measured.children.at(1));
+            geometry.near("the stretch text's width, the line less the fixed text and a step", 28.0 - step,
+                          stretch.width);
+            geometry.near("the fixed text's top, on the stretch text's line", stretch.y, fixed.y);
+        }
+    }
+    {
+        WrappingRow const narrow = mountWrappingRow(probe, 20, children());
+        checks.that(narrow.measured.children.size() == 2, "the narrow wrapping row holds two texts");
+        if (narrow.measured.children.size() == 2) {
+            WidgetBounds const stretch = geometry.of(*narrow.measured.children.at(0));
+            WidgetBounds const fixed = geometry.of(*narrow.measured.children.at(1));
+            geometry.near("the stretch text's width, alone on its line", 20.0, stretch.width);
+            checks.that(fixed.y >= stretch.y + stretch.height - 0.5, "the fixed text is on the next line");
+        }
+    }
+    return checks.result();
+}
+
 /// @brief Case: a scrollable slot of fixed height shows a column of 40 lines inside its own height and brings the
 ///        focused last one into view; holding a column that stretches in height, the column fills it exactly.
 /// @param probe The backend under test.
@@ -2833,7 +2956,7 @@ struct SelectionReport {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 20> const cases{{
+    static std::array<ConformanceCase, 22> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -2863,6 +2986,10 @@ struct SelectionReport {
          .run = detail::stretchingChildBelowMinimumScrolls},
         {.name = "a slot showing a one-row ForEach whose holder stretches fills the slot",
          .run = detail::slotShowingStretchingForEachFills},
+        {.name = "a wrapping row starts a line only when out of room",
+         .run = detail::wrappingRowStartsLineWhenOutOfRoom},
+        {.name = "a stretch child of a wrapping row takes its line's spare width",
+         .run = detail::wrappingRowStretchTakesLineSpare},
     }};
     return cases;
 }

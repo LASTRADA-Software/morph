@@ -589,7 +589,7 @@ ui::Node cardContent(Samples const& list) {
                      ui::row({layout::outlineTag(ui::row("priority"), priorityTone(ui::row("priority"))),
                               layout::tag(ui::row("status"), ui::row("statusTone")),
                               layout::tag(spec, ui::row("specTone")).visible(!ui::isEmpty(spec))},
-                             {.gap = 1})},
+                             {.gap = 1, .wrap = true})},
                     {.gap = 0})
              .sizing(ui::stretch())},
         {.gap = 2, .align = Align::Start});

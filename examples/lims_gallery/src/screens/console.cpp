@@ -724,7 +724,7 @@ ui::Node samplePane(Console const& console) {
                 ui::text({.text = ui::format("{0} · lot {1} · {2}", {field(console, "product"), field(console, "lot"),
                                                                      field(console, "instrument")})})
                     .testId("pane-line"),
-                ui::forEach(tags, {.key = ui::row("text"), .axis = "horizontal", .gap = 1},
+                ui::forEach(tags, {.key = ui::row("text"), .axis = "horizontal", .gap = 1, .wrap = true},
                             [](ui::DeclScope&) { return ui::Nodes{layout::tag(ui::row("text"), ui::row("tone"))}; })
                     .testId("pane-tags"),
                 paneResults(console), custodyLines(console),
@@ -781,7 +781,7 @@ ui::Node compactCard() {
                        ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("product")})}),
                        ui::row({layout::tag(ui::row("priority"), ui::row("priorityTone")),
                                 layout::tag(ui::row("status"), ui::row("statusTone"))},
-                               {.gap = 1})},
+                               {.gap = 1, .wrap = true})},
                       {.gap = 1});
 }
 

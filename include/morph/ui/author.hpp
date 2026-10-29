@@ -3406,6 +3406,14 @@ public:
         return *this;
     }
 
+    /// @brief A literal `true` flag.
+    /// @param key The key.
+    /// @return This writer.
+    NodeWriter& flag(char const* key) {
+        detail::put(_json, key, true);
+        return *this;
+    }
+
     /// @brief Any JSON.
     /// @param key   The key.
     /// @param value The JSON.
@@ -3745,6 +3753,9 @@ struct ContainerOptions {
     /// @brief A row's or column's spare length along its axis; absent packs at the start. Not on a grid, whose
     ///        columns are sized by their count or tracks.
     std::optional<Justify> justify;
+    /// @brief Whether a row's children continue on the next line when they do not fit. Only a `row` has it; the
+    ///        loader refuses it on a `column`.
+    bool wrap = false;
 };
 
 namespace detail {
@@ -3762,6 +3773,10 @@ namespace detail {
     }
     if (options.justify) {
         node.text("justify", justifyName(*options.justify));
+    }
+    if (options.wrap) {
+        // Written for a column too, so the loader refuses it rather than the author silently losing it.
+        node.flag("wrap");
     }
     return node.done();
 }
@@ -4133,6 +4148,8 @@ struct ForEachOptions {
     AnyHandle axis;
     /// @brief The gap between rows: a spacing step, 0 to `kMaxSpacingStep`.
     AnyHandle gap;
+    /// @brief Whether a horizontal `forEach`'s rows continue on the next line when they do not fit.
+    bool wrap = false;
 };
 
 /// @brief A `forEach` node: its children once per row, each row a scope of its own.
@@ -4143,14 +4160,12 @@ struct ForEachOptions {
 [[nodiscard]] inline Node forEach(AnyHandle const& rows, ForEachOptions const& options, ScopeBuilder const& builder) {
     DeclScope scope;
     Nodes const children = builder(scope);
-    return detail::NodeWriter{"forEach"}
-        .put("rows", rows)
-        .put("key", options.key)
-        .put("axis", options.axis)
-        .put("gap", options.gap)
-        .scope(scope)
-        .put("children", children)
-        .done();
+    detail::NodeWriter node{"forEach"};
+    node.put("rows", rows).put("key", options.key).put("axis", options.axis).put("gap", options.gap);
+    if (options.wrap) {
+        node.flag("wrap");
+    }
+    return node.scope(scope).put("children", children).done();
 }
 
 /// @brief A column of a `table`.

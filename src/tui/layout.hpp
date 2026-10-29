@@ -95,6 +95,30 @@ struct GridPlan {
 [[nodiscard]] GridPlan planGrid(std::span<Item const> columns, std::span<GridCell const> cells, Track width,
                                 int rowGap);
 
+/// Where one item of a wrapping row lands.
+struct WrapPlaced {
+    int line = 0;   ///< The line, from 0.
+    int x = 0;      ///< Its leading edge along the line.
+    int width = 0;  ///< Its extent along the line.
+
+    bool operator==(WrapPlaced const&) const = default;
+};
+
+/// A solved wrapping row: one place per item, in item order, and the number of lines.
+struct WrapPlan {
+    std::vector<WrapPlaced> placed;  ///< One per item.
+    int lines = 0;                   ///< How many lines the items fill.
+};
+
+/// Places items along lines of `width.length` cells, `width.gap` cells apart. Each item has a basis: its natural
+/// extent (a Fixed item its amount), and for a Stretch item its minimum when it has one (above 0), else its natural
+/// extent; clamped into its bounds and at most the line's length. Items fill lines in order; an item starts a new line
+/// when its basis, and a gap, does not fit after the items already on the line. A line holds at least one item, and an
+/// item whose basis is 0 takes no gap and starts no line. On a line the Stretch items share the spare length as
+/// `distribute` does; a line with none places it by `justify`. An item wider than the line sits alone, at the line's
+/// length.
+[[nodiscard]] WrapPlan planWrap(std::span<Item const> items, Track width, ui::Justify justify = ui::Justify::Start);
+
 /// The rectangle a slot of `plan` covers, gaps between its columns included.
 [[nodiscard]] ::core::tui::Rect slotArea(GridPlan const& plan, GridSlot const& slot);
 

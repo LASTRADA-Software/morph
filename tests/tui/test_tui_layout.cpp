@@ -509,3 +509,66 @@ TEST_CASE("tui::layout::planGrid holds its invariants on random input", "[tui][l
         CHECK(gridViolation(columns, cells, width, layout::planGrid(columns, cells, width, width.gap)).empty());
     }
 }
+
+namespace {
+
+layout::Item contentItem(int natural) { return {.sizing = Sizing::content(), .natural = natural}; }
+
+}  // namespace
+
+// Mutation: break the line test (`used + gap + basis > length`, say by dropping the gap): the third item then
+// stays on line 0 at 30 columns.
+TEST_CASE("tui::layout::planWrap starts a line only when the next item does not fit", "[tui][layout]") {
+    std::vector<layout::Item> const items{contentItem(12), contentItem(12), contentItem(12)};
+    SECTION("all three fit at 3 x 12 plus two gaps") {
+        auto const plan = layout::planWrap(items, {.length = 38, .gap = 1});
+        CHECK(plan.lines == 1);
+        CHECK(plan.placed.at(2) == layout::WrapPlaced{.line = 0, .x = 26, .width = 12});
+    }
+    SECTION("two fit in 30 columns, and the third starts the next line at the left") {
+        auto const plan = layout::planWrap(items, {.length = 30, .gap = 1});
+        CHECK(plan.lines == 2);
+        CHECK(plan.placed.at(1) == layout::WrapPlaced{.line = 0, .x = 13, .width = 12});
+        CHECK(plan.placed.at(2) == layout::WrapPlaced{.line = 1, .x = 0, .width = 12});
+    }
+}
+
+// Mutation: take a stretch child's basis from its natural extent (30) in place of its minimum: the fixed child then
+// starts line 1 at 40 columns.
+TEST_CASE("tui::layout::planWrap gives a stretch item its line's spare length, and its minimum is its basis",
+          "[tui][layout]") {
+    std::vector<layout::Item> const items{
+        {.sizing = Sizing::stretch(), .natural = 30, .minimum = 10},
+        {.sizing = Sizing::fixed(12), .natural = 5},
+    };
+    auto const wide = layout::planWrap(items, {.length = 40, .gap = 1});
+    CHECK(wide.lines == 1);
+    CHECK(wide.placed.at(0) == layout::WrapPlaced{.line = 0, .x = 0, .width = 27});
+    CHECK(wide.placed.at(1) == layout::WrapPlaced{.line = 0, .x = 28, .width = 12});
+    auto const narrow = layout::planWrap(items, {.length = 20, .gap = 1});
+    CHECK(narrow.lines == 2);
+    CHECK(narrow.placed.at(0) == layout::WrapPlaced{.line = 0, .x = 0, .width = 20});
+    CHECK(narrow.placed.at(1) == layout::WrapPlaced{.line = 1, .x = 0, .width = 12});
+}
+
+TEST_CASE("tui::layout::planWrap seats an overwide item alone, and an empty item takes no gap", "[tui][layout]") {
+    SECTION("an item wider than the line sits alone at the line's length") {
+        std::vector<layout::Item> const items{contentItem(5), contentItem(50), contentItem(5)};
+        auto const plan = layout::planWrap(items, {.length = 20, .gap = 1});
+        CHECK(plan.lines == 3);
+        CHECK(plan.placed.at(1) == layout::WrapPlaced{.line = 1, .x = 0, .width = 20});
+    }
+    SECTION("an item with no basis takes no gap and starts no line") {
+        std::vector<layout::Item> const items{contentItem(10), contentItem(0), contentItem(9)};
+        auto const plan = layout::planWrap(items, {.length = 20, .gap = 1});
+        CHECK(plan.lines == 1);
+        CHECK(plan.placed.at(1).width == 0);
+        CHECK(plan.placed.at(2) == layout::WrapPlaced{.line = 0, .x = 11, .width = 9});
+    }
+    SECTION("a line without a stretch item is placed by justify") {
+        std::vector<layout::Item> const items{contentItem(5), contentItem(5)};
+        auto const plan = layout::planWrap(items, {.length = 20, .gap = 1}, morph::ui::Justify::End);
+        CHECK(plan.placed.at(0).x == 9);
+        CHECK(plan.placed.at(1).x == 15);
+    }
+}

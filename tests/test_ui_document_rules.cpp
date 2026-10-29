@@ -295,3 +295,22 @@ TEST_CASE("ui document rules: a text's role may be display or small, and no othe
     CHECK(refusal(document(R"({"kind": "text", "text": "x", "role": "tiny"})")) ==
           "/view/role: `tiny` is not one of the values of `role`");
 }
+
+// Mutation: drop the `wrap` key from the row's or the forEach's keys (the accepted forms are then refused), or its
+// axis check (the vertical forEach then loads).
+TEST_CASE("ui document rules: wrap is a literal flag of a row and of a horizontal forEach", "[ui][document]") {
+    auto const each = [](std::string const& extra) {
+        return document(R"({"kind": "forEach", "rows": {"lit": []}, "key": {"row": "id"}, )" + extra +
+                        R"("children": [{"kind": "text", "text": "x"}]})");
+    };
+    CHECK(refusal(document(R"({"kind": "row", "wrap": true, "children": []})")) == "loads");
+    CHECK(refusal(document(R"({"kind": "row", "wrap": false, "children": []})")) == "loads");
+    CHECK(refusal(document(R"({"kind": "row", "wrap": {"ref": "x"}, "children": []})")) ==
+          "/view/wrap: `wrap` is a literal `true` or `false`");
+    CHECK(refusal(document(R"({"kind": "column", "wrap": true, "children": []})")) ==
+          "/view/wrap: only a row wraps; a column has no lines to continue on");
+    CHECK(refusal(each(R"("axis": "horizontal", "wrap": true,)")) == "loads");
+    CHECK(refusal(each(R"("axis": "vertical", "wrap": true,)")) ==
+          "/view/wrap: `wrap` fills lines along a row; this `forEach`'s `axis` is not \"horizontal\"");
+    CHECK(refusal(each(R"("axis": "vertical", "wrap": false,)")) == "loads");
+}

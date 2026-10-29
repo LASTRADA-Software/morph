@@ -631,8 +631,11 @@ private:
     // costs no call.
     Widget& mountStack(reactive::Scope& scope, Axis axis, std::vector<Node> const& children, int gap,
                        Common const& common, ContainerWidget* parent, Align align = Align::Stretch,
-                       Justify justify = Justify::Start) {
+                       Justify justify = Justify::Start, bool wrap = false) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, axis));
+        if (wrap) {
+            widget.setWrap(true);
+        }
         applyCommon(scope, widget, common);
         widget.setGap(spacingStep(gap));
         if (align != Align::Stretch) {
@@ -932,7 +935,7 @@ private:
                 "morph::ui: a row's tone, label and heading are a table row's; this row is not in a table"};
         }
         return mountStack(scope, Axis::Horizontal, spec.children, spec.gap, spec.common, parent, spec.align,
-                          spec.justify);
+                          spec.justify, spec.wrap);
     }
 
     Widget& mountKind(reactive::Scope& scope, Grid const& spec, ContainerWidget* parent) {
@@ -1256,6 +1259,9 @@ private:
 
     Widget& mountKind(reactive::Scope& scope, ForEach const& spec, ContainerWidget* parent) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, spec.axis));
+        if (spec.wrap && spec.axis == Axis::Horizontal) {
+            widget.setWrap(true);
+        }
         applyCommon(scope, widget, spec.common);
         widget.setGap(spacingStep(spec.gap));
         mountRows(scope, spec.model, widget, {}, nullptr);

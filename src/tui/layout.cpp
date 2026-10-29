@@ -219,6 +219,109 @@ GridPlan planGrid(std::span<Item const> columns, std::span<GridCell const> cells
     return plan;
 }
 
+namespace {
+
+/// An item's basis along a wrapping line of @p length cells.
+int basisOf(Item const& item, int length) noexcept {
+    int const wanted = isStretch(item.sizing) && item.minimum > 0 ? item.minimum : requestOf(item);
+    return std::min(clampInto(wanted, boundsOfItem(item)), std::max(0, length));
+}
+
+/// Places one line's @p members (indices into @p items, in order) in @p length cells.
+void placeLine(std::span<Item const> items, std::span<std::size_t const> members, std::span<int const> bases,
+               Track width, ui::Justify justify, int line, std::vector<WrapPlaced>& placed) {
+    // Items with a basis share the line and its gaps; the others take no space and no gap.
+    std::vector<Item> sharing;
+    std::vector<std::size_t> sharers;
+    for (std::size_t const member : members) {
+        if (bases.data()[member] > 0) {
+            Item item = itemAt(items, member);
+            if (!isStretch(item.sizing)) {
+                item.sizing = ui::Sizing::fixed(bases.data()[member]);
+                item.minimum = 0;
+                item.maximum = std::numeric_limits<int>::max();
+            }
+            sharing.push_back(item);
+            sharers.push_back(member);
+        }
+    }
+    std::vector<int> const extents = distribute(sharing, width);
+    Wide const used =
+        std::accumulate(extents.begin(), extents.end(), Wide{0}) + gapsBetween(extents.size(), width.gap);
+    Wide const spare = std::max<Wide>(0, Wide{width.length} - used);
+    bool const stretches = std::ranges::any_of(sharing, [](Item const& item) { return isStretch(item.sizing); });
+    Wide lead = 0;
+    Wide extra = 0;
+    Wide remainder = 0;
+    if (!stretches && spare > 0) {
+        if (justify == ui::Justify::Center) {
+            lead = spare / 2;
+        } else if (justify == ui::Justify::End) {
+            lead = spare;
+        } else if (justify == ui::Justify::Between && extents.size() > 1) {
+            auto const gaps = static_cast<Wide>(extents.size()) - 1;
+            extra = spare / gaps;
+            remainder = spare % gaps;
+        }
+    }
+    Wide cursor = lead;
+    std::size_t next = 0;
+    bool first = true;
+    for (std::size_t const member : members) {
+        if (next < sharers.size() && sharers.at(next) == member) {
+            if (!first) {
+                cursor += Wide{std::max(0, width.gap)} + extra + (remainder > 0 ? 1 : 0);
+                remainder = std::max<Wide>(0, remainder - 1);
+            }
+            placed.at(member) = WrapPlaced{.line = line, .x = saturate(cursor), .width = extents.at(next)};
+            cursor += extents.at(next);
+            ++next;
+            first = false;
+        } else {
+            placed.at(member) = WrapPlaced{.line = line, .x = saturate(cursor), .width = 0};
+        }
+    }
+}
+
+}  // namespace
+
+WrapPlan planWrap(std::span<Item const> items, Track width, ui::Justify justify) {
+    WrapPlan plan;
+    plan.placed.resize(items.size());
+    std::vector<int> bases;
+    bases.reserve(items.size());
+    for (Item const& item : items) {
+        bases.push_back(basisOf(item, width.length));
+    }
+    int const gap = std::max(0, width.gap);
+    std::vector<std::size_t> members;
+    Wide used = 0;
+    bool occupied = false;
+    auto const flush = [&] {
+        if (!members.empty()) {
+            placeLine(items, members, bases, Track{.length = width.length, .gap = gap}, justify, plan.lines,
+                      plan.placed);
+            ++plan.lines;
+            members.clear();
+        }
+        used = 0;
+        occupied = false;
+    };
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        int const basis = bases.at(index);
+        if (basis > 0 && occupied && used + gap + basis > width.length) {
+            flush();
+        }
+        if (basis > 0) {
+            used += (occupied ? gap : 0) + basis;
+            occupied = true;
+        }
+        members.push_back(index);
+    }
+    flush();
+    return plan;
+}
+
 ::core::tui::Rect slotArea(GridPlan const& plan, GridSlot const& slot) {
     auto const first = static_cast<std::size_t>(slot.column);
     auto const spanned =

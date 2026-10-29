@@ -308,8 +308,11 @@ public:
     void setGap(int gap) override;
     void setAlign(ui::Align align) override;
     void setJustify(ui::Justify justify) override;
+    void setWrap(bool wrap) override;
 
 protected:
+    /// A wrapping row places its children itself, again whenever one's size or visibility changes.
+    void adopted(ItemBase& child) override;
     /// A column fills its children's width, a row their height.
     [[nodiscard]] CrossFill crossFill() const noexcept override {
         return CrossFill{.width = _axis == ui::Axis::Vertical, .height = _axis == ui::Axis::Horizontal};
@@ -319,6 +322,7 @@ protected:
 
 private:
     ui::Axis _axis;
+    bool _wrap = false;
 };
 
 class GridImpl final : public ContainerItemWidget<ui::GridWidget> {
@@ -586,6 +590,8 @@ public:
     void setAlign(ui::Align align) override { static_cast<void>(align); }
     /// As `setAlign`.
     void setJustify(ui::Justify justify) override { static_cast<void>(justify); }
+    /// As `setAlign`.
+    void setWrap(bool wrap) override { static_cast<void>(wrap); }
     /// Its key, once the table was told it.
     [[nodiscard]] std::optional<ui::Key> const& key() const noexcept { return _key; }
     void setKey(ui::Key key);
