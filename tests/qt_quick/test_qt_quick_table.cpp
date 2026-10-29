@@ -616,11 +616,11 @@ TEST_CASE("qt_quick table: a table wider than its area keeps every column and sc
 TEST_CASE("qt_quick table: a virtualized table keeps the height it is given, and its rows scroll inside it",
           "[qt_quick]") {
     Scene scene;
-    auto const many = std::views::iota(std::int64_t{0}, std::int64_t{40}) |
-                      std::views::transform([](std::int64_t index) {
-                          return VirtualRow{.id = index, .name = "row-" + std::to_string(index)};
-                      }) |
-                      std::ranges::to<std::vector>();
+    std::vector<VirtualRow> many;
+    many.reserve(40);
+    for (std::int64_t index = 0; index < 40; ++index) {
+        many.push_back(VirtualRow{.id = index, .name = "row-" + std::to_string(index)});
+    }
     ui::Mounted const mounted{
         scene.runtime(), scene.backend(),
         ui::table<VirtualRow>(
@@ -739,8 +739,8 @@ TEST_CASE("qt_quick table: the select column's boxes show and change the selecti
     // The box carries its row's name, and the select-all box the table's label.
     bool const wasActive = QAccessible::isActive();
     QAccessible::setActive(true);
-    QAccessibleInterface* const rowBox = QAccessible::queryAccessibleInterface(&selectBoxOf(*table.rows.at(1)));
-    QAccessibleInterface* const allBox = QAccessible::queryAccessibleInterface(&selectAll);
+    QAccessibleInterface const* const rowBox = QAccessible::queryAccessibleInterface(&selectBoxOf(*table.rows.at(1)));
+    QAccessibleInterface const* const allBox = QAccessible::queryAccessibleInterface(&selectAll);
     REQUIRE(rowBox != nullptr);
     REQUIRE(allBox != nullptr);
     CHECK(rowBox->text(QAccessible::Name) == QStringLiteral("S-2"));
@@ -761,7 +761,7 @@ TEST_CASE("qt_quick table: a row's select box under a bound selection that refus
     ui::Mounted const mounted{
         scene.runtime(), scene.backend(),
         ui::table<Sample>(
-            {{.label = "Sample"}}, [&samples] { return samples; },
+            {{.label = "Sample"}}, [&samples] { return std::vector<Sample>{samples}; },
             [](Sample const& sample) { return ui::Key{sample.id}; },
             [](morph::reactive::Signal<Sample> const&) { return std::vector<ui::Node>{ui::text({.text = "S"})}; },
             {.selectionMode = ui::SelectionMode::Multiple,
@@ -812,7 +812,7 @@ TEST_CASE("qt_quick table: the sorted column's header shows and states its direc
     table.table->setOnSort([&asked](std::size_t column) { asked.push_back(column); });
     scene.settle();
     QQuickItem& name = headerOf(*table.table, 0);
-    QQuickItem& mass = headerOf(*table.table, 1);
+    QQuickItem const& mass = headerOf(*table.table, 1);
     CHECK(name.property("text").toString() == QStringLiteral("Name"));
     CHECK(name.property("activeFocusOnTab").toBool());
     CHECK_FALSE(mass.property("activeFocusOnTab").toBool());
@@ -823,7 +823,7 @@ TEST_CASE("qt_quick table: the sorted column's header shows and states its direc
     CHECK(asked.empty());
     bool const wasActive = QAccessible::isActive();
     QAccessible::setActive(true);
-    QAccessibleInterface* const header = QAccessible::queryAccessibleInterface(&name);
+    QAccessibleInterface const* const header = QAccessible::queryAccessibleInterface(&name);
     REQUIRE(header != nullptr);
     CHECK(header->text(QAccessible::Description) == QStringLiteral("Sorted descending"));
     CHECK(header->text(QAccessible::Name) == QStringLiteral("Name"));

@@ -316,8 +316,8 @@ TEMPLATE_TEST_CASE("qt_quick overlays: a description sits in the head under the 
     scene.settle();
     QQuickItem const& overlayItem = Scene::itemOf(static_cast<ui::Widget&>(*overlay));
     QQuickItem const& contentRoot = *scene.window().contentItem();
-    QQuickItem* const description = namedIn(contentRoot, QStringLiteral("description"));
-    QQuickItem* const rule = namedIn(contentRoot, QStringLiteral("headRule"));
+    QQuickItem const* const description = namedIn(contentRoot, QStringLiteral("description"));
+    QQuickItem const* const rule = namedIn(contentRoot, QStringLiteral("headRule"));
     REQUIRE(description != nullptr);
     REQUIRE(rule != nullptr);
     CHECK(rule->isVisible());
@@ -356,7 +356,7 @@ TEST_CASE(
     REQUIRE(popup != nullptr);
     CHECK(popup->property("width").toReal() == scene.window().width());
     CHECK(popup->property("height").toReal() == scene.window().height());
-    QQuickItem* const dismiss = namedItem(scene.window().contentItem(), QStringLiteral("sheetDismiss"));
+    QQuickItem const* const dismiss = namedItem(scene.window().contentItem(), QStringLiteral("sheetDismiss"));
     REQUIRE(dismiss != nullptr);
     CHECK(dismiss->isVisible());
     CHECK(dismiss->property("text").toString() == QStringLiteral("Cancel"));

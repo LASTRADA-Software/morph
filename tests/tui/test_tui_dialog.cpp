@@ -1056,7 +1056,7 @@ TEST_CASE("tui dialog: a description takes the first row inside the frame, a rul
     int const title = at("Confirm");
     REQUIRE(title >= 0);
     CHECK(at("Sign the results") == title + 1);
-    CHECK(rows.at(static_cast<std::size_t>(title) + 2).find("──") != std::string::npos);
+    CHECK(rows.at(static_cast<std::size_t>(title) + 2).contains("──"));
     CHECK(at("Sure?") == title + 3);
     CHECK(scene.dialog->accessibleDescription() == "Sign the results");
 }

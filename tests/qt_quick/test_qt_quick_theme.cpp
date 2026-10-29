@@ -811,7 +811,7 @@ TEST_CASE("qt_quick theme: a selected push button keeps its size, rings in the a
 
     QColor tint = accent;
     tint.setAlphaF(0.12F);
-    QColor const shown = buttonBackground(*picked).property("color").value<QColor>();
+    auto const shown = buttonBackground(*picked).property("color").value<QColor>();
     CHECK(shown.rgb() == tint.rgb());
     CHECK(std::abs(shown.alphaF() - 0.12F) < 0.01F);
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));

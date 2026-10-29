@@ -19,11 +19,11 @@ using morph::qt_quick::testing::Scene;
 namespace {
 
 // The theme's default error colour: what an `err` line and an `err` mark are drawn in.
-QColor const kErr{"#c62828"};
+constexpr QRgb kErr = 0xc62828;
 
 bool isErr(QColor const& colour) {
-    return std::abs(colour.red() - kErr.red()) <= 8 && std::abs(colour.green() - kErr.green()) <= 8 &&
-           std::abs(colour.blue() - kErr.blue()) <= 8;
+    return std::abs(colour.red() - qRed(kErr)) <= 8 && std::abs(colour.green() - qGreen(kErr)) <= 8 &&
+           std::abs(colour.blue() - qBlue(kErr)) <= 8;
 }
 
 // One dashed `err` line at the middle of 0 to 10, and three points, the last marked `err` far above the line.
@@ -78,7 +78,7 @@ TEST_CASE("qt_quick chart: a dashed err line, and a marked point as an err cross
     CHECK(gaps > 10);
     // The cross: error pixels well above the line, where nothing else is the error colour.
     int above = 0;
-    for (int y = 0; y < lineRow - image.height() / 5; ++y) {
+    for (int y = 0; y < lineRow - (image.height() / 5); ++y) {
         above += rows.at(static_cast<std::size_t>(y));
     }
     CHECK(above > 4);
@@ -93,7 +93,7 @@ TEST_CASE("qt_quick chart: a Chart to assistive technology, its summary read onc
         chart->setData(sample());
         scene.settle();
         QQuickItem& item = Scene::itemOf(*chart);
-        QAccessibleInterface* const node = QAccessible::queryAccessibleInterface(&item);
+        QAccessibleInterface const* const node = QAccessible::queryAccessibleInterface(&item);
         REQUIRE(node != nullptr);
         CHECK(node->role() == QAccessible::Chart);
         CHECK(node->text(QAccessible::Name) == QStringLiteral("Three runs, the last one high"));

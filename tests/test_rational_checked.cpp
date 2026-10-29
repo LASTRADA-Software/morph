@@ -668,6 +668,7 @@ TEST_CASE("The 128-bit integer square root agrees with unsigned __int128", "[rat
 TEST_CASE("A square root of a fraction is rounded once, correctly, at its places", "[rational][checked][sqrt]") {
     using morph::math::RoundingMode;
     using morph::math::detail::roundSqrtOfFraction;
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a numerator, then a denominator, as every Rational reads them.
     auto const root = [](std::uint64_t numerator, std::uint64_t denominator, std::uint32_t places, RoundingMode mode) {
         // The numerator is scaled by 10^(2 * places) here, as the statistics scale theirs.
         U128 scaled{.hi = 0, .lo = numerator};

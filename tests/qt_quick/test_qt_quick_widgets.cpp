@@ -657,7 +657,7 @@ TEST_CASE("qt_quick widgets: a removable badge's remove button is named and remo
 
     bool const wasActive = QAccessible::isActive();
     QAccessible::setActive(true);
-    QAccessibleInterface* const named = QAccessible::queryAccessibleInterface(remove);
+    QAccessibleInterface const* const named = QAccessible::queryAccessibleInterface(remove);
     REQUIRE(named != nullptr);
     CHECK(named->text(QAccessible::Name) == QStringLiteral("Remove Result"));
     QAccessible::setActive(wasActive);

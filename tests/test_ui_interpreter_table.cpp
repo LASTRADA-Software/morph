@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -221,7 +222,7 @@ std::string sortTable(std::string_view state, std::string_view extra) {
 
 constexpr std::string_view kNoteSort = R"(, "onSortChange": [ { "set": "seen", "value": { "ref": "event" } } ])";
 
-long sortReports(Harness const& h) {
+std::ptrdiff_t sortReports(Harness const& h) {
     return std::ranges::count_if(h.diagnostics,
                                  [](ui::Refusal const& refusal) { return refusal.path.ends_with("/view/sort"); });
 }
@@ -559,6 +560,7 @@ std::string entryOrder(Harness const& h, int table) {
 
 // Results of samples grouped by sample: S-1 holds results 1 to 3, S-2 results 4 to 5; @p extra goes after the
 // table's `rows`, and @p results replaces the rows.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the table's extra members, then its rows; swapped, the rows parse as members and the table is refused.
 std::string groupedTable(std::string_view extra = "", std::string_view results = "") {
     std::string const rows = results.empty() ? std::string{R"([ { "id": 1, "sample": "S-1", "lot": "L-1", "area": 30 },
         { "id": 2, "sample": "S-1", "lot": "L-1", "area": 10 }, { "id": 3, "sample": "S-1", "lot": "L-1", "area": 20 },
