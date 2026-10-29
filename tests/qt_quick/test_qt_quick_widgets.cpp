@@ -591,6 +591,22 @@ TEST_CASE("qt_quick widgets: a calendar opens on the field's month, not today's"
     CHECK(grid->property("month").toInt() == expected.month() - 1);
 }
 
+TEST_CASE("qt_quick widgets: an empty date input's calendar opens on today's month", "[qt_quick]") {
+    Scene scene;
+    auto input = scene.backend().createDateTimeInput(nullptr, ui::DateMode::Date, 0);
+    input->setValue(std::nullopt);
+    scene.settle();
+
+    QQuickItem const* const button = findNamed(Scene::itemOf(*input), QStringLiteral("datePickerButton"));
+    REQUIRE(button != nullptr);
+    scene.click(*button);
+    QQuickItem const* const grid = findNamed(*scene.window().contentItem(), QStringLiteral("datePickerGrid"));
+    REQUIRE(grid != nullptr);
+    QDate const today = QDateTime::currentDateTimeUtc().date();
+    CHECK(grid->property("year").toInt() == today.year());
+    CHECK(grid->property("month").toInt() == today.month() - 1);
+}
+
 TEST_CASE("qt_quick widgets: dates format and parse in a display zone", "[qt_quick]") {
     using morph::time::DateTime;
     using namespace std::chrono;

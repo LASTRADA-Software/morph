@@ -450,7 +450,9 @@ void DateTimeImpl::show(QString const& text, bool force) const {
     if (control != nullptr && (force || control->property("text").toString() != text)) {
         control->setProperty("text", text);
     }
-    QVariant chosen;
+    // A JavaScript null, not an empty QVariant: QML reads that as undefined, which the calendar's null checks let
+    // through.
+    QVariant chosen = QVariant::fromValue(nullptr);
     if (auto const instant = text.isEmpty() ? std::nullopt : parseDateTime(text, _mode, _offsetMinutes, _pattern)) {
         std::chrono::year_month_day const date{
             std::chrono::floor<std::chrono::days>(instant->value + std::chrono::minutes{_offsetMinutes})};
