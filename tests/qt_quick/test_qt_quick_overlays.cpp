@@ -3,13 +3,16 @@
 // Dialogs and drawers on the real Qt Quick engine: opened and closed by code without a dismissal, dismissed by
 // Escape or a click outside with one, and holding their content out of reach while closed.
 
+#include <QMetaObject>
 #include <QPointF>
 #include <QQuickItem>
 #include <QTest>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/view.hpp>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -380,4 +383,146 @@ TEST_CASE(
     scene.click(*dismiss);
     CHECK(dismissals == 2);
     CHECK_FALSE(dynamic_cast<detail::DialogImpl&>(*dialog).open());
+}
+
+namespace {
+
+// A popup's left and right edges in window coordinates; the popup is placed in its parent item's coordinates.
+struct Span {
+    qreal left = 0;
+    qreal right = 0;
+};
+
+Span spanOf(QObject const& popup) {
+    auto const* const parent = qobject_cast<QQuickItem*>(popup.property("parent").value<QObject*>());
+    REQUIRE(parent != nullptr);
+    qreal const left = parent->mapToScene(QPointF{popup.property("x").toReal(), 0}).x();
+    return {.left = left, .right = left + popup.property("width").toReal()};
+}
+
+// The popup `item` declares.
+QObject* firstPopup(QQuickItem& item) {
+    QObject* const found = popupOf(item);
+    REQUIRE(found != nullptr);
+    return found;
+}
+
+bool framedByMorph(QObject const& popup) {
+    auto const* const background = popup.property("background").value<QObject*>();
+    return background != nullptr && QString::fromLatin1(background->metaObject()->className())
+                                        .startsWith(QStringLiteral("MorphPopupBackground"));
+}
+
+// A button-style menu in a row across a 400 px window: at the row's start, or at its end with a unit of room after it.
+struct MenuAtEdge {
+    std::unique_ptr<ui::ContainerWidget> row;
+    std::vector<std::unique_ptr<ui::Widget>> fillers;
+    std::unique_ptr<ui::MenuWidget> menu;
+};
+
+MenuAtEdge menuAt(Scene& scene, bool atEnd) {
+    scene.window().resize(400, 300);
+    MenuAtEdge made;
+    made.row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    if (atEnd) {
+        made.fillers.push_back(scene.backend().createSpacer(made.row.get()));
+        made.fillers.back()->setLayout({.width = ui::Sizing::stretch()});
+    }
+    made.menu = scene.backend().createMenu(made.row.get(), ui::MenuStyle::Button);
+    made.menu->setTrigger({.label = "Actions"});
+    made.menu->setItems({{.label = "A rather long entry label"}, {.label = "Another entry"}});
+    made.fillers.push_back(scene.backend().createSpacer(made.row.get()));
+    made.fillers.back()->setLayout({.width = atEnd ? ui::Sizing::fixed(1) : ui::Sizing::stretch()});
+    scene.settle();
+    return made;
+}
+
+}  // namespace
+
+TEST_CASE("qt_quick overlays: a menu at the window's right edge opens ending at its trigger, inside the window",
+          "[qt_quick]") {
+    Scene scene;
+    auto const made = menuAt(scene, true);
+    QQuickItem& item = Scene::itemOf(*made.menu);
+    qreal const triggerRight = item.mapToScene(QPointF{item.width(), 0}).x();
+    REQUIRE(triggerRight > 380);
+    REQUIRE(triggerRight < 396);
+    QMetaObject::invokeMethod(&item, "openFromTrigger");
+    scene.settle();
+    QObject const& popup = *firstPopup(item);
+    REQUIRE(popup.property("visible").toBool());
+    Span const span = spanOf(popup);
+    CHECK(span.right == Catch::Approx(triggerRight).margin(1));
+    CHECK(span.right <= 400);
+    CHECK(span.left >= 0);
+    CHECK(framedByMorph(popup));
+}
+
+TEST_CASE("qt_quick overlays: a menu at the window's left edge opens starting at its trigger", "[qt_quick]") {
+    Scene scene;
+    auto const made = menuAt(scene, false);
+    QQuickItem& item = Scene::itemOf(*made.menu);
+    qreal const triggerLeft = item.mapToScene(QPointF{0, 0}).x();
+    QMetaObject::invokeMethod(&item, "openFromTrigger");
+    scene.settle();
+    Span const span = spanOf(*firstPopup(item));
+    // The popup keeps its margin from the window's edge, so a trigger flush with it starts the popup a margin in.
+    CHECK(span.left == Catch::Approx(triggerLeft).margin(4.5));
+    CHECK(span.left >= 0);
+}
+
+TEST_CASE("qt_quick overlays: a menu bar's popup opens under the entry that was chosen", "[qt_quick]") {
+    Scene scene;
+    auto menu = scene.backend().createMenu(nullptr, ui::MenuStyle::Bar);
+    menu->setItems({{.label = "File", .items = {{.label = "Open"}}},
+                    {.label = "Edit", .items = {{.label = "A rather long entry label"}}}});
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*menu);
+    QList<QQuickItem*> const buttons = Scene::itemsOf(item, "QQuickToolButton");
+    REQUIRE(buttons.size() == 2);
+    scene.click(*buttons.at(1));
+    QObject const& popup = *firstPopup(item);
+    REQUIRE(popup.property("visible").toBool());
+    CHECK(spanOf(popup).left == Catch::Approx(buttons.at(1)->mapToScene(QPointF{0, 0}).x()).margin(1));
+    CHECK(framedByMorph(popup));
+}
+
+TEST_CASE("qt_quick overlays: a dropdown select's list and a date input's calendar open inside the window",
+          "[qt_quick]") {
+    using ui::Align;
+    Scene scene;
+    scene.window().resize(400, 300);
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto select = scene.backend().createSelect(column.get(), ui::SelectStyle::Dropdown);
+    select->setOptions({{.key = std::string{"a"}, .label = "Alpha"}, {.key = std::string{"b"}, .label = "Beta"}});
+    select->setLayout({.alignSelf = Align::End});
+    auto date = scene.backend().createDateTimeInput(column.get(), ui::DateMode::Date, 0);
+    date->setLayout({.alignSelf = Align::Start});
+    scene.settle();
+    QQuickItem& selectItem = Scene::itemOf(*select);
+    QQuickItem* control = nullptr;
+    for (QQuickItem* const candidate : Scene::itemsOf(selectItem, "QQuickComboBox")) {
+        control = candidate;
+    }
+    REQUIRE(control != nullptr);
+    auto* const dropdown = control->property("popup").value<QObject*>();
+    REQUIRE(dropdown != nullptr);
+    QMetaObject::invokeMethod(dropdown, "open");
+    scene.settle();
+    REQUIRE(dropdown->property("visible").toBool());
+    Span const list = spanOf(*dropdown);
+    CHECK(list.left >= 0);
+    CHECK(list.right <= 400);
+    CHECK(framedByMorph(*dropdown));
+    QMetaObject::invokeMethod(dropdown, "close");
+
+    QMetaObject::invokeMethod(&Scene::itemOf(*date), "openPicker");
+    scene.settle();
+    auto const* const picker = scene.window().contentItem()->findChild<QObject*>(QStringLiteral("datePickerPopup"));
+    REQUIRE(picker != nullptr);
+    REQUIRE(picker->property("visible").toBool());
+    Span const calendar = spanOf(*picker);
+    CHECK(calendar.left >= 0);
+    CHECK(calendar.right <= 400);
+    CHECK(framedByMorph(*picker));
 }

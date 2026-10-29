@@ -120,10 +120,14 @@ MorphField {
     Popup {
         id: picker
         objectName: "datePickerPopup"
-        // Placed in the field's coordinates: under it, its right edge on the field's.
+        // Placed in the field's coordinates: under it, `onAboutToShow` setting where along it.
         parent: field
-        x: field.width - width
         y: field.height
+        onAboutToShow: placement.place(picker, field)
+        onWidthChanged: {
+            if (visible)
+                placement.place(picker, field)
+        }
         padding: Theme.spaceOf(2)
         // Focus, so Escape reaches the popup's close policy; the field reports no edit on losing focus alone.
         focus: true
@@ -131,10 +135,11 @@ MorphField {
         // Focus returns to the field, wherever the calendar closes from.
         onClosed: field.forceActiveFocus()
 
-        background: Rectangle {
-            color: root.scheme.surface
-            border.color: root.scheme.border
-            radius: Theme.radiusCard
+        MorphPopupPlacement {
+            id: placement
+        }
+
+        background: MorphPopupBackground {
         }
 
         contentItem: Column {

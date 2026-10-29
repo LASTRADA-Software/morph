@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <core/tui/Canvas.hpp>
@@ -449,6 +450,41 @@ TEST_CASE("tui lists: a dropdown at the bottom opens its list above itself", "[t
     harness.focus(*select);
     static_cast<void>(harness.key(KeyCode::Enter));
     CHECK(harness.draw() == Rows{"", "▶ Red", "  Green", "[Red ▾]"});
+}
+
+TEST_CASE("tui lists: a dropdown's list opens at the field's start when it fits, else ending at the field's end",
+          "[tui][lists]") {
+    Harness harness{40, 4};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    bool const atRight = GENERATE(true, false);
+    auto const pad = harness.make<SpacerImpl>(row.get());
+    pad->setLayout({.width = atRight ? ui::Sizing::stretch() : ui::Sizing::fixed(0)});
+    auto const select = harness.make<DropdownSelectImpl>(row.get());
+    auto const margin = harness.make<SpacerImpl>(row.get());
+    margin->setLayout({.width = ui::Sizing::fixed(atRight ? 5 : 0)});
+    select->setOptions({{.key = key(1), .label = "Red"}, {.key = key(2), .label = "Green apples"}});
+    select->setSelected(key(2));
+    // Byte offsets into a drawn row, as the screen columns they are at: each glyph is one column.
+    auto const column = [](std::string const& drawn, std::size_t offset) {
+        return static_cast<std::size_t>(std::ranges::count_if(
+            drawn.substr(0, offset), [](char byte) { return (static_cast<unsigned char>(byte) & 0xC0U) != 0x80U; }));
+    };
+    auto const first = harness.draw().at(0);
+    std::size_t const start = column(first, first.find('['));
+    std::size_t const end = column(first, first.rfind(']') + 1);
+    harness.focus(*select);
+    static_cast<void>(harness.key(KeyCode::Enter));
+    std::string const popup = harness.draw().at(2);
+    std::size_t const label = column(popup, popup.find("Green apples"));
+    if (atRight) {
+        REQUIRE(end == 35);
+        // The list ends at the field's last column, not at the screen's edge; its text ends two columns short of that.
+        CHECK(label + std::string{"Green apples"}.size() + 2 == end);
+    } else {
+        REQUIRE(start == 0);
+        // The list's text starts after its marker.
+        CHECK(label == 2);
+    }
 }
 
 TEST_CASE("tui lists: an open list closes when the focus leaves it", "[tui][lists][focus]") {

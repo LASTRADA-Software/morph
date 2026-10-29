@@ -533,7 +533,7 @@ TEST_CASE("qt_quick widgets: a calendar day keeps a date-time input's time of da
 }
 
 // Mutation: place the popup by the field's scene position. The popup is placed in its parent's coordinates, so a
-// scene position puts it off by the field's own offset as soon as the placement is recomputed, here on a new width.
+// scene position puts it off by the field's own offset.
 TEST_CASE("qt_quick widgets: a calendar opens under its field, wherever the field sits", "[qt_quick]") {
     Scene scene;
     auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
@@ -553,17 +553,13 @@ TEST_CASE("qt_quick widgets: a calendar opens under its field, wherever the fiel
     auto* const background = popup->property("background").value<QQuickItem*>();
     REQUIRE(background != nullptr);
     auto const check = [&] {
-        QPointF const fieldBottomRight = field.mapToScene(QPointF{field.width(), field.height()});
-        QPointF const topRight = background->mapToScene(QPointF{background->width(), 0});
-        INFO("field bottom-right " << fieldBottomRight.x() << "," << fieldBottomRight.y() << ", popup top-right "
-                                   << topRight.x() << "," << topRight.y());
-        CHECK(std::abs(topRight.y() - fieldBottomRight.y()) <= 1.0);
-        CHECK(std::abs(topRight.x() - fieldBottomRight.x()) <= 1.0);
+        QPointF const fieldBottomLeft = field.mapToScene(QPointF{0, field.height()});
+        QPointF const topLeft = background->mapToScene(QPointF{0, 0});
+        INFO("field bottom-left " << fieldBottomLeft.x() << "," << fieldBottomLeft.y() << ", popup top-left "
+                                  << topLeft.x() << "," << topLeft.y());
+        CHECK(std::abs(topLeft.y() - fieldBottomLeft.y()) <= 1.0);
+        CHECK(std::abs(topLeft.x() - fieldBottomLeft.x()) <= 1.0);
     };
-    check();
-    // A new width places the calendar again.
-    input->setLayout({.width = ui::Sizing::fixed(40), .height = {}});
-    scene.settle();
     check();
 }
 

@@ -39,6 +39,8 @@ MorphWidget {
         if (root.buttonStyle)
             root.openFromTrigger()
     }
+    // The control the popup opens from: the trigger of a button-style menu, else the bar's entry that was chosen.
+    property Item openFrom: null
     // The path of the submenu the popup shows.
     property var openPath: []
     readonly property var openEntries: root.entriesAt(root.openPath)
@@ -88,6 +90,11 @@ MorphWidget {
             popup.open()
     }
 
+    // Places the popup under the control it opens from.
+    function placePopup() {
+        placement.place(popup, root.buttonStyle ? trigger : root.openFrom ?? bar)
+    }
+
     function entryText(entry: var): string {
         const mark = entry.checked === true ? "✓ " : entry.checked === false ? "  " : ""
         const more = entry.items && entry.items.length > 0 ? " ›" : ""
@@ -107,7 +114,8 @@ MorphWidget {
         text: root.triggerText
         leftPadding: root.triggerEmphasis === 3 ? Theme.spaceOf(1) : Theme.spaceOf(4)
         rightPadding: root.triggerEmphasis === 3 ? Theme.spaceOf(1) : Theme.spaceOf(4)
-        palette.buttonText: root.triggerEmphasis === 0 || root.triggerEmphasis === 3 ? root.scheme.text : "white"
+        palette.buttonText: root.triggerEmphasis === 3 ? root.scheme.accent
+                            : root.triggerEmphasis === 0 ? root.scheme.text : "white"
         font: root.triggerEmphasis === 0 || root.triggerEmphasis === 3 ? Theme.bodyFont : Theme.strongFont
         icon.source: Theme.iconSource(root.triggerIcon)
         icon.color: "transparent"
@@ -169,6 +177,7 @@ MorphWidget {
                 icon.color: "transparent"
                 enabled: modelData.enabled
                 onClicked: {
+                    root.openFrom = topEntry
                     if (modelData.items && modelData.items.length > 0)
                         root.open([index])
                     else
@@ -182,6 +191,18 @@ MorphWidget {
         id: popup
         y: root.buttonStyle ? trigger.height : bar.height
         padding: 2
+        onAboutToShow: root.placePopup()
+        onWidthChanged: {
+            if (visible)
+                root.placePopup()
+        }
+
+        MorphPopupPlacement {
+            id: placement
+        }
+
+        background: MorphPopupBackground {
+        }
 
         contentItem: ColumnLayout {
             spacing: 0
@@ -213,6 +234,11 @@ MorphWidget {
                             control: entryButton
                             color: entryButton.palette.text
                             alignment: Qt.AlignLeft
+                        }
+                        background: Rectangle {
+                            radius: Theme.radiusControl
+                            color: entryButton.down || entryButton.hovered || entryButton.visualFocus
+                                   ? Theme.cardScheme.hover : "transparent"
                         }
                         enabled: entry.modelData.enabled
                         Accessible.role: Accessible.MenuItem

@@ -84,6 +84,32 @@ MorphField {
                 color: root.scheme.text
             }
         }
+        // The drop-down: under the combo, as wide as it, in the shared popup frame.
+        popup: Popup {
+            id: dropdown
+            y: combo.height
+            width: combo.width
+            implicitHeight: Math.min(contentItem.implicitHeight, 400) + topPadding + bottomPadding
+            padding: 1
+            onAboutToShow: placement.place(dropdown, combo)
+            onWidthChanged: {
+                if (visible)
+                    placement.place(dropdown, combo)
+            }
+
+            MorphPopupPlacement {
+                id: placement
+            }
+
+            contentItem: ListView {
+                clip: true
+                implicitHeight: contentHeight
+                model: combo.popup.visible ? combo.delegateModel : null
+                currentIndex: combo.highlightedIndex
+            }
+            background: MorphPopupBackground {
+            }
+        }
         model: root.options
         currentIndex: -1
         // The style's delegate draws an option's label as an IconLabel, which reads markup.

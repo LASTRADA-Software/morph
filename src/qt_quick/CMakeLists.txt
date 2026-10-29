@@ -46,6 +46,8 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphCheckbox.qml
         qml/MorphSelect.qml
         qml/MorphMenu.qml
+        qml/MorphPopupBackground.qml
+        qml/MorphPopupPlacement.qml
         qml/MorphStack.qml
         qml/MorphGrid.qml
         qml/MorphSpacer.qml

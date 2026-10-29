@@ -583,6 +583,18 @@ void DropdownSelectImpl::fillPopup() {
     }
 }
 
+namespace {
+
+// The column a popup @p width wide opens at under a control spanning @p control: at the control's start when it fits
+// in @p viewport, else ending at the control's end, and always inside @p viewport.
+int popupColumn(::core::tui::Rect control, ::core::tui::Rect viewport, int width) {
+    int const last = viewport.x + viewport.width;
+    int const column = control.x + width <= last ? control.x : control.x + control.width - width;
+    return std::max(viewport.x, std::min(column, last - width));
+}
+
+}  // namespace
+
 DropdownSelectImpl::Placement DropdownSelectImpl::placement() const {
     auto const field = view().screenBounds();
     auto const viewport = context().screen->viewportArea();
@@ -592,9 +604,8 @@ DropdownSelectImpl::Placement DropdownSelectImpl::placement() const {
     int const below = std::max(0, viewport.y + viewport.height - (top + 1));
     int const above = std::max(0, top - viewport.y);
     int const width = popupSize().width;
-    Placement place{
-        .origin = {.x = std::max(viewport.x, std::min(field.x, viewport.x + viewport.width - width)), .y = top + 1},
-        .rows = std::min(count, below)};
+    Placement place{.origin = {.x = popupColumn(field, viewport, width), .y = top + 1},
+                    .rows = std::min(count, below)};
     if (below < count && above > below) {
         place.rows = std::min(count, above);
         place.origin.y = top - place.rows;
@@ -1141,8 +1152,7 @@ MenuButtonImpl::Placement MenuButtonImpl::placement() const {
     int const below = std::max(0, viewport.y + viewport.height - (trigger.y + 1));
     int const above = std::max(0, trigger.y - viewport.y);
     int const width = popupSize().width;
-    Placement place{.origin = {.x = std::max(viewport.x, std::min(trigger.x, viewport.x + viewport.width - width)),
-                               .y = trigger.y + 1},
+    Placement place{.origin = {.x = popupColumn(trigger, viewport, width), .y = trigger.y + 1},
                     .rows = std::min(count, below)};
     if (below < count && above > below) {
         place.rows = std::min(count, above);
