@@ -696,10 +696,7 @@ TEMPLATE_TEST_CASE("qt_quick theme: a dialog and a drawer draw on the theme's ca
           QColor{"#336699"});
 }
 
-namespace {
-
-
-}  // namespace
+namespace {}  // namespace
 
 // Mutation: drop the bar's `contentItem` (the style's own fill draws, and no item is named `fill`), or colour the
 // fill with anything but the scheme's accent.
@@ -1106,6 +1103,74 @@ TEST_CASE("qt_quick theme: a control on a tinted surface fills with controlSurfa
     scene.settle();
     CHECK(buttonBackground(*button).property("color").value<QColor>() == QColor{"#FFFFFF"});
     CHECK(fieldBackground("tinted_input").property("color").value<QColor>() == QColor{"#FFFFFF"});
+}
+
+namespace {
+
+QQuickItem const& panelFrame(ui::Widget const& panel) {
+    auto const* const frame = Scene::itemOf(panel).findChild<QQuickItem*>(QStringLiteral("frame"));
+    REQUIRE(frame != nullptr);
+    return *frame;
+}
+
+QQuickItem const* panelShadow(ui::Widget const& panel) {
+    return Scene::itemOf(panel).findChild<QQuickItem*>(QStringLiteral("frameShadow"));
+}
+
+}  // namespace
+
+// Control: fill the panel with the scheme it inherits, and the frame reads the page's background.
+TEST_CASE("qt_quick theme: a panel on the page is a card, and its input fills with controlSurface", "[qt_quick]") {
+    Scene scene;
+    QObject* const theme = themeOf(scene);
+    REQUIRE(theme->property("surface").value<QColor>() != theme->property("background").value<QColor>());
+    auto page = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    page->setSurface("page");
+    auto panel = scene.backend().createPanel(page.get());
+    auto input = scene.backend().createTextInput(panel.get(), ui::TextInputMode::SingleLine);
+    input->setTestId("card_input");
+    scene.settle();
+    CHECK(panelFrame(*panel).property("color").value<QColor>() == theme->property("surface").value<QColor>());
+    CHECK(fieldBackground("card_input").property("color").value<QColor>() ==
+          theme->property("controlSurface").value<QColor>());
+    CHECK(panelShadow(*panel)->isVisible());
+}
+
+TEST_CASE("qt_quick theme: a panel that names the page surface is flat on the page's background", "[qt_quick]") {
+    Scene scene;
+    QObject* const theme = themeOf(scene);
+    auto page = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    page->setSurface("page");
+    auto panel = scene.backend().createPanel(page.get());
+    panel->setSurface("page");
+    scene.settle();
+    CHECK(panelShadow(*panel)->isVisible() == false);
+    // The widget draws the page surface behind the frame, which stays unfilled so nothing is drawn twice.
+    CHECK(panelFrame(*panel).property("color").value<QColor>() == QColor{Qt::transparent});
+    QList<QQuickItem*> const filled = Scene::itemsOf(Scene::itemOf(*panel), "QQuickRectangle");
+    bool backgroundFound = false;
+    for (QQuickItem const* const rectangle : filled) {
+        backgroundFound = backgroundFound || rectangle->property("color").value<QColor>() ==
+                                                 theme->property("background").value<QColor>();
+    }
+    CHECK(backgroundFound);
+}
+
+TEST_CASE("qt_quick theme: a panel in a panel draws no shadow, and a card surface draws one frame", "[qt_quick]") {
+    Scene scene;
+    auto outer = scene.backend().createPanel(nullptr);
+    auto inner = scene.backend().createPanel(outer.get());
+    auto named = scene.backend().createPanel(nullptr);
+    named->setSurface("card");
+    scene.settle();
+    CHECK(panelShadow(*outer)->isVisible());
+    CHECK_FALSE(panelShadow(*inner)->isVisible());
+    CHECK(panelFrame(*named).property("color").value<QColor>() == QColor{Qt::transparent});
+    CHECK_FALSE(panelShadow(*named)->isVisible());
+    // The empty surface that a bound value evaluates to is the default, a card.
+    named->setSurface("");
+    scene.settle();
+    CHECK(panelShadow(*named)->isVisible());
 }
 
 namespace {

@@ -350,6 +350,10 @@ public:
     void setCollapsible(bool collapsible) override;
     void setCollapsed(bool collapsed) override;
     void setOnToggle(std::function<void(bool)> onToggle) override;
+
+protected:
+    // A panel that names no surface is a card, so its content draws with the card's scheme.
+    [[nodiscard]] QObject* scheme() const override;
 };
 
 class ScrollImpl final : public ContainerItemWidget<ui::ScrollWidget> {

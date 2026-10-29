@@ -155,7 +155,9 @@ light defaults (white controls under light text, a light outline, an invisible h
 
 A theme's surface is resolved with its layer over the theme (`resolveTheme(…, surface)`), so a role it does not set
 is the theme's. Surfaces do not nest their colours: a card inside a sidebar is a card. A dialog and a drawer draw on
-`card`, whatever surface encloses the node that declares them. A surface name that is neither
+`card`, whatever surface encloses the node that declares them. A panel draws on `card` unless it names a surface; an
+empty surface is the default; a panel on a card (a panel in a panel, a dialog or a drawer) draws its border and fill but
+no shadow, since a card on a card has no elevation; a flat panel names `page`. A surface name that is neither
 built in nor in the theme draws nothing and changes no colour.
 
 ## The closed set

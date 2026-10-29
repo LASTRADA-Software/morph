@@ -91,6 +91,10 @@ void GridImpl::setSpan(ui::Widget& child, int span) {
 PanelImpl::PanelImpl(Context& context, ui::ContainerWidget* parent)
     : ContainerItemWidget{context, QStringLiteral("MorphPanel"), parent} {}
 
+QObject* PanelImpl::scheme() const {
+    return read("surface").toString().isEmpty() ? context().themeObject("cardScheme") : part("scheme");
+}
+
 void PanelImpl::setTitle(std::string_view title) { write("title", toQString(title)); }
 
 void PanelImpl::setHeader(ui::Widget& header) {

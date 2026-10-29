@@ -533,8 +533,7 @@ ui::Node resultCards(Review const& review) {
                             layout::tag(ui::row("evaluation"), ui::row("tone")),
                             layout::muted(ui::format("Changed {0}", {ui::row("change")}))
                                 .visible(ui::ne(ui::row("change"), "—"))},
-                           {.padding = 2})
-                           .surface("card")};
+                           {.padding = 2})};
                })
         .testId("results");
 }
