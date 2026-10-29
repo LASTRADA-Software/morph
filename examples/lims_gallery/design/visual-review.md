@@ -51,6 +51,7 @@ Defects in the library are filed: #1069, #1070, #1071, #1072.
 | G9 | Text with a role and a tone together; tones on spans; spans in the head subtitle | console, receipt, instrument | "Past due 7" small and regular; no mono breadcrumb |
 | G10 | Compact tabs overflow into "More ▾" | instrument | "Audit trail" clipped |
 | G11 | A monospace prominent input without an italic placeholder; right-aligned numbers in text inputs | receipt, console, results | |
+| G12 | The select's dropdown drawn as the mockups' input and menu: padded field, themed open list with radius and shadow, hover on the theme's token, the current option marked with ✓ in the strong weight | every screen with a select (from the user running the app) | Value 4 px from the border; Basic-style list; current option italic |
 
 ## Screen fixes (the vocabulary already covers them)
 
