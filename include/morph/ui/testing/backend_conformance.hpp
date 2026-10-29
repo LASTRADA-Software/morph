@@ -2519,7 +2519,8 @@ struct WrappingRow {
     double const step = stepOneDistance(probe, geometry);
     auto const children = [] {
         std::vector<Node> made;
-        made.push_back(sizedText("a stretch text of well over thirty characters, wider than the row", {.width = Sizing::stretch(), .minWidth = 10}));
+        made.push_back(sizedText("a stretch text of well over thirty characters, wider than the row",
+                                 {.width = Sizing::stretch(), .minWidth = 10}));
         made.push_back(sizedText("fixed", {.width = Sizing::fixed(12)}));
         return made;
     };
