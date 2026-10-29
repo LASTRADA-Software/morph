@@ -213,12 +213,14 @@ Item {
             root.focusTarget.focus = false
     }
 
-    // The keys a kind takes itself, after the widget's own chords: a function of the key event answering whether it
-    // took the key; null takes none.
-    property var ownKey: null
+    // The keys a kind takes itself, after the widget's own chords: answers whether it took the key. A kind that takes
+    // keys declares its own `ownKey`, which replaces this one; a widget takes none.
+    function ownKey(event: var): bool {
+        return false
+    }
 
     Keys.onPressed: event => {
-        if (root.takeOwnChord(event) || (root.ownKey !== null && root.ownKey(event)))
+        if (root.takeOwnChord(event) || root.ownKey(event))
             event.accepted = true
     }
 

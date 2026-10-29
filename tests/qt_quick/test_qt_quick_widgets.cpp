@@ -1160,15 +1160,22 @@ TEST_CASE("qt_quick widgets: every text a document gives is drawn as its charact
     QMetaObject::invokeMethod(popup, "open");
     base(*menu).call("open", QVariant{QVariantList{0}});
     scene.settle();
-    // Last, since a modal dialog takes the hover from the widgets under it.
+    QList<QQuickItem const*> found;
+    markupTexts(*scene.window().contentItem(), found);
+    // Last, and walked on its own: a modal dialog takes the hover from the widgets under it, and the tooltip with it,
+    // which Qt closes as the dialog opens or only at the next pointer event, depending on its version.
     auto dialog = scene.backend().createDialog(nullptr);
     dialog->setTitle(raw);
     dialog->setOpen(true);
     ++strings;
     scene.settle();
-
-    QList<QQuickItem const*> found;
-    markupTexts(*scene.window().contentItem(), found);
+    QList<QQuickItem const*> withDialog;
+    markupTexts(*scene.window().contentItem(), withDialog);
+    for (QQuickItem const* const item : std::as_const(withDialog)) {
+        if (!found.contains(item)) {
+            found.append(item);
+        }
+    }
     CHECK(found.size() == strings);
     for (QQuickItem const* const item : std::as_const(found)) {
         QString const shown = item->property("text").toString();

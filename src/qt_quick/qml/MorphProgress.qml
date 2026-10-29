@@ -43,7 +43,6 @@ MorphWidget {
                     objectName: "fill"
                     height: parent.height
                     width: bar.indeterminate ? parent.width / 3 : bar.visualPosition * parent.width
-                    x: 0
                     radius: height / 2
                     color: root.scheme.accent
 

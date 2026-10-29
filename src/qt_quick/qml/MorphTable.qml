@@ -232,7 +232,6 @@ MorphWidget {
         if (activeFocus)
             root.focusRow(root.shownRows().includes(root.currentRow) ? root.currentRow : root.shownRows()[0])
     }
-    ownKey: event => root.tableKey(event)
 
     // The data rows the user can see, in order: a heading row is never current, selected or counted.
     function shownRows(): var {
@@ -256,9 +255,9 @@ MorphWidget {
     // leaves goes on outwards. The arrows, Home, End, PageUp and PageDown move the current row; Shift with Up or Down
     // moves it and selects from the anchor; Space toggles it (selects it in single mode); Ctrl+A selects every row,
     // or clears them, in multiple mode only. Enter is the row's own key.
-    function tableKey(event: var): bool {
+    function ownKey(event: var): bool {
         const focused = root.Window.activeFocusItem
-        if (focused !== root && !(focused && focused.table === root))
+        if (focused !== root && (focused as MorphTableRow)?.table !== root)
             return false
         const rows = root.shownRows()
         const at = rows.indexOf(root.currentRow)

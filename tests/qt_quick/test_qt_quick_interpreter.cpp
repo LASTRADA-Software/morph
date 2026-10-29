@@ -439,7 +439,10 @@ TEST_CASE("qt_quick interpreter: server-calculated values show in their row, sta
     CHECK(cell("result", 0).item()->opacity() == 1.0);
 
     // The user types into row 1: its result is stale, never blank, until the calculation replies.
+    // End after the click: where a click lands in the text depends on the font's glyph widths, and the column is
+    // narrow enough that the centre of the field can fall between the two digits.
     h.scene.click(*cell("mass", 0).focusTarget());
+    h.scene.key(Qt::Key_End);
     h.scene.type(QStringLiteral("5"));
     CHECK(cell("mass", 0).shownText() == "105");
     CHECK(cell("result", 0).read("stale").toBool());
