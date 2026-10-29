@@ -179,7 +179,7 @@ reorders children, and only through this.
 | `ScrollWidget` | One scrolled viewport, on the axis fixed at creation, that keeps the focused child visible |
 | `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page. A scrollable slot (`setScrollable(true)`) shows a child that does not stretch in height at its natural height in a vertical viewport of its own height, which keeps the focused widget in view; a child that stretches in height fills it, as in a slot that does not scroll, but is never shorter than its `minHeight`: while the slot is shorter than that, the slot scrolls it at that height. The slot reads its shown child's height sizing itself |
 | `TabsWidget` | Page slots in the order first shown; the mount keeps exactly the selected page's slot visible, and `setSelected` moves the bar's highlight only |
-| `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included. `footer()` is a container the overlay owns and lays out after its content, showing nothing while it is empty; the mount puts the overlay's actions there. A `DrawerWidget` has the same footer. `setSheet(true)` draws the dialog as a sheet that fills the window, square, with a head holding a dismiss control (`setDismissLabel`, "Close" by default) before the title, which dismisses exactly as Escape does; a press outside is not possible. A sheet keeps every rule of the dialog, and changing it while open keeps the content and its state |
+| `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included. `footer()` is a container the overlay owns and lays out after its content, showing nothing while it is empty; the mount puts the overlay's actions there. A `DrawerWidget` has the same footer. `setSheet(true)` draws the dialog as a sheet that fills the window, square, with a head holding a dismiss control (`setDismissLabel`, "Close" by default) before the title, which dismisses exactly as Escape does; a press outside is not possible. A sheet keeps every rule of the dialog, and changing it while open keeps the content and its state. The sheet's dismiss control is drawn as a ghost button (its label in the accent). On Qt Quick a modal dialog or drawer dims the window behind it with `color.scrim`; a sheet fills the window and draws none, and the terminal draws none |
 | `TableWidget` | Rows, each a horizontal stack of cells in column order; `setSelectColumn(true)` once, before any row, for a table that draws its selection as check boxes; `setRowKey(row, key)` once per row, right after it is built, then `setRowHeading(row)` for a heading row, whose one cell spans every column and the select column, then `setRowTone(row, tone)` for a toned row and `setRowLabel(row, label)` for a named one, and again on every change. A hidden cell keeps its column: the cells after it stay under their own headers |
 
 **Spacing.** `setGap` and `setPadding` take a spacing step, 0 to `kMaxSpacingStep` (5); the mount clamps a document's
@@ -192,7 +192,7 @@ value with `spacingStep`, so a backend never sees another. Each backend maps a s
 that is not the screen's main one: Qt Quick draws it as a normal button (the control surface's fill, `color.controlSurface`, and a 1 px border in `color.controlBorder`) with the
 border in `color.err.border` and the label in the error colour, and the terminal in the error colour and not bold,
 which keeps it apart from both `Danger` and `Normal`. Qt Quick fills a primary button in the accent and a danger one in the error
-colour, and draws a ghost button with no border or fill, minimal padding, and a faint tint in `color.hover` on hover or press
+colour, and draws a ghost button with its label in the accent, no border or fill, minimal padding, and a faint tint in `color.hover` on hover or press
 — for an action embedded in other content (a table row's remove, a disclosure chevron) where full button chrome would
 read as a second control beside it rather than part of it. The terminal draws `Primary`/`Danger` bold, a danger one
 in the error colour, and falls back to `Normal`'s plain style for `Ghost`.
@@ -207,7 +207,7 @@ behaves as a push button (activation, enablement, tooltip, hover) and is drawn a
 label at the start and unframed. The mount calls it once, only for `Item`. `setSelected(bool)` marks an item as the
 current entry, or a push button as pressed in (a well picked on a plate), or clears the mark; the mount calls it for
 either style, only when `selected` is bound or `true`, and a new button is a push button and not selected. Qt Quick
-tints the current item in the accent with a bar at its leading edge, and draws a selected push button with its frame
+tints the current item in `color.selection` with an accent bar at its leading edge, and draws a selected push button with its frame
 and size unchanged, a 2 px accent ring outside its border and, unless it is filled (primary, danger), the item's
 accent tint, so selection reads apart from focus, whose border sits inside; assistive technology hears a selected push
 button as checked. The terminal draws an item, and a push button's caption inside its brackets, in the list's

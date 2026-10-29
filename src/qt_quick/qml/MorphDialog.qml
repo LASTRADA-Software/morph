@@ -67,6 +67,11 @@ MorphWidget {
         height: root.sheet ? (root.Overlay.overlay?.height ?? 0) : undefined
         margins: root.sheet ? 0 : -1
         modal: true
+        // The window behind a dialog is dimmed in `color.scrim`; a sheet fills the window and has nothing to dim.
+        Overlay.modal: Rectangle {
+            objectName: "scrim"
+            color: root.sheet ? "transparent" : Theme.scrim
+        }
         focus: true
         closePolicy: root.sheet ? Popup.CloseOnEscape : Popup.CloseOnEscape | Popup.CloseOnPressOutside
         // An explicit width (widthKind Fixed) wins outright over the Popup's own default sizing. The fallback branch
@@ -136,6 +141,21 @@ MorphWidget {
                     objectName: "sheetDismiss"
                     flat: true
                     text: root.dismissLabel
+                    font: Theme.bodyFont
+                    leftPadding: Theme.spaceOf(1)
+                    rightPadding: Theme.spaceOf(1)
+                    palette.buttonText: Theme.cardScheme.accent
+                    contentItem: MorphPlainContent {
+                        control: dismissButton
+                        color: dismissButton.palette.buttonText
+                    }
+                    background: MorphButtonBackground {
+                        scheme: Theme.cardScheme
+                        ghost: true
+                        hovered: dismissButton.hovered
+                        pressed: dismissButton.down
+                        focused: dismissButton.visualFocus
+                    }
                     Accessible.name: root.dismissLabel
                     onClicked: popup.close()
                 }

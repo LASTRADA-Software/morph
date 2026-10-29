@@ -65,6 +65,11 @@ MorphWidget {
         enter: Transition {}
         exit: Transition {}
         modal: true
+        // The window behind the drawer is dimmed in `color.scrim`.
+        Overlay.modal: Rectangle {
+            objectName: "scrim"
+            color: Theme.scrim
+        }
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         // An explicit width (widthKind Fixed) wins outright over the circular inference below, which reports back

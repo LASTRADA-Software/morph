@@ -2,8 +2,8 @@
 import QtQuick
 
 // What a button is drawn on: the control height and radius, outlined on the surface colour, a shade darker while
-// hovered or pressed. A list item's is unframed: clear, the hover colour while hovered, and while selected an accent
-// tint with a bar at its leading edge. A selected push button keeps its frame and size and draws an accent ring outside
+// hovered or pressed. A list item's is unframed: clear, the hover colour while hovered, and while selected the selection
+// colour with an accent bar at its leading edge. A selected push button keeps its frame and size and draws an accent ring outside
 // its border; unless filled it also takes the item's accent tint, since the default theme's focus and accent colours
 // are the same and a ring alone would read as focus. A ghost button is unframed the same way but has no "current"
 // concept: just the hover tint while hovered or pressed, transparent otherwise.
@@ -32,7 +32,7 @@ Rectangle {
     // The fill a push button shades while hovered or pressed: the tint while selected, unless the button is filled.
     readonly property color restFill: selected && !filled ? Qt.alpha(scheme.accent, 0.12) : fill
 
-    color: item ? (selected ? Qt.alpha(scheme.accent, 0.12) : hovered || pressed ? scheme.hover : "transparent")
+    color: item ? (selected ? scheme.selection : hovered || pressed ? scheme.hover : "transparent")
                 : ghost ? (hovered || pressed ? scheme.hover : "transparent")
                         : pressed ? Qt.darker(restFill, 1.12) : hovered ? Qt.darker(restFill, 1.05) : restFill
     border.width: focused ? 2 : filled || item || ghost ? 0 : 1

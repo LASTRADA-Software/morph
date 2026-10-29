@@ -83,6 +83,8 @@ QtObject {
     // The fill under a hovered or pressed item, and the unfilled part of a progress bar: `color.hover`, `color.track`.
     property color hover: "#141d1d1f"
     property color track: "#e5e5ea"
+    // The dim behind a modal dialog or drawer: `color.scrim`.
+    property color scrim: "#4d000000"
     // A control's fill and outline, and the rule between rows: `color.controlSurface`, `color.controlBorder`,
     // `color.divider`.
     property color controlSurface: "#ffffff"

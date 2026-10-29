@@ -3,6 +3,7 @@
 // Dialogs and drawers on the real Qt Quick engine: opened and closed by code without a dismissal, dismissed by
 // Escape or a click outside with one, and holding their content out of reach while closed.
 
+#include <QColor>
 #include <QMetaObject>
 #include <QPointF>
 #include <QQuickItem>
@@ -11,7 +12,9 @@
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <morph/qt_quick/theme.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
 #include <string>
 #include <type_traits>
@@ -525,4 +528,42 @@ TEST_CASE("qt_quick overlays: a dropdown select's list and a date input's calend
     CHECK(calendar.left >= 0);
     CHECK(calendar.right <= 400);
     CHECK(framedByMorph(*picker));
+}
+
+// Control: drop `Overlay.modal` from MorphDialog and MorphDrawer (no item named "scrim" exists, and the Basic style's
+// own dim shows).
+TEMPLATE_TEST_CASE("qt_quick overlays: a modal overlay dims the window behind it in color.scrim", "[qt_quick]",
+                   ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    std::unique_ptr<TestType> overlay;
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(nullptr);
+    } else {
+        overlay = scene.backend().createDrawer(nullptr, ui::Side::End);
+    }
+    overlay->setTitle("Confirm");
+    overlay->setOpen(true);
+    scene.settle();
+    auto const scrimColor = [&scene] {
+        // The modal item is a child item of the window's overlay, not a QObject child of it.
+        QList<QQuickItem const*> pending{scene.window().contentItem()};
+        while (!pending.isEmpty()) {
+            QQuickItem const* const node = pending.takeLast();
+            if (node->objectName() == QStringLiteral("scrim")) {
+                return node->property("color").value<QColor>();
+            }
+            for (QQuickItem const* const child : node->childItems()) {
+                pending.append(child);
+            }
+        }
+        FAIL("no scrim item");
+        return QColor{};
+    };
+    CHECK(scrimColor() == QColor{0, 0, 0, 0x4d});
+
+    ui::ThemeValues values = ui::themeValues();
+    values.colors.insert_or_assign("color.scrim", ui::Rgba{.r = 0x14, .g = 0x18, .b = 0x1f, .a = 0x59});
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    scene.settle();
+    CHECK(scrimColor() == QColor{0x14, 0x18, 0x1f, 0x59});
 }

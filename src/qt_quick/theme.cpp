@@ -31,7 +31,7 @@ namespace morph::qt_quick {
 namespace {
 
 /// The `Theme` property each colour token of the set sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 37> kColorProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 38> kColorProperties = {{
     {"color.text", "text"},
     {"color.muted", "muted"},
     {"color.err", "error"},
@@ -69,6 +69,7 @@ constexpr std::array<std::pair<std::string_view, char const*>, 37> kColorPropert
     {"color.chart.2", "chart2"},
     {"color.chart.3", "chart3"},
     {"color.chart.4", "chart4"},
+    {"color.scrim", "scrim"},
 }};
 
 /// The scheme property each colour token of a surface sets.

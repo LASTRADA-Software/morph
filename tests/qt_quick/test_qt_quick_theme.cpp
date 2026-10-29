@@ -13,6 +13,7 @@
 #include <QMetaObject>
 #include <QMetaProperty>
 #include <QObject>
+#include <QPalette>
 #include <QQuickItem>
 #include <QTemporaryDir>
 #include <QUrl>
@@ -129,7 +130,8 @@ TEST_CASE("qt_quick theme: a tab's label takes the scheme colour under every sty
                                         .selected = std::size_t{0}})};
     scene.settle();
     QQuickItem const& item = Scene::itemOf(mounted.root());
-    CHECK(labelColor(item, QStringLiteral("First")) == QColor{"#aa0055"});
+    // The chosen tab reads in the text colour, over an accent underline; the others are muted.
+    CHECK(labelColor(item, QStringLiteral("First")) == QColor{"#336699"});
     CHECK(labelColor(item, QStringLiteral("Second")) == QColor{"#6e6e73"});
 }
 
@@ -893,6 +895,44 @@ TEST_CASE("qt_quick theme: the neutral tone, the hover fill and the track are se
     auto const* const fill = Scene::itemOf(*badge).findChild<QQuickItem*>(QStringLiteral("fill"));
     REQUIRE(fill != nullptr);
     CHECK(fill->property("color").value<QColor>() == QColor{0x6e, 0x6e, 0x73, 0x26});
+}
+
+// Mutations: revert the ghost label to `scheme.text`; revert a selected item's fill to the accent tint; fill a
+// selected push button with `scheme.selection` (its rest fill is the accent tint).
+TEST_CASE("qt_quick theme: a ghost button's label is the accent, a selected item fills with the selection colour",
+          "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), brandTheme()).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QColor const accent = theme->property("accent").value<QColor>();
+    QColor const selection = theme->property("selection").value<QColor>();
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto ghost = scene.backend().createButton(column.get());
+    ghost->setLabel("Clear all");
+    ghost->setEmphasis(ui::ButtonEmphasis::Ghost);
+    ghost->setOnClick([] {});
+    auto item = scene.backend().createButton(column.get());
+    item->setLabel("Entry");
+    item->setStyle(ui::ButtonStyle::Item);
+    item->setSelected(true);
+    item->setOnClick([] {});
+    auto push = scene.backend().createButton(column.get());
+    push->setLabel("Pick");
+    push->setSelected(true);
+    push->setOnClick([] {});
+    scene.settle();
+
+    auto const* const ghostControl = Scene::itemOf(*ghost).property("focusTarget").value<QQuickItem*>();
+    REQUIRE(ghostControl != nullptr);
+    auto const* const label = ghostControl->property("contentItem").value<QQuickItem*>();
+    REQUIRE(label != nullptr);
+    CHECK(label->property("color").value<QColor>() == accent);
+    CHECK(buttonBackground(*item).property("color").value<QColor>() == selection);
+    // A selected push button keeps the accent tint and its ring.
+    QColor const tint = buttonBackground(*push).property("color").value<QColor>();
+    CHECK(tint.rgb() == accent.rgb());
+    CHECK(std::abs(tint.alphaF() - 0.12F) < 0.01F);
 }
 
 // Mutations: drop the ring's `selected` condition (the unselected button's ring shows); leave a selected push

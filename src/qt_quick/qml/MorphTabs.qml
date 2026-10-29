@@ -80,7 +80,7 @@ MorphWidget {
                         textFormat: Text.PlainText
                         text: tab.text
                         font: tab.font
-                        color: tab.checked ? root.scheme.accent : root.scheme.muted
+                        color: tab.checked ? root.scheme.text : root.scheme.muted
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight

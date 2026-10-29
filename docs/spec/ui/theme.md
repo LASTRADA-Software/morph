@@ -172,6 +172,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `color.controlSurface` (`#ffffff`): the fill of a text input, a text area, a select's field, a date input, a check box's box and a normal or danger-outline button; a scheme role, so a surface that sets only `color.surface` leaves its controls on it. A read-only input keeps its own fill | colour |
 | `color.controlBorder` (`#c7c7cc`): the outline of those controls at rest; a theme that sets `color.border` alone no longer moves them. A focused control's outline stays `color.focus`, a toned one's its tone's border | colour |
 | `color.divider` (`#dcdce0`): a table's row rules and the rules of a divided list; `color.border` stays the outline of a card, a panel, a popup and a table | colour |
+| `color.scrim` (`#0000004d`, black at 30 %): the dim over the window behind a modal dialog or drawer; a sheet draws none | colour |
 | `color.track` (`#e5e5ea`): the unfilled part of a progress bar, and the segmented select's track | colour |
 | `color.table.header` (transparent) | colour |
 | `color.chart.1` … `color.chart.4` (`#0072b2`, `#c25400`, `#00805e`, `#a8508a`): a chart's series colours, in drawing order | colour |
@@ -213,6 +214,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `infoBg`, `infoBorder`, `infoDot` | `color.info.bg`, `color.info.border`, `color.info.dot` |
 | `tableHeader` | `color.table.header` |
 | `chart1` … `chart4` | `color.chart.1` … `color.chart.4` |
+| `scrim` | `color.scrim` |
 | `staleOpacity` | `opacity.stale` |
 | `space` (six px lengths) | `space.0` … `space.5` |
 | `background` | `color.background` |

@@ -100,7 +100,8 @@ MorphWidget {
         leftPadding: root.ghost ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
         rightPadding: root.ghost ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
         palette.buttonText: root.emphasis === 4 ? root.scheme.error
-                                                : root.emphasis === 0 || root.ghost ? root.scheme.text : "white"
+                            : root.ghost ? root.scheme.accent
+                            : root.emphasis === 0 ? root.scheme.text : "white"
         font: root.emphasis === 0 || root.emphasis === 4 || root.ghost ? Theme.bodyFont : Theme.strongFont
         icon.source: Theme.iconSource(root.icon)
         icon.color: "transparent"

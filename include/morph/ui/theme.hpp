@@ -1060,7 +1060,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 61> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 62> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1082,6 +1082,8 @@ inline constexpr std::array<ThemeTokenSpec, 61> kThemeTokens = {{
     {.path = "color.controlSurface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.controlBorder", .kind = ThemeTokenKind::Color, .color = "#c7c7cc", .number = 0.0},
     {.path = "color.divider", .kind = ThemeTokenKind::Color, .color = "#dcdce0", .number = 0.0},
+    // The dim over the window behind a modal dialog or drawer.
+    {.path = "color.scrim", .kind = ThemeTokenKind::Color, .color = "#0000004d", .number = 0.0},
     {.path = "color.selection", .kind = ThemeTokenKind::Color, .color = "#cfe3ff", .number = 0.0},
     {.path = "color.ok", .kind = ThemeTokenKind::Color, .color = "#2e7d32", .number = 0.0},
     {.path = "color.ok.bg", .kind = ThemeTokenKind::Color, .color = "#e8f5e9", .number = 0.0},
