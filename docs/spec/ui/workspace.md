@@ -220,8 +220,20 @@ A name with no factory refuses the mount with `no host screen `<name>` is regist
 
 `ui::Navigator` (`include/morph/ui/navigator.hpp`) lists the catalog for a person to open screens from.
 - **Grouping.** Entries are grouped by module, then group, in the order each first appears. Each group has a
-  heading in the `Section` text role, `navigator_group_<module>/<group>`, and each entry is a list item (`ButtonStyle::Item`) as wide as the
-  navigator, `nav_<id>`.
+  heading in the `Section` text role, `navigator_group_<module>/<group>`, and each entry is a row as wide as the
+  navigator, `nav_row_<id>`, holding a list item (`ButtonStyle::Item`) that stretches, `nav_<id>`, and a badge,
+  `nav_badge_<id>`, hidden until the entry has a count. The search shows and hides the row.
+- **Counts.** `setBadge(id, NavigatorBadge{text, tone})` shows a count at the end of a screen's entry, and
+  `setBadge(id, std::nullopt)` takes it away; `badgeOf(id)` answers it. The entry stays one button to assistive
+  technology: its accessible name carries the count, "Review, 4", and is its title again without one. A screen the
+  navigator does not list answers `false` and changes nothing. The client copies the app document's `navigation`
+  onto the entries ([client.md](../client/client.md#the-shell)).
+- **As a menu.** `menuEntries()` is the navigator as the entries of a menu, for a frame too narrow for it: the pins
+  first, a separator, then each group as a submenu labelled by its heading (a group with no heading puts its entries
+  at the top level). An entry's label is its title with its count after it, "Review · 4"; the current screen's entry
+  is checked, and an unavailable one is disabled. `choose(path)` opens the entry at that path, separators counted, as
+  choosing it in the navigator does, and answers whether it named an available entry. `setOnChanged(handler)` is
+  called after anything the menu lists changed: a count, the current entry, a pin.
 - **The current entry.** `setCurrent(id)` marks the entry of the screen that is open and clears the one marked
   before; an id the navigator does not list, or empty, leaves none marked, and a pin is never marked. `current()`
   answers the marked one. The client shell calls it whenever the active tab changes.

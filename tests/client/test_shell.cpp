@@ -110,6 +110,39 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> callBundle()
     return served.build();
 }
 
+/// An app document that counts `n` on the plain screen's entry while it is not 0.
+constexpr std::string_view kCountingApp =
+    R"({"vocab":"ui/1","id":"app","state":{"n":{"init":3}},"navigation":[)"
+    R"({"screen":"probe.plain","text":{"fn":"format","args":["{0}",{"ref":"n"}]},"tone":"info",)"
+    R"("visible":{"fn":"ne","args":[{"ref":"n"},0]}}]})";
+
+/// A screen that sets the app document's `n`.
+constexpr std::string_view kCounter = R"({
+  "vocab": "ui/1", "id": "probe.counter",
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "five", "label": "five", "onClick": { "set": "app.n", "value": 5 } },
+    { "kind": "button", "testId": "none", "label": "none", "onClick": { "set": "app.n", "value": 0 } } ] } })";
+
+/// The counter, the plain screen and the counting app document, no screen public.
+/// @return It, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> countingBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    for (auto const& [screenId, text] : {std::pair{"probe.counter", kCounter}, std::pair{"probe.plain", kPlain}}) {
+        ui::CatalogEntry entry;
+        entry.id = screenId;
+        entry.title = screenId;
+        if (auto added = served.addScreen(std::move(entry), std::string{text}); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    if (auto added = served.addFile(
+            ui::BundleFile{.kind = "app", .id = "app", .bytes = std::string{kCountingApp}, .isPublic = true});
+        !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
 /// A widget's property, or nothing while no widget of that kind has that test id.
 // NOLINTBEGIN(bugprone-easily-swappable-parameters): a kind, a test id and a property name, as the backend reads them.
 std::optional<std::string> propOf(ui::testing::RecordingBackend const& backend, std::string_view kind,
@@ -256,4 +289,63 @@ TEST_CASE("Client shell: a navigate with a call to a screen whose tab is open is
     source.close();
     REQUIRE(problems.size() == 1);
     CHECK(problems.front().contains("navigate to probe.callee mounted no screen; its call was cancelled"));
+}
+
+// Control: compact the frame on `compact` only (the medium window keeps its sidebar).
+TEST_CASE("Client shell: the frame is compact below an expanded window", "[client][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &headBundle}, client::LocalSetup{}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "probe.plain"});
+        auto const sidebar = [&backend] { return propOf(backend, "Row", "shell_sidebar", "visible"); };
+        REQUIRE(
+            pumpUntil(context.owner(), [&backend] { return backend.find("Text", "testId", "plain").has_value(); }));
+        CHECK(sidebar() == "true");
+        backend.setWidthClass("medium");
+        CHECK(pumpUntil(context.owner(), [&sidebar] { return sidebar() == "false"; }));
+        CHECK(propOf(backend, "Menu", "shell_nav_menu", "visible") == "true");
+        backend.setWidthClass("expanded");
+        CHECK(pumpUntil(context.owner(), [&sidebar] { return sidebar() == "true"; }));
+        backend.setWidthClass("compact");
+        CHECK(pumpUntil(context.owner(), [&sidebar] { return sidebar() == "false"; }));
+    }
+    source.close();
+}
+
+// Control: drop the shell's effect over the app root's navigation badges (no count is drawn).
+TEST_CASE("Client shell: the app document's navigation counts follow its state on the navigator's entries",
+          "[client][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &countingBundle}, client::LocalSetup{}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    std::vector<std::string> problems;
+    {
+        auto const shell = client::mountShell(
+            context, backend, std::move(*opened), source,
+            client::ShellOptions{.startScreen = "probe.counter",
+                                 .onProblem = [&problems](std::string const& text) { problems.push_back(text); }});
+        auto const count = [&backend] { return propOf(backend, "Badge", "nav_badge_probe.plain", "text"); };
+        auto const countShown = [&backend] { return propOf(backend, "Badge", "nav_badge_probe.plain", "visible"); };
+        REQUIRE(pumpUntil(context.owner(), [&count] { return count() == "3"; }));
+        CHECK(countShown() == "true");
+        CHECK(propOf(backend, "Button", "nav_probe.plain", "a11yName") == "probe.plain, 3");
+        backend.click(*backend.find("Button", "testId", "five"));
+        CHECK(pumpUntil(context.owner(), [&count] { return count() == "5"; }));
+        backend.click(*backend.find("Button", "testId", "none"));
+        CHECK(pumpUntil(context.owner(), [&countShown] { return countShown() == "false"; }));
+    }
+    source.close();
+    CHECK(problems.empty());
 }

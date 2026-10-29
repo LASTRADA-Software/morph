@@ -62,6 +62,11 @@ the app document runs once however many screens read it, and `{"set": "app.name"
 state (a name that is not state is reported). Destroying the root runs its `onUnmount` and takes its
 scope off the session; the screens that read it are destroyed first, as sign-out does (spec 6 §5).
 
+`AppRoot::navigationBadges()` is a `reactive::Computed` of the document's `navigation` badges that are visible, in
+order, each a `NavigationBadge{screen, text, tone}`: the parts are lowered once in the app scope when the root
+mounts, so a count follows the state it reads. It is empty when the document declares none, and goes with the root,
+before its scope. A shell copies it onto its navigator ([client.md](../client/client.md#the-shell)).
+
 ## Mounting
 
 `mount` refuses, with a `Refusal`, what only the opener can get wrong: a param missing or of the wrong

@@ -104,6 +104,12 @@ destroyed after the screens and before the session changes hands, as the interpr
 - signing out destroys it after every tab closed, before the source signs out;
 - the shell's destructor destroys it after the workspace and before the document host.
 
+Once the root is mounted and the frame built, the shell copies the root's `navigation` counts
+(`AppRoot::navigationBadges()`) onto the frame's navigator (`Navigator::setBadge`) with an effect, made after both and
+destroyed before either goes, so it never writes into a navigator that is gone or reads a root that is. A screen's
+first visible badge is its count; a count no longer given is taken away. A count for a screen the navigator does not
+list is reported once per screen, while the navigator lists anything (a signed-out frame lists nothing).
+
 An app document that does not load, or that the interpreter refuses, is reported through `onProblem`, and the
 screens mount without it. A development reload that changes the app document loads and reports it, and the new
 document takes effect at the next frame build (a sign-in or sign-out); the root is not remounted in place.
@@ -112,6 +118,13 @@ The shell sets `{"env": "widthClass"}` from its view backend: before the first m
 `backend.widthClass()` into the session (`Session::setEnvironmentValue`), then registers the backend's
 `setOnWidthClass` listener, which writes each change, so every open tab re-evaluates it; the shell clears the
 listener when it goes. The session belongs to the shell, and every screen of the client shares the value.
+
+The frame takes its compact form (`ShellFrame::setCompact`, [shell_frame.md](../ui/shell_frame.md#the-compact-form))
+below `expanded`: on `compact` and `medium`, when it is built and on each change the listener hears. The class stays
+the window's. Below `expanded` the sidebar is gone, so the page is nearly the window, and a document's class describes
+the space it gets; with the sidebar, an 80-unit `medium` window, an 80-column terminal among them, would leave the
+page 52 units, narrower than any `compact` window. On `expanded` the page is the window less the sidebar's 28 units,
+at least 132.
 
 The frame shows its sidebar and top bar, and the principal, while the shell is signed in, and the page alone
 otherwise (`ShellFrame::showSignedIn`). The shell is signed in after a sign-in, until a sign-out, and from the start
@@ -163,7 +176,8 @@ there itself. An empty mapper is `std::invalid_argument`.
 `tests/client/` (`morph_client_tests`, label `client`), headless over a `FakeAppContext` and `RecordingBackend`:
 the arguments, both sources and the shell over a two-screen probe application (and the same behind a public login,
 for when the frame shows its chrome), a navigation as a dialog and a callee that returns from a tab, a call to a
-screen whose tab is open, the waits the tests use, and the
+screen whose tab is open, the frame's compact form below `expanded`, the app document's navigation counts, the waits
+the tests use, and the
 sign-in mapping: a mapper reading `{user, jwt}` signs in, an empty principal is reported, and an `ApplicationHost`
 passed to a hand-built `DocumentScreenHost` runs a document's `signIn` and inline `upload`, while the same host
 without it reports both as not supported.

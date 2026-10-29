@@ -583,6 +583,9 @@ struct Document {
     ExprPtr menuLabel;
     /// @brief The head's tools: `headTool` parts, a search field or a select each, in order.
     std::vector<DocNodePtr> tools;
+    /// @brief The app document's counts on the navigator's entries: `navigationBadge` parts, in order; empty for a
+    ///        screen, which declares none.
+    std::vector<DocNodePtr> navigation;
     /// @brief The typed params, in declaration order.
     std::vector<std::pair<std::string, Type>> params;
     /// @brief The screen scope's declarations.
@@ -983,6 +986,12 @@ inline constexpr std::array<KeySpec, 7> kActionButtonKeys = {{{"id", Shape::Name
 /// @brief The keys of a `headBadge` part: a status badge of a screen's head.
 inline constexpr std::array<KeySpec, 4> kHeadBadgeKeys = {
     {{"tone", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}, {"visible", Shape::Condition}}};
+/// @brief The keys of a `navigationBadge` part: a count the app document puts on a navigator entry. `screen` is the
+///        screen id the entry opens, a literal; the rest are read in the app scope.
+inline constexpr std::array<KeySpec, 4> kNavigationBadgeKeys = {{{"screen", Shape::Text, {}, kRequired},
+                                                                 {"text", Shape::Expr},
+                                                                 {"tone", Shape::Expr},
+                                                                 {"visible", Shape::Condition}}};
 /// @brief The keys of `badge`.
 inline constexpr std::array<KeySpec, 6> kBadgeKeys = {{{"tone", Shape::Expr},
                                                        {"text", Shape::Expr},
@@ -1073,7 +1082,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 56> kKinds = {{
+inline constexpr std::array<KindSpec, 57> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -1127,6 +1136,7 @@ inline constexpr std::array<KindSpec, 56> kKinds = {{
     {"headBadge", kHeadBadgeKeys, kPart},
     {"headMenuItem", kHeadMenuItemKeys, kPart},
     {"headTool", kHeadToolKeys, kPart},
+    {"navigationBadge", kNavigationBadgeKeys, kPart},
     {"fields", {}, kPart},
     {"series", kSeriesKeys, kPart | kRowScope},
     {"line", kLineKeys, kPart},
@@ -1240,6 +1250,7 @@ public:
         doc.menu = topParts(*object, "menu", "headMenuItem");
         doc.menuLabel = optionalExpr(*object, "menuLabel", "");
         doc.tools = topParts(*object, "tools", "headTool");
+        doc.navigation = navigation(*object, doc.id);
         if (doc.id == "app") {
             // The head belongs to a screen's tab; the app document has no view and so no head.
             for (std::string_view const key : {"subtitle", "status", "actions", "menu", "menuLabel", "tools"}) {
@@ -1429,6 +1440,20 @@ private:
                                               std::string const& path) {
         Json const* const value = member(object, key);
         return value == nullptr ? nullptr : expr(*value, pointerAppend(path, key));
+    }
+
+    // The app document's `navigation` badges, each naming its screen; a screen declares none.
+    [[nodiscard]] std::vector<DocNodePtr> navigation(Json::object_t const& object, std::string_view documentId) {
+        std::vector<DocNodePtr> badges = topParts(object, "navigation", "navigationBadge");
+        if (documentId != "app" && !badges.empty()) {
+            refuse("/navigation", "`navigation` is the app document's; a screen has none");
+        }
+        for (DocNodePtr const& badge : badges) {
+            if (badge->name("screen").empty()) {
+                refuse(pointerAppend(badge->path, "screen"), "a navigation badge names the screen of its entry");
+            }
+        }
+        return badges;
     }
 
     // A top-level list of parts: the screen head's `status` and `actions`.
@@ -3670,12 +3695,14 @@ private:
         }
     }
 
-    // The screen head's parts: its status badges, its actions, then its menu's entries.
+    // The document's top-level parts: a screen head's status badges, actions, menu entries and tools, and the app
+    // document's navigation badges.
     [[nodiscard]] std::vector<DocNodePtr> headParts() const {
         std::vector<DocNodePtr> parts = _doc->status;
         parts.insert(parts.end(), _doc->actions.begin(), _doc->actions.end());
         parts.insert(parts.end(), _doc->menu.begin(), _doc->menu.end());
         parts.insert(parts.end(), _doc->tools.begin(), _doc->tools.end());
+        parts.insert(parts.end(), _doc->navigation.begin(), _doc->navigation.end());
         return parts;
     }
 

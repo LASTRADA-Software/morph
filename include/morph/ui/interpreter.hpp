@@ -2931,6 +2931,21 @@ struct HeadBadge {
     bool operator==(HeadBadge const&) const = default;
 };
 
+/// @brief A count the app document puts on a navigator entry (its `navigation`), as `AppRoot::navigationBadges`
+///        answers it.
+struct NavigationBadge {
+    /// @brief The screen id of the entry it goes on.
+    std::string screen;
+    /// @brief The badge's text.
+    std::string text;
+    /// @brief Its tone.
+    Tone tone = Tone::Neutral;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(NavigationBadge const&) const = default;
+};
+
 /// @brief An action of a screen's head, as its handle answers it.
 struct HeadAction {
     /// @brief The action's id, what `ScreenHead::run` takes.
@@ -3449,8 +3464,18 @@ public:
             }
         } catch (...) {  // NOLINT(bugprone-empty-catch): a destructor has no one to report to.
         }
+        // The counts read the scope, so they go before it.
+        _navigationBadges.reset();
+        _navigation.clear();
         _core->session.setAppScope(nullptr);
         _scope.reset();
+    }
+
+    /// @brief The app document's `navigation` badges that are visible now, in order, each with the screen whose
+    ///        navigator entry it goes on, and following the app state they read.
+    /// @return They, valid as long as the root; empty when the document declares no `navigation`.
+    [[nodiscard]] reactive::Computed<std::vector<NavigationBadge>> const& navigationBadges() const {
+        return *_navigationBadges;
     }
 
     /// @brief Evaluates an expression in the app document's scope.
@@ -3481,8 +3506,16 @@ private:
         _core->runtime().batch([&] { _core->runList(commands, ctx, {}); });
     }
 
+    // A navigation badge, lowered in the app scope, with the screen of its entry.
+    struct PlacedBadge {
+        std::string screen;
+        detail::BadgeModel badge;
+    };
+
     std::unique_ptr<detail::ScreenCore> _core;
     std::shared_ptr<detail::RtScope> _scope;
+    std::vector<PlacedBadge> _navigation;
+    std::unique_ptr<reactive::Computed<std::vector<NavigationBadge>>> _navigationBadges;
 };
 
 /// @brief Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher.
@@ -9603,7 +9636,29 @@ inline std::expected<std::unique_ptr<AppRoot>, Refusal> Interpreter::mountApp(st
         static_cast<void>(key);
         lists.push_back(&commands);
     }
-    _session->runtime().untracked([&] { core.declare(*root->_scope, &doc->scope, {}, lists); });
+    _session->runtime().untracked([&] {
+        core.declare(*root->_scope, &doc->scope, {}, lists);
+        detail::LowerCtx const ctx{
+            .scope = root->_scope, .bindings = std::make_shared<detail::Bindings const>(), .boundary = nullptr};
+        std::vector<detail::BadgeModel> badges = core.lowerBadgeParts(doc->navigation, ctx);
+        for (std::size_t index = 0; index < badges.size(); ++index) {
+            root->_navigation.push_back(
+                AppRoot::PlacedBadge{.screen = std::string{doc->navigation.at(index)->name("screen")},
+                                     .badge = std::move(badges.at(index))});
+        }
+    });
+    root->_navigationBadges = std::make_unique<reactive::Computed<std::vector<NavigationBadge>>>(
+        _session->runtime(), [placed = &root->_navigation] {
+            std::vector<NavigationBadge> shown;
+            for (AppRoot::PlacedBadge const& entry : *placed) {
+                if (entry.badge.visible.evaluate()) {
+                    shown.push_back(NavigationBadge{.screen = entry.screen,
+                                                    .text = entry.badge.text.evaluate(),
+                                                    .tone = entry.badge.tone.evaluate()});
+                }
+            }
+            return shown;
+        });
     // The app document's date patterns are the application's: every screen of the bundle shows and reads dates so.
     if (!doc->datePattern.empty() || !doc->dateTimePattern.empty()) {
         _session->setDatePatterns(doc->datePattern, doc->dateTimePattern);

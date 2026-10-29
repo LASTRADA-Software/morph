@@ -18,6 +18,7 @@ add_executable(morph_tui_tests
     test_tui_frontend.cpp
     test_tui_forms.cpp
     test_tui_explorer.cpp
+    test_tui_shell_frame.cpp
 )
 
 target_link_libraries(morph_tui_tests

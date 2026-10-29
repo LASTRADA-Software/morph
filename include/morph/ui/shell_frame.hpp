@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "../attributes.hpp"
 #include "backend.hpp"
@@ -39,7 +41,9 @@ struct ShellFrameOptions {
 /// (surface `page`), where the client places the workspace. The top bar has two lines: the shown screen's title, the
 /// principal and a sign-out button, and below them, while `setHeadShown(true)`, a line that scrolls sideways holding
 /// the slot for the active tab's head row. Signed out, the sidebar and the top bar are hidden and
-/// the page is all there is. Neither copyable nor movable; owned by the owner thread of its backend.
+/// the page is all there is. Compact (`setCompact(true)`), the sidebar and the principal are hidden and the top bar's
+/// first line starts with a navigation menu over the navigator's entries, so the page has nearly the whole window.
+/// Neither copyable nor movable; owned by the owner thread of its backend.
 class ShellFrame {
 public:
     /// @brief The frame, appended to @p parent.
@@ -60,6 +64,7 @@ public:
           _topBar{backend.createStack(_main.get(), Axis::Vertical)},
           _topLine{backend.createStack(_topBar.get(), Axis::Horizontal)},
           _topStart{backend.createSpacer(_topLine.get())},
+          _navMenu{backend.createMenu(_topLine.get(), MenuStyle::Button)},
           _title{backend.createText(_topLine.get())},
           _principal{backend.createText(_topLine.get())},
           _signOut{backend.createButton(_topLine.get())},
@@ -107,6 +112,15 @@ public:
         _topEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
         // Centred across the line, so the principal's text sits level with the sign-out button's label.
         _topLine->setAlign(Align::Center);
+        // The compact form's navigation: the navigator's entries as one button-style menu, kept current with it.
+        _navMenu->setTestId("shell_nav_menu");
+        _navMenu->setAccessibleName("Navigation");
+        _navMenu->setTooltip("Navigation");
+        _navMenu->setTrigger(MenuTrigger{.label = {}, .icon = "nav.menu", .emphasis = ButtonEmphasis::Ghost});
+        _navMenu->setItems(_navigator->menuEntries());
+        _navMenu->setOnActivate([this](std::vector<std::size_t> const& path) { _navigator->choose(path); });
+        _navMenu->setVisible(false);
+        _navigator->setOnChanged([this] { _navMenu->setItems(_navigator->menuEntries()); });
         _title->setRole(TextRole::Heading);
         _title->setLayout({.width = Sizing::stretch(), .height = {}});
         _title->setTestId("shell_title");
@@ -176,9 +190,23 @@ public:
     /// @brief Shows or hides the sidebar and the top bar: signed out, the page is all there is.
     /// @param signedIn Whether someone is signed in.
     void showSignedIn(bool signedIn) {
-        _sidebar->setVisible(signedIn);
-        _topBar->setVisible(signedIn);
+        _signedIn = signedIn;
+        showChrome();
     }
+
+    /// @brief Takes the frame's compact form, or its full one again. Compact, the sidebar and the principal are
+    ///        hidden, and the top bar's first line starts with the navigation menu (`shell_nav_menu`, the framework
+    ///        icon `nav.menu`, named "Navigation"), which lists the navigator's entries (`Navigator::menuEntries`) and
+    ///        opens the one chosen, as the navigator does. A new frame is not compact.
+    /// @param compact Whether the frame is compact.
+    void setCompact(bool compact) {
+        _compact = compact;
+        showChrome();
+    }
+
+    /// @brief Whether the frame has its compact form.
+    /// @return It.
+    [[nodiscard]] bool compact() const noexcept { return _compact; }
 
     /// @brief Shows a passive, transient message over the frame's main content area. Made the first time it is
     ///        asked for; a later call replaces its text and tone and restarts its dismiss interval, whether or not
@@ -193,6 +221,14 @@ public:
     }
 
 private:
+    // The chrome that shows for the sign-in state and the form.
+    void showChrome() {
+        _sidebar->setVisible(_signedIn && !_compact);
+        _topBar->setVisible(_signedIn);
+        _principal->setVisible(!_compact);
+        _navMenu->setVisible(_compact);
+    }
+
     // Declared parent before child, so destruction takes the children first.
     IViewBackend& _backend;
     std::unique_ptr<StackWidget> _root;
@@ -209,6 +245,7 @@ private:
     std::unique_ptr<StackWidget> _topBar;
     std::unique_ptr<StackWidget> _topLine;
     std::unique_ptr<SpacerWidget> _topStart;
+    std::unique_ptr<MenuWidget> _navMenu;
     std::unique_ptr<TextWidget> _title;
     std::unique_ptr<TextWidget> _principal;
     std::unique_ptr<ButtonWidget> _signOut;
@@ -224,6 +261,8 @@ private:
     std::unique_ptr<SpacerWidget> _left;
     std::unique_ptr<StackWidget> _content;
     std::unique_ptr<SpacerWidget> _right;
+    bool _signedIn = true;
+    bool _compact = false;
 };
 
 }  // namespace morph::ui

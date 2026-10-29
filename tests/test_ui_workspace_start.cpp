@@ -273,7 +273,12 @@ std::vector<CatalogEntry> lab() {
     return entries;
 }
 
+/// Whether a navigator entry (`nav_<id>`, shown with its row) or a heading is shown.
 bool shown(Harness& harness, std::string_view testId) {
+    if (testId.starts_with("nav_")) {
+        auto const row = harness.backend.find("Row", "testId", "nav_row_" + std::string{testId.substr(4)});
+        return row && harness.backend.prop(*row, "visible") != "false";
+    }
     auto const widget = harness.backend.find("Button", "testId", testId);
     return widget && harness.backend.prop(*widget, "visible") != "false";
 }
@@ -421,4 +426,63 @@ TEST_CASE("navigator: entries are list items, and setCurrent marks the open scre
     navigator.setCurrent("nowhere");
     CHECK(prop("nav_lims.results", "selected") == "false");
     CHECK(navigator.current().empty());
+}
+
+// Control: a no-op setBadge (no badge is drawn, and the accessible name has no count); or leave the count out of
+// menuEntries' labels.
+TEST_CASE("navigator: a count sits at the end of its entry, named with it, and the menu lists it after the title",
+          "[ui][workspace][navigator]") {
+    Harness harness;
+    std::vector<std::string> opened;
+    Navigator navigator{harness.backend, nullptr,
+                        NavigatorOptions{.entries = lab(),
+                                         .titles = {},
+                                         .pins = {"admin.users"},
+                                         .maxPins = 12,
+                                         .onOpen = [&opened](std::string const& id) { opened.push_back(id); },
+                                         .onPrefetch = {},
+                                         .onPins = {}}};
+    int changes = 0;
+    navigator.setOnChanged([&changes] { ++changes; });
+    int const row = *harness.backend.find("Row", "testId", "nav_row_lims.results");
+    int const button = *harness.backend.find("Button", "testId", "nav_lims.results");
+    int const badge = *harness.backend.find("Badge", "testId", "nav_badge_lims.results");
+    CHECK(harness.backend.children(row) == std::vector<int>{button, badge});
+    CHECK(harness.backend.prop(badge, "visible") == "false");
+
+    REQUIRE(navigator.setBadge("lims.results", morph::ui::NavigatorBadge{.text = "4", .tone = morph::ui::Tone::Info}));
+    CHECK(harness.backend.prop(badge, "visible") == "true");
+    CHECK(harness.backend.prop(badge, "text") == "4");
+    CHECK(harness.backend.prop(badge, "tone") == "Info");
+    CHECK(harness.backend.prop(button, "a11yName") == "Results, 4");
+    CHECK(changes == 1);
+    CHECK_FALSE(navigator.setBadge("lims.nowhere", morph::ui::NavigatorBadge{.text = "1", .tone = {}}));
+
+    navigator.setCurrent("lims.samples");
+    std::vector<morph::ui::MenuEntry> const menu = navigator.menuEntries();
+    // The pin, a separator, then the groups as submenus.
+    REQUIRE(menu.size() == 5);
+    CHECK(menu.at(0).label == "Users");
+    CHECK(menu.at(1).separator);
+    CHECK(menu.at(2).label == "Lab / Work");
+    REQUIRE(menu.at(2).items.size() == 2);
+    CHECK(menu.at(2).items.at(0).label == "Samples");
+    CHECK(menu.at(2).items.at(0).checked == true);
+    CHECK(menu.at(2).items.at(1).label == "Results · 4");
+    CHECK_FALSE(menu.at(2).items.at(1).checked.has_value());
+    CHECK(menu.at(3).label == "Lab / Office");
+    CHECK_FALSE(menu.at(3).items.at(0).enabled);
+    CHECK(menu.at(4).label == "Admin");
+
+    CHECK(navigator.choose({2, 1}));
+    CHECK_FALSE(navigator.choose({3, 0}));  // unavailable
+    CHECK_FALSE(navigator.choose({1}));     // a separator
+    CHECK_FALSE(navigator.choose({2}));     // a submenu
+    CHECK(navigator.choose({0}));
+    CHECK(opened == std::vector<std::string>{"lims.results", "admin.users"});
+
+    REQUIRE(navigator.setBadge("lims.results", std::nullopt));
+    CHECK(harness.backend.prop(badge, "visible") == "false");
+    CHECK(harness.backend.prop(button, "a11yName") == "Results");
+    CHECK(navigator.menuEntries().at(2).items.at(1).label == "Results");
 }

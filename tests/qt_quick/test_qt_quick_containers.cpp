@@ -602,6 +602,24 @@ TEST_CASE("qt_quick containers: the shell frame fills the window, its sidebar 28
     CHECK(Scene::itemOf(*content).mapToScene(QPointF{0, 0}).x() >= sidebar.width() + 16.0);
 }
 
+// Control: drop `nav.menu` from MorphMenu's triggerText (the trigger draws its name, "Navigation", instead).
+TEST_CASE("qt_quick containers: the compact shell hides its sidebar and draws its navigation menu as ☰", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrameOptions options;
+    options.applicationName = "App";
+    options.navigator.entries = {morph::ui::CatalogEntry{.id = "lims.review", .title = "Review", .group = "Lab"}};
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
+    frame.showSignedIn(true);
+    frame.setCompact(true);
+    frame.navigator().setBadge("lims.review", morph::ui::NavigatorBadge{.text = "4", .tone = morph::ui::Tone::Info});
+    scene.settle();
+    detail::ItemBase const* const sidebar = detail::findWidget(QStringLiteral("shell_sidebar"));
+    REQUIRE(sidebar != nullptr);
+    CHECK_FALSE(sidebar->item()->isVisible());
+    QQuickItem const& trigger = *textItemOf("shell_nav_menu", QStringLiteral("☰"));
+    CHECK(trigger.isVisible());
+}
+
 // The inner items, not the widget roots: each root fills the bar's height whatever the alignment, so the roots share
 // a centre either way, while the label and the button inside them are centred only when the bar centres them.
 // Mutation: drop the top bar's setAlign(Align::Center) in ShellFrame (the principal's label sits at the top).

@@ -353,8 +353,9 @@ public:
     ///        `MenuStyle::Button`, at mount and whenever the label changes.
     ///
     /// The label, when not empty, is the trigger's text and its accessible name. An icon-only trigger draws its icon
-    /// from the theme's set; `more`, a framework name, draws `⋯` when the set does not name it, and another icon the
-    /// set does not name draws the widget's accessible name as the label, so the trigger is never blank.
+    /// from the theme's set; `more` and `nav.menu`, framework names, draw `⋯` and `☰` when the set does not name
+    /// them, and another icon the set does not name draws the widget's accessible name as the label, so the trigger is
+    /// never blank.
     /// @param trigger The trigger's label, icon and emphasis.
     virtual void setTrigger(MenuTrigger const& trigger) = 0;
 

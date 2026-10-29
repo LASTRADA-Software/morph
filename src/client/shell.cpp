@@ -23,6 +23,7 @@
 #include <morph/ui/inspector.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/navigator.hpp>
 #include <morph/ui/route_history.hpp>
 #include <morph/ui/service_client.hpp>
 #include <morph/ui/shell_frame.hpp>
@@ -131,6 +132,7 @@ public:
         // then the tabs, then the app document's root the tabs read, then the frame they sit in. The root goes before
         // the document host, whose interpreter runs its onUnmount.
         resetHead();
+        _badges.reset();
         _workspace.reset();
         _appRoot.reset();
         _frame.reset();
@@ -245,6 +247,9 @@ public:
                 if (_workspace) {
                     _workspace->setWidthClass(widthClass);
                 }
+                if (_frame) {
+                    _frame->setCompact(compactFrame(widthClass));
+                }
             }
         });
     }
@@ -313,7 +318,8 @@ private:
             _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, done = std::move(done)] {
                 if (auto const live = alive.lock(); live != nullptr && *live) {
                     unmount();
-                    // After the screens that read it, and before the session changes hands.
+                    // After the screens that read it, and before the session changes hands; its counts go first.
+                    _badges.reset();
                     _appRoot.reset();
                     _source->signOut(done);
                 }
@@ -325,6 +331,7 @@ private:
     // session's catalog gets a new frame. Every tab of the old one is closed.
     void buildFrame() {
         resetHead();
+        _badges.reset();
         _workspace.reset();
         _appRoot.reset();
         _frame.reset();
@@ -360,6 +367,7 @@ private:
         };
         frame.onSignOut = [this] { signOut(); };
         _frame = std::make_unique<ui::ShellFrame>(*_backend, nullptr, std::move(frame));
+        _frame->setCompact(compactFrame(_backend->widthClass()));
         // Re-wired on every rebuild, since _frame is replaced here but _application is not: the sink must
         // dereference _frame at call time, never capture it directly, so it keeps working across a rebuild.
         _application->setNotifySink([this](std::string const& text, std::string const& role) {
@@ -395,6 +403,50 @@ private:
         _workspace = std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs),
                                                      &_frame->page(), ui::HeadPlacement::External);
         mountApp();
+        followBadges();
+    }
+
+    // The frame is compact below `expanded`: with its sidebar, an 80-unit `medium` window would leave the page
+    // narrower than any `compact` one, and without it the page is nearly the window.
+    [[nodiscard]] static bool compactFrame(std::string_view widthClass) { return widthClass != "expanded"; }
+
+    // The app document's navigation counts, copied onto the navigator's entries as they change: made after the root
+    // and the frame, and destroyed before either goes. A count for a screen the navigator does not list is reported
+    // once.
+    void followBadges() {
+        if (_appRoot == nullptr) {
+            return;
+        }
+        _badged.clear();
+        _badges = std::make_unique<reactive::Effect>(_context->runtime(), [this] {
+            std::vector<ui::NavigationBadge> const badges = _appRoot->navigationBadges().get();
+            _context->runtime().untracked([this, &badges] { showBadges(badges); });
+        });
+    }
+
+    // Puts each screen's first visible count on its entry, and takes away the counts no longer given.
+    void showBadges(std::vector<ui::NavigationBadge> const& badges) {
+        ui::Navigator& navigator = _frame->navigator();
+        // A signed-out frame's navigator lists nothing, and its counts are not a mistake of the document's.
+        bool const listing = !navigator.menuEntries().empty();
+        std::set<std::string, std::less<>> shown;
+        for (ui::NavigationBadge const& badge : badges) {
+            if (!shown.insert(badge.screen).second) {
+                continue;
+            }
+            bool const listed =
+                navigator.setBadge(badge.screen, ui::NavigatorBadge{.text = badge.text, .tone = badge.tone});
+            if (!listed && listing && _unlistedBadges.insert(badge.screen).second) {
+                problem("the app document's navigation counts " + badge.screen +
+                        ", which the navigator does not list");
+            }
+        }
+        for (std::string const& screenId : _badged) {
+            if (!shown.contains(screenId)) {
+                navigator.setBadge(screenId, std::nullopt);
+            }
+        }
+        _badged = std::move(shown);
     }
 
     // The app document's root for the frame just built, before its first tab: every screen's `app.*` reads it. A
@@ -782,6 +834,12 @@ private:
     std::unique_ptr<ui::Workspace> _workspace;
     // The app document's root for the current frame; destroyed after the tabs that read it.
     std::unique_ptr<ui::AppRoot> _appRoot;
+    // Copies the root's navigation counts onto the frame's navigator; goes before either.
+    std::unique_ptr<reactive::Effect> _badges;
+    // The screens whose entries hold a count now, and those a count named that the navigator does not list, each
+    // reported once.
+    std::set<std::string, std::less<>> _badged;
+    std::set<std::string, std::less<>> _unlistedBadges;
     std::optional<ui::Mounted> _message;
     // The active tab's head row, mounted into the frame's top-bar slot; reset together with its own comparison key
     // (never one without the other) ahead of _workspace, since both are built from the Workspace's own data and

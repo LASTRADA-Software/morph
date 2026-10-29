@@ -64,6 +64,7 @@ refused: a lab writes dates one way everywhere, so the pattern is the applicatio
 | `id` | `id` | Non-empty |
 | `title`, `identity`, `dirty` | same | Expressions; `dirty` is a condition |
 | `subtitle`, `status`, `tools`, `actions`, `menu`, `menuLabel` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
+| `navigation` | `navigation` | The counts on the navigator's entries, in the app scope ([The app document's navigation](#the-app-documents-navigation)); the app document's only |
 | `params` | `params` | Name to type, in declaration order |
 | `scope` | `models`, `state`, `let`, `queries`, `mutations`, `watch`, `checks` | The screen scope's declarations |
 | `lifecycle` | `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange` | Command lists |
@@ -93,6 +94,16 @@ A screen's head is what a shell shows above it beside the title: `subtitle` (an 
 actions`). All are evaluated in the screen scope, and the app document, which has no view, refuses them. A shell
 draws them in that order on one line: the subtitle, the badges, then at the trailing edge the tools, the actions and
 the menu.
+
+### The app document's navigation
+
+The app document's `navigation` is a list of `navigationBadge` parts, `{screen, text, tone, visible}`: a count a
+shell puts on the navigator's entry of a screen, such as the worksheets waiting for review. `screen` is the screen id
+the entry opens, a non-empty literal (`a navigation badge names the screen of its entry`); `text` and `tone` are
+expressions and `visible` a condition, all evaluated in the app scope, so a count follows the app state and queries
+it reads. A screen that declares `navigation` is refused (`` `navigation` is the app document's; a screen has none
+``): the navigator lists the application's screens, and no screen owns its entries.
+`AppRoot::navigationBadges()` answers the visible ones ([interpreter.md](interpreter.md#the-app-root-scope)).
 
 A `headTool` part is a search field or a select the shell draws in the head, as data the screen evaluates: no node of
 the screen is mounted in the shell's widgets.

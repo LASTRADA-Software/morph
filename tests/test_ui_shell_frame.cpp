@@ -144,3 +144,41 @@ TEST_CASE("shell frame: the head slot has the top bar's second line, shown only 
     frame.setHeadShown(false);
     CHECK(backend.prop(line, "visible") == "false");
 }
+
+// Control: a no-op setCompact (the sidebar stays shown and the navigation menu hidden); or leave the menu's items
+// stale after a count (its first entry keeps the label without it).
+TEST_CASE("shell frame: compact, the sidebar and the principal give way to a navigation menu", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    frame.showSignedIn(true);
+    int const sidebar = backend.find("Row", "testId", "shell_sidebar").value();
+    int const principal = backend.find("Text", "testId", "shell_principal").value();
+    int const menu = backend.find("Menu", "testId", "shell_nav_menu").value();
+    CHECK(backend.prop(menu, "visible") == "false");
+    CHECK(backend.prop(menu, "icon") == "nav.menu");
+    CHECK(backend.prop(menu, "a11yName") == "Navigation");
+    // First on the top bar's first line, after its padding.
+    int const line = backend.find("Row", "testId", "shell_topbar_main").value();
+    CHECK(backend.children(line).at(1) == menu);
+
+    frame.setCompact(true);
+    CHECK(frame.compact());
+    CHECK(backend.prop(sidebar, "visible") == "false");
+    CHECK(backend.prop(principal, "visible") == "false");
+    CHECK(backend.prop(menu, "visible") == "true");
+    frame.navigator().setBadge("bookmarks.tags", morph::ui::NavigatorBadge{.text = "2", .tone = {}});
+    CHECK(backend.prop(menu, "items").contains("Tags · 2"));
+    backend.chooseMenuEntry(menu, {0, 1});
+    CHECK(opened == std::vector<std::string>{"bookmarks.tags"});
+
+    // Signed out, the top bar goes, and the sidebar stays hidden when the frame is no longer compact.
+    frame.showSignedIn(false);
+    frame.setCompact(false);
+    CHECK(backend.prop(sidebar, "visible") == "false");
+    frame.showSignedIn(true);
+    CHECK(backend.prop(sidebar, "visible") == "true");
+    CHECK(backend.prop(principal, "visible") == "true");
+    CHECK(backend.prop(menu, "visible") == "false");
+}
