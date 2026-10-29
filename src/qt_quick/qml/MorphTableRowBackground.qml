@@ -73,10 +73,10 @@ Item {
     }
     // The hairline between rows.
     Rectangle {
+        objectName: "rule"
         anchors.bottom: parent.bottom
         width: parent.width
         height: 1
-        color: root.scheme.border
-        opacity: 0.6
+        color: root.scheme.divider
     }
 }

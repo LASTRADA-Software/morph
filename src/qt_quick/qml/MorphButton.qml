@@ -35,7 +35,7 @@ MorphWidget {
     readonly property color fill: emphasis === 1 ? root.scheme.accent
                                  : emphasis === 2 ? root.scheme.error
                                  : ghost ? "transparent"
-                                         : root.scheme.surface
+                                         : root.scheme.controlSurface
 
     // The widget's item is the one node a driver finds by test id, so it is the button: it carries the role, the
     // label as its name and the press action, and the control inside it is not a second node.
@@ -114,7 +114,7 @@ MorphWidget {
             filled: root.emphasis === 1 || root.emphasis === 2
             item: root.style === 1
             ghost: root.ghost
-            borderColor: root.emphasis === 4 ? root.scheme.errorBorder : root.scheme.border
+            borderColor: root.emphasis === 4 ? root.scheme.errorBorder : root.scheme.controlBorder
             selected: root.selected
             hovered: button.hovered
             pressed: button.down

@@ -189,10 +189,10 @@ value with `spacingStep`, so a backend never sees another. Each backend maps a s
 **Button emphasis.** `ButtonWidget::setEmphasis(ButtonEmphasis)` takes `Normal`, `Primary`, `Danger`, `Ghost` or
 `DangerOutline`; the mount calls it only for another value than `Normal`, so a document without the `emphasis` key
 (`normal`, `primary`, `danger`, `ghost`, `dangerOutline`) records nothing new. `DangerOutline` is a destructive action
-that is not the screen's main one: Qt Quick draws it as a normal button (the surface's fill, a 1 px border) with the
+that is not the screen's main one: Qt Quick draws it as a normal button (the control surface's fill, `color.controlSurface`, and a 1 px border in `color.controlBorder`) with the
 border in `color.err.border` and the label in the error colour, and the terminal in the error colour and not bold,
 which keeps it apart from both `Danger` and `Normal`. Qt Quick fills a primary button in the accent and a danger one in the error
-colour, and draws a ghost button with no border or fill, minimal padding, and a faint neutral tint on hover or press
+colour, and draws a ghost button with no border or fill, minimal padding, and a faint tint in `color.hover` on hover or press
 — for an action embedded in other content (a table row's remove, a disclosure chevron) where full button chrome would
 read as a second control beside it rather than part of it. The terminal draws `Primary`/`Danger` bold, a danger one
 in the error colour, and falls back to `Normal`'s plain style for `Ghost`.
@@ -232,7 +232,7 @@ spare height, and a stretching scroll above a bar keeps the bar at the column's 
 size until the user drags. A splitter's panes are sized by the splitter, not by this rule. A panel's or a collapsible's content starts under its
 header whatever the panel's height; only a stretching child takes the spare height.
 
-**Table cells.** A table sizes and places its cells itself. A cell fills its column's width, except a kind whose
+**Table cells.** A table draws a 1 px rule under each row in `color.divider` on Qt Quick. A table sizes and places its cells itself. A cell fills its column's width, except a kind whose
 width is its label (a badge, a check box, a push button), which draws at its natural width at the column's start,
 centre or end, as `TableColumn::align` says. The column's `align` also places the text of a text cell and of a text
 input cell (where the frontend can align an input's text), and the header's label; a container cell fills its

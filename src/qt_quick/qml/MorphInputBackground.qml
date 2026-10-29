@@ -19,18 +19,18 @@ Rectangle {
     // The screen's focal field: a 2 px accent border at all times and, while focused, a 3 px ring of the accent,
     // faint. A tone wins over the accent, so a refused scan looks refused.
     property bool prominent: false
-    readonly property color toneColor: [scheme.border, scheme.info, scheme.success, scheme.warn, scheme.error][tone]
-                                       ?? scheme.border
-    readonly property color toneFill: [scheme.surface, scheme.infoBg, scheme.successBg, scheme.warnBg,
-                                       scheme.errorBg][tone] ?? scheme.surface
+    readonly property color toneColor: [scheme.controlBorder, scheme.info, scheme.success, scheme.warn, scheme.error][tone]
+                                       ?? scheme.controlBorder
+    readonly property color toneFill: [scheme.controlSurface, scheme.infoBg, scheme.successBg, scheme.warnBg,
+                                       scheme.errorBg][tone] ?? scheme.controlSurface
 
     // A prominent field keeps the touch height on every window.
     implicitHeight: prominent ? Math.max(Theme.targetHeight, Theme.touchHeight) : Theme.targetHeight
     implicitWidth: Theme.unitWidth * 20
     radius: Theme.radiusControl
-    color: readOnly ? Theme.background : scheme.surface
+    color: readOnly ? Theme.background : scheme.controlSurface
     border.width: focused || prominent ? 2 : 1
-    border.color: tone !== 0 ? toneColor : prominent ? scheme.accent : focused ? scheme.focus : scheme.border
+    border.color: tone !== 0 ? toneColor : prominent ? scheme.accent : focused ? scheme.focus : scheme.controlBorder
 
     // The ring: a sibling's outline, since a Rectangle draws nothing outside itself.
     Rectangle {

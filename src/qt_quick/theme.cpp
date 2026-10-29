@@ -31,7 +31,7 @@ namespace morph::qt_quick {
 namespace {
 
 /// The `Theme` property each colour token of the set sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 29> kColorProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 37> kColorProperties = {{
     {"color.text", "text"},
     {"color.muted", "muted"},
     {"color.err", "error"},
@@ -39,6 +39,14 @@ constexpr std::array<std::pair<std::string_view, char const*>, 29> kColorPropert
     {"color.info", "info"},
     {"color.warn", "warn"},
     {"color.neutral", "neutral"},
+    {"color.neutral.bg", "neutralBg"},
+    {"color.neutral.border", "neutralBorder"},
+    {"color.neutral.dot", "neutralDot"},
+    {"color.hover", "hover"},
+    {"color.track", "track"},
+    {"color.controlSurface", "controlSurface"},
+    {"color.controlBorder", "controlBorder"},
+    {"color.divider", "divider"},
     {"color.surface", "surface"},
     {"color.border", "border"},
     {"color.selection", "selection"},
@@ -64,7 +72,7 @@ constexpr std::array<std::pair<std::string_view, char const*>, 29> kColorPropert
 }};
 
 /// The scheme property each colour token of a surface sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 29> kSchemeProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 37> kSchemeProperties = {{
     {"color.surface", "surface"},
     {"color.text", "text"},
     {"color.muted", "muted"},
@@ -73,6 +81,14 @@ constexpr std::array<std::pair<std::string_view, char const*>, 29> kSchemeProper
     {"color.selection", "selection"},
     {"color.border", "border"},
     {"color.neutral", "neutral"},
+    {"color.neutral.bg", "neutralBg"},
+    {"color.neutral.border", "neutralBorder"},
+    {"color.neutral.dot", "neutralDot"},
+    {"color.hover", "hover"},
+    {"color.track", "track"},
+    {"color.controlSurface", "controlSurface"},
+    {"color.controlBorder", "controlBorder"},
+    {"color.divider", "divider"},
     {"color.err", "error"},
     {"color.ok", "success"},
     {"color.info", "info"},
@@ -166,23 +182,33 @@ void setFamilies(QObject& theme, ui::ThemeValues const& values, std::string_view
     }
 }
 
-// The card's shadow and the spacing steps, which only a complete set of steps replaces.
-void setShadowAndSpace(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
-    if (auto const card = values.shadows.find("elevation.card"); card != values.shadows.end()) {
-        ui::ThemeShadow const& shadow = card->second;
-        std::array<std::pair<char const*, QVariant>, 5> const parts{{
-            {"cardShadowColor", QColor{shadow.color.r, shadow.color.g, shadow.color.b, shadow.color.a}},
-            {"cardShadowOffsetX", shadow.offsetX},
-            {"cardShadowOffsetY", shadow.offsetY},
-            {"cardShadowBlur", shadow.blur},
-            {"cardShadowSpread", shadow.spread},
-        }};
-        for (auto const& [property, value] : parts) {
-            if (!theme.setProperty(property, value)) {
-                unset.emplace_back(property);
-            }
+// A shadow token onto the five `Theme` properties that begin with @p prefix.
+void setShadow(QObject& theme, ui::ThemeValues const& values, std::string_view path, std::string_view prefix,
+               std::vector<std::string>& unset) {
+    auto const found = values.shadows.find(path);
+    if (found == values.shadows.end()) {
+        return;
+    }
+    ui::ThemeShadow const& shadow = found->second;
+    std::array<std::pair<char const*, QVariant>, 5> const parts{{
+        {"ShadowColor", QColor{shadow.color.r, shadow.color.g, shadow.color.b, shadow.color.a}},
+        {"ShadowOffsetX", shadow.offsetX},
+        {"ShadowOffsetY", shadow.offsetY},
+        {"ShadowBlur", shadow.blur},
+        {"ShadowSpread", shadow.spread},
+    }};
+    for (auto const& [suffix, value] : parts) {
+        std::string const property = std::string{prefix} + suffix;
+        if (!theme.setProperty(property.c_str(), value)) {
+            unset.push_back(property);
         }
     }
+}
+
+// The card's and the popup's shadows and the spacing steps, which only a complete set of steps replaces.
+void setShadowAndSpace(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
+    setShadow(theme, values, "elevation.card", "card", unset);
+    setShadow(theme, values, "elevation.popup", "popup", unset);
     QList<qreal> space;
     for (int step = 0; step <= ui::kMaxSpacingStep; ++step) {
         auto const found = values.dimensions.find("space." + std::to_string(step));

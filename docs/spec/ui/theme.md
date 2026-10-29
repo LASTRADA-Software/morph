@@ -121,6 +121,14 @@ The report is not a refusal: the application still starts. `UiRegistry::build` l
 so nothing draws it`, or `… is of type <t>, which ui-theme/1 does not read`), and `applyBundleTheme` returns them among
 its problems, which the Qt Quick frontend logs. `themeProblems` gives both channels the same sentences.
 
+A theme whose text cannot be read on its fills is reported the same way. `themeContrastProblems(values)` checks
+`color.text` at 4.5:1 and `color.muted` at 3:1 on `color.hover`, `color.selection`, `color.track` and
+`color.controlSurface`, each composited
+over `color.surface` when it is translucent (for example `color.hover: color.text is 1.50:1 on it, below 4.5:1`), and
+`themeProblems` runs it for the base and for each surface's resolved values. Muted gets 3:1 because the framework's
+own defaults hold that (4.04:1 on `#e5e5ea`) and not 4.5:1; the check exists to catch a fill that makes text
+disappear, not to restyle the defaults. The theme is still applied.
+
 ## Surfaces
 
 A surface is a named set of colour roles a node and everything inside it draw with (`Common::surface`). Four are
@@ -131,7 +139,7 @@ replaces one, and declares any other:
 |---|---|---|
 | `page` | `color.background` | the theme's |
 | `card` | `color.surface`, with `radius.card`, a border and `elevation.card` | the theme's |
-| `sidebar` | `#1f2430` | text `#c9ccd6`, muted `#7d8396`, accent `#4c8dff`, selection and border `#2f3646`; the rest the theme's |
+| `sidebar` | `#1f2430` | text `#c9ccd6`, muted `#7d8396`, accent `#4c8dff`, selection, border, track and divider `#2f3646`, control fill `#2a3040`, control outline `#3a4152`, hover `#ffffff14`, the neutral tone `#7d8396` (its fill that at 15 %); the rest the theme's |
 | `toolbar` | `color.surface`, with a border `#e3e5ea` | the theme's |
 
 **In the client.** A bundle carries its theme files by id (`Bundle::themes`). Once a bundle is open and before the
@@ -139,6 +147,11 @@ shell mounts, the Qt Quick frontend applies it with `applyBundleTheme`: the inde
 resolved with its layer; a bundle without a theme index restores the defaults. It does so unless the frontend is told
 to ignore the bundle's theme (`FrontendConfig::bundleTheme`), for an application that applies its own. No variant or
 density is chosen yet.
+
+Every built-in surface sets every role `MorphScheme` declares, either bound to the theme's value or as a literal of
+its own palette, so the dark sidebar, which holds the navigator's search field and pin buttons, is not drawn with the
+light defaults (white controls under light text, a light outline, an invisible hover). `toolbar`'s border is its own
+`#e3e5ea`.
 
 A theme's surface is resolved with its layer over the theme (`resolveTheme(…, surface)`), so a role it does not set
 is the theme's. Surfaces do not nest their colours: a card inside a sidebar is a card. A dialog and a drawer draw on
@@ -151,8 +164,13 @@ built in nor in the theme draws nothing and changes no colour.
 
 | Paths | Kind |
 |---|---|
-| `color.surface`, `color.text`, `color.muted`, `color.accent`, `color.focus`, `color.border`, `color.neutral`, `color.selection` | colour |
-| `color.ok`, `color.warn`, `color.err`, `color.info`, each with `.bg`, `.border` and `.dot` | colour |
+| `color.surface`, `color.text`, `color.muted`, `color.accent`, `color.focus`, `color.border`, `color.selection` | colour |
+| `color.ok`, `color.warn`, `color.err`, `color.info`, `color.neutral`, each with `.bg`, `.border` and `.dot`; `color.neutral` and its parts default to `#6e6e73`, `#6e6e7326`, `#6e6e73`, `#6e6e73`, so the neutral tone is drawn like the others, and no longer follows `color.muted` | colour |
+| `color.hover` (`#1d1d1f14`): the fill under a hovered or pressed list item, ghost button, segmented option and menu entry; translucent, so it darkens whatever light surface it lies on by one step and keeps its text readable | colour |
+| `color.controlSurface` (`#ffffff`): the fill of a text input, a text area, a select's field, a date input, a check box's box and a normal or danger-outline button; a scheme role, so a surface that sets only `color.surface` leaves its controls on it. A read-only input keeps its own fill | colour |
+| `color.controlBorder` (`#c7c7cc`): the outline of those controls at rest; a theme that sets `color.border` alone no longer moves them. A focused control's outline stays `color.focus`, a toned one's its tone's border | colour |
+| `color.divider` (`#dcdce0`): a table's row rules and the rules of a divided list; `color.border` stays the outline of a card, a panel, a popup and a table | colour |
+| `color.track` (`#e5e5ea`): the unfilled part of a progress bar, and the segmented select's track | colour |
 | `color.table.header` (transparent) | colour |
 | `color.chart.1` … `color.chart.4` (`#0072b2`, `#c25400`, `#00805e`, `#a8508a`): a chart's series colours, in drawing order | colour |
 | `opacity.stale` | number |
@@ -164,6 +182,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `font.family` (none: the platform font) | font family: a name, or a list of names in order of preference |
 | `font.mono` (none: the platform's fixed-pitch font), the family of the `mono` text role: a sibling of `font.family`, as the set keeps one spelling per path | font family, as `font.family` |
 | `elevation.card` (`#00000014`, offsets 0 and 2, blur 10, spread 0) | shadow; of a list of layers, the first |
+| `elevation.popup` (`#00000024`, offsets 0 and 8, blur 24, spread 0): a menu's, a dropdown's and a date picker's shadow | shadow, as `elevation.card` |
 
 `themeValues(resolved)` gives every path of the set the theme's value when the theme has it with the set's type, and
 its default otherwise; a token outside the set is ignored. A dimension is read in px, and a `rem` is 16 px
@@ -181,7 +200,8 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 
 | `Theme` | Token |
 |---|---|
-| `text`, `muted`, `surface`, `border`, `neutral`, `selection`, `accent`, `focus` | `color.<same name>` |
+| `text`, `muted`, `surface`, `border`, `neutral`, `selection`, `accent`, `focus`, `hover`, `track`, `controlSurface`, `controlBorder`, `divider` | `color.<same name>` |
+| `neutralBg`, `neutralBorder`, `neutralDot` | `color.neutral.bg`, `color.neutral.border`, `color.neutral.dot` |
 | `error`, `success`, `info`, `warn` | `color.err`, `color.ok`, `color.info`, `color.warn` |
 | `successBg`, `successBorder`, `successDot` | `color.ok.bg`, `color.ok.border`, `color.ok.dot` |
 | `warnBg`, `warnBorder`, `warnDot` | `color.warn.bg`, `color.warn.border`, `color.warn.dot` |
@@ -194,6 +214,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `background` | `color.background` |
 | `radiusControl`, `radiusCard`, `controlHeight`, `touchHeight`, `bodySize`, `headingSize` | `radius.control`, `radius.card`, `control.height`, `control.touchHeight`, `font.size.body`, `font.size.heading` |
 | `cardShadowColor`, `cardShadowOffsetX`, `cardShadowOffsetY`, `cardShadowBlur`, `cardShadowSpread` | `elevation.card` |
+| `popupShadowColor`, `popupShadowOffsetX`, `popupShadowOffsetY`, `popupShadowBlur`, `popupShadowSpread` | `elevation.popup` |
 | `fontFamilies` | `font.family` |
 | `monoFontFamilies` | `font.mono` |
 
@@ -233,9 +254,9 @@ the size never depends on the metrics it feeds.
 Every `MorphUi` component binds to `Theme`, and a host component that imports `MorphUi` reads the same instance in
 the same engine, so a theme reaches both, and applying another theme later updates what is mounted. It returns the
 properties it could not set. Every colour row is also a role of each surface's `MorphScheme`, so a surface's own
-tokens set it there. A progress bar reads two of them: its fill is `color.accent` on a `color.neutral` track. `MorphWidget`'s `toneBgOf`, `toneBorderOf` and `toneDotOf` answer a tone's fill, outline and
-marker in a widget's scheme (neutral: the muted colour, faint for the fill); a badge and a banner fill and outline
-with them.
+tokens set it there. A progress bar reads two of them: its fill is `color.accent` on a `color.track` track. `MorphWidget`'s `toneBgOf`,
+`toneBorderOf` and `toneDotOf` answer a tone's fill, outline and marker in a widget's scheme (the neutral tone's are
+`color.neutral.bg`, `.border` and `.dot`); a badge and a banner fill and outline with them.
 
 ## Icons
 

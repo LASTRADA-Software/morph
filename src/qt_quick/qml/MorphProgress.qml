@@ -3,8 +3,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 
-// A progress bar with a label; a negative value is indeterminate. The fill is the scheme's accent on its neutral
-// track, drawn here rather than by the style, which paints its own colours.
+// A progress bar with a label; a negative value is indeterminate. The fill is the scheme's accent on its track,
+// drawn here rather than by the style, which paints its own colours.
 MorphWidget {
     id: root
 
@@ -28,7 +28,7 @@ MorphWidget {
                 implicitWidth: 20 * Theme.unitWidth
                 implicitHeight: Theme.spaceOf(1)
                 radius: height / 2
-                color: root.scheme.neutral
+                color: root.scheme.track
             }
 
             contentItem: Item {

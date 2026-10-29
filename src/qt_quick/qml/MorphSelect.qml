@@ -195,7 +195,7 @@ MorphField {
         implicitWidth: segmentRow.implicitWidth + 4
         implicitHeight: Theme.touchTargets ? Theme.targetHeight : Theme.targetHeight - 8
         radius: Theme.radiusControl
-        color: root.scheme.neutral
+        color: root.scheme.track
         border.width: root.shownTone !== 0 || activeFocus ? (activeFocus ? 2 : 1) : 0
         border.color: root.shownTone !== 0 ? root.toneOf(root.shownTone) : root.scheme.focus
         Accessible.role: root.accessibleRole

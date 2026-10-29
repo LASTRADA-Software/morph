@@ -39,7 +39,11 @@ constexpr char const* kThemeBase = R"({
     "text": { "$value": "#1C1E21" }, "muted": { "$value": "#4D5461" },
     "border": { "$value": "#DDE1E6" }, "surface": { "$value": "#FFFFFF" },
     "background": { "$value": "#F6F7F9" }, "selection": { "$value": "#DCEFE3" },
-    "neutral": { "$value": "#363C46" },
+    "neutral": { "$root": { "$value": "#363C46" }, "bg": { "$value": "#EEF0F3" }, "border": { "$value": "#C3C9D2" },
+                 "dot": { "$value": "#7A828F" } },
+    "hover": { "$value": "#F0F3F7" }, "track": { "$value": "#E7EAEE" },
+    "controlSurface": { "$value": "#FFFFFF" }, "controlBorder": { "$value": "#C3C9D2" },
+    "divider": { "$value": "#EDF0F3" },
     "ok": { "$root": { "$value": "#17602F" }, "bg": { "$value": "#E2F4E8" }, "border": { "$value": "#BCDFC9" },
             "dot": { "$value": "#17784A" } },
     "warn": { "$root": { "$value": "#7A4A00" }, "bg": { "$value": "#FFF1D6" }, "border": { "$value": "#F1D49A" },
@@ -50,7 +54,10 @@ constexpr char const* kThemeBase = R"({
               "dot": { "$value": "#1F3A8A" } },
     "table": { "header": { "$value": "#FAFBFC" } } },
   "radius": { "$type": "dimension",
-    "control": { "$value": { "value": 6, "unit": "px" } }, "card": { "$value": { "value": 6, "unit": "px" } } }
+    "control": { "$value": { "value": 6, "unit": "px" } }, "card": { "$value": { "value": 6, "unit": "px" } } },
+  "elevation": { "popup": { "$type": "shadow", "$value": { "color": "#14181F24",
+    "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 8, "unit": "px" },
+    "blur": { "value": 24, "unit": "px" }, "spread": { "value": 0, "unit": "px" } } } }
 })";
 
 // A bar that acts on selected rows: the accent's pale tint.
@@ -66,28 +73,33 @@ constexpr char const* kOutOfSpecSurface = R"({
 // A plate's template wells: standards blue, controls amber, the blank grey, so they read apart from the samples.
 constexpr char const* kStandardSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#E6ECFF" }, "border": { "$value": "#5B7BE0" },
-             "text": { "$value": "#1F3FA8" } }
+             "text": { "$value": "#1F3FA8" },
+             "controlSurface": { "$value": "#E6ECFF" }, "controlBorder": { "$value": "#5B7BE0" } }
 })";
 
 constexpr char const* kControlSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#FFF1D6" }, "border": { "$value": "#D19100" },
-             "text": { "$value": "#6B4100" } }
+             "text": { "$value": "#6B4100" },
+             "controlSurface": { "$value": "#FFF1D6" }, "controlBorder": { "$value": "#D19100" } }
 })";
 
 // A well that holds a sample, outlined solid, and an empty one, muted: no surface draws a dashed outline.
 constexpr char const* kSampleSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#FFFFFF" }, "border": { "$value": "#4D5461" },
-             "text": { "$value": "#1C1E21" } }
+             "text": { "$value": "#1C1E21" },
+             "controlSurface": { "$value": "#FFFFFF" }, "controlBorder": { "$value": "#4D5461" } }
 })";
 
 constexpr char const* kEmptySurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#F6F7F9" }, "border": { "$value": "#DDE1E6" },
-             "text": { "$value": "#7A828F" } }
+             "text": { "$value": "#7A828F" },
+             "controlSurface": { "$value": "#F6F7F9" }, "controlBorder": { "$value": "#DDE1E6" } }
 })";
 
 constexpr char const* kBlankSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#EEF0F3" }, "border": { "$value": "#7A828F" },
-             "text": { "$value": "#363C46" } }
+             "text": { "$value": "#363C46" },
+             "controlSurface": { "$value": "#EEF0F3" }, "controlBorder": { "$value": "#7A828F" } }
 })";
 
 // A pane that fills its side of a splitter: white, and square as every theme surface is.

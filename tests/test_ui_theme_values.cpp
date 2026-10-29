@@ -3,6 +3,7 @@
 // The theme's value readers: icon names, DTCG dimensions, shadows and font families, read from the JSON a theme
 // holds, and the shapes each refuses.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <morph/ui/theme.hpp>
 #include <morph/ui/value.hpp>
@@ -87,4 +88,63 @@ TEST_CASE("ui theme values: a font family is one name or a list of them", "[ui][
     CHECK(ui::detail::familiesOf(json(R"("Inter")")) == std::vector<std::string>{"Inter"});
     CHECK(ui::detail::familiesOf(json(R"(["Inter", 3, "Arial"])")) == std::vector<std::string>{"Inter", "Arial"});
     CHECK(ui::detail::familiesOf(json("3")).empty());
+}
+
+namespace {
+
+ui::ThemeValues valuesOf(std::string_view text) {
+    auto tokens = ui::parseTokens(text);
+    REQUIRE(tokens.has_value());
+    auto resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved.has_value());
+    return ui::themeValues(*resolved);
+}
+
+}  // namespace
+
+TEST_CASE("ui theme values: the neutral tone has its parts, and the hover fill and the track are their own tokens",
+          "[ui][theme]") {
+    ui::ThemeValues const defaults = ui::themeValues();
+    CHECK(defaults.colors.at("color.neutral").hex() == "#6e6e73");
+    CHECK(defaults.colors.at("color.neutral.bg").hex() == "#6e6e7326");
+    CHECK(defaults.colors.at("color.neutral.border").hex() == "#6e6e73");
+    CHECK(defaults.colors.at("color.neutral.dot").hex() == "#6e6e73");
+    CHECK(defaults.colors.at("color.hover").hex() == "#1d1d1f14");
+    CHECK(defaults.colors.at("color.track").hex() == "#e5e5ea");
+    CHECK(defaults.colors.at("color.controlSurface").hex() == "#ffffff");
+    CHECK(defaults.colors.at("color.controlBorder").hex() == "#c7c7cc");
+    CHECK(defaults.colors.at("color.divider").hex() == "#dcdce0");
+    ui::ThemeShadow const& popup = defaults.shadows.at("elevation.popup");
+    CHECK(popup.color.hex() == "#00000024");
+    CHECK(popup.offsetX == 0.0);
+    CHECK(popup.offsetY == 8.0);
+    CHECK(popup.blur == 24.0);
+    CHECK(popup.spread == 0.0);
+}
+
+// Mutation: drop the fill's alpha before comparing (the translucent default reads as opaque near-black).
+TEST_CASE("ui theme values: text that cannot be read on a fill is reported", "[ui][theme]") {
+    CHECK(ui::themeContrastProblems(ui::themeValues()).empty());
+
+    // The gallery's neutral text colour used as the hover fill: dark text on a dark fill.
+    auto const dark = ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color",
+        "text": {"$value": "#1C1E21"}, "hover": {"$value": "#363C46"}}})"));
+    REQUIRE(dark.size() >= 1);
+    CHECK(dark.front().starts_with("color.hover: color.text is 1.5"));
+    CHECK(dark.front().ends_with(":1 on it, below 4.5:1"));
+
+    // A control fill the text cannot be read on.
+    auto const pale = ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color",
+        "text": {"$value": "#c9ccd6"}, "controlSurface": {"$value": "#ffffff"}}})"));
+    CHECK(std::ranges::any_of(
+        pale, [](std::string const& line) { return line.starts_with("color.controlSurface: color.text is 1.6"); }));
+
+    // Muted holds 3:1, not 4.5:1: the default muted on the default track is 4.04:1 and passes.
+    CHECK(ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color", "track": {"$value": "#e5e5ea"}}})"))
+              .empty());
+    auto const faint = ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color",
+        "muted": {"$value": "#9a9aa0"}, "track": {"$value": "#e5e5ea"}}})"));
+    CHECK(std::ranges::any_of(faint, [](std::string const& line) {
+        return line.starts_with("color.track: color.muted is ") && line.ends_with(":1 on it, below 3:1");
+    }));
 }

@@ -88,11 +88,11 @@ Item {
         case 4:
             return root.scheme.error
         default:
-            return root.scheme.muted
+            return root.scheme.neutral
         }
     }
 
-    // A tone's fill in this widget's scheme: `color.<tone>.bg`; neutral is the muted colour, faint.
+    // A tone's fill in this widget's scheme: `color.<tone>.bg`.
     function toneBgOf(index: int): color {
         switch (index) {
         case 1:
@@ -104,11 +104,11 @@ Item {
         case 4:
             return root.scheme.errorBg
         default:
-            return Qt.alpha(root.scheme.muted, 0.15)
+            return root.scheme.neutralBg
         }
     }
 
-    // A tone's outline in this widget's scheme: `color.<tone>.border`; neutral is the muted colour.
+    // A tone's outline in this widget's scheme: `color.<tone>.border`.
     function toneBorderOf(index: int): color {
         switch (index) {
         case 1:
@@ -120,11 +120,11 @@ Item {
         case 4:
             return root.scheme.errorBorder
         default:
-            return root.scheme.muted
+            return root.scheme.neutralBorder
         }
     }
 
-    // A tone's marker colour in this widget's scheme: `color.<tone>.dot`; neutral is the muted colour.
+    // A tone's marker colour in this widget's scheme: `color.<tone>.dot`.
     function toneDotOf(index: int): color {
         switch (index) {
         case 1:
@@ -136,7 +136,7 @@ Item {
         case 4:
             return root.scheme.errorDot
         default:
-            return root.scheme.muted
+            return root.scheme.neutralDot
         }
     }
 

@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <format>
 #include <functional>
 #include <initializer_list>
 #include <map>
@@ -1035,14 +1036,28 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 46> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 56> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
     {.path = "color.accent", .kind = ThemeTokenKind::Color, .color = "#1565c0", .number = 0.0},
     {.path = "color.focus", .kind = ThemeTokenKind::Color, .color = "#1565c0", .number = 0.0},
     {.path = "color.border", .kind = ThemeTokenKind::Color, .color = "#c7c7cc", .number = 0.0},
-    {.path = "color.neutral", .kind = ThemeTokenKind::Color, .color = "#e5e5ea", .number = 0.0},
+    // The neutral tone: its text colour and its fill, outline and marker, as the other four tones have.
+    {.path = "color.neutral", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
+    {.path = "color.neutral.bg", .kind = ThemeTokenKind::Color, .color = "#6e6e7326", .number = 0.0},
+    {.path = "color.neutral.border", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
+    {.path = "color.neutral.dot", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
+    // The fill under a hovered or pressed item: translucent, so it darkens any light surface by one step and keeps
+    // the text on it readable.
+    {.path = "color.hover", .kind = ThemeTokenKind::Color, .color = "#1d1d1f14", .number = 0.0},
+    // The unfilled part of a progress bar, and the segmented select's track.
+    {.path = "color.track", .kind = ThemeTokenKind::Color, .color = "#e5e5ea", .number = 0.0},
+    // A text input's, a select's, a date input's, a check box's and a normal button's fill and outline, apart from
+    // the card's `color.surface` and `color.border`; and the rule between the rows of a table or a divided list.
+    {.path = "color.controlSurface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
+    {.path = "color.controlBorder", .kind = ThemeTokenKind::Color, .color = "#c7c7cc", .number = 0.0},
+    {.path = "color.divider", .kind = ThemeTokenKind::Color, .color = "#dcdce0", .number = 0.0},
     {.path = "color.selection", .kind = ThemeTokenKind::Color, .color = "#cfe3ff", .number = 0.0},
     {.path = "color.ok", .kind = ThemeTokenKind::Color, .color = "#2e7d32", .number = 0.0},
     {.path = "color.ok.bg", .kind = ThemeTokenKind::Color, .color = "#e8f5e9", .number = 0.0},
@@ -1085,6 +1100,12 @@ inline constexpr std::array<ThemeTokenSpec, 46> kThemeTokens = {{
      .color = "",
      .number = 0.0,
      .shadow = {.color = "#00000014", .offsetX = 0.0, .offsetY = 2.0, .blur = 10.0, .spread = 0.0}},
+    // A popup's shadow: a menu, a dropdown, a date picker.
+    {.path = "elevation.popup",
+     .kind = ThemeTokenKind::Shadow,
+     .color = "",
+     .number = 0.0,
+     .shadow = {.color = "#00000024", .offsetX = 0.0, .offsetY = 8.0, .blur = 24.0, .spread = 0.0}},
     // Transparent: an unset theme fills a table's header with nothing, matching today's appearance exactly.
     {.path = "color.table.header", .kind = ThemeTokenKind::Color, .color = "#00000000", .number = 0.0},
     // A chart's series colours, in drawing order: Okabe and Ito's hues, darkened until each holds 3:1 against both
@@ -1367,14 +1388,110 @@ struct UnreadThemeToken {
     return unread;
 }
 
-/// @brief What is wrong with a theme that does not refuse it: its unread tokens, one sentence each.
+namespace detail {
+
+/// @brief @p top drawn over the opaque colour @p under.
+/// @param top   The colour, which may be translucent.
+/// @param under The colour beneath it.
+/// @return The opaque colour that results.
+[[nodiscard]] inline Rgba over(Rgba top, Rgba under) {
+    auto const mix = [&top](std::uint8_t above, std::uint8_t below) {
+        return static_cast<std::uint8_t>(std::lround((above * top.a + below * (255.0 - top.a)) / 255.0));
+    };
+    return Rgba{.r = mix(top.r, under.r), .g = mix(top.g, under.g), .b = mix(top.b, under.b), .a = 255};
+}
+
+/// @brief The WCAG 2 relative luminance of an opaque colour.
+/// @param color The colour.
+/// @return It, from 0 to 1.
+[[nodiscard]] inline double luminance(Rgba color) {
+    auto const linear = [](std::uint8_t channel) {
+        double const value = channel / 255.0;
+        return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+    };
+    return (0.2126 * linear(color.r)) + (0.7152 * linear(color.g)) + (0.0722 * linear(color.b));
+}
+
+/// @brief The WCAG 2 contrast ratio of two opaque colours.
+/// @param first  One colour.
+/// @param second The other.
+/// @return The ratio, 1 to 21.
+[[nodiscard]] inline double contrastRatio(Rgba first, Rgba second) {
+    double const high = std::max(luminance(first), luminance(second));
+    double const low = std::min(luminance(first), luminance(second));
+    return (high + 0.05) / (low + 0.05);
+}
+
+}  // namespace detail
+
+/// @brief The fills text lies on, and the text colours that must stay readable on them.
+///
+/// `color.text` must hold 4.5:1 and `color.muted` 3:1 on `color.hover`, `color.selection`, `color.track` and
+/// `color.controlSurface`. Muted gets 3:1 because the framework's own defaults hold that and not 4.5:1; the check
+/// catches a fill that makes text disappear, not one that merely restyles it. A translucent fill is composited over
+/// `color.surface` first.
+/// @param values The theme's values.
+/// @return One sentence per text colour and fill that fall short, such as `color.hover: color.text is 1.50:1 on it,
+///         below 4.5:1`; empty when every pair holds.
+[[nodiscard]] inline std::vector<std::string> themeContrastProblems(ThemeValues const& values) {
+    struct Text {
+        std::string_view path;
+        double minimum;
+        std::string_view label;
+    };
+    static constexpr std::array<Text, 2> kTexts = {{{"color.text", 4.5, "4.5"}, {"color.muted", 3.0, "3"}}};
+    static constexpr std::array<std::string_view, 4> kFills = {"color.hover", "color.selection", "color.track",
+                                                               "color.controlSurface"};
+    std::vector<std::string> problems;
+    auto const colorAt = [&values](std::string_view path) -> std::optional<Rgba> {
+        auto const found = values.colors.find(path);
+        return found == values.colors.end() ? std::nullopt : std::optional<Rgba>{found->second};
+    };
+    auto const surface = colorAt("color.surface").value_or(Rgba{});
+    for (std::string_view const fillPath : kFills) {
+        auto const fill = colorAt(fillPath);
+        if (!fill) {
+            continue;
+        }
+        Rgba const under = detail::over(*fill, detail::over(surface, Rgba{}));
+        for (Text const& text : kTexts) {
+            auto const color = colorAt(text.path);
+            if (!color) {
+                continue;
+            }
+            double const ratio = detail::contrastRatio(detail::over(*color, under), under);
+            if (ratio < text.minimum) {
+                problems.push_back(
+                    std::format("{}: {} is {:.2f}:1 on it, below {}:1", fillPath, text.path, ratio, text.label));
+            }
+        }
+    }
+    return problems;
+}
+
+/// @brief What is wrong with a theme that does not refuse it: its unread tokens, and the text colours that cannot be
+///        read on a fill (`themeContrastProblems`), for the base and for each surface.
 /// @param index The theme index.
 /// @param files The bundle's token files.
-/// @return The sentences, each starting with the token file it concerns; empty for a theme that is all read.
+/// @return The sentences, each starting with the token file or the `base` or `surface <name>` it concerns; empty for
+///         a theme that is all read and legible.
 [[nodiscard]] inline std::vector<std::string> themeProblems(ThemeIndex const& index, TokenFileLookup const& files) {
     std::vector<std::string> problems;
     for (UnreadThemeToken const& token : unreadThemeTokens(index, files)) {
         problems.push_back(token.message());
+    }
+    auto const contrast = [&problems](std::string_view layer, std::expected<TokenSet, std::string> const& resolved) {
+        if (!resolved) {
+            return;
+        }
+        for (std::string const& problem : themeContrastProblems(themeValues(*resolved))) {
+            problems.push_back(std::string{layer} + ": " + problem);
+        }
+    };
+    contrast("base", resolveTheme(index, files, {}, {}, {}));
+    for (auto const& [name, file] : index.surfaces) {
+        static_cast<void>(file);
+        contrast("surface " + name, resolveTheme(index, files, {}, {}, name));
     }
     return problems;
 }

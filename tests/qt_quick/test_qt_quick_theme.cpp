@@ -10,6 +10,8 @@
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QFontMetricsF>
+#include <QMetaObject>
+#include <QMetaProperty>
 #include <QObject>
 #include <QQuickItem>
 #include <QTemporaryDir>
@@ -18,6 +20,7 @@
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -25,14 +28,17 @@
 #include <morph/qt_quick/components.hpp>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/shell_frame.hpp>
 #include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
+#include "qt_quick/kinds.hpp"
 #include "qt_quick_harness.hpp"
 
 namespace ui = morph::ui;
@@ -315,14 +321,14 @@ TEST_CASE("qt_quick theme: a bundle's theme index applies its base and its surfa
         {"theme/index.json",
          R"({"vocab": "ui-theme/1", "base": "theme/base.json", "surfaces": {"sidebar": "theme/sidebar.json"}})"},
         {"theme/base.json", R"({"color": {"$type": "color", "accent": {"$value": "#aa0055"}}})"},
-        {"theme/sidebar.json", R"({"color": {"$type": "color", "surface": {"$value": "#102030"}}})"}};
+        {"theme/sidebar.json", R"({"color": {"$type": "color", "surface": {"$value": "#e0e8f0"}}})"}};
     CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), themes).empty());
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
     CHECK(theme->property("accent").value<QColor>() == QColor{"#aa0055"});
     auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
     REQUIRE(sidebar != nullptr);
-    CHECK(sidebar->property("surface").value<QColor>() == QColor{"#102030"});
+    CHECK(sidebar->property("surface").value<QColor>() == QColor{"#e0e8f0"});
     // A role the surface does not set is the theme's: the base's accent.
     CHECK(sidebar->property("accent").value<QColor>() == QColor{"#aa0055"});
 
@@ -651,10 +657,10 @@ QQuickItem* namedItem(QQuickItem const& item, QString const& name) {
 
 // Mutation: drop the bar's `contentItem` (the style's own fill draws, and no item is named `fill`), or colour the
 // fill with anything but the scheme's accent.
-TEST_CASE("qt_quick theme: a progress bar fills with the accent on the neutral track", "[qt_quick]") {
+TEST_CASE("qt_quick theme: a progress bar fills with the accent on the track colour", "[qt_quick]") {
     Scene scene;
     auto const tokens = ui::parseTokens(R"({"color": {"$type": "color",
-        "accent": {"$value": "#17784a"}, "neutral": {"$value": "#d0d4d8"}}})");
+        "accent": {"$value": "#17784a"}, "track": {"$value": "#d0d4d8"}}})");
     REQUIRE(tokens);
     auto const resolved = ui::resolveTokens({&*tokens});
     REQUIRE(resolved);
@@ -687,7 +693,7 @@ TEST_CASE("qt_quick theme: a read-only input draws on the page's background, an 
           "[qt_quick]") {
     Scene scene;
     auto const tokens = ui::parseTokens(R"({"color": {"$type": "color",
-        "surface": {"$value": "#fefefe"}, "background": {"$value": "#e9ecef"}}})");
+        "controlSurface": {"$value": "#fefefe"}, "background": {"$value": "#e9ecef"}}})");
     REQUIRE(tokens);
     auto const resolved = ui::resolveTokens({&*tokens});
     REQUIRE(resolved);
@@ -806,6 +812,46 @@ QQuickItem const& buttonBackground(ui::ButtonWidget const& button) {
 
 }  // namespace
 
+// Mutation: keep `scheme.neutral` in MorphButtonBackground (the hovered item reads the neutral tone's text colour).
+TEST_CASE("qt_quick theme: the neutral tone, the hover fill and the track are separate tokens", "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color", "neutral": {"$value": "#363C46"}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("neutral").value<QColor>() == QColor{"#363C46"});
+    CHECK(theme->property("hover").value<QColor>() == QColor{0x1d, 0x1d, 0x1f, 0x14});
+    CHECK(theme->property("track").value<QColor>() == QColor{"#e5e5ea"});
+    CHECK(theme->property("neutralBg").value<QColor>() == QColor{0x6e, 0x6e, 0x73, 0x26});
+
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto item = scene.backend().createButton(column.get());
+    item->setLabel("Entry");
+    item->setStyle(ui::ButtonStyle::Item);
+    item->setOnClick([] {});
+    auto ghost = scene.backend().createButton(column.get());
+    ghost->setLabel("Link");
+    ghost->setEmphasis(ui::ButtonEmphasis::Ghost);
+    ghost->setOnClick([] {});
+    scene.settle();
+    for (ui::ButtonWidget const* const button : {item.get(), ghost.get()}) {
+        auto* const background = const_cast<QQuickItem*>(&buttonBackground(*button));
+        REQUIRE(background->setProperty("hovered", true));
+        CHECK(background->property("color").value<QColor>() == QColor{0x1d, 0x1d, 0x1f, 0x14});
+    }
+
+    auto badge = scene.backend().createBadge(column.get());
+    badge->setTone(ui::Tone::Neutral);
+    badge->setText("Draft");
+    scene.settle();
+    auto const* const fill = Scene::itemOf(*badge).findChild<QQuickItem*>(QStringLiteral("fill"));
+    REQUIRE(fill != nullptr);
+    CHECK(fill->property("color").value<QColor>() == QColor{0x6e, 0x6e, 0x73, 0x26});
+}
+
 // Mutations: drop the ring's `selected` condition (the unselected button's ring shows); leave a selected push
 // button's fill alone (no tint); make the control `checkable` (a click flips `Accessible.checked`).
 TEST_CASE("qt_quick theme: a selected push button keeps its size, rings in the accent, tints and reads checked",
@@ -858,7 +904,7 @@ TEST_CASE("qt_quick theme: a selected push button keeps its size, rings in the a
 TEST_CASE("qt_quick theme: a toned or refused input is outlined in the tone, with a ring, focused or not",
           "[qt_quick]") {
     Scene scene;
-    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color", "border": {"$value": "#999999"},
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color", "controlBorder": {"$value": "#999999"},
         "err": {"bg": {"$value": "#ffe0e0"}}}})");
     REQUIRE(tokens);
     auto const resolved = ui::resolveTokens({&*tokens});
@@ -918,4 +964,194 @@ TEST_CASE("qt_quick theme: a prominent input keeps the touch height and an accen
     QObject const* const border = background->property("border").value<QObject*>();
     CHECK(border->property("width").toInt() == 2);
     CHECK(border->property("color").value<QColor>() == QColor{"#aa0055"});
+}
+
+namespace {
+
+/// The `background` item of a field widget's control, found by the widget's test id.
+QQuickItem const& fieldBackground(char const* testId) {
+    morph::qt_quick::detail::ItemBase const* const widget =
+        morph::qt_quick::detail::findWidget(QString::fromLatin1(testId));
+    REQUIRE(widget != nullptr);
+    auto const* const control = widget->item()->property("control").value<QQuickItem*>();
+    REQUIRE(control != nullptr);
+    auto const* const background = control->property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    return *background;
+}
+
+QObject* themeOf(Scene& scene) {
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    return theme;
+}
+
+/// The border colour of @p item's `border` group.
+QColor borderColorOf(QQuickItem const& item) {
+    return item.property("border").value<QObject*>()->property("color").value<QColor>();
+}
+
+}  // namespace
+
+// Mutation: keep `scheme.border` on the check box's unchecked outline, and on the input background's resting one.
+TEST_CASE("qt_quick theme: a control is outlined in controlBorder, not in the divider-weight border", "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color",
+        "border": {"$value": "#DDE1E6"}, "controlBorder": {"$value": "#C3C9D2"}, "divider": {"$value": "#EDF0F3"}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    QObject* const theme = themeOf(scene);
+    CHECK(theme->property("controlBorder").value<QColor>() == QColor{"#C3C9D2"});
+    CHECK(theme->property("divider").value<QColor>() == QColor{"#EDF0F3"});
+
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto box = scene.backend().createCheckbox(column.get());
+    box->setLabel("Signed");
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    input->setTestId("input");
+    auto button = scene.backend().createButton(column.get());
+    button->setLabel("Book");
+    auto table = scene.backend().createTable(column.get());
+    table->setColumns({{.label = "Name"}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::string{"a"}});
+    auto cell = scene.backend().createText(row.get());
+    cell->setText("cell");
+    scene.settle();
+
+    CHECK(borderColorOf(fieldBackground("input")) == QColor{"#C3C9D2"});
+    QQuickItem const& boxItem = Scene::itemOf(*box);
+    auto const* const indicator = boxItem.findChild<QQuickItem*>(QStringLiteral("boxIndicator"));
+    REQUIRE(indicator != nullptr);
+    CHECK(borderColorOf(*indicator) == QColor{"#C3C9D2"});
+    auto const* const control = Scene::itemOf(*button).property("focusTarget").value<QQuickItem*>();
+    REQUIRE(control != nullptr);
+    CHECK(borderColorOf(*control->property("background").value<QQuickItem*>()) == QColor{"#C3C9D2"});
+    auto const* const rowBackground = Scene::itemOf(*row).property("backgroundItem").value<QQuickItem*>();
+    REQUIRE(rowBackground != nullptr);
+    auto const* const rule = rowBackground->findChild<QQuickItem*>(QStringLiteral("rule"));
+    REQUIRE(rule != nullptr);
+    CHECK(rule->property("color").value<QColor>() == QColor{"#EDF0F3"});
+}
+
+// Mutation: keep `fill: scheme.surface` in MorphButtonBackground and `scheme.surface` in MorphInputBackground.
+TEST_CASE("qt_quick theme: a control on a tinted surface fills with controlSurface, not with the surface's tint",
+          "[qt_quick]") {
+    Scene scene;
+    auto const base = ui::parseTokens(R"({"color": {"$type": "color", "controlSurface": {"$value": "#FFFFFF"}}})");
+    auto const bar = ui::parseTokens(R"({"color": {"$type": "color", "surface": {"$value": "#EAF5EE"}}})");
+    REQUIRE(base);
+    REQUIRE(bar);
+    auto const resolved = ui::resolveTokens({&*base});
+    auto const barResolved = ui::resolveTokens({&*base, &*bar});
+    REQUIRE(resolved);
+    REQUIRE(barResolved);
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"selected", ui::themeValues(*barResolved)}};
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved), surfaces).empty());
+
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    row->setSurface("selected");
+    auto button = scene.backend().createButton(row.get());
+    button->setLabel("Export");
+    auto input = scene.backend().createTextInput(row.get(), ui::TextInputMode::SingleLine);
+    input->setTestId("tinted_input");
+    scene.settle();
+    CHECK(buttonBackground(*button).property("color").value<QColor>() == QColor{"#FFFFFF"});
+    CHECK(fieldBackground("tinted_input").property("color").value<QColor>() == QColor{"#FFFFFF"});
+}
+
+namespace {
+
+ui::Rgba rgbaOf(QColor const& color) {
+    return ui::Rgba{.r = static_cast<std::uint8_t>(color.red()),
+                    .g = static_cast<std::uint8_t>(color.green()),
+                    .b = static_cast<std::uint8_t>(color.blue()),
+                    .a = 255};
+}
+
+}  // namespace
+
+// Control: remove the sidebar's `controlSurface` literal; the field then reads the theme's `#ffffff`, 1.6:1 to its
+// text.
+TEST_CASE("qt_quick theme: the dark sidebar's search field and pin buttons use the sidebar's own roles",
+          "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrameOptions options;
+    options.applicationName = "App";
+    options.navigator.entries = {morph::ui::CatalogEntry{.id = "lims.review", .title = "Review", .group = "Lab"}};
+    options.navigator.pins = {"lims.review"};
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
+    frame.showSignedIn(true);
+    scene.settle();
+    QObject* const theme = themeOf(scene);
+    auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
+    REQUIRE(sidebar != nullptr);
+
+    QColor const field = fieldBackground("navigator_search").property("color").value<QColor>();
+    QColor const text = sidebar->property("text").value<QColor>();
+    CHECK(ui::detail::contrastRatio(rgbaOf(text), rgbaOf(field)) >= 4.5);
+    CHECK(field == sidebar->property("controlSurface").value<QColor>());
+
+    auto const backgroundOf = [](char const* testId) {
+        morph::qt_quick::detail::ItemBase const* const widget =
+            morph::qt_quick::detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        auto* const control = widget->item()->property("focusTarget").value<QQuickItem*>();
+        REQUIRE(control != nullptr);
+        auto* const background = control->property("background").value<QQuickItem*>();
+        REQUIRE(background != nullptr);
+        return background;
+    };
+    // A hovered navigator entry (a list item) fills with the sidebar's hover colour, which shows on the dark column.
+    QQuickItem* const entry = backgroundOf("nav_lims.review");
+    REQUIRE(entry->setProperty("hovered", true));
+    QColor const hover = entry->property("color").value<QColor>();
+    CHECK(hover == sidebar->property("hover").value<QColor>());
+    CHECK(hover.alpha() > 0);
+
+    // A pin is a push button: it rests on the sidebar's control fill, outlined in the sidebar's control border.
+    QQuickItem* const pin = backgroundOf("pin_lims.review");
+    CHECK(pin->property("color").value<QColor>() == sidebar->property("controlSurface").value<QColor>());
+    CHECK(borderColorOf(*pin) == sidebar->property("controlBorder").value<QColor>());
+}
+
+// Mutation: leave one role out of a built-in scheme in Theme.qml (it keeps MorphScheme's default, not the theme's).
+TEST_CASE("qt_quick theme: every built-in scheme sets every colour role MorphScheme declares", "[qt_quick]") {
+    Scene scene;
+    ui::ThemeValues values = ui::themeValues();
+    std::uint8_t step = 0;
+    for (auto& [path, color] : values.colors) {
+        step = static_cast<std::uint8_t>(step + 7);
+        color = ui::Rgba{.r = static_cast<std::uint8_t>(31 + step),
+                         .g = static_cast<std::uint8_t>(250 - step),
+                         .b = static_cast<std::uint8_t>(step * 3U),
+                         .a = 255};
+    }
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    QObject* const theme = themeOf(scene);
+    QVariant made;
+    QMetaObject::invokeMethod(theme, "schemeObject", Qt::DirectConnection, qReturnArg(made),
+                              QVariant{QStringLiteral("probe")});
+    auto* const probe = made.value<QObject*>();
+    REQUIRE(probe != nullptr);
+    int roles = 0;
+    for (char const* const name : {"themeScheme", "pageScheme", "cardScheme", "sidebarScheme", "toolbarScheme"}) {
+        auto* const scheme = theme->property(name).value<QObject*>();
+        REQUIRE(scheme != nullptr);
+        QMetaObject const* const meta = probe->metaObject();
+        for (int index = 0; index < meta->propertyCount(); ++index) {
+            QMetaProperty const property = meta->property(index);
+            if (property.metaType() != QMetaType::fromType<QColor>()) {
+                continue;
+            }
+            ++roles;
+            INFO(name << "." << property.name());
+            CHECK(scheme->property(property.name()).value<QColor>() !=
+                  probe->property(property.name()).value<QColor>());
+        }
+    }
+    // Five schemes, each with every role: more than the roles of any one.
+    CHECK(roles >= 5 * 35);
 }

@@ -67,7 +67,19 @@ QtObject {
     property color success: "#2e7d32"
     property color info: "#1565c0"
     property color warn: "#b26a00"
-    property color neutral: "#e5e5ea"
+    // The neutral tone's text, fill, outline and marker: `color.neutral` and its `.bg`, `.border` and `.dot`.
+    property color neutral: "#6e6e73"
+    property color neutralBg: "#266e6e73"
+    property color neutralBorder: "#6e6e73"
+    property color neutralDot: "#6e6e73"
+    // The fill under a hovered or pressed item, and the unfilled part of a progress bar: `color.hover`, `color.track`.
+    property color hover: "#141d1d1f"
+    property color track: "#e5e5ea"
+    // A control's fill and outline, and the rule between rows: `color.controlSurface`, `color.controlBorder`,
+    // `color.divider`.
+    property color controlSurface: "#ffffff"
+    property color controlBorder: "#c7c7cc"
+    property color divider: "#dcdce0"
     property color surface: "#ffffff"
     property color border: "#c7c7cc"
     property color selection: "#cfe3ff"
@@ -163,6 +175,13 @@ QtObject {
     property real cardShadowBlur: 10
     property real cardShadowSpread: 0
 
+    // A popup's shadow: `elevation.popup`.
+    property color popupShadowColor: "#24000000"
+    property real popupShadowOffsetX: 0
+    property real popupShadowOffsetY: 8
+    property real popupShadowBlur: 24
+    property real popupShadowSpread: 0
+
     // The spacing scale in px, one entry per spacing step 0 to 5: the `space.<step>` defaults.
     property list<real> space: [0, 4, 8, 12, 16, 24]
 
@@ -183,6 +202,14 @@ QtObject {
         selection: theme.selection
         border: theme.border
         neutral: theme.neutral
+        neutralBg: theme.neutralBg
+        neutralBorder: theme.neutralBorder
+        neutralDot: theme.neutralDot
+        hover: theme.hover
+        track: theme.track
+        controlSurface: theme.controlSurface
+        controlBorder: theme.controlBorder
+        divider: theme.divider
         error: theme.error
         success: theme.success
         info: theme.info
@@ -214,6 +241,14 @@ QtObject {
         selection: theme.selection
         border: theme.border
         neutral: theme.neutral
+        neutralBg: theme.neutralBg
+        neutralBorder: theme.neutralBorder
+        neutralDot: theme.neutralDot
+        hover: theme.hover
+        track: theme.track
+        controlSurface: theme.controlSurface
+        controlBorder: theme.controlBorder
+        divider: theme.divider
         error: theme.error
         success: theme.success
         info: theme.info
@@ -245,6 +280,14 @@ QtObject {
         selection: theme.selection
         border: theme.border
         neutral: theme.neutral
+        neutralBg: theme.neutralBg
+        neutralBorder: theme.neutralBorder
+        neutralDot: theme.neutralDot
+        hover: theme.hover
+        track: theme.track
+        controlSurface: theme.controlSurface
+        controlBorder: theme.controlBorder
+        divider: theme.divider
         error: theme.error
         success: theme.success
         info: theme.info
@@ -275,7 +318,15 @@ QtObject {
         focus: theme.focus
         selection: "#2f3646"
         border: "#2f3646"
-        neutral: theme.neutral
+        neutral: "#7d8396"
+        neutralBg: "#267d8396"
+        neutralBorder: "#7d8396"
+        neutralDot: "#7d8396"
+        hover: "#14ffffff"
+        track: "#2f3646"
+        controlSurface: "#2a3040"
+        controlBorder: "#3a4152"
+        divider: "#2f3646"
         error: theme.error
         success: theme.success
         info: theme.info
@@ -307,6 +358,14 @@ QtObject {
         selection: theme.selection
         border: "#e3e5ea"
         neutral: theme.neutral
+        neutralBg: theme.neutralBg
+        neutralBorder: theme.neutralBorder
+        neutralDot: theme.neutralDot
+        hover: theme.hover
+        track: theme.track
+        controlSurface: theme.controlSurface
+        controlBorder: theme.controlBorder
+        divider: theme.divider
         error: theme.error
         success: theme.success
         info: theme.info
@@ -390,7 +449,7 @@ QtObject {
         case 4:
             return error
         default:
-            return muted
+            return neutral
         }
     }
 }

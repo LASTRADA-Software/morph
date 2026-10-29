@@ -36,17 +36,18 @@ MorphField {
             verticalAlignment: Text.AlignVCenter
         }
         indicator: Rectangle {
+            objectName: "boxIndicator"
             x: box.leftPadding
             y: (box.height - height) / 2
             implicitWidth: Theme.unitHeight
             implicitHeight: Theme.unitHeight
             radius: Theme.radiusControl / 2
-            color: box.checked ? root.scheme.accent : root.scheme.surface
+            color: box.checked ? root.scheme.accent : root.scheme.controlSurface
             border.width: box.visualFocus ? 2 : 1
             // A toned box keeps its tone's border while focused; focus shows as the border's width.
             border.color: root.shownTone !== 0 ? root.toneOf(root.shownTone)
                                                : box.visualFocus ? root.scheme.focus
-                                                                 : box.checked ? root.scheme.accent : root.scheme.border
+                                                                 : box.checked ? root.scheme.accent : root.scheme.controlBorder
 
             Text {
                 textFormat: Text.PlainText
