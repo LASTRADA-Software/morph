@@ -287,3 +287,11 @@ TEST_CASE("ui document rules: a state declared any keeps any beside its init", "
     CHECK(refusal(document(R"({"kind": "button", "label": "x", "onClick": [{"set": "s", "value": "two"}]})",
                            R"("state": {"s": {"type": "any", "init": 2}},)")) == "loads");
 }
+
+// Mutation: drop "display" or "small" from the loader's list of roles (the document is refused).
+TEST_CASE("ui document rules: a text's role may be display or small, and no other new name", "[ui][document]") {
+    CHECK(refusal(document(R"({"kind": "text", "text": "7", "role": "display"})")) == "loads");
+    CHECK(refusal(document(R"({"kind": "text", "text": "x", "role": "small"})")) == "loads");
+    CHECK(refusal(document(R"({"kind": "text", "text": "x", "role": "tiny"})")) ==
+          "/view/role: `tiny` is not one of the values of `role`");
+}

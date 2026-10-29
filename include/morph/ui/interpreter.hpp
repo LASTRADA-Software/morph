@@ -6396,7 +6396,7 @@ namespace detail {
 }
 
 /// @brief A text role by name.
-/// @param name `normal`, `muted`, `heading` (or `title`), `section`, `error`, `success`, `mono`.
+/// @param name `normal`, `muted`, `heading` (or `title`), `section`, `error`, `success`, `mono`, `display`, `small`.
 /// @return The role; `nullopt` for any other name.
 [[nodiscard]] inline std::optional<TextRole> roleNamed(std::string_view name) {
     if (name == "normal") {
@@ -6420,11 +6420,18 @@ namespace detail {
     if (name == "mono") {
         return TextRole::Mono;
     }
+    if (name == "display") {
+        return TextRole::Display;
+    }
+    if (name == "small") {
+        return TextRole::Small;
+    }
     return std::nullopt;
 }
 
 /// @brief What a role that names none is told: the names `roleNamed` reads.
-inline constexpr std::string_view kRoleNames = "a role is normal, muted, heading, section, error, success or mono";
+inline constexpr std::string_view kRoleNames =
+    "a role is normal, muted, heading, section, error, success, mono, display or small";
 
 /// @brief A text role by name, as `roleNamed` reads it.
 /// @param value  The name.

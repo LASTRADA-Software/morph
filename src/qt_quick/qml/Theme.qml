@@ -37,11 +37,19 @@ QtObject {
     readonly property list<string> families: fontFamilies.length > 0 ? fontFamilies : [platformMetrics.font.family]
     // Body text and controls: the theme's families at the body size, or the platform font untouched.
     readonly property font bodyFont: fontFamilies.length > 0 ? fontOf(bodyPixels, Font.Normal) : platformMetrics.font
-    // Emphasised text at the body size: a title, a header, the current step.
-    readonly property font strongFont: fontFamilies.length > 0 ? fontOf(bodyPixels, Font.Bold)
+    // Emphasised text at the body size: a title, a header, the current step. Every strong font draws at
+    // `strongWeight`.
+    readonly property font strongFont: fontFamilies.length > 0 ? fontOf(bodyPixels, strongWeight)
                                                                : boldOf(platformMetrics.font)
-    // A heading: the families at the heading size, bold.
-    readonly property font headingFont: fontOf(headingPixels, Font.Bold)
+    // A heading: the families at the heading size, strong.
+    readonly property font headingFont: fontOf(headingPixels, strongWeight)
+    // The small size, regular and strong: a table header (strong), a footnote, a timestamp, a tag.
+    readonly property font smallFont: fontOf(smallPixels, Font.Normal)
+    readonly property font smallStrongFont: fontOf(smallPixels, strongWeight)
+    // A field's caption above its control.
+    readonly property font captionFont: fontOf(captionPixels, Font.Normal)
+    // A figure that stands out, such as a KPI's number: the display size, strong.
+    readonly property font displayFont: fontOf(displayPixels, strongWeight)
     // The families `font.mono` names, in order of preference; empty draws in the platform's fixed-pitch font.
     property list<string> monoFontFamilies: []
     // The family of the platform's fixed-pitch font; the backend writes it, since QML cannot ask the font database.
@@ -55,7 +63,7 @@ QtObject {
     readonly property font monoFont: Qt.font({
         family: monoFamilies.length > 0 ? monoFamilies[0] : "monospace",
         families: monoFamilies.length > 0 ? monoFamilies : ["monospace"],
-        pixelSize: Math.round(bodyPixels)
+        pixelSize: Math.round(monoPixels)
     })
     readonly property real unitWidth: metrics.averageCharacterWidth
     readonly property real unitHeight: metrics.height
@@ -120,16 +128,27 @@ QtObject {
     readonly property real targetHeight: touchTargets ? Math.max(controlHeight, touchHeight) : controlHeight
     property real bodySize: 0
     property real headingSize: 0
+    // The other sizes, derived from the body size while 0: `font.size.small`, `.caption`, `.mono` and `.display`.
+    property real smallSize: 0
+    property real captionSize: 0
+    property real monoSize: 0
+    property real displaySize: 0
+    // The weight of every strong font: `font.weight.strong`.
+    property int strongWeight: Font.Bold
     readonly property real bodyPixels: bodySize > 0 ? bodySize : platformMetrics.font.pixelSize > 0
                                                                    ? platformMetrics.font.pixelSize
                                                                    : platformMetrics.height * 0.75
     readonly property real headingPixels: headingSize > 0 ? headingSize : bodyPixels * 1.3
+    readonly property real smallPixels: smallSize > 0 ? smallSize : Math.round(bodyPixels * 0.85)
+    readonly property real captionPixels: captionSize > 0 ? captionSize : Math.round(bodyPixels * 0.92)
+    readonly property real monoPixels: monoSize > 0 ? monoSize : bodyPixels
+    readonly property real displayPixels: displaySize > 0 ? displaySize : Math.round(bodyPixels * 1.7)
 
     // @p base in bold, at its own size: a pixel size, or else a point size, whichever it was given in.
     function boldOf(base: font): font {
         const spec = {
             family: base.family,
-            weight: Font.Bold
+            weight: strongWeight
         }
         if (base.pixelSize > 0)
             spec.pixelSize = base.pixelSize

@@ -413,6 +413,11 @@ namespace detail {
                : std::optional<std::string>{"not a font weight"};
 }
 
+/// @brief The numeric weight of a checked `fontWeight` value.
+/// @param value The value, checked by `checkFontWeight`: a number from 1 to 1000, or a DTCG weight name.
+/// @return The weight, or nothing when it is neither.
+[[nodiscard]] inline std::optional<double> weightOf(Json const& value);
+
 /// @brief Checks a `shadow`: an object of a `color` and the dimensions `offsetX`, `offsetY`, `blur` and `spread`, or a
 ///        non-empty list of them.
 /// @param value The value.
@@ -441,6 +446,24 @@ namespace detail {
         return std::nullopt;
     }
     return std::string{"a shadow is an object of a colour and the dimensions offsetX, offsetY, blur and spread"};
+}
+
+inline std::optional<double> weightOf(Json const& value) {
+    if (auto const number = numberOf(value)) {
+        return number;
+    }
+    auto const* const name = std::get_if<std::string>(&value.data);
+    if (name == nullptr) {
+        return std::nullopt;
+    }
+    // The weights DTCG gives its names, in the order of `kFontWeights`.
+    static constexpr std::array<double, 18> kValues = {100, 100, 200, 200, 300, 400, 400, 400, 500,
+                                                       600, 600, 700, 800, 800, 900, 900, 950, 950};
+    auto const found = std::ranges::find(kFontWeights, *name);
+    if (found == kFontWeights.end()) {
+        return std::nullopt;
+    }
+    return kValues.at(static_cast<std::size_t>(found - kFontWeights.begin()));
 }
 
 inline std::optional<std::string> checkTokenValue(std::string_view type, Json const& value) {
@@ -1001,6 +1024,7 @@ enum class ThemeTokenKind : std::uint8_t {
     Dimension,   ///< A `dimension` token, read in px (a `rem` is 16 px).
     Shadow,      ///< A `shadow` token: a colour and four px lengths; of a list of layers, the first.
     FontFamily,  ///< A `fontFamily` token: a family name, or a list of them in order of preference.
+    FontWeight,  ///< A `fontWeight` token, read as its numeric weight, 1 to 1000, in `ThemeValues::numbers`.
 };
 
 /// @brief A `shadow` token's default, in the form a `constexpr` table can hold.
@@ -1036,7 +1060,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 56> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 61> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1091,6 +1115,14 @@ inline constexpr std::array<ThemeTokenSpec, 56> kThemeTokens = {{
     {.path = "control.touchHeight", .kind = ThemeTokenKind::Dimension, .color = "", .number = 44.0},
     {.path = "font.size.body", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.size.heading", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    // The sizes below are derived from the body size while 0, as the two above are; none derives from another.
+    // A tag's and a table header's size, a field's caption, the `mono` role's and the `display` role's.
+    {.path = "font.size.small", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    {.path = "font.size.caption", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    {.path = "font.size.mono", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    {.path = "font.size.display", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    // The weight of every strong font: a section, a header, a heading, a strong text.
+    {.path = "font.weight.strong", .kind = ThemeTokenKind::FontWeight, .color = "", .number = 700.0},
     {.path = "font.family", .kind = ThemeTokenKind::FontFamily, .color = "", .number = 0.0},
     // The fixed-pitch family of the `mono` text role; none draws in the platform's fixed-pitch font. A sibling of
     // `font.family`: the set keeps one spelling per path.
@@ -1255,6 +1287,12 @@ namespace detail {
                                             .spread = spec.shadow.spread}));
         } else if (spec.kind == ThemeTokenKind::FontFamily) {
             values.families.insert_or_assign(std::string{spec.path}, detail::familyValue(spec, token));
+        } else if (spec.kind == ThemeTokenKind::FontWeight) {
+            std::optional<double> weight;
+            if (token != nullptr && token->type == "fontWeight") {
+                weight = detail::weightOf(token->value);
+            }
+            values.numbers.insert_or_assign(std::string{spec.path}, weight.value_or(spec.number));
         } else if (spec.kind == ThemeTokenKind::Dimension) {
             std::optional<double> pixels;
             if (token != nullptr && token->type == "dimension") {
@@ -1275,8 +1313,8 @@ namespace detail {
 namespace detail {
 
 /// @brief The `$type`s the set's kinds are read as.
-inline constexpr std::array<std::string_view, 5> kReadTokenTypes = {"color", "number", "dimension", "shadow",
-                                                                    "fontFamily"};
+inline constexpr std::array<std::string_view, 6> kReadTokenTypes = {"color",  "number",     "dimension",
+                                                                    "shadow", "fontFamily", "fontWeight"};
 
 /// @brief Calls @p reach with the path of every alias inside a value.
 /// @param value The value.

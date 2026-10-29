@@ -669,6 +669,23 @@ TEST_CASE("tui widgets: a section text is bold and muted, a step below a heading
     CHECK_FALSE(theme.textMuted.fg == theme.textBold.fg);
 }
 
+// Mutation: map Display to Normal in roleStyle (the figure is not bold).
+TEST_CASE("tui widgets: a display text is bold as a heading is, and a small text is normal", "[tui][widgets]") {
+    Harness harness{20, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const display = harness.make<TextImpl>(column.get());
+    display->setText("7");
+    display->setRole(ui::TextRole::Display);
+    auto const small = harness.make<TextImpl>(column.get());
+    small->setText("note");
+    small->setRole(ui::TextRole::Small);
+    static_cast<void>(harness.draw());
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.bold);
+    CHECK_FALSE(buffer.at(0, 1).style.bold);
+    CHECK(buffer.at(0, 1).style.fg == harness.screen().theme().textNormal.fg);
+}
+
 // Mutation: draw an item as a push button (its line shows `[ ... ]`).
 TEST_CASE("tui widgets: an item button paints its label unbracketed across its line, selected in the list's style",
           "[tui][widgets]") {

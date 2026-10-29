@@ -312,7 +312,7 @@ MorphWidget {
 
     FontMetrics {
         id: headerMetrics
-        font: Theme.strongFont
+        font: Theme.smallStrongFont
     }
 
     // The table's area, which scrolls sideways only while its columns are wider than the table: a table that fits
@@ -386,7 +386,7 @@ MorphWidget {
                         id: headerLabel
                         objectName: "header" + index
                         textFormat: Text.PlainText
-                        font: Theme.strongFont
+                        font: Theme.smallStrongFont
                         required property int index
                         required property var modelData
                         readonly property bool sorted: root.sortColumn === index

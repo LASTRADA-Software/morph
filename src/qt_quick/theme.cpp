@@ -113,13 +113,17 @@ constexpr std::array<std::pair<std::string_view, char const*>, 37> kSchemeProper
 }};
 
 /// The `Theme` property each dimension token of the set sets, besides the spacing scale.
-constexpr std::array<std::pair<std::string_view, char const*>, 6> kDimensionProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 10> kDimensionProperties = {{
     {"radius.control", "radiusControl"},
     {"radius.card", "radiusCard"},
     {"control.height", "controlHeight"},
     {"control.touchHeight", "touchHeight"},
     {"font.size.body", "bodySize"},
     {"font.size.heading", "headingSize"},
+    {"font.size.small", "smallSize"},
+    {"font.size.caption", "captionSize"},
+    {"font.size.mono", "monoSize"},
+    {"font.size.display", "displaySize"},
 }};
 
 // The colours, the stale opacity, the background and the dimensions; each property that would not take its value
@@ -138,6 +142,10 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     if (auto const stale = values.numbers.find("opacity.stale");
         stale != values.numbers.end() && !theme.setProperty("staleOpacity", stale->second)) {
         unset.emplace_back("staleOpacity");
+    }
+    if (auto const weight = values.numbers.find("font.weight.strong");
+        weight != values.numbers.end() && !theme.setProperty("strongWeight", static_cast<int>(weight->second))) {
+        unset.emplace_back("strongWeight");
     }
     if (auto const background = values.colors.find("color.background"); background != values.colors.end()) {
         ui::Rgba const& color = background->second;

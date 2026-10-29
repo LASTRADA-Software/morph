@@ -179,6 +179,8 @@ built in nor in the theme draws nothing and changes no colour.
 | `radius.control` (6), `radius.card` (10), `control.height` (32) | dimension, in px |
 | `control.touchHeight` (44, the common minimum touch target): a sibling of `control.height` | dimension, in px |
 | `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3) | dimension, in px |
+| `font.size.small` (0: the body size ×0.85, rounded): a table header's label, the `small` text role; `font.size.caption` (0: ×0.92, rounded): a field's caption above its control; `font.size.mono` (0: the body size): the `mono` role; `font.size.display` (0: ×1.7, rounded): the `display` role. Each derives from the body size, none from another new token, so what a theme leaves unset never depends on what else it sets | dimension, in px |
+| `font.weight.strong` (700): the weight of every strong font (`strongFont`, `headingFont`, the table header, a section, a strong run) | font weight: a number from 1 to 1000 or a DTCG weight name (`semi-bold` is 600), read into `ThemeValues::numbers` |
 | `font.family` (none: the platform font) | font family: a name, or a list of names in order of preference |
 | `font.mono` (none: the platform's fixed-pitch font), the family of the `mono` text role: a sibling of `font.family`, as the set keeps one spelling per path | font family, as `font.family` |
 | `elevation.card` (`#00000014`, offsets 0 and 2, blur 10, spread 0) | shadow; of a list of layers, the first |
@@ -213,6 +215,8 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `space` (six px lengths) | `space.0` … `space.5` |
 | `background` | `color.background` |
 | `radiusControl`, `radiusCard`, `controlHeight`, `touchHeight`, `bodySize`, `headingSize` | `radius.control`, `radius.card`, `control.height`, `control.touchHeight`, `font.size.body`, `font.size.heading` |
+| `smallSize`, `captionSize`, `monoSize`, `displaySize` | `font.size.small`, `font.size.caption`, `font.size.mono`, `font.size.display` |
+| `strongWeight` | `font.weight.strong` |
 | `cardShadowColor`, `cardShadowOffsetX`, `cardShadowOffsetY`, `cardShadowBlur`, `cardShadowSpread` | `elevation.card` |
 | `popupShadowColor`, `popupShadowOffsetX`, `popupShadowOffsetY`, `popupShadowBlur`, `popupShadowSpread` | `elevation.popup` |
 | `fontFamilies` | `font.family` |
@@ -232,19 +236,21 @@ a check box and a tab button take it as their least height while `touchTargets` 
 keeping their size. The width class stands in for touch input, and is not a density layer: it is a fact about the
 window, not a choice. The terminal is unchanged: a cell is the target.
 
-`Theme.bodyPixels` and `Theme.headingPixels` are the font sizes the components use: a size of 0 derives from the
-platform font (`Theme.platformMetrics`), the body its size and a heading 1.3 times the body. Every `MorphUi` text and
-control draws in `Theme.bodyFont` (`strongFont` where it is emphasised and for a `section` text, which is also
-muted, `headingFont` for a heading): the theme's
-families at the body size, or the platform font untouched while `fontFamilies` is empty. A family Qt cannot resolve
+`Theme.bodyPixels`, `headingPixels`, `smallPixels`, `captionPixels`, `monoPixels` and `displayPixels` are the font
+sizes the components use: a size of 0 derives from the platform font (`Theme.platformMetrics`), the body its size, a
+heading 1.3 times the body, and the others as the closed set lists. Every `MorphUi` text and control draws in
+`Theme.bodyFont` (`strongFont` where it is emphasised and for a `section` text, which is also muted, `headingFont`
+for a heading, `smallFont` and `smallStrongFont` for a table header's label and a `small` text, `captionFont` for a
+field's caption, `displayFont` for a `display` text): the theme's families at the font's size, or the platform font
+untouched while `fontFamilies` is empty. Every strong font draws at `Theme.strongWeight`. A family Qt cannot resolve
 falls back to Qt's own substitute, and `applyTheme` reports it (`font.family: none of <names> is installed`),
 comparing `QFontInfo`'s family against the list.
 
-A `mono` text draws in `Theme.monoFont`: `Theme.monoFamilies` at `bodyPixels`, regular weight. `monoFamilies` is the
+A `mono` text draws in `Theme.monoFont`: `Theme.monoFamilies` at `monoPixels`, regular weight. `monoFamilies` is the
 theme's `font.mono` (`monoFontFamilies`), or, while that is empty, the family of the platform's fixed-pitch font
 (`QFontDatabase::systemFont(QFontDatabase::FixedFont)`), which the backend writes as `Theme.platformMonoFamily` when
 it starts and on every `applyTheme`. A `font.mono` Qt cannot resolve is reported as `font.family`'s is
-(`font.mono: none of <names> is installed`). There is no `font.size.mono`: mono text is body sized.
+(`font.mono: none of <names> is installed`). The size is `font.size.mono`, the body size while it is unset.
 
 **Units follow the theme's font, opt-in.** `Theme.metrics`, which the units read, is the theme's families at
 `bodyPixels` while `fontFamilies` is set and the platform font otherwise, so the units and every `fixed(n)` are

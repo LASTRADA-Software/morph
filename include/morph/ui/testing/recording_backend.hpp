@@ -316,6 +316,10 @@ template <typename T, typename F>
             return "Section";
         case TextRole::Mono:
             return "Mono";
+        case TextRole::Display:
+            return "Display";
+        case TextRole::Small:
+            return "Small";
         default:
             return "unknown";
     }

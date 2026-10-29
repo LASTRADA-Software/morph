@@ -148,3 +148,23 @@ TEST_CASE("ui theme values: text that cannot be read on a fill is reported", "[u
         return line.starts_with("color.track: color.muted is ") && line.ends_with(":1 on it, below 3:1");
     }));
 }
+
+TEST_CASE("ui theme values: the type steps and the strong weight have defaults, and a weight name reads as its number",
+          "[ui][theme]") {
+    ui::ThemeValues const defaults = ui::themeValues();
+    for (std::string_view const path :
+         {"font.size.small", "font.size.caption", "font.size.mono", "font.size.display"}) {
+        CHECK(defaults.dimensions.at(std::string{path}) == 0.0);
+    }
+    CHECK(defaults.numbers.at("font.weight.strong") == 700.0);
+
+    CHECK(valuesOf(R"({"font": {"weight": {"strong": {"$type": "fontWeight", "$value": "semi-bold"}}}})")
+              .numbers.at("font.weight.strong") == 600.0);
+    CHECK(valuesOf(R"({"font": {"weight": {"strong": {"$type": "fontWeight", "$value": 650}}}})")
+              .numbers.at("font.weight.strong") == 650.0);
+    // A weight of another type keeps the default.
+    CHECK(valuesOf(R"({"font": {"weight": {"strong": {"$type": "number", "$value": 300}}}})")
+              .numbers.at("font.weight.strong") == 700.0);
+    CHECK(valuesOf(R"({"font": {"size": {"small": {"$type": "dimension", "$value": {"value": 11, "unit": "px"}}}}})")
+              .dimensions.at("font.size.small") == 11.0);
+}

@@ -57,7 +57,7 @@ MorphWidget {
 
     Label {
         textFormat: Text.PlainText
-        font: Theme.bodyFont
+        font: Theme.captionFont
         id: captionLabel
         objectName: "caption"
         // Elided short of the mark, so the mark stays visible after it.

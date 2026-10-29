@@ -79,6 +79,21 @@ QColor labelColor(QQuickItem const& item, QString const& text) {
     return {};
 }
 
+/// The descendant item of @p item whose objectName is @p name, or null.
+QQuickItem* namedItem(QQuickItem const& item, QString const& name) {
+    QList<QQuickItem const*> pending{&item};
+    while (!pending.isEmpty()) {
+        QQuickItem const* const node = pending.takeLast();
+        for (QQuickItem* const child : node->childItems()) {
+            if (child->objectName() == name) {
+                return child;
+            }
+            pending.append(child);
+        }
+    }
+    return nullptr;
+}
+
 QUrl writeFile(QTemporaryDir const& dir, QString const& name, char const* text) {
     QString const path = dir.filePath(name);
     QFile file{path};
@@ -479,6 +494,51 @@ TEST_CASE("qt_quick theme: a mono text draws in font.mono, else in the platform'
           std::vector<std::string>{"font.mono: none of NoSuchFont is installed"});
 }
 
+// Mutation: keep `Theme.strongFont` on the table header (it reads the body size), `Theme.bodyFont` on the caption.
+TEST_CASE("qt_quick theme: the small and caption sizes, the display role and the strong weight reach the components",
+          "[qt_quick]") {
+    Scene scene;
+    ui::ThemeValues values = ui::themeValues();
+    values.dimensions.insert_or_assign("font.size.body", 13.0);
+    values.dimensions.insert_or_assign("font.size.small", 11.0);
+    values.dimensions.insert_or_assign("font.size.caption", 12.0);
+    values.dimensions.insert_or_assign("font.size.display", 22.0);
+    values.numbers.insert_or_assign("font.weight.strong", 600.0);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("smallPixels").toReal() == 11.0);
+    CHECK(theme->property("captionPixels").toReal() == 12.0);
+    CHECK(theme->property("displayPixels").toReal() == 22.0);
+    CHECK(theme->property("strongWeight").toInt() == 600);
+    CHECK(theme->property("strongFont").value<QFont>().weight() == QFont::DemiBold);
+
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto table = scene.backend().createTable(column.get());
+    table->setColumns({{.label = "Name"}});
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    input->setCaption("Operator", true);
+    auto display = scene.backend().createText(column.get());
+    display->setText("7");
+    display->setRole(ui::TextRole::Display);
+    auto small = scene.backend().createText(column.get());
+    small->setText("note");
+    small->setRole(ui::TextRole::Small);
+    scene.settle();
+
+    auto const* const header = namedItem(Scene::itemOf(*table), QStringLiteral("header0"));
+    REQUIRE(header != nullptr);
+    CHECK(header->property("font").value<QFont>().pixelSize() == 11);
+    CHECK(header->property("font").value<QFont>().weight() == QFont::DemiBold);
+    auto const* const caption = namedItem(Scene::itemOf(*input), QStringLiteral("caption"));
+    REQUIRE(caption != nullptr);
+    CHECK(caption->property("font").value<QFont>().pixelSize() == 12);
+    CHECK(labelFont(*display).pixelSize() == 22);
+    CHECK(labelFont(*display).weight() == QFont::DemiBold);
+    CHECK(labelFont(*small).pixelSize() == 11);
+    CHECK(labelFont(*small).weight() == QFont::Normal);
+}
+
 // Mutation: bind the units' metrics to the platform font always (unitWidth keeps the platform font's width).
 TEST_CASE("qt_quick theme: font.family sets the body font and the units follow it; an unknown family is reported",
           "[qt_quick]") {
@@ -638,20 +698,6 @@ TEMPLATE_TEST_CASE("qt_quick theme: a dialog and a drawer draw on the theme's ca
 
 namespace {
 
-/// The descendant item of @p item whose objectName is @p name, or null.
-QQuickItem* namedItem(QQuickItem const& item, QString const& name) {
-    QList<QQuickItem const*> pending{&item};
-    while (!pending.isEmpty()) {
-        QQuickItem const* const node = pending.takeLast();
-        for (QQuickItem* const child : node->childItems()) {
-            if (child->objectName() == name) {
-                return child;
-            }
-            pending.append(child);
-        }
-    }
-    return nullptr;
-}
 
 }  // namespace
 
