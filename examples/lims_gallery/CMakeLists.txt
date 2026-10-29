@@ -56,7 +56,8 @@ if(MORPH_BUILD_TESTS)
     if(AF_COVERAGE)
         apply_coverage(lims_gallery_tests)
     endif()
-    catch_discover_tests(lims_gallery_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 LABELS "lims-gallery")
+    # Mounting every design at both widths takes over 80 seconds under ASan and longer under TSan.
+    catch_discover_tests(lims_gallery_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 600 LABELS "lims-gallery")
 
     # The render smoke runs the Qt Quick renderer offscreen.
     if(TARGET morph_qt_quick)

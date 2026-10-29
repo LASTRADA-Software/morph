@@ -8655,7 +8655,8 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                        "selection is " + canonicalJson(bound) + "; a table's selection is a list of keys");
             }
         }
-        if (ValueList const* const items = tableSelection(*element).asList()) {
+        Value const selection = tableSelection(*element);
+        if (ValueList const* const items = selection.asList()) {
             for (Value const& item : *items) {
                 keys.push_back(keyOf(item));
             }
