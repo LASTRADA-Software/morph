@@ -523,17 +523,16 @@ ui::Node resultCards(Review const& review) {
     return ui::forEach(
                review.shownResults, {.key = ui::row("key"), .gap = 2},
                [](ui::DeclScope&) {
-                   return ui::Nodes{
-                       ui::panel(
-                           {ui::row({ui::text({.text = ui::row("sample"), .role = "section"}).sizing(ui::stretch()),
-                                     ui::text({.text = ui::row("value"), .role = "section"})},
-                                    {.gap = 1}),
-                            ui::text({.text = ui::format("{0} · spec {1} · previous lot {2}",
-                                                         {ui::row("analyte"), ui::row("spec"), ui::row("previous")})}),
-                            layout::tag(ui::row("evaluation"), ui::row("tone")),
-                            layout::muted(ui::format("Changed {0}", {ui::row("change")}))
-                                .visible(ui::ne(ui::row("change"), "—"))},
-                           {.padding = 2})};
+                   return ui::Nodes{ui::panel(
+                       {ui::row({ui::text({.text = ui::row("sample"), .role = "section"}).sizing(ui::stretch()),
+                                 ui::text({.text = ui::row("value"), .role = "section"})},
+                                {.gap = 1}),
+                        ui::text({.text = ui::format("{0} · spec {1} · previous lot {2}",
+                                                     {ui::row("analyte"), ui::row("spec"), ui::row("previous")})}),
+                        layout::tag(ui::row("evaluation"), ui::row("tone")),
+                        layout::muted(ui::format("Changed {0}", {ui::row("change")}))
+                            .visible(ui::ne(ui::row("change"), "—"))},
+                       {.padding = 2})};
                })
         .testId("results");
 }
