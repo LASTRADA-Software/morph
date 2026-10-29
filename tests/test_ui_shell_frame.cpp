@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The shell frame (docs/spec/ui/shell_frame.md): the sidebar with the application's name and the navigator, the top
-// bar with the title, the principal and sign-out, and the page; signed out, only the page.
+// The shell frame (docs/spec/ui/shell_frame.md): the sidebar with the application's name, the navigator, the
+// principal and sign-out, the top bar with the title and the head, and the page; signed out, only the page.
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -51,10 +51,16 @@ TEST_CASE("shell frame: a sidebar with the navigator, a top bar and the page, on
     CHECK(backend.prop(backend.find("Text", "testId", "shell_principal").value(), "text") == "alice");
     CHECK(backend.prop(backend.find("Text", "testId", "shell_application").value(), "text") == "Morph Bookmarks");
 
-    // The head slot (#1027): its own stretch, independent of whatever is mounted inside it, so it keeps claiming
-    // room in the top bar even while an active tab's head row is hidden.
-    int const headSlot = backend.find("Row", "testId", "shell_head").value();
-    CHECK(backend.prop(headSlot, "layout") == "stretch(1)/content");
+    // The principal and the sign-out button sit at the sidebar's foot, below the navigator.
+    int const side = backend.children(sidebar).at(1);
+    int const navigator = backend.find("Column", "testId", "navigator").value();
+    int const principalText = backend.find("Text", "testId", "shell_principal").value();
+    int const signOutButton = backend.find("Button", "testId", "shell_signOut").value();
+    std::vector<int> const foot = backend.children(side);
+    auto const position = [&foot](int widget) { return std::ranges::find(foot, widget) - foot.begin(); };
+    CHECK(position(navigator) < position(principalText));
+    CHECK(position(principalText) + 1 == position(signOutButton));
+    CHECK(backend.prop(navigator, "layout") == "content/stretch(1)");
 
     backend.click(backend.find("Button", "testId", "nav_bookmarks.tags").value());
     CHECK(opened == std::vector<std::string>{"bookmarks.tags"});
@@ -120,29 +126,78 @@ bool within(RecordingBackend const& backend, int ancestor, int node) {
 
 }  // namespace
 
-// Mutation: put the head slot back in the title's line (it is then beside the sign-out button, outside
-// `shell_head_line`), or start the head line shown.
-TEST_CASE("shell frame: the head slot has the top bar's second line, shown only when the client says", "[ui][shell]") {
+// Mutation: put the head slots back on a line of their own (outside `shell_topbar_main`), start them shown, start the
+// top line without the wrap before its children, or leave the lead block without its minimum.
+TEST_CASE("shell frame: the head shares the title's wrapping line, its slots shown only when the client says",
+          "[ui][shell]") {
     RecordingBackend backend;
     std::vector<std::string> opened;
     int signOuts = 0;
     ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
-    int const line = backend.find("Row", "testId", "shell_head_line").value();
     int const main = backend.find("Row", "testId", "shell_topbar_main").value();
+    int const lead = backend.find("Column", "testId", "shell_head_lead").value();
     int const slot = backend.find("Row", "testId", "shell_head").value();
-    int const signOut = backend.find("Button", "testId", "shell_signOut").value();
-    CHECK(within(backend, line, slot));
-    CHECK_FALSE(within(backend, main, slot));
-    CHECK(within(backend, main, signOut));
-    // The slot sits in a scroll along the line, so a head wider than the bar scrolls sideways.
-    int const scroll = backend.find("Scroll", "testId", "shell_head_scroll").value();
-    CHECK(within(backend, scroll, slot));
+    int const title = backend.find("Text", "testId", "shell_title").value();
+    int const menu = backend.find("Menu", "testId", "shell_nav_menu").value();
+    // The second line and its scroll are gone.
+    CHECK_FALSE(backend.find("Row", "testId", "shell_head_line").has_value());
+    CHECK_FALSE(backend.find("Scroll", "testId", "shell_head_scroll").has_value());
+    // The wrapping row holds the menu, the lead block (the title over the lead slot) and the trail slot.
+    CHECK(backend.prop(main, "wrap") == "true");
+    CHECK(backend.prop(main, "justify") == "end");
+    REQUIRE(backend.children(main).size() == 3);
+    CHECK(backend.children(main).at(0) == menu);
+    int const block = backend.children(main).at(1);
+    CHECK(backend.prop(block, "layout") == "stretch(1) min=32/content");
+    CHECK(backend.children(block) == std::vector<int>{title, lead});
+    CHECK(backend.children(main).at(2) == slot);
+    // The pad spacers are outside the wrapping row, so every line of it is padded at both ends.
+    CHECK(within(backend, backend.find("Row", "testId", "shell_topbar_line").value(), main));
+    CHECK_FALSE(backend.hasProp(backend.find("Row", "testId", "shell_topbar_line").value(), "wrap"));
 
-    CHECK(backend.prop(line, "visible") == "false");
+    CHECK(backend.prop(lead, "visible") == "false");
+    CHECK(backend.prop(slot, "visible") == "false");
     frame.setHeadShown(true);
-    CHECK(backend.prop(line, "visible") == "true");
+    CHECK(backend.prop(lead, "visible") == "true");
+    CHECK(backend.prop(slot, "visible") == "true");
     frame.setHeadShown(false);
-    CHECK(backend.prop(line, "visible") == "false");
+    CHECK(backend.prop(lead, "visible") == "false");
+    CHECK(backend.prop(slot, "visible") == "false");
+}
+
+// Control: route the last index to `Navigator::choose`, and sign-out is not called.
+TEST_CASE("shell frame: compact, the navigation menu ends with the principal's sign-out entry", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    frame.setPrincipal("alice");
+    frame.setCompact(true);
+    int const menu = backend.find("Menu", "testId", "shell_nav_menu").value();
+    std::string const items = backend.prop(menu, "items");
+    CHECK(items.contains("Sign out"));
+    CHECK(items.contains("alice"));
+    // Entries: the group, then a separator and the sign-out entry; the navigator's own path 0 is the group.
+    std::size_t const last = frame.navigator().menuEntries().size() + 1;
+    backend.chooseMenuEntry(menu, {last});
+    CHECK(signOuts == 1);
+    CHECK(opened.empty());
+    backend.chooseMenuEntry(menu, {0, 1});
+    CHECK(signOuts == 1);
+    CHECK(opened == std::vector<std::string>{"bookmarks.tags"});
+}
+
+// Control: a frame without a sign-out handler lists no sign-out entry and shows no principal button.
+TEST_CASE("shell frame: without a sign-out handler there is no sign-out button and no sign-out entry", "[ui][shell]") {
+    RecordingBackend backend;
+    ShellFrameOptions options;
+    options.applicationName = "App";
+    options.navigator.entries = {CatalogEntry{.id = "a.b", .title = "B", .group = "G"}};
+    ShellFrame frame{backend, nullptr, std::move(options)};
+    frame.setPrincipal("alice");
+    frame.setCompact(true);
+    CHECK(backend.prop(backend.find("Button", "testId", "shell_signOut").value(), "visible") == "false");
+    CHECK_FALSE(backend.prop(backend.find("Menu", "testId", "shell_nav_menu").value(), "items").contains("Sign out"));
 }
 
 // Control: a no-op setCompact (the sidebar stays shown and the navigation menu hidden); or leave the menu's items
@@ -154,19 +209,17 @@ TEST_CASE("shell frame: compact, the sidebar and the principal give way to a nav
     ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
     frame.showSignedIn(true);
     int const sidebar = backend.find("Row", "testId", "shell_sidebar").value();
-    int const principal = backend.find("Text", "testId", "shell_principal").value();
     int const menu = backend.find("Menu", "testId", "shell_nav_menu").value();
     CHECK(backend.prop(menu, "visible") == "false");
     CHECK(backend.prop(menu, "icon") == "nav.menu");
     CHECK(backend.prop(menu, "a11yName") == "Navigation");
-    // First on the top bar's first line, after its padding.
+    // First in the top bar's wrapping line.
     int const line = backend.find("Row", "testId", "shell_topbar_main").value();
-    CHECK(backend.children(line).at(1) == menu);
+    CHECK(backend.children(line).at(0) == menu);
 
     frame.setCompact(true);
     CHECK(frame.compact());
     CHECK(backend.prop(sidebar, "visible") == "false");
-    CHECK(backend.prop(principal, "visible") == "false");
     CHECK(backend.prop(menu, "visible") == "true");
     frame.navigator().setBadge("bookmarks.tags", morph::ui::NavigatorBadge{.text = "2", .tone = {}});
     CHECK(backend.prop(menu, "items").contains("Tags · 2"));
@@ -179,6 +232,5 @@ TEST_CASE("shell frame: compact, the sidebar and the principal give way to a nav
     CHECK(backend.prop(sidebar, "visible") == "false");
     frame.showSignedIn(true);
     CHECK(backend.prop(sidebar, "visible") == "true");
-    CHECK(backend.prop(principal, "visible") == "true");
     CHECK(backend.prop(menu, "visible") == "false");
 }

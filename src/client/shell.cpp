@@ -495,9 +495,11 @@ private:
         }
         _headTab = active;
         _headShown.reset();
-        _head.emplace(_context->runtime(), *_backend, _workspace->headRowForActive(), &_frame->headSlot());
-        // The head has the top bar's second line, shown while the active tab's head shows anything; the frame cannot
-        // tell from the row it holds.
+        ui::HeadParts parts = _workspace->headPartsForActive();
+        _headLead.emplace(_context->runtime(), *_backend, std::move(parts.lead), &_frame->headLeadSlot());
+        _head.emplace(_context->runtime(), *_backend, std::move(parts.trail), &_frame->headSlot());
+        // The head's slots show while the active tab's head shows anything; the frame cannot tell from the rows
+        // they hold.
         _headShown = std::make_unique<reactive::Effect>(
             _context->runtime(), [this] { _frame->setHeadShown(_workspace->activeHeadShown()); });
     }
@@ -507,6 +509,7 @@ private:
     void resetHead() {
         _headShown.reset();
         _head.reset();
+        _headLead.reset();
         _headTab.reset();
     }
 
@@ -845,7 +848,9 @@ private:
     // (never one without the other) ahead of _workspace, since both are built from the Workspace's own data and
     // mounted into the ShellFrame.
     std::optional<ui::Mounted> _head;
-    // Shows the frame's head line while the active tab's head has content; goes with `_head`.
+    // The lead of the head, mounted beside `_head`, the trail.
+    std::optional<ui::Mounted> _headLead;
+    // Shows the frame's head slots while the active tab's head has content; goes with `_head`.
     std::unique_ptr<reactive::Effect> _headShown;
     std::optional<ui::WorkspaceTabId> _headTab;
     // Whether a sign-in or sign-out has reloaded the catalog, and whether the session is now signed in.

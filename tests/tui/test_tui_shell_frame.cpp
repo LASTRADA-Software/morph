@@ -15,7 +15,9 @@
 #include <morph/tui/backend.hpp>
 #include <morph/tui/loop_executor.hpp>
 #include <morph/ui/bundle.hpp>
+#include <morph/ui/mount.hpp>
 #include <morph/ui/shell_frame.hpp>
+#include <morph/ui/view.hpp>
 #include <string>
 #include <vector>
 
@@ -79,4 +81,42 @@ TEST_CASE("tui shell frame: below expanded the page starts at its padding, and b
     FramedPage const wide{160};
     CHECK(wide.backend.widthClass() == "expanded");
     CHECK(wide.pageColumn() == 30);
+}
+
+namespace {
+
+// The row of the first line of @p screen that holds @p text, or npos.
+std::size_t rowOf(core::tui::Screen const& screen, std::string const& text) {
+    std::vector<std::string> const rows = rowsOf(screen);
+    for (std::size_t row = 0; row < rows.size(); ++row) {
+        if (rows.at(row).contains(text)) {
+            return row;
+        }
+    }
+    return std::string::npos;
+}
+
+}  // namespace
+
+// Control: the old two-line bar, whose head line is below the title's at every width.
+TEST_CASE("tui shell frame: the head shares the title's line where it fits, and wraps under it where it does not",
+          "[tui][shell]") {
+    for (auto const [columns, together] : {std::pair{100, true}, std::pair{40, false}}) {
+        FramedPage page{columns};
+        ui::Text lead{.text = std::string{"a subtitle of some length"}};
+        ui::Text trail{.text = std::string{"ACTIONS"}};
+        ui::Mounted const leadMount{page.runtime, page.backend, ui::text(std::move(lead)),
+                                    &page.frame->headLeadSlot()};
+        ui::Mounted const trailMount{page.runtime, page.backend, ui::text(std::move(trail)), &page.frame->headSlot()};
+        page.frame->setHeadShown(true);
+        static_cast<void>(page.loop.runUntilIdle());
+        page.backend.fit();
+        page.screen.draw();
+        std::size_t const title = rowOf(page.screen, "Review");
+        std::size_t const actions = rowOf(page.screen, "ACTIONS");
+        REQUIRE(title != std::string::npos);
+        REQUIRE(actions != std::string::npos);
+        INFO("columns " << columns << ": title row " << title << ", actions row " << actions);
+        CHECK((actions == title) == together);
+    }
 }

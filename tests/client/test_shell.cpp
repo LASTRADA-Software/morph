@@ -194,8 +194,8 @@ TEST_CASE("Client shell: a screen reads the backend's width class, and follows a
     source.close();
 }
 
-// Mutation: drop the shell's effect that shows the head line (it stays hidden with the headed screen active).
-TEST_CASE("Client shell: the top bar's head line shows while the active tab's head has content", "[client][shell]") {
+// Mutation: drop the shell's effect that shows the head slots (it stays hidden with the headed screen active).
+TEST_CASE("Client shell: the top bar's head slots show while the active tab's head has content", "[client][shell]") {
     FakeAppContext context;
     ui::testing::RecordingBackend backend;
     client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &headBundle}, client::LocalSetup{}};
@@ -208,7 +208,7 @@ TEST_CASE("Client shell: the top bar's head line shows while the active tab's he
         auto const shell = client::mountShell(context, backend, std::move(*opened), source,
                                               client::ShellOptions{.startScreen = "probe.headed"});
         auto const lineShown = [&backend] {
-            auto const line = backend.find("Row", "testId", "shell_head_line");
+            auto const line = backend.find("Row", "testId", "shell_head");
             return line.has_value() && backend.prop(*line, "visible") == "true";
         };
         REQUIRE(

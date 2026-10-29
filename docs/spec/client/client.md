@@ -126,7 +126,7 @@ the space it gets; with the sidebar, an 80-unit `medium` window, an 80-column te
 page 52 units, narrower than any `compact` window. On `expanded` the page is the window less the sidebar's 28 units,
 at least 132.
 
-The frame shows its sidebar and top bar, and the principal, while the shell is signed in, and the page alone
+The frame shows its sidebar (with the principal and the sign-out button at its foot, or, compact, the navigation menu's sign-out entry) and top bar while the shell is signed in, and the page alone
 otherwise (`ShellFrame::showSignedIn`). The shell is signed in after a sign-in, until a sign-out, and from the start
 when its start screen is not public: an application without a public screen, or a `--screen` that is not public, is
 used by the principal the source opened with. While it is signed out, opening a listed screen that is not public (a
@@ -136,8 +136,9 @@ signed-out catalog lists the screens, so neither tells signed in from signed out
 screens either way. The top bar's title and the navigator's current entry follow the active tab: each change of the
 workspace sets the title to the tab's caption and `Navigator::setCurrent` to its screen. The shell builds its
 `Workspace` with `HeadPlacement::External`, so a page holds only its screen and the head is shown once, in the top
-bar's head slot, on its second line, which the shell shows through an effect beside that mount
-(`ShellFrame::setHeadShown(Workspace::activeHeadShown())`); the slot follows the active tab the same way, but only
+bar's two head slots (`headPartsForActive()`: the lead under the title, the trail at the line's trailing edge), which the
+shell shows through an effect beside those mounts (`ShellFrame::setHeadShown(Workspace::activeHeadShown())`); the slots
+follow the active tab the same way, but only
 re-mounts on a genuine active-tab change
 (compared by the model's own tab id, not the bar's index), since the mounted row is itself reactive to its own
 content.

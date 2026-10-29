@@ -924,28 +924,33 @@ TEST_CASE("workspace: activeHeadShown follows the active tab's head, as a tracke
     CHECK(std::ranges::find(heard, true) != heard.end());
 }
 
-// Mutation: build headRowForActive() from Workspace::active()'s index rather than the model's own tab id (would
-// desync across a close that reindexes a later tab). Also covers: no tab open gives a defined, invisible row, never
-// a null Node (headRowForActive() must never throw inside Mounted's own null check).
-TEST_CASE("workspace: headRowForActive mounts the active tab's own head row, separately from the in-body one",
+// Mutation: build headPartsForActive() from Workspace::active()'s index rather than the model's own tab id (would
+// desync across a close that reindexes a later tab). Also covers: no tab open gives defined, invisible rows, never a
+// null Node (headPartsForActive() must never throw inside Mounted's own null check).
+TEST_CASE("workspace: headPartsForActive mounts the active tab's own head, separately from the in-page one",
           "[ui][workspace]") {
     using morph::ui::Mounted;
     Harness harness;
     Host host{harness, std::nullopt};
     Workspace shell{harness.runtime, harness.backend, host, catalog()};
 
-    // No tab open: a defined, invisible row, not a null Node.
+    // No tab open: defined, invisible rows, not null Nodes.
     {
-        Mounted const separate{harness.runtime, harness.backend, shell.headRowForActive()};
-        CHECK(harness.backend.prop(harness.byTestId("Row", "head"), "visible") == "false");
+        morph::ui::HeadParts parts = shell.headPartsForActive();
+        Mounted const lead{harness.runtime, harness.backend, std::move(parts.lead)};
+        Mounted const trail{harness.runtime, harness.backend, std::move(parts.trail)};
+        CHECK(harness.backend.prop(harness.byTestId("Column", "head_lead"), "visible") == "false");
+        CHECK(harness.backend.prop(harness.byTestId("Row", "head_trail"), "visible") == "false");
     }
 
     REQUIRE(shell.open("headed", {}) == 0U);
     harness.settle();
-    Mounted const separate{harness.runtime, harness.backend, shell.headRowForActive()};
+    morph::ui::HeadParts parts = shell.headPartsForActive();
+    Mounted const lead{harness.runtime, harness.backend, std::move(parts.lead)};
+    Mounted const trail{harness.runtime, harness.backend, std::move(parts.trail)};
     harness.settle();
-    // Two renderings of the same tab's head, both present -- confirming headRowForActive() reads the live active
-    // tab's own data, the same way the in-body headRow() does, not a stale snapshot.
+    // Two renderings of the same tab's head, both present -- confirming headPartsForActive() reads the live active
+    // tab's own data, the same way the in-page headRow() does, not a stale snapshot.
     std::string const dump = harness.backend.dump();
     std::size_t rows = 0;
     for (std::size_t at = dump.find("head_subtitle"); at != std::string::npos;
@@ -966,18 +971,37 @@ TEST_CASE("workspace: an external head placement leaves the page without a head 
     harness.settle();
     // The page holds the screen only: no head row of its own.
     CHECK_FALSE(harness.backend.find("Row", "testId", "head").has_value());
-    // The row the host mounts itself shows the active tab's subtitle and its action.
-    Mounted const separate{harness.runtime, harness.backend, shell.headRowForActive()};
+    // The parts the host mounts itself show the active tab's subtitle and its action.
+    morph::ui::HeadParts parts = shell.headPartsForActive();
+    Mounted const lead{harness.runtime, harness.backend, std::move(parts.lead)};
+    Mounted const trail{harness.runtime, harness.backend, std::move(parts.trail)};
     harness.settle();
     CHECK(harness.text("head_subtitle") == "Editing");
     CHECK(harness.backend.find("Button", "testId", "head_action_save").has_value());
-    // The row and its spacer stretch, so a host's wide slot puts the actions at the trailing edge.
-    std::optional<int> const row = harness.backend.find("Row", "testId", "head");
-    std::optional<int> const spacer = harness.backend.find("Spacer", "testId", "head_spacer");
-    REQUIRE(row);
-    REQUIRE(spacer);
-    CHECK(harness.backend.prop(*row, "layout").starts_with("stretch"));
-    CHECK(harness.backend.prop(*spacer, "layout").starts_with("stretch"));
+}
+
+// Mutation: drop `minWidth` from the lead (its layout record loses `min=32`), its badges' `wrap`, or the head row's
+// own `wrap`, `justify` or `align`.
+TEST_CASE("workspace: the in-page head is a wrapping line of a lead that stretches from 32 units and a trail",
+          "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("headed", {}) == 0U);
+    harness.settle();
+    int const head = harness.byTestId("Row", "head");
+    int const lead = harness.byTestId("Column", "head_lead");
+    int const trail = harness.byTestId("Row", "head_trail");
+    CHECK(harness.backend.prop(head, "wrap") == "true");
+    CHECK(harness.backend.prop(head, "justify") == "end");
+    CHECK(harness.backend.prop(head, "align") == "start");
+    CHECK(harness.backend.children(head) == std::vector<int>{lead, trail});
+    CHECK(harness.backend.prop(lead, "layout") == "stretch(1) min=32/content");
+    CHECK_FALSE(harness.backend.hasProp(lead, "wrap"));
+    // The badges wrap under one another whatever the lead's width: their holder wraps too.
+    REQUIRE(harness.backend.children(lead).size() == 2);
+    CHECK(harness.backend.prop(harness.backend.children(lead).at(1), "wrap") == "true");
+    CHECK_FALSE(harness.backend.hasProp(trail, "wrap"));
 }
 
 namespace {

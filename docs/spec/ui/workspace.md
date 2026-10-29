@@ -117,8 +117,13 @@ open tab, which is when a host settles the navigation's call rather than leave i
 ## The head row
 
 With `HeadPlacement::InPage`, the default, the shell mounts a row over the handle's `head()` above each tab's
-screen, in its page: the subtitle (muted), the badges, a spacer, the tools, the actions as buttons and the head's own
-menu, with test ids `head`, `head_subtitle`, `head_spacer`, `head_status_<n>` (the badge's place among the visible
+screen, in its page: one wrapping row (`head`, gap 2, `align: start`, `justify: end`) of a lead and a trail. The lead (`head_lead`) is a
+column of gap 1 that stretches from `kHeadLeadMinimum` (32) units: the subtitle (muted) over the badges, whose holder
+wraps, so they wrap under one another whatever the lead's width. (A wrapping row holding a wrapping row has no stable
+size, each one's height depending on the width the other gives it, so the lead is a column.) The trail (`head_trail`) is a row of gap 1:
+the tools, the actions as buttons and the head's own menu. Where the trail fits beside 32 units of lead, the lead takes
+the rest of the width; where it does not, the trail drops to a line of its own at the trailing edge. The test ids are
+`head`, `head_lead`, `head_trail`, `head_subtitle`, `head_status_<n>` (the badge's place among the visible
 ones), `head_tool_<id>`, `head_action_<id>` and `head_menu`. A tool is a `TextInput` (a search) or a dropdown
 `Select`, keyed by its id: its value is bound to the tool's, it draws no caption, its label is its accessible name,
 its width is the tool's (none for 0), and it is disabled while the tool is; an edit or a choice goes to
@@ -135,18 +140,18 @@ It reads the head through the model, a tracked read of `tabs()`, so a row mounte
 the tab reads the head once the model holds it, and one whose handle has gone reads nothing.
 
 With `HeadPlacement::External`, `mountPage` mounts no head row and a page holds only its screen: the host mounts
-`headRowForActive()` where it chooses. The row stretches to the full width it is given and its spacer stretches with
-it, so the actions sit at the trailing edge in either placement.
+`headPartsForActive()` where it chooses.
 
-`Workspace::headRowForActive()` builds the same row for whichever tab is active, as a public `Node` a host can mount
-somewhere else entirely (a client's own shell chrome) — `morph::client::Shell` constructs its `Workspace` with
-`HeadPlacement::External` and mounts this row into `ShellFrame::headSlot()`, the top bar's second line, below the
-title, and shows that line while `activeHeadShown()` holds, so the head shows once. `activeHeadShown()` is a tracked
-read: true while the active tab's head has a subtitle, a badge, a tool, an action or a menu entry. It and the row's own visibility share one
-rule, so the two cannot disagree. It reads
+`Workspace::headPartsForActive()` builds the same head as two parts, the lead and the trail (`HeadParts`), for whichever
+tab is active, as public `Node`s a host can mount somewhere else entirely (a client's own shell chrome) —
+`morph::client::Shell` constructs its `Workspace` with `HeadPlacement::External` and mounts the lead into
+`ShellFrame::headLeadSlot()` and the trail into `ShellFrame::headSlot()`, on the top bar's one line, and shows the slots
+while `activeHeadShown()` holds, so the head shows once. `activeHeadShown()` is a tracked read: true while the active
+tab's head has a subtitle, a badge, a tool, an action or a menu entry. It and the parts' own visibility share one rule,
+so the two cannot disagree. It reads
 `WorkspaceModel::active()` directly, not the public `Workspace::active()` index, since the index is a position in
-the tab bar, not an identity, and is unsafe to compare across a close. With no tab open it returns a defined,
-invisible row — never a null `Node` — so a caller mounting it need not handle a null case itself.
+the tab bar, not an identity, and is unsafe to compare across a close. With no tab open it returns two defined,
+invisible rows — never a null `Node` — so a caller mounting them need not handle a null case itself.
 
 ## Captions
 

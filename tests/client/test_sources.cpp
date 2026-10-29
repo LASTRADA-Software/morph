@@ -557,6 +557,29 @@ TEST_CASE("Client shell: the frame shows its chrome only while signed in, or on 
             CHECK(log.problems.empty());
         });
     }
+    SECTION("compact, the navigation menu's last entry signs out, described by the principal") {
+        shellOver({}, nullptr, [](FakeAppContext& context, auto& backend, ShellLog& log) {
+            backend.click(*backend.find("Button", "testId", "login"));
+            REQUIRE(pumpUntil(context.owner(), [&] { return chromeShown(backend) == true; }));
+            backend.setWidthClass("compact");
+            auto const menu = backend.find("Menu", "testId", "shell_nav_menu");
+            REQUIRE(menu.has_value());
+            REQUIRE(pumpUntil(context.owner(), [&] { return backend.prop(*menu, "visible") == "true"; }));
+            std::string const items = backend.prop(*menu, "items");
+            CHECK(items.ends_with(",;separator,Sign out;description=alice]"));
+            // The last top-level entry: one past the commas outside every submenu.
+            std::size_t depth = 0;
+            std::size_t last = 0;
+            for (char const character : items) {
+                depth += character == '[' ? 1U : 0U;
+                depth -= character == ']' ? 1U : 0U;
+                last += character == ',' && depth == 1 ? 1U : 0U;
+            }
+            backend.chooseMenuEntry(*menu, {last});
+            REQUIRE(pumpUntil(context.owner(), [&] { return chromeShown(backend) == false; }));
+            CHECK(log.mounted.back() == "probe.login");
+        });
+    }
     SECTION("a start screen named by --screen that is not public shows the chrome from the start") {
         shellOver("probe.home", nullptr, [](FakeAppContext& /*context*/, auto& backend, ShellLog& log) {
             REQUIRE(log.mounted == Entries{"probe.home"});

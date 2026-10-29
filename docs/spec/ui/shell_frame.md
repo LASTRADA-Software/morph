@@ -18,26 +18,25 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 | Widget | Test id | What it is |
 |---|---|---|
 | a row, stretch × stretch | `shell` | the whole frame |
-| a row, surface `sidebar`, `fixed(kShellSidebarWidth)` (28) × stretch, gap 3, its content padded by spacers | `shell_sidebar` | the application's name (`shell_application`, a heading) and a `ui::Navigator` over `ShellFrameOptions::navigator`, whose group headings are sections and whose entries are body text, so the scale runs name, section, entry |
+| a row, surface `sidebar`, `fixed(kShellSidebarWidth)` (28) × stretch, gap 3, its content padded by spacers | `shell_sidebar` | the application's name (`shell_application`, a heading), a `ui::Navigator` over `ShellFrameOptions::navigator` that takes the sidebar's spare height (its group headings are sections and its entries body text, so the scale runs name, section, entry), and at its foot the principal (`shell_principal`, muted) above the sign-out button (`shell_signOut`, ghost), both hidden without `onSignOut` |
 | a column, stretch × stretch | — | the main column |
-| a column, surface `toolbar`, gap 1 | `shell_topbar` | the top bar's two lines, below |
-| a row, gap 3, `align: center`, padded by spacers at both ends | `shell_topbar_main` | line 1: the navigation menu (`shell_nav_menu`, shown only in [the compact form](#the-compact-form)), the shown screen's title (`shell_title`, a heading that stretches), the principal (`shell_principal`, muted) and a sign-out button (`shell_signOut`) |
-| a row, gap 3, padded by spacers at both ends, hidden on a new frame | `shell_head_line` | line 2: a horizontal scroll (`shell_head_scroll`, stretch) holding the slot for the active tab's head row (`shell_head`, a row that stretches) |
+| a column, surface `toolbar` | `shell_topbar` | the top bar: one line, below |
+| a row, padded by a zero-width spacer at both ends | `shell_topbar_line` | the top line: the two pad spacers around the wrapping row |
+| a row that wraps, gap 3, `align: start`, `justify: end`, stretch | `shell_topbar_main` | the navigation menu (`shell_nav_menu`, shown only in [the compact form](#the-compact-form)); a lead block, a column that stretches from `kShellHeadLeadMinimum` (32) units, holding the shown screen's title (`shell_title`, a heading) over the lead slot (`shell_head_lead`); then the trail slot (`shell_head`). Every line of it is padded at both ends by the pad spacers |
 | a column, surface `page`, stretch × stretch | `shell_page` | the page: zero-sized spacers above and either side of the content, each a gap of step 4 away, so the content is padded by step 4 |
 
 - `page()` is the content container, where the client places the workspace.
 - `navigator()` is the navigator, for its pins and search.
-- `headSlot()` is the container a client mounts the active tab's own head row into — `Workspace::
-  headRowForActive()` builds it — the top bar's second line, below the title, shown only while `setHeadShown(true)`.
-  The mounted row fills the line's width, so its spacer pushes the actions to the trailing edge, and it scrolls
-  sideways when it is wider than the bar: a horizontal scroll's content is at least its viewport's width on both
-  frontends.
-- `setHeadShown(shown)` shows or hides that second line. The frame builds widgets and never sees what is mounted in
-  the slot, so it cannot tell when the head is empty: the client says, and a new frame starts with the line hidden.
-  An application that mounts something else into `headSlot()` calls it itself.
-- `setTitle` and `setPrincipal` set the top bar's texts. The first line centres its children across it, so the
-  principal's line sits level with the sign-out button's label rather than on the line's top edge.
-- The sign-out button calls `ShellFrameOptions::onSignOut`; with none, it is hidden.
+- `headLeadSlot()` and `headSlot()` are the containers a client mounts the active head's two parts into —
+  `Workspace::headPartsForActive()` builds them: the lead (the subtitle over the badges, which wrap under one another) under the
+  title, and the trail (tools, actions and menu) at the line's trailing edge. Where the trail does not fit beside the
+  lead block's 32 units, it drops to a line of its own at the trailing edge.
+- `setHeadShown(shown)` shows or hides the two slots. The frame builds widgets and never sees what is mounted in
+  them, so it cannot tell when the head is empty: the client says, and a new frame starts with them hidden. An
+  application that mounts something else into the slots calls it itself.
+- `setTitle` sets the top bar's title, `setPrincipal` the sidebar's principal text; compact, the principal is the
+  sign-out entry's description.
+- The sign-out button calls `ShellFrameOptions::onSignOut`; with none, it and the compact sign-out entry are hidden.
 
 ## Signed in and signed out
 
@@ -48,13 +47,13 @@ session is signed in, and the principal to show with it (none while signed out).
 
 ## The compact form
 
-`setCompact(true)` gives the page nearly the whole window: the sidebar and the principal are hidden, and the top
-bar's first line starts with the navigation menu, `shell_nav_menu`, a button-style menu whose trigger is the
+`setCompact(true)` gives the page nearly the whole window: the sidebar, with the principal and the sign-out button at its foot, is hidden, and the top
+bar starts with the navigation menu, `shell_nav_menu`, a button-style menu whose trigger is the
 framework icon `nav.menu` (drawn `☰` when the theme's set does not name it), named and titled "Navigation". It lists
 `Navigator::menuEntries()` (the pins, then the groups as submenus, each count after its label and the current
 screen's entry checked) and opens the entry chosen through `Navigator::choose`, so it opens what the sidebar's entry
-would; the frame sets it again whenever the navigator says its entries changed. `setCompact(false)` shows the sidebar
-and the principal again and hides the menu; `compact()` answers the form, and a new frame is not compact. The form
+would; with a sign-out handler the menu ends with a separator and a "Sign out" entry described by the principal, which calls `onSignOut` and opens no screen; the frame sets it again whenever the navigator says its entries changed or the principal does. `setCompact(false)` shows the sidebar
+again and hides the menu; `compact()` answers the form, and a new frame is not compact. The form
 and the sign-in state combine: signed out, the sidebar and the top bar stay hidden in either form. The frame does not
 decide when to be compact; the generic client's rule is in [`client/client.md`](../client/client.md#the-shell). A
 compact frame has no navigator search: the menu lists every entry.
@@ -77,7 +76,7 @@ toast is non-modal, dims nothing, and never takes keyboard focus.
 |---|---|---|
 | Built from widgets | Backend widgets, not a document | The frame is the client's, not an application's, and every frontend has the widgets. |
 | The padding | Zero-sized spacers a gap away | A stack has a gap and no padding; spacers say it in the vocabulary that exists, and step 4 is 16 px on Qt Quick and a row and two columns on the terminal. |
-| A head wider than its share of the bar | A second line that scrolls sideways | A head row (a subtitle, badges, actions) does not fit beside a title, a principal and a sign-out button at every width: on one line it overflowed its slot and the sign-out button was drawn over it. Wrapping to a line of its own is what every backend can draw with the widgets it has. Eliding loses the badges and actions, which are why the head exists; an overflow menu needs a menu node and a measuring pass the vocabulary does not have; and one line when it fits needs a flow container that measures its children, which ui/1 has none of, while a width-class rule cannot decide it, since a head overflows an `expanded` window too. |
+| A head wider than its share of the bar | One wrapping line: the title and the lead stretch from 32 units, the trail wraps under them only when it does not fit; the principal and sign-out sit in the sidebar or the navigation menu, so the line has one owner's controls at its end | Wrapping to a further line is what every backend can draw with the widgets it has. Eliding loses the badges and actions, which are why the head exists; an overflow menu needs a menu node and a measuring pass the vocabulary does not have. A head costs no line of its own where there is room for it, and the sign-out button no longer competes with the screen's actions for the trailing edge. |
 | The width of the sidebar | 28 units, fixed | Wide enough for a navigator entry's title, and a unit on the terminal is a column. |
 | A window too narrow for the sidebar | A compact form: the navigator's entries as one menu in the top bar | On a 60-column terminal the sidebar took half the screen and left a `compact` document about 30 units. A menu holds every entry in the space of one button, and is the navigator's own list, so the two never differ. Collapsing the sidebar to icons would need an icon per catalog entry, which the catalog does not carry. |
 | The toast's one `show(text, tone)` call | Not separate setters plus `setVisible` | A widget's `setVisible` skips a write when the value already matches, so a second `setVisible(true)` while the toast is still showing would be silently dropped and its dismiss timer would not restart. |

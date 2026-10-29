@@ -48,8 +48,19 @@ struct WorkspaceTab {
 enum class HeadPlacement : std::uint8_t {
     /// @brief Above each page, inside the workspace.
     InPage,
-    /// @brief Nowhere: the host mounts `headRowForActive()` where it chooses, and a page holds only its screen.
+    /// @brief Nowhere: the host mounts `headPartsForActive()` where it chooses, and a page holds only its screen.
     External,
+};
+
+/// @brief The narrowest a head's lead is given before the trail wraps to a line of its own, in units.
+inline constexpr int kHeadLeadMinimum = 32;
+
+/// @brief The two parts of the active screen's head, for a host that lays them out itself.
+struct HeadParts {
+    /// @brief The subtitle, muted, then the badges, which wrap under one another.
+    Node lead;
+    /// @brief The tools, the actions and the head's own menu, in one row.
+    Node trail;
 };
 
 /// @brief Tabs over screens: a tab bar over a `WorkspaceModel`, one screen instance per tab, mounted into the tab's
@@ -71,7 +82,7 @@ public:
     /// @param options The screens' catalog facts.
     /// @param parent  The container the shell is appended to; null makes it a backend root.
     /// @param headPlacement Where the active screen's head row is drawn. `External` leaves the host to mount
-    ///        `headRowForActive()` itself, so a shell with its own top bar shows the head once.
+    ///        `headPartsForActive()` itself, so a shell with its own top bar shows the head once.
     Workspace(reactive::Runtime& runtime MORPH_LIFETIMEBOUND, IViewBackend& backend MORPH_LIFETIMEBOUND,
               DocumentScreenHost& host MORPH_LIFETIMEBOUND, WorkspaceOptions options = {},
               ContainerWidget* parent = nullptr, HeadPlacement headPlacement = HeadPlacement::InPage)
@@ -331,20 +342,23 @@ public:
         return shown ? handleOf(*shown) : nullptr;
     }
 
-    /// @brief The active tab's head row, the same reactive content `headRow` builds for the body-embedded rendering,
-    ///        for a host that mounts it elsewhere (a shell's own top bar, say). Never null: an invisible, empty row
-    ///        stands in for "no active tab" rather than a null `Node`, since a caller mounting this may not expect to
-    ///        handle one.
-    /// @return The row, reactive to the active tab changing and to its head's own content changing.
-    [[nodiscard]] Node headRowForActive() const {
+    /// @brief The active tab's head as two parts, the same reactive content `headRow` builds for the in-page
+    ///        rendering, for a host that mounts them elsewhere (a shell's own top bar, say). Neither is null: with no
+    ///        active tab each is an invisible, empty container rather than a null `Node`, since a caller mounting them
+    ///        may not expect to handle one.
+    /// @return The lead and the trail, reactive to the active tab changing and to its head's own content changing.
+    [[nodiscard]] HeadParts headPartsForActive() const {
         std::optional<WorkspaceTabId> const tab = _model->active().peek();
         if (tab) {
-            return ui::row(buildHeadRow(*tab));
+            return HeadParts{.lead = ui::column(buildHeadLead(*tab)), .trail = ui::row(buildHeadTrail(*tab))};
         }
-        Row empty{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
-        empty.common.testId = "head";
-        empty.common.visible = false;
-        return ui::row(std::move(empty));
+        Column lead{.children = {}, .gap = 0, .common = {}};
+        lead.common.testId = "head_lead";
+        lead.common.visible = false;
+        Row trail{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
+        trail.common.testId = "head_trail";
+        trail.common.visible = false;
+        return HeadParts{.lead = ui::column(std::move(lead)), .trail = ui::row(std::move(trail))};
     }
 
     /// @brief Whether the active tab's head shows anything: a subtitle, a badge, an action or a menu entry. A tracked
@@ -712,11 +726,19 @@ private:
     }
 
     // Whether a tab's head has a subtitle, a badge, a tool, an action or a menu entry; a tracked read.
-    [[nodiscard]] bool headHasContent(WorkspaceTabId tab) const {
+    [[nodiscard]] bool headHasContent(WorkspaceTabId tab) const { return leadHasContent(tab) || trailHasContent(tab); }
+
+    // Whether the head has a subtitle or a badge.
+    [[nodiscard]] bool leadHasContent(WorkspaceTabId tab) const {
+        ScreenHead const* const head = headOf(tab);
+        return head != nullptr && (!head->subtitle().get().empty() || !head->status().get().empty());
+    }
+
+    // Whether the head has a tool, an action or a menu entry.
+    [[nodiscard]] bool trailHasContent(WorkspaceTabId tab) const {
         ScreenHead const* const head = headOf(tab);
         return head != nullptr &&
-               (!head->subtitle().get().empty() || !head->status().get().empty() || !headToolsOf(tab).empty() ||
-                !head->actions().get().empty() || !headMenuOf(tab).empty());
+               (!headToolsOf(tab).empty() || !head->actions().get().empty() || !headMenuOf(tab).empty());
     }
 
     // A tool of the head row: a search field or a select bound to the tool's value, its label the accessible name and
@@ -767,12 +789,12 @@ private:
         return ui::textInput(std::move(input));
     }
 
-    // The head row's own content, built but not yet wrapped into an immutable Node: the subtitle (muted), the
-    // badges, a spacer, the tools, the actions as buttons and the head's own menu behind one icon button. Hidden while
-    // the head has none of them, so a screen without a head looks as it would without the row. Factored out of
-    // headRow() so a caller needing to set additional layout fields on the row -- which a Node, once built, can no
-    // longer be mutated to carry -- can do so on the still-mutable Row this returns, before wrapping it itself.
-    [[nodiscard]] Row buildHeadRow(WorkspaceTabId tab) const {
+    // The head's lead, built but not yet wrapped into an immutable Node: a column of the subtitle (muted) over the
+    // badges, whose holder wraps, so they wrap under one another whatever the lead's width. It is a column rather than
+    // a wrapping row because a wrapping row holding another wrapping row has no stable size: each one's height depends
+    // on the width the other gives it. It stretches from `kHeadLeadMinimum` units, so a trail beside it leaves it at
+    // least that much before the trail wraps to a line of its own.
+    [[nodiscard]] Column buildHeadLead(WorkspaceTabId tab) const {
         auto const subtitle = [this, tab] {
             ScreenHead const* const head = headOf(tab);
             return head == nullptr ? std::string{} : head->subtitle().get();
@@ -781,15 +803,11 @@ private:
             ScreenHead const* const head = headOf(tab);
             return head == nullptr ? std::vector<HeadBadge>{} : head->status().get();
         };
-        auto const actions = [this, tab] {
-            ScreenHead const* const head = headOf(tab);
-            return head == nullptr ? std::vector<HeadAction>{} : head->actions().get();
-        };
-        Row row{.children = {}, .gap = 2, .common = {}, .tone = std::nullopt};
-        row.common.testId = "head";
-        // Full width, so the actions sit at the trailing edge in either placement.
+        Column row{.children = {}, .gap = 1, .common = {}};
+        row.common.testId = "head_lead";
         row.common.layout.width = Sizing::stretch();
-        row.common.visible = Prop<bool>{[this, tab] { return headHasContent(tab); }};
+        row.common.layout.minWidth = kHeadLeadMinimum;
+        row.common.visible = Prop<bool>{[this, tab] { return leadHasContent(tab); }};
         Text text{.text = Prop<std::string>{subtitle}, .role = TextRole::Muted, .field = {}, .common = {}};
         text.common.testId = "head_subtitle";
         text.common.visible = Prop<bool>{[subtitle] { return !subtitle().empty(); }};
@@ -811,12 +829,21 @@ private:
                 badge.common.testId = "head_status_" + std::to_string(placed.peek().index);
                 return ui::badge(std::move(badge));
             },
-            Axis::Horizontal, 1));
-        // The spacer stretches, which is what makes the row lay out at full width and pushes the actions to the end.
-        Spacer filler;
-        filler.common.testId = "head_spacer";
-        filler.common.layout.width = Sizing::stretch();
-        row.children.push_back(ui::spacer(std::move(filler)));
+            Axis::Horizontal, 1, {}, true));
+        return row;
+    }
+
+    // The head's trail: the tools, the actions as buttons and the head's own menu behind one icon button, in one row.
+    // Hidden while the head has none of them.
+    [[nodiscard]] Row buildHeadTrail(WorkspaceTabId tab) const {
+        auto const actions = [this, tab] {
+            ScreenHead const* const head = headOf(tab);
+            return head == nullptr ? std::vector<HeadAction>{} : head->actions().get();
+        };
+        Row row{.children = {}, .gap = 1, .common = {}, .tone = std::nullopt};
+        row.common.testId = "head_trail";
+        row.common.visible = Prop<bool>{[this, tab] { return trailHasContent(tab); }};
+        row.align = Align::Center;
         row.children.push_back(ui::forEach<HeadTool>(
             [this, tab] { return headToolsOf(tab); }, [](HeadTool const& tool) { return Key{tool.id}; },
             [this, tab](reactive::Signal<HeadTool> const& tool) { return headTool(tab, tool); }, Axis::Horizontal, 1));
@@ -870,8 +897,21 @@ private:
         return row;
     }
 
-    // The head row above a tab's screen, exactly as buildHeadRow() builds it, wrapped into a Node.
-    [[nodiscard]] Node headRow(WorkspaceTabId tab) const { return ui::row(buildHeadRow(tab)); }
+    // The head row above a tab's screen: the lead and the trail on one wrapping line, the trail at the trailing edge,
+    // dropping to a line of its own where it does not fit beside the lead's minimum. Hidden while the head has no
+    // content, so a screen without a head looks as it would without the row.
+    [[nodiscard]] Node headRow(WorkspaceTabId tab) const {
+        Row row{.children = {}, .gap = 2, .common = {}, .tone = std::nullopt};
+        row.children.push_back(ui::column(buildHeadLead(tab)));
+        row.children.push_back(ui::row(buildHeadTrail(tab)));
+        row.common.testId = "head";
+        row.common.layout.width = Sizing::stretch();
+        row.common.visible = Prop<bool>{[this, tab] { return headHasContent(tab); }};
+        row.align = Align::Start;
+        row.justify = Justify::End;
+        row.wrap = true;
+        return ui::row(std::move(row));
+    }
 
     // The model changed: the bar shows its tabs in order, with their captions, and the active tab's page.
     void showTabs() {

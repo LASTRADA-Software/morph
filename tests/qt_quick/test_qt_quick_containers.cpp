@@ -646,10 +646,9 @@ TEST_CASE("qt_quick containers: the compact shell hides its sidebar and draws it
     CHECK(trigger.isVisible());
 }
 
-// The inner items, not the widget roots: each root fills the bar's height whatever the alignment, so the roots share
-// a centre either way, while the label and the button inside them are centred only when the bar centres them.
-// Mutation: drop the top bar's setAlign(Align::Center) in ShellFrame (the principal's label sits at the top).
-TEST_CASE("qt_quick containers: the shell's principal sits level with its sign-out button", "[qt_quick]") {
+// Mutation: put the principal back on the top bar's line (it is then level with the sign-out button, not above it).
+TEST_CASE("qt_quick containers: the shell's principal sits above its sign-out button at the sidebar's foot",
+          "[qt_quick]") {
     Scene scene;
     morph::ui::ShellFrameOptions options;
     options.applicationName = "App";
@@ -672,12 +671,18 @@ TEST_CASE("qt_quick containers: the shell's principal sits level with its sign-o
     };
     QQuickItem const& label = *textItemOf("shell_principal", QStringLiteral("alice"));
     QQuickItem const& button = innerOf("shell_signOut", "QQuickAbstractButton");
+    detail::ItemBase const* const sidebar = detail::findWidget(QStringLiteral("shell_sidebar"));
+    REQUIRE(sidebar != nullptr);
     REQUIRE(label.height() > 0.0);
-    REQUIRE(button.height() > label.height());
-    qreal const labelCentre = label.mapToScene(QPointF{0, label.height() / 2}).y();
-    qreal const buttonCentre = button.mapToScene(QPointF{0, button.height() / 2}).y();
-    INFO("label centre " << labelCentre << ", button centre " << buttonCentre);
-    CHECK(std::abs(labelCentre - buttonCentre) <= 1.0);
+    qreal const labelBottom = label.mapToScene(QPointF{0, label.height()}).y();
+    qreal const buttonTop = button.mapToScene(QPointF{0, 0}).y();
+    INFO("label bottom " << labelBottom << ", button top " << buttonTop);
+    CHECK(labelBottom <= buttonTop + 1.0);
+    // Both sit in the sidebar, the button at its foot.
+    qreal const sidebarBottom = sidebar->item()->mapToScene(QPointF{0, sidebar->item()->height()}).y();
+    CHECK(button.mapToScene(QPointF{0, button.height()}).y() <= sidebarBottom);
+    CHECK(button.mapToScene(QPointF{0, button.height()}).y() >= sidebarBottom - 2.0 * label.height() - 48.0);
+    CHECK(label.mapToScene(QPointF{0, 0}).x() < sidebar->item()->width());
 }
 
 // Mutation: ignore `fieldLayout` in fieldCell (the label sits above its control).
@@ -854,9 +859,9 @@ TEST_CASE("qt_quick containers: a head row puts its actions at the trailing edge
     CHECK(actionRight >= slotRight - gap - 0.5);
 }
 
-// Mutation: put the head slot back in the title's line of ShellFrame (at 1000 px the actions are drawn over the
-// sign-out button), or size a horizontal scroll's content to its own width (the head row does not reach the edge).
-TEST_CASE("qt_quick containers: the shell's head has a line of its own, which scrolls when the bar is narrow",
+// Mutation: put the head slots back on a line of their own below the title (at 1000 px the actions are then lower than
+// the title), or drop the lead block's minimum width (at 390 px the actions stay beside the badges).
+TEST_CASE("qt_quick containers: the shell's head shares the title's line, and wraps under it only when out of room",
           "[qt_quick]") {
     Scene scene;
     morph::ui::ShellFrameOptions options;
@@ -867,21 +872,29 @@ TEST_CASE("qt_quick containers: the shell's head has a line of its own, which sc
     frame.setTitle("Sample S-2026-0412 · stability pull");
     frame.setPrincipal("alice");
     frame.setHeadShown(true);
-    std::vector<ui::Node> children{ui::text({.text = "Paracetamol 500 mg, lot 24-117", .role = ui::TextRole::Muted})};
-    for (auto const* const tag : {"Draft", "Due today", "Priority"}) {
-        children.push_back(ui::badge({.tone = ui::Tone::Warn, .text = tag}));
+    std::vector<ui::Node> badgeNodes;
+    for (auto const* const tag : {"Draft", "Due today"}) {
+        ui::Badge badge{.tone = ui::Tone::Warn, .text = tag};
+        badge.common.testId = std::string{"head_badge_"} + tag;
+        badgeNodes.push_back(ui::badge(std::move(badge)));
     }
-    ui::Spacer filler;
-    filler.common.layout.width = ui::Sizing::stretch();
-    children.push_back(ui::spacer(std::move(filler)));
+    ui::Row badgeRow{.children = std::move(badgeNodes), .gap = 1};
+    badgeRow.wrap = true;
+    ui::Column leadColumn{
+        .children = {ui::text({.text = "Paracetamol 500 mg, lot 24-117", .role = ui::TextRole::Muted}),
+                     ui::row(std::move(badgeRow))},
+        .gap = 1};
+    leadColumn.common.layout.width = ui::Sizing::stretch();
+    std::vector<ui::Node> trail;
     for (auto const* const action : {"Book", "Sign"}) {
         ui::Button button{.label = action};
         button.common.testId = std::string{"head_"} + action;
-        children.push_back(ui::button(std::move(button)));
+        trail.push_back(ui::button(std::move(button)));
     }
-    ui::Row head{.children = std::move(children), .gap = 2};
-    head.common.layout.width = ui::Sizing::stretch();
-    ui::Mounted const mounted{scene.runtime(), scene.backend(), ui::row(std::move(head)), &frame.headSlot()};
+    ui::Mounted const leadMount{scene.runtime(), scene.backend(), ui::column(std::move(leadColumn)),
+                                &frame.headLeadSlot()};
+    ui::Mounted const trailMount{scene.runtime(), scene.backend(),
+                                 ui::row(ui::Row{.children = std::move(trail), .gap = 1}), &frame.headSlot()};
 
     auto const rectOf = [](char const* testId) {
         detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
@@ -892,29 +905,20 @@ TEST_CASE("qt_quick containers: the shell's head has a line of its own, which sc
     };
     scene.window().resize(1000, 600);
     scene.settle();
-    QRectF const signOut = rectOf("shell_signOut");
-    for (char const* const action : {"head_Book", "head_Sign"}) {
-        QRectF const rect = rectOf(action);
-        INFO(action << " at " << rect.x() << "+" << rect.width());
-        CHECK_FALSE(rect.intersects(signOut));
-        CHECK(rect.right() <= 1000.0);
-    }
-    // The head row fills the line, so its actions sit at the trailing edge.
+    QRectF const titleAt1000 = rectOf("shell_title");
+    QRectF const bookAt1000 = rectOf("head_Book");
+    INFO("title at " << titleAt1000.y() << ", the actions at " << bookAt1000.y());
+    // One line: the actions' top is the title's top, and they sit at the trailing edge.
+    CHECK(bookAt1000.y() <= titleAt1000.y() + 1.0);
     CHECK(rectOf("head_Sign").right() > 900.0);
+    CHECK_FALSE(bookAt1000.intersects(rectOf("shell_signOut")));
 
-    scene.window().resize(400, 600);
+    scene.window().resize(390, 600);
     scene.settle();
-    detail::ItemBase const* const scroll = detail::findWidget(QStringLiteral("shell_head_scroll"));
-    REQUIRE(scroll != nullptr);
-    QList<QQuickItem*> const inside = scroll->item()->childItems();
-    auto const found =
-        std::ranges::find_if(inside, [](QQuickItem const* item) { return item->inherits("QQuickFlickable"); });
-    bool const isFlick = found != inside.end();
-    REQUIRE(isFlick);
-    QQuickItem const* const flick = *found;
-    qreal const contentWidth = flick->property("contentWidth").toReal();
-    CHECK(contentWidth > flick->width());
-    QQuickItem const* const sign = detail::findWidget(QStringLiteral("head_Sign"))->item();
-    QPointF const inContent = sign->mapToItem(flick->property("contentItem").value<QQuickItem*>(), QPointF{0, 0});
-    CHECK(inContent.x() + sign->width() <= contentWidth + 0.5);
+    QRectF const badges = rectOf("head_badge_Due today");
+    QRectF const bookAt390 = rectOf("head_Book");
+    INFO("the badges end at " << badges.bottom() << ", the actions start at " << bookAt390.y());
+    // Out of room: the actions drop to a line of their own, below the badges.
+    CHECK(bookAt390.y() >= badges.bottom() - 1.0);
+    CHECK(rectOf("head_Sign").right() <= 390.0);
 }
