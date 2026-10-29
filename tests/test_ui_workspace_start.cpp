@@ -456,6 +456,9 @@ TEST_CASE("navigator: a count sits at the end of its entry, named with it, and t
     CHECK(harness.backend.prop(badge, "tone") == "Info");
     CHECK(harness.backend.prop(button, "a11yName") == "Results, 4");
     CHECK(changes == 1);
+    // The same count again changes nothing.
+    REQUIRE(navigator.setBadge("lims.results", morph::ui::NavigatorBadge{.text = "4", .tone = morph::ui::Tone::Info}));
+    CHECK(changes == 1);
     CHECK_FALSE(navigator.setBadge("lims.nowhere", morph::ui::NavigatorBadge{.text = "1", .tone = {}}));
 
     navigator.setCurrent("lims.samples");
@@ -479,6 +482,9 @@ TEST_CASE("navigator: a count sits at the end of its entry, named with it, and t
     CHECK_FALSE(navigator.choose({1}));     // a separator
     CHECK_FALSE(navigator.choose({2}));     // a submenu
     CHECK(navigator.choose({0}));
+    CHECK_FALSE(navigator.choose({9}));     // past the last entry
+    CHECK_FALSE(navigator.choose({2, 7}));  // past the submenu's last entry
+    CHECK_FALSE(navigator.choose({}));      // no entry
     CHECK(opened == std::vector<std::string>{"lims.results", "admin.users"});
 
     REQUIRE(navigator.setBadge("lims.results", std::nullopt));

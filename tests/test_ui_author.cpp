@@ -1576,3 +1576,41 @@ TEST_CASE("accessibility: a group has a label or an a11y.name", "[ui][author]") 
         "a11y": {"name": "Conditions"}, "children": []}})")
                     .has_value());
 }
+
+// Mutation: write `danger` as `primary` in menuButton (the second trigger then reads `primary`).
+TEST_CASE("author: a menu button writes each emphasis by name, and none for normal", "[ui][author]") {
+    auto const trigger = [](morph::ui::ButtonEmphasis emphasis) {
+        return text(ui::menuButton({.label = "More", .emphasis = emphasis}, {{.label = "Print"}}).json());
+    };
+    std::string const head = R"({"kind":"menu","items":[{"label":"Print"}],"style":"button","label":"More")";
+    CHECK(trigger(morph::ui::ButtonEmphasis::Primary) == head + R"(,"emphasis":"primary"})");
+    CHECK(trigger(morph::ui::ButtonEmphasis::Danger) == head + R"(,"emphasis":"danger"})");
+    CHECK(trigger(morph::ui::ButtonEmphasis::Normal) == head + "}");
+}
+
+// Mutation: write a reference line's dotted style as dashed (the line then reads `dashed`).
+TEST_CASE("author: a chart writes no lines key without lines, and a line's style only when not solid",
+          "[ui][author]") {
+    CHECK(text(ui::chart({.summary = "s",
+                          .series = {{.points = ui::ref("runs"),
+                                      .y = [](ui::AnyHandle const& point) { return point.at("value"); }}}})) ==
+          R"({"kind":"chart","summary":"s","series":[{"points":{"ref":"runs"},"y":{"row":"value"}}]})");
+    CHECK(text(ui::chart({.summary = "s",
+                          .series = {{.points = ui::ref("runs"),
+                                      .y = [](ui::AnyHandle const& point) { return point.at("value"); }}},
+                          .lines = {{.value = 1}, {.value = 2, .style = ui::LineStyle::Dotted}}})) ==
+          R"({"kind":"chart","summary":"s","series":[{"points":{"ref":"runs"},"y":{"row":"value"}}],)"
+          R"("lines":[{"value":1},{"value":2,"style":"dotted"}]})");
+}
+
+// Mutation: write a stacked key-value's layout as inline (it then reads `inline`).
+TEST_CASE("author: a key-value writes its caption layout only when given", "[ui][author]") {
+    CHECK(text(ui::keyValue(ui::KeyValueOptions{.items = ui::ref("pairs")})) ==
+          R"({"kind":"keyValue","items":{"ref":"pairs"}})");
+    CHECK(text(ui::keyValue(
+              ui::KeyValueOptions{.items = ui::ref("pairs"), .fieldLayout = morph::forms::FieldLayout::Stacked})) ==
+          R"({"kind":"keyValue","items":{"ref":"pairs"},"fieldLayout":"stacked"})");
+    CHECK(text(ui::keyValue(
+              ui::KeyValueOptions{.items = ui::ref("pairs"), .fieldLayout = morph::forms::FieldLayout::Inline})) ==
+          R"({"kind":"keyValue","items":{"ref":"pairs"},"fieldLayout":"inline"})");
+}

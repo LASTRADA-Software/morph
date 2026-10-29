@@ -990,3 +990,39 @@ TEST_CASE("ui::Mounted: two rows that fail in one run are one report, and neithe
     CHECK(probe.count(morph::reactive::detail::site::kEffectThrew) == 1);
     CHECK(backend.recording().dump() == "Column#1 gap=0\n");
 }
+
+// Mutation: drop the text's description check (a described text then mounts).
+TEST_CASE(
+    "ui::Mounted: a C++ tree's text takes no description or tone, a push button no content, and a text area "
+    "no emphasis",
+    "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Text described{.text = "x"};
+    described.field.description = "a line";
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::text(described)}),
+                      Catch::Matchers::ContainsSubstring("a text is not described or toned"));
+    ui::Text toned{.text = "x"};
+    toned.field.tone = ui::Tone::Warn;
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::text(toned)}),
+                      Catch::Matchers::ContainsSubstring("a text is not described or toned"));
+    ui::Button push{.label = "Go"};
+    push.child = ui::text({.text = "inside"});
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::button(push)}),
+                      Catch::Matchers::ContainsSubstring("a push button has a label"));
+    ui::Button entry = push;
+    entry.style = ui::ButtonStyle::Item;
+    {
+        ui::Mounted const view{runtime, backend, ui::button(entry)};
+        CHECK(backend.find("Text", "text", "inside").has_value());
+    }
+    ui::TextInput area{.mode = ui::TextInputMode::Multiline};
+    area.emphasis = ui::InputEmphasis::Prominent;
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::textInput(area)}),
+                      Catch::Matchers::ContainsSubstring("a multiline text input's size is its own"));
+    ui::TextInput focal{};
+    focal.emphasis = ui::InputEmphasis::Prominent;
+    ui::Mounted const view{runtime, backend, ui::textInput(focal)};
+    CHECK(backend.find("TextInput", "emphasis", "Prominent").has_value());
+}

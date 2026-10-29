@@ -215,3 +215,187 @@ TEST_CASE("chart: points that are no list draw as empty, reported unless null", 
               return refusal.reason.contains("`points` is a list");
           }) == 1);
 }
+
+namespace {
+
+// How many reports carry @p text.
+std::ptrdiff_t reported(Harness const& h, std::string_view text) {
+    return std::ranges::count_if(h.diagnostics,
+                                 [text](ui::Refusal const& refusal) { return refusal.reason.contains(text); });
+}
+
+// A chart of one series positioned by `x` over `values`, each `{x, v}`.
+std::string positionedChart(std::string_view values) {
+    return std::format(R"({{
+      "vocab": "ui/1", "id": "positioned",
+      "view": {{ "kind": "chart", "testId": "chart", "summary": "s",
+                 "series": [ {{ "points": {}, "x": {{ "row": "x" }}, "y": {{ "row": "v" }} }} ] }} }})",
+                       values);
+}
+
+}  // namespace
+
+// Mutation: place a date at its index rather than at its instant (`xRange` is then `[-0.05,1.05]`).
+TEST_CASE("chart: dates on x place the points at their instants", "[ui][interpreter][chart]") {
+    Harness h;
+    auto const screen =
+        h.mount(positionedChart(R"({ "lit": [ { "x": "2026-01-01", "v": 1 }, { "x": "2026-01-02", "v": 2 } ] })"));
+    // 2026-01-01T00:00Z in milliseconds, padded by 5 % of one day.
+    CHECK(chartProp(h, "xRange") == "[1767221280000,1767316320000]");
+    CHECK(chartProp(h, "series") == "[;true;[@1767225600000,1;;|@1.767312e+12,2;;]]");
+    CHECK(h.diagnostics.empty());
+}
+
+// Mutation: position by `x` even when numbers and dates mix (the points then sit at 3 and at an instant).
+TEST_CASE("chart: x values that mix numbers and dates space the points by index, with a report",
+          "[ui][interpreter][chart]") {
+    Harness h;
+    auto const screen =
+        h.mount(positionedChart(R"({ "lit": [ { "x": 3, "v": 1 }, { "x": "2026-01-02", "v": 2 } ] })"));
+    CHECK(chartProp(h, "xRange") == "[-0.05,1.05]");
+    CHECK(chartProp(h, "series") == "[;true;[@0,1;;|@1,2;;]]");
+    CHECK(reported(h, "all numbers or all dates and instants") == 1);
+}
+
+// Mutation: keep a point whose `x` is unreadable at its index (the series then holds three points).
+TEST_CASE("chart: a point whose x is null is left out quietly, and one whose x is no position with a report",
+          "[ui][interpreter][chart]") {
+    Harness h;
+    auto const screen = h.mount(positionedChart(
+        R"({ "lit": [ { "x": 1, "v": 1 }, { "x": null, "v": 2 }, { "x": "soon", "v": 3 }, { "x": 4, "v": 4 } ] })"));
+    CHECK(chartProp(h, "series") == "[;true;[@1,1;;|@4,4;;]]");
+    CHECK(reported(h, "a number, a date or an instant") == 1);
+    CHECK(h.diagnostics.size() == 1);
+}
+
+// Mutation: read any string as a tone (`purple` then marks its point).
+TEST_CASE("chart: a computed tone that names none marks nothing, with a report", "[ui][interpreter][chart]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "tones",
+      "state": { "loud": { "init": "loud" } },
+      "view": { "kind": "chart", "testId": "chart", "summary": "s",
+        "series": [ { "points": { "lit": [ { "v": 1, "t": "ok" }, { "v": 2, "t": "purple" }, { "v": 3, "t": 7 },
+                                           { "v": 4, "t": null } ] },
+                      "y": { "row": "v" }, "tone": { "row": "t" } } ],
+        "lines": [ { "value": 2, "label": "two", "tone": { "ref": "loud" } } ] } })");
+    CHECK(chartProp(h, "series") == "[;true;[@0,1;ok;|@1,2;;|@2,3;;|@3,4;;]]");
+    CHECK(chartProp(h, "lines") == "[two@2;neutral;solid]");
+    // One report per place, however many of its values name no tone.
+    CHECK(reported(h, "a chart tone is neutral") == 2);
+}
+
+// Mutation: keep a value whose unit does not convert, unconverted (the series then holds `@1,2`).
+TEST_CASE("chart: a value in another unit converts or is left out", "[ui][interpreter][chart]") {
+    Harness h;
+    ui::FormatContext format;
+    format.units.insert_or_assign("mg", ui::UnitInfo{.canonical = "g",
+                                                     .toCanonical = morph::math::Rational{
+                                                         morph::math::Numerator{1}, morph::math::Denominator{1000},
+                                                         morph::math::DecimalPlaces{0}}});
+    h.session.setFormatting(format);
+    auto const screen = h.mount(simpleChart(
+        R"({ "lit": [ { "v": { "num": 1, "den": 1, "dp": 0, "unit": "g" } },
+                      { "v": { "num": 2, "den": 1, "dp": 0, "unit": "furlong" } },
+                      { "v": 3 },
+                      { "v": { "num": 4000, "den": 1, "dp": 0, "unit": "mg" } } ] })",
+        "[]"));
+    CHECK(chartProp(h, "series") == "[;true;[@0,1;;|@3,4;;]]");
+    CHECK(reported(h, "does not convert to the unit of the chart's first value") == 1);
+}
+
+// Mutation: keep a line whose value is null at zero (the lines then hold `@0`).
+TEST_CASE("chart: a reference line whose value is null is not drawn", "[ui][interpreter][chart]") {
+    Harness h;
+    auto const screen =
+        h.mount(simpleChart(R"({ "lit": [ { "v": 1 }, { "v": 3 } ] })",
+                            R"([ { "value": null, "label": "none" }, { "value": 2, "style": "solid" } ])"));
+    // A line without a label is labelled with its value, at the chart's places.
+    CHECK(chartProp(h, "lines") == "[2@2;neutral;solid]");
+    CHECK(h.diagnostics.empty());
+}
+
+// Mutation: accept a computed yMin at or above yMax (the range is then reversed).
+TEST_CASE("chart: computed ends that do not leave yMin below yMax are reported, and the values' range is kept",
+          "[ui][interpreter][chart]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "ends",
+      "state": { "low": { "init": 50 }, "high": { "init": 40 } },
+      "view": { "kind": "chart", "testId": "chart", "summary": "s",
+        "yMin": { "ref": "low" }, "yMax": { "ref": "high" },
+        "series": [ { "points": { "lit": [ { "v": 0 }, { "v": 100 } ] }, "y": { "row": "v" } } ] } })");
+    CHECK(chartProp(h, "yRange") == "[-5,105]");
+    REQUIRE(reported(h, "`yMin` is not below `yMax`") == 1);
+    auto const refusal = std::ranges::find_if(
+        h.diagnostics, [](ui::Refusal const& one) { return one.reason.contains("`yMin` is not below"); });
+    CHECK(refusal->path == "/view/yMin");
+}
+
+// Mutation: mark a value below a fixed yMin as above it (the point then records `↑`).
+TEST_CASE("chart: a value below a fixed yMin is clipped at the lower edge, and a null end keeps its own",
+          "[ui][interpreter][chart]") {
+    Harness h;
+    auto const screen = h.mount(
+        simpleChart(R"({ "lit": [ { "v": 1 }, { "v": 5 }, { "v": 9 } ] })", "[]", R"(, "yMin": 4, "yMax": null)"));
+    CHECK(chartProp(h, "yRange") == "[4,9.4]");
+    CHECK(chartProp(h, "series") == "[;true;[@0,4↓;;|@1,5;;|@2,9;;]]");
+}
+
+// Mutation: ignore `joined` (the first series then records `true`).
+TEST_CASE("chart: a series that is not joined says so, and one joined in so many words is joined",
+          "[ui][interpreter][chart]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "scatter",
+      "view": { "kind": "chart", "testId": "chart", "summary": "s",
+        "series": [ { "label": "a", "points": { "lit": [ { "v": 1 }, { "v": 2 } ] }, "y": { "row": "v" }, "joined": false },
+                    { "label": "b", "points": { "lit": [ { "v": 3 } ] }, "y": { "row": "v" }, "joined": true } ] } })");
+    CHECK(chartProp(h, "series") == "[a;false;[@0,1;;|@1,2;;],b;true;[@0,3;;]]");
+}
+
+// Mutation: draw every point however many (the first point is then index 0).
+TEST_CASE("chart: a series draws only its last 1000 points, with a report", "[ui][interpreter][chart]") {
+    std::string list = "[";
+    for (int index = 0; index < 1005; ++index) {
+        list += std::format(R"({}{{ "v": {} }})", index == 0 ? "" : ",", index);
+    }
+    list += ']';
+    Harness h;
+    auto const screen = h.mount(simpleChart(R"({ "lit": )" + list + " }", "[]"));
+    std::string const series = chartProp(h, "series");
+    CHECK(series.starts_with("[;true;[@5,5;;|@6,6;;|"));
+    CHECK(series.ends_with("|@1004,1004;;]]"));
+    CHECK(reported(h, "a series draws its last 1000 points") == 1);
+}
+
+// Mutation: draw the chart from a range that overflowed (a range is then recorded).
+TEST_CASE("chart: values whose range overflows draw nothing, with a report", "[ui][interpreter][chart]") {
+    Harness h;
+    auto const screen =
+        h.mount(simpleChart(R"({ "lit": [ { "v": 9223372036854775807 }, { "v": -9223372036854775807 } ] })", "[]"));
+    CHECK(chartProp(h, "series") == "[]");
+    CHECK(chartProp(h, "yTicks") == "[]");
+    CHECK(reported(h, "overflow its arithmetic") == 1);
+}
+
+// Mutation: write a value at places it cannot be rounded to (the label then reads
+// `100000000000000000.333333333333333333`).
+TEST_CASE("chart: a value that cannot be written at the chart's places is written exactly",
+          "[ui][interpreter][chart]") {
+    Harness h;
+    // 10^17 + 1/3 at 18 places needs a numerator of about 10^35.
+    auto const screen = h.mount(simpleChart(
+        R"({ "lit": [ { "v": 0 } ] })",
+        R"([ { "value": { "lit": { "num": 300000000000000001, "den": 3, "dp": 1 } } } ])", R"(, "yPlaces": 18)"));
+    CHECK(chartProp(h, "lines") == "[100000000000000000.3@1e+17;neutral;solid]");
+}
+
+// Mutation: convert a quantity into a unitless first value as if it had the quantity's unit (`@1,2` is then kept).
+TEST_CASE("chart: a quantity after a plain first value is left out", "[ui][interpreter][chart]") {
+    Harness h;
+    auto const screen = h.mount(simpleChart(
+        R"({ "lit": [ { "v": 1 }, { "v": { "num": 2, "den": 1, "dp": 0, "unit": "g" } }, { "v": 3 } ] })", "[]"));
+    CHECK(chartProp(h, "series") == "[;true;[@0,1;;|@2,3;;]]");
+    CHECK(reported(h, "does not convert to the unit of the chart's first value") == 1);
+}

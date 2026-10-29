@@ -1121,3 +1121,24 @@ TEST_CASE("workspace model: an empty mountPage is refused, and one that throws o
     CHECK(model.order().empty());
     CHECK(model.handleOf(WorkspaceTabId{1}) == nullptr);
 }
+
+// Mutation: drop the `as` check (a tab request then mounts the note in a dialog).
+TEST_CASE("workspace: openOverlay refuses an `as` that is no overlay, a host screen and a refused mount",
+          "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, WorkspaceOptions{.screens = [](std::string_view id) {
+                        return WorkspaceScreen{.host = id == "audit" ? "audit-view" : ""};
+                    }}};
+    auto const asTab = shell.openOverlay(morph::ui::NavigateRequest{.screen = "note", .as = "tab"});
+    REQUIRE_FALSE(asTab.has_value());
+    CHECK(asTab.error().reason == "`as: tab` is not a dialog or a drawer");
+    auto const hosted = shell.openOverlay(morph::ui::NavigateRequest{.screen = "audit", .as = "drawer"});
+    REQUIRE_FALSE(hosted.has_value());
+    CHECK(hosted.error().reason == "a host screen opens as a tab, not an overlay");
+    auto const unknown = shell.openOverlay(morph::ui::NavigateRequest{.screen = "nowhere", .as = "dialog"});
+    REQUIRE_FALSE(unknown.has_value());
+    CHECK(unknown.error().screenId == "nowhere");
+    CHECK(harness.backend.all("Dialog").empty());
+    CHECK(harness.backend.all("Drawer").empty());
+}

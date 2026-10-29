@@ -130,6 +130,8 @@ public:
         ++closedThemselves;
     }
 
+    using DocumentScreenHost::settleCall;
+
     std::vector<std::pair<std::string, ParamMap>> navigated;
     std::vector<std::string> as;
     int closedThemselves = 0;
@@ -944,4 +946,56 @@ TEST_CASE("A dialog answers its opener under a host that ignores screens closing
     harness.settle();
     CHECK(opener->title().get() == "apple");
     CHECK(DocumentScreenHost::rootOf(*chooser) == nullptr);
+}
+
+// Mutation: leave the unclaimed calls in place (the opener's title stays "none").
+TEST_CASE("cancelUnclaimedCalls answers every call no mount adopted with a cancel, once", "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    auto opener = std::move(*shell.mount("opener", ParamMap{}));
+    harness.backend.click(harness.byTestId("Button", "pick"));
+    harness.settle();
+    REQUIRE(shell.navigated.size() == 1);
+    CHECK(opener->title().get() == "none");
+    shell.cancelUnclaimedCalls();
+    harness.settle();
+    CHECK(opener->title().get() == "cancelled");
+    // The chooser mounted now adopts no call: its answer reaches nobody.
+    auto const chooser = std::move(*shell.mount(shell.navigated[0].first, shell.navigated[0].second));
+    harness.settle();
+    harness.backend.click(harness.byTestId("Button", "choose"));
+    harness.settle();
+    CHECK(opener->title().get() == "cancelled");
+}
+
+// Mutation: settle the oldest call whatever its params (the call for `from: opener` is cancelled by the first
+// settleCall).
+TEST_CASE("settleCall cancels the call of the screen and params it names, and no other", "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    auto opener = std::move(*shell.mount("opener", ParamMap{}));
+    harness.backend.click(harness.byTestId("Button", "pick"));
+    harness.settle();
+    REQUIRE(shell.navigated.size() == 1);
+    shell.settleCall("chooser", ParamMap{{"from", Value{std::string{"elsewhere"}}}});
+    shell.settleCall("note", shell.navigated[0].second);
+    harness.settle();
+    CHECK(opener->title().get() == "none");
+    shell.settleCall("chooser", shell.navigated[0].second);
+    harness.settle();
+    CHECK(opener->title().get() == "cancelled");
+}
+
+// Mutation: mount a null app document (the host dereferences it).
+TEST_CASE("DocumentScreenHost::mountApp refuses no document and a document that is not the app's", "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    auto const none = shell.mountApp(nullptr);
+    REQUIRE_FALSE(none.has_value());
+    CHECK(none.error().screenId == "app");
+    CHECK(none.error().reason == "no app document");
+    auto const note = shell.mountApp(loadOrFail(kNote, morph::ui::testing::corpusCatalog()));
+    REQUIRE_FALSE(note.has_value());
+    CHECK(note.error().screenId == "note");
+    CHECK(note.error().reason.contains("the app document's id is `app`"));
 }

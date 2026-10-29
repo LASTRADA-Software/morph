@@ -643,3 +643,52 @@ TEST_CASE("table: showHeader false hides the header, and absent shows it", "[ui]
         CHECK(h.backend.prop(h.backend.all("Table").front(), "showHeader") == shown);
     }
 }
+
+// Mutation: accept any direction as ascending in sortKeysOf (`up` then sorts the rows x y z).
+TEST_CASE("table: a bound sort whose key names no sortable column or no direction keeps the order, reported",
+          "[ui][interpreter]") {
+    for (std::string_view const order :
+         {R"([ { "column": "id", "direction": "up" } ])", R"([ { "column": "id" } ])",
+          R"([ { "column": "other", "direction": "asc" } ])", R"([ { "column": "nope", "direction": "asc" } ])",
+          R"([ { "column": 3, "direction": "asc" } ])", R"([ "id" ])"}) {
+        INFO(order);
+        Harness h;
+        auto const screen = h.mount(sortTable(R"(, "order": { "init": { "lit": )" + std::string{order} + " } }",
+                                              R"(, "sort": { "ref": "order" })"));
+        int const table = h.backend.all("Table").front();
+        CHECK(rowOrder(h, table) == "x z y");
+        CHECK(h.backend.prop(table, "sort") == "none");
+        CHECK(sortReports(h) == 1);
+    }
+}
+
+// Mutation: report a bound selection that is not a list on every read (the count is then 2 after the click).
+TEST_CASE("table: a bound selection that is not a list selects nothing, reported once", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "odd",
+      "state": { "picked": { "init": "a" }, "items": { "init": { "lit": [ { "id": "a" }, { "id": "b" } ] } } },
+      "view": { "kind": "table", "id": "t", "rows": { "ref": "items" }, "selectionMode": "multiple",
+                "selection": { "ref": "picked" }, "columns": [ { "id": "id", "label": "Id" } ] } })");
+    int const table = h.backend.all("Table").front();
+    CHECK(readJson(*screen, R"({"ref":"t.selection"})") == "[]");
+    CHECK(h.backend.prop(table, "selection") == "[]");
+    h.backend.selectRows(table, {key("b")});
+    h.settle();
+    CHECK(h.backend.prop(table, "selection") == "[]");
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.reason == R"(selection is "a"; a table's selection is a list of keys)";
+          }) == 1);
+}
+
+// Mutation: bind a literal null sort as a bound one (a header click then leaves the rows in their order).
+TEST_CASE("table: a literal null sort is no binding, so a header click sorts", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(sortTable("", R"(, "sort": null)"));
+    int const table = h.backend.all("Table").front();
+    CHECK(rowOrder(h, table) == "x z y");
+    h.backend.clickHeader(table, 0);
+    h.settle();
+    CHECK(rowOrder(h, table) == "x y z");
+    CHECK(sortReports(h) == 0);
+}
