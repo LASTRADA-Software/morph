@@ -114,7 +114,7 @@ constexpr std::array<std::pair<std::string_view, char const*>, 37> kSchemeProper
 }};
 
 /// The `Theme` property each dimension token of the set sets, besides the spacing scale.
-constexpr std::array<std::pair<std::string_view, char const*>, 10> kDimensionProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 12> kDimensionProperties = {{
     {"radius.control", "radiusControl"},
     {"radius.card", "radiusCard"},
     {"control.height", "controlHeight"},
@@ -125,6 +125,8 @@ constexpr std::array<std::pair<std::string_view, char const*>, 10> kDimensionPro
     {"font.size.caption", "captionSize"},
     {"font.size.mono", "monoSize"},
     {"font.size.display", "displaySize"},
+    {"table.cellPaddingX", "tableCellPaddingX"},
+    {"table.cellPaddingY", "tableCellPaddingY"},
 }};
 
 // The colours, the stale opacity, the background and the dimensions; each property that would not take its value

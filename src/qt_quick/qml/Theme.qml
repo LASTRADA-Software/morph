@@ -128,6 +128,9 @@ QtObject {
     property bool touchTargets: false
     // The height every control is drawn at: `controlHeight`, or at least `touchHeight` while `touchTargets` holds.
     readonly property real targetHeight: touchTargets ? Math.max(controlHeight, touchHeight) : controlHeight
+    // A table cell's and a header label's inset: `table.cellPaddingX`, `table.cellPaddingY`.
+    property real tableCellPaddingX: 8
+    property real tableCellPaddingY: 4
     property real bodySize: 0
     property real headingSize: 0
     // The other sizes, derived from the body size while 0: `font.size.small`, `.caption`, `.mono` and `.display`.

@@ -19,9 +19,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <morph/qt_quick/theme.hpp>
 #include <morph/reactive/signal.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <ranges>
@@ -835,4 +837,25 @@ TEST_CASE("qt_quick table: the sorted column's header shows and states its direc
     table.table->setSort(std::nullopt);
     scene.settle();
     CHECK(name.property("text").toString() == QStringLiteral("Name"));
+}
+
+// Control: ignore the token in MorphTableRow's `place` (the cell's top is the row's top, 0).
+TEST_CASE("qt_quick table: a cell is inset by table.cellPaddingY and a row grows by twice it", "[qt_quick]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::string{"a"}}}, ui::SelectionMode::Single);
+    QQuickItem const& rowItem = Scene::itemOf(*table.rows.at(0));
+    QQuickItem const& cell = Scene::itemOf(*table.cells.at(0));
+    qreal const restingTop = cell.mapToItem(&rowItem, QPointF{0, 0}).y();
+    qreal const restingHeight = rowItem.height();
+    CHECK(restingTop >= 4.0);
+
+    ui::ThemeValues values = ui::themeValues();
+    values.dimensions.insert_or_assign("table.cellPaddingY", 6.0);
+    values.dimensions.insert_or_assign("table.cellPaddingX", 12.0);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    scene.settle();
+    CHECK(cell.mapToItem(&rowItem, QPointF{0, 0}).y() >= 6.0);
+    CHECK(cell.mapToItem(&rowItem, QPointF{0, 0}).x() == 12.0);
+    CHECK(rowItem.height() >= restingHeight);
+    CHECK(rowItem.height() >= cell.implicitHeight() + 12.0);
 }

@@ -54,7 +54,7 @@ MorphWidget {
     // and exact, but this codebase's own tables mix row heights (a multi-line cell, a sieve row); an estimate that
     // self-corrects is the more broadly applicable of the two options the design named, at the cost of an
     // imprecise scrollbar thumb position until enough real rows have been measured to average.
-    property real estimatedRowHeight: Theme.unitHeight + Theme.spaceOf(2)
+    property real estimatedRowHeight: Theme.unitHeight + 2 * Theme.tableCellPaddingY
     readonly property Item content: body
     // What draws under the header's column labels: MorphTableHeaderBackground, or the `tableHeader` restyle. C++
     // sets it when it makes the table.
@@ -410,10 +410,10 @@ MorphWidget {
                             onTapped: root.fire("sort", headerLabel.index)
                         }
                         color: root.scheme.muted
-                        topPadding: Theme.spaceOf(2)
-                        bottomPadding: Theme.spaceOf(2)
-                        leftPadding: Theme.spaceOf(2)
-                        rightPadding: Theme.spaceOf(2)
+                        topPadding: Theme.tableCellPaddingY
+                        bottomPadding: Theme.tableCellPaddingY
+                        leftPadding: Theme.tableCellPaddingX
+                        rightPadding: Theme.tableCellPaddingX
                         // Over its cells: a number column's header sits over its digits.
                         horizontalAlignment: modelData.align === 3 ? Text.AlignRight
                                                                    : modelData.align === 2 ? Text.AlignHCenter

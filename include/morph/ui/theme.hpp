@@ -1060,7 +1060,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 62> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 64> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1125,6 +1125,9 @@ inline constexpr std::array<ThemeTokenSpec, 62> kThemeTokens = {{
     {.path = "font.size.display", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     // The weight of every strong font: a section, a header, a heading, a strong text.
     {.path = "font.weight.strong", .kind = ThemeTokenKind::FontWeight, .color = "", .number = 700.0},
+    // A table cell's and a header label's inset on each axis.
+    {.path = "table.cellPaddingX", .kind = ThemeTokenKind::Dimension, .color = "", .number = 8.0},
+    {.path = "table.cellPaddingY", .kind = ThemeTokenKind::Dimension, .color = "", .number = 4.0},
     {.path = "font.family", .kind = ThemeTokenKind::FontFamily, .color = "", .number = 0.0},
     // The fixed-pitch family of the `mono` text role; none draws in the platform's fixed-pitch font. A sibling of
     // `font.family`: the set keeps one spelling per path.

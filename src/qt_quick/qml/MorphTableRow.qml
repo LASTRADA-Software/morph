@@ -50,14 +50,16 @@ MorphWidget {
         return false
     }
 
-    // Each cell sits inset by the same step as the header label's own padding (MorphTable.qml), so its text lines
-    // up under its header. A cell fills its column's width, except a kind whose width is its label (`fillsAcross`
+    // Each cell sits inset by `table.cellPaddingX` and `table.cellPaddingY`, as the header label is (MorphTable.qml),
+    // so its text lines up under its header, and a row is as tall as its tallest cell plus twice the vertical inset.
+    // A cell fills its column's width, except a kind whose width is its label (`fillsAcross`
     // false: a badge, a check box, a button), which keeps its natural width at the column's start, centre or end.
     // A cell that draws text (`textAlign`) draws it at the column's start, centre or end, and an end column's
     // digits are tabular so they line up across rows. Every cell keeps its own height, up to the row's, and sits at
     // the row's top, centre or bottom by its column's `valign`; `stretch` fills the row's height.
     function place() {
-        const inset = Theme.spaceOf(2)
+        const inset = Theme.tableCellPaddingX
+        const insetY = Theme.tableCellPaddingY
         if (root.heading) {
             let across = root.table ? root.table.lead : 0
             for (const w of root.widths)
@@ -70,8 +72,8 @@ MorphWidget {
                 tall = Math.max(tall, cell.implicitHeight)
             }
             cells.implicitWidth = across
-            cells.implicitHeight = tall
-            const headingHeight = Math.max(tall, root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
+            cells.implicitHeight = tall + 2 * insetY
+            const headingHeight = Math.max(tall + 2 * insetY, root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
             for (let i = 0; i < cells.children.length; ++i) {
                 const cell = cells.children[i]
                 cell.height = Math.min(cell.implicitHeight, tall)
@@ -102,17 +104,27 @@ MorphWidget {
             tallest = Math.max(tallest, cell.implicitHeight)
         }
         cells.implicitWidth = x
-        cells.implicitHeight = tallest
-        const rowHeight = Math.max(tallest, root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
+        cells.implicitHeight = tallest + 2 * insetY
+        const rowHeight = Math.max(tallest + 2 * insetY, root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
+        const room = rowHeight - 2 * insetY
         for (let i = 0; i < cells.children.length; ++i) {
             const cell = cells.children[i]
             const down = i < root.columns.length ? root.columns[i].valign : 2
-            cell.height = down === 0 ? rowHeight : Math.min(cell.implicitHeight, tallest)
-            const spare = rowHeight - cell.height
-            cell.y = down === 3 ? spare : down === 2 ? Math.floor(spare / 2) : 0
+            cell.height = down === 0 ? room : Math.min(cell.implicitHeight, tallest)
+            const spare = room - cell.height
+            cell.y = insetY + (down === 3 ? spare : down === 2 ? Math.floor(spare / 2) : 0)
         }
     }
 
+    Connections {
+        target: Theme
+        function onTableCellPaddingXChanged() {
+            root.place()
+        }
+        function onTableCellPaddingYChanged() {
+            root.place()
+        }
+    }
     onWidthsChanged: place()
     onHeadingChanged: place()
     onColumnsChanged: place()

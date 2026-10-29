@@ -60,6 +60,7 @@ constexpr char const* kThemeBase = R"({
               "display": { "$value": { "value": 22, "unit": "px" } },
               "heading": { "$value": { "value": 16, "unit": "px" } } },
             "weight": { "strong": { "$type": "fontWeight", "$value": 700 } } },
+  "table": { "$type": "dimension", "cellPaddingY": { "$value": { "value": 6, "unit": "px" } } },
   "radius": { "$type": "dimension",
     "control": { "$value": { "value": 6, "unit": "px" } }, "card": { "$value": { "value": 6, "unit": "px" } } },
   "elevation": { "popup": { "$type": "shadow", "$value": { "color": "#14181F24",
