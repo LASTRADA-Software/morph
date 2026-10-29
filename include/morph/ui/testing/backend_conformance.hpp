@@ -2450,6 +2450,88 @@ struct SelectionReport {
     return checks.result();
 }
 
+/// @brief Case: a splitter that stretches in a column of fixed height 20 gives each pane the whole 20; a pane that is
+///        a `pinned` page (a stretching scroll above a bar) keeps its bar at the pane's bottom.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> splitterPanesFillIt(ConformanceProbe& probe) {
+    std::vector<Node> lines;
+    lines.reserve(40);
+    for (int line = 1; line <= 40; ++line) {
+        lines.push_back(sizedText("line " + std::to_string(line), {}));
+    }
+    Scroll scroll{.child = ui::column(Column{.children = std::move(lines)}), .axis = Axis::Vertical};
+    scroll.common.layout = {.width = Sizing::stretch(), .height = Sizing::stretch()};
+    Column page{.children = {ui::scroll(std::move(scroll)), sizedText("bar", {})}};
+    page.common.layout = {.width = Sizing::stretch(), .height = Sizing::stretch()};
+    Splitter split{.children = {ui::column(Column{.children = {sizedText("first", {})}}), ui::column(std::move(page))},
+                   .orientation = Axis::Horizontal};
+    split.common.layout = {.width = Sizing::stretch(), .height = Sizing::stretch()};
+    Column outer{.children = {ui::splitter(std::move(split))}};
+    outer.common.layout = {.width = Sizing::fixed(40), .height = Sizing::fixed(20)};
+    Mounted const view{probe.runtime(), probe.backend(), insideRow(ui::column(std::move(outer)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const inside = measured(probe, view);
+    checks.that(inside.children.size() == 1, "the column holds the splitter");
+    ContainerWidget const* const panes = inside.children.size() == 1 ? asContainer(*inside.children.at(0)) : nullptr;
+    checks.that(panes != nullptr && probe.childCount(*panes) == 2, "the splitter holds two panes");
+    if (panes != nullptr && probe.childCount(*panes) == 2) {
+        WidgetBounds const outerBox = geometry.of(*inside.container);
+        for (std::size_t index = 0; index < 2; ++index) {
+            geometry.near("a pane's height", 20, geometry.of(*probe.childAt(*panes, index)).height);
+        }
+        ContainerWidget const* const pinnedPane = asContainer(*probe.childAt(*panes, 1));
+        checks.that(pinnedPane != nullptr && probe.childCount(*pinnedPane) == 2,
+                    "the second pane holds a scroll and a bar");
+        if (pinnedPane != nullptr && probe.childCount(*pinnedPane) == 2) {
+            WidgetBounds const bar = geometry.of(*probe.childAt(*pinnedPane, 1));
+            geometry.near("the bar's bottom, at the column's", outerBox.y + outerBox.height, bar.y + bar.height);
+        }
+    }
+    return checks.result();
+}
+
+/// @brief Case: a scrollable slot of height 20 holding a column that stretches in height with `minHeight` 30 keeps
+///        the column 30 tall and scrolls it, bringing the focused last button into view; with `minHeight` 10 the
+///        column is exactly 20 tall. A backend that clips what it reads shows the 30 only by the scroll.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> stretchingChildBelowMinimumScrolls(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    IViewBackend& backend = probe.backend();
+    for (int const minimum : {30, 10}) {
+        auto const root = backend.createStack(nullptr, Axis::Vertical);
+        auto const slot = backend.createSlot(root.get());
+        slot->setLayout({.width = Sizing::fixed(30), .height = Sizing::fixed(20)});
+        slot->setScrollable(true);
+        auto const column = backend.createStack(slot.get(), Axis::Vertical);
+        column->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch(), .minHeight = minimum});
+        auto const first = backend.createButton(column.get());
+        first->setLabel("first");
+        auto const filler = backend.createText(column.get());
+        filler->setText("filler");
+        filler->setLayout({.height = Sizing::fixed(24)});
+        auto const last = backend.createButton(column.get());
+        last->setLabel("last");
+        probe.settle();
+        WidgetBounds const box = geometry.of(*slot);
+        geometry.near("the slot's height", 20, box.height);
+        if (minimum == 10) {
+            geometry.near("the column's height above its minimum", 20, geometry.of(*column).height);
+        }
+        if (minimum == 30) {
+            checks.that(!within(box, geometry.of(*last)), "the last button lies inside the slot before any scroll");
+            last->focus();
+            probe.settle();
+            checks.that(within(box, geometry.of(*last)), "the focused last button stays outside the slot");
+        }
+    }
+    return checks.result();
+}
+
 /// @brief Case: in a 40-unit grid with no gap, a `fixed(10)` track and a stretch track give their texts cells 10 and
 ///        30 units wide.
 /// @param probe The backend under test.
@@ -2697,7 +2779,7 @@ struct SelectionReport {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 17> const cases{{
+    static std::array<ConformanceCase, 19> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -2721,6 +2803,10 @@ struct SelectionReport {
         {.name = "a sheet fills the surface", .run = detail::sheetFillsSurface},
         {.name = "a panel taller than its content keeps the content under its header",
          .run = detail::panelContentStartsAtTop},
+        {.name = "a stretching splitter's panes fill it, and a pinned pane keeps its bar at its bottom",
+         .run = detail::splitterPanesFillIt},
+        {.name = "a stretching child of a scrollable slot below its minimum height scrolls",
+         .run = detail::stretchingChildBelowMinimumScrolls},
     }};
     return cases;
 }

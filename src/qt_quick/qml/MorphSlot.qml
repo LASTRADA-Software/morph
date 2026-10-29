@@ -6,14 +6,15 @@ import QtQuick.Layouts
 
 // Where a switch case or a tabs page is shown: its children as they are. A scrollable slot shows a child that does
 // not stretch down at its natural height in a vertical viewport of its own height, which keeps the focused item in
-// view; a child that stretches down fills it, as in a slot that does not scroll.
+// view; a child that stretches down fills it, as in a slot that does not scroll, but is never shorter than its
+// `minHeight`: while the slot is shorter than that, the slot scrolls the child at that height.
 MorphWidget {
     id: root
 
     readonly property Item content: column
     property bool scrollable: false
-    // Whether the viewport scrolls now: scrollable, and no shown child stretches down.
-    readonly property bool scrolls: scrollable && !stretchesDown
+    // Whether the viewport scrolls now: scrollable, and no shown child that stretches down fits.
+    readonly property bool scrolls: scrollable && (!stretchesDown || stretchFloor > root.height)
     // The bar's part, `MorphScrollBar` or its restyle, which C++ passes at creation.
     property Component bar: null
     // The bar made from `bar`, or null without one.
@@ -31,6 +32,16 @@ MorphWidget {
                 return true
         }
         return false
+    }
+
+    // The tallest `minHeight` among the shown children that stretch down, in pixels; zero for none.
+    readonly property real stretchFloor: {
+        let floor = 0
+        for (const child of column.children) {
+            if (child.visible && child.heightKind === 2 && child.minHeightUnits > 0)
+                floor = Math.max(floor, child.minHeightUnits * Theme.unitHeight)
+        }
+        return floor
     }
 
     // Scrolls so that `item`, somewhere inside the content, is in view.
@@ -59,7 +70,7 @@ MorphWidget {
         anchors.fill: parent
         interactive: root.scrolls
         contentWidth: width
-        contentHeight: root.scrolls ? column.implicitHeight : height
+        contentHeight: root.scrolls ? column.height : height
         flickableDirection: Flickable.VerticalFlick
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: root.barItem
@@ -67,7 +78,7 @@ MorphWidget {
         ColumnLayout {
             id: column
             width: flick.width
-            height: root.stretchesDown ? flick.height : implicitHeight
+            height: root.stretchesDown ? Math.max(flick.height, root.stretchFloor) : implicitHeight
             spacing: 0
         }
     }

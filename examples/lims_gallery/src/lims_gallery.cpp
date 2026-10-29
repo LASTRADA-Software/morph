@@ -26,7 +26,7 @@ constexpr char const* kThemeIndex = R"({
   "surfaces": { "selected": "theme/selected.tokens.json", "outOfSpec": "theme/out-of-spec.tokens.json",
                 "standard": "theme/standard.tokens.json", "control": "theme/control.tokens.json",
                 "blank": "theme/blank.tokens.json", "sample": "theme/sample.tokens.json",
-                "empty": "theme/empty.tokens.json" },
+                "empty": "theme/empty.tokens.json", "pane": "theme/pane.tokens.json" },
   "icons": { "scan": "icon/scan.svg" }
 })";
 
@@ -88,6 +88,11 @@ constexpr char const* kEmptySurface = R"({
 constexpr char const* kBlankSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#EEF0F3" }, "border": { "$value": "#7A828F" },
              "text": { "$value": "#363C46" } }
+})";
+
+// A pane that fills its side of a splitter: white, and square as every theme surface is.
+constexpr char const* kPaneSurface = R"({
+  "color": { "$type": "color", "surface": { "$value": "#FFFFFF" }, "border": { "$value": "#DDE1E6" } }
 })";
 
 // The barcode glyph of the receipt screen's scan field, as the design draws it.
@@ -165,6 +170,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
                                        std::tuple{"theme", "theme/blank.tokens.json", kBlankSurface},
                                        std::tuple{"theme", "theme/sample.tokens.json", kSampleSurface},
                                        std::tuple{"theme", "theme/empty.tokens.json", kEmptySurface},
+                                       std::tuple{"theme", "theme/pane.tokens.json", kPaneSurface},
                                        std::tuple{"icon", "icon/scan.svg", kScanIcon}}) {
         if (auto added = served.addFile(morph::ui::BundleFile{.kind = kind, .id = fileId, .bytes = bytes}); !added) {
             return std::unexpected(std::move(added.error()));

@@ -752,8 +752,13 @@ ui::Node samplePane(Console const& console) {
 
 // ── Layouts ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
+// The least height the page keeps for the worklist and the sample pane's splitter beneath the alert, the tiles and
+// the charts; a shorter window scrolls the page instead of squeezing the splitter.
+constexpr int kExpandedMinHeight = 52;
+
 ui::Node expandedLayout(Console const& console) {
-    // The design's 360 px sample pane, in the frontend's character widths, beside the worklist.
+    // The design's 360 px sample pane, in the frontend's character widths, beside the worklist. The splitter takes the
+    // page's height under the charts.
     auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{70, 45}};
     return ui::column({alert(false), kpis(false),
                        ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
@@ -762,9 +767,12 @@ ui::Node expandedLayout(Console const& console) {
                        ui::splitter({ui::panel({worklistTabs(console)}, {.padding = 1}),
                                      ui::panel({samplePane(console)}, {.padding = 2})},
                                     ui::AnyHandle{"horizontal"}, sizes)
+                           .sizing(ui::stretch(), ui::stretch())
                            .a11y("Worklist and sample")
                            .testId("work-split")},
-                      {.gap = 2});
+                      {.gap = 2})
+        .sizing(ui::stretch(), ui::stretch())
+        .minHeight(kExpandedMinHeight);
 }
 
 ui::Node compactCard() {

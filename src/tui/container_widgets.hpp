@@ -217,7 +217,8 @@ private:
 /// The slot a Switch case or a Tabs page mounts into: its children stacked vertically, no gap. A scrollable one whose
 /// shown children all keep their content height is a vertical `ScrollViewport` over them: it follows the focus, takes
 /// the arrows, PageUp and PageDown, Home and End and the wheel, and takes the focus itself while nothing inside can. A
-/// child that stretches down fills the slot, which then does not scroll.
+/// child that stretches down fills the slot, which then does not scroll, unless the child's `minHeight` is more than
+/// the slot's height: the slot then scrolls the child at that height.
 class SlotImpl final : public TuiContainer<ui::SlotWidget> {
 public:
     explicit SlotImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
@@ -230,8 +231,10 @@ public:
     [[nodiscard]] bool wheel(int delta) override;
 
 private:
-    // Whether the slot scrolls now: scrollable, and no shown child stretches down.
-    [[nodiscard]] bool scrolls() const;
+    // Whether the slot scrolls when it is @p height tall: scrollable, and no shown child that stretches down fits.
+    [[nodiscard]] bool scrolls(int height) const;
+    // The slot's height as of the last frame.
+    [[nodiscard]] int height() const;
 
     bool _scrollable = false;
     ScrollViewport _scroller{ui::Axis::Vertical};

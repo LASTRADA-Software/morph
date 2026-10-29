@@ -58,7 +58,8 @@ answers them by index over its order.
   and every page stretch both ways, so a screen whose root stretches fills the page and lays itself out. Every page
   slot is scrollable (`SlotWidget::setScrollable(true)`): a screen whose root keeps its content height is shown at
   that height and scrolls inside the page, so no screen is cut off at the window's edge. Scrolling every page
-  instead would leave a stretching root no height to stretch to.
+  instead would leave a stretching root no height to stretch to. A stretching root is never shorter than its
+  `minHeight`: while the page is shorter than that, the page scrolls it at that height.
 - `WorkspaceOptions::screens` gives a screen id's catalog facts, `WorkspaceScreen{singleton, reuseEmpty, host,
   available}`; empty treats every screen as a plain, available document screen.
 - Tabs keep the order they were opened in, so a page slot's index is its tab's. `tabs()` lists them as

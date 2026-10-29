@@ -188,7 +188,8 @@ runs nothing.
 **A bar that stays in view.** ui/1 has no screen footer: a `column` sized to stretch in height, holding a `scroll`
 sized to stretch in height between its bars, keeps the bars at the column's ends while the content scrolls (the
 scroll takes the column's spare height, not its content's). The same column gives a bar at the top, or both. As a
-screen's root it fills the page; the author API writes it as `pinned`.
+screen's root it fills the page; the author API writes it as `pinned`. A splitter pane may be pinned: a stretching
+splitter gives each pane its height, and a pinned pane keeps its bars at the pane's ends.
 
 A `DocNode` is a node or a structured part of one. Its properties stay keyed by their document
 keys — `props` (expressions), `events` (command lists, a custom node's events as `on.<event>`),

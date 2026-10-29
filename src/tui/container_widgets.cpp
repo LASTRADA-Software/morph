@@ -88,17 +88,17 @@ bool ScrollImpl::wheel(int delta) { return _scroller.wheel(*this, delta); }
 ::core::tui::Size SlotImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Vertical, 0); }
 
 std::vector<::core::tui::Rect> SlotImpl::childAreas(::core::tui::Size size) const {
-    if (scrolls()) {
+    if (scrolls(size.height)) {
         return _scroller.childAreas(*this, size);
     }
     return stackAreas(children(), {.x = 0, .y = 0, .width = size.width, .height = size.height},
                       StackSpec{.axis = ui::Axis::Vertical});
 }
 
-bool SlotImpl::wantsFocus() const { return scrolls() && ScrollViewport::wantsFocus(*this); }
+bool SlotImpl::wantsFocus() const { return scrolls(height()) && ScrollViewport::wantsFocus(*this); }
 
 void SlotImpl::paint(::core::tui::Canvas& canvas) {
-    if (scrolls()) {
+    if (scrolls(canvas.size().height)) {
         _scroller.paint(*this, canvas);
         return;
     }
@@ -106,10 +106,10 @@ void SlotImpl::paint(::core::tui::Canvas& canvas) {
 }
 
 ::core::tui::EventResult SlotImpl::key(::core::tui::KeyEvent const& key) {
-    return scrolls() ? _scroller.key(*this, key) : ::core::tui::EventResult::Ignored;
+    return scrolls(height()) ? _scroller.key(*this, key) : ::core::tui::EventResult::Ignored;
 }
 
-bool SlotImpl::wheel(int delta) { return scrolls() && _scroller.wheel(*this, delta); }
+bool SlotImpl::wheel(int delta) { return scrolls(height()) && _scroller.wheel(*this, delta); }
 
 void SlotImpl::setScrollable(bool scrollable) {
     if (scrollable != _scrollable) {
@@ -118,11 +118,24 @@ void SlotImpl::setScrollable(bool scrollable) {
     }
 }
 
-// A child that stretches down fills the slot, so only content-height children scroll.
-bool SlotImpl::scrolls() const {
-    return _scrollable && std::ranges::none_of(children(), [](WidgetBase const* child) {
-               return child->shown() && child->layout().height.kind == ui::Sizing::Kind::Stretch;
-           });
+int SlotImpl::height() const { return view().area().height; }
+
+// A child that stretches down fills the slot, so only content-height children scroll; a stretching child whose
+// `minHeight` is more than the slot is tall keeps that height instead, and the slot scrolls it.
+bool SlotImpl::scrolls(int height) const {
+    if (!_scrollable) {
+        return false;
+    }
+    bool stretches = false;
+    for (auto const* child : children()) {
+        if (child->shown() && child->layout().height.kind == ui::Sizing::Kind::Stretch) {
+            if (child->layout().minHeight.value_or(0) > height) {
+                return true;
+            }
+            stretches = true;
+        }
+    }
+    return !stretches;
 }
 
 void GridImpl::setColumns(int columns) {
