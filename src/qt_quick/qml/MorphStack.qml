@@ -18,6 +18,9 @@ MorphWidget {
     // Whether the row's children continue on the next line when they do not fit; C++ sets it before it adopts any
     // child, so every child lands in the content the stack lays out with.
     property bool wrap: false
+    // Whether a 1 px rule in the scheme's divider colour is drawn between each two shown children of a column; the
+    // rule takes 1 px of its own, so the children are `gap` plus that apart.
+    property bool divided: false
     readonly property Item content: wrap ? free : layout
 
     // Under `between` the layout's spacing comes from the stack's length, so its implicit length along the axis would
@@ -66,7 +69,7 @@ MorphWidget {
         }
         return lengths
     }
-    readonly property real gapLength: Theme.spaceOf(root.gap)
+    readonly property real gapLength: Theme.spaceOf(root.gap) + (root.divided && root.axis === 0 ? 1 : 0)
     readonly property real naturalLength: root.shownLengths.reduce((sum, length) => sum + length, 0)
                                           + root.gapLength * Math.max(0, root.shownLengths.length - 1)
     readonly property real betweenSpacing: {
@@ -225,6 +228,33 @@ MorphWidget {
             y += height + (l < lines.length - 1 ? space : 0)
         }
         free.implicitHeight = y
+    }
+
+    // The shown children, in order: what the rules sit between.
+    readonly property var shownItems: {
+        const items = []
+        for (const object of layout.children) {
+            const child = object as Item
+            if (child && child.visible)
+                items.push(child)
+        }
+        return items
+    }
+
+    // A rule below each shown child but the last, centred in the gap that is left of the rule's own pixel.
+    Repeater {
+        model: root.divided && root.axis === 0 && !root.wrap ? root.shownItems : []
+        delegate: Rectangle {
+            required property Item modelData
+            required property int index
+            parent: root
+            visible: index < root.shownItems.length - 1
+            x: 0
+            width: root.width
+            height: 1
+            y: layout.y + modelData.y + modelData.height + (root.gapLength - 1) / 2
+            color: root.scheme.divider
+        }
     }
 
     Item {

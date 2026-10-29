@@ -334,7 +334,9 @@ the node. The holder a slot sees is the one-row `forEach`, because a slot reads 
 that `forEach` carries the hints too; they are worked out from the document's children before the content mounts. A
 literal sizing is read as written and a computed one is evaluated once in the enclosing scope. A computed sizing that
 reads a name the case or overlay itself declares cannot be evaluated before the content mounts: it is reported at its
-path and the holder stays content-sized on that axis. A single node of a list is lowered unwrapped.
+path and the holder stays content-sized on that axis. A single node of a list is lowered unwrapped. A document panel or collapsible puts `gap` (default 2) between several
+children and a dialog or drawer (default 3), the holder's column carrying it; a panel built in the view tree holds one child and
+its author picks that child's gap.
 
 A `group` lowers to a `Column` (gap `gap`) of existing kinds, so the view tree and the contract do not change: a
 `Text` of its `label` whose `field.required` is its `required` (so the mark follows the legend's last line), its

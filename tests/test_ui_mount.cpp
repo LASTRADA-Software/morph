@@ -1054,3 +1054,32 @@ TEST_CASE("ui::Mounted: a wrapping row records wrap before its first child, and 
           "Row#1 gap=0\n"
           "  Text#2 role=Normal text=a\n");
 }
+
+// Mutation: never call setDivided in mountStack (the log loses it), or call it after the children are mounted.
+TEST_CASE("ui::Mounted: a divided column records divided before its first child, and a plain one records nothing",
+          "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    {
+        ui::Mounted const view{
+            runtime, backend,
+            ui::column({.children = {ui::text({.text = "a"}), ui::text({.text = "b"})}, .divided = true})};
+        CHECK(backend.dump() ==
+              "Column#1 divided=true gap=0\n"
+              "  Text#2 role=Normal text=a\n"
+              "  Text#3 role=Normal text=b\n");
+        auto const& log = backend.log();
+        auto const divided = std::ranges::find(log, "set Column#1 divided=true");
+        auto const firstChild =
+            std::ranges::find_if(log, [](std::string const& entry) { return entry.starts_with("create Text"); });
+        REQUIRE(divided != log.end());
+        REQUIRE(firstChild != log.end());
+        CHECK(divided < firstChild);
+    }
+    RecordingBackend plain;
+    ui::Mounted const view{runtime, plain, ui::column({.children = {ui::text({.text = "a"})}})};
+    CHECK(plain.dump() ==
+          "Column#1 gap=0\n"
+          "  Text#2 role=Normal text=a\n");
+}

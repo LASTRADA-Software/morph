@@ -39,6 +39,8 @@ void StackImpl::setWrap(bool wrap) {
     write("wrap", wrap);
 }
 
+void StackImpl::setDivided(bool divided) { write("divided", divided); }
+
 namespace {
 
 // Has the container's `place` run again whenever a cell's implicit size or visibility changes. The container's item is

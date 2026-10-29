@@ -396,6 +396,13 @@ public:
     /// on one line, and its natural height the height of its lines at the width it is given.
     /// @param wrap Always true: a stack that does not wrap is never told.
     virtual void setWrap(bool wrap) = 0;
+
+    /// @brief Draws a 1 px rule in the theme's divider colour between each two shown children of a vertical stack,
+    ///        centred in the gap. The rule takes 1 px of its own, so a gap of 0 still separates the children. The
+    ///        mount calls it once, before the stack's first child, and only for a stack that is divided. A backend
+    ///        that cannot spare a row for a rule draws none: the terminal's lines are already apart.
+    /// @param divided Always true: a stack that is not divided is never told.
+    virtual void setDivided(bool divided) = 0;
 };
 
 /// @brief Children laid out row-major in columns.

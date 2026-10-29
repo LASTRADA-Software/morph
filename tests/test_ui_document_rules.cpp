@@ -314,3 +314,26 @@ TEST_CASE("ui document rules: wrap is a literal flag of a row and of a horizonta
           "/view/wrap: `wrap` fills lines along a row; this `forEach`'s `axis` is not \"horizontal\"");
     CHECK(refusal(each(R"("axis": "vertical", "wrap": false,)")) == "loads");
 }
+
+// Mutation: drop `divided` from the container keys (a column then refuses it), or its refusals on a row and on a
+// horizontal forEach.
+TEST_CASE(
+    "ui document rules: divided is a column's and a vertical forEach's, and gap is a panel's, dialog's and "
+    "collapsible's",
+    "[ui][document]") {
+    auto const each = [](std::string const& extra) {
+        return document(R"({"kind": "forEach", "rows": {"lit": []}, "key": {"row": "id"}, )" + extra +
+                        R"("children": [{"kind": "text", "text": "x"}]})");
+    };
+    CHECK(refusal(document(R"({"kind": "column", "divided": true, "children": []})")) == "loads");
+    CHECK(refusal(document(R"({"kind": "column", "divided": {"ref": "x"}, "children": []})")) ==
+          "/view/divided: `divided` is a literal `true` or `false`");
+    CHECK(refusal(document(R"({"kind": "row", "divided": true, "children": []})")) ==
+          "/view/divided: only a column is divided; a row has no rules between rows");
+    CHECK(refusal(each(R"("divided": true,)")) == "loads");
+    CHECK(refusal(each(R"("axis": "horizontal", "divided": true,)")) ==
+          "/view/divided: `divided` draws rules between rows of a column; this `forEach`'s `axis` is \"horizontal\"");
+    CHECK(refusal(document(R"({"kind": "panel", "gap": 1, "children": []})")) == "loads");
+    CHECK(refusal(document(R"({"kind": "collapsible", "gap": 0, "children": []})")) == "loads");
+    CHECK(refusal(document(R"({"kind": "dialog", "gap": 4, "children": []})")) == "loads");
+}

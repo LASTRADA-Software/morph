@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
+#include <functional>
 #include <memory>
 #include <morph/core/completion.hpp>
 #include <morph/forms/engine/form_session.hpp>
@@ -921,4 +922,52 @@ TEST_CASE("qt_quick containers: the shell's head shares the title's line, and wr
     // Out of room: the actions drop to a line of their own, below the badges.
     CHECK(bookAt390.y() >= badges.bottom() - 1.0);
     CHECK(rectOf("head_Sign").right() <= 390.0);
+}
+
+// Mutation: draw the rules in the scheme's border colour, leave `divided` unread (no rules), or put the rule on the
+// lower child's edge instead of in the gap.
+TEST_CASE("qt_quick containers: a divided column draws a divider rule in each gap and a plain one none",
+          "[qt_quick]") {
+    Scene scene;
+    // The one-pixel rectangles under @p item, however deep.
+    std::function<void(QQuickItem const&, QList<QQuickItem*>&)> collect = [&collect](QQuickItem const& item,
+                                                                                     QList<QQuickItem*>& found) {
+        for (QQuickItem* const child : item.childItems()) {
+            if (child->inherits("QQuickRectangle") && child->height() == 1 && child->isVisible()) {
+                found.append(child);
+            }
+            collect(*child, found);
+        }
+    };
+    auto const rulesOf = [&collect](QQuickItem const& stack) {
+        QList<QQuickItem*> found;
+        collect(stack, found);
+        return found;
+    };
+    for (bool const divided : {false, true}) {
+        auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+        if (divided) {
+            column->setDivided(true);
+        }
+        column->setGap(0);
+        std::vector<std::unique_ptr<ui::TextWidget>> texts;
+        for (char const* const name : {"a", "b", "c"}) {
+            texts.push_back(scene.backend().createText(column.get()));
+            texts.back()->setText(name);
+        }
+        scene.settle();
+        QList<QQuickItem*> rules = rulesOf(Scene::itemOf(*column));
+        if (!divided) {
+            CHECK(rules.isEmpty());
+            continue;
+        }
+        REQUIRE(rules.size() == 2);
+        std::ranges::sort(rules.begin(), rules.end(),
+                          [](QQuickItem const* left, QQuickItem const* right) { return left->y() < right->y(); });
+        QQuickItem const& first = Scene::itemOf(*texts.at(0));
+        QQuickItem const& second = Scene::itemOf(*texts.at(1));
+        CHECK(rules.at(0)->y() >= first.y() + first.height() - 0.5);
+        CHECK(rules.at(0)->y() + 1 <= second.y() + 0.5);
+        CHECK(rules.at(0)->property("color").value<QColor>() == QColor{QStringLiteral("#dcdce0")});
+    }
 }

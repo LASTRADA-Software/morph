@@ -1170,7 +1170,7 @@ public:
     }
 };
 
-/// @brief A fake `StackWidget`, of kind `Column` or `Row`: properties `gap`, `align`, `justify`, `wrap`.
+/// @brief A fake `StackWidget`, of kind `Column` or `Row`: properties `gap`, `align`, `justify`, `wrap`, `divided`.
 class FakeStack final : public FakeContainer<StackWidget> {
 public:
     using FakeContainer<StackWidget>::FakeContainer;
@@ -1178,6 +1178,7 @@ public:
     void setAlign(Align align) override { set("align", formatAlign(align)); }
     void setJustify(Justify justify) override { set("justify", formatJustify(justify)); }
     void setWrap(bool wrap) override { set("wrap", wrap ? "true" : "false"); }
+    void setDivided(bool divided) override { set("divided", divided ? "true" : "false"); }
 };
 
 /// @brief A fake `GridWidget`: properties `columns`, `tracks`, `gap`, `align`, and `span` on a child.

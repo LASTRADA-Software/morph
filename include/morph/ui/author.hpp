@@ -3756,6 +3756,9 @@ struct ContainerOptions {
     /// @brief Whether a row's children continue on the next line when they do not fit. Only a `row` has it; the
     ///        loader refuses it on a `column`.
     bool wrap = false;
+    /// @brief Whether a column draws a rule between its children. Only a `column` has it; the loader refuses it on a
+    ///        `row`.
+    bool divided = false;
 };
 
 namespace detail {
@@ -3777,6 +3780,9 @@ namespace detail {
     if (options.wrap) {
         // Written for a column too, so the loader refuses it rather than the author silently losing it.
         node.flag("wrap");
+    }
+    if (options.divided) {
+        node.flag("divided");
     }
     return node.done();
 }
@@ -4150,6 +4156,8 @@ struct ForEachOptions {
     AnyHandle gap;
     /// @brief Whether a horizontal `forEach`'s rows continue on the next line when they do not fit.
     bool wrap = false;
+    /// @brief Whether a vertical `forEach` draws a rule between its rows.
+    bool divided = false;
 };
 
 /// @brief A `forEach` node: its children once per row, each row a scope of its own.
@@ -4164,6 +4172,9 @@ struct ForEachOptions {
     node.put("rows", rows).put("key", options.key).put("axis", options.axis).put("gap", options.gap);
     if (options.wrap) {
         node.flag("wrap");
+    }
+    if (options.divided) {
+        node.flag("divided");
     }
     return node.scope(scope).put("children", children).done();
 }

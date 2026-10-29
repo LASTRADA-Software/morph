@@ -714,6 +714,9 @@ struct Column {
     Align align = Align::Stretch;
     /// @brief Where the spare height goes while no shown child stretches; set once.
     Justify justify = Justify::Start;
+    /// @brief Whether a 1 px rule in the theme's divider colour is drawn between each two shown children, centred in
+    ///        the gap; set once. The terminal draws none.
+    bool divided = false;
 };
 
 /// @brief Children laid out left to right.
@@ -1046,6 +1049,9 @@ struct ForEach {
     /// @brief Whether rows that do not fit on one line continue on the next; set once. Only a horizontal `axis`
     ///        wraps: the mount ignores it on a vertical one.
     bool wrap = false;
+    /// @brief Whether a rule is drawn between each two shown rows, as a Column's `divided`; set once. Only a vertical
+    ///        `axis` divides: the mount ignores it on a horizontal one.
+    bool divided = false;
 };
 
 /// @brief One column of a `Table`.
@@ -1723,12 +1729,13 @@ template <typename E>
 /// @param gap Space between rows.
 /// @param common Visibility, enablement, layout and the rest of the row container's common properties.
 /// @param wrap Whether rows continue on the next line when they do not fit; only a horizontal @p axis wraps.
+/// @param divided Whether a rule is drawn between each two shown rows; only a vertical @p axis divides.
 /// @return The node.
 /// @throws std::invalid_argument when @p rows, @p keyOf or @p rowView is empty.
 template <typename RowT>
 [[nodiscard]] Node forEach(std::function<std::vector<RowT>()> rows, std::function<Key(RowT const&)> keyOf,
                            std::function<Node(reactive::Signal<RowT> const&)> rowView, Axis axis = Axis::Vertical,
-                           int gap = 0, Common const& common = {}, bool wrap = false) {
+                           int gap = 0, Common const& common = {}, bool wrap = false, bool divided = false) {
     return detail::makeNode(ForEach{
         .model =
             std::make_shared<detail::TypedForEach<RowT> const>(std::move(rows), std::move(keyOf), std::move(rowView)),
@@ -1736,6 +1743,7 @@ template <typename RowT>
         .gap = gap,
         .common = common,
         .wrap = wrap,
+        .divided = divided,
     });
 }
 
@@ -1748,14 +1756,15 @@ template <typename RowT>
 /// @param gap Space between rows.
 /// @param common Visibility, enablement, layout and the rest of the row container's common properties.
 /// @param wrap Whether rows continue on the next line when they do not fit; only a horizontal @p axis wraps.
+/// @param divided Whether a rule is drawn between each two shown rows; only a vertical @p axis divides.
 /// @return The node.
 /// @throws std::invalid_argument when @p keyOf or @p rowView is empty.
 template <typename RowT>
 [[nodiscard]] Node forEach(reactive::Signal<std::vector<RowT>> const& rows, std::function<Key(RowT const&)> keyOf,
                            std::function<Node(reactive::Signal<RowT> const&)> rowView, Axis axis = Axis::Vertical,
-                           int gap = 0, Common const& common = {}, bool wrap = false) {
-    return forEach<RowT>([&rows] { return rows.get(); }, std::move(keyOf), std::move(rowView), axis, gap, common,
-                         wrap);
+                           int gap = 0, Common const& common = {}, bool wrap = false, bool divided = false) {
+    return forEach<RowT>([&rows] { return rows.get(); }, std::move(keyOf), std::move(rowView), axis, gap, common, wrap,
+                         divided);
 }
 
 /// @brief Everything about a `table` beyond its columns and rows.

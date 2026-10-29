@@ -841,12 +841,14 @@ inline constexpr std::array<KeySpec, 14> kHeadToolKeys = {{{"id", Shape::Name, {
                                                            {"width", Shape::Expr},
                                                            {"visible", Shape::Condition},
                                                            {"enabled", Shape::Condition}}};
-/// @brief The keys of `column` and `row`; `wrap` is a row's, read on a column only to refuse it.
-inline constexpr std::array<KeySpec, 5> kContainerKeys = {{{"children", Shape::Nodes},
+/// @brief The keys of `column` and `row`; `wrap` is a row's and `divided` a column's, each read on the other only to
+///        refuse it.
+inline constexpr std::array<KeySpec, 6> kContainerKeys = {{{"children", Shape::Nodes},
                                                            {"gap", Shape::Expr},
                                                            {"align", Shape::Text},
                                                            {"justify", Shape::Text},
-                                                           {"wrap", Shape::Flag}}};
+                                                           {"wrap", Shape::Flag},
+                                                           {"divided", Shape::Flag}}};
 /// @brief The keys of `grid`; `justify` is read only to refuse it.
 inline constexpr std::array<KeySpec, 6> kGridKeys = {{{"children", Shape::Nodes},
                                                       {"gap", Shape::Expr},
@@ -857,7 +859,8 @@ inline constexpr std::array<KeySpec, 6> kGridKeys = {{{"children", Shape::Nodes}
 /// @brief The keys of a `grid` track part.
 inline constexpr std::array<KeySpec, 2> kTrackKeys = {{{"width", Shape::Expr}, {"align", Shape::Text}}};
 /// @brief The keys of `panel`.
-inline constexpr std::array<KeySpec, 7> kPanelKeys = {{{"title", Shape::Expr},
+inline constexpr std::array<KeySpec, 8> kPanelKeys = {{{"title", Shape::Expr},
+                                                       {"gap", Shape::Expr},
                                                        {"header", Shape::Nodes},
                                                        {"padding", Shape::Expr},
                                                        {"collapsible", Shape::Expr},
@@ -879,7 +882,8 @@ inline constexpr std::array<KeySpec, 3> kTabsKeys = {
 inline constexpr std::array<KeySpec, 3> kTabKeys = {
     {{"id", Shape::Name}, {"label", Shape::Expr}, {"children", Shape::Nodes}}};
 /// @brief The keys of `dialog` and `drawer`.
-inline constexpr std::array<KeySpec, 12> kDialogKeys = {{{"open", Shape::Condition},
+inline constexpr std::array<KeySpec, 13> kDialogKeys = {{{"open", Shape::Condition},
+                                                         {"gap", Shape::Expr},
                                                          {"title", Shape::Expr},
                                                          {"description", Shape::Expr},
                                                          {"showErrors", Shape::Text},
@@ -901,11 +905,12 @@ inline constexpr std::array<KeySpec, 6> kGroupKeys = {{{"label", Shape::Expr},
 /// @brief The keys of `busy`.
 inline constexpr std::array<KeySpec, 2> kBusyKeys = {{{"active", Shape::Condition}, {"label", Shape::Expr}}};
 /// @brief The keys of `forEach`.
-inline constexpr std::array<KeySpec, 6> kForEachKeys = {{{"rows", Shape::Expr, {}, kRequired},
+inline constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {}, kRequired},
                                                          {"key", Shape::Expr, {}, kInner},
                                                          {"axis", Shape::Expr},
                                                          {"gap", Shape::Expr},
                                                          {"wrap", Shape::Flag},
+                                                         {"divided", Shape::Flag},
                                                          {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
 inline constexpr std::array<KeySpec, 27> kTableKeys = {{{"rows", Shape::Expr},
@@ -1037,7 +1042,8 @@ inline constexpr std::array<KeySpec, 4> kLineKeys = {
 inline constexpr std::array<KeySpec, 3> kSplitterKeys = {
     {{"orientation", Shape::Expr}, {"sizes", Shape::Expr}, {"children", Shape::Nodes}}};
 /// @brief The keys of `collapsible`.
-inline constexpr std::array<KeySpec, 5> kCollapsibleKeys = {{{"title", Shape::Expr},
+inline constexpr std::array<KeySpec, 6> kCollapsibleKeys = {{{"title", Shape::Expr},
+                                                             {"gap", Shape::Expr},
                                                              {"open", Shape::Condition},
                                                              {"header", Shape::Nodes},
                                                              {"children", Shape::Nodes},
@@ -3611,6 +3617,8 @@ private:
             checkGrid(node);
         } else if (node.kind == "column" && node.flags.contains("wrap")) {
             refuse(pointerAppend(node.path, "wrap"), "only a row wraps; a column has no lines to continue on");
+        } else if (node.kind == "row" && node.flags.contains("divided")) {
+            refuse(pointerAppend(node.path, "divided"), "only a column is divided; a row has no rules between rows");
         } else if (node.kind == "forEach") {
             checkForEachWrap(node);
         } else if (node.kind == "menu") {
@@ -4129,20 +4137,22 @@ private:
         checkCellPlace(node, "valign");
     }
 
-    // Only a horizontal `forEach` wraps; a literal `axis` that is anything else is refused here, and a computed one
-    // is read when the screen lowers.
+    // Only a horizontal `forEach` wraps and only a vertical one is divided; a literal `axis` that says otherwise is
+    // refused here, and a computed one is read when the screen lowers.
     static void checkForEachWrap(DocNode const& node) {
-        if (!node.flag("wrap")) {
-            return;
-        }
         ExprPtr const axis = node.prop("axis");
         if (axis == nullptr || axis->kind != ExprKind::Literal) {
             return;
         }
         std::string const* const named = axis->literal.asString();
-        if (named == nullptr || *named != "horizontal") {
+        bool const horizontal = named != nullptr && *named == "horizontal";
+        if (node.flag("wrap") && !horizontal) {
             refuse(pointerAppend(node.path, "wrap"),
                    "`wrap` fills lines along a row; this `forEach`'s `axis` is not \"horizontal\"");
+        }
+        if (node.flag("divided") && horizontal) {
+            refuse(pointerAppend(node.path, "divided"),
+                   "`divided` draws rules between rows of a column; this `forEach`'s `axis` is \"horizontal\"");
         }
     }
 

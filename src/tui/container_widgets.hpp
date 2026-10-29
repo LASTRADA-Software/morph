@@ -32,6 +32,8 @@ public:
     void setAlign(ui::Align align) override;
     void setJustify(ui::Justify justify) override;
     void setWrap(bool wrap) override;
+    /// Draws no rule: a rule would take a row of its own and double a list's height, and its lines are already apart.
+    void setDivided(bool divided) override { static_cast<void>(divided); }
     [[nodiscard]] ui::Axis axis() const noexcept { return _axis; }
     /// The gap in cells along the axis: the spacing step `setGap` was given, mapped by `layout::stepCells`.
     [[nodiscard]] int gap() const noexcept { return _gap; }

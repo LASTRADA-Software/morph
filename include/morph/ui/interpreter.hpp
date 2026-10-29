@@ -2650,9 +2650,10 @@ public:
     /// @brief Lowers a node list into one node: the node itself, or a column of them.
     /// @param nodes The nodes.
     /// @param ctx   Where.
+    /// @param gap   The spacing step between the nodes of a list of several; a single node is lowered unwrapped.
     /// @return The node.
     // NOLINTNEXTLINE(misc-no-recursion): one level per nested node of the document.
-    [[nodiscard]] Node lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx);
+    [[nodiscard]] Node lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx, int gap = 0);
 
     /// @brief The size request of a holder of @p content: the largest stretch of its children on each axis.
     ///
@@ -6671,6 +6672,11 @@ inline constexpr std::string_view kToneNames = "a tone is neutral, info, ok, war
     return out;
 }
 
+/// @brief The default spacing step between the children of a document panel or collapsible, the mockups' 8 px.
+inline constexpr int kPanelGap = 2;
+/// @brief The default spacing step between the children of a document dialog or drawer, the mockups' 12 px.
+inline constexpr int kDialogGap = 3;
+
 /// @brief A node's size request.
 /// @param node The node; may be null.
 /// @return Its layout hints, or none for a null node or a kind that has no `Common`.
@@ -6741,10 +6747,11 @@ inline constexpr std::string_view kToneNames = "a tone is neutral, info, ok, war
 /// @param children The content.
 /// @param scope    The scope.
 /// @param keys     The chords of the content.
+/// @param gap      The spacing step between the children.
 /// @return The node.
 [[nodiscard]] inline Node holding(std::vector<Node> children, std::shared_ptr<RtScope> scope,
-                                  std::vector<KeyBinding> keys = {}) {
-    Column column = listColumn(std::move(children));
+                                  std::vector<KeyBinding> keys = {}, int gap = 0) {
+    Column column = listColumn(std::move(children), gap);
     column.common.visible = Prop<bool>{[held = std::move(scope)] { return held != nullptr; }};
     column.common.keys = std::move(keys);
     return ui::column(std::move(column));
@@ -6781,7 +6788,7 @@ inline void collectIds(DocNode const& node, std::set<std::string, std::less<>>& 
     }
 }
 
-inline Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx) {
+inline Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx, int gap) {
     if (nodes.size() == 1) {
         return lower(*nodes.front(), ctx);
     }
@@ -6790,7 +6797,7 @@ inline Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx con
     for (DocNodePtr const& child : nodes) {
         children.push_back(lower(*child, ctx));
     }
-    return ui::column(listColumn(std::move(children)));
+    return ui::column(listColumn(std::move(children), gap));
 }
 
 inline LayoutHints ScreenCore::holderHints(std::span<DocNode const* const> content, ScopeDecl const* decl,
@@ -7290,9 +7297,9 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         }
         return out;
     };
-    auto child = [&](std::string_view key) -> Node {
+    auto child = [&](std::string_view key, int gap = 0) -> Node {
         auto const nodes = node.nodes(key);
-        return nodes.empty() ? Node{} : lowerAll(nodes, ctx);
+        return nodes.empty() ? Node{} : lowerAll(nodes, ctx, gap);
     };
     auto onceInt = [&](std::string_view key, std::int64_t fallback) {
         ExprPtr const expr = node.prop(key);
@@ -7648,7 +7655,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             Column spec{.children = children("children"),
                         .gap = gap,
                         .align = alignOf(node.name("align")),
-                        .justify = justifyOf(node.name("justify"))};
+                        .justify = justifyOf(node.name("justify")),
+                        .divided = node.flag("divided")};
             commonOf(node, ctx, element, spec.common);
             return ui::column(std::move(spec));
         }
@@ -7685,7 +7693,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     if (kind == "panel") {
         Panel spec{.title = textProp("title"), .padding = static_cast<int>(onceInt("padding", 0))};
         spec.header = child("header");
-        spec.child = child("children");
+        spec.child = child("children", static_cast<int>(onceInt("gap", kPanelGap)));
         spec.collapsible = onceBool("collapsible", false);
         spec.collapsed = bindProp<bool>(ctx, node.prop("collapsed"), false, boolOf);
         if (Commands const* const commands = node.event("onToggle")) {
@@ -7838,7 +7846,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             spec.onToggle = [this, ctx, commands](bool open) { runEvent(commands, ctx, Value{open}); };
         }
         spec.header = child("header");
-        spec.child = child("children");
+        spec.child = child("children", static_cast<int>(onceInt("gap", kPanelGap)));
         commonOf(node, ctx, element, spec.common);
         return ui::collapsible(std::move(spec));
     }
@@ -8375,9 +8383,11 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
     for (DocNodePtr const& child : node.nodes("children")) {
         bodyContent.push_back(child.get());
     }
+    int const bodyGap =
+        node.prop("gap") ? static_cast<int>(intOf(once(ctx, node.prop("gap")), kDialogGap)) : kDialogGap;
     LayoutHints const bodyHints = holderHints(bodyContent, node.scope ? &*node.scope : nullptr, ctx);
     Node body = lazy(
-        [this, ctx, &node, element]() -> Node {
+        [this, ctx, &node, element, bodyGap]() -> Node {
             auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
             inner->owner = element;
             addPending(1);
@@ -8421,7 +8431,7 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
                 keys.push_back(KeyBinding{
                     .chord = "Esc", .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); }});
             }
-            return holding(std::move(children), inner, std::move(keys));
+            return holding(std::move(children), inner, std::move(keys), bodyGap);
         },
         bodyHints);
     Action onDismiss = [this, ctx, element, commands = node.event("onDismiss")] {
@@ -8655,8 +8665,14 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                    "`wrap` fills lines along a row; this `forEach`'s `axis` is not \"horizontal\"");
             wrap = false;
         }
+        bool divided = node.flag("divided");
+        if (divided && along != Axis::Vertical) {
+            report(node.path + "/divided",
+                   "`divided` draws rules between rows of a column; this `forEach`'s `axis` is \"horizontal\"");
+            divided = false;
+        }
         return ui::forEach<Value>(std::move(rows), std::move(keyFn), std::move(rowView), along,
-                                  gap ? static_cast<int>(intOf(once(ctx, gap), 0)) : 0, common, wrap);
+                                  gap ? static_cast<int>(intOf(once(ctx, gap), 0)) : 0, common, wrap, divided);
     }
     // The table's rows, sorted: the element's own view, which its element values read too, unless names bound
     // where the table is lowered (a component's `props`) reach its rows, which the element cannot see.
