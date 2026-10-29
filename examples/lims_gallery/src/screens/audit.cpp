@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "layout.hpp"
 #include "lims_gallery/screens.hpp"
+#include "screen_layout.hpp"
 
 namespace lims_gallery {
 
@@ -53,18 +53,61 @@ ui::AnyHandle entry(Change const& change) {
 
 ui::AnyHandle entries() {
     return ui::list(
-        {entry({"2026-10-24T09:40:12", "24-Oct-2026", "09:40:12", "ameyer", "WS-2026-0412", "", "Status", "Result",
-                "In review", "Approved (signed)",
-                "Results within specification except Impurity B; OOS-2026-031 closed as lab error."}),
-         entry({"2026-10-24T09:12:47", "24-Oct-2026", "09:12:47", "mkaur", "S-26-104170", "Impurity B", "Result",
-                "Result", "0.12 %", "0.21 %", "Transcription error: peak 7 integrated with the wrong baseline."}),
-         entry({"2026-10-24T09:07:03", "24-Oct-2026", "09:07:03", "jruiz", "S-26-104217", "", "Received at", "Sample",
-                "(empty)", "24-Oct-2026 09:07", ""}),
-         entry({"2026-10-23T17:55:31", "23-Oct-2026", "17:55:31", "mkaur", "S-26-104176", "", "Storage location",
-                "Sample", "Fridge F-02 · shelf 1", "Fridge F-03 · shelf 2",
-                "F-02 out of range during defrost cycle."}),
-         entry({"2026-10-23T16:20:09", "23-Oct-2026", "16:20:09", "ameyer", "SPEC-ASSAY-07", "", "Upper limit",
-                "Specification", "105.0 %", "103.0 %", "Change control CC-2026-118, effective 23-Oct-2026."})});
+        {entry({.at = "2026-10-24T09:40:12",
+                .date = "24-Oct-2026",
+                .time = "09:40:12",
+                .user = "ameyer",
+                .record = "WS-2026-0412",
+                .detail = "",
+                .field = "Status",
+                .type = "Result",
+                .oldValue = "In review",
+                .newValue = "Approved (signed)",
+                .reason = "Results within specification except Impurity B; OOS-2026-031 closed as lab error."}),
+         entry({.at = "2026-10-24T09:12:47",
+                .date = "24-Oct-2026",
+                .time = "09:12:47",
+                .user = "mkaur",
+                .record = "S-26-104170",
+                .detail = "Impurity B",
+                .field = "Result",
+                .type = "Result",
+                .oldValue = "0.12 %",
+                .newValue = "0.21 %",
+                .reason = "Transcription error: peak 7 integrated with the wrong baseline."}),
+         entry({.at = "2026-10-24T09:07:03",
+                .date = "24-Oct-2026",
+                .time = "09:07:03",
+                .user = "jruiz",
+                .record = "S-26-104217",
+                .detail = "",
+                .field = "Received at",
+                .type = "Sample",
+                .oldValue = "(empty)",
+                .newValue = "24-Oct-2026 09:07",
+                .reason = ""}),
+         entry({.at = "2026-10-23T17:55:31",
+                .date = "23-Oct-2026",
+                .time = "17:55:31",
+                .user = "mkaur",
+                .record = "S-26-104176",
+                .detail = "",
+                .field = "Storage location",
+                .type = "Sample",
+                .oldValue = "Fridge F-02 · shelf 1",
+                .newValue = "Fridge F-03 · shelf 2",
+                .reason = "F-02 out of range during defrost cycle."}),
+         entry({.at = "2026-10-23T16:20:09",
+                .date = "23-Oct-2026",
+                .time = "16:20:09",
+                .user = "ameyer",
+                .record = "SPEC-ASSAY-07",
+                .detail = "",
+                .field = "Upper limit",
+                .type = "Specification",
+                .oldValue = "105.0 %",
+                .newValue = "103.0 %",
+                .reason = "Change control CC-2026-118, effective 23-Oct-2026."})});
 }
 
 // One checkbox of a facet group: the value it matches, its label, its count in the whole trail, and its state.
@@ -124,14 +167,28 @@ Audit declare(ui::Scope& screen) {
     Audit audit;
     audit.width = layout::widthClass(screen);
     audit.compact = screen.let("compact", ui::eq(audit.width, "compact"));
-    audit.types = {{"Result", "412", "type-result", screen.state("typeResult", true)},
-                   {"Sample", "96", "type-sample", screen.state("typeSample", true)},
-                   {"Specification", "8", "type-specification", screen.state("typeSpecification", false)},
-                   {"User account", "3", "type-user", screen.state("typeUser", false)}};
-    audit.actions = {{"Modified", "57", "action-modified", screen.state("actionModified", true)},
-                     {"Created", "380", "action-created", screen.state("actionCreated", false)},
-                     {"Signed", "71", "action-signed", screen.state("actionSigned", false)},
-                     {"Deleted", "0", "action-deleted", screen.state("actionDeleted", false)}};
+    audit.types = {
+        {.value = "Result", .count = "412", .testId = "type-result", .checked = screen.state("typeResult", true)},
+        {.value = "Sample", .count = "96", .testId = "type-sample", .checked = screen.state("typeSample", true)},
+        {.value = "Specification",
+         .count = "8",
+         .testId = "type-specification",
+         .checked = screen.state("typeSpecification", false)},
+        {.value = "User account", .count = "3", .testId = "type-user", .checked = screen.state("typeUser", false)}};
+    audit.actions = {
+        {.value = "Modified",
+         .count = "57",
+         .testId = "action-modified",
+         .checked = screen.state("actionModified", true)},
+        {.value = "Created",
+         .count = "380",
+         .testId = "action-created",
+         .checked = screen.state("actionCreated", false)},
+        {.value = "Signed", .count = "71", .testId = "action-signed", .checked = screen.state("actionSigned", false)},
+        {.value = "Deleted",
+         .count = "0",
+         .testId = "action-deleted",
+         .checked = screen.state("actionDeleted", false)}};
     audit.user = screen.state("user", std::string{"any"});
     audit.from = screen.state("from", std::string{"2026-10-20T00:00:00"});
     audit.until = screen.state("until", std::string{"2026-10-24T23:59:00"});

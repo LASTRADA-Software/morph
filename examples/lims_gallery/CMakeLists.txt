@@ -18,7 +18,7 @@ add_library(lims_gallery_screens STATIC
     src/screens/results.cpp
     src/screens/review.cpp
     src/screens/console.cpp
-    src/screens/layout.hpp
+    src/screens/screen_layout.hpp
     include/lims_gallery/lims_gallery.hpp
     include/lims_gallery/screens.hpp)
 target_include_directories(lims_gallery_screens PUBLIC include)

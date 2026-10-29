@@ -64,7 +64,7 @@ TEST_CASE("samples, expanded: selecting rows drives the bulk bar, and changing p
     screen.click("action_apply");
     CHECK(screen.waitFor([&screen] { return !screen.shows("Panel", "bulk"); }));
     // Two STAT tags now: the first sample's and the one just changed.
-    CHECK(screen.waitFor([&screen] { return screen.backend().all("Badge").size() > 0; }));
+    CHECK(screen.waitFor([&screen] { return !screen.backend().all("Badge").empty(); }));
     std::size_t stat = 0;
     for (int const badge : screen.backend().all("Badge")) {
         stat += screen.backend().prop(badge, "text") == "STAT" ? 1U : 0U;
@@ -119,7 +119,9 @@ TEST_CASE("samples, compact: rows become cards with the same selection, the bar 
     // The cards follow the shared order, 25 at a time.
     CHECK(screen.prop("Select", "sort", "selected") == "\"due-asc\"");
     CHECK(screen.prop("Button", "load-more", "label") == "Load more · 25 of 38");
-    screen.backend().toggle(*selectBox(screen, "S-26-104170"));
+    auto const box = selectBox(screen, "S-26-104170");
+    REQUIRE(box.has_value());
+    screen.backend().toggle(box.value_or(0));
     CHECK(screen.waitFor([&screen] { return screen.text("selected") == "2 selected"; }));
     screen.click("assign");
     REQUIRE(screen.waitFor([&screen] { return screen.find("Select", "worksheet").has_value(); }));

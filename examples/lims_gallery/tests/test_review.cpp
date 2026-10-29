@@ -70,7 +70,7 @@ TEST_CASE("review: the splitter's sizes reach the splitter", "[lims-gallery]") {
     auto const written = lims_gallery::reviewScreen().write();
     REQUIRE(written.has_value());
     auto const text = written.value_or(morph::ui::author::Emitted{}).text;
-    CHECK(text.find(R"("sizes":{"lit":[37,96]})") != std::string::npos);
+    CHECK(text.contains(R"("sizes":{"lit":[37,96]})"));
     GalleryScreen screen{kScreen, "expanded"};
     CHECK(screen.prop("Splitter", "split", "sizes") == "[37,96]");
 }

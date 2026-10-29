@@ -85,7 +85,7 @@ TEST_CASE("stability: the pull dates follow the study start, a month on from 31 
     REQUIRE(start.has_value());
     auto const instant = morph::time::DateTime::fromIso8601("2027-01-31T00:00:00Z");
     REQUIRE(instant.has_value());
-    screen.backend().setDateTime(start.value_or(0), morph::time::Timestamp{*instant});
+    screen.backend().setDateTime(start.value_or(0), morph::time::Timestamp{instant.value_or(morph::time::DateTime{})});
     CHECK(screen.waitFor([&screen] {
         return holdsPair(screen, "summary-pairs", "First pull:28-Feb-2027 (40 °C\\, 1 m)") &&
                holdsPair(screen, "summary-pairs", "Last pull:31-Jan-2030");

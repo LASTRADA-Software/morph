@@ -6,12 +6,13 @@
 // shows each row as a card with the same selection, and the bar at the bottom.
 
 #include <array>
+#include <format>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "layout.hpp"
 #include "lims_gallery/screens.hpp"
+#include "screen_layout.hpp"
 
 namespace lims_gallery {
 
@@ -84,20 +85,20 @@ std::vector<Value> routineSamples() {
     for (int index = 0; index < kRoutine; ++index) {
         std::string const day = std::to_string(29 + (index / 10));
         std::string const hour = std::to_string(10 + (index % 10));
-        routine.push_back(
-            Value{ValueRecord{{"id", Value{"S-26-1042" + std::to_string(40 + index)}},
-                              {"product", Value{"Purified water · loop " + std::to_string((index % 4) + 1)}},
-                              {"short", Value{"Purified water"}},
-                              {"lot", Value{""}},
-                              {"tests", Value{"TOC, conductivity"}},
-                              {"priority", Value{"Routine"}},
-                              {"status", Value{"Registered"}},
-                              {"statusTone", Value{"neutral"}},
-                              {"due", Value{day + "-Oct " + hour + ":00"}},
-                              {"dueAt", Value{"2026-10-" + day + "T" + hour + ":00"}},
-                              {"overdue", Value{false}},
-                              {"spec", Value{""}},
-                              {"specTone", Value{""}}}});
+        routine.emplace_back(
+            ValueRecord{{"id", Value{"S-26-1042" + std::to_string(40 + index)}},
+                        {"product", Value{"Purified water · loop " + std::to_string((index % 4) + 1)}},
+                        {"short", Value{"Purified water"}},
+                        {"lot", Value{""}},
+                        {"tests", Value{"TOC, conductivity"}},
+                        {"priority", Value{"Routine"}},
+                        {"status", Value{"Registered"}},
+                        {"statusTone", Value{"neutral"}},
+                        {"due", Value{std::format("{}-Oct {}:00", day, hour)}},
+                        {"dueAt", Value{std::format("2026-10-{}T{}:00", day, hour)}},
+                        {"overdue", Value{false}},
+                        {"spec", Value{""}},
+                        {"specTone", Value{""}}});
     }
     return routine;
 }
@@ -282,6 +283,7 @@ ui::Commands clearSelection(Samples const& list) {
 ui::Commands updateSelected(Samples const& list, std::string const& field, ui::AnyHandle const& value) {
     auto const updated = ui::map(list.all, "entry", [&](ui::AnyHandle const& item) -> ui::AnyHandle {
         std::vector<std::pair<std::string, ui::AnyHandle>> members;
+        members.reserve(kFields.size());
         for (char const* const name : kFields) {
             members.emplace_back(name, name == field ? value : item.at(name));
         }

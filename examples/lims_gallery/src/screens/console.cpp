@@ -15,9 +15,9 @@
 #include <utility>
 #include <vector>
 
-#include "layout.hpp"
 #include "lims_gallery/lims_gallery.hpp"
 #include "lims_gallery/screens.hpp"
+#include "screen_layout.hpp"
 
 namespace lims_gallery {
 

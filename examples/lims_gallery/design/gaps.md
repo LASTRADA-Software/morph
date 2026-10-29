@@ -13,7 +13,7 @@
   no way to reach the mounted session's environment. The testkit's `ScreenHarness` and render smoke have none either.
   Verified by grep; that the value reads `null` at run time is inferred from it, not observed.
 - **Workaround used:** every screen declares an optional `width` param and lays out for
-  `coalesce(param width, env widthClass, "expanded")` (`examples/lims_gallery/src/screens/layout.hpp`); tests and the
+  `coalesce(param width, env widthClass, "expanded")` (`examples/lims_gallery/src/screens/screen_layout.hpp`); tests and the
   render smoke pass the param. In the real client every screen therefore shows its expanded layout at any window
   width.
 - **Weight:** High

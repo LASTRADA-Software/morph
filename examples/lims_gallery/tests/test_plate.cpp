@@ -126,12 +126,12 @@ std::vector<std::string> runLines(GalleryScreen& screen, std::string const& row)
     std::vector<std::string> texts;
     std::vector<int> pending{list.value_or(0)};
     while (!pending.empty()) {
-        int const at = pending.front();
+        int const node = pending.front();
         pending.erase(pending.begin());
-        if (screen.backend().kindOf(at) == "Text" && screen.backend().prop(at, "testId") == "line") {
-            texts.push_back(screen.backend().prop(at, "text"));
+        if (screen.backend().kindOf(node) == "Text" && screen.backend().prop(node, "testId") == "line") {
+            texts.push_back(screen.backend().prop(node, "text"));
         }
-        std::vector<int> const children = screen.backend().children(at);
+        std::vector<int> const children = screen.backend().children(node);
         pending.insert(pending.begin(), children.begin(), children.end());
     }
     return texts;
