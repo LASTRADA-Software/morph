@@ -24,6 +24,9 @@ TEST_CASE("e-signature, expanded: a dialog over the worksheet, opened on the ref
           "[Password incorrect.;strong, 3 of 5 attempts left before the account locks.]");
     CHECK(screen.backend().all("Dialog").size() == 1);
     CHECK(screen.prop("Dialog", "signature", "sheet") == "false");
+    // Opened on its own, no opener asked for the signature: its head shows no signing actions.
+    CHECK_FALSE(screen.find("Button", "head_action_sign").has_value());
+    CHECK(screen.backend().find("Text", "testId", "shell_title").has_value());
     CHECK(screen.backend().all("KeyValue").size() == 1);
     CHECK(screen.shows("Panel", "record"));
     CHECK(screen.prop("TextInput", "signer", "readonly") == "true");

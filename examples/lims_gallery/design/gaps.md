@@ -47,9 +47,8 @@
 - **Workaround used:** compact renders the dialog's fields in the page under a `switch` on the `open` state, with an
   in-page Cancel row and a stretched primary button; the expanded layout keeps the real `dialog`. The two layouts
   share the field builders but not the overlay's `ready`/`submitted` semantics. Now one `dialog` for both, a sheet
-  (`sheet`, `dismissLabel: "Cancel"`) on compact, its footer Cancel hidden there. The line under the title is still a
-  muted text in the content until batch C's dialog `description`, and the footer's button keeps its own width rather
-  than spanning the sheet.
+  (`sheet`, `dismissLabel: "Cancel"`) on compact, its footer Cancel hidden there. The line under the title is the
+  dialog's `description`, and the footer's button keeps its own width rather than spanning the sheet.
 - **Weight:** Medium
 
 ### G5: Touch-sized controls on compact — fixed in batch A
@@ -591,7 +590,7 @@
 - **Workaround used:** none; the panes take the splitter's own sharing, and the user can still drag the handle.
 - **Weight:** Medium
 
-### G50: `navigate` with `as: dialog` opens a tab in the generic client
+### G50: `navigate` with `as: dialog` opens a tab in the generic client — fixed in batch D
 - **Design(s):** 09
 - **Needs:** "Approve and sign…" opening design 01's e-signature dialog over the review screen, and the review
   learning that it was signed.
@@ -606,7 +605,12 @@
   and design 01 never `return`s, so an `onResult` could not fire either; that part is inferred from reading.
 - **Workaround used:** the screen keeps `as: dialog`, so a host that honours it shows the signature over the review;
   the generic client opens it as a tab beside it, and the review does not learn that it was signed. The e-signature
-  screen takes no worksheet param, so it always signs WS-2026-0412.
+  screen takes no worksheet param, so it always signs WS-2026-0412. Now the generic client shows a dialog over the
+  review: approve navigates with the selected worksheet as the `worksheet` param and an `onResult`, the e-signature
+  opened so shows its fields with Cancel and "Sign and approve" as head actions the dialog's footer draws, and a
+  signature `return`s its meaning, which the review shows as a "signed" banner. Opened on its own, the e-signature
+  still signs WS-2026-0412 in its own dialog, whose `description` is the line under its title; the navigated dialog
+  draws none, so there the line is a muted text above the fields.
 - **Weight:** Medium
 
 ### G51: A tab label cannot follow the data — fixed in batch D
@@ -659,10 +663,10 @@
 - **Weight:** High
 - **Logged by the coordinator from the code.** The lane stopped before writing its own entries for design 10.
 
-### G56: A screen's own navigation beside the shell's
+### G56: A screen's own navigation beside the shell's — fixed in batch D
 - **Design(s):** 10
 - **Needs:** the console's sidebar, which is grouped sections (Lab, Quality, Admin) with entries carrying counts (Review 4, Instruments 1) and the open screen marked. On compact it moves into a menu.
 - **ui/1 today:** the shell's `Navigator` lists catalog screens (`include/morph/ui/navigator.hpp`). A screen cannot add entries, group them or attach a count to them. Read in the code, not tried.
-- **Workaround used:** the screen draws its own sidebar from item-style buttons (`ButtonStyle::Item`, `selected`), on the `sidebar` surface, beside the shell's navigator. On compact it uses a `menu` of the same entries. The counts are left out.
+- **Workaround used:** the screen draws its own sidebar from item-style buttons (`ButtonStyle::Item`, `selected`), on the `sidebar` surface, beside the shell's navigator. On compact it uses a `menu` of the same entries. The counts are left out. The gap was mis-framed: the sidebar is the application's navigation, the shell's navigator, which lacked counts and a compact form. Now the gallery's app document counts the review and instrument entries (`navigation`, as app state), the navigator draws them, and below `expanded` the shell's frame folds its sidebar into one navigation menu; the console drops its sidebar and its "☰ Menu", its "Connected" tag is a head badge and the user is the shell's principal. The navigator lists the gallery's screens, not the design's LabTrack entries, so "Control charts" and the other entries the gallery has no screen for are not shown.
 - **Weight:** Medium
 - **Logged by the coordinator from the code.**

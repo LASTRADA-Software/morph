@@ -75,13 +75,36 @@ TEST_CASE("review: the splitter's sizes reach the splitter", "[lims-gallery]") {
     CHECK(screen.prop("Splitter", "split", "sizes") == "[37,96]");
 }
 
-// The review's `navigate` asks for a dialog, and the generic client draws one over the review: no tab is added.
-TEST_CASE("review: approve and sign opens the e-signature screen as a dialog over the review", "[lims-gallery]") {
+// The review's `navigate` asks for a dialog, and the generic client draws one over the review: no tab is added. The
+// signature answers with its meaning, which marks the worksheet signed.
+TEST_CASE("review: approve and sign opens the e-signature over the review, and its signature answers it",
+          "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
+    CHECK_FALSE(screen.shows("Banner", "signed"));
     screen.click("approve");
-    CHECK(screen.waitFor([&screen] { return screen.backend().find("Dialog", "title", "E-signature").has_value(); }));
+    CHECK(screen.waitFor(
+        [&screen] { return screen.backend().find("Dialog", "title", "Sign to approve results").has_value(); }));
     CHECK(workspaceTabs(screen) == "[Review and approval]");
     CHECK(screen.mounted().size() == 1);
+    CHECK(screen.find("Column", "fields").has_value());
+    CHECK(screen.prop("Button", "overlay_action_sign", "enabled") == "true");
+    screen.edit("password", "meyer-2026");
+    screen.click("overlay_action_sign");
+    CHECK(screen.waitFor([&screen] { return screen.backend().all("Dialog").size() == 1; }));
+    CHECK(screen.waitFor([&screen] { return screen.shows("Banner", "signed"); }));
+    CHECK(screen.prop("Banner", "signed", "text") == "WS-2026-0412 signed: approved.");
+    screen.requireNoProblems();
+}
+
+TEST_CASE("review: cancelling the signature leaves the worksheet unsigned", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    screen.click("approve");
+    REQUIRE(screen.waitFor(
+        [&screen] { return screen.backend().find("Dialog", "title", "Sign to approve results").has_value(); }));
+    screen.click("overlay_action_cancel");
+    CHECK(screen.waitFor(
+        [&screen] { return !screen.backend().find("Dialog", "title", "Sign to approve results").has_value(); }));
+    CHECK_FALSE(screen.shows("Banner", "signed"));
     screen.requireNoProblems();
 }
 

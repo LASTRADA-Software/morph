@@ -13,12 +13,18 @@ constexpr char const* kScreen = "lims-gallery.console";
 
 }  // namespace
 
+// The design's sidebar is the shell's navigator: its entries carry the app document's counts, and the screen draws
+// no navigation of its own.
 TEST_CASE("console, expanded: navigation, alert, figures, chart, instruments and the sample pane", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
     screen.requireNoProblems();
-    CHECK(screen.find("Column", "sidebar").has_value());
-    CHECK(screen.prop("Button", "nav-Overview", "selected") == "true");
-    CHECK(screen.prop("Button", "nav-Control charts", "enabled") == "false");
+    CHECK_FALSE(screen.find("Column", "sidebar").has_value());
+    CHECK(screen.prop("Button", "nav_lims-gallery.console", "selected") == "true");
+    CHECK(screen.prop("Badge", "nav_badge_lims-gallery.review", "text") == "4");
+    CHECK(screen.prop("Badge", "nav_badge_lims-gallery.instrument", "text") == "1");
+    CHECK(screen.prop("Badge", "nav_badge_lims-gallery.instrument", "tone") == "Warn");
+    CHECK(screen.prop("Badge", "head_status_0", "text") == "Connected");
+    CHECK(screen.shows("Row", "shell_sidebar"));
     CHECK(screen.shows("Banner", "alert"));
     CHECK(screen.text("kpi-received") == "64");
     CHECK(screen.prop("Text", "kpi-due", "role") == "Error");
@@ -69,11 +75,14 @@ TEST_CASE("console: the total follows an impurity entered in the pane", "[lims-g
     screen.requireNoProblems();
 }
 
+// On compact the shell's frame puts its navigation in one menu, so the screen draws none of its own.
 TEST_CASE("console, compact: menu navigation, stacked sections, a sample opens result entry", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "compact"};
     screen.requireNoProblems();
-    CHECK_FALSE(screen.find("Column", "sidebar").has_value());
-    CHECK(screen.find("Menu", "nav-menu").has_value());
+    CHECK_FALSE(screen.find("Menu", "nav-menu").has_value());
+    CHECK_FALSE(screen.shows("Row", "shell_sidebar"));
+    CHECK(screen.shows("Menu", "shell_nav_menu"));
+    CHECK(screen.prop("Menu", "shell_nav_menu", "items").value_or("").contains("Review and approval · 4"));
     CHECK(screen.prop("Collapsible", "chart-section", "title") == "Assay control, HPLC-02 · latest run +3.4 SD");
     CHECK(screen.find("Column", "worklist").has_value());
     CHECK(screen.prop("Grid", "kpis", "columns") == "2");

@@ -376,6 +376,9 @@ struct Review {
     Count flaggedCount;
     Count auditCount;
     Count commentCount;
+    // The worksheet the e-signature last answered for, and the meaning it was signed with.
+    Text signedSheet;
+    Text signedAs;
 };
 
 // A field of the worksheet being reviewed.
@@ -403,6 +406,8 @@ Review declare(ui::Scope& screen) {
     review.decision = screen.state("decision", std::string{"return"});
     review.decisionOpen = screen.state("decisionOpen", false);
     review.showQueue = screen.state("showQueue", false);
+    review.signedSheet = screen.state("signedSheet", std::string{});
+    review.signedAs = screen.state("signedAs", std::string{});
     review.results = screen.let("results", resultList());
     review.lots = screen.let("lots", lotList());
     review.audit = screen.let("audit", entryList({kAudit.begin(), kAudit.end()}));
@@ -624,6 +629,13 @@ ui::Node selfBanner(Review const& review) {
     return ui::banner({.tone = "warn", .text = kSelfReview}).visible(review.self).testId("self-review");
 }
 
+// The signature the e-signature answered with, for the worksheet it signed.
+ui::Node signedBanner(Review const& review) {
+    return ui::banner({.tone = "ok", .text = ui::format("{0} signed: {1}.", {review.signedSheet, review.signedAs})})
+        .visible(ui::eq(review.signedSheet, review.selected))
+        .testId("signed");
+}
+
 // ── Decisions ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 ui::Commands decide(Review const& review, char const* decision) {
@@ -681,8 +693,14 @@ ui::Node decisionDialog(Review const& review) {
         .testId("decision");
 }
 
-// Approving opens design 01's signature as a dialog over this screen, where the host can show one.
-ui::Commands approve() { return ui::navigate("lims-gallery.esignature", {.as = ui::OpenAs::Dialog}); }
+// Approving opens design 01's signature for the worksheet as a dialog over this screen; the meaning it answers with
+// marks the worksheet signed.
+ui::Commands approve(Review const& review) {
+    return ui::navigate("lims-gallery.esignature", {.params = ui::obj({{"worksheet", review.selected}}),
+                                                    .as = ui::OpenAs::Dialog,
+                                                    .onResult = {ui::set(review.signedSheet, review.selected),
+                                                                 ui::set(review.signedAs, ui::event())}});
+}
 
 ui::Node returnButton(Review const& review, char const* label) {
     return ui::button({.label = label, .onClick = decide(review, "return")}).testId("return");
@@ -695,7 +713,7 @@ ui::Node rejectButton(Review const& review, char const* label) {
 }
 
 ui::Node approveButton(Review const& review, char const* label) {
-    return ui::button({.label = label, .emphasis = ButtonEmphasis::Primary, .onClick = approve()})
+    return ui::button({.label = label, .emphasis = ButtonEmphasis::Primary, .onClick = approve(review)})
         .enabled(!review.self)
         .tooltip(ui::cond(review.self, Text{kSelfReview}, Text{"Approving needs your signature"}))
         .testId("approve");
@@ -704,7 +722,7 @@ ui::Node approveButton(Review const& review, char const* label) {
 // ── Layouts ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 ui::Node worksheetPane(Review const& review) {
-    return ui::column({sheetHead(review, false), selfBanner(review), recordTabs(review, false),
+    return ui::column({sheetHead(review, false), selfBanner(review), signedBanner(review), recordTabs(review, false),
                        ui::row({returnButton(review, "Return to analyst…"), rejectButton(review, "Reject…"),
                                 ui::spacer().sizing(ui::stretch()),
                                 layout::muted(ui::cond(review.self, Text{"Another reviewer must approve"},
@@ -726,17 +744,17 @@ ui::Node expandedLayout(Review const& review) {
 
 // The decisions stay at the bottom of the phone screen while the worksheet scrolls above them.
 ui::Node compactWorksheet(Review const& review) {
-    return ui::pinned(
-        {ui::column({ui::button({.label = ui::format("‹ Awaiting review · {0}", {review.waiting}),
-                                 .emphasis = ButtonEmphasis::Ghost,
-                                 .onClick = ui::set(review.showQueue, true)})
-                         .testId("back"),
-                     sheetHead(review, true), selfBanner(review), recordTabs(review, true), decisionDialog(review)},
-                    {.gap = 2})},
-        {.bottom = ui::row({returnButton(review, "Return…").sizing(ui::stretch()),
-                            rejectButton(review, "Reject…").sizing(ui::stretch()),
-                            approveButton(review, "Approve…").sizing(ui::stretch(2))},
-                           {.gap = 1})});
+    return ui::pinned({ui::column({ui::button({.label = ui::format("‹ Awaiting review · {0}", {review.waiting}),
+                                               .emphasis = ButtonEmphasis::Ghost,
+                                               .onClick = ui::set(review.showQueue, true)})
+                                       .testId("back"),
+                                   sheetHead(review, true), selfBanner(review), signedBanner(review),
+                                   recordTabs(review, true), decisionDialog(review)},
+                                  {.gap = 2})},
+                      {.bottom = ui::row({returnButton(review, "Return…").sizing(ui::stretch()),
+                                          rejectButton(review, "Reject…").sizing(ui::stretch()),
+                                          approveButton(review, "Approve…").sizing(ui::stretch(2))},
+                                         {.gap = 1})});
 }
 
 ui::Node compactLayout(Review const& review) {

@@ -26,7 +26,8 @@ inline constexpr std::string_view kDatePattern = "dd-MMM-yyyy";
 /// @brief The form every date and time of the gallery is written and read in.
 inline constexpr std::string_view kDateTimePattern = "dd-MMM-yyyy HH:mm";
 
-/// @brief The gallery's app document: the date patterns, which a client that mounts it gives every screen.
+/// @brief The gallery's app document: the date patterns, which a client that mounts it gives every screen, and the
+///        counts the navigator shows on the review and instrument entries.
 /// @return Its text.
 [[nodiscard]] std::string appDocument();
 

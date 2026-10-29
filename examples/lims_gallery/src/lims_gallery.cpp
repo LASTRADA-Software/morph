@@ -105,9 +105,18 @@ struct Registered {
 
 }  // namespace
 
+// The navigation counts are app state, which the navigator's badges follow.
 std::string appDocument() {
-    return R"({"vocab": "ui/1", "id": "app", "formatting": {"date": ")" + std::string{kDatePattern} +
-           R"(", "dateTime": ")" + std::string{kDateTimePattern} + R"("}})";
+    return R"({
+  "vocab": "ui/1", "id": "app",
+  "formatting": { "date": ")" +
+           std::string{kDatePattern} + R"(", "dateTime": ")" + std::string{kDateTimePattern} + R"(" },
+  "state": { "awaitingReview": { "init": 4 }, "instrumentsOnHold": { "init": 1 } },
+  "navigation": [
+    { "screen": "lims-gallery.review", "text": { "fn": "format", "args": [ "{0}", { "ref": "awaitingReview" } ] },
+      "tone": "info", "visible": { "fn": "ne", "args": [ { "ref": "awaitingReview" }, 0 ] } },
+    { "screen": "lims-gallery.instrument", "text": { "fn": "format", "args": [ "{0}", { "ref": "instrumentsOnHold" } ] },
+      "tone": "warn", "visible": { "fn": "ne", "args": [ { "ref": "instrumentsOnHold" }, 0 ] } } ] })";
 }
 
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle() {

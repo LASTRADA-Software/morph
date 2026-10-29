@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Design 01, the e-signature: a reviewer signs worksheet WS-2026-0412 to approve its results. Expanded, the signature
-// is a dialog over the worksheet it signs; compact, the same fields fill the screen as a sheet. The screen opens on
-// the state the design draws: one wrong password already entered, three attempts left.
+// Design 01, the e-signature: a reviewer signs a worksheet to approve its results. Opened with a `worksheet` param, as
+// the review opens it in a dialog, the screen is the signature itself: its fields, with Cancel and the signing button
+// as head actions the dialog's footer shows, and a signature `return`s its meaning to the opener. Opened on its own it
+// signs WS-2026-0412, a dialog over the worksheet it signs, a sheet on compact. The screen opens on the state the
+// design draws: one wrong password already entered, three attempts left.
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -33,9 +36,13 @@ struct Signature {
     ui::Handle<bool> open;
     ui::Handle<bool> done;
     ui::AnyHandle meaningLabel;
+    // Whether an opener asked for the signature, and the worksheet it signs.
+    ui::Handle<bool> called;
+    ui::AnyHandle record;
 };
 
 Signature declare(ui::Scope& screen) {
+    auto const worksheet = screen.param<std::optional<std::string>>("worksheet");
     Signature sign{
         .meaning = screen.state("meaning", std::string{"approved"}),
         .reason = screen.state("reason", std::string{"Results within specification except Impurity B; OOS-2026-031 "
@@ -47,6 +54,8 @@ Signature declare(ui::Scope& screen) {
         .open = screen.state("open", true),
         .done = screen.state("signed", false),
         .meaningLabel = {},
+        .called = ui::engaged(worksheet),
+        .record = screen.let("record", ui::coalesce({worksheet, ui::AnyHandle{"WS-2026-0412"}})),
     };
     sign.meaningLabel = screen.let(
         "meaningLabel", ui::cond(ui::eq(sign.meaning, "approved"), Text{"Approved"},
@@ -54,41 +63,39 @@ Signature declare(ui::Scope& screen) {
     return sign;
 }
 
-// A right password signs and closes; a wrong one costs an attempt and clears the field.
-ui::Commands signCommands(Signature const& sign) {
-    return ui::ifThen(ui::eq(sign.password, kPassword), {ui::set(sign.done, true), ui::set(sign.open, false)},
+// A right password runs @p signed; a wrong one costs an attempt and clears the field.
+ui::Commands signCommands(Signature const& sign, ui::Commands const& signedWith) {
+    return ui::ifThen(ui::eq(sign.password, kPassword), signedWith,
                       {ui::set(sign.attempts, sign.attempts - 1), ui::set(sign.refused, true),
                        ui::set(sign.password, std::string{})});
 }
 
 ui::Handle<bool> canSign(Signature const& sign) { return !ui::isEmpty(sign.reason) && !ui::isEmpty(sign.password); }
 
-ui::Node summary(bool compact) {
+ui::Node summary(Signature const& sign, bool compact) {
     ui::Node const body =
-        compact ? ui::column({ui::text({.spans = ui::spans({ui::mono("WS-2026-0412"), " · worksheet"})}),
-                              ui::text({.spans = ui::spans({"24 results · Assay and impurities · Lot ",
-                                                            ui::mono("L-26-0381")})}),
-                              ui::text({.spans = ui::spans({"2 out of specification, ", ui::mono("OOS-2026-031"),
-                                                            " linked"})})},
-                             {.gap = 0})
-                : ui::keyValue(ui::list({
-                      ui::obj({{"label", "Record"},
-                               {"spans", ui::spans({ui::mono("WS-2026-0412"), " · worksheet"})}}),
-                      ui::obj({{"label", "Content"},
-                               {"spans",
-                                ui::spans({"24 results · Assay and impurities · Lot ", ui::mono("L-26-0381")})}}),
-                      ui::obj({{"label", "Flags"},
-                               {"spans", ui::spans({"2 out of specification, investigation ",
-                                                    ui::mono("OOS-2026-031"), " linked"})}}),
-                  }));
+        compact
+            ? ui::column(
+                  {ui::text({.spans = ui::spans({ui::mono(sign.record), " · worksheet"})}),
+                   ui::text({.spans = ui::spans({"24 results · Assay and impurities · Lot ", ui::mono("L-26-0381")})}),
+                   ui::text({.spans = ui::spans({"2 out of specification, ", ui::mono("OOS-2026-031"), " linked"})})},
+                  {.gap = 0})
+            : ui::keyValue(ui::list({
+                  ui::obj({{"label", "Record"}, {"spans", ui::spans({ui::mono(sign.record), " · worksheet"})}}),
+                  ui::obj({{"label", "Content"},
+                           {"spans", ui::spans({"24 results · Assay and impurities · Lot ", ui::mono("L-26-0381")})}}),
+                  ui::obj({{"label", "Flags"},
+                           {"spans", ui::spans({"2 out of specification, investigation ", ui::mono("OOS-2026-031"),
+                                                " linked"})}}),
+              }));
     return ui::panel({body}, {.padding = 2}).surface("page").testId("record");
 }
 
 ui::Node refusedBanner(Signature const& sign) {
     return ui::banner({.tone = "err",
-                       .spans = ui::spans({ui::strong("Password incorrect."),
-                                           ui::format(" {0} of 5 attempts left before the account locks.",
-                                                      {sign.attempts})})})
+                       .spans = ui::spans(
+                           {ui::strong("Password incorrect."),
+                            ui::format(" {0} of 5 attempts left before the account locks.", {sign.attempts})})})
         .visible(sign.refused)
         .testId("refused");
 }
@@ -158,46 +165,77 @@ ui::Node worksheet(Signature const& sign) {
         {.gap = 2});
 }
 
+// The signature's fields, the same in its own dialog and in the dialog an opener shows it in.
+// The fields, after a note when the dialog around them draws no description of its own.
+ui::Nodes signatureFields(ui::AnyHandle const& width, Signature const& sign, bool withNote) {
+    std::vector<ui::Node> fields{
+        layout::byWidth(width, {summary(sign, true)}, {summary(sign, false)}),
+        refusedBanner(sign),
+        layout::byWidth(width, {signerField(), meaningField(sign)},
+                        {ui::grid({signerField(), meaningField(sign)}, {.gap = 2, .columns = 2})}),
+        reasonField(sign),
+        passwordField(sign),
+        signingAt(sign)};
+    if (withNote) {
+        fields.insert(fields.begin(),
+                      layout::muted("Your signature is stored with the record and cannot be removed."));
+    }
+    return fields;
+}
+
 // One dialog for both layouts: centred at the design's 480 px when expanded, and on compact a sheet that fills the
 // screen, its Cancel in the sheet's head and the signing button across the footer.
 ui::Node signatureDialog(ui::AnyHandle const& width, Signature const& sign) {
     auto const dialog = ui::element("signature");
     auto const compact = ui::Handle<bool>{ui::eq(width, "compact")};
     ui::Commands const close = ui::set(sign.open, false);
-    return ui::dialog(dialog,
-                      {layout::byWidth(width, {summary(true)}, {summary(false)}), refusedBanner(sign),
-                       layout::byWidth(width, {signerField(), meaningField(sign)},
-                                       {ui::grid({signerField(), meaningField(sign)}, {.gap = 2, .columns = 2})}),
-                       reasonField(sign), passwordField(sign), signingAt(sign)},
-                      {.title = ui::cond(compact, Text{"Sign to approve"}, Text{"Sign to approve results"}),
-                       .description = "Your signature is stored with the record and cannot be removed.",
-                       .open = sign.open,
-                       .showErrors = ui::ShowErrors::Always,
-                       .cancel = close,
-                       .onDismiss = close,
-                       .actions = {{.id = "cancel", .label = "Cancel", .visible = !compact, .onClick = close},
-                                   {.id = "sign",
-                                    .label = "Sign and approve",
-                                    .emphasis = ButtonEmphasis::Primary,
-                                    .enabled = canSign(sign),
-                                    .onClick = signCommands(sign)}},
-                       .sheet = compact,
-                       .dismissLabel = "Cancel"})
+    return ui::dialog(
+               dialog, signatureFields(width, sign, false),
+               {.title = ui::cond(compact, Text{"Sign to approve"}, Text{"Sign to approve results"}),
+                .description = "Your signature is stored with the record and cannot be removed.",
+                .open = sign.open,
+                .showErrors = ui::ShowErrors::Always,
+                .cancel = close,
+                .onDismiss = close,
+                .actions = {{.id = "cancel", .label = "Cancel", .visible = !compact, .onClick = close},
+                            {.id = "sign",
+                             .label = "Sign and approve",
+                             .emphasis = ButtonEmphasis::Primary,
+                             .enabled = canSign(sign),
+                             .onClick = signCommands(sign, {ui::set(sign.done, true), ui::set(sign.open, false)})}},
+                .sheet = compact,
+                .dismissLabel = "Cancel"})
         // The design's 480 px, in the frontend's character widths; a sheet is the window's width.
         .sizing(ui::fixed(64))
         .testId("signature");
+}
+
+// Asked for by an opener, the signature's Cancel and signing button are head actions, which the dialog the opener's
+// host shows draws in its footer; a signature answers with its meaning.
+void declareCalledActions(ui::Scope& screen, Signature const& sign) {
+    screen.action({.id = "cancel", .label = "Cancel", .visible = sign.called, .onClick = {ui::close(ui::self)}});
+    screen.action({.id = "sign",
+                   .label = "Sign and approve",
+                   .emphasis = ButtonEmphasis::Primary,
+                   .enabled = canSign(sign),
+                   .visible = sign.called,
+                   .onClick = signCommands(sign, {ui::returnWith(sign.meaning)})});
 }
 
 }  // namespace
 
 ui::Screen eSignatureScreen() {
     return ui::screen("lims-gallery.esignature", [](ui::Scope& screen) {
-        screen.title("E-signature");
         // The refused password is marked from the start, before the field is touched.
         screen.showErrors(ui::ShowErrors::Always);
         auto const width = layout::widthClass(screen);
         Signature const sign = declare(screen);
-        return ui::column({worksheet(sign), signatureDialog(width, sign)}, {.gap = 3});
+        screen.title(ui::cond(sign.called, Text{"Sign to approve results"}, Text{"E-signature"}));
+        declareCalledActions(screen, sign);
+        return ui::switchOn(
+            sign.called,
+            {ui::Case{true, {ui::column(signatureFields(width, sign, true), {.gap = 2}).testId("fields")}}},
+            {ui::column({worksheet(sign), signatureDialog(width, sign)}, {.gap = 3})});
     });
 }
 

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Design 10, the lab operations console: LabTrack's overview for QC chemistry, site A, at 09:41 on the morning HPLC-02
-// failed system suitability. A navigation sidebar beside the dashboard: the suitability alert, the day's figures, the
-// assay control chart, the instruments, and the worklist beside a non-modal sample pane that steps through it. The
-// held sample cannot be submitted, and the pane says why.
+// failed system suitability. The dashboard: the suitability alert, the day's figures, the assay control chart, the
+// instruments, and the worklist beside a non-modal sample pane that steps through it. The held sample cannot be
+// submitted, and the pane says why. The design's sidebar is the shell's navigator, whose counts the gallery's app
+// document gives.
 
 #include <array>
 #include <cstddef>
@@ -33,37 +34,6 @@ constexpr char const* kHoldReason =
     "Can't submit: HPLC-02 is on suitability hold. Rerun, or record an assessment of the failure.";
 
 // ── The data ─────────────────────────────────────────────────────────────────────────────────────────────────────
-
-struct NavEntry {
-    char const* label;
-    // The gallery screen it opens; empty where the gallery has none.
-    char const* screen;
-};
-
-struct NavGroup {
-    char const* heading;
-    std::vector<NavEntry> entries;
-};
-
-std::vector<NavGroup> const& navigation() {
-    static std::vector<NavGroup> const kGroups{
-        {.heading = "Lab",
-         .entries = {{.label = "Overview", .screen = "lims-gallery.console"},
-                     {.label = "Samples", .screen = "lims-gallery.samples"},
-                     {.label = "Worksheets", .screen = "lims-gallery.results"},
-                     {.label = "Review · 4", .screen = "lims-gallery.review"}}},
-        {.heading = "Quality",
-         .entries = {{.label = "Control charts", .screen = ""},
-                     {.label = "Instruments · 1", .screen = "lims-gallery.instrument"},
-                     {.label = "Investigations", .screen = ""},
-                     {.label = "Stability", .screen = "lims-gallery.stability"}}},
-        {.heading = "Admin",
-         .entries = {{.label = "Methods and specs", .screen = ""},
-                     {.label = "Audit trail", .screen = "lims-gallery.audit"},
-                     {.label = "Users", .screen = ""}}},
-    };
-    return kGroups;
-}
 
 struct Kpi {
     char const* key;
@@ -431,47 +401,9 @@ Console declare(ui::Scope& screen) {
     return console;
 }
 
-// ── The shell: navigation ────────────────────────────────────────────────────────────────────────────────────────
+// ── The head ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
 ui::Command open(char const* screen) { return ui::navigate(screen); }
-
-ui::Node sidebar() {
-    std::vector<ui::Node> items{ui::text({.text = "LabTrack", .role = "heading"})};
-    for (NavGroup const& group : navigation()) {
-        items.push_back(layout::section(group.heading));
-        for (NavEntry const& entry : group.entries) {
-            bool const here = std::string_view{entry.screen} == "lims-gallery.console";
-            bool const built = !std::string_view{entry.screen}.empty();
-            ui::Node item = ui::button({.label = entry.label,
-                                        .onClick = built && !here ? open(entry.screen) : ui::Commands{},
-                                        .style = morph::ui::ButtonStyle::Item,
-                                        .selected = here});
-            if (!built) {
-                item = item.enabled(false).tooltip("Not part of the gallery");
-            }
-            items.push_back(item.testId(std::string{"nav-"} + entry.label));
-        }
-    }
-    return ui::column(items, {.gap = 1}).surface("sidebar").sizing(ui::fixed(22)).a11y("Main").testId("sidebar");
-}
-
-// Compact: the same entries in a menu behind one button.
-ui::Node navigationMenu() {
-    std::vector<ui::MenuItem> groups;
-    for (NavGroup const& group : navigation()) {
-        std::vector<ui::MenuItem> entries;
-        for (NavEntry const& entry : group.entries) {
-            bool const built = !std::string_view{entry.screen}.empty();
-            bool const here = std::string_view{entry.screen} == "lims-gallery.console";
-            entries.push_back(ui::MenuItem{.label = entry.label,
-                                           .checked = here ? ui::AnyHandle{true} : ui::AnyHandle{},
-                                           .enabled = built ? ui::AnyHandle{} : ui::AnyHandle{false},
-                                           .onClick = built && !here ? open(entry.screen) : ui::Commands{}});
-        }
-        groups.push_back(ui::MenuItem{.label = group.heading, .items = entries});
-    }
-    return ui::menu({ui::MenuItem{.label = "☰ Menu", .items = groups}}).a11y("Open navigation").testId("nav-menu");
-}
 
 ui::Commands findSample(Console const& console) {
     auto const matching = ui::filter(console.samples, "sample", [](ui::AnyHandle const& sample) {
@@ -482,9 +414,10 @@ ui::Commands findSample(Console const& console) {
                       ui::notify(ui::format("No sample {0} on today's worklist.", {ui::event()}), ui::Role::Warning));
 }
 
-// The lab and the sample search are head tools on the expanded layout, the one that draws them; the connection and
-// the user stay in the page, as the application's chrome.
-void declareTools(ui::Scope& screen, Console const& console) {
+// The lab and the sample search are head tools on the expanded layout, the one that draws them, and the connection
+// is a head badge; the user is the shell's principal.
+void declareHead(ui::Scope& screen, Console const& console) {
+    screen.status({.text = "Connected", .tone = "ok"});
     auto const labs = ui::list({ui::obj({{"key", "qc-chem-a"}, {"label", "QC chemistry, site A"}}),
                                 ui::obj({{"key", "qc-micro-a"}, {"label", "QC microbiology, site A"}})});
     Flag const expanded = !Flag{ui::eq(console.width, "compact")};
@@ -503,11 +436,6 @@ void declareTools(ui::Scope& screen, Console const& console) {
                                       .onSubmit = findSample(console),
                                       .width = 28,
                                       .visible = expanded});
-}
-
-ui::Node toolbar() {
-    return ui::row({ui::spacer().sizing(ui::stretch()), layout::tag("Connected", "ok"), layout::muted("Dr. A. Meyer")},
-                   {.gap = 1, .align = Align::Center});
 }
 
 // ── The dashboard ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -826,17 +754,16 @@ ui::Node samplePane(Console const& console) {
 ui::Node expandedLayout(Console const& console) {
     // The design's 360 px sample pane, in the frontend's character widths, beside the worklist.
     auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{70, 45}};
-    auto const dashboard = ui::column({toolbar(), alert(false), kpis(false),
-                                       ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
-                                                ui::panel({instruments()}, {.padding = 2}).sizing(ui::stretch(10))},
-                                               {.gap = 1, .align = Align::Start}),
-                                       ui::splitter({ui::panel({worklistTabs(console)}, {.padding = 1}),
-                                                     ui::panel({samplePane(console)}, {.padding = 2})},
-                                                    ui::AnyHandle{"horizontal"}, sizes)
-                                           .a11y("Worklist and sample")
-                                           .testId("work-split")},
-                                      {.gap = 2});
-    return ui::row({sidebar(), dashboard.sizing(ui::stretch())}, {.gap = 2, .align = Align::Start});
+    return ui::column({alert(false), kpis(false),
+                       ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
+                                ui::panel({instruments()}, {.padding = 2}).sizing(ui::stretch(10))},
+                               {.gap = 1, .align = Align::Start}),
+                       ui::splitter({ui::panel({worklistTabs(console)}, {.padding = 1}),
+                                     ui::panel({samplePane(console)}, {.padding = 2})},
+                                    ui::AnyHandle{"horizontal"}, sizes)
+                           .a11y("Worklist and sample")
+                           .testId("work-split")},
+                      {.gap = 2});
 }
 
 ui::Node compactCard() {
@@ -867,7 +794,7 @@ ui::Node compactWorklist(Console const& console, ui::AnyHandle const& rows, std:
 
 ui::Node compactLayout(Console const& console) {
     return ui::column(
-        {ui::row({navigationMenu(), ui::spacer().sizing(ui::stretch()),
+        {ui::row({ui::spacer().sizing(ui::stretch()),
                   ui::button({.label = "Scan", .icon = "scan", .onClick = open("lims-gallery.receipt")})
                       .a11y("Scan a sample")
                       .testId("scan")},
@@ -891,7 +818,7 @@ ui::Screen consoleScreen() {
     return ui::screen("lims-gallery.console", [](ui::Scope& screen) {
         Console const console = declare(screen);
         screen.title("Overview");
-        declareTools(screen, console);
+        declareHead(screen, console);
         return layout::byWidth(console.width, compactLayout(console), expandedLayout(console));
     });
 }
