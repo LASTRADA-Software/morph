@@ -970,7 +970,7 @@ private:
             throw std::logic_error{"morph::ui: a table row's selection is the table's; this row gives its own"};
         }
         return mountStack(scope, Axis::Horizontal, spec.children, spec.gap, spec.common, parent, spec.align,
-                          spec.justify, spec.wrap, false, spec.padding, spec.selected);
+                          spec.justify, spec.wrap, spec.divided && !spec.wrap, spec.padding, spec.selected);
     }
 
     Widget& mountKind(reactive::Scope& scope, Grid const& spec, ContainerWidget* parent) {

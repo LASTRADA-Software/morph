@@ -866,8 +866,8 @@ inline constexpr std::array<KeySpec, 14> kHeadToolKeys = {{{"id", Shape::Name, {
                                                            {"width", Shape::Expr},
                                                            {"visible", Shape::Condition},
                                                            {"enabled", Shape::Condition}}};
-/// @brief The keys of `column` and `row`; `wrap` is a row's and `divided` a column's, each read on the other only to
-///        refuse it.
+/// @brief The keys of `column` and `row`; `wrap` is a row's, read on a column only to refuse it, and `divided` a
+///        column's or a row's that does not wrap.
 inline constexpr std::array<KeySpec, 9> kContainerKeys = {{{"children", Shape::Nodes},
                                                            {"gap", Shape::Expr},
                                                            {"padding", Shape::Expr},
@@ -3755,8 +3755,9 @@ private:
             checkGrid(node);
         } else if (node.kind == "column" && node.flags.contains("wrap")) {
             refuse(pointerAppend(node.path, "wrap"), "only a row wraps; a column has no lines to continue on");
-        } else if (node.kind == "row" && node.flags.contains("divided")) {
-            refuse(pointerAppend(node.path, "divided"), "only a column is divided; a row has no rules between rows");
+        } else if (node.kind == "row" && node.flags.contains("divided") && node.flags.contains("wrap")) {
+            refuse(pointerAppend(node.path, "divided"),
+                   "a wrapping row has no single line to rule between; `divided` is for a row that does not `wrap`");
         } else if (node.kind == "forEach") {
             checkForEachWrap(node);
         } else if (node.kind == "menu") {

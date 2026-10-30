@@ -85,7 +85,7 @@ MorphWidget {
         }
         return lengths
     }
-    readonly property real gapLength: Theme.spaceOf(root.gap) + (root.divided && root.axis === 0 ? 1 : 0)
+    readonly property real gapLength: Theme.spaceOf(root.gap) + (root.divided && !root.wrap ? 1 : 0)
     readonly property real naturalLength: root.shownLengths.reduce((sum, length) => sum + length, 0)
                                           + root.gapLength * Math.max(0, root.shownLengths.length - 1)
     readonly property real betweenSpacing: {
@@ -295,18 +295,19 @@ MorphWidget {
         bottomRightRadius: root.LayoutMirroring.enabled ? root.surfaceRadius : 0
     }
 
-    // A rule below each shown child but the last, centred in the gap that is left of the rule's own pixel.
+    // A rule after each shown child but the last, centred in the gap that is left of the rule's own pixel: a
+    // horizontal rule below a column's child, a vertical one beside a row's.
     Repeater {
-        model: root.divided && root.axis === 0 && !root.wrap ? root.shownItems : []
+        model: root.divided && !root.wrap ? root.shownItems : []
         delegate: Rectangle {
             required property Item modelData
             required property int index
             parent: root
             visible: index < root.shownItems.length - 1
-            x: 0
-            width: root.width
-            height: 1
-            y: layout.y + modelData.y + modelData.height + (root.gapLength - 1) / 2
+            x: root.axis === 0 ? 0 : layout.x + modelData.x + modelData.width + (root.gapLength - 1) / 2
+            y: root.axis === 0 ? layout.y + modelData.y + modelData.height + (root.gapLength - 1) / 2 : layout.y
+            width: root.axis === 0 ? root.width : 1
+            height: root.axis === 0 ? 1 : layout.height
             color: root.scheme.divider
         }
     }

@@ -800,6 +800,9 @@ struct Row {
     /// @brief Whether children that do not fit on one line continue on the next, as a flex row with `wrap` does;
     ///        set once. A table row never wraps.
     bool wrap = false;
+    /// @brief Whether a vertical 1 px rule in the theme's divider colour is drawn between each two shown children,
+    ///        centred in the gap; set once. A wrapping row is not divided: the mount ignores it there.
+    bool divided = false;
     /// @brief The inset of the children: a spacing step on every side, or one step above and below and one at the
     ///        sides; set once.
     Padding padding;

@@ -1689,4 +1689,47 @@ TEST_CASE("qt_quick containers: a splitter's handle is the scheme's border colou
     CHECK(centre.x() == Catch::Approx(handle->width() / 2).margin(0.5));
     CHECK(centre.y() == Catch::Approx(handle->height() / 2).margin(0.5));
     CHECK(grip.property("color").value<QColor>() == scheme->property("neutralDot").value<QColor>());
+
+// Mutation: leave a row's `divided` unread (no rule, a step-2 gap), or put the rule on the second child's edge instead
+// of in the gap.
+TEST_CASE("qt_quick containers: a divided row draws a vertical rule centred in each gap", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 200);
+    auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    row->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    row->setGap(2);
+    row->setDivided(true);
+    std::vector<std::unique_ptr<ui::StackWidget>> columns;
+    std::vector<std::unique_ptr<ui::TextWidget>> texts;
+    for (char const* const name : {"left", "right"}) {
+        columns.push_back(scene.backend().createStack(row.get(), ui::Axis::Vertical));
+        columns.back()->setLayout({.width = ui::Sizing::fixed(10)});
+        texts.push_back(scene.backend().createText(columns.back().get()));
+        texts.back()->setText(name);
+    }
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal gap = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, gap), Q_ARG(int, 2)));
+
+    QList<QQuickItem*> rules;
+    std::function<void(QQuickItem const&)> collect = [&collect, &rules](QQuickItem const& item) {
+        for (QQuickItem* const child : item.childItems()) {
+            if (child->inherits("QQuickRectangle") && child->width() == 1 && child->isVisible()) {
+                rules.append(child);
+            }
+            collect(*child);
+        }
+    };
+    collect(Scene::itemOf(*row));
+    REQUIRE(rules.size() == 1);
+    QQuickItem const& first = Scene::itemOf(*columns.at(0));
+    QQuickItem const& second = Scene::itemOf(*columns.at(1));
+    qreal const firstEnd = first.x() + first.width();
+    CHECK(second.x() - firstEnd == Catch::Approx(gap + 1).margin(0.5));
+    CHECK(rules.at(0)->x() >= firstEnd - 0.5);
+    CHECK(rules.at(0)->x() + 1 <= second.x() + 0.5);
+    CHECK(rules.at(0)->x() - firstEnd == Catch::Approx(gap / 2).margin(0.5));
+    CHECK(rules.at(0)->height() > 1);
 }

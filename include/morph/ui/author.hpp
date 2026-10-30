@@ -3839,8 +3839,8 @@ struct ContainerOptions {
     /// @brief Whether a row's children continue on the next line when they do not fit. Only a `row` has it; the
     ///        loader refuses it on a `column`.
     bool wrap = false;
-    /// @brief Whether a column draws a rule between its children. Only a `column` has it; the loader refuses it on a
-    ///        `row`.
+    /// @brief Whether a column, or a row that does not wrap, draws a rule between its children. The loader refuses it
+    ///        on a row that wraps.
     bool divided = false;
     /// @brief The inset of the children from every edge of a `column` or `row`: a spacing step, 0 to
     ///        `kMaxSpacingStep`, or `padding(vertical, horizontal)`. Not on a grid.

@@ -216,7 +216,7 @@ expression of one),
   absent `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` and `tracks`
   (`GridTrack{width, align}`, each key written only when given) are the grid's, and
   a grid's `justify` is written so the loader refuses it rather than dropped. `wrap` is a row's: the children
-  continue on the next line when they do not fit; written on a column or a grid, the loader refuses it. `divided` is a column's: a rule is drawn between its children; the loader refuses it on a row. `forEach`
+  continue on the next line when they do not fit; written on a column or a grid, the loader refuses it. `divided` draws a rule between the children of a column, or of a row that does not wrap; the loader refuses it on a wrapping row. `forEach`
   takes the same `wrap`, for a horizontal `axis`, and `divided`, for a vertical one, in its `ForEachOptions`.
 - **`table`** takes its rows, its options (`key`, `columns` (each `TableColumn{name, label, width, role, align,
   valign, cell, sortable, sortBy}`; an absent `align` or `valign` is left out and a present one is written by name,

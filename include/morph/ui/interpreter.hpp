@@ -7817,6 +7817,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                  .align = alignOf(node.name("align")),
                  .justify = justifyOf(node.name("justify")),
                  .wrap = node.flag("wrap"),
+                 .divided = node.flag("divided"),
                  .padding = stackPadding()};
         if (node.prop("selected")) {
             spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
