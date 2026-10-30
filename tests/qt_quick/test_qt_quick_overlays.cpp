@@ -338,6 +338,28 @@ TEST_CASE("qt_quick dialog: a sheet's footer action fills the sheet's width, a d
     CHECK(Scene::itemOf(*late).width() > 600);
 }
 
+// Mutation: make the footer fill its area only while it stretches (a dialog's actions then sit at the footer's left).
+TEST_CASE("qt_quick dialog: a dialog's footer actions sit against the footer's right edge", "[qt_quick]") {
+    Scene scene;
+    auto const dialog = scene.backend().createDialog(nullptr);
+    dialog->setTitle("Sign");
+    auto const body = scene.backend().createText(dialog.get());
+    body->setText("Sure? This text is long enough that the dialog is wider than its two actions together.");
+    auto const undo = scene.backend().createButton(&dialog->footer());
+    undo->setLabel("Undo");
+    auto const sign = scene.backend().createButton(&dialog->footer());
+    sign->setLabel("Confirm");
+    dialog->setOpen(true);
+    scene.settle();
+    // The rule above the footer spans the content's width: the footer's actions end at its right edge.
+    QQuickItem const* const rule = namedIn(*scene.window().contentItem(), QStringLiteral("footerRule"));
+    REQUIRE(rule != nullptr);
+    qreal const right = rule->mapToScene(QPointF{rule->width(), 0}).x();
+    QQuickItem const& last = Scene::itemOf(*sign);
+    CHECK(last.mapToScene(QPointF{last.width(), 0}).x() == Catch::Approx(right).margin(1));
+    CHECK(Scene::itemOf(*undo).mapToScene(QPointF{0, 0}).x() > rule->mapToScene(QPointF{0, 0}).x() + 20);
+}
+
 // Mutation: draw the title in `strongFont`; draw no rule, or draw it while the footer holds nothing.
 TEMPLATE_TEST_CASE("qt_quick overlays: the title is heading-sized and a footer holding an action has a rule above it",
                    "[qt_quick]", ui::DialogWidget, ui::DrawerWidget) {

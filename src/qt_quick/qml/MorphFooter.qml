@@ -17,7 +17,8 @@ MorphWidget {
     readonly property bool stretching: area !== null && area !== undefined && area.stretchesFooter === true
     sharesWidth: stretching
 
-    Layout.fillWidth: stretching
+    // Always the area's full width: the actions sit against its right edge, or share it while stretching.
+    Layout.fillWidth: true
 
     implicitWidth: row.implicitWidth
     implicitHeight: row.implicitHeight
