@@ -247,15 +247,15 @@ struct Spread {
     Wide remainder = 0;
 };
 
-/// The spread of @p spare cells over @p count placed items under @p justify.
-Spread spreadOf(ui::Justify justify, Wide spare, std::size_t count) {
+/// The spread of @p spare cells over the items of @p extents under @p justify.
+Spread spreadOf(ui::Justify justify, Wide spare, std::span<int const> extents) {
     Spread spread;
     if (justify == ui::Justify::Center) {
         spread.lead = spare / 2;
     } else if (justify == ui::Justify::End) {
         spread.lead = spare;
-    } else if (justify == ui::Justify::Between && count > 1) {
-        auto const gaps = static_cast<Wide>(count) - 1;
+    } else if (justify == ui::Justify::Between && extents.size() > 1) {
+        auto const gaps = static_cast<Wide>(extents.size()) - 1;
         spread.extra = spare / gaps;
         spread.remainder = spare % gaps;
     }
@@ -290,8 +290,7 @@ void placeLine(std::span<Item const> items, std::span<std::size_t const> members
         std::accumulate(extents.begin(), extents.end(), Wide{0}) + gapsBetween(extents.size(), width.gap);
     Wide const spare = std::max<Wide>(0, Wide{width.length} - used);
     bool const stretches = std::ranges::any_of(sharing, [](Item const& item) { return isStretch(item.sizing); });
-    auto const [lead, extra, startRemainder] =
-        !stretches && spare > 0 ? spreadOf(justify, spare, extents.size()) : Spread{};
+    auto const [lead, extra, startRemainder] = !stretches && spare > 0 ? spreadOf(justify, spare, extents) : Spread{};
     Wide remainder = startRemainder;
     Wide cursor = lead;
     std::size_t next = 0;

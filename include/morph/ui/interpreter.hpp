@@ -6822,7 +6822,7 @@ inline constexpr int kDialogGap = 3;
 /// @param expr  The expression.
 /// @param names The names.
 /// @return Whether any form of the expression names one.
-// NOLINTNEXTLINE(misc-no-recursion): an expression nests its arguments and fields, and the walk follows them.
+// NOLINTBEGIN(misc-no-recursion): an expression nests its arguments and fields, and the walk follows them.
 [[nodiscard]] inline bool readsAny(ExprPtr const& expr, std::set<std::string, std::less<>> const& names) {
     if (!expr) {
         return false;
@@ -6830,18 +6830,10 @@ inline constexpr int kDialogGap = 3;
     if (!expr->name.empty() && names.contains(expr->name)) {
         return true;
     }
-    for (ExprPtr const& arg : expr->args) {
-        if (readsAny(arg, names)) {
-            return true;
-        }
-    }
-    for (auto const& field : expr->fields) {
-        if (readsAny(field.second, names)) {
-            return true;
-        }
-    }
-    return false;
+    return std::ranges::any_of(expr->args, [&](ExprPtr const& arg) { return readsAny(arg, names); }) ||
+           std::ranges::any_of(expr->fields, [&](auto const& field) { return readsAny(field.second, names); });
 }
+// NOLINTEND(misc-no-recursion)
 
 /// @brief Collects the element ids of a document subtree.
 /// @param node The root.

@@ -120,8 +120,9 @@ bool takeGrabSize(std::vector<std::string>& args, Grab& grab) {
         if (cross == std::string::npos) {
             return false;
         }
-        std::string_view const widthText = std::string_view{size}.substr(0, cross);
-        std::string_view const heightText = std::string_view{size}.substr(cross + 1);
+        std::span<char const> const all{size};
+        std::span<char const> const widthText = all.first(cross);
+        std::span<char const> const heightText = all.subspan(cross + 1);
         auto const [widthEnd, widthError] =
             std::from_chars(widthText.data(), std::to_address(widthText.end()), grab.width);
         auto const [heightEnd, heightError] =
