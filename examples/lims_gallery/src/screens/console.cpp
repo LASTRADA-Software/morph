@@ -569,12 +569,12 @@ ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::s
         {.name = "test", .label = "Test", .width = ui::stretch(), .wrap = false},
         {.name = "priority",
          .label = "Priority",
-         .width = ui::fixed(9),
+         .width = ui::fixed(7),
          .cell = layout::tag(ui::row("priority"), ui::row("priorityTone"))},
-        {.name = "due", .label = "Due", .width = ui::fixed(14), .cell = dueCell(), .wrap = false},
+        {.name = "due", .label = "Due", .width = ui::fixed(12), .cell = dueCell(), .wrap = false},
         {.name = "status",
          .label = "Status",
-         .width = ui::fixed(12),
+         .width = ui::fixed(9),
          .cell = layout::tag(ui::row("status"), ui::row("statusTone"))}};
     // The sample in the pane is the table's selection: the id of the row at `current`, and a click on a row makes it
     // current.
@@ -667,10 +667,10 @@ ui::Node resultLine(Console const& console) {
                         .align = morph::ui::Align::End,
                         .onCommit = enterResult(console)})
              .readonly(Flag{ui::row("total")})
-             .sizing(ui::fixed(14))
+             .sizing(ui::fixed(12))
              .testId("pane-result"),
          // A fixed width, wide enough for "Out of spec", keeps the result inputs of every line in one column.
-         layout::tag(evaluation.label, evaluation.tone).sizing(ui::fixed(12)).testId("pane-evaluation")},
+         layout::tag(evaluation.label, evaluation.tone).sizing(ui::fixed(11)).testId("pane-evaluation")},
         {.gap = 1, .align = Align::Center});
 }
 
@@ -791,9 +791,9 @@ ui::Node samplePane(Console const& console) {
 constexpr int kExpandedMinHeight = 40;
 
 ui::Node expandedLayout(Console const& console) {
-    // The design's 360 px sample pane, in the frontend's character widths, beside the worklist. The splitter takes the
-    // page's height under the charts.
-    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{53, 45}};
+    // The sample pane takes 38 of 98 units beside the worklist, which leaves the worklist's Test column room. The
+    // splitter takes the page's height under the charts.
+    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{60, 38}};
     return ui::column(
                {alert(false), kpis(false),
                 ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
@@ -831,18 +831,21 @@ ui::Node compactCard() {
 
 // Tapping a sample opens it as its own page: the compact result entry of design 08. The card is the item.
 ui::Node compactWorklist(Console const& console, ui::AnyHandle const& rows, std::string const& testId) {
-    return ui::forEach(
-               rows, {.key = ui::row("id"), .gap = 2},
-               [&console](ui::DeclScope&) {
-                   return ui::Nodes{ui::button({.label = ui::format("{0} · {1}", {ui::row("id"), ui::row("test")}),
-                                                .onClick = {ui::set(console.current, ui::row("index")),
-                                                            open("lims-gallery.results")},
-                                                .style = morph::ui::ButtonStyle::Item,
-                                                .selected = ui::eq(ui::row("index"), console.current),
-                                                .children = {compactCard()}})
-                                        .testId("open-sample")};
-               })
-        .testId(testId);
+    // One white card, its samples ruled off from one another.
+    return ui::panel(
+        {ui::forEach(
+             rows, {.key = ui::row("id"), .gap = 0, .divided = true},
+             [&console](ui::DeclScope&) {
+                 return ui::Nodes{
+                     ui::button({.label = ui::format("{0} · {1}", {ui::row("id"), ui::row("test")}),
+                                 .onClick = {ui::set(console.current, ui::row("index")), open("lims-gallery.results")},
+                                 .style = morph::ui::ButtonStyle::Item,
+                                 .selected = ui::eq(ui::row("index"), console.current),
+                                 .children = {compactCard()}})
+                         .testId("open-sample")};
+             })
+             .testId(testId)},
+        {.padding = 0});
 }
 
 ui::Node compactLayout(Console const& console) {
