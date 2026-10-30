@@ -52,7 +52,11 @@ TEST_CASE("stability, expanded: step 2 of the wizard, the matrix and the summary
     CHECK(screen.prop("TextInput", "per-pull", "errors") ==
           "[15 pulls × 12 \\= 180 units needed\\, 150 in stock for lot L-26-0381.]");
     CHECK(screen.shows("Banner", "attention"));
-    CHECK(screen.prop("Button", "continue", "label") == "Continue");
+    CHECK(screen.prop("Button", "continue", "label") == "Continue to tests");
+    // The attention banner links the field's name inside its sentence.
+    CHECK(screen.prop("Banner", "attention", "actionStyle") == "link");
+    CHECK(screen.prop("Banner", "attention", "actionLabel") == "Containers per pull");
+    CHECK(screen.prop("Banner", "attention", "spans") == "[1 field needs attention: ,Containers per pull;action,.]");
 }
 
 TEST_CASE("stability, expanded: a timepoint changes the summary, and enough containers lets the wizard go on",
@@ -104,7 +108,9 @@ TEST_CASE("stability, compact: one condition open at a time, every field kept", 
     CHECK(screen.backend().find("Panel", "title", "25 °C / 60 % RH · 8 pulls").has_value());
     CHECK(screen.backend().find("Panel", "title", "40 °C / 75 % RH · 3 pulls").has_value());
     CHECK(screen.prop("Panel", "summary-section", "title") == "Summary · first pull 03-Dec-2026");
-    CHECK(screen.prop("TextInput", "per-pull", "errors") == "[180 units needed\\, 150 in stock for lot L-26-0381.]");
+    // The field is outlined and the message spans both fields of its row.
+    CHECK(screen.prop("TextInput", "per-pull", "tone") == "Err");
+    CHECK(screen.text("per-pull-error") == "180 units needed, 150 in stock for lot L-26-0381.");
     // The summary's identifiers are mono runs.
     CHECK(screen.backend().dump().contains("L-26-0381;mono"));
     CHECK(screen.backend().dump().contains("STP-0114 v2;mono"));

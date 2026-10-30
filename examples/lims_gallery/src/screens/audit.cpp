@@ -258,15 +258,17 @@ ui::Nodes facetFields(Audit const& audit) {
             ui::column({dateField(audit.from, "From", "from"), dateField(audit.until, "To", "until")}, {.gap = 1})};
 }
 
+// The facets are a rail on the bar surface, flush to the page's edge, with a rule between it and the trail.
 ui::Node facetsPanel(Audit const& audit) {
-    return ui::panel(
+    return ui::column(
                {ui::row(
                     {layout::section("Filters"), ui::spacer().sizing(ui::stretch()),
                      ui::button({.label = "Clear all", .emphasis = ButtonEmphasis::Ghost, .onClick = clearAll(audit)})
                          .testId("clear-all")},
                     {.gap = 1, .align = Align::Center}),
                 ui::column(facetFields(audit), {.gap = 3})},
-               {.padding = 2})
+               {.gap = 2, .padding = ui::padding(3, 3)})
+        .surface("bar")
         // The design's 220 px rail.
         .sizing(ui::fixed(29))
         .a11y("Filters")
@@ -356,17 +358,20 @@ ui::Node trailTable(Audit const& audit) {
 ui::Node pager(Audit const& audit) {
     auto const page = ui::Handle<std::int64_t>{ui::ref("trail.page")};
     auto const pageCount = ui::Handle<std::int64_t>{ui::ref("trail.pageCount")};
-    return ui::row({layout::muted(ui::format("{0}–{1} of {2}", {ui::ref("trail.pageFirst"), ui::ref("trail.pageLast"),
-                                                                ui::ref("trail.viewCount")}))
-                        .sizing(ui::stretch())
-                        .testId("range"),
-                    ui::button({.label = "‹", .onClick = ui::set(audit.page, page - 1), .shape = ControlShape::Square})
-                        .a11y("Previous page")
-                        .enabled(page > 0),
-                    ui::button({.label = "›", .onClick = ui::set(audit.page, page + 1), .shape = ControlShape::Square})
-                        .a11y("Next page")
-                        .enabled(page < pageCount - 1)},
-                   {.gap = 1, .align = Align::Center, .padding = 2})
+    return ui::row(
+               {layout::muted(ui::format("{0}–{1} of {2}", {ui::ref("trail.pageFirst"), ui::ref("trail.pageLast"),
+                                                            ui::ref("trail.viewCount")}))
+                    .sizing(ui::stretch())
+                    .testId("range"),
+                ui::button(
+                    {.icon = "nav.back", .onClick = ui::set(audit.page, page - 1), .shape = ControlShape::Square})
+                    .a11y("Previous page")
+                    .enabled(page > 0),
+                ui::button(
+                    {.icon = "nav.forward", .onClick = ui::set(audit.page, page + 1), .shape = ControlShape::Square})
+                    .a11y("Next page")
+                    .enabled(page < pageCount - 1)},
+               {.gap = 1, .align = Align::Center, .padding = 2})
         .testId("pager");
 }
 
@@ -381,10 +386,12 @@ ui::Node searchField(Audit const& audit) {
 }
 
 ui::Node expandedLayout(Audit const& audit) {
-    auto const main =
-        ui::column({chips(audit), ui::panel({trailTable(audit), pager(audit)}, {.padding = 0})}, {.gap = 2})
-            .sizing(ui::stretch());
-    return ui::row({facetsPanel(audit), main}, {.gap = 2, .align = Align::Start});
+    auto const main = ui::column({chips(audit), ui::panel({trailTable(audit), pager(audit)}, {.padding = 0})},
+                                 {.gap = 2, .padding = 4})
+                          .sizing(ui::stretch());
+    // The page's own edge: the rail runs the page's height, with a rule between it and the trail.
+    return ui::row({facetsPanel(audit), main}, {.align = Align::Stretch, .divided = true, .pageEdge = true})
+        .sizing(ui::stretch(), ui::stretch());
 }
 
 // ── Compact: one entry per card, nothing shortened ───────────────────────────────────────────────────────────────
@@ -402,7 +409,7 @@ ui::Node entryCard() {
          ui::text({.text = recordLine, .spans = recordRuns}),
          ui::row({oldValue(ui::row("old")), ui::text({.text = "→"}), newValue(ui::row("new"))}, {.gap = 1}),
          layout::muted(ui::format("Reason: {0}", {ui::row("reason")})).visible(!ui::isEmpty(ui::row("reason")))},
-        {.gap = 0});
+        {.gap = 0, .padding = ui::padding(3, 4)});
 }
 
 ui::Node filtersDrawer(Audit const& audit) {
@@ -418,8 +425,10 @@ ui::Node filtersDrawer(Audit const& audit) {
                                     .onClick = ui::close(ui::self)}}});
 }
 
+// The list runs to the page's edges on the bar surface, ruled between its sections and its entries; the page joins the
+// head's block, so the head draws no rule of its own over it.
 ui::Node compactLayout(Audit const& audit) {
-    return ui::column(
+    auto const actions = ui::column(
         {ui::row(
              {ui::button({.label = ui::format("Filters · {0}", {audit.active}), .onClick = ui::open(audit.filters)})
                   .sizing(ui::stretch())
@@ -427,17 +436,22 @@ ui::Node compactLayout(Audit const& audit) {
               ui::button({.label = "Export CSV", .onClick = ui::notify("Exporting the audit trail as CSV")})
                   .sizing(ui::stretch())},
              {.gap = 1}),
-         layout::muted("57 entries · times in CEST (UTC+2)"),
-         ui::forEach(ui::slice(audit.shown, std::int64_t{0}, audit.listed),
-                     {.key = ui::row("at"), .gap = 2, .divided = true},
-                     [](ui::DeclScope&) { return ui::Nodes{entryCard()}; })
-             .testId("entries"),
-         ui::column(noEntries(audit)).visible(ui::isEmpty(audit.shown)),
-         ui::button({.label = "Load 25 more", .onClick = ui::set(audit.listed, audit.listed + 25)})
-             .visible(audit.listed < ui::Handle<std::int64_t>{ui::call("count", {audit.shown})})
-             .testId("load-more"),
-         filtersDrawer(audit)},
-        {.gap = 2});
+         layout::muted("57 entries · times in CEST (UTC+2)")},
+        {.gap = 2, .padding = ui::padding(2, 4)});
+    return ui::column(
+               {actions,
+                ui::forEach(ui::slice(audit.shown, std::int64_t{0}, audit.listed),
+                            {.key = ui::row("at"), .gap = 0, .divided = true},
+                            [](ui::DeclScope&) { return ui::Nodes{entryCard()}; })
+                    .testId("entries"),
+                ui::column(noEntries(audit), {.padding = 4}).visible(ui::isEmpty(audit.shown)),
+                ui::column({ui::button({.label = "Load 25 more", .onClick = ui::set(audit.listed, audit.listed + 25)})
+                                .testId("load-more")},
+                           {.padding = 4})
+                    .visible(audit.listed < ui::Handle<std::int64_t>{ui::call("count", {audit.shown})}),
+                filtersDrawer(audit)},
+               {.divided = true, .pageEdge = true, .headJoined = true})
+        .surface("bar");
 }
 
 }  // namespace
@@ -462,7 +476,8 @@ ui::Screen auditScreen() {
                        .label = ui::cond(audit.compact, Text{"Export PDF"}, Text{"Export PDF for inspection"}),
                        .emphasis = ButtonEmphasis::Primary,
                        .onClick = ui::notify("Exporting the audit trail as PDF for inspection")});
-        return layout::byWidth(audit.width, compactLayout(audit), expandedLayout(audit));
+        return layout::byWidth(audit.width, compactLayout(audit), expandedLayout(audit))
+            .sizing(ui::stretch(), ui::stretch());
     });
 }
 

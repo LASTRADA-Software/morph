@@ -52,9 +52,9 @@ TEST_CASE("samples, expanded: the table, its out-of-spec tone, and three rows se
     CHECK(screen.prop("Table", "samples", "selectAllLabel") == "Select all on this page");
     CHECK(screen.prop("Table", "samples", "selection") == R"(["S-26-104170","S-26-104221","S-26-104176"])");
     CHECK(screen.shows("Panel", "bulk"));
-    CHECK(screen.text("selected") == "3 selected on this page");
+    CHECK(screen.text("selected") == "3 selected on this page ·");
     // Only the count is strong, and a lot number is a mono run.
-    CHECK(screen.backend().dump().contains("[3 selected;strong, on this page]"));
+    CHECK(screen.backend().dump().contains("[3 selected;strong, on this page ·]"));
     CHECK(screen.backend().dump().contains(" · ,L-26-0377;mono]"));
     CHECK(screen.prop("Button", "select-all", "label") == "Select all 312");
     CHECK(screen.prop("Button", "head_action_register", "label") == "Register samples");
@@ -68,7 +68,7 @@ TEST_CASE("samples, expanded: selecting rows drives the bulk bar, and changing p
     CHECK(screen.waitFor([&screen] { return !screen.shows("Panel", "bulk"); }));
     int const table = screen.find("Table", "samples").value_or(0);
     screen.backend().clickRow(table, sampleKey("S-26-104198"), morph::ui::RowClick::Toggle);
-    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "1 selected on this page"; }));
+    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "1 selected on this page ·"; }));
     screen.click("change-priority");
     REQUIRE(screen.waitFor([&screen] { return screen.find("Select", "new-priority").has_value(); }));
     screen.choose("new-priority", "STAT");
@@ -83,9 +83,9 @@ TEST_CASE("samples, expanded: selecting rows drives the bulk bar, and changing p
     CHECK(stat == 2);
     // The header box is Ctrl+A: every row on the page.
     CHECK(screen.backend().press(table, "Ctrl+A"));
-    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "25 selected on this page"; }));
+    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "25 selected on this page ·"; }));
     screen.click("select-all");
-    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "All 312 samples selected"; }));
+    CHECK(screen.waitFor([&screen] { return screen.text("selected") == "All 312 samples selected ·"; }));
     screen.requireNoProblems();
 }
 
@@ -95,6 +95,8 @@ TEST_CASE("samples, expanded: the pager turns the page, and a header sorts from 
     CHECK(screen.prop("Button", "previous-page", "enabled") == "false");
     // The pager's buttons are glyph-sized squares.
     CHECK(screen.prop("Button", "previous-page", "shape") == "square");
+    CHECK(screen.prop("Button", "previous-page", "icon") == "nav.back");
+    CHECK(screen.prop("Button", "next-page", "icon") == "nav.forward");
     CHECK(screen.prop("Button", "next-page", "shape") == "square");
     screen.click("next-page");
     CHECK(screen.waitFor([&screen] { return screen.text("range") == "26–38 of 38"; }));
@@ -151,14 +153,24 @@ TEST_CASE("samples, compact: the bulk bar is the pinned bottom bar, and takes no
           "[lims-gallery]") {
     GalleryScreen screen{kScreen, "compact"};
     screen.requireNoProblems();
-    auto const bar = screen.backend().find("Column", "surface", "bar");
-    REQUIRE(bar.has_value());
+    // The search and filters are the top bar; the bulk bar is the last column on the `bar` surface.
+    auto const lastBar = [&screen] {
+        int found = 0;
+        for (int const id : screen.backend().all("Column")) {
+            if (screen.backend().prop(id, "surface") == "bar") {
+                found = id;
+            }
+        }
+        return found;
+    };
+    int const bar = lastBar();
+    REQUIRE(bar != 0);
     CHECK(screen.shows("Row", "bulk"));
-    CHECK(screen.backend().prop(bar.value_or(0), "visible") != "false");
+    CHECK(screen.backend().prop(bar, "visible") != "false");
     // "Clear selection" is the menu's third entry.
     screen.backend().chooseMenuEntry(screen.find("Menu", "more-bulk").value_or(0), std::vector<std::size_t>{2});
     CHECK(screen.waitFor([&screen] { return !screen.shows("Row", "bulk"); }));
-    CHECK(screen.backend().prop(screen.backend().find("Column", "surface", "bar").value_or(0), "visible") == "false");
+    CHECK(screen.backend().prop(lastBar(), "visible") == "false");
 }
 
 // Mutation: leave `selected` off the card (no bar, and the card stays a plain client item).

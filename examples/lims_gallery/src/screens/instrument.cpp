@@ -331,7 +331,8 @@ ui::Node expandedLayout(Instrument const& instrument) {
              .sizing(ui::fixed(44))},
         {.gap = 2, .align = Align::Start});
     // The root is the page's edge: the strip sits in the head's white block, and the tabs inset their own pages.
-    return ui::column({recordTabs(instrument, overview), dialogs(instrument)}, {.gap = 0, .pageEdge = true});
+    return ui::column({recordTabs(instrument, overview), dialogs(instrument)},
+                      {.gap = 0, .pageEdge = true, .headJoined = true});
 }
 
 // Compact stacks every section: the details as label-over-value pairs, the rest folded.
@@ -382,7 +383,7 @@ ui::Node compactLayout(Instrument const& instrument) {
     // The actions sit in the head's white block, above the strip.
     return ui::column({ui::column({actions}, {.padding = ui::padding(2, 4)}).surface("bar"),
                        recordTabs(instrument, overview), dialogs(instrument)},
-                      {.gap = 0, .pageEdge = true});
+                      {.gap = 0, .pageEdge = true, .headJoined = true});
 }
 
 }  // namespace

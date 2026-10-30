@@ -349,9 +349,10 @@ ui::Node bulkBar(Samples const& list) {
                    {ui::text(
                         {.text = selectedLabel(list, false),
                          .spans = ui::cond(
-                             list.everySelected, ui::AnyHandle{ui::spans({ui::strong(selectedLabel(list, false))})},
+                             list.everySelected,
+                             ui::AnyHandle{ui::spans({ui::strong(selectedLabel(list, false)), " ·"})},
                              ui::AnyHandle{ui::spans(
-                                 {ui::strong(ui::format("{0} selected", {list.selectedCount})), " on this page"})})})
+                                 {ui::strong(ui::format("{0} selected", {list.selectedCount})), " on this page ·"})})})
                         .testId("selected"),
                     ui::button(
                         {.label = ui::format("Select all {0}", {ui::AnyHandle{kTotal}}),
@@ -367,7 +368,7 @@ ui::Node bulkBar(Samples const& list) {
                     ui::button({.label = "Print labels", .onClick = printLabels(list)}),
                     ui::button({.label = "Clear", .emphasis = ButtonEmphasis::Ghost, .onClick = clearSelection(list)})
                         .testId("clear")},
-                   {.gap = 1, .align = Align::Center})},
+                   {.gap = 1, .align = Align::Center, .padding = ui::padding(0, 2)})},
                {.padding = 1})
         .surface("selected")
         .a11y("Bulk actions")
@@ -569,11 +570,13 @@ ui::Node pageFooter(Samples const& list) {
                             .onChoose = {ui::set(list.pageSize, ui::event()), ui::set(list.page, std::int64_t{0})}})
                     .sizing(ui::fixed(8))
                     .testId("page-size"),
-                ui::button({.label = "‹", .onClick = ui::set(list.page, page - 1), .shape = ControlShape::Square})
+                ui::button(
+                    {.icon = "nav.back", .onClick = ui::set(list.page, page - 1), .shape = ControlShape::Square})
                     .a11y("Previous page")
                     .enabled(page > 0)
                     .testId("previous-page"),
-                ui::button({.label = "›", .onClick = ui::set(list.page, page + 1), .shape = ControlShape::Square})
+                ui::button(
+                    {.icon = "nav.forward", .onClick = ui::set(list.page, page + 1), .shape = ControlShape::Square})
                     .a11y("Next page")
                     .enabled(page < pageCount - 1)
                     .testId("next-page")},
@@ -686,16 +689,17 @@ ui::Node compactLayout(Samples const& list) {
     auto const active =
         ui::cond(ui::eq(list.status, "open"), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1}) +
         ui::cond(ui::eq(list.priority, "any"), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1});
-    // The bulk bar stays at the bottom of the phone screen while the cards scroll above it.
+    // The search, Filters and Sort stay at the top of the phone screen in the head's block, and the bulk bar at the
+    // bottom, while the cards scroll between them.
+    auto const controls = ui::Nodes{
+        searchField(list),
+        ui::row({ui::button({.label = ui::format("Filters · {0}", {active}), .onClick = ui::open(list.filtersDrawer)})
+                     .sizing(ui::stretch())
+                     .testId("open-filters"),
+                 sortChoice(list).sizing(ui::stretch())},
+                {.gap = 1})};
     return ui::pinned(
-        ui::column({searchField(list),
-                    ui::row({ui::button({.label = ui::format("Filters · {0}", {active}),
-                                         .onClick = ui::open(list.filtersDrawer)})
-                                 .sizing(ui::stretch())
-                                 .testId("open-filters"),
-                             sortChoice(list).sizing(ui::stretch())},
-                            {.gap = 1}),
-                    ui::panel({ui::forEach(ui::slice(cardOrder(list), std::int64_t{0}, list.cardCount),
+        ui::column({ui::panel({ui::forEach(ui::slice(cardOrder(list), std::int64_t{0}, list.cardCount),
                                            {.key = ui::row("id"), .gap = 0, .divided = true},
                                            [&list](ui::DeclScope&) { return ui::Nodes{sampleCard(list)}; })
                                    .testId("cards")},
@@ -707,7 +711,7 @@ ui::Node compactLayout(Samples const& list) {
                         .testId("load-more"),
                     compactFilters(list), assignDialog(list), priorityDialog(list)},
                    {.gap = 2}),
-        {.bottom = compactBulkBar(list)});
+        {.top = controls, .bottom = compactBulkBar(list)});
 }
 
 }  // namespace

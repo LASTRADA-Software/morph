@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "gallery_harness.hpp"
 
@@ -29,7 +30,7 @@ bool showsText(GalleryScreen& screen, std::string_view text) {
 TEST_CASE("audit, expanded: facets beside the trail, with the active filters as chips", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
     screen.requireNoProblems();
-    CHECK(screen.shows("Panel", "facets"));
+    CHECK(screen.shows("Column", "facets"));
     CHECK(screen.prop("Checkbox", "type-result", "checked") == "true");
     CHECK(screen.prop("Checkbox", "type-specification", "checked") == "false");
     CHECK(screen.shows("Table", "trail"));
@@ -91,10 +92,11 @@ TEST_CASE("audit, compact: entries stack as cards, filters in a drawer", "[lims-
 // Mutation: write the pager's arrows as default buttons, or the facet labels as muted capitals again.
 TEST_CASE("audit, expanded: the pager is square glyph buttons and the facet labels are overlines", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
-    for (char const* arrow : {"‹", "›"}) {
-        auto const button = screen.backend().find("Button", "label", arrow);
+    for (auto const& [name, icon] : {std::pair{"Previous page", "nav.back"}, std::pair{"Next page", "nav.forward"}}) {
+        auto const button = screen.backend().find("Button", "a11yName", name);
         REQUIRE(button.has_value());
         CHECK(screen.backend().prop(*button, "shape") == "square");
+        CHECK(screen.backend().prop(*button, "icon") == icon);
     }
     for (char const* label : {"Record type", "Action"}) {
         auto const heading = screen.backend().find("Text", "text", label);

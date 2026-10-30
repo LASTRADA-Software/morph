@@ -261,6 +261,7 @@ ui::Node matrix(Study const& study) {
         columns.push_back(ui::TableColumn{.name = std::string{"m"} + point.header,
                                           .label = point.header,
                                           .width = ui::fixed(4),
+                                          .align = Align::Center,
                                           .cell = monthBox(study, point, false)});
     }
     columns.push_back(ui::TableColumn{
@@ -309,28 +310,37 @@ ui::Node windowField(Study const& study) {
         .testId("window");
 }
 
+ui::AnyHandle perPullMessage(Study const& study, bool compact) {
+    return compact ? ui::format("{0} units needed, {1} in stock for lot {2}.", {study.needed, study.stock, study.lot})
+                   : ui::format("{0} pulls × {1} = {2} units needed, {3} in stock for lot {4}.",
+                                {study.pulls, study.perPull, study.needed, study.stock, study.lot});
+}
+
+// Expanded, the field carries its message. Compact, the field is outlined and the message spans both fields of the
+// row, under it.
 ui::Node perPullField(Study const& study, bool compact) {
-    auto const message =
-        compact ? ui::format("{0} units needed, {1} in stock for lot {2}.", {study.needed, study.stock, study.lot})
-                : ui::format("{0} pulls × {1} = {2} units needed, {3} in stock for lot {4}.",
-                             {study.pulls, study.perPull, study.needed, study.stock, study.lot});
-    auto const errors = ui::cond(study.enough, ui::AnyHandle{std::vector<std::string>{}}, ui::list({message}));
-    return layout::captioned(ui::textInput({.value = study.perPull,
-                                            .label = compact ? "Per pull" : "Containers per pull",
-                                            .unit = "units",
-                                            .onChange = ui::set(study.perPull, ui::event())}))
-        .id(compact ? study.perPullCompact : study.perPullField)
-        .required(true)
-        .errors(errors)
-        .testId("per-pull");
+    auto const field = layout::captioned(ui::textInput({.value = study.perPull,
+                                                        .label = compact ? "Per pull" : "Containers per pull",
+                                                        .unit = "units",
+                                                        .onChange = ui::set(study.perPull, ui::event())}))
+                           .id(compact ? study.perPullCompact : study.perPullField)
+                           .required(true)
+                           .testId("per-pull");
+    if (compact) {
+        return field.tone(ui::cond(study.enough, Text{"neutral"}, Text{"err"}));
+    }
+    return field.errors(
+        ui::cond(study.enough, ui::AnyHandle{std::vector<std::string>{}}, ui::list({perPullMessage(study, false)})));
 }
 
 ui::Node attention(Study const& study, bool compact) {
     return ui::banner(
                {.tone = "err",
                 .text = "1 field needs attention: Containers per pull.",
-                .action = ui::ActionPart{.label = "Go to the field",
-                                         .onClick = ui::focus(compact ? study.perPullCompact : study.perPullField)}})
+                .spans = ui::spans({"1 field needs attention: ", ui::actionRun("Containers per pull"), "."}),
+                .action = ui::ActionPart{.label = "Containers per pull",
+                                         .onClick = ui::focus(compact ? study.perPullCompact : study.perPullField)},
+                .actionStyle = morph::ui::BannerActionStyle::Link})
         .visible(study.attempted && !study.enough)
         .testId("attention");
 }
@@ -548,14 +558,13 @@ ui::StepperParts wizard(Study const& study, bool compact, ui::Node const& condit
     Flag const hasTests = Count{study.testCount} > 0;
     return ui::stepperParts(
         {.step = study.step,
-         .steps = {{.label = kSteps.at(0),
-                    .children = productStep(study, compact),
-                    .continueLabel = "Continue to tests"},
+         .steps = {{.label = kSteps.at(0), .children = productStep(study, compact)},
                    {.label = kSteps.at(1),
                     .children = conditionsStep,
                     .canContinue = study.enough,
                     .blocking = compact ? study.perPullCompact : study.perPullField,
-                    .onBlocked = ui::set(study.attempted, true)},
+                    .onBlocked = ui::set(study.attempted, true),
+                    .continueLabel = "Continue to tests"},
                    {.label = kSteps.at(2), .children = testsStep(study, compact), .canContinue = hasTests},
                    {.label = kSteps.at(3), .children = reviewStep(study), .canContinue = study.confirmed}},
          .continueLabel = "Continue",
@@ -570,9 +579,9 @@ ui::StepperParts wizard(Study const& study, bool compact, ui::Node const& condit
 // ── Expanded ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
 ui::Node expandedConditions(Study const& study) {
-    auto const fields = ui::panel(
-        {ui::grid({startField(study), windowField(study), perPullField(study, false)}, {.gap = 2, .columns = 3})},
-        {.padding = 2});
+    auto const fields = ui::panel({ui::grid({startField(study), windowField(study), perPullField(study, false)},
+                                            {.gap = 2, .columns = 3, .align = Align::Start})},
+                                  {.padding = 2});
     auto const conditions =
         ui::panel({ui::row({layout::section("Storage conditions and timepoints (months)").sizing(ui::stretch()),
                             ui::button({.label = "Apply ICH Q1A template",
@@ -625,6 +634,9 @@ ui::Node compactConditions(Study const& study) {
          // The fields' tops line up although only one has an error text below it.
          ui::row({windowField(study).sizing(ui::stretch()), perPullField(study, true).sizing(ui::stretch())},
                  {.gap = 2, .align = Align::Start}),
+         ui::text({.text = perPullMessage(study, true), .role = "error"})
+             .visible(!study.enough)
+             .testId("per-pull-error"),
          ui::forEach(study.conditions, {.key = ui::row("id"), .gap = 1},
                      [&study](ui::DeclScope&) { return ui::Nodes{conditionSection(study)}; })
              .testId("conditions"),
