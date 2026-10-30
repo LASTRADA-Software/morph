@@ -37,8 +37,6 @@ using Count = ui::Handle<std::int64_t>;
 
 constexpr std::array<char const*, 8> kRowNames{"A", "B", "C", "D", "E", "F", "G", "H"};
 constexpr int kColumns = 12;
-// A well's grid track, in units: wide enough for the longest label, `STD1`, in the dense mono face.
-constexpr int kWellTrack = 6;
 constexpr int kRowCount = static_cast<int>(kRowNames.size());
 
 // Sample n of the worksheet is S-26-(kIdBase + n); the wells show it as Sn.
@@ -400,12 +398,12 @@ ui::Node sampleWell(Plate const& plate, Well const& well) {
 
 ui::Node header(std::string const& text) { return ui::text({.text = text, .role = "muted"}).alignSelf(Align::Center); }
 
-// The row letters' narrow track, then twelve centred well tracks of six units, so a column number sits over its wells
-// and a dense well's label fits whole.
+// The row letters' narrow track, then twelve centred well tracks sharing the panel's width, so a column number sits
+// over its wells and the grid fills the panel. A well keeps its own size inside its track.
 std::vector<ui::GridTrack> plateTracks() {
     std::vector<ui::GridTrack> tracks{{.width = ui::fixed(3)}};
     for (int column = 1; column <= kColumns; ++column) {
-        tracks.push_back({.width = ui::fixed(kWellTrack), .align = Align::Center});
+        tracks.push_back({.width = ui::stretch(), .align = Align::Center});
     }
     return tracks;
 }
@@ -655,7 +653,8 @@ ui::Node runLine(Plate const& plate) {
              .visible(empty)
              .a11y(ui::format("Assign a sample to {0}", {first}))
              .testId("assign")},
-        {.gap = 1, .align = Align::Center});
+        // The inset leaves room for a selected marker's ring at the page's edge.
+        {.gap = 1, .align = Align::Center, .padding = 1});
 }
 
 // "Row B · 1 standard, 1 blank, 10 samples": the template's wells, then how many sample wells are filled and empty.

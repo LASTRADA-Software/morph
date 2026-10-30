@@ -38,10 +38,10 @@ TEST_CASE("plate, expanded: the samples to place beside the 12-column plate, A3 
     screen.requireNoProblems();
     std::string tracks = "[fixed(3)";
     for (int column = 0; column < 12; ++column) {
-        tracks += ",fixed(6);align=center";
+        tracks += ",stretch(1);align=center";
     }
     CHECK(screen.prop("Grid", "plate", "tracks") == tracks + "]");
-    // A well is a round, dense button in the mono face, on fixed tracks that hold its whole label.
+    // A well is a round, dense button in the mono face, on tracks that share the panel's width.
     for (std::string const name : {"A1", "A2", "B2", "B3", "D5"}) {
         CHECK(screen.backend().prop(well(screen, name), "shape") == "round");
         CHECK(screen.backend().prop(well(screen, name), "size") == "small");
