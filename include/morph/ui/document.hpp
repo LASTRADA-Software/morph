@@ -1301,15 +1301,7 @@ public:
         doc.tools = topParts(*object, "tools", "headTool");
         doc.navigation = navigation(*object, doc.id);
         if (doc.id == "app") {
-            // The head belongs to a screen's tab; the app document has no view and so no head.
-            for (std::string_view const key :
-                 {"titleSpans", "eyebrow", "eyebrowSpans", "subtitle", "subtitleSpans", "leadPlacement", "headSurface",
-                  "status", "actions", "menu", "menuLabel", "tools"}) {
-                if (member(*object, key) != nullptr) {
-                    refuse(pointerAppend("", key),
-                           "`" + std::string{key} + "` is a screen's; the app document has none");
-                }
-            }
+            refuseScreenHead(*object);
         }
         static constexpr std::array<std::string_view, 2> kPrincipalPlacements = {"sidebar", "head"};
         doc.principalPlacement = choiceOf(*object, "principalPlacement", "", kPrincipalPlacements);
@@ -1496,6 +1488,17 @@ private:
                                               std::string const& path) {
         Json const* const value = member(object, key);
         return value == nullptr ? nullptr : expr(*value, pointerAppend(path, key));
+    }
+
+    // The head belongs to a screen's tab; the app document has no view and so no head.
+    static void refuseScreenHead(Json::object_t const& object) {
+        for (std::string_view const key :
+             {"titleSpans", "eyebrow", "eyebrowSpans", "subtitle", "subtitleSpans", "leadPlacement", "headSurface",
+              "status", "actions", "menu", "menuLabel", "tools"}) {
+            if (member(object, key) != nullptr) {
+                refuse(pointerAppend("", key), "`" + std::string{key} + "` is a screen's; the app document has none");
+            }
+        }
     }
 
     // A `leadPlacement` written as a literal is one of the three places; a computed one is read at run time.
@@ -3793,19 +3796,8 @@ private:
             static constexpr std::array<std::string_view, 2> kStale = {"clear", "keep"};
             checkChoice(node, "onStale", kStale);
             checkSelectStyle(node);
-        } else if (node.kind == "dialog" || node.kind == "drawer" || node.kind == "form") {
-            static constexpr std::array<std::string_view, 3> kPolicies = {"touched", "submit", "always"};
-            checkChoice(node, "showErrors", kPolicies);
-            // Absent keeps the schema's own mode, so a misspelt mode would silently do the same.
-            static constexpr std::array<std::string_view, 2> kSubmitModes = {"explicit", "auto"};
-            checkChoice(node, "submit", kSubmitModes);
-            checkSpans(node.prop("descriptionSpans"));
         } else if (node.kind == "text") {
-            checkTextRole(node);
-            checkSpans(node.prop("spans"));
-            if (node.prop("description") != nullptr) {
-                refuse(pointerAppend(node.path, "description"), "a text is not described; put the line in the text");
-            }
+            checkText(node);
         } else if (node.kind == "banner") {
             checkBanner(node);
         } else if (node.kind == "badge") {
@@ -3830,6 +3822,7 @@ private:
         checkChoice(node, "align", kAlign);
         checkChoice(node, "justify", kJustify);
         checkChoice(node, "alignSelf", kAlign);
+        checkSurfaceValues(node);
     }
 
     // Each form field drawn by a host component.
@@ -4112,6 +4105,28 @@ private:
         }
     }
 
+    // A dialog's, drawer's or form's error policy, submit mode and description spans.
+    static void checkSurfaceValues(DocNode const& node) {
+        if (node.kind != "dialog" && node.kind != "drawer" && node.kind != "form") {
+            return;
+        }
+        static constexpr std::array<std::string_view, 3> kPolicies = {"touched", "submit", "always"};
+        checkChoice(node, "showErrors", kPolicies);
+        // Absent keeps the schema's own mode, so a misspelt mode would silently do the same.
+        static constexpr std::array<std::string_view, 2> kSubmitModes = {"explicit", "auto"};
+        checkChoice(node, "submit", kSubmitModes);
+        checkSpans(node.prop("descriptionSpans"));
+    }
+
+    // A text's role and spans; a text carries no description, the line itself is the text.
+    static void checkText(DocNode const& node) {
+        checkTextRole(node);
+        checkSpans(node.prop("spans"));
+        if (node.prop("description") != nullptr) {
+            refuse(pointerAppend(node.path, "description"), "a text is not described; put the line in the text");
+        }
+    }
+
     // A banner's action: its style is one of three; the link style places the action in the message's runs, and a
     // stretched action is a button on a line of its own, so it needs an action and is no link.
     static void checkBanner(DocNode const& node) {
@@ -4124,7 +4139,7 @@ private:
                 refuse(pointerAppend(node.path, "actionStretch"),
                        "`actionStretch` puts a button on a line of its own; a `link` action sits in the message");
             }
-            if (node.parts.find("action") == node.parts.end()) {
+            if (!node.parts.contains("action")) {
                 refuse(pointerAppend(node.path, "actionStretch"), "`actionStretch` stretches the banner's `action`");
             }
         }

@@ -2034,7 +2034,7 @@ TEST_CASE("qt_quick widgets: a link banner draws its action as an anchor in the 
     int fired = 0;
     banner->setOnAction([&fired] { ++fired; });
     scene.settle();
-    QQuickItem& item = Scene::itemOf(*banner);
+    QQuickItem const& item = Scene::itemOf(*banner);
     auto* const message = item.findChild<QQuickItem*>(QStringLiteral("message"));
     REQUIRE(message != nullptr);
     QString const markup = message->property("text").toString();
@@ -2085,14 +2085,14 @@ TEST_CASE("qt_quick widgets: a stretched button action is as wide as the banner'
     banner->setActionLabel("Open run");
     banner->setActionStyle(ui::BannerActionStyle::Button, true);
     scene.settle();
-    QQuickItem& item = Scene::itemOf(*banner);
+    QQuickItem const& item = Scene::itemOf(*banner);
     auto* const message = item.findChild<QQuickItem*>(QStringLiteral("message"));
     auto* const action = item.findChild<QQuickItem*>(QStringLiteral("action"));
     REQUIRE((message != nullptr && action != nullptr));
     QPointF const messageAt = message->mapToItem(&item, QPointF{0, 0});
     QPointF const actionAt = action->mapToItem(&item, QPointF{0, 0});
     CHECK(actionAt.y() >= messageAt.y() + message->height());
-    CHECK(action->width() == Catch::Approx(item.width() - 2 * actionAt.x()).margin(1.0));
+    CHECK(action->width() == Catch::Approx(item.width() - (2 * actionAt.x())).margin(1.0));
     auto const* const background = action->property("background").value<QObject*>();
     REQUIRE(background != nullptr);
     CHECK_FALSE(background->property("ghost").toBool());

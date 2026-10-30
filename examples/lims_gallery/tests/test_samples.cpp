@@ -156,9 +156,9 @@ TEST_CASE("samples, compact: the bulk bar is the pinned bottom bar, and takes no
     // The search and filters are the top bar; the bulk bar is the last column on the `bar` surface.
     auto const lastBar = [&screen] {
         int found = 0;
-        for (int const id : screen.backend().all("Column")) {
-            if (screen.backend().prop(id, "surface") == "bar") {
-                found = id;
+        for (int const column : screen.backend().all("Column")) {
+            if (screen.backend().prop(column, "surface") == "bar") {
+                found = column;
             }
         }
         return found;
