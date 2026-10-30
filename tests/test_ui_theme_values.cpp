@@ -122,6 +122,14 @@ TEST_CASE("ui theme values: the neutral tone has its parts, and the hover fill a
     CHECK(popup.spread == 0.0);
 }
 
+// Mutation: leave `radius.badge` out of `kThemeTokens` (a bundle's value is dropped and the default 4 reads).
+TEST_CASE("ui theme values: the badge radius is a token with a default", "[ui][theme]") {
+    CHECK(ui::themeValues().dimensions.at("radius.badge") == 4.0);
+    ui::ThemeValues const values =
+        valuesOf(R"({"radius": {"$type": "dimension", "badge": {"$value": {"value": 2, "unit": "px"}}}})");
+    CHECK(values.dimensions.at("radius.badge") == 2.0);
+}
+
 // Mutation: drop the fill's alpha before comparing (the translucent default reads as opaque near-black).
 TEST_CASE("ui theme values: text that cannot be read on a fill is reported", "[ui][theme]") {
     CHECK(ui::themeContrastProblems(ui::themeValues()).empty());

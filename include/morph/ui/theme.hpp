@@ -1111,6 +1111,8 @@ inline constexpr std::array<ThemeTokenSpec, 64> kThemeTokens = {{
     {.path = "color.background", .kind = ThemeTokenKind::Color, .color = "#f2f3f7", .number = 0.0},
     {.path = "radius.control", .kind = ThemeTokenKind::Dimension, .color = "", .number = 6.0},
     {.path = "radius.card", .kind = ThemeTokenKind::Dimension, .color = "", .number = 10.0},
+    // A badge's corners: a tag, a chip, an option of a select's list.
+    {.path = "radius.badge", .kind = ThemeTokenKind::Dimension, .color = "", .number = 4.0},
     {.path = "control.height", .kind = ThemeTokenKind::Dimension, .color = "", .number = 32.0},
     // The least height of a control while the window is compact: the common minimum touch target. A sibling of
     // `control.height`: the set keeps one spelling per path.

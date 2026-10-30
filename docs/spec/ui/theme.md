@@ -180,7 +180,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `opacity.stale` | number |
 | `space.0` … `space.5`, defaults 0, 4, 8, 12, 16, 24 | dimension, in px |
 | `color.background` (`#f2f3f7`) | colour |
-| `radius.control` (6), `radius.card` (10), `control.height` (32) | dimension, in px |
+| `radius.control` (6), `radius.card` (10), `radius.badge` (4: a tag, a chip and a select option), `control.height` (32) | dimension, in px |
 | `control.touchHeight` (44, the common minimum touch target): a sibling of `control.height` | dimension, in px |
 | `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3) | dimension, in px |
 | `font.size.small` (0: the body size ×0.85, rounded): a table header's label, the `small` text role; `font.size.caption` (0: ×0.92, rounded): a field's caption above its control; `font.size.mono` (0: the body size): the `mono` role; `font.size.display` (0: ×1.7, rounded): the `display` role. Each derives from the body size, none from another new token, so what a theme leaves unset never depends on what else it sets | dimension, in px |
@@ -219,7 +219,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `staleOpacity` | `opacity.stale` |
 | `space` (six px lengths) | `space.0` … `space.5` |
 | `background` | `color.background` |
-| `radiusControl`, `radiusCard`, `controlHeight`, `touchHeight`, `bodySize`, `headingSize` | `radius.control`, `radius.card`, `control.height`, `control.touchHeight`, `font.size.body`, `font.size.heading` |
+| `radiusControl`, `radiusCard`, `radiusBadge`, `controlHeight`, `touchHeight`, `bodySize`, `headingSize` | `radius.control`, `radius.card`, `radius.badge`, `control.height`, `control.touchHeight`, `font.size.body`, `font.size.heading` |
 | `tableCellPaddingX`, `tableCellPaddingY` | `table.cellPaddingX`, `table.cellPaddingY` |
 | `smallSize`, `captionSize`, `monoSize`, `displaySize` | `font.size.small`, `font.size.caption`, `font.size.mono`, `font.size.display` |
 | `strongWeight` | `font.weight.strong` |
@@ -268,7 +268,7 @@ the same engine, so a theme reaches both, and applying another theme later updat
 properties it could not set. Every colour row is also a role of each surface's `MorphScheme`, so a surface's own
 tokens set it there. A progress bar reads two of them: its fill is `color.accent` on a `color.track` track. `MorphWidget`'s `toneBgOf`,
 `toneBorderOf` and `toneDotOf` answer a tone's fill, outline and marker in a widget's scheme (the neutral tone's are
-`color.neutral.bg`, `.border` and `.dot`); a badge and a banner fill and outline with them.
+`color.neutral.bg`, `.border` and `.dot`); a filled badge fills with them, and an outline badge, a chip and a banner outline with them.
 
 ## Icons
 

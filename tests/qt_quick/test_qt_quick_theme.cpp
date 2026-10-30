@@ -218,7 +218,30 @@ TEST_CASE("qt_quick theme: a tone's bg, border and dot reach Theme, its surfaces
     auto const* const fill = Scene::itemOf(*badge).findChild<QQuickItem*>(QStringLiteral("fill"));
     REQUIRE(fill != nullptr);
     CHECK(fill->property("color").value<QColor>() == QColor{"#123456"});
-    CHECK(fill->property("border").value<QObject*>()->property("color").value<QColor>() == QColor{"#234567"});
+    // A filled badge is a tag: it draws no border.
+    CHECK(fill->property("border").value<QObject*>()->property("width").toReal() == 0.0);
+
+    auto outlined = scene.backend().createBadge(nullptr);
+    outlined->setTone(ui::Tone::Ok);
+    outlined->setText("Done");
+    outlined->setStyle(ui::BadgeStyle::Outline);
+    scene.settle();
+    auto const* const outline = Scene::itemOf(*outlined).findChild<QQuickItem*>(QStringLiteral("fill"));
+    REQUIRE(outline != nullptr);
+    CHECK(outline->property("border").value<QObject*>()->property("color").value<QColor>() == QColor{"#234567"});
+}
+
+TEST_CASE("qt_quick theme: radius.badge reaches Theme", "[qt_quick]") {
+    Scene scene;
+    auto const tokens =
+        ui::parseTokens(R"({"radius": {"$type": "dimension", "badge": {"$value": {"value": 2, "unit": "px"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("radiusBadge").toReal() == 2.0);
 }
 
 TEST_CASE("qt_quick theme: a table header's colour reaches Theme, a surface's scheme and the table it draws under",

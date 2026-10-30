@@ -132,6 +132,7 @@ TEST_CASE("theme: the shell's tokens have defaults, and a shadow is read and che
     CHECK(defaults.colors.at("color.background").hex() == "#f2f3f7");
     CHECK(defaults.dimensions.at("radius.control") == 6.0);
     CHECK(defaults.dimensions.at("radius.card") == 10.0);
+    CHECK(defaults.dimensions.at("radius.badge") == 4.0);
     CHECK(defaults.dimensions.at("control.height") == 32.0);
     // Zero: derived from the platform font.
     CHECK(defaults.dimensions.at("font.size.body") == 0.0);

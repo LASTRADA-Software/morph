@@ -681,6 +681,50 @@ TEST_CASE("qt_quick widgets: a removable badge's remove button is named and remo
     CHECK(removals == 2);
 }
 
+// Mutation: put `radius: height / 2` back on the badge's fill (the radius check fails), or draw the label in
+// `Theme.bodyFont` (the size and weight checks fail).
+TEST_CASE("qt_quick widgets: a filled badge is a tag in the small strong step", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const badge = scene.backend().createBadge(column.get());
+    badge->setTone(ui::Tone::Ok);
+    badge->setText("Released");
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QQuickItem& item = Scene::itemOf(*badge);
+    QQuickItem const* const fill = findNamed(item, QStringLiteral("fill"));
+    QQuickItem const* const label = findNamed(item, QStringLiteral("label"));
+    REQUIRE(fill != nullptr);
+    REQUIRE(label != nullptr);
+    CHECK(fill->property("radius").toReal() == theme->property("radiusBadge").toReal());
+    QFont const font = label->property("font").value<QFont>();
+    CHECK(font.pixelSize() == static_cast<int>(theme->property("smallPixels").toReal()));
+    CHECK(static_cast<int>(font.weight()) == theme->property("strongWeight").toInt());
+    CHECK(item.height() <= label->implicitHeight() + 2);
+}
+
+// Mutation: draw a removable badge as a tag (the border is the tone's, the height the tag's).
+TEST_CASE("qt_quick widgets: a removable badge is a chip", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const badge = scene.backend().createBadge(column.get());
+    badge->setText("Status: Released");
+    badge->setOnRemove([] {}, "Remove");
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QQuickItem& item = Scene::itemOf(*badge);
+    QQuickItem const* const fill = findNamed(item, QStringLiteral("fill"));
+    REQUIRE(fill != nullptr);
+    QObject const* const border = fill->property("border").value<QObject*>();
+    REQUIRE(border != nullptr);
+    CHECK(border->property("color").value<QColor>() == theme->property("controlBorder").value<QColor>());
+    CHECK(border->property("width").toReal() == 1.0);
+    CHECK(fill->property("color").value<QColor>() == theme->property("controlSurface").value<QColor>());
+    CHECK(item.height() == theme->property("targetHeight").toReal() - 6);
+}
+
 TEST_CASE("qt_quick widgets: the display kinds show what they are given", "[qt_quick]") {
     Scene scene;
     auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
@@ -1357,7 +1401,8 @@ TEST_CASE("qt_quick widgets: a danger outlined button, an outline badge, and a s
     QQuickItem const* const fill = findNamed(Scene::itemOf(*stat), QStringLiteral("fill"));
     REQUIRE(fill != nullptr);
     CHECK(fill->property("color").value<QColor>() == surface);
-    CHECK(fill->property("border").value<QObject*>()->property("color").value<QColor>() == error);
+    CHECK(fill->property("border").value<QObject*>()->property("color").value<QColor>() ==
+          scheme->property("errorBorder").value<QColor>());
     QList<QQuickItem*> const segments = named(Scene::itemOf(*show), QStringLiteral("segment"));
     REQUIRE(segments.size() == 2);
     CHECK(std::abs(segments.at(0)->width() - segments.at(1)->width()) <= 1);

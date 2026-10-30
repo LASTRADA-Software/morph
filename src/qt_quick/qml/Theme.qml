@@ -121,6 +121,8 @@ QtObject {
     property color background: "#f2f3f7"
     property real radiusControl: 6
     property real radiusCard: 10
+    // A tag's, a chip's and a select option's corners: `radius.badge`.
+    property real radiusBadge: 4
     property real controlHeight: 32
     // The least height of a control while `touchTargets` holds: `control.touchHeight`.
     property real touchHeight: 44
