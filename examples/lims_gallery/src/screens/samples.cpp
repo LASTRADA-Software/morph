@@ -345,7 +345,13 @@ ui::Commands printLabels(Samples const& list) {
 ui::Node bulkBar(Samples const& list) {
     return ui::panel(
                {ui::row(
-                   {ui::text({.text = selectedLabel(list, false), .role = "section"}).testId("selected"),
+                   {ui::text(
+                        {.text = selectedLabel(list, false),
+                         .spans = ui::cond(
+                             list.everySelected, ui::AnyHandle{ui::spans({ui::strong(selectedLabel(list, false))})},
+                             ui::AnyHandle{ui::spans(
+                                 {ui::strong(ui::format("{0} selected", {list.selectedCount})), " on this page"})})})
+                        .testId("selected"),
                     ui::button(
                         {.label = ui::format("Select all {0}", {ui::AnyHandle{kTotal}}),
                          .emphasis = ButtonEmphasis::Ghost,
@@ -502,7 +508,11 @@ ui::Node samplesTable(Samples const& list) {
                      {.name = "product",
                       .label = "Product · lot",
                       .width = ui::stretch(),
-                      .cell = ui::text({.text = lotLine})},
+                      .cell = ui::text(
+                          {.text = lotLine,
+                           .spans = ui::cond(
+                               ui::isEmpty(ui::row("lot")), ui::AnyHandle{ui::spans({ui::row("product")})},
+                               ui::AnyHandle{ui::spans({ui::row("product"), " · ", ui::mono(ui::row("lot"))})})})},
                      {.name = "tests", .label = "Tests", .width = ui::fixed(16)},
                      {.name = "priority",
                       .label = "Priority",

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <optional>
@@ -21,8 +22,14 @@ std::optional<int> selectBox(GalleryScreen& screen, std::string_view sample) {
 
 morph::ui::Key sampleKey(std::string_view sample) { return morph::ui::Key{std::string{sample}}; }
 
+// A text given runs is recorded as its runs, so it shows the text when its runs' characters are it.
 bool showsText(GalleryScreen& screen, std::string_view text) {
-    return screen.backend().find("Text", "text", text).has_value();
+    if (screen.backend().find("Text", "text", text).has_value()) {
+        return true;
+    }
+    return std::ranges::any_of(screen.backend().all("Text"), [&screen, text](int id) {
+        return morph::ui::testing::detail::spansCharacters(screen.backend().prop(id, "spans")) == text;
+    });
 }
 
 }  // namespace
@@ -45,6 +52,9 @@ TEST_CASE("samples, expanded: the table, its out-of-spec tone, and three rows se
     CHECK(screen.prop("Table", "samples", "selection") == R"(["S-26-104170","S-26-104221","S-26-104176"])");
     CHECK(screen.shows("Panel", "bulk"));
     CHECK(screen.text("selected") == "3 selected on this page");
+    // Only the count is strong, and a lot number is a mono run.
+    CHECK(screen.backend().dump().contains("[3 selected;strong, on this page]"));
+    CHECK(screen.backend().dump().contains(" · ,L-26-0377;mono]"));
     CHECK(screen.prop("Button", "select-all", "label") == "Select all 312");
     CHECK(screen.prop("Button", "head_action_register", "label") == "Register samples");
     CHECK(screen.find("Row", "pager").has_value());
