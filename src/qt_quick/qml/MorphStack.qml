@@ -45,6 +45,40 @@ MorphWidget {
                                                 : root.axis === 0 && root.between ? root.naturalLength
                                                                                   : layout.implicitHeight)
 
+    // The widest a wrapping row's child ever needs: a wrapping row can be as narrow as that.
+    readonly property real widestBasis: {
+        let widest = 0
+        for (let i = 0; i < free.children.length; ++i) {
+            const cell = free.children[i]
+            if (cell.visible)
+                widest = Math.max(widest, root.naturalBasisOf(cell))
+        }
+        return widest
+    }
+    // The content's minimum across the width, and the width there is inside the padding.
+    needWidth: root.wrap ? root.widestBasis : root.axis === 1 && root.between ? root.naturalLength
+                                                                       : layout.Layout.minimumWidth
+    haveWidth: root.width - 2 * root.insetX
+    contentMinimumWidth: 2 * root.insetX + root.needWidth
+    overflowKind: root.axis === 1 ? "row" : "column"
+
+    // The widest child whose minimum alone exceeds the width inside the padding, or empty.
+    function overflowChild(): string {
+        let found = ""
+        let widest = root.haveWidth
+        for (const object of root.content.children) {
+            const child = object as MorphWidget
+            if (!child || !child.visible)
+                continue
+            const least = root.wrap ? root.naturalBasisOf(child) : child.Layout.minimumWidth
+            if (least > widest) {
+                widest = least
+                found = child.objectName
+            }
+        }
+        return found
+    }
+
     defaultRole: root.selectable ? Accessible.Grouping : Accessible.Client
     Accessible.selectable: root.selectable
     Accessible.selected: root.selected

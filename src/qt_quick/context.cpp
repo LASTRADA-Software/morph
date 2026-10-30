@@ -89,6 +89,7 @@ Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
     // The roots item reports its width in units, which follows both the host's width and the theme's font.
     relay->setParent(_holder);
     _rootsRelay = relay.release();
+    _rootsRelay->on(QStringLiteral("overflow"), &reportOverflow);
     _rootsRelay->on(QStringLiteral("widthUnits"), [this](QVariant const& units) { widthChanged(units.toDouble()); });
     widthChanged(_holder->property("widthUnits").toDouble());
 }

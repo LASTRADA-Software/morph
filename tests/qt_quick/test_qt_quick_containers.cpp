@@ -1875,3 +1875,192 @@ TEST_CASE("qt_quick containers: a bleeding child of a holder column reaches its 
     CHECK(Scene::itemOf(*bleeding).width() == Catch::Approx(panelItem.width() - 2.0).margin(0.5));
     CHECK(Scene::itemOf(*writtenBleeding).mapToItem(&panelItem, QPointF{0, 0}).x() == Catch::Approx(1.0 + step));
 }
+
+namespace {
+
+// The warnings of the `morph.layout` category, collected while a `LayoutWatch` lives.
+QStringList& layoutWarnings() {
+    static QStringList warnings;
+    return warnings;
+}
+
+QtMessageHandler& previousLayoutHandler() {
+    static QtMessageHandler previous = nullptr;
+    return previous;
+}
+
+void collectLayoutWarnings(QtMsgType type, QMessageLogContext const& context, QString const& message) {
+    if (type == QtWarningMsg && context.category != nullptr && std::string_view{context.category} == "morph.layout") {
+        layoutWarnings().append(message);
+    } else if (previousLayoutHandler() != nullptr) {
+        previousLayoutHandler()(type, context, message);
+    }
+}
+
+class LayoutWatch {
+public:
+    LayoutWatch() : _previous{qInstallMessageHandler(collectLayoutWarnings)} {
+        previousLayoutHandler() = _previous;
+        layoutWarnings().clear();
+    }
+    ~LayoutWatch() { qInstallMessageHandler(_previous); }
+    LayoutWatch(LayoutWatch const&) = delete;
+    LayoutWatch& operator=(LayoutWatch const&) = delete;
+    LayoutWatch(LayoutWatch&&) = delete;
+    LayoutWatch& operator=(LayoutWatch&&) = delete;
+
+private:
+    QtMessageHandler _previous;
+};
+
+// A row of two texts and a 40-unit spacer under @p parent: wider than a 300 px window, and content-sized, so it
+// neither wraps nor shrinks.
+struct WideRow {
+    WideRow(Scene& scene, ui::ContainerWidget* parent, std::string const& testId) {
+        row = scene.backend().createStack(parent, ui::Axis::Horizontal);
+        row->setTestId(testId);
+        for (auto* const label : {"Approving needs your signature and a second reviewer",
+                                  "Approving needs your signature and a second reviewer"}) {
+            texts.push_back(scene.backend().createText(row.get()));
+            texts.back()->setText(label);
+        }
+        spacer = scene.backend().createSpacer(row.get());
+        spacer->setLayout({.width = ui::Sizing::fixed(40)});
+    }
+
+    std::unique_ptr<ui::StackWidget> row;
+    std::vector<std::unique_ptr<ui::TextWidget>> texts;
+    std::unique_ptr<ui::SpacerWidget> spacer;
+};
+
+}  // namespace
+
+// Mutation: leave `contentMinimumWidth` unbound on a stack (the column's minimum stays 0, as the row's content
+// cannot be seen from outside), or bind it without the padding.
+TEST_CASE("qt_quick containers: a container's minimum width is its padding and its content's", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(300, 300);
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setPadding(ui::Padding{0, 2});
+    WideRow const wide{scene, column.get(), "wide"};
+    scene.settle();
+
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    double const step = theme->property("space").value<QList<qreal>>().at(2);
+    QQuickItem const& rowItem = Scene::itemOf(*wide.row);
+    QQuickItem const& columnItem = Scene::itemOf(*column);
+    double const rowMinimum = rowItem.property("contentMinimumWidth").toDouble();
+    // The row's content: both texts, which together are more than the whole window.
+    CHECK(rowMinimum >= 2 * Scene::itemOf(*wide.texts.at(0)).implicitWidth());
+    CHECK(rowMinimum > 300);
+    CHECK(columnItem.property("contentMinimumWidth").toDouble() == Catch::Approx(rowMinimum + 2 * step));
+
+    // The column that fits its content has a minimum that is not binding: nothing is wider than it.
+    Scene roomy;
+    roomy.window().resize(900, 300);
+    auto fitting = roomy.backend().createStack(nullptr, ui::Axis::Vertical);
+    WideRow const fits{roomy, fitting.get(), "fits"};
+    roomy.settle();
+    CHECK(Scene::itemOf(*fits.row).width() >= Scene::itemOf(*fits.row).property("contentMinimumWidth").toDouble());
+}
+
+// Mutation: compare against `layout.width` (a packed row lays its layout out at its implicit width, which always
+// equals its minimum, so nothing is ever wider), report on every change of the width, or report while hidden.
+TEST_CASE("qt_quick containers: content that does not fit is reported once as a morph.layout warning", "[qt_quick]") {
+    LayoutWatch const watch;
+    Scene scene;
+    scene.window().resize(300, 300);
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setTestId("page");
+    WideRow const wide{scene, column.get(), "footer-row"};
+    scene.settle();
+    QTest::qWait(150);
+    REQUIRE(layoutWarnings().size() == 1);
+    CHECK(layoutWarnings().front().contains(QStringLiteral("the window needs")));
+    CHECK(layoutWarnings().front().contains(QStringLiteral("px and has 300 px")));
+    CHECK(layoutWarnings().front().contains(QStringLiteral("`page` and its siblings neither wrap nor shrink")));
+
+    // Another width, wider and narrower again: the container reported once and stays quiet.
+    scene.window().resize(299, 300);
+    scene.settle();
+    QTest::qWait(150);
+    scene.window().resize(2000, 300);
+    scene.settle();
+    QTest::qWait(150);
+    scene.window().resize(300, 300);
+    scene.settle();
+    QTest::qWait(150);
+    CHECK(layoutWarnings().size() == 1);
+
+    // A column whose content fits reports nothing.
+    layoutWarnings().clear();
+    Scene roomy;
+    roomy.window().resize(900, 300);
+    auto fitting = roomy.backend().createStack(nullptr, ui::Axis::Vertical);
+    WideRow const fits{roomy, fitting.get(), "fits"};
+    roomy.settle();
+    QTest::qWait(150);
+    CHECK(layoutWarnings().isEmpty());
+}
+
+// Mutation: report from a tab page that is not shown.
+TEST_CASE("qt_quick containers: a hidden tab page reports its overflow when it is shown, not before", "[qt_quick]") {
+    LayoutWatch const watch;
+    Scene scene;
+    scene.window().resize(300, 300);
+    auto tabs = scene.backend().createTabs(nullptr);
+    tabs->setTabs({"One", "Two"});
+    auto first = scene.backend().createSlot(tabs.get());
+    auto second = scene.backend().createSlot(tabs.get());
+    second->setVisible(false);
+    auto fitting = scene.backend().createText(first.get());
+    fitting->setText("short");
+    WideRow const wide{scene, second.get(), "hidden-row"};
+    scene.settle();
+    QTest::qWait(150);
+    CHECK(layoutWarnings().isEmpty());
+
+    first->setVisible(false);
+    second->setVisible(true);
+    scene.settle();
+    QTest::qWait(150);
+    QTest::qWait(150);
+    REQUIRE(layoutWarnings().size() == 1);
+    CHECK(layoutWarnings().front().contains(QStringLiteral("page")));
+}
+
+// Mutation: lay the page's column out at the viewport's width whatever its minimum, or leave the bar off.
+TEST_CASE("qt_quick containers: a scrollable page whose content cannot be narrower scrolls sideways", "[qt_quick]") {
+    LayoutWatch const watch;
+    Scene scene;
+    scene.window().resize(300, 300);
+    auto slot = scene.backend().createSlot(nullptr);
+    slot->setScrollable(true);
+    WideRow const wide{scene, slot.get(), "row"};
+    scene.settle();
+    QQuickItem& slotItem = Scene::itemOf(*slot);
+    auto const* const flick = slotItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    double const minimum = Scene::itemOf(*wide.row).property("contentMinimumWidth").toDouble();
+    CHECK(flick->property("contentWidth").toDouble() == Catch::Approx(minimum).margin(1.0));
+    CHECK(minimum > 300);
+    auto const* const sideBar = qobject_cast<QQuickItem*>(slotItem.property("sideBarItem").value<QObject*>());
+    REQUIRE(sideBar != nullptr);
+    CHECK(sideBar->isVisible());
+
+    // A row that fits is laid out at the viewport's width, with no bar.
+    Scene roomy;
+    roomy.window().resize(900, 300);
+    auto fitting = roomy.backend().createSlot(nullptr);
+    fitting->setScrollable(true);
+    WideRow const fits{roomy, fitting.get(), "row"};
+    roomy.settle();
+    QQuickItem& fitItem = Scene::itemOf(*fitting);
+    auto const* const fitFlick = fitItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(fitFlick != nullptr);
+    CHECK(fitFlick->property("contentWidth").toDouble() == Catch::Approx(fitFlick->width()));
+    auto const* const fitBar = qobject_cast<QQuickItem*>(fitItem.property("sideBarItem").value<QObject*>());
+    REQUIRE(fitBar != nullptr);
+    CHECK_FALSE(fitBar->isVisible());
+}

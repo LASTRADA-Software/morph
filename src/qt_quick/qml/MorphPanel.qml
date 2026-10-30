@@ -33,6 +33,10 @@ MorphWidget {
 
     implicitWidth: frame.implicitWidth
     implicitHeight: frame.implicitHeight
+    needWidth: inner.Layout.minimumWidth
+    haveWidth: inner.width
+    contentMinimumWidth: 2 * Theme.spaceOf(root.padding) + 2 + root.needWidth
+    overflowKind: "panel"
 
     Rectangle {
         id: frame

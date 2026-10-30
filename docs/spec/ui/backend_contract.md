@@ -251,7 +251,19 @@ column and places its own content. Every cell keeps its own height and is placed
 the row's whole height. No column is squeezed below its header: a content column is at
 least its header, a stretch column takes what the others leave but never less than its header, and a fixed column
 keeps its width (a fixed column narrower than its header cuts the header). A table whose columns are wider than the
-table scrolls sideways on Qt Quick; on the terminal the columns past its edge are cut and cannot be reached.
+table scrolls sideways on Qt Quick, with a bar that shows while it can; on the terminal the columns past its edge are cut and cannot be reached.
+
+**Content that does not fit.** A container does not shrink its children on its own: whether a text elides or a row
+wraps is the document's choice (`wrap`, `minWidth`, a stretch). A container's minimum width is its content's: a stack
+or a panel is never laid out narrower than its padding and its children's minimums, so a row of content-sized children
+that cannot fit raises its column's minimum, and so on up to the first container whose width its parent does not
+choose (a page, a splitter's pane, a window root). A document's `minWidth` wins. A table, a scroll and every leaf take
+their own overflow; a table's cells are placed at their column's width and do not raise it. A page (a slot) whose
+content cannot be narrower than it scrolls sideways when it is scrollable, and a scrolling vertical `scroll` does too.
+A frontend that can says so, once per container while it is mounted, when a container that is shown and sized holds
+content wider than itself by 2 px or more (a smaller shortfall is layout rounding); Qt Quick writes it as a warning of
+the `morph.layout` category. The terminal cuts the content at the container's edge and says nothing: it has no
+diagnostics channel that does not draw over the screen.
 
 **Alignment.** All of the above is the default, `Align::Stretch` and `Justify::Start`; the mount calls `setAlign` and
 `setJustify` only for another value, as it does `setEmphasis`, so a screen that says nothing of alignment records
