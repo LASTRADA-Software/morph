@@ -436,14 +436,14 @@ ui::Node analyteCell(Evaluation const& evaluation) {
                         .visible(ui::eq(ui::row("kind"), "entered") && ui::ne(ui::row("value"), ui::row("original")))
                         .testId("changed"),
                     layout::muted("calculated").visible(evaluation.calculated)},
-                   {.gap = 1, .align = Align::Center});
+                   {.gap = 1, .align = Align::Center, .wrap = true});
 }
 
 ui::Node evaluationCell(Worksheet const& sheet, Evaluation const& evaluation) {
     return ui::row(
         {layout::tag(evaluation.label, evaluation.tone).testId("evaluation"),
          layout::muted(ui::format("RSD {0} %", {sheet.rsd})).visible(ui::eq(ui::row("kind"), "mean")).testId("rsd")},
-        {.gap = 1, .align = Align::Center});
+        {.gap = 1, .align = Align::Center, .wrap = true});
 }
 
 ui::Node resultTable(Worksheet const& sheet) {
@@ -451,7 +451,7 @@ ui::Node resultTable(Worksheet const& sheet) {
     Evaluation const evaluation = evaluate(sheet, field);
     // The sample's own column is empty in a result's row: the sample is named by the heading above its results.
     std::vector<ui::TableColumn> const columns{
-        {.name = "sample", .label = "Sample", .width = ui::fixed(11), .cell = ui::text({.text = ""})},
+        {.name = "sample", .label = "Sample", .width = ui::fixed(7), .cell = ui::text({.text = ""})},
         {.name = "analyte", .label = "Analyte", .width = ui::stretch(), .cell = analyteCell(evaluation)},
         {.name = "area", .label = "Peak area", .width = ui::fixed(10), .align = Align::End},
         {.name = "result",

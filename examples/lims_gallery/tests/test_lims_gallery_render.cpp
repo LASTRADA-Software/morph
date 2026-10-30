@@ -4,7 +4,9 @@
 // client's source and shell, once at each width class. The testkit's smoke mounts each screen once at the window's
 // default size; this one resizes the window before each mount, so the backend reports `compact` or `expanded` and the
 // shell hands that class to the screen, as a user resizing the window would. It fails when a mount saw another class,
-// on any problem the shell reports, and on any Qt warning, as the testkit's does.
+// on any problem the shell reports, and on any Qt warning, as the testkit's does. The `morph.layout` warning a
+// container logs when its content is wider than it is one of those, so a screen that does not fit its window at any
+// of the sizes below fails the smoke naming the container.
 
 #include <QPointF>
 #include <QQmlEngine>
@@ -35,6 +37,10 @@ namespace {
 
 // Each width class and a window width in units inside it: below 80 units is compact, 108 and over expanded.
 constexpr std::array<std::pair<std::string_view, double>, 2> kWidths{{{"compact", 60.0}, {"expanded", 180.0}}};
+
+// The windows a screen is also shown in, in pixels: the expanded shell at a desktop's size, and a phone.
+constexpr std::array<std::pair<std::string_view, std::pair<int, int>>, 2> kWindows{
+    {{"expanded", {1000, 830}}, {"compact", {390, 844}}}};
 
 // The window of the footer probe, in pixels: a phone.
 constexpr int kProbeWidth = 390;
@@ -73,6 +79,9 @@ struct WidthReport {
     std::vector<std::string> expected;
     std::vector<std::string> mounted;
     std::vector<std::string> failures;
+    // Where each mount began among the Qt warnings recorded so far, so a warning is reported with the screen, class
+    // and window that logged it.
+    std::vector<std::pair<std::size_t, std::string>> marks;
     int exitCode = -1;
     // The footer probe: the receipt page's Receive button at the probe window's size.
     bool footerFound = false;
@@ -120,6 +129,10 @@ public:
                 _mounts.push_back(Mount{.screen = screen, .width = std::string{width}, .units = units});
                 _report->expected.push_back(screen + "@" + std::string{width});
             }
+            for (auto const& [width, size] : kWindows) {
+                _mounts.push_back(Mount{.screen = screen, .width = std::string{width}, .pixels = size});
+                _report->expected.push_back(screen + "@" + std::string{width});
+            }
         }
         // Last, so the window is left at the probe's size only after every other mount.
         _mounts.push_back(Mount{.screen = "lims-gallery.receipt", .width = "compact", .units = 0.0, .probe = true});
@@ -132,6 +145,8 @@ private:
         std::string screen;
         std::string width;
         double units = 0.0;
+        // The window's size in pixels, when the mount names one in place of a width in units.
+        std::pair<int, int> pixels{0, 0};
         bool probe = false;
     };
 
@@ -144,6 +159,8 @@ private:
         Mount const& mount = _mounts.at(_index++);
         if (mount.probe) {
             _shown->window->resize(kProbeWidth, kProbeHeight);
+        } else if (mount.pixels.first > 0) {
+            _shown->window->resize(mount.pixels.first, mount.pixels.second);
         } else {
             _shown->window->resize(pixelsFor(*_shown->engine, mount.units), 900);
         }
@@ -156,7 +173,11 @@ private:
             later(std::chrono::milliseconds{10}, [this, &mount, attempt] { awaitWidth(mount, attempt + 1); });
             return;
         }
-        std::string const label = mount.screen + "@" + mount.width;
+        std::string const label = mount.screen + "@" + mount.width + " " + std::to_string(_shown->window->width()) +
+                                  "x" + std::to_string(_shown->window->height());
+        if (auto const* const warnings = morph::examples::testing::detail::smokeWarnings(); warnings != nullptr) {
+            _report->marks.emplace_back(warnings->size(), label);
+        }
         _shell = morph::client::mountShell(
             *_context, *_backend, _opened, *_source,
             morph::client::ShellOptions{
@@ -239,8 +260,14 @@ WidthReport runWidthSmoke(morph::client::Source& source) {
     report.exitCode = frontend.run(source);
     qInstallMessageHandler(previous);
     detail::smokeWarnings() = nullptr;
-    for (std::string& warning : warnings) {
-        report.failures.push_back(std::move(warning));
+    for (std::size_t at = 0; at < warnings.size(); ++at) {
+        std::string where;
+        for (auto const& [first, label] : report.marks) {
+            if (first <= at) {
+                where = label;
+            }
+        }
+        report.failures.push_back(where + ": " + warnings.at(at));
     }
     return report;
 }

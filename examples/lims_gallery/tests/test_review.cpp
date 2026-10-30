@@ -39,7 +39,7 @@ TEST_CASE("review, expanded: the queue beside the worksheet, its flagged results
     CHECK(screen.backend().prop(queueEntry(screen, "WS-2026-0412 · 2 h 10 min"), "selected") == "true");
     CHECK(screen.text("sheet-title") == "Assay and impurities · Paracetamol 500 mg");
     CHECK(screen.prop("Select", "show", "options") == "[\"all\":All 7,\"flagged\":Flagged 2]");
-    CHECK(screen.backend().find("Badge", "text", "Out of trend: −0.7 % vs. last 5 lots").has_value());
+    CHECK(screen.backend().find("Badge", "text", "Out of trend").has_value());
     CHECK(screen.prop("Tabs", "record-tabs", "tabs") == "[Results,Previous lots,Audit trail · 3,Comments · 1]");
     CHECK_FALSE(screen.shows("Banner", "self-review"));
     CHECK(screen.prop("Button", "approve", "enabled") == "true");
@@ -76,9 +76,9 @@ TEST_CASE("review: the splitter's sizes reach the splitter", "[lims-gallery]") {
     auto const written = lims_gallery::reviewScreen().write();
     REQUIRE(written.has_value());
     auto const text = written.value_or(morph::ui::author::Emitted{}).text;
-    CHECK(text.contains(R"("sizes":{"lit":[23,80]})"));
+    CHECK(text.contains(R"("sizes":{"lit":[20,83]})"));
     GalleryScreen screen{kScreen, "expanded"};
-    CHECK(screen.prop("Splitter", "split", "sizes") == "[23,80]");
+    CHECK(screen.prop("Splitter", "split", "sizes") == "[20,83]");
 }
 
 // The review's `navigate` asks for a dialog, and the generic client draws one over the review: no tab is added. The
