@@ -459,7 +459,7 @@ inline std::optional<double> weightOf(Json const& value) {
     // The weights DTCG gives its names, in the order of `kFontWeights`.
     static constexpr std::array<double, 18> kValues = {100, 100, 200, 200, 300, 400, 400, 400, 500,
                                                        600, 600, 700, 800, 800, 900, 900, 950, 950};
-    auto const found = std::ranges::find(kFontWeights, *name);
+    auto const* const found = std::ranges::find(kFontWeights, *name);
     if (found == kFontWeights.end()) {
         return std::nullopt;
     }
@@ -581,6 +581,7 @@ inline std::optional<std::string> checkTokenValue(std::string_view type, Json co
 /// @param inherited The group's `$type`.
 /// @param out       Where the token goes.
 /// @return Why the file is refused, or nothing.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the group's path, then its inherited type; swapped, the `$root` token is read at the wrong path.
 [[nodiscard]] inline std::optional<std::string> readRoot(Json const& member, std::string const& prefix,
                                                          std::string const& inherited, TokenSet& out) {
     if (prefix.empty()) {
@@ -990,9 +991,9 @@ struct KeywordSpec {
 
 /// @brief The keyword tokens of the set.
 inline constexpr std::array<KeywordSpec, 3> kKeywords = {{
-    {"shape.iconOnly", {"default", "square"}},
-    {"font.overline.case", {"none", "uppercase"}},
-    {"collapsible.marker", {"shown", "none"}},
+    {.path = "shape.iconOnly", .names = {"default", "square"}},
+    {.path = "font.overline.case", .names = {"none", "uppercase"}},
+    {.path = "collapsible.marker", .names = {"shown", "none"}},
 }};
 
 /// @brief Whether @p name is one of the names of the keyword at @p path.
@@ -1017,8 +1018,8 @@ inline constexpr std::array<KeywordSpec, 3> kKeywords = {{
         }
         auto const* const named = std::get_if<std::string>(&found->second.value.data);
         if (named == nullptr || !isKeywordName(spec.path, *named)) {
-            return std::string{spec.path} + ": only " + std::string{spec.names[0]} + " and " +
-                   std::string{spec.names[1]} + " are drawn";
+            return std::string{spec.path} + ": only " + std::string{spec.names.front()} + " and " +
+                   std::string{spec.names.back()} + " are drawn";
         }
     }
     return std::nullopt;
@@ -1043,6 +1044,57 @@ inline constexpr std::array<KeywordSpec, 3> kKeywords = {{
 
 }  // namespace detail
 
+namespace detail {
+
+/// @brief Names one combination of a theme's variant, density and surface.
+/// @param variant The variant, or empty for none.
+/// @param density The density, or empty for none.
+/// @param surface The surface, or empty for none.
+/// @return `base`, then each given layer.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): variant, density, surface: the order they layer in.
+[[nodiscard]] inline std::string combinationLabel(std::string const& variant, std::string const& density,
+                                                  std::string const& surface) {
+    std::string out = "base";
+    if (!variant.empty()) {
+        out += " + " + variant;
+    }
+    if (!density.empty()) {
+        out += " + density " + density;
+    }
+    if (!surface.empty()) {
+        out += " + surface " + surface;
+    }
+    return out;
+}
+
+/// @brief Why one combination of a theme is refused.
+/// @param index   The theme index.
+/// @param files   The bundle's token files.
+/// @param variant The variant, or empty for none.
+/// @param density The density, or empty for none.
+/// @param surface The surface, or empty for none.
+/// @return The reason, naming the combination, or nothing when it resolves and draws.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): variant, density, surface: the order they layer in.
+[[nodiscard]] inline std::optional<std::string> combinationProblem(ThemeIndex const& index,
+                                                                   TokenFileLookup const& files,
+                                                                   std::string const& variant,
+                                                                   std::string const& density,
+                                                                   std::string const& surface) {
+    auto const resolved = resolveTheme(index, files, variant, density, surface);
+    if (!resolved) {
+        return combinationLabel(variant, density, surface) + ": " + resolved.error();
+    }
+    if (auto problem = strokeProblem(*resolved)) {
+        return combinationLabel(variant, density, surface) + ": " + *problem;
+    }
+    if (auto problem = keywordProblem(*resolved)) {
+        return combinationLabel(variant, density, surface) + ": " + *problem;
+    }
+    return std::nullopt;
+}
+
+}  // namespace detail
+
 /// @brief Checks that every combination of a theme resolves: each variant (or none), density (or none) and surface
 ///        (or none) over `base`, and that none strokes an outline in a style that is not drawn.
 /// @param index The theme index.
@@ -1057,33 +1109,12 @@ inline constexpr std::array<KeywordSpec, 3> kKeywords = {{
         }
         return names;
     };
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): variant, density, surface: the order they layer in.
-    auto const label = [](std::string const& variant, std::string const& density, std::string const& surface) {
-        std::string out = "base";
-        if (!variant.empty()) {
-            out += " + " + variant;
-        }
-        if (!density.empty()) {
-            out += " + density " + density;
-        }
-        if (!surface.empty()) {
-            out += " + surface " + surface;
-        }
-        return out;
-    };
     std::vector<std::string> const surfaces = namesOf(index.surfaces);
     for (std::string const& variant : namesOf(index.variants)) {
         for (std::string const& density : namesOf(index.densities)) {
             for (std::string const& surface : surfaces) {
-                auto const resolved = resolveTheme(index, files, variant, density, surface);
-                if (!resolved) {
-                    return label(variant, density, surface) + ": " + resolved.error();
-                }
-                if (auto problem = detail::strokeProblem(*resolved)) {
-                    return label(variant, density, surface) + ": " + *problem;
-                }
-                if (auto problem = detail::keywordProblem(*resolved)) {
-                    return label(variant, density, surface) + ": " + *problem;
+                if (auto problem = detail::combinationProblem(index, files, variant, density, surface)) {
+                    return problem;
                 }
             }
         }
@@ -1382,6 +1413,96 @@ namespace detail {
 
 }  // namespace detail
 
+namespace detail {
+
+/// @brief What @p read makes of a token's value, when the token is there and has the given type.
+/// @tparam Read Callable taking the token's value.
+/// @param token The token, or `nullptr` for none.
+/// @param type  The `$type` the token must have.
+/// @param read  Reads the value.
+/// @return What @p read returns, or its empty value when the token is absent or of another type.
+template <typename Read>
+[[nodiscard]] auto typedValue(Token const* token, std::string_view type, Read read) -> decltype(read(token->value)) {
+    if (token == nullptr || token->type != type) {
+        return {};
+    }
+    return read(token->value);
+}
+
+/// @brief A name the token holds, when it is a string.
+/// @param value The token's value.
+/// @return The string, or nothing.
+[[nodiscard]] inline std::optional<std::string> tokenString(Json const& value) {
+    if (auto const* const named = std::get_if<std::string>(&value.data)) {
+        return *named;
+    }
+    return std::nullopt;
+}
+
+/// @brief Reads one token of the set into @p values: the theme's value when it has the set's type, else the default.
+/// @param values Receives the value.
+/// @param spec   The token of the set.
+/// @param token  The theme's token at the spec's path, or `nullptr`.
+inline void fillValue(ThemeValues& values, ThemeTokenSpec const& spec, Token const* token) {
+    std::string const path{spec.path};
+    switch (spec.kind) {
+        case ThemeTokenKind::Color: {
+            auto const color = typedValue(token, "color", [](Json const& value) { return colorOf(value); });
+            values.colors.insert_or_assign(path, color.value_or(hexColor(spec.color).value_or(Rgba{})));
+            break;
+        }
+        case ThemeTokenKind::Shadow: {
+            auto const shadow = typedValue(token, "shadow", [](Json const& value) { return shadowOf(value); });
+            values.shadows.insert_or_assign(
+                path, shadow.value_or(ThemeShadow{.color = hexColor(spec.shadow.color).value_or(Rgba{}),
+                                                  .offsetX = spec.shadow.offsetX,
+                                                  .offsetY = spec.shadow.offsetY,
+                                                  .blur = spec.shadow.blur,
+                                                  .spread = spec.shadow.spread}));
+            break;
+        }
+        case ThemeTokenKind::FontFamily:
+            values.families.insert_or_assign(path, familyValue(spec, token));
+            break;
+        case ThemeTokenKind::Stroke: {
+            auto const named = typedValue(token, "strokeStyle", [](Json const& value) { return tokenString(value); });
+            std::string stroke{spec.stroke};
+            if (named && (*named == "solid" || *named == "dashed")) {
+                stroke = *named;
+            }
+            values.strokes.insert_or_assign(path, std::move(stroke));
+            break;
+        }
+        case ThemeTokenKind::Keyword: {
+            auto const named = typedValue(token, "keyword", [](Json const& value) { return tokenString(value); });
+            std::string keyword{spec.keyword};
+            if (named && isKeywordName(spec.path, *named)) {
+                keyword = *named;
+            }
+            values.keywords.insert_or_assign(path, std::move(keyword));
+            break;
+        }
+        case ThemeTokenKind::FontWeight: {
+            auto const weight = typedValue(token, "fontWeight", [](Json const& value) { return weightOf(value); });
+            values.numbers.insert_or_assign(path, weight.value_or(spec.number));
+            break;
+        }
+        case ThemeTokenKind::Dimension: {
+            auto const pixels = typedValue(token, "dimension", [](Json const& value) { return pixelsOf(value); });
+            values.dimensions.insert_or_assign(path, pixels.value_or(spec.number));
+            break;
+        }
+        case ThemeTokenKind::Number:
+        default: {
+            auto const number = typedValue(token, "number", [](Json const& value) { return numberOf(value); });
+            values.numbers.insert_or_assign(path, number.value_or(spec.number));
+            break;
+        }
+    }
+}
+
+}  // namespace detail
+
 /// @brief Fills the closed `ui-theme/1` set from a resolved theme.
 ///
 /// A path of the set takes the theme's value when the theme has it with the set's type, and its default otherwise; a
@@ -1391,65 +1512,7 @@ namespace detail {
 [[nodiscard]] inline ThemeValues themeValues(TokenSet const& resolved = {}) {
     ThemeValues values;
     for (ThemeTokenSpec const& spec : kThemeTokens) {
-        Token const* const token = detail::tokenAt(resolved, spec.path);
-        if (spec.kind == ThemeTokenKind::Color) {
-            std::optional<Rgba> color;
-            if (token != nullptr && token->type == "color") {
-                color = colorOf(token->value);
-            }
-            values.colors.insert_or_assign(std::string{spec.path},
-                                           color.value_or(detail::hexColor(spec.color).value_or(Rgba{})));
-        } else if (spec.kind == ThemeTokenKind::Shadow) {
-            std::optional<ThemeShadow> shadow;
-            if (token != nullptr && token->type == "shadow") {
-                shadow = detail::shadowOf(token->value);
-            }
-            values.shadows.insert_or_assign(
-                std::string{spec.path},
-                shadow.value_or(ThemeShadow{.color = detail::hexColor(spec.shadow.color).value_or(Rgba{}),
-                                            .offsetX = spec.shadow.offsetX,
-                                            .offsetY = spec.shadow.offsetY,
-                                            .blur = spec.shadow.blur,
-                                            .spread = spec.shadow.spread}));
-        } else if (spec.kind == ThemeTokenKind::FontFamily) {
-            values.families.insert_or_assign(std::string{spec.path}, detail::familyValue(spec, token));
-        } else if (spec.kind == ThemeTokenKind::Stroke) {
-            std::string stroke{spec.stroke};
-            if (token != nullptr && token->type == "strokeStyle") {
-                if (auto const* const named = std::get_if<std::string>(&token->value.data);
-                    named != nullptr && (*named == "solid" || *named == "dashed")) {
-                    stroke = *named;
-                }
-            }
-            values.strokes.insert_or_assign(std::string{spec.path}, std::move(stroke));
-        } else if (spec.kind == ThemeTokenKind::Keyword) {
-            std::string keyword{spec.keyword};
-            if (token != nullptr && token->type == "keyword") {
-                if (auto const* const named = std::get_if<std::string>(&token->value.data);
-                    named != nullptr && detail::isKeywordName(spec.path, *named)) {
-                    keyword = *named;
-                }
-            }
-            values.keywords.insert_or_assign(std::string{spec.path}, std::move(keyword));
-        } else if (spec.kind == ThemeTokenKind::FontWeight) {
-            std::optional<double> weight;
-            if (token != nullptr && token->type == "fontWeight") {
-                weight = detail::weightOf(token->value);
-            }
-            values.numbers.insert_or_assign(std::string{spec.path}, weight.value_or(spec.number));
-        } else if (spec.kind == ThemeTokenKind::Dimension) {
-            std::optional<double> pixels;
-            if (token != nullptr && token->type == "dimension") {
-                pixels = detail::pixelsOf(token->value);
-            }
-            values.dimensions.insert_or_assign(std::string{spec.path}, pixels.value_or(spec.number));
-        } else {
-            std::optional<double> number;
-            if (token != nullptr && token->type == "number") {
-                number = detail::numberOf(token->value);
-            }
-            values.numbers.insert_or_assign(std::string{spec.path}, number.value_or(spec.number));
-        }
+        detail::fillValue(values, spec, detail::tokenAt(resolved, spec.path));
     }
     return values;
 }
@@ -1479,6 +1542,62 @@ inline void forEachAlias(Json const& value, std::function<void(std::string_view)
             forEachAlias(member, reach);
         }
     }
+}
+
+}  // namespace detail
+
+namespace detail {
+
+/// @brief The ids of the files a theme index names, the base first, each once.
+/// @param index The theme index.
+/// @return The ids.
+[[nodiscard]] inline std::vector<std::string> themeFileIds(ThemeIndex const& index) {
+    std::vector<std::string> fileIds{index.base};
+    for (auto const* const named : {&index.variants, &index.densities, &index.surfaces}) {
+        for (auto const& [name, fileId] : *named) {
+            static_cast<void>(name);
+            if (std::ranges::find(fileIds, fileId) == fileIds.end()) {
+                fileIds.push_back(fileId);
+            }
+        }
+    }
+    return fileIds;
+}
+
+/// @brief The paths a theme reads: those of the set, and everything they reach through aliases in any file.
+/// @param fileIds The ids of the theme's files.
+/// @param files   The bundle's token files.
+/// @return The paths.
+[[nodiscard]] inline std::set<std::string, std::less<>> readTokenPaths(std::vector<std::string> const& fileIds,
+                                                                       TokenFileLookup const& files) {
+    std::map<std::string, std::vector<Token const*>, std::less<>> defined;
+    for (std::string const& fileId : fileIds) {
+        if (TokenSet const* const set = files(fileId)) {
+            for (auto const& [path, token] : *set) {
+                defined[path].push_back(&token);
+            }
+        }
+    }
+    std::set<std::string, std::less<>> read;
+    std::vector<std::string> pending;
+    auto const reach = [&read, &pending](std::string_view path) {
+        if (read.emplace(path).second) {
+            pending.emplace_back(path);
+        }
+    };
+    for (ThemeTokenSpec const& spec : kThemeTokens) {
+        reach(spec.path);
+    }
+    while (!pending.empty()) {
+        std::string const path = std::move(pending.back());
+        pending.pop_back();
+        if (auto const found = defined.find(path); found != defined.end()) {
+            for (Token const* const token : found->second) {
+                forEachAlias(token->value, reach);
+            }
+        }
+    }
+    return read;
 }
 
 }  // namespace detail
@@ -1514,46 +1633,12 @@ struct UnreadThemeToken {
 /// @return The unread tokens, in file order, then by path.
 [[nodiscard]] inline std::vector<UnreadThemeToken> unreadThemeTokens(ThemeIndex const& index,
                                                                      TokenFileLookup const& files) {
-    std::vector<std::string> ids{index.base};
-    for (auto const* const named : {&index.variants, &index.densities, &index.surfaces}) {
-        for (auto const& [name, fileId] : *named) {
-            static_cast<void>(name);
-            if (std::ranges::find(ids, fileId) == ids.end()) {
-                ids.push_back(fileId);
-            }
-        }
-    }
-    std::map<std::string, std::vector<Token const*>, std::less<>> defined;
-    for (std::string const& id : ids) {
-        if (TokenSet const* const set = files(id)) {
-            for (auto const& [path, token] : *set) {
-                defined[path].push_back(&token);
-            }
-        }
-    }
-    std::set<std::string, std::less<>> read;
-    std::vector<std::string> pending;
-    auto const reach = [&read, &pending](std::string_view path) {
-        if (read.emplace(path).second) {
-            pending.emplace_back(path);
-        }
-    };
-    for (ThemeTokenSpec const& spec : kThemeTokens) {
-        reach(spec.path);
-    }
-    while (!pending.empty()) {
-        std::string const path = std::move(pending.back());
-        pending.pop_back();
-        if (auto const found = defined.find(path); found != defined.end()) {
-            for (Token const* const token : found->second) {
-                detail::forEachAlias(token->value, reach);
-            }
-        }
-    }
+    std::vector<std::string> const fileIds = detail::themeFileIds(index);
+    std::set<std::string, std::less<>> const read = detail::readTokenPaths(fileIds, files);
     std::vector<UnreadThemeToken> unread;
     std::set<std::string, std::less<>> reported;
-    for (std::string const& id : ids) {
-        TokenSet const* const set = files(id);
+    for (std::string const& fileId : fileIds) {
+        TokenSet const* const set = files(fileId);
         if (set == nullptr) {
             continue;
         }
@@ -1564,7 +1649,7 @@ struct UnreadThemeToken {
             bool const readType = token.type.empty() || std::ranges::find(detail::kReadTokenTypes, token.type) !=
                                                             detail::kReadTokenTypes.end();
             unread.push_back(
-                UnreadThemeToken{.file = id, .path = path, .unreadType = readType ? std::string{} : token.type});
+                UnreadThemeToken{.file = fileId, .path = path, .unreadType = readType ? std::string{} : token.type});
         }
     }
     return unread;
@@ -1578,7 +1663,7 @@ namespace detail {
 /// @return The opaque colour that results.
 [[nodiscard]] inline Rgba over(Rgba top, Rgba under) {
     auto const mix = [&top](std::uint8_t above, std::uint8_t below) {
-        return static_cast<std::uint8_t>(std::lround((above * top.a + below * (255.0 - top.a)) / 255.0));
+        return static_cast<std::uint8_t>(std::lround(((above * top.a) + (below * (255.0 - top.a))) / 255.0));
     };
     return Rgba{.r = mix(top.r, under.r), .g = mix(top.g, under.g), .b = mix(top.b, under.b), .a = 255};
 }
@@ -1621,7 +1706,8 @@ namespace detail {
         double minimum;
         std::string_view label;
     };
-    static constexpr std::array<TextRule, 2> kTexts = {{{"color.text", 4.5, "4.5"}, {"color.muted", 3.0, "3"}}};
+    static constexpr std::array<TextRule, 2> kTexts = {{{.path = "color.text", .minimum = 4.5, .label = "4.5"},
+                                                        {.path = "color.muted", .minimum = 3.0, .label = "3"}}};
     static constexpr std::array<std::string_view, 4> kFills = {"color.hover", "color.selection", "color.track",
                                                                "color.controlSurface"};
     std::vector<std::string> problems;

@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -889,6 +890,30 @@ private:
 
     private:
         struct State {
+            /// Whether the screen is mounted and its reads are current.
+            [[nodiscard]] bool live() const { return !closed.get() && generation.get() >= 0; }
+
+            /// A read that follows @p read on the open screen and, once the screen is gone, answers the value it read
+            /// last, kept in @p last.
+            template <typename Last, typename Read>
+            [[nodiscard]] auto remembered(Last& last, Read read) {
+                return [this, &last, read] {
+                    if (live()) {
+                        last = read(*screen);
+                    }
+                    return last;
+                };
+            }
+
+            /// A read that follows @p read on the open screen and, once the screen is gone, answers an empty value.
+            template <typename Read>
+            [[nodiscard]] auto emptyOnceClosed(Read read) {
+                return [this, read] {
+                    using Result = std::invoke_result_t<Read, Screen&>;
+                    return live() ? read(*screen) : Result{};
+                };
+            }
+
             State(std::unique_ptr<Screen> mounted, CloseGuard closeGuard,
                   std::function<void(ScreenHandle&)> onSaveFailed)
                 : screen{std::move(mounted)},
@@ -898,108 +923,29 @@ private:
                   closed{*runtime, false},
                   generation{*runtime, 0},
                   title{*runtime,
-                        [this] {
-                            if (!closed.get() && generation.get() >= 0) {
-                                lastTitle = detail::host::titleText(screen->title());
-                            }
-                            return lastTitle;
-                        }},
-                  dirty{*runtime, [this] { return !closed.get() && generation.get() >= 0 && screen->dirty(); }},
-                  identity{*runtime,
-                           [this] {
-                               if (!closed.get() && generation.get() >= 0) {
-                                   lastIdentity = screen->identity();
-                               }
-                               return lastIdentity;
-                           }},
-                  titleSpans{*runtime,
-                             [this] {
-                                 if (!closed.get() && generation.get() >= 0) {
-                                     lastTitleSpans = screen->titleSpans();
-                                 }
-                                 return lastTitleSpans;
-                             }},
-                  pageEdge{*runtime,
-                           [this] {
-                               if (!closed.get() && generation.get() >= 0) {
-                                   lastPageEdge = screen->pageEdge();
-                               }
-                               return lastPageEdge;
-                           }},
-                  headJoined{*runtime,
-                             [this] {
-                                 if (!closed.get() && generation.get() >= 0) {
-                                     lastHeadJoined = screen->headJoined();
-                                 }
-                                 return lastHeadJoined;
-                             }},
+                        remembered(lastTitle, [](Screen& open) { return detail::host::titleText(open.title()); })},
+                  dirty{*runtime, [this] { return live() && screen->dirty(); }},
+                  identity{*runtime, remembered(lastIdentity, [](Screen& open) { return open.identity(); })},
+                  titleSpans{*runtime, remembered(lastTitleSpans, [](Screen& open) { return open.titleSpans(); })},
+                  pageEdge{*runtime, remembered(lastPageEdge, [](Screen& open) { return open.pageEdge(); })},
+                  headJoined{*runtime, remembered(lastHeadJoined, [](Screen& open) { return open.headJoined(); })},
                   leadPlacement{*runtime,
-                                [this] {
-                                    if (!closed.get() && generation.get() >= 0) {
-                                        lastLeadPlacement = screen->leadPlacement();
-                                    }
-                                    return lastLeadPlacement;
-                                }},
-                  headSurface{*runtime,
-                              [this] {
-                                  if (!closed.get() && generation.get() >= 0) {
-                                      lastHeadSurface = screen->headSurface();
-                                  }
-                                  return lastHeadSurface;
-                              }},
-                  eyebrow{*runtime,
-                          [this] {
-                              if (!closed.get() && generation.get() >= 0) {
-                                  lastEyebrow = detail::host::titleText(screen->eyebrow());
-                              }
-                              return lastEyebrow;
-                          }},
+                                remembered(lastLeadPlacement, [](Screen& open) { return open.leadPlacement(); })},
+                  headSurface{*runtime, remembered(lastHeadSurface, [](Screen& open) { return open.headSurface(); })},
+                  eyebrow{*runtime, remembered(lastEyebrow,
+                                               [](Screen& open) { return detail::host::titleText(open.eyebrow()); })},
                   eyebrowSpans{*runtime,
-                               [this] {
-                                   if (!closed.get() && generation.get() >= 0) {
-                                       lastEyebrowSpans = screen->eyebrowSpans();
-                                   }
-                                   return lastEyebrowSpans;
-                               }},
-                  subtitle{*runtime,
-                           [this] {
-                               if (!closed.get() && generation.get() >= 0) {
-                                   lastSubtitle = detail::host::titleText(screen->subtitle());
-                               }
-                               return lastSubtitle;
-                           }},
+                               remembered(lastEyebrowSpans, [](Screen& open) { return open.eyebrowSpans(); })},
+                  subtitle{
+                      *runtime,
+                      remembered(lastSubtitle, [](Screen& open) { return detail::host::titleText(open.subtitle()); })},
                   subtitleSpans{*runtime,
-                                [this] {
-                                    if (!closed.get() && generation.get() >= 0) {
-                                        lastSubtitleSpans = screen->subtitleSpans();
-                                    }
-                                    return lastSubtitleSpans;
-                                }},
-                  status{*runtime,
-                         [this] {
-                             return !closed.get() && generation.get() >= 0 ? screen->status()
-                                                                           : std::vector<HeadBadge>{};
-                         }},
-                  actions{*runtime,
-                          [this] {
-                              return !closed.get() && generation.get() >= 0 ? screen->actions()
-                                                                            : std::vector<HeadAction>{};
-                          }},
-                  menu{*runtime,
-                       [this] {
-                           return !closed.get() && generation.get() >= 0 ? screen->menu()
-                                                                         : std::vector<HeadMenuEntry>{};
-                       }},
-                  menuLabel{*runtime,
-                            [this] {
-                                if (!closed.get() && generation.get() >= 0) {
-                                    lastMenuLabel = screen->menuLabel();
-                                }
-                                return lastMenuLabel;
-                            }},
-                  tools{*runtime, [this] {
-                            return !closed.get() && generation.get() >= 0 ? screen->tools() : std::vector<HeadTool>{};
-                        }} {}
+                                remembered(lastSubtitleSpans, [](Screen& open) { return open.subtitleSpans(); })},
+                  status{*runtime, emptyOnceClosed([](Screen& open) { return open.status(); })},
+                  actions{*runtime, emptyOnceClosed([](Screen& open) { return open.actions(); })},
+                  menu{*runtime, emptyOnceClosed([](Screen& open) { return open.menu(); })},
+                  menuLabel{*runtime, remembered(lastMenuLabel, [](Screen& open) { return open.menuLabel(); })},
+                  tools{*runtime, emptyOnceClosed([](Screen& open) { return open.tools(); })} {}
 
             State(State const&) = delete;
             State& operator=(State const&) = delete;
