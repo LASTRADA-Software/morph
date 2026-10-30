@@ -448,7 +448,10 @@ TEST_CASE("navigator: a count sits at the end of its entry, named with it, and t
     int const row = *harness.backend.find("Row", "testId", "nav_row_lims.results");
     int const button = *harness.backend.find("Button", "testId", "nav_lims.results");
     int const badge = *harness.backend.find("Badge", "testId", "nav_badge_lims.results");
-    CHECK(harness.backend.children(row) == std::vector<int>{button, badge});
+    // The entry's row is the button alone; the title and the badge are the button's content.
+    CHECK(harness.backend.children(row) == std::vector<int>{button});
+    int const content = *harness.backend.find("Row", "testId", "nav_content_lims.results");
+    CHECK(harness.backend.children(content).back() == badge);
     CHECK(harness.backend.prop(badge, "visible") == "false");
 
     REQUIRE(navigator.setBadge("lims.results", morph::ui::NavigatorBadge{.text = "4", .tone = morph::ui::Tone::Info}));

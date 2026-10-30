@@ -60,15 +60,17 @@ struct NavigatorOptions {
 /// @brief The catalog as a list a person opens screens from, with a title search and pinned shortcuts.
 ///
 /// Entries are grouped by module, then group, in the order each first appears; each group is a column of its own
-/// holding its heading and its entries, and the groups are a spacing step apart. Each entry is a row as wide as the navigator holding a list item (`ButtonStyle::Item`) and, while `setBadge` gives it one, a
-/// badge at its end; `setCurrent` marks the open screen's. An unavailable entry is listed disabled, with its reason as
-/// its tooltip. The search shows the entries one of whose titles contains the text, ignoring ASCII case, and the
-/// headings of the groups that still show one. `menuEntries` and `choose` give the same list as a menu, for a frame
-/// too narrow for the navigator. Neither copyable nor movable; owned by the owner thread of its backend.
+/// holding its heading and its entries, and the groups are a spacing step apart. Each entry is a row as wide as the
+/// navigator holding a list item (`ButtonStyle::Item`) whose content is the title and, while `setBadge` gives it one,
+/// a badge at its end, so the item's selection spans the badge; `setCurrent` marks the open screen's. An unavailable
+/// entry is listed disabled, with its reason as its tooltip. The search shows the entries one of whose titles contains
+/// the text, ignoring ASCII case, and the headings of the groups that still show one. `menuEntries` and `choose` give
+/// the same list as a menu, for a frame too narrow for the navigator. Neither copyable nor movable; owned by the owner
+/// thread of its backend.
 ///
 /// Test ids: `navigator`, `navigator_search`, `navigator_pins`, `nav_row_<screen id>`, `nav_<screen id>`,
-/// `nav_badge_<screen id>`, `pin_<screen id>`, `navigator_group_<module>/<group>` for a heading and
-/// `navigator_group_<module>/<group>_section` for its column.
+/// `nav_content_<screen id>`, `nav_badge_<screen id>`, `pin_<screen id>`, `navigator_group_<module>/<group>` for a
+/// heading and `navigator_group_<module>/<group>_section` for its column.
 class Navigator {
 public:
     /// @brief The navigator, appended to @p parent.
@@ -238,9 +240,12 @@ private:
     struct Item {
         CatalogEntry const* entry = nullptr;
         std::vector<std::string> titles;
-        // The row goes after the button and the badge it holds.
+        // Declared parent before child: the button is the row's only child, and the title and the badge are the
+        // button's content, which the button owns.
         std::unique_ptr<StackWidget> row;
         std::unique_ptr<ButtonWidget> button;
+        std::unique_ptr<StackWidget> content;
+        std::unique_ptr<TextWidget> label;
         std::unique_ptr<BadgeWidget> badge;
         std::optional<NavigatorBadge> shown;
     };
@@ -425,20 +430,31 @@ private:
                           .titles = titlesOf(entry),
                           .row = _backend->createStack(group.section.get(), Axis::Horizontal),
                           .button = {},
+                          .content = {},
+                          .label = {},
                           .badge = {},
                           .shown = std::nullopt};
                 item.row->setTestId("nav_row_" + entry.id);
                 item.row->setLayout({.width = Sizing::stretch(), .height = {}});
                 item.row->setAlign(Align::Center);
-                item.row->setGap(1);
                 item.button = _backend->createButton(item.row.get());
                 item.button->setTestId("nav_" + entry.id);
                 item.button->setStyle(ButtonStyle::Item);
                 item.button->setLayout({.width = Sizing::stretch(), .height = {}});
                 wire(*item.button, entry, item.titles.front());
-                // Hidden until a count is set; the button's accessible name carries the count, so the entry stays one
+                // The title and the badge are the button's content, so its selection spans both. The badge is hidden
+                // until a count is set; the button's accessible name carries the count, so the entry stays one
                 // control to assistive technology.
-                item.badge = _backend->createBadge(item.row.get());
+                ContainerWidget& content = item.button->content();
+                item.content = _backend->createStack(&content, Axis::Horizontal);
+                item.content->setTestId("nav_content_" + entry.id);
+                item.content->setGap(1);
+                item.content->setAlign(Align::Center);
+                item.content->setLayout({.width = Sizing::stretch(), .height = {}});
+                item.label = _backend->createText(item.content.get());
+                item.label->setText(item.titles.front());
+                item.label->setLayout({.width = Sizing::stretch(), .height = {}});
+                item.badge = _backend->createBadge(item.content.get());
                 item.badge->setTestId("nav_badge_" + entry.id);
                 item.badge->setVisible(false);
                 group.items.push_back(std::move(item));
