@@ -29,8 +29,10 @@ Item {
     // Whether the widget's sides lie at its container's edges, past the container's horizontal padding: the container
     // gives that padding as `childBleedInset`, and a layout honours the negative margins it becomes.
     property bool bleed: false
-    readonly property real bleedInset: {
-        const holder = root.parent
+    readonly property real bleedInset: bleedInsetOf(root.parent)
+    // The `childBleedInset` of a container, 0 for a parent that gives none. The parent is passed as a `var` because
+    // only some containers declare the property, and a typed `Item` lookup of it does not lint.
+    function bleedInsetOf(holder: var): real {
         const inset = holder ? holder["childBleedInset"] : undefined
         return inset !== undefined ? inset : 0
     }
