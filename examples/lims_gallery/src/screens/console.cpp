@@ -447,12 +447,18 @@ void declareHead(ui::Scope& screen, Console const& console) {
 // ── The dashboard ────────────────────────────────────────────────────────────────────────────────────────────────
 
 ui::Node alert(bool compact) {
-    return ui::banner({.tone = "err",
-                       .text = compact ? "System suitability failed on HPLC-02 at 09:40: tailing 2.3, limit 2.0. 18 "
-                                         "results on hold."
-                                       : "System suitability failed on HPLC-02 at 09:40 CEST: tailing 2.3, limit 2.0. "
-                                         "18 results from this run are on hold.",
-                       .action = ui::ActionPart{.label = "Open run", .onClick = open("lims-gallery.instrument")}})
+    return ui::banner(
+               {.tone = "err",
+                .text = compact ? "System suitability failed on HPLC-02 at 09:40: tailing 2.3, limit 2.0. 18 "
+                                  "results on hold."
+                                : "System suitability failed on HPLC-02 at 09:40 CEST: tailing 2.3, limit 2.0. "
+                                  "18 results from this run are on hold.",
+                // The lead phrase is the strong run; the rest is plain.
+                .spans = ui::spans({ui::strong("System suitability failed on HPLC-02"),
+                                    compact ? " at 09:40: tailing 2.3, limit 2.0. 18 results on hold."
+                                            : " at 09:40 CEST: tailing 2.3, limit 2.0. 18 results from this run "
+                                              "are on hold."}),
+                .action = ui::ActionPart{.label = "Open run", .onClick = open("lims-gallery.instrument")}})
         .a11y("System suitability failed on HPLC-02", "alert")
         .testId("alert");
 }
@@ -552,7 +558,7 @@ ui::Node dueCell() {
 ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::string const& testId) {
     std::vector<ui::TableColumn> const columns{
         {.name = "id", .label = "Sample", .width = ui::fixed(11), .role = "mono"},
-        {.name = "test", .label = "Test", .width = ui::stretch()},
+        {.name = "test", .label = "Test", .width = ui::stretch(), .wrap = false},
         {.name = "priority",
          .label = "Priority",
          .width = ui::fixed(9),
@@ -657,7 +663,8 @@ ui::Node resultLine(Console const& console) {
              .readonly(Flag{ui::row("total")})
              .sizing(ui::fixed(14))
              .testId("pane-result"),
-         layout::tag(evaluation.label, evaluation.tone).testId("pane-evaluation")},
+         // A fixed width, wide enough for "Out of spec", keeps the result inputs of every line in one column.
+         layout::tag(evaluation.label, evaluation.tone).sizing(ui::fixed(12)).testId("pane-evaluation")},
         {.gap = 1, .align = Align::Center});
 }
 
@@ -777,17 +784,21 @@ ui::Node expandedLayout(Console const& console) {
     // The design's 360 px sample pane, in the frontend's character widths, beside the worklist. The splitter takes the
     // page's height under the charts.
     auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{70, 45}};
-    return ui::column({alert(false), kpis(false),
-                       ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
-                                ui::panel({instruments()}, {.padding = 2}).sizing(ui::stretch(10))},
-                               {.gap = 1, .align = Align::Start}),
-                       ui::splitter({ui::panel({worklistTabs(console)}, {.padding = 1}),
-                                     ui::panel({samplePane(console)}, {.padding = 2})},
-                                    ui::AnyHandle{"horizontal"}, sizes)
-                           .sizing(ui::stretch(), ui::stretch())
-                           .a11y("Worklist and sample")
-                           .testId("work-split")},
-                      {.gap = 2})
+    return ui::column(
+               {alert(false), kpis(false),
+                ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
+                         ui::panel({instruments()}, {.padding = 2}).sizing(ui::stretch(10))},
+                        {.gap = 1, .align = Align::Start}),
+                ui::splitter({ui::panel({worklistTabs(console)}, {.padding = 1}),
+                              // The pane scrolls on its own: its results and chain of custody may be taller than
+                              // what the window leaves the splitter.
+                              ui::panel({ui::scroll({samplePane(console)}).sizing(ui::stretch(), ui::stretch())},
+                                        {.padding = 2})},
+                             ui::AnyHandle{"horizontal"}, sizes)
+                    .sizing(ui::stretch(), ui::stretch())
+                    .a11y("Worklist and sample")
+                    .testId("work-split")},
+               {.gap = 2})
         .sizing(ui::stretch(), ui::stretch())
         .minHeight(kExpandedMinHeight);
 }

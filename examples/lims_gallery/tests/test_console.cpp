@@ -26,6 +26,10 @@ TEST_CASE("console, expanded: navigation, alert, figures, chart, instruments and
     CHECK(screen.prop("Badge", "head_status_0", "text") == "Connected");
     CHECK(screen.shows("Row", "shell_sidebar"));
     CHECK(screen.shows("Banner", "alert"));
+    // The banner's lead phrase is a strong run.
+    CHECK(screen.prop("Banner", "alert", "spans")
+              .value_or("")
+              .starts_with("[System suitability failed on HPLC-02;strong, at 09:40 CEST"));
     CHECK(screen.text("kpi-received") == "64");
     CHECK(screen.prop("Text", "kpi-due", "role") == "Display");
     CHECK(screen.prop("Text", "kpi-due", "tone") == "Err");
