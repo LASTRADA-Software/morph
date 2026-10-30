@@ -523,19 +523,22 @@ ui::Node resultCards(Review const& review) {
     return ui::forEach(
                review.shownResults, {.key = ui::row("key"), .gap = 2},
                [](ui::DeclScope&) {
-                   return ui::Nodes{ui::panel(
-                       {ui::row({ui::text({.text = ui::row("sample"),
-                                           .spans = ui::spans(
-                                               {ui::styled(ui::row("sample"), {.strong = true, .mono = true})})})
-                                     .sizing(ui::stretch()),
-                                 ui::text({.text = ui::row("value"), .role = "section"})},
-                                {.gap = 1}),
-                        ui::text({.text = ui::format("{0} · spec {1} · previous lot {2}",
-                                                     {ui::row("analyte"), ui::row("spec"), ui::row("previous")})}),
-                        layout::tag(ui::row("evaluation"), ui::row("tone")),
-                        layout::muted(ui::format("Changed {0}", {ui::row("change")}))
-                            .visible(ui::ne(ui::row("change"), "—"))},
-                       {.padding = 2})};
+                   return ui::Nodes{
+                       ui::panel(
+                           {ui::row({ui::text({.text = ui::row("sample"),
+                                               .spans = ui::spans(
+                                                   {ui::styled(ui::row("sample"), {.strong = true, .mono = true})})})
+                                         .sizing(ui::stretch()),
+                                     ui::text({.text = ui::row("value"), .role = "section"})},
+                                    {.gap = 1}),
+                            ui::text({.text = ui::format("{0} · spec {1} · previous lot {2}",
+                                                         {ui::row("analyte"), ui::row("spec"), ui::row("previous")})}),
+                            layout::tag(ui::row("evaluation"), ui::row("tone")),
+                            layout::muted(ui::format("Changed {0}", {ui::row("change")}))
+                                .visible(ui::ne(ui::row("change"), "—"))},
+                           {.padding = 2})
+                           // An out-of-specification card carries the tint the table's row has.
+                           .surface(ui::cond(ui::eq(ui::row("tone"), "err"), Text{"outOfSpec"}, Text{""}))};
                })
         .testId("results");
 }
@@ -726,7 +729,7 @@ ui::Node approveButton(Review const& review, char const* label) {
 ui::Node worksheetPane(Review const& review) {
     return ui::pinned(
         {ui::column({sheetHead(review, false), selfBanner(review), signedBanner(review), recordTabs(review, false)},
-                    {.gap = 2})},
+                    {.gap = 2, .padding = 4})},
         {.bottom = ui::row({returnButton(review, "Return to analyst…"), rejectButton(review, "Reject…"),
                             ui::spacer().sizing(ui::stretch()),
                             layout::muted(ui::cond(review.self, Text{"Another reviewer must approve"},
