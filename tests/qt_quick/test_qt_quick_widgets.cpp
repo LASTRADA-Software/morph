@@ -1316,9 +1316,42 @@ TEST_CASE("qt_quick widgets: every text a document gives is drawn as its charact
     }
 }
 
-// Mutation: leave the elided text without a tooltip, or let the automatic tooltip win over the node's own.
+namespace {
+
+// The warnings Qt logs that name a binding loop, collected while a `BindingLoopWatch` lives.
+QStringList& bindingLoops() {
+    static QStringList loops;
+    return loops;
+}
+
+void collectBindingLoops(QtMsgType type, QMessageLogContext const& context, QString const& message) {
+    static_cast<void>(context);
+    if (type == QtWarningMsg && message.contains(QStringLiteral("Binding loop"))) {
+        bindingLoops().append(message);
+    }
+}
+
+class BindingLoopWatch {
+public:
+    BindingLoopWatch() : _previous{qInstallMessageHandler(collectBindingLoops)} { bindingLoops().clear(); }
+    ~BindingLoopWatch() { qInstallMessageHandler(_previous); }
+    BindingLoopWatch(BindingLoopWatch const&) = delete;
+    BindingLoopWatch& operator=(BindingLoopWatch const&) = delete;
+    BindingLoopWatch(BindingLoopWatch&&) = delete;
+    BindingLoopWatch& operator=(BindingLoopWatch&&) = delete;
+
+private:
+    QtMessageHandler _previous;
+};
+
+}  // namespace
+
+// Mutation: leave the elided text without a tooltip, or let the automatic tooltip win over the node's own; or let a
+// one-line text's width read its label's, which depends on what it shows and so on the width the layout derives
+// from it (a binding loop Qt 6.8 reports).
 TEST_CASE("qt_quick widgets: an elided mono text's tooltip is its full text, and a node's own tooltip wins",
           "[qt_quick]") {
+    BindingLoopWatch const loops;
     Scene scene;
     auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
     auto const elided = scene.backend().createText(column.get());
@@ -1343,6 +1376,8 @@ TEST_CASE("qt_quick widgets: an elided mono text's tooltip is its full text, and
     CHECK(Scene::itemOf(*own).property("tooltipText").toString() == QStringLiteral("Sample"));
     CHECK_FALSE(Scene::itemOf(*fits).property("elided").toBool());
     CHECK(Scene::itemOf(*fits).property("tooltipText").toString().isEmpty());
+    INFO("binding loops: " << bindingLoops().join(QLatin1Char('\n')).toStdString());
+    CHECK(bindingLoops().isEmpty());
 }
 
 // Mutation: ignore `tone` in MorphText (the colour stays the role's), or colour the role's font instead (the font
