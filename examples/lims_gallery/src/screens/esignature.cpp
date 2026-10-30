@@ -140,9 +140,11 @@ ui::Node passwordField(Signature const& sign) {
         .testId("password");
 }
 
-ui::Node signingAt(Signature const& sign) {
-    return ui::text({.spans = ui::spans({"Signing at 24-Oct-2026 09:40 CEST as ", ui::strong(sign.meaningLabel), "."}),
-                     .role = "small"})
+// The meaning is strong in the dialog's line and plain in the phone sheet's.
+ui::Node signingAt(Signature const& sign, bool compact) {
+    auto const meaning =
+        compact ? ui::AnyHandle{ui::format("{0}", {sign.meaningLabel})} : ui::AnyHandle{ui::strong(sign.meaningLabel)};
+    return ui::text({.spans = ui::spans({"Signing at 24-Oct-2026 09:40 CEST as ", meaning, "."}), .role = "small"})
         .testId("signing-at");
 }
 
@@ -177,7 +179,7 @@ ui::Nodes signatureFields(ui::AnyHandle const& width, Signature const& sign, boo
                         {ui::grid({signerField(), meaningField(sign)}, {.gap = 2, .columns = 2})}),
         reasonField(sign),
         passwordField(sign),
-        signingAt(sign)};
+        layout::byWidth(width, {signingAt(sign, true)}, {signingAt(sign, false)})};
     if (withNote) {
         fields.insert(fields.begin(),
                       layout::muted("Your signature is stored with the record and cannot be removed."));

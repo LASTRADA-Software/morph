@@ -88,7 +88,8 @@ TEST_CASE("e-signature, compact: the same dialog as a sheet, signed from its foo
     CHECK(screen.find("TextInput", "signer").has_value());
     CHECK(screen.find("Select", "meaning").has_value());
     CHECK(screen.find("TextInput", "reason").has_value());
-    CHECK(screen.prop("Text", "signing-at", "spans") == "[Signing at 24-Oct-2026 09:40 CEST as ,Approved;strong,.]");
+    // The phone's line is plain; the dialog's has the meaning strong.
+    CHECK(screen.prop("Text", "signing-at", "spans") == "[Signing at 24-Oct-2026 09:40 CEST as ,Approved,.]");
 
     screen.edit("password", "meyer-2026");
     REQUIRE(screen.waitFor([&screen] { return screen.prop("Button", "action_sign", "enabled") != "false"; }));
