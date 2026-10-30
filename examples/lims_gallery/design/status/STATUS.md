@@ -8,7 +8,7 @@ The run's tracker, committed so another agent can pick it up; `next.md` says how
 
 Ten real LIMS screens (`examples/lims_gallery`, no backend, green theme) test what ui/1 can express, and their gap log
 becomes five framework batches (A–E), each designed, reviewed once and implemented on this one branch. It all lands
-as one PR, #1045 (draft), which leaves draft when every batch is in.
+as one PR, #1045, out of draft since every batch is in.
 
 **Decisions:**
 - One branch and one PR for the whole initiative; no separate PRs.
@@ -16,17 +16,32 @@ as one PR, #1045 (draft), which leaves draft when every batch is in.
 - Green (`#17784A`) is the main colour.
 - Framework changes land in batches, not one gap at a time.
 - Each design gets one review by a separate agent on the default model, never Fable.
+- Implementation agents run on Sonnet 5.5; designs and reviews stay on the default model.
 - Run 2–3 agents at a time, each in its own worktree and build tree, with builds taking turns through one lock; branches are rebased onto `feat/lims-gallery` and folded in.
 - Batch B owns the `mono` text role and the `font.mono` token; batch C cites them.
+- The goal is that ui/1 can produce each mockup's look itself: a visual difference is fixed in the vocabulary or the frontend, and in the screen only when the vocabulary already expresses the design.
 
 | Lane | Tasks done | State | Where it is |
 |---|---|---|---|
+| Batch H: the gaps left after G | 7/7 | done | Your call: the gaps the last comparison found get built now, not left for later. A design agent (default model) is writing batch H from `c4df1b3e9`: pinned bars that span the window on compact (H1), a square glyph button for pagers (H2), a control inside a selectable entry so samples' cards keep their checkbox and the accent bar (H3), runs in a head's title (H4), an eyebrow line above a head's title and small-capital section labels (H5), plus any other framework gap in the reviews. Then a review round and two Sonnet 5.5 lanes. PR #1045 stays open until H lands. **Design written** (`cee2b3e32`, `...batch-h-design.md`): a screen can drop the shell's page inset, `pinned` insets its body and spans its bars (H1); a `square` shape with the glyph at heading size (H2); `selected` on a column or row draws the accent bar, the checkbox keeps focus (H3); `titleSpans` (H4); `eyebrow` and an `overline` text role (H5); plus two it found: the compact head wraps Scan too early (H6) and an all-hidden pinned bar still draws a strip (H7). Two lanes: H-C (stacks and controls, audit, console) then H-S (shell and head, the other seven screens). Your decisions: `pinned`'s inset on by default; the square head menus and small-capital navigator headings switched by a theme token (off by default, on in the gallery); the checkbox alone selects; heading-size glyphs. Reviewed: 2 blockers (`padding: [2, 4]` is refused by the expression parser, it must be a `lit` list; the stack widgets that need the new calls are four, not three) and 8 should-fixes (a doubled inset, review's queue pane, the workspace tab strip, the pager glyph at body size strong as the mockup has it, the selected card's screen-reader role, the title runs not following a change, the small-capital font lost under tabular figures, an untested eyebrow mount); plus one more gap: instrument's tabs inside the white head block. **Revised** (`bed3d7989`): every finding taken; `pinned` marks its page `pageEdge` and the shell drops its own inset there, so no screen needs a key; two theme switches (`shape.iconOnly`, `font.overline.case`), off by default and on in the gallery; H8: `tabs` gains `inset` and `stripSurface` for instrument's head-block tabs. Defaults taken on the three small choices left (pinned pages keep the inset while the workspace shows its tab strip; a `keyword` token type; instrument's 1 px head rule stays). **Implementing:** H-C (`lg-hc`, e2) and H-S (`lg-hs`, e3), Sonnet 5.5, in parallel. **H-C done:** 7 commits (theme switches, H1/H7 stack half, H3, H2, overline, H8 tabs inset and strip surface, the gallery theme with square audit/console pagers); no warnings, Qt Quick/terminal/client/gallery tests pass, qmllint clean, mutation controls on every item. **H-S done** apart from instrument's tabs, which wait on H8: H6, H4, H5 eyebrow, H1 page half, navigator overlines, and the plate, instrument/results/stability, review and samples screens; 5149/5149 tests, no warnings, qmllint clean, mutation controls on H6/H4/H5/H1 and the screens. It also fixed the terminal's line layout, which let a stretch item's minimum squeeze Scan out at 40 columns **Folded and verified** (`lg-fold-h`, e1): no warnings, 5154/5154 tests, GCC `-Wshadow` clean over every ui header, Qt 6.8.1 qmllint clean and its 253 Qt Quick tests pass (offscreen, as CI runs them). All 20 grabs re-taken (`lg-cmp/app-hh`). **Lane T done** (`lg-tidy`, 7 commits): the local clang-tidy 22.1.8 diff run went from 124 findings (91 in CI before H, plus H's) to 0; control reproduced CI's `receipt.cpp:312`; complex functions split into helpers, `std::span` for argv, NOLINTs only for genuine tree recursion and a few swappable-parameter pairs, each with its reason; four stale allowlist hints fixed (20/20 resolve); no warnings, 5154/5154 tests. One local-only error left (`glaze/glaze.hpp` not found from a header without a compile entry), which CI's augmented database doesn't hit. **Comparison after H:** batch H's items are closed wherever they show (H8 only partly on expanded instrument); 3 regressions — the square ☰ grows to 44 px on compact and pushes titles right (wraps instrument's badge and results' title), results' badge left alone under its title, review's queue entries tighter — and 63 remaining differences, none high: 22 medium, 41 low; 16 framework gaps (a status slot at the title line's end, the compact title centred against its action, the tab strip's height, dialog rules edge to edge, the compact sheet head, one pinned child bleeding, a dark shell head, the sidebar at 1000 px, …) and about 40 screen fixes. Per your rule these become batch I. |
+| Final comparison with the mockups, and its fixes | 3/3 | done | Two reviewers compared all ten screens after batch G. Close to the mockup: receipt, plate, and samples (desktop), audit and console (compact); stability's stepper and pinned footer, plate's round wells and tags, banners and mono IDs all landed. Regressions: dialog footer buttons moved to the left (results, e-signature), and a table row keeps its wrapped height (review). Medium: collapsed section cards ~58 px with the title near the top and no header inset; compact pinned bars inset 16 px with a faint separator; audit's pager row has no inset; console's Test column wraps and its result inputs misalign; review's right pane has no inset; samples' selected compact cards have no accent bar; stability's fields misalign. Two Sonnet 5.5 lanes from `79baf82f8`: GX1 framework (`lg-gx1`, e2), GX2 screens (`lg-gx2`, e3). Not in scope: the eyebrow line above a head's title, small-caps section labels, and the mono face (JetBrains Mono isn't installed here, so mono renders as Nimbus Mono). **GX2 done** (9 commits, one per screen): console's Test column no longer wraps and its inputs line up; review's right pane inset; stability's fields top-aligned, summary IDs mono, full-width Add condition; samples bolds only "3 selected"; results' compact tags and mono head IDs; plate's grid fills again and the ring isn't clipped; e-signature's password message once; audit's compact record line mono. Not expressible yet: a checkbox inside a selectable card (samples' accent bar), `titleSpans` (plate's mono PL-0193); the Scan icon was a framework drop, passed to GX1. **CI's fifth run** failed 5 jobs on two causes plus a runner shutdown (WASM): GCC 15's `-Wshadow` on a local `struct Text` in `theme.hpp` (4 jobs), and Qt 6.8.1's qmllint on three QML files — including `Accessible.expandable`/`expanded`, which Qt 6.8 lacks, so the section header would not even load there. Fixed on `lg-ci5` (e3): the struct renamed (a GCC check reproduces the error before and not after), the expanded state set only where Qt has it, with a test that pins it on Qt 6.12; verified: full `ctest` 5107/5107, and on a local Qt 6.8.1 build qmllint and 253 Qt Quick tests pass (qmllint fails on the old QML, the control). **GX1 done** (4 commits): dialog actions at the right again, a folded section is its header row with the header inset kept, tabs fit Maintenance before More, a head action draws its icon (compact Scan). Review's tall row was its change column wrapping off-screen, fixed in the screen, as is audit's pager inset. Left for later, as framework additions: full-bleed compact bars, a square pager button, a checkbox inside a selectable card, runs in a head's title |
+| Batch I: the gaps left after H | 3/5 | running | Design (default model) from the comparison after H: the 3 regressions, 16 framework gaps and the screen fixes; then a review round, your decisions, and Sonnet lanes. **Design written** (`5a6834366`, `...batch-i-design.md`): the unframed square ☰ drawn 32 px with a 44 px touch target (R1); `leadPlacement` (below/inline/end) for the subtitle and status badges, and the user's name in the top bar (R2, G-a, G-i); a title-only head centred (G-b); tabs at the control height with no extra gap under an inset strip (G-c); dialog rules edge to edge (G-d); a centred sheet title (G-e); `bleed` for one child past its container's padding (G-f, G-k); a dark compact-toolbar surface and icon-only head actions (G-g); a theme switch for the collapsible marker (G-j); tighter check boxes (G-l); vector chevrons (G-m); a joined head without the rule (G-n); stepper gaps (G-o); a splitter grip (G-p); plus divided rows and banner action styles it found; every screen fix grouped per screen. Three lanes: I-Q (Qt looks), I-V (vocabulary and containers), I-S (shell and head). **Your decisions:** `expanded` begins at 108 units (sidebar shows at 1000 px); tabs at the control height everywhere. **Reviewed:** 3 blockers (the dark compact head would have darkened every screen, not just console's; review's compact rows couldn't bleed under a padded, clipping tab page; a banner link can't continue the text's last line as a separate button) and 11 should-fixes (a joined head's surface leaking into `bar`, the scan icon not tinting white, footer actions dropping their icon — a shipped defect, the end-placed lead's sizing, the existing width-class tests G-h changes, dividers on rows, shared files missing from the lane split, and the Qt 6.8.1 binding loop folded in). **Revised** (`e10d59505`): every finding taken — the dark head is console's own `headSurface`; tabs get `pageInset` so review's rows can bleed; the banner link is an anchor in the message with an accessible button proxy; `toolbarJoined` its own scheme; `currentColor` icons tinted by their control; footer actions keep their icon; a theme glyph table; the 785 px page fit checked (review's and console's splitters rescaled); the Qt 6.8.1 binding loop fixed in `MorphText`. **Implementing:** Sonnet 5.5, in parallel; landing order I-Q, I-V, I-S. **I-Q done** (`lg-iq`, 10/10 commits): the binding loop on Qt 6.8 fixed (S10), the collapsible marker switch, smaller check boxes, spaced stepper connectors, a splitter grip, dialog rules edge to edge, a centred sheet title, vector chevrons and a glyph table, icons tinted in their control's colour, and e-signature's full refusal; full ctest passes, and Qt 6.8.1 runs clean (265 tests, no binding loop). **I-V done** (`lg-iv`, 7 commits): divided rows, tabs at the control height, `bleed` and `pageInset`, the joined head (`headJoined`, `toolbarJoined`), banner action styles with an in-text link, and screen fixes for stability, audit, samples and instrument; its Qt, terminal, core, client and gallery tests pass, and controls were run for most new tests. **I-S done** (`lg-is`, 9 commits of its own, plus I-Q's and I-V's): the review, plate and console compact screens finished; 5201/5201 tests pass, and Qt 6.8.1 qmllint passes with one warning. **Folded** onto `lg-fold-i` with lane T's 7 tidy commits (3 conflicts resolved by hand). **Verifying** (lane W, Sonnet): build, ctest, `-Wshadow`, Qt 6.8.1 lint and tests, clang-tidy over the whole diff, clang-format, the coverage allowlist, Doxygen, and two runtime warnings (console's dark head track contrast, pager icon names). **Compared** (two reviewers, all 20 grabs): batch I's items are closed except two (`bleed` has no effect on receipt's session table, and review's compact All/Flagged doesn't stretch), and the principal never shows in the head. 17 regressions, all from the 785 px page beside the new 1000 px sidebar: audit, samples, receipt, stability and review clip or squeeze at 1000 (5 high). Plus about 19 remaining differences. Reports: `lg-ir-findings-A.md`, `-B.md`. |
+| Batch J: fit the 785 px page and the last framework gaps | 0/3 | running | **J-F** (Sonnet, `lg-jf`): re-fit audit, samples, receipt, stability, review, console, instrument and plate to the 785 px page, plus the per-screen fixes. **Design** (default model, `lg-j-design`): `bleed` in a panel, the principal in the head, silent clipping of wide tables and footers, a field showing the end of its text, the inline lead's wrap order, a white compact page, dialog rule spacing, text area padding, sidebar overline spacing, the navigator's selection, and review's compact tab page. **Design written** (`cef20bbae`): `bleed` was lost to the wrapper column the interpreter adds around several children (a library defect); the principal works, but the grabs passed no `--user`; overflowing containers will report and pages scroll sideways; an unfocused field shows its text from the start; the title and inline lead wrap on their own line; a per-screen `pageSurface`; 12 px around dialog rules; `input.paddingX`; spaced navigator groups with the badge inside the item and a `list.selection` switch; tab pages fill the tab area and scroll. Three lanes: J-C (Qt looks), J-B (head and navigator), J-A (bleed, overflow, tab pages). **Your decisions:** report and scroll; per-screen `pageSurface`; `accent` stays the default selection; inputs default to 8 px padding. **Reviewing** (default model). |
+| Batch G: component looks and text | 3/3 | done | Three Sonnet 5.5 agents from `7ddb82627`, landing in the order G-C → G-B → G-A. G-C (`lg-gc`, e2): the drawn stepper (G2), `pinned` bars with a surface and separator (G3), collapsible sections as cards (G5), tabs overflowing into More ▾ (G10); no screen code. G-B (`lg-gb`, e3): toned text and runs (G9), banners and the dialog's title and footer rule (G4), cells that keep IDs whole (G7), table marks and select boxes (G6), then the screen fixes for console, instrument, results, review, samples, audit, e-signature. G-A (`lg-ga`, gallery worktree): tags (G1), the plate's round wells (G8), mono and aligned inputs (G11), the select's field and dropdown (G12), then stability, plate, receipt and the theme bundle. Lanes cherry-pick what their screens need from the lane before. Progress: **G-A done**, 18 commits — tags and chips (G1), round, dense and mono buttons and badges with dashed outlines (G8: round wells that keep their colours, dashed empty wells, ringed selection), mono, aligned and prefixed inputs (G11), the select's field and list (G12), and screen fixes for stability's units, receipt's mono IDs and plate's list; every suite passes, mutations caught. Its follow-ups on G-B are done too (receipt's mono ID column `fixed(11)`; console's and results' value inputs end-aligned with the unit inside); then stability on the drawn stepper with its footer in `pinned`'s bottom bar and a full-width Continue on compact, compact sections as cards (opening one closes the other, tested), and plate's compact rows as a divided list of sections. Every suite passes; the plate marker ring may still look flat at its left edge. **G-B done**, 7 commits plus G-C's — toned text and runs (G9), rounded toned banners with a green action, a heading-size dialog title and a footer rule (G4), mono cells that never wrap mid-ID (G7), selected rows with the accent bar and toned rows tinted, themed select boxes (G6), and screen fixes for console, instrument, results, review, samples, audit, e-signature; every suite passes, mutations caught. Then on G-C: console's and instrument's compact sections as collapsible panels (a click test opens and closes Qualification), samples' compact cards as one divided list, the bulk bar white with a hairline. Every suite passes, no warnings. **G-C done** (`0704c4a26`, one commit for G2, G3, G5, G10 after the first agent stalled): numbered stepper circles with full-width connectors, pinned bars with a surface and separator, 44 px strong section headers with chevrons, tabs that don't fit go into More ▾. The new agent fixed an undefined `headerSlot` in the panel (broke qmllint and every render smoke) and a conformance probe; `ctest` 5068/5068. G-B and G-A resumed for the screen work that needed it |
+| Batch F regressions found by the re-grab | 2/2 | done | Two reviewers compared all ten screens after batch F with the mockups and the earlier grabs. Batch F's items show fixed everywhere they target (white cards, visible checkboxes, green ghost buttons, the scrim, compact bottom bars at the window bottom, review's panes filling, console's tab bar under its header). Regressions: **high** — review's selected queue entry is blank (the new opaque selection fill is drawn over the entry's content; hover likely the same) and receipt's sample heading breaks one character per line (a wrapping row inside a row); **medium** — the shell bar lost its gutter and padding, heads wrap with room to spare (receipt 3 rows), cell padding narrows fixed columns so "% LC" and "22 min overdue" wrap, console's page doesn't fill. Two Sonnet 5.5 lanes fix them from `a9d8a3120`: FX1 (`lg-fx1`, e2) wrapping, shell bar, head, grab tooltip; FX2 (`lg-fx2`, e3) the selection fill, column padding, console fill. New low items go to batch G and its screen fixes. **FX2 done** (3 commits): an item's content column was never reparented into its button, so the background painted over it — the selected queue entry shows its text again (a pixel test fails on the old code); a column's declared width now adds the cell padding ("22 min overdue" on one line again); console's switch stretches and its page fills the window at 1000×830 and 1000×1200. Every suite and qmllint pass. Stretch columns (review's analyte) still wrap: G7. **FX1 done** (4 commits): a wrapping row now places its cells after their bindings settle, so receipt's heading stays on one line; the head's subtitle and badges share one wrapping line, and the head wraps only when out of room; the top bar's gutter and padding are back and its line is centred; a grab clears the hover first (no tooltip). Folded and pushed (`7ddb82627` + tracker): no warnings, `ctest` 5059/5059, clang-format clean, all 20 grabs clean |
+| Batch F: layout, theme and containers | 3/3 | done | Three Sonnet 5.5 agents, each in its own worktree and branch from `81ee4fdfc`. **F-T done** (`lg-ft`, 5 commits): tone parts load and a token with members is refused (#1070); `hover`, `track`, `controlSurface`, `controlBorder`, `divider`, `elevation.popup` in every built-in scheme; text below 4.5:1 (muted 3:1) reported; the small and display type steps; ghost buttons in the accent, the active tab in text; the scrim; table cell padding. Full build with no warnings, every suite passes; six QML mutations each caught by their test. **F-L done** (`lg-fl`, e2, 3 commits): a case's, an overlay's and a node list's stretch reach the slot (#1069), so the compact receipt's Receive bar sits at the window bottom; rows and horizontal forEach can wrap (tag rows in samples, console, receipt); panel, dialog, collapsible and drawer bodies space their children, and a divided column draws rules. Full `ctest` 5033/5033, every new test has a hand-broken control. Not yet: re-grabs of stability, results, review. **F-S done** (`lg-fs`, 8 commits): a panel's content starts under its header (#1072); a splitter fills the page and a stretching child scrolls below its minimum height; menus, selects and the date picker open inside the window, ending at their trigger when they'd overflow, in one shared popup frame (#1071); panels draw as white cards; the head shares the top line with the title, and sign-out moved to the sidebar's foot (☰ on compact); console KPIs in the display size. Every suite and qmllint pass; each item has a control that fails without it |
+| Batches F and G: drawing the mockups in ui/1 | 6/6 | done | CI's fourth run passed every job on `8a16448e5`; the merge waits for these. Batch F's design is written (`docs/superpowers/specs/2026-10-29-lims-gallery-batch-f-design.md`, three lanes: layout, theme, shell and containers) and reviewed: 2 blockers (F1's stretch fix stops at a second wrapper, so compact screens would stay cut; the new colour roles would break the dark sidebar) and 10 should-fixes, all taken in the revision, committed as `81ee4fdfc`. Your decisions: sign-out moves to the sidebar's foot (☰ on compact); `color.neutral` is the neutral tone only, with new `hover` and `track` tokens; panels default to gap 2 and the card surface, dialogs to gap 3; contrast below 4.5:1 (muted 3:1) is reported, not refused. Batch G's design is written too (`...batch-g-design.md`: tags, a drawn stepper split into parts for `pinned`, a `bar` surface, banners, section headers, table marks, mono that elides, round and small buttons, toned text and spans, a More ▾ tab menu, mono inputs) and reviewed: 1 blocker (round plate wells would still draw square and lose their colours) and 14 should-fixes, all taken in the revision, committed as `d467798a9`, with G12 rewritten to extend batch F's shared popup frame; its five small choices are taken at its defaults. G12 added from your note: the select's dropdown drawn as the mockups' input and menu. Both reviews feed one revision each, then the implementation runs three Sonnet 5.5 agents at a time |
+| Comparing every screen with its mockup | 3/3 | done | All your reports confirmed and traced to code. The union is in `examples/lims_gallery/design/visual-review.md`: batch F (layout, theme and container defects, F1–F14) and batch G (component looks and text, G1–G11), plus nine screen fixes. Four library defects filed: #1069 (a `switch` case drops its stretch, so compact pinned pages are cut off at y≈390), #1070 (the theme reader drops tone backgrounds), #1071 (menus leave the window), #1072 (a stretched panel centres its content). The client takes `--grab-size` for this |
+| Fixing PR #1045's third CI run | 3/3 | done | 4 jobs failed on three causes. ASan, TSan and clang-cl: a table's selection list read after its temporary was freed, in this branch's row lowering (Valgrind shows the invalid reads before the fix). MSVC and clang-cl: `DateTime` built from components sums days, hours and minutes in the STL's 32-bit minutes, so 9999-12-31 23:30 read as 1833; it now converts to milliseconds first. TSan: mounting every design at both widths ran past the 120 s timeout (84 s under ASan); now 600 s. All in `81e2ed69b`, with a `DateTime` test for year 9999 and one allowlist hint moved. Build with no warnings; every suite passes, and Valgrind is clean on the table test |
+| Fixing PR #1045's second CI run | 4/4 | done | 9 of 14 jobs went green; the other 5 had new causes, fixed by three agents in parallel. Qt 6.8.1 (`b827a67d2`): three QML forms 6.8's qmllint rejects; a tooltip 6.8 closes when a modal opens; a click that put the cursor mid-number under CI's DejaVu font (the test now presses End). Toolchain (`e1615aa7b`): the clang-cl link came from a test's native 128-bit divide, now skipped on MSVC; GCC 15's maybe-uninitialized was a false positive in copying `Prop`, which now builds its alternative in place; 15 allowlist line hints moved. Coverage (`5e311b939`): tests only, `include/morph/ui` branches 90.21% → 92.57% measured locally (clang 21), 10 mutations each caught; it found #1068 (a state declared `any` with an init takes the init's type), kept as a `[!shouldfail]` test. And the e-signature test renamed in ASCII (`5eb8af721`). Build with no warnings; every suite, the ten render smokes, qmllint and Doxygen pass |
+| Fixing PR #1045's first CI run | 3/3 | done | 14 jobs failed on six causes, fixed by three agents in parallel, plus a seventh the fixes uncovered. Library (`2237cfb2e`): GCC `-Wshadow` in `interpreter.hpp`, `std::iota` for the WASM libc++, the navigator's `const_cast`, the TUI overrides made protected, NOLINTs with reasons in `kinds.hpp`. Tests (`9c2e77058`): MSVC narrowing, a `ranges::to` pipe libstdc++ 14 rejects, 18 tidy findings. Examples (`6120873ed`): a chart in `examples/gallery`, `layout.hpp` renamed to `screen_layout.hpp`, gallery tidy. Then `5382eee17`: an empty date input threw in its calendar (QML read an empty QVariant as undefined), caught by the gallery's render smoke, with a test that fails without it. Build with no warnings; every suite, the ten render smokes and qmllint pass |
 | Gallery: ten LIMS designs | 10/10 | done | 01–10 on the branch, each with compact and expanded layouts |
 | Batch A: defects and responsive layout | 15/15 | done | 14 fixes and the gallery cleanup, `b6581747a`..`1e4c9cf34`; closes #1046–#1052, #1054, #1055 |
 | Batch B part 1: columns and the selection | 6/6 | done | `27c072205`..`7c7f9d708` on `feat/lims-gallery`, pushed; G2, G47, G29 (closes #1053), G43 (closes #1059), G30 and the gallery cleanup |
 | Batch B part 2: the row pipeline | 7/7 | done | `8215ca989`..`cdb41fe9f` on `feat/lims-gallery`, pushed: G41 selected button, G31 sort, G28 paging, G44 `runs`, G46 group headings, the `showHeader` flag fix, and the gallery cleanup; all six suites pass |
 | Batch C: text, fields and small controls | 16/16 | done | 13 commits on `feat/lims-gallery-c` (pushed): plain text (#1058), spans, key-value, required mark, help text, dialog description, input group, unit (#1060, #1062), outlined and segmented controls (#1061), multi-line list entries, the date pattern, the focal scanner field, gallery cleanup; all suites and qmllint pass |
-| Folding batch C onto `feat/lims-gallery` | 0/1 | running | an agent rebases C over the 35 commits it is behind (4 of 13 replayed), then switches E1's ISO pull dates to C's date pattern |
+| Rebasing D parts 3–4 onto the batch C fold, and the final check | 1/1 | done | `feat/lims-gallery` now holds every batch. The sheet and C's dialog description share one dialog; the app document carries C's date patterns and D4's navigation counts. Three fixes on the way: the node-kinds array size in each D commit that adds a kind, the e-signature's note, and clang-format 22 over 54 files plus four Doxygen gaps from C. Build with no warnings; `morph_tests` 3275 (1 failing as expected), qt 188, tui 367, client 38, gallery 54, render smoke, qmllint and Doxygen pass. 54 conformance and 16 layout cases |
+| Folding batch C onto `feat/lims-gallery` | 1/1 | done | `feat/lims-gallery-c` (`85ddd58b8`, pushed) is `feat/lims-gallery` plus C's 13 commits. Build clean; `morph_tests` 3260 (1 failing as expected), qt 186, tui 365, client 34, gallery 53, render smoke and qmllint pass. 54 conformance and 15 layout cases |
 | Batch D design | 2/2 | done | written and reviewed, `84d3b53cc` (D4 fixes #1063 and #1064) |
 | Batch D part 1: following the data | 8/8 | done | on `feat/lims-gallery`. on `feat/lims-gallery-e1` (pushed) over B part 1 and E1: #1063, G51, G20, G32, G35, G16, G38 and the cleanup; I built it: no warnings, all six suites pass |
 | Batch D part 2: layout and controls | 4/4 | done | on `feat/lims-gallery`. `572fcc7ec`..`e96f52973` on `feat/lims-gallery-e1` (pushed): G23 grid column widths, G18 menu drawn as one button, G27 removable badges as filter chips, the gallery cleanup, and a qmllint fix for part 1's tab bar; all suites and qmllint pass |
@@ -37,12 +52,12 @@ as one PR, #1045 (draft), which leaves draft when every batch is in.
 | Batch E1: expressions | 7/7 | done | on `feat/lims-gallery`. on `feat/lims-gallery-e1` under D part 1; closes #1066 and #1065 |
 | Batch E2: the chart | 2/2 | done | on `feat/lims-gallery`. on `feat/lims-gallery-e2` (pushed); it uses E1's checked rounding, so it goes in after `feat/lims-gallery-e1`. A first try on batch B part 2 alone failed to compile; that resolution is kept on local branch `lg-fold-e2-on-b2` (drop its stray `backend_conformance.hpp.orig`). Tidy 22 on `chart_scale.hpp`: 0 warnings |
 
-**Now:** every batch is implemented. One agent folds batch C onto `feat/lims-gallery`; D parts 3–4 wait on `feat/lims-gallery-d4` to be rebased onto it.
-**Next:** push the C fold; rebase D parts 3 and 4 onto it; verify once; take the PR out of draft and update its body.
+**Now:** paused at the user's request. Lane W (CI checks on the batch I fold) and lane J-F (785 px re-fit) were stopped mid-run; their work is saved as WIP commits on `lg-w` and `lg-jf`. The batch J design (`cef20bbae`, `lg-j-design`) has the user's decisions; its review was stopped before reporting and must be rerun. See `next.md` for how to resume.
+**Next:** review batch I's design, take your decisions on it, implement it in 2–3 Sonnet lanes, fold with lane T, re-grab and compare; then push, CI to green, and merge PR #1045.
 
 ## Time spent
 
-From the time log, stamped as each event happened. *Implement* runs from a task's dispatch to its first commit or report, *review & fixes* from there to done, and *wall time* from the first dispatch to the last completion: less than their sum where work ran in parallel. Work still running counts to 2026-10-29 01:24:28.
+From the time log, stamped as each event happened. *Implement* runs from a task's dispatch to its first commit or report, *review & fixes* from there to done, and *wall time* from the first dispatch to the last completion: less than their sum where work ran in parallel. Work still running counts to 2026-10-30 15:07:32.
 
 | Lane or phase | Finished | Wall time | Implement | Review & fixes | Mean per task | Idle |
 |---|---|---|---|---|---|---|
@@ -55,10 +70,21 @@ From the time log, stamped as each event happened. *Implement* runs from a task'
 | D1 · Batch D part 1: following the data | 1 | 15h 12m | 15h 12m | 0m 00s | 15h 12m | 7h 05m |
 | E2 · Batch E2: the chart | 1 | 4h 41m | 4h 41m | 0m 00s | 4h 41m | 35m 09s |
 | D2 · Batch D part 2: layout and controls | 1 | 6h 14m | 6h 14m | 0m 00s | 6h 14m | 8m 06s |
-| FOLD · Folding the side branches (running) | 1 | 57h 32m | 55h 04m | 5m 46s | 52h 33m | 1h 31m |
+| FOLD · Folding the side branches | 3 | 64h 22m | 61h 53m | 5m 46s | 20h 39m | 1h 31m |
 | D3 · Batch D part 3: the head and overlays | 1 | 2h 41m | 2h 41m | 0m 00s | 2h 41m | — |
 | D4 · Batch D part 4: navigation | 1 | 2h 17m | 2h 17m | 0m 00s | 2h 17m | — |
-| **All** (running) | 14 | 85h 12m | 183h 27m | 7m 13s | 12h 55m | 24h 09m |
+| CI · Fixing PR #1045's first CI run | 3 | 1h 11m | 3h 05m | — | 1h 01m | — |
+| CI2 · Fixing PR #1045's second CI run | 4 | 2h 06m | 4h 38m | — | 1h 09m | — |
+| CI3 · Fixing PR #1045's third CI run | 3 | 9m 09s | 27m 09s | — | 9m 03s | — |
+| VC · Comparing every screen with its mockup | 3 | 13m 47s | 30m 01s | — | 10m 00s | — |
+| FG · Batches F and G: drawing the mockups in ui/1 | 6 | 36m 20s | 1h 11m | — | 11m 55s | — |
+| F · Batch F: layout, theme and containers | 6 | 5h 11m | 10h 37m | — | 1h 46m | — |
+| G · Batch G: component looks and text | 4 | 4h 14m | 11h 32m | — | 2h 53m | — |
+| X · Final comparison and fixes | 3 | 55m 45s | 1h 51m | — | 37m 10s | — |
+| H · Batch H: the gaps left after G | 8 | 5h 16m | 8h 04m | — | 1h 00m | — |
+| I · Batch I: the gaps left after H (running) | 7 | 4h 36m | 9h 09m | — | 1h 12m | — |
+| J (running) | 1 | 38m 24s | 1h 16m | — | 36m 10s | — |
+| **All** (running) | 64 | 122h 55m | 242h 40m | 7m 13s | 3h 46m | 24h 09m |
 
 ### B1 · Batch B part 1: columns and the selection
 
@@ -121,7 +147,8 @@ From the time log, stamped as each event happened. *Implement* runs from a task'
 | Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
 |---|---|---|---|---|---|---|---|
 | FOLD.1 | Rebase E1 and D parts 1-2 onto batch B part 2, then the chart | 2026-10-26 15:51:30 | 52h 27m | 5m 46s | 52h 33m | 1h 31m | 1 |
-| FOLD.2 | Rebase batch C onto feat/lims-gallery (running) | 2026-10-28 22:47:49 | 2h 36m | — | 2h 36m | — | — |
+| FOLD.2 | Rebase batch C onto feat/lims-gallery | 2026-10-28 22:47:49 | 8h 51m | 0m 00s | 8h 51m | — | — |
+| FOLD.3 | Rebase D parts 3-4 onto the C fold, verify everything once | 2026-10-29 07:39:12 | 34m 52s | 0m 00s | 34m 52s | — | 3 |
 
 ### D3 · Batch D part 3: the head and overlays
 
@@ -134,6 +161,112 @@ From the time log, stamped as each event happened. *Implement* runs from a task'
 | Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
 |---|---|---|---|---|---|---|---|
 | D4.1 | Batch D part 4: G50 (#1064), G56 and the gallery cleanup | 2026-10-28 23:07:04 | 2h 17m | 0m 00s | 2h 17m | — | 0 |
+
+### CI · Fixing PR #1045's first CI run
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| CI.1 | Library: GCC shadow, WASM iota, tidy in include and src | 2026-10-29 10:26:55 | 56m 35s | — | 56m 35s | — | — |
+| CI.2 | Tests: MSVC narrowing and clang-tidy | 2026-10-29 10:26:55 | 56m 53s | — | 56m 53s | — | — |
+| CI.3 | Examples: the gallery's chart, a header name, clang-tidy | 2026-10-29 10:26:55 | 1h 11m | — | 1h 11m | — | — |
+
+### CI2 · Fixing PR #1045's second CI run
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| CI2.1 | Qt 6.8.1: qmllint and two qt_quick tests | 2026-10-29 13:23:02 | 1h 15m | — | 1h 15m | — | — |
+| CI2.2 | Toolchain: clang-cl 128-bit division, GCC 15 maybe-uninitialized, coverage line hints | 2026-10-29 13:23:02 | 1h 16m | — | 1h 16m | — | — |
+| CI2.3 | ui branch coverage back over its 92% floor | 2026-10-29 13:23:02 | 2h 06m | — | 2h 06m | — | — |
+| CI2.4 | A test name ctest on Windows cannot select | 2026-10-29 13:23:02 | 0m 00s | — | 0m 00s | — | — |
+
+### CI3 · Fixing PR #1045's third CI run
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| CI3.1 | A dangling selection list in table rows (ASan, TSan, clang-cl) | 2026-10-29 17:23:26 | 9m 09s | — | 9m 09s | — | — |
+| CI3.2 | DateTime wraps past year 6053 on MSVC | 2026-10-29 17:23:35 | 9m 00s | — | 9m 00s | — | — |
+| CI3.3 | The gallery mount test's timeout under TSan | 2026-10-29 17:23:35 | 9m 00s | — | 9m 00s | — | — |
+
+### VC · Comparing every screen with its mockup
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| VC.1 | Screens 1–4: e-signature, receipt, instrument, audit | 2026-10-29 19:19:46 | 13m 47s | — | 13m 47s | — | — |
+| VC.2 | Screens 5–7: samples, stability, plate | 2026-10-29 19:19:46 | 7m 37s | — | 7m 37s | — | — |
+| VC.3 | Screens 8–10: results, review, console | 2026-10-29 19:19:46 | 8m 37s | — | 8m 37s | — | — |
+
+### FG · Batches F and G: drawing the mockups in ui/1
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| FG.1 | Batch F design: layout, theme and containers | 2026-10-29 19:38:06 | 16m 09s | — | 16m 09s | — | — |
+| FG.2 | Batch G design: component looks and text | 2026-10-29 19:38:06 | 20m 28s | — | 20m 28s | — | — |
+| FG.3 | Batch F design review | 2026-10-29 19:54:15 | 9m 51s | — | 9m 51s | — | — |
+| FG.4 | Batch G design review | 2026-10-29 19:58:34 | 9m 05s | — | 9m 05s | — | — |
+| FG.5 | Batch F design revision | 2026-10-29 20:04:06 | 9m 10s | — | 9m 10s | — | — |
+| FG.6 | Batch G design revision | 2026-10-29 20:07:39 | 6m 47s | — | 6m 47s | — | — |
+
+### F · Batch F: layout, theme and containers
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| F.L | F-L layout: F1, F4, F7 | 2026-10-29 20:13:16 | 3h 01m | — | 3h 01m | — | — |
+| F.T | F-T theme: F8–F14, table padding | 2026-10-29 20:13:16 | 1h 42m | — | 1h 42m | — | — |
+| F.S | F-S shell and containers: F2, F6, F3, F10, F5 | 2026-10-29 20:13:16 | 4h 04m | — | 4h 04m | — | — |
+| F.I | Fold batch F onto the branch, verify, re-grab | 2026-10-30 00:17:38 | 11m 07s | — | 11m 07s | — | — |
+| F.X1 | FX1: wrap row in a row, shell bar gutter, head wrapping, grab tooltip | 2026-10-30 00:28:45 | 56m 30s | — | 56m 30s | — | — |
+| F.X2 | FX2: selected fill over content, padding narrowing columns, console fill | 2026-10-30 00:28:45 | 40m 53s | — | 40m 53s | — | — |
+
+### G · Batch G: component looks and text
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| G.C | G-C structure: G2, G3, G5, G10 | 2026-10-30 01:25:16 | 3h 19m | — | 3h 19m | — | — |
+| G.B | G-B text and tables: G9, G4, G7, G6, screen fixes | 2026-10-30 01:25:16 | 3h 59m | — | 3h 59m | — | — |
+| G.A | G-A controls: G1, G8, G11, G12, screen fixes | 2026-10-30 01:25:16 | 3h 59m | — | 3h 59m | — | — |
+| G.I | Fold batch G, verify, re-grab | 2026-10-30 05:25:02 | 14m 17s | — | 14m 17s | — | — |
+
+### X · Final comparison and fixes
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| X.1 | GX1 framework: dialog footer, row height, section cards, bar bleed, pager, tab overflow | 2026-10-30 05:43:13 | 55m 45s | — | 55m 45s | — | — |
+| X.2 | GX2 screens: console, review, stability, samples, results, receipt, plate, e-signature, audit | 2026-10-30 05:43:13 | 32m 02s | — | 32m 02s | — | — |
+| X.3 | CI fifth run: GCC shadow, Qt 6.8 qmllint and Accessible | 2026-10-30 06:15:16 | 23m 42s | — | 23m 42s | — | — |
+
+### H · Batch H: the gaps left after G
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| H.D | Batch H design | 2026-10-30 06:43:15 | 22m 26s | — | 22m 26s | — | — |
+| H.R | Batch H design review | 2026-10-30 07:05:41 | 4m 23s | — | 4m 23s | — | — |
+| H.V | Batch H design revision | 2026-10-30 07:10:04 | 7m 10s | — | 7m 10s | — | — |
+| H.C | H-C controls, stacks and theme | 2026-10-30 07:17:14 | 2h 27m | — | 2h 27m | — | — |
+| H.S | H-S shell and head | 2026-10-30 07:17:14 | 2h 17m | — | 2h 17m | — | — |
+| H.S2 | H-S: instrument's tabs on H8 | 2026-10-30 09:44:37 | 16m 18s | — | 16m 18s | — | — |
+| H.F | Fold and verify batch H | 2026-10-30 10:00:55 | 30m 12s | — | 30m 12s | — | — |
+| H.T | Lane T: clang-tidy-diff to zero | 2026-10-30 10:00:55 | 1h 58m | — | 1h 58m | — | — |
+
+### I · Batch I: the gaps left after H
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| I.D | Batch I design | 2026-10-30 10:31:08 | 24m 22s | — | 24m 22s | — | — |
+| I.R | Batch I design review | 2026-10-30 10:55:30 | 9m 40s | — | 9m 40s | — | — |
+| I.V | Batch I design revision | 2026-10-30 11:05:10 | 8m 07s | — | 8m 07s | — | — |
+| I.QQ | Lane I-Q | 2026-10-30 11:13:17 | 1h 52m | — | 1h 52m | — | — |
+| I.VV | Lane I-V | 2026-10-30 11:13:17 | 2h 36m | — | 2h 36m | — | — |
+| I.SS | Lane I-S | 2026-10-30 11:13:17 | 3h 11m | — | 3h 11m | — | — |
+| I.W | Lane W: verify the fold (running) | 2026-10-30 14:24:24 | 43m 09s | — | 43m 09s | — | — |
+| I.RR | Compare after batch I | 2026-10-30 14:24:27 | 4m 42s | — | 4m 42s | — | — |
+
+### J
+
+| Task | What | Started | Implement | Review & fixes | Total | Idle | Fix rounds |
+|---|---|---|---|---|---|---|---|
+| J.F | Lane J-F: fit 785 px (running) | 2026-10-30 14:29:09 | 38m 24s | — | 38m 24s | — | — |
+| J.D | Batch J design | 2026-10-30 14:29:09 | 36m 10s | — | 36m 10s | — | — |
+| J.DR | Review batch J design (running) | 2026-10-30 15:05:19 | 2m 14s | — | 2m 14s | — | — |
 
 ### Idle stalls
 
