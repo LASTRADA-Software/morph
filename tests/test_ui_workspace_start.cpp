@@ -4,6 +4,7 @@
 // screen will read before it mounts; the record lists the open tabs' routes and resume reopens them; a host screen
 // mounts from the registry into a tab; and the navigator lists, searches, pins and prefetches the catalog.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
@@ -316,7 +317,7 @@ TEST_CASE("navigator: groups, a disabled entry with its reason, and a search ove
     CHECK(shown(harness, "nav_lims.results"));
     CHECK_FALSE(shown(harness, "nav_lims.samples"));
     CHECK_FALSE(shown(harness, "nav_admin.users"));
-    int const admin = *harness.backend.find("Text", "testId", "navigator_group_Admin/");
+    int const admin = *harness.backend.find("Column", "testId", "navigator_group_Admin/_section");
     CHECK(harness.backend.prop(admin, "visible") == "false");
     harness.backend.edit(*harness.backend.find("TextInput", "testId", "navigator_search"), "");
     CHECK(shown(harness, "nav_admin.users"));
@@ -510,4 +511,29 @@ TEST_CASE("host screens: a host screen's page stays inset", "[ui][workspace]") {
                          .hosts = &hosts}};
     REQUIRE(shell.open("sync", {}).has_value());
     CHECK(shell.activePageInset());
+}
+
+// Mutation: put the groups' headings and entries back in the root, or leave the root without a gap.
+TEST_CASE("navigator: each group is a column under a spaced root, and a search that matches nothing in it hides it",
+          "[ui][workspace][navigator]") {
+    Harness harness;
+    Navigator navigator{
+        harness.backend, nullptr,
+        NavigatorOptions{
+            .entries = lab(), .titles = {}, .pins = {}, .maxPins = 12, .onOpen = {}, .onPrefetch = {}, .onPins = {}}};
+    int const root = *harness.backend.find("Column", "testId", "navigator");
+    CHECK(harness.backend.prop(root, "gap") == "3");
+    int const work = *harness.backend.find("Column", "testId", "navigator_group_Lab/Work_section");
+    CHECK(harness.backend.prop(work, "gap") == "1");
+    int const heading = *harness.backend.find("Text", "testId", "navigator_group_Lab/Work");
+    int const samples = *harness.backend.find("Row", "testId", "nav_row_lims.samples");
+    CHECK(harness.backend.children(work).front() == heading);
+    CHECK(harness.backend.children(work).at(1) == samples);
+    std::vector<int> const rootChildren = harness.backend.children(root);
+    CHECK(std::ranges::find(rootChildren, work) != rootChildren.end());
+
+    harness.backend.edit(*harness.backend.find("TextInput", "testId", "navigator_search"), "users");
+    CHECK(harness.backend.prop(work, "visible") == "false");
+    int const admin = *harness.backend.find("Column", "testId", "navigator_group_Admin/_section");
+    CHECK(harness.backend.prop(admin, "visible") != "false");
 }

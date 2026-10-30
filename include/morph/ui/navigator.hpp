@@ -59,15 +59,16 @@ struct NavigatorOptions {
 
 /// @brief The catalog as a list a person opens screens from, with a title search and pinned shortcuts.
 ///
-/// Entries are grouped by module, then group, in the order each first appears; each group has a heading. Each entry
-/// is a row as wide as the navigator holding a list item (`ButtonStyle::Item`) and, while `setBadge` gives it one, a
+/// Entries are grouped by module, then group, in the order each first appears; each group is a column of its own
+/// holding its heading and its entries, and the groups are a spacing step apart. Each entry is a row as wide as the navigator holding a list item (`ButtonStyle::Item`) and, while `setBadge` gives it one, a
 /// badge at its end; `setCurrent` marks the open screen's. An unavailable entry is listed disabled, with its reason as
 /// its tooltip. The search shows the entries one of whose titles contains the text, ignoring ASCII case, and the
 /// headings of the groups that still show one. `menuEntries` and `choose` give the same list as a menu, for a frame
 /// too narrow for the navigator. Neither copyable nor movable; owned by the owner thread of its backend.
 ///
 /// Test ids: `navigator`, `navigator_search`, `navigator_pins`, `nav_row_<screen id>`, `nav_<screen id>`,
-/// `nav_badge_<screen id>`, `pin_<screen id>`, and `navigator_group_<module>/<group>` for a heading.
+/// `nav_badge_<screen id>`, `pin_<screen id>`, `navigator_group_<module>/<group>` for a heading and
+/// `navigator_group_<module>/<group>_section` for its column.
 class Navigator {
 public:
     /// @brief The navigator, appended to @p parent.
@@ -77,6 +78,8 @@ public:
     Navigator(IViewBackend& backend MORPH_LIFETIMEBOUND, ContainerWidget* parent, NavigatorOptions options)
         : _backend{&backend}, _options{std::move(options)}, _root{backend.createStack(parent, Axis::Vertical)} {
         _root->setTestId("navigator");
+        // The search, the pins and the groups stand a spacing step apart; a hidden pin row or group takes no gap.
+        _root->setGap(3);
         _search = backend.createTextInput(_root.get(), TextInputMode::SingleLine);
         _search->setTestId("navigator_search");
         _search->setPlaceholder("Search");
@@ -245,6 +248,7 @@ private:
     struct Group {
         std::string module;
         std::string group;
+        std::unique_ptr<StackWidget> section;
         std::unique_ptr<TextWidget> heading;
         std::vector<Item> items;
     };
@@ -398,11 +402,17 @@ private:
                 return candidate.module == entry.module && candidate.group == entry.group;
             });
             if (!seen) {
-                _groups.push_back(Group{.module = entry.module, .group = entry.group, .heading = {}, .items = {}});
+                _groups.push_back(
+                    Group{.module = entry.module, .group = entry.group, .section = {}, .heading = {}, .items = {}});
             }
         }
         for (Group& group : _groups) {
-            group.heading = _backend->createText(_root.get());
+            // The heading and its entries are a column of their own, a step apart from the next group's; the heading
+            // sits a step under whatever precedes it, and the entries' own heights keep them apart.
+            group.section = _backend->createStack(_root.get(), Axis::Vertical);
+            group.section->setGap(1);
+            group.section->setTestId("navigator_group_" + group.module + "/" + group.group + "_section");
+            group.heading = _backend->createText(group.section.get());
             // An overline, which a theme may draw as small capitals; by default it looks as a section does.
             group.heading->setRole(TextRole::Overline);
             group.heading->setTestId("navigator_group_" + group.module + "/" + group.group);
@@ -413,7 +423,7 @@ private:
                 }
                 Item item{.entry = &entry,
                           .titles = titlesOf(entry),
-                          .row = _backend->createStack(_root.get(), Axis::Horizontal),
+                          .row = _backend->createStack(group.section.get(), Axis::Horizontal),
                           .button = {},
                           .badge = {},
                           .shown = std::nullopt};
@@ -448,7 +458,7 @@ private:
                 item.row->setVisible(shown);
                 any = any || shown;
             }
-            group.heading->setVisible(any);
+            group.section->setVisible(any);
         }
     }
 
