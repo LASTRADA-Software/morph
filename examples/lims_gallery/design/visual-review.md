@@ -67,3 +67,31 @@ Defects in the library are filed: #1069, #1070, #1071, #1072.
 
 Full per-screen tables, with colours, sizes and file references, were the review's working notes; the items above
 are their union.
+
+## After batch F
+
+Every screen was grabbed again once batch F landed and compared with the mockups and the earlier grabs. Batch F's
+items show as fixed on every screen they target. Its regressions (a selected item's fill covering its content, a
+wrapping row in a row breaking its text per character, the shell bar's lost gutter, heads wrapping with room to
+spare, cell padding narrowing fixed columns, the console's page not filling) are fixed on the branch before batch G.
+
+Added to batch G:
+
+- G4 also covers a banner's action button, which still draws in the Basic style ("Go to the field", "Open run").
+- G7 now also matters for columns batch F's padding narrowed ("% LC", "22 min overdue", "Impurity B", audit's
+  "When").
+
+Added screen fixes:
+
+- E-signature compact: "Sign and approve" full width; no description; "Password incorrect." shown once.
+- Stability compact: "Summary · first pull" closed by default.
+- Plate: the to-place IDs in mono.
+- Review: the worksheet pane on the pane surface; 16 px above the "Review comment" caption; compact card IDs in mono.
+- Audit compact: row dividers between entries, a "Load 25 more" button, the record line in mono.
+- Samples compact: the cards as one divided list.
+- Console compact: Scan in the header.
+- The gallery's `empty` well surface pairs muted text with fills it's measured against; its contrast reports are the
+  mockup's colours and stay.
+
+Not in any batch: an eyebrow line above a head's title (instrument's breadcrumb), the dialog title's 16 px size and a
+rule above a dialog's footer (batch G owns both per its design), section labels in small grey capitals (audit).
