@@ -74,6 +74,10 @@ TEST_CASE("e-signature, compact: the same dialog as a sheet, signed from its foo
     // The sheet's head holds its Cancel, so the footer's is hidden.
     CHECK_FALSE(screen.shows("Button", "action_cancel"));
     CHECK(screen.shows("Banner", "refused"));
+    // "Password incorrect." is the password field's error; the banner on the same screen only says what is left.
+    CHECK(screen.prop("Banner", "refused", "spans") == "[3 of 5 attempts left before the account locks.]");
+    CHECK(screen.prop("TextInput", "password", "errors") == "[Password incorrect.]");
+    CHECK(screen.prop("Dialog", "signature", "description").value_or("").empty());
     CHECK(screen.find("TextInput", "signer").has_value());
     CHECK(screen.find("Select", "meaning").has_value());
     CHECK(screen.find("TextInput", "reason").has_value());

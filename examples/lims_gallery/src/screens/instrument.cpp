@@ -88,6 +88,8 @@ void declareHead(ui::Scope& screen, Instrument const& instrument) {
     auto const compact = instrument.compact;
     screen.title("HPLC-02 · Liquid chromatograph");
     screen.subtitle(ui::cond(compact, Text{"EQ-0142"}, Text{"Instruments › EQ-0142"}));
+    screen.subtitleSpans(ui::cond(compact, ui::AnyHandle{ui::spans({ui::mono("EQ-0142")})},
+                                  ui::AnyHandle{ui::spans({"Instruments › ", ui::mono("EQ-0142")})}));
     screen.status({.text = ui::cond(instrument.inService, Text{"In service"}, Text{"Out of service"}),
                    .tone = ui::cond(instrument.inService, Text{"ok"}, Text{"neutral"})});
     screen.status({.text = ui::cond(compact, Text{"IQ, OQ, PQ passed"}, Text{"Qualified: IQ, OQ, PQ"}), .tone = "ok"});
@@ -235,13 +237,19 @@ ui::Node bookDialog(Instrument const& instrument) {
 
 ui::AnyHandle detail(char const* label, char const* value) { return ui::obj({{"label", label}, {"value", value}}); }
 
+// The serial number is an identifier, so its value is a mono run.
+ui::AnyHandle serialNumber() {
+    return ui::obj(
+        {{"label", "Serial number"}, {"value", "DEAB-902114"}, {"spans", ui::spans({ui::mono("DEAB-902114")})}});
+}
+
 ui::Node detailsCard() {
-    return ui::panel({ui::keyValue(ui::list(
-                         {detail("Model", "[Manufacturer] 1290 series"), detail("Serial number", "DEAB-902114"),
-                          detail("Location", "QC lab 2, bench 4"), detail("Owner", "Dr. Anna Meyer"),
-                          detail("Software", "CDS 3.4.1, validated 14-Mar-2026"),
-                          detail("Methods", "Assay and impurities, dissolution")}))},
-                     {.title = "Details", .padding = 2})
+    return ui::panel(
+               {ui::keyValue(ui::list({detail("Model", "[Manufacturer] 1290 series"), serialNumber(),
+                                       detail("Location", "QC lab 2, bench 4"), detail("Owner", "Dr. Anna Meyer"),
+                                       detail("Software", "CDS 3.4.1, validated 14-Mar-2026"),
+                                       detail("Methods", "Assay and impurities, dissolution")}))},
+               {.title = "Details", .padding = 2})
         .testId("details");
 }
 
@@ -267,10 +275,11 @@ ui::Node qualificationList() {
 }
 
 ui::Node currentBooking() {
-    return ui::column(
-               {ui::text({.text = "Worksheet WS-2026-0412"}), layout::muted("M. Kaur · 24-Oct-2026 08:00–14:00"),
-                ui::progress(elapsed(), "Booking elapsed").testId("booking-elapsed")},
-               {.gap = 1})
+    return ui::column({ui::text({.text = "Worksheet WS-2026-0412",
+                                 .spans = ui::spans({"Worksheet ", ui::mono("WS-2026-0412")})}),
+                       layout::muted("M. Kaur · 24-Oct-2026 08:00–14:00"),
+                       ui::progress(elapsed()).a11y("Booking elapsed").testId("booking-elapsed")},
+                      {.gap = 1})
         .testId("current-booking");
 }
 
@@ -326,10 +335,7 @@ ui::Node compactDetails() {
     auto const pair = [](char const* label, char const* value) {
         return ui::obj({{"label", label}, {"value", value}});
     };
-    return ui::keyValue({.items = ui::list({pair("Model", "[Manufacturer] 1290 series"),
-                                            ui::obj({{"label", "Serial number"},
-                                                     {"value", "DEAB-902114"},
-                                                     {"spans", ui::spans({ui::mono("DEAB-902114")})}}),
+    return ui::keyValue({.items = ui::list({pair("Model", "[Manufacturer] 1290 series"), serialNumber(),
                                             pair("Location", "QC lab 2, bench 4"),
                                             pair("Owner · Software", "Dr. Anna Meyer · CDS 3.4.1"),
                                             pair("Methods", "Assay and impurities, dissolution")}),

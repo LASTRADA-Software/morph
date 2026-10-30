@@ -52,7 +52,12 @@ TEST_CASE("results, expanded: the worksheet grid, its calculations and the chang
     CHECK(screen.backend().prop(impurityB.value_or(0), "tone") == "Err");
     CHECK(screen.text("oos") == "1 result out of specification. Submitting opens an investigation.");
     CHECK(screen.prop("Dialog", "change", "open") == "true");
-    CHECK(screen.text("change-line") == "S-26-104170 · Impurity B: 0.12 % → 0.21 %");
+    // The change line is the dialog's description, as runs: the sample's id mono, the two values strong.
+    CHECK(morph::ui::testing::detail::spansCharacters(
+              screen.prop("Dialog", "change", "descriptionSpans").value_or("")) ==
+          "S-26-104170 · Impurity B: 0.12 % → 0.21 %");
+    CHECK(screen.prop("Dialog", "change", "descriptionSpans") ==
+          "[S-26-104170;mono, · Impurity B: ,0.12 %;strong, → ,0.21 %;strong]");
     CHECK(screen.prop("Button", "submit", "enabled") == "false");
 }
 
@@ -68,7 +73,9 @@ TEST_CASE("results, expanded: undoing the change, then editing a result asks for
 
     screen.backend().submit(resultInput(screen, "Assay, prep 1 result, S-26-104176"), "101.0");
     CHECK(screen.waitFor([&screen] { return screen.prop("Dialog", "change", "open") == "true"; }));
-    CHECK(screen.text("change-line") == "S-26-104176 · Assay, prep 1: 99.6 % LC → 101.0 % LC");
+    CHECK(morph::ui::testing::detail::spansCharacters(
+              screen.prop("Dialog", "change", "descriptionSpans").value_or("")) ==
+          "S-26-104176 · Assay, prep 1: 99.6 % LC → 101.0 % LC");
     CHECK(screen.backend().prop(resultInput(screen, "Assay, mean result, S-26-104176"), "text") == "100.1");
     CHECK(screen.prop("Button", "action_confirm", "enabled") == "false");
     screen.choose("reason", "transcription");

@@ -418,6 +418,12 @@ ui::Commands findSample(Console const& console) {
 // is a head badge; the user is the shell's principal.
 void declareHead(ui::Scope& screen, Console const& console) {
     screen.status({.text = "Connected", .tone = "ok"});
+    // Compact has no room for the head's tools, so scanning a sample is its one head action.
+    screen.action({.id = "scan",
+                   .label = "Scan",
+                   .icon = "scan",
+                   .visible = ui::eq(console.width, "compact"),
+                   .onClick = open("lims-gallery.receipt")});
     auto const labs = ui::list({ui::obj({{"key", "qc-chem-a"}, {"label", "QC chemistry, site A"}}),
                                 ui::obj({{"key", "qc-micro-a"}, {"label", "QC microbiology, site A"}})});
     Flag const expanded = !Flag{ui::eq(console.width, "compact")};
@@ -455,9 +461,12 @@ ui::Node kpis(bool compact) {
     std::vector<ui::Node> tiles;
     for (Kpi const& kpi : kKpis) {
         char const* const note = compact ? kpi.compactNote : kpi.note;
-        std::vector<ui::Node> lines{layout::muted(kpi.label),
-                                    ui::text({.text = kpi.value, .role = kpi.alarming ? "error" : "display"})
-                                        .testId(std::string{"kpi-"} + kpi.key)};
+        // The figure is a display text, in the error tone while it alarms.
+        ui::TextOptions figure{.text = kpi.value, .role = "display"};
+        if (kpi.alarming) {
+            figure.tone = "err";
+        }
+        std::vector<ui::Node> lines{layout::muted(kpi.label), ui::text(figure).testId(std::string{"kpi-"} + kpi.key)};
         if (std::string_view{note}.empty()) {
             lines.push_back(ui::spacer());
         } else {
@@ -465,7 +474,10 @@ ui::Node kpis(bool compact) {
         }
         tiles.push_back(ui::panel({ui::column(lines, {.gap = 0})}, {.padding = 2}).a11y(kpi.label));
     }
-    return ui::grid(tiles, {.gap = 1, .columns = compact ? 2 : 4}).testId("kpis");
+    // The tiles stretch to the row's tallest, so a tile with no note is as tall as one with. Tracks size the columns
+    // equally and place the cells to fill their rows.
+    std::vector<ui::GridTrack> tracks(compact ? 2U : 4U);
+    return ui::grid(tiles, {.gap = 1, .tracks = tracks, .align = Align::Stretch}).testId("kpis");
 }
 
 // The assay control's runs as % LC values, 100.00 + 0.04 per tenth of an SD, each with the rule it broke.
@@ -539,13 +551,13 @@ ui::Node dueCell() {
 
 ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::string const& testId) {
     std::vector<ui::TableColumn> const columns{
-        {.name = "id", .label = "Sample", .width = ui::fixed(12), .role = "mono"},
+        {.name = "id", .label = "Sample", .width = ui::fixed(11), .role = "mono"},
         {.name = "test", .label = "Test", .width = ui::stretch()},
         {.name = "priority",
          .label = "Priority",
          .width = ui::fixed(9),
          .cell = layout::tag(ui::row("priority"), ui::row("priorityTone"))},
-        {.name = "due", .label = "Due", .width = ui::fixed(13), .cell = dueCell()},
+        {.name = "due", .label = "Due", .width = ui::fixed(14), .cell = dueCell(), .wrap = false},
         {.name = "status",
          .label = "Status",
          .width = ui::fixed(12),
@@ -667,9 +679,13 @@ ui::Node custodyLines(Console const& console) {
     return ui::column({layout::section("Chain of custody"),
                        ui::forEach(mine, {.key = ui::row("key"), .gap = 0},
                                    [](ui::DeclScope&) {
+                                       // A toned dot, a strong step name, then the plain rest; the text beside the
+                                       // runs is what a client that does not know them draws.
+                                       auto const tone = ui::cond(Flag{ui::row("alarm")}, Text{"err"}, Text{"ok"});
                                        return ui::Nodes{ui::text(
                                            {.text = ui::format("● {0} · {1}", {ui::row("step"), ui::row("detail")}),
-                                            .role = ui::cond(Flag{ui::row("alarm")}, Text{"error"}, Text{"normal"})})};
+                                            .spans = ui::spans({ui::toned("● ", tone), ui::strong(ui::row("step")),
+                                                                ui::format(" · {0}", {ui::row("detail")})})})};
                                    })
                            .testId("custody")},
                       {.gap = 1});
@@ -776,8 +792,10 @@ ui::Node expandedLayout(Console const& console) {
 }
 
 ui::Node compactCard() {
-    return ui::column({ui::row({ui::text({.text = ui::row("id"), .role = "section"}).sizing(ui::stretch()), dueCell()},
-                               {.gap = 1, .align = Align::Center}),
+    // The id is an identifier: a strong run in the mono face.
+    auto const id = ui::text(
+        {.text = ui::row("id"), .spans = ui::spans({ui::styled(ui::row("id"), {.strong = true, .mono = true})})});
+    return ui::column({ui::row({id.sizing(ui::stretch()), dueCell()}, {.gap = 1, .align = Align::Center}),
                        ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("product")})}),
                        ui::row({layout::tag(ui::row("priority"), ui::row("priorityTone")),
                                 layout::tag(ui::row("status"), ui::row("statusTone"))},
@@ -785,30 +803,25 @@ ui::Node compactCard() {
                       {.gap = 1});
 }
 
-// Tapping a sample opens it as its own page: the compact result entry of design 08.
+// Tapping a sample opens it as its own page: the compact result entry of design 08. The card is the item.
 ui::Node compactWorklist(Console const& console, ui::AnyHandle const& rows, std::string const& testId) {
-    return ui::forEach(rows, {.key = ui::row("id"), .gap = 2},
-                       [&console](ui::DeclScope&) {
-                           return ui::Nodes{ui::panel(
-                               {compactCard(), ui::button({.label = ui::format("Open {0}", {ui::row("id")}),
-                                                           .onClick = {ui::set(console.current, ui::row("index")),
-                                                                       open("lims-gallery.results")},
-                                                           .style = morph::ui::ButtonStyle::Item,
-                                                           .selected = ui::eq(ui::row("index"), console.current)})
-                                                   .testId("open-sample")},
-                               {.padding = 2})};
-                       })
+    return ui::forEach(
+               rows, {.key = ui::row("id"), .gap = 2},
+               [&console](ui::DeclScope&) {
+                   return ui::Nodes{ui::button({.label = ui::format("{0} · {1}", {ui::row("id"), ui::row("test")}),
+                                                .onClick = {ui::set(console.current, ui::row("index")),
+                                                            open("lims-gallery.results")},
+                                                .style = morph::ui::ButtonStyle::Item,
+                                                .selected = ui::eq(ui::row("index"), console.current),
+                                                .children = {compactCard()}})
+                                        .testId("open-sample")};
+               })
         .testId(testId);
 }
 
 ui::Node compactLayout(Console const& console) {
     return ui::column(
-        {ui::row({ui::spacer().sizing(ui::stretch()),
-                  ui::button({.label = "Scan", .icon = "scan", .onClick = open("lims-gallery.receipt")})
-                      .a11y("Scan a sample")
-                      .testId("scan")},
-                 {.gap = 1, .align = Align::Center}),
-         alert(true), kpis(true),
+        {alert(true), kpis(true),
          ui::collapsible({controlChart()}, {.title = "Assay control, HPLC-02 · latest run +3.4 SD", .open = false})
              .testId("chart-section"),
          ui::collapsible({instruments()}, {.title = "Instruments · 1 on hold, 1 calibration due", .open = false})

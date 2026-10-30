@@ -320,13 +320,15 @@ ui::Node trailTable(Audit const& audit) {
                 .columns =
                     {{.name = "when",
                       .label = "When",
-                      .width = ui::fixed(11),
+                      .width = ui::fixed(12),
                       .cell = ui::column({ui::text({.text = ui::row("date")}), ui::text({.text = ui::row("time")})},
-                                         {.gap = 0})},
+                                         {.gap = 0}),
+                      .wrap = false},
                      {.name = "user", .label = "User", .width = ui::fixed(8)},
                      {.name = "record",
                       .label = "Record",
                       .width = ui::fixed(13),
+                      .role = "mono",
                       .cell =
                           ui::column({ui::text({.text = ui::row("record"), .role = "mono"}),
                                       ui::text({.text = ui::row("detail")}).visible(!ui::isEmpty(ui::row("detail")))},
@@ -390,11 +392,17 @@ ui::Node entryCard() {
     auto const recordLine =
         ui::cond(ui::isEmpty(ui::row("detail")), ui::format("{0} · {1}", {ui::row("record"), ui::row("field")}),
                  ui::format("{0} · {1} · {2}", {ui::row("record"), ui::row("detail"), ui::row("field")}));
+    // The record is an identifier, so it is a mono run in its line.
+    auto const recordRuns =
+        ui::cond(ui::isEmpty(ui::row("detail")),
+                 ui::AnyHandle{ui::spans({ui::mono(ui::row("record")), ui::format(" · {0}", {ui::row("field")})})},
+                 ui::AnyHandle{ui::spans({ui::mono(ui::row("record")),
+                                          ui::format(" · {0} · {1}", {ui::row("detail"), ui::row("field")})})});
     return ui::column(
         {ui::row({layout::section(ui::format("{0} {1}", {ui::row("date"), ui::row("time")})),
                   ui::text({.text = ui::row("user")})},
                  {.gap = 1, .justify = Justify::Between}),
-         ui::text({.text = recordLine}),
+         ui::text({.text = recordLine, .spans = recordRuns}),
          ui::row({oldValue(ui::row("old")), ui::text({.text = "→"}), newValue(ui::row("new"))}, {.gap = 1}),
          layout::muted(ui::format("Reason: {0}", {ui::row("reason")})).visible(!ui::isEmpty(ui::row("reason")))},
         {.gap = 0});
@@ -423,7 +431,8 @@ ui::Node compactLayout(Audit const& audit) {
                   .sizing(ui::stretch())},
              {.gap = 1}),
          layout::muted("57 entries · times in CEST (UTC+2)"),
-         ui::forEach(ui::slice(audit.shown, std::int64_t{0}, audit.listed), {.key = ui::row("at"), .gap = 3},
+         ui::forEach(ui::slice(audit.shown, std::int64_t{0}, audit.listed),
+                     {.key = ui::row("at"), .gap = 2, .divided = true},
                      [](ui::DeclScope&) { return ui::Nodes{entryCard()}; })
              .testId("entries"),
          ui::column(noEntries(audit)).visible(ui::isEmpty(audit.shown)),

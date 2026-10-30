@@ -27,7 +27,9 @@ TEST_CASE("console, expanded: navigation, alert, figures, chart, instruments and
     CHECK(screen.shows("Row", "shell_sidebar"));
     CHECK(screen.shows("Banner", "alert"));
     CHECK(screen.text("kpi-received") == "64");
-    CHECK(screen.prop("Text", "kpi-due", "role") == "Error");
+    CHECK(screen.prop("Text", "kpi-due", "role") == "Display");
+    CHECK(screen.prop("Text", "kpi-due", "tone") == "Err");
+    CHECK(screen.prop("Text", "kpi-received", "tone").value_or("").empty());
     CHECK(screen.find("Chart", "chart").has_value());
     CHECK(screen.prop("Chart", "chart", "series").value_or("").ends_with("|20@19,101.36;err;+3.4SD\\, rule 1-3s]]"));
     CHECK(screen.text("chart-violation") == "Run 20: 101.4 % LC, +3.4 SD, rule 1-3s");
@@ -36,6 +38,9 @@ TEST_CASE("console, expanded: navigation, alert, figures, chart, instruments and
     CHECK(screen.shows("Table", "worklist"));
     CHECK(screen.text("pane-id") == "S-26-104170");
     CHECK(screen.text("pane-line") == "Paracetamol 500 mg · lot L-26-0377 · HPLC-02");
+    // A chain of custody line is a toned dot, a strong step and the plain rest.
+    CHECK(screen.backend().dump().contains("[● ;tone=Ok,Sampled;strong, · QA\\, packaging line 2 · 24-Oct 06:50]"));
+    CHECK(screen.backend().dump().contains(";tone=Err,Held;strong"));
     CHECK(screen.backend().find("TextInput", "a11yName", "Total impurities result").has_value());
     CHECK(screen.shows("Text", "hold-reason"));
     CHECK(screen.prop("Button", "submit", "enabled") == "false");
@@ -85,7 +90,7 @@ TEST_CASE("console, compact: menu navigation, stacked sections, a sample opens r
     CHECK(screen.prop("Menu", "shell_nav_menu", "items").value_or("").contains("Review and approval · 4"));
     CHECK(screen.prop("Collapsible", "chart-section", "title") == "Assay control, HPLC-02 · latest run +3.4 SD");
     CHECK(screen.find("Column", "worklist").has_value());
-    CHECK(screen.prop("Grid", "kpis", "columns") == "2");
+    CHECK(screen.prop("Grid", "kpis", "tracks") == "[stretch(1),stretch(1)]");
     screen.click("open-sample");
     CHECK(screen.waitFor([&screen] { return screen.mounted().size() == 2; }));
     CHECK(screen.mounted().back() == "lims-gallery.results");

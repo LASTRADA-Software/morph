@@ -91,11 +91,15 @@ ui::Node summary(Signature const& sign, bool compact) {
     return ui::panel({body}, {.padding = 2}).surface("page").testId("record");
 }
 
-ui::Node refusedBanner(Signature const& sign) {
-    return ui::banner({.tone = "err",
-                       .spans = ui::spans(
-                           {ui::strong("Password incorrect."),
-                            ui::format(" {0} of 5 attempts left before the account locks.", {sign.attempts})})})
+// The refusal: "Password incorrect." in a strong run, then the attempts that are left. The field under it carries the
+// same words as its own error, so on a phone, where both are on one screen, the banner leaves them out and says only
+// what the field does not.
+ui::Node refusedBanner(Signature const& sign, ui::Handle<bool> const& compact) {
+    auto const attempts = ui::format("{0} of 5 attempts left before the account locks.", {sign.attempts});
+    auto const full =
+        ui::AnyHandle{ui::spans({ui::strong("Password incorrect."),
+                                 ui::format(" {0} of 5 attempts left before the account locks.", {sign.attempts})})};
+    return ui::banner({.tone = "err", .spans = ui::cond(compact, ui::AnyHandle{ui::spans({attempts})}, full)})
         .visible(sign.refused)
         .testId("refused");
 }
@@ -170,7 +174,7 @@ ui::Node worksheet(Signature const& sign) {
 ui::Nodes signatureFields(ui::AnyHandle const& width, Signature const& sign, bool withNote) {
     std::vector<ui::Node> fields{
         layout::byWidth(width, {summary(sign, true)}, {summary(sign, false)}),
-        refusedBanner(sign),
+        refusedBanner(sign, ui::Handle<bool>{ui::eq(width, "compact")}),
         layout::byWidth(width, {signerField(), meaningField(sign)},
                         {ui::grid({signerField(), meaningField(sign)}, {.gap = 2, .columns = 2})}),
         reasonField(sign),
@@ -192,7 +196,9 @@ ui::Node signatureDialog(ui::AnyHandle const& width, Signature const& sign) {
     return ui::dialog(
                dialog, signatureFields(width, sign, false),
                {.title = ui::cond(compact, Text{"Sign to approve"}, Text{"Sign to approve results"}),
-                .description = "Your signature is stored with the record and cannot be removed.",
+                // A phone's sheet leaves the note out: the fields are what it is for.
+                .description = ui::cond(compact, Text{""},
+                                        Text{"Your signature is stored with the record and cannot be removed."}),
                 .open = sign.open,
                 .showErrors = ui::ShowErrors::Always,
                 .cancel = close,

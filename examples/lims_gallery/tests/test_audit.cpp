@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 #include <string_view>
@@ -13,8 +14,14 @@ namespace {
 constexpr char const* kScreen = "lims-gallery.audit";
 
 // Whether a text showing @p text is mounted: a table row or a card of the trail.
+// A text given runs is recorded as its runs, so it shows the text when its runs' characters are it.
 bool showsText(GalleryScreen& screen, std::string_view text) {
-    return screen.backend().find("Text", "text", text).has_value();
+    if (screen.backend().find("Text", "text", text).has_value()) {
+        return true;
+    }
+    return std::ranges::any_of(screen.backend().all("Text"), [&screen, text](int id) {
+        return morph::ui::testing::detail::spansCharacters(screen.backend().prop(id, "spans")) == text;
+    });
 }
 
 }  // namespace
@@ -27,7 +34,7 @@ TEST_CASE("audit, expanded: facets beside the trail, with the active filters as 
     CHECK(screen.prop("Checkbox", "type-specification", "checked") == "false");
     CHECK(screen.shows("Table", "trail"));
     CHECK(screen.prop("Table", "trail", "columns") ==
-          "[When:fixed(11);valign=start,User:fixed(8);valign=start,Record:fixed(13);valign=start,"
+          "[When:fixed(12);valign=start;wrap=false,User:fixed(8);valign=start,Record:fixed(13);valign=start,"
           "Field:fixed(12);valign=start,Old value:stretch(1);valign=start,New value:stretch(1);valign=start,"
           "Reason:stretch(2);valign=start]");
     CHECK(showsText(screen, "WS-2026-0412"));

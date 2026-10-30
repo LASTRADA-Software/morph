@@ -498,7 +498,7 @@ ui::Node samplesTable(Samples const& list) {
                list.shown,
                {.key = ui::row("id"),
                 .columns =
-                    {{.name = "id", .label = "Sample", .width = ui::fixed(12), .role = "mono", .sortable = true},
+                    {{.name = "id", .label = "Sample", .width = ui::fixed(11), .role = "mono", .sortable = true},
                      {.name = "product",
                       .label = "Product · lot",
                       .width = ui::stretch(),
@@ -514,10 +514,11 @@ ui::Node samplesTable(Samples const& list) {
                       .cell = layout::tag(ui::row("status"), ui::row("statusTone"))},
                      {.name = "due",
                       .label = "Due",
-                      .width = ui::fixed(13),
+                      .width = ui::fixed(14),
                       .cell = dueText(),
                       .sortable = true,
-                      .sortBy = ui::row("dueAt")},
+                      .sortBy = ui::row("dueAt"),
+                      .wrap = false},
                      {.name = "spec", .label = "Specification", .width = ui::fixed(14), .cell = specCell()}},
                 // The table draws the selection the cards share: its own boxes, and a header box for the page.
                 .selectionMode = ui::Selection::Multiple,
@@ -582,17 +583,19 @@ ui::Node expandedLayout(Samples const& list) {
 
 ui::Node cardContent(Samples const& list) {
     auto const spec = ui::row("spec");
-    return ui::row(
-        {selectBox(list),
-         ui::column({ui::row({layout::section(ui::row("id")), dueText()}, {.gap = 1, .justify = Justify::Between}),
-                     ui::text({.text = ui::format("{0} · {1}", {ui::row("short"), ui::row("tests")})}),
-                     ui::row({layout::outlineTag(ui::row("priority"), priorityTone(ui::row("priority"))),
-                              layout::tag(ui::row("status"), ui::row("statusTone")),
-                              layout::tag(spec, ui::row("specTone")).visible(!ui::isEmpty(spec))},
-                             {.gap = 1, .wrap = true})},
-                    {.gap = 0})
-             .sizing(ui::stretch())},
-        {.gap = 2, .align = Align::Start});
+    // The id is an identifier: a strong run in the mono face.
+    auto const id = ui::text(
+        {.text = ui::row("id"), .spans = ui::spans({ui::styled(ui::row("id"), {.strong = true, .mono = true})})});
+    return ui::row({selectBox(list),
+                    ui::column({ui::row({id, dueText()}, {.gap = 1, .justify = Justify::Between}),
+                                ui::text({.text = ui::format("{0} · {1}", {ui::row("short"), ui::row("tests")})}),
+                                ui::row({layout::outlineTag(ui::row("priority"), priorityTone(ui::row("priority"))),
+                                         layout::tag(ui::row("status"), ui::row("statusTone")),
+                                         layout::tag(spec, ui::row("specTone")).visible(!ui::isEmpty(spec))},
+                                        {.gap = 1, .wrap = true})},
+                               {.gap = 0})
+                        .sizing(ui::stretch())},
+                   {.gap = 2, .align = Align::Start});
 }
 
 // A card is tinted while its sample is out of specification.

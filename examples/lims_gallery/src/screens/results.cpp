@@ -390,6 +390,13 @@ ui::AnyHandle changeLine(Change const& change) {
                       {change.sample, change.analyte, change.before, change.after, change.unit});
 }
 
+// The change line as runs: the sample's id in the mono face, the two values strong.
+ui::AnyHandle changeRuns(Change const& change) {
+    return ui::spans({ui::mono(change.sample), ui::format(" · {0}: ", {change.analyte}),
+                      ui::strong(ui::format("{0} {1}", {change.before, change.unit})), " → ",
+                      ui::strong(ui::format("{0} {1}", {change.after, change.unit}))});
+}
+
 // ── The worksheet's parts ────────────────────────────────────────────────────────────────────────────────────────
 
 struct Check {
@@ -506,36 +513,40 @@ ui::Node submitButton(Worksheet const& sheet) {
 
 ui::Node changeDialog(Worksheet const& sheet) {
     Change const& change = sheet.change;
-    return ui::dialog(
-               ui::element("change"),
-               {layout::muted(changeLine(change)).testId("change-line"), reasonField(change), commentField(change),
-                layout::muted("The old value, the new value, you and the time are kept in the audit trail.")},
-               {.title = "Reason for change",
-                .open = change.open,
-                .cancel = undoChange(sheet),
-                .onDismiss = undoChange(sheet),
-                .actions = {{.id = "undo", .label = "Undo change", .onClick = undoChange(sheet)},
-                            {.id = "confirm",
-                             .label = "Confirm change",
-                             .emphasis = ButtonEmphasis::Primary,
-                             .enabled = canConfirm(change),
-                             .onClick = confirmChange(change)}}})
+    return ui::dialog(ui::element("change"),
+                      {reasonField(change), commentField(change),
+                       layout::muted("The old value, the new value, you and the time are kept in the audit trail.")},
+                      {.title = "Reason for change",
+                       .description = changeLine(change),
+                       .descriptionSpans = changeRuns(change),
+                       .open = change.open,
+                       .cancel = undoChange(sheet),
+                       .onDismiss = undoChange(sheet),
+                       .actions = {{.id = "undo", .label = "Undo change", .onClick = undoChange(sheet)},
+                                   {.id = "confirm",
+                                    .label = "Confirm change",
+                                    .emphasis = ButtonEmphasis::Primary,
+                                    .enabled = canConfirm(change),
+                                    .onClick = confirmChange(change)}}})
         // The design's 440 px, in the frontend's character widths.
         .sizing(ui::fixed(58))
         .testId("change");
 }
 
 ui::Node expandedLayout(Worksheet const& sheet) {
-    return ui::pinned(ui::column(
-        {suitability(),
-         ui::panel({resultTable(sheet),
-                    layout::muted("Results are entered and reported to the decimal places of their specification.")},
-                   {.padding = 0}),
-         ui::row({ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).sizing(ui::stretch()).testId("oos"),
-                  saveButton(), submitButton(sheet)},
-                 {.gap = 1, .align = Align::Center}),
-         changeDialog(sheet)},
-        {.gap = 2}));
+    // Save and Submit stay at the bottom of the page in the bottom bar while the results scroll above them.
+    return ui::pinned(
+        ui::column({suitability(),
+                    ui::panel({resultTable(sheet),
+                               layout::muted(
+                                   "Results are entered and reported to the decimal places of their specification.")},
+                              {.padding = 0}),
+                    changeDialog(sheet)},
+                   {.gap = 2}),
+        {.bottom =
+             ui::row({ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).sizing(ui::stretch()).testId("oos"),
+                      saveButton(), submitButton(sheet)},
+                     {.gap = 1, .align = Align::Center})});
 }
 
 // ── Compact: one sample at a time ────────────────────────────────────────────────────────────────────────────────

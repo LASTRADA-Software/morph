@@ -498,11 +498,11 @@ ui::Node showChoice(Review const& review) {
 
 ui::Node resultTable(Review const& review) {
     std::vector<ui::TableColumn> const columns{
-        {.name = "sample", .label = "Sample", .width = ui::fixed(12), .role = "mono"},
-        {.name = "analyte", .label = "Analyte", .width = ui::stretch()},
-        {.name = "value", .label = "Result", .width = ui::fixed(9), .align = Align::End},
-        {.name = "spec", .label = "Specification", .width = ui::fixed(11)},
-        {.name = "previous", .label = "Previous lot", .width = ui::fixed(10), .align = Align::End},
+        {.name = "sample", .label = "Sample", .width = ui::fixed(11), .role = "mono"},
+        {.name = "analyte", .label = "Analyte", .width = ui::content(), .wrap = false},
+        {.name = "value", .label = "Result", .width = ui::fixed(10), .align = Align::End, .wrap = false},
+        {.name = "spec", .label = "Specification", .width = ui::content(), .wrap = false},
+        {.name = "previous", .label = "Previous lot", .width = ui::content(), .align = Align::End, .wrap = false},
         {.name = "evaluation",
          .label = "Evaluation",
          .width = ui::fixed(28),
@@ -524,7 +524,10 @@ ui::Node resultCards(Review const& review) {
                review.shownResults, {.key = ui::row("key"), .gap = 2},
                [](ui::DeclScope&) {
                    return ui::Nodes{ui::panel(
-                       {ui::row({ui::text({.text = ui::row("sample"), .role = "section"}).sizing(ui::stretch()),
+                       {ui::row({ui::text({.text = ui::row("sample"),
+                                           .spans = ui::spans(
+                                               {ui::styled(ui::row("sample"), {.strong = true, .mono = true})})})
+                                     .sizing(ui::stretch()),
                                  ui::text({.text = ui::row("value"), .role = "section"})},
                                 {.gap = 1}),
                         ui::text({.text = ui::format("{0} · spec {1} · previous lot {2}",
@@ -594,8 +597,10 @@ ui::Node auditList(Review const& review) {
 
 // The record's tabs, whose counts follow the selected worksheet; the reviewer's pick is kept across worksheets.
 ui::Node recordTabs(Review const& review, bool compact) {
+    // A line of room above the comment's caption, which sits close under the cards otherwise.
+    auto const room = ui::spacer().sizing(ui::fixed(1), ui::fixed(1));
     ui::Nodes const resultsPage{showChoice(review), compact ? resultCards(review) : resultTable(review),
-                                commentCards(review), reviewComment(review)};
+                                commentCards(review), room, reviewComment(review)};
     return ui::tabs({{.label = "Results", .children = resultsPage},
                      {.label = compact ? "Previous" : "Previous lots", .children = lotTable(review)},
                      {.label = ui::format(compact ? "Audit {0}" : "Audit trail · {0}", {review.auditCount}),
@@ -735,7 +740,7 @@ ui::Node expandedLayout(Review const& review) {
     // The design's 280 px queue beside the worksheet, in the frontend's character widths. The splitter takes the
     // page's height, so each pane reaches the page's bottom.
     auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{37, 96}};
-    return ui::column({ui::splitter({queuePane(review).surface("pane"), worksheetPane(review)},
+    return ui::column({ui::splitter({queuePane(review).surface("pane"), worksheetPane(review).surface("pane")},
                                     ui::AnyHandle{"horizontal"}, sizes)
                            .sizing(ui::stretch(), ui::stretch())
                            .a11y("Queue and worksheet")
