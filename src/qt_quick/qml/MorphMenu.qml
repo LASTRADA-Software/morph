@@ -20,16 +20,15 @@ MorphWidget {
     property string triggerIcon: ""
     property int triggerEmphasis: 0
     // What the trigger shows as text: its label; for an icon-only trigger nothing when the theme draws the icon, the
-    // glyph of the framework's `more` (`⋯`) and `nav.menu` (`☰`), and otherwise its accessible name, so it is never
-    // blank.
+    // glyph of the framework's icon of that name (`Theme.iconGlyphs`), and otherwise its accessible name, so it is
+    // never blank.
     readonly property string triggerText: {
         if (root.triggerLabel !== "")
             return root.triggerLabel
         if (root.triggerIcon !== "" && Theme.iconSource(root.triggerIcon) !== "")
             return ""
-        if (root.triggerIcon === "more")
-            return "⋯"
-        return root.triggerIcon === "nav.menu" ? "☰" : root.accessibleName
+        const glyph = Theme.iconGlyphs[root.triggerIcon]
+        return glyph !== undefined ? glyph : root.accessibleName
     }
     // A button-style menu's item is its one accessible node, as a button's is: it carries the trigger's name, the
     // menu-button role and the press action, and the control inside it is not a second node.

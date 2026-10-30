@@ -136,6 +136,8 @@ MorphWidget {
         contentItem: MorphPlainContent {
             control: button
             color: button.palette.buttonText
+            iconName: root.icon
+            fallbackText: root.accessibleName
         }
         background: MorphButtonBackground {
             scheme: root.scheme

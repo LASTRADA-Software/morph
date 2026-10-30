@@ -200,6 +200,11 @@ void ButtonImpl::setIcon(std::string_view icon) {
     refresh();
 }
 
+void ButtonImpl::setAccessibleName(std::string_view name) {
+    applyAccessibleName(name);
+    refresh();
+}
+
 void ButtonImpl::setStyle(ui::ButtonStyle style) {
     _style = style;
     refresh();
@@ -222,7 +227,11 @@ void ButtonImpl::setSelected(bool selected) {
 
 std::string ButtonImpl::caption() const {
     std::string_view const glyph = ui::iconGlyph(_icon);
-    return glyph.empty() ? _label : std::string{glyph} + " " + _label;
+    if (glyph.empty()) {
+        // An icon-only button whose icon has no glyph names itself, so it is never an empty bracket.
+        return _label.empty() ? accessibleName() : _label;
+    }
+    return std::string{glyph} + " " + _label;
 }
 
 // A push button's brackets and their spaces, or an item's space either side.

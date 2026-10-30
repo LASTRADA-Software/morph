@@ -81,6 +81,7 @@ Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
     // platform's.
     if (auto* const theme = _engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))) {
         static_cast<void>(writePlatformMonoFamily(*theme));
+        static_cast<void>(writeIconGlyphs(*theme));
     }
     _roots = std::make_unique<Roots>(qobject_cast<QQuickItem*>(_holder->property("content").value<QObject*>()));
     // The roots item reports its width in units, which follows both the host's width and the theme's font.

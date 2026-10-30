@@ -296,11 +296,15 @@ file the bundle lacks or one that is not an `icon` file, naming the index and th
   shell frame's navigation menu, `☰`), from the set when it names them, and as today's glyph or nothing
   otherwise, so a bundle without a set keeps today's look. `nav.back` and `nav.forward` are framework names no
   built-in component draws yet (`kFrameworkIcons`).
+  Qt Quick draws them as a vector chevron when the set does not name them: a push button with no label whose icon
+  is `nav.back` or `nav.forward` (a pager's buttons) shows a `MorphChevron`, in the button's caption colour.
 - **On Qt Quick.** `applyBundleTheme(engine, themes, icons)` hands the set to `Theme.icons` (name to a
   `data:image/svg+xml` URL) and sets `Theme.iconSet`; `Theme.iconSource(name)` is the URL, or empty. A button, a
   badge, an empty state, a menu entry and a single-line or password text input's leading `icon` draw a node's icon
   from the set when it names it, and today's text otherwise (a badge's and a menu entry's name before the label, a
   button and a text input nothing — a text input with no themed icon for its name shows no leading space at all).
+  An icon-only push button the set does not name is never blank: with no label it draws, in order, the set's icon, a
+  built-in chevron (`nav.back`, `nav.forward`), `Theme.iconGlyphs[name]`, and its accessible name.
   While the bundle declares a set, a node icon it does not name is reported once per name through the `Components`
   callback (`icon <name> is not in the theme's icon set`); without a set nothing is reported.
 - **On the terminal.** Icons stay text: a framework name is drawn as its glyph (`iconGlyph`: `tone.ok` ✓, `tone.warn`

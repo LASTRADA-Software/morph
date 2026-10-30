@@ -64,6 +64,8 @@ public:
     void setOnClick(ui::Action onClick) override;
     void setEmphasis(ui::ButtonEmphasis emphasis) override;
     void setIcon(std::string_view icon) override;
+    /// Keeps the name, which an icon-only button with no glyph draws as its caption.
+    void setAccessibleName(std::string_view name) override;
     void setStyle(ui::ButtonStyle style) override;
     void setSelected(bool selected) override;
     /// A cell has no corners, so only `square` draws anything: a square push button drops the spaces inside its

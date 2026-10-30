@@ -11,6 +11,8 @@ QtObject {
 
     // The bundle's icon set: icon name to the URL of its SVG; empty while the theme declares none.
     property var icons: ({})
+    // The text glyph of each framework icon name that has one, the glyphs the terminal draws: icon name to glyph.
+    property var iconGlyphs: ({})
     // Whether the bundle's theme declares an icon set: a node icon it does not name is then reported.
     property bool iconSet: false
 

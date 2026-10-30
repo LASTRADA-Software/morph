@@ -1988,3 +1988,31 @@ TEST_CASE("qt_quick widgets: a step connector stands a step of 2 off the steps e
     }
 }
 
+// Mutation: put the content item back (a square button with `nav.back` and no set draws nothing, one with an unnamed
+// `scan` icon and no label stays blank, and `close` draws no glyph).
+TEST_CASE("qt_quick widgets: an icon-only button is never blank when the theme does not name its icon", "[qt_quick]") {
+    Scene scene;
+    auto pager = scene.backend().createButton(nullptr);
+    pager->setIcon("nav.back");
+    pager->setShape(ui::ControlShape::Square);
+    pager->setAccessibleName("Previous page");
+    auto scan = scene.backend().createButton(nullptr);
+    scan->setIcon("scan");
+    scan->setAccessibleName("Scan");
+    auto close = scene.backend().createButton(nullptr);
+    close->setIcon("close");
+    close->setAccessibleName("Close");
+    scene.settle();
+
+    QQuickItem const* const chevron = firstNamed(Scene::itemOf(*pager), QStringLiteral("navChevron"));
+    REQUIRE(chevron != nullptr);
+    CHECK(chevron->isVisible());
+    CHECK(chevron->height() >= 0.55 * themeNumber(scene, "bodyPixels"));
+    QQuickItem const* const scanText = firstNamed(Scene::itemOf(*scan), QStringLiteral("contentLabel"));
+    REQUIRE(scanText != nullptr);
+    CHECK(scanText->isVisible());
+    CHECK(scanText->property("text").toString() == QStringLiteral("Scan"));
+    QQuickItem const* const closeText = firstNamed(Scene::itemOf(*close), QStringLiteral("contentLabel"));
+    REQUIRE(closeText != nullptr);
+    CHECK(closeText->property("text").toString() == QStringLiteral("×"));
+}

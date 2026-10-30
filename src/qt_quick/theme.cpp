@@ -17,6 +17,7 @@
 #include <functional>
 #include <map>
 #include <morph/qt_quick/theme.hpp>
+#include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <string>
@@ -294,6 +295,18 @@ bool writePlatformMonoFamily(QObject& theme) {
     return theme.setProperty("platformMonoFamily", QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
 }
 
+bool writeIconGlyphs(QObject& theme) {
+    QVariantMap glyphs;
+    for (std::string_view const name : ui::kFrameworkIcons) {
+        std::string_view const glyph = ui::iconGlyph(name);
+        if (!glyph.empty()) {
+            glyphs.insert(QString::fromUtf8(name.data(), static_cast<qsizetype>(name.size())),
+                          QString::fromUtf8(glyph.data(), static_cast<qsizetype>(glyph.size())));
+        }
+    }
+    return theme.setProperty("iconGlyphs", QVariant::fromValue(glyphs));
+}
+
 }  // namespace detail
 
 std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& values,
@@ -329,6 +342,9 @@ std::vector<std::string> setIcons(QQmlEngine& engine, std::map<std::string, std:
                                                       QString::fromLatin1(QByteArray::fromStdString(svg).toBase64()));
     }
     std::vector<std::string> unset;
+    if (!detail::writeIconGlyphs(*theme)) {
+        unset.emplace_back("iconGlyphs");
+    }
     if (!theme->setProperty("icons", QVariant::fromValue(urls))) {
         unset.emplace_back("icons");
     }

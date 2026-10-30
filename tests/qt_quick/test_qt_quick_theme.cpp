@@ -1598,3 +1598,17 @@ TEST_CASE("qt_quick theme: the collapsible marker reaches the Theme singleton", 
     CHECK_FALSE(theme->property("collapsibleMarker").toBool());
 }
 
+// Mutation: skip the write (the glyph table stays empty, so a menu trigger and an icon-only button have no glyph).
+TEST_CASE("qt_quick theme: the framework's glyphs reach Theme.iconGlyphs whether or not the bundle has an icon set",
+          "[qt_quick]") {
+    Scene scene;
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}).empty());
+    QVariantMap const glyphs = theme->property("iconGlyphs").toMap();
+    CHECK(glyphs.value(QStringLiteral("more")).toString() == QStringLiteral("⋯"));
+    CHECK(glyphs.value(QStringLiteral("nav.menu")).toString() == QStringLiteral("☰"));
+    CHECK(glyphs.value(QStringLiteral("close")).toString() == QStringLiteral("×"));
+    CHECK_FALSE(glyphs.contains(QStringLiteral("empty")));
+}
+

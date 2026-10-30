@@ -25,6 +25,10 @@ class Relay;
 /// font database for; whether the property took it.
 bool writePlatformMonoFamily(QObject& theme);
 
+/// Writes the text glyph of each framework icon name that has one as @p theme's `iconGlyphs`, the glyphs the terminal
+/// draws; whether the property took them.
+bool writeIconGlyphs(QObject& theme);
+
 /// What every widget of one backend shares: the engine, the compiled components, the column the roots go in, and
 /// the restyle map.
 class Context {

@@ -916,3 +916,20 @@ TEST_CASE("tui widgets: an overline text is bold and muted, written as it reads"
     CHECK(buffer.at(0, 0).style.bold);
     CHECK(buffer.at(0, 0).style.fg == harness.screen().theme().textMuted.fg);
 }
+
+// Mutation: draw `[  ]` for an icon-only button whose icon has no glyph (the caption ignores the accessible name).
+TEST_CASE("tui widgets: an icon-only button with no glyph draws its accessible name", "[tui][widgets]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const glyph = harness.make<ButtonImpl>(column.get());
+    glyph->setIcon("nav.back");
+    glyph->setAccessibleName("Previous page");
+    auto const named = harness.make<ButtonImpl>(column.get());
+    named->setIcon("scan");
+    named->setAccessibleName("Scan");
+    auto const labelled = harness.make<ButtonImpl>(column.get());
+    labelled->setIcon("scan");
+    labelled->setLabel("Go");
+    labelled->setAccessibleName("Start");
+    CHECK(harness.draw() == Rows{"[ ‹  ]", "[ Scan ]", "[ Go ]"});
+}
