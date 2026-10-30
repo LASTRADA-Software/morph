@@ -103,8 +103,15 @@ MorphWidget {
         return mark + named + entry.label + more
     }
 
+    // Whether the trigger is drawn square: under the theme's `shape.iconOnly`, a trigger whose caption is an icon
+    // alone.
+    readonly property bool squareTrigger: root.buttonStyle && Theme.iconOnlySquare && root.triggerLabel === ""
+                                          && root.triggerIcon !== ""
+
     focusTarget: root.buttonStyle ? trigger : bar
-    implicitWidth: root.buttonStyle ? trigger.implicitWidth : bar.implicitWidth
+    implicitWidth: root.buttonStyle ? (root.squareTrigger ? Math.max(trigger.implicitWidth, trigger.implicitHeight)
+                                                          : trigger.implicitWidth)
+                                    : bar.implicitWidth
     implicitHeight: root.buttonStyle ? trigger.implicitHeight : bar.implicitHeight
 
     Button {
@@ -112,11 +119,12 @@ MorphWidget {
         anchors.fill: parent
         visible: root.buttonStyle
         text: root.triggerText
-        leftPadding: root.triggerEmphasis === 3 ? Theme.spaceOf(1) : Theme.spaceOf(4)
-        rightPadding: root.triggerEmphasis === 3 ? Theme.spaceOf(1) : Theme.spaceOf(4)
+        leftPadding: root.triggerEmphasis === 3 || root.squareTrigger ? Theme.spaceOf(1) : Theme.spaceOf(4)
+        rightPadding: leftPadding
         palette.buttonText: root.triggerEmphasis === 3 ? root.scheme.accent
                             : root.triggerEmphasis === 0 ? root.scheme.text : "white"
-        font: root.triggerEmphasis === 0 || root.triggerEmphasis === 3 ? Theme.bodyFont : Theme.strongFont
+        font: (root.triggerEmphasis === 0 || root.triggerEmphasis === 3) && !root.squareTrigger ? Theme.bodyFont
+                                                                                                : Theme.strongFont
         icon.source: Theme.iconSource(root.triggerIcon)
         icon.color: "transparent"
         contentItem: MorphPlainContent {
@@ -130,6 +138,7 @@ MorphWidget {
                 : root.triggerEmphasis === 3 ? "transparent" : root.scheme.surface
             filled: root.triggerEmphasis === 1 || root.triggerEmphasis === 2
             ghost: root.triggerEmphasis === 3
+            square: root.squareTrigger
             hovered: trigger.hovered
             pressed: trigger.down
             focused: trigger.visualFocus

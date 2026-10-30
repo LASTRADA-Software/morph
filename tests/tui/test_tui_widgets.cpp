@@ -893,3 +893,13 @@ TEST_CASE("tui widgets: a selected list entry with content paints its line on ev
     static_cast<void>(harness.click({.x = 3, .y = 2}));
     CHECK(clicks == 1);
 }
+
+// Mutation: draw `square` as `default` ([ ‹ ]).
+TEST_CASE("tui widgets: a square push button drops the spaces inside its brackets", "[tui][widgets]") {
+    Harness harness{8, 1};
+    auto const button = harness.make<ButtonImpl>(nullptr);
+    button->setLabel("\xE2\x80\xB9");
+    CHECK(harness.draw() == Rows{"[ \xE2\x80\xB9 ]"});
+    button->setShape(ui::ControlShape::Square);
+    CHECK(harness.draw() == Rows{"[\xE2\x80\xB9]"});
+}

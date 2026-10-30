@@ -1747,3 +1747,81 @@ TEST_CASE("qt_quick widgets: an unlabelled steps indicator names each step by it
     CHECK(list->role() == QAccessible::List);
     QAccessible::setActive(wasActive);
 }
+
+namespace {
+
+/// The background item of the control a button or a button-style menu draws.
+QQuickItem const& controlBackground(QQuickItem const& item) {
+    auto const* const control = item.property("focusTarget").value<QQuickItem*>();
+    REQUIRE(control != nullptr);
+    auto const* const background = control->property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    return *background;
+}
+
+QObject* themeOf(Scene& scene) {
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    return theme;
+}
+
+}  // namespace
+
+// Mutation: draw `square` as `default` (the button is eight units wide, with the normal padding and weight).
+TEST_CASE(
+    "qt_quick widgets: a square button is as wide as it is tall, with the control's corners and a strong caption",
+    "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.window().resize(400, 200);
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto const square = scene.backend().createButton(row.get());
+    square->setLabel("\xE2\x80\xB9");
+    square->setShape(ui::ControlShape::Square);
+    auto const plain = scene.backend().createButton(row.get());
+    plain->setLabel("\xE2\x80\xB9");
+    scene.settle();
+    QObject* const theme = themeOf(scene);
+    QQuickItem const& item = Scene::itemOf(*square);
+    double const target = theme->property("targetHeight").toReal();
+    CHECK(item.height() == target);
+    CHECK(item.width() == target);
+    CHECK(Scene::itemOf(*plain).width() > target);
+    QQuickItem const& background = controlBackground(item);
+    CHECK(background.property("radius").toReal() == theme->property("radiusControl").toReal());
+    QList<QQuickItem*> const texts = Scene::itemsOf(const_cast<QQuickItem&>(item), "QQuickText");
+    REQUIRE_FALSE(texts.isEmpty());
+    QFont const font = texts.front()->property("font").value<QFont>();
+    CHECK(font.pixelSize() == static_cast<int>(std::lround(theme->property("bodyPixels").toReal())));
+    CHECK(font.weight() == static_cast<QFont::Weight>(theme->property("strongWeight").toInt()));
+    QFont const normal = Scene::itemsOf(Scene::itemOf(*plain), "QQuickText").front()->property("font").value<QFont>();
+    CHECK(normal.weight() != font.weight());
+}
+
+// Mutation: ignore `Theme.iconOnlySquare` in the menu's trigger.
+TEST_CASE(
+    "qt_quick widgets: under shape.iconOnly an icon-only menu trigger is square, and otherwise is not",
+    "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 200);
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto const more = scene.backend().createMenu(row.get(), ui::MenuStyle::Button);
+    more->setTrigger({.label = "", .icon = "more", .emphasis = ui::ButtonEmphasis::Ghost});
+    more->setItems({{.label = "Open"}});
+    auto const labelled = scene.backend().createMenu(row.get(), ui::MenuStyle::Button);
+    labelled->setTrigger({.label = "Actions", .icon = "more", .emphasis = ui::ButtonEmphasis::Ghost});
+    labelled->setItems({{.label = "Open"}});
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.settle();
+    QQuickItem const& trigger = Scene::itemOf(*more);
+    CHECK(trigger.width() < trigger.height());
+
+    auto const tokens = ui::parseTokens(R"({"shape": {"iconOnly": {"$type": "keyword", "$value": "square"}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    scene.settle();
+    CHECK(trigger.width() == trigger.height());
+    CHECK(Scene::itemOf(*labelled).width() > Scene::itemOf(*labelled).height());
+}

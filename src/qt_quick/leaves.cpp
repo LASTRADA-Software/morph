@@ -108,8 +108,11 @@ void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
 // MorphButton's `style`: 0 push, 1 item.
 void ButtonImpl::setStyle(ui::ButtonStyle style) { write("style", style == ui::ButtonStyle::Item ? 1 : 0); }
 
-// MorphButton's `round`.
-void ButtonImpl::setShape(ui::ControlShape shape) { write("round", shape == ui::ControlShape::Round); }
+// MorphButton's `round` and `square`.
+void ButtonImpl::setShape(ui::ControlShape shape) {
+    write("round", shape == ui::ControlShape::Round);
+    write("square", shape == ui::ControlShape::Square);
+}
 
 // MorphButton's `small`.
 void ButtonImpl::setSize(ui::ButtonSize size) { write("small", size == ui::ButtonSize::Small); }

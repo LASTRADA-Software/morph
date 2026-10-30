@@ -3094,13 +3094,36 @@ struct WrappingRow {
     return checks.result();
 }
 
+/// @brief Case: a square push button is narrower than a normal one with the same label.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> squareButtonIsNarrower(ConformanceProbe& probe) {
+    Row row{.children = {ui::button(Button{.label = "\xE2\x80\xB9", .shape = ControlShape::Square}),
+                         ui::button(Button{.label = "\xE2\x80\xB9"})}};
+    row.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the row holds two buttons");
+    if (children.size() == 2) {
+        double const square = geometry.of(*children.at(0)).width;
+        double const normal = geometry.of(*children.at(1)).width;
+        checks.that(square > 0 && square < normal, "a square button is " + std::to_string(square) +
+                                                       " wide, beside a normal one " + std::to_string(normal) +
+                                                       " wide");
+    }
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 26> const cases{{
+    static std::array<ConformanceCase, 27> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3141,6 +3164,8 @@ struct WrappingRow {
         {.name = "a column's padding insets its children", .run = detail::paddingInsetsChildren},
         {.name = "a stack's two-step padding insets its ends and its sides apart",
          .run = detail::twoStepPaddingInsetsEndsAndSidesApart},
+        {.name = "a square push button is narrower than a normal one with the same label",
+         .run = detail::squareButtonIsNarrower},
     }};
     return cases;
 }

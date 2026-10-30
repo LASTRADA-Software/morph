@@ -3667,8 +3667,12 @@ private:
             checkChoice(node, "emphasis", kEmphasis);
             static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
             checkChoice(node, "style", kStyles);
-            static constexpr std::array<std::string_view, 2> kShapes = {"default", "round"};
+            static constexpr std::array<std::string_view, 3> kShapes = {"default", "round", "square"};
             checkChoice(node, "shape", kShapes);
+            if (node.name("shape") == "square" && node.name("style") == "item") {
+                refuse(pointerAppend(node.path, "shape"),
+                       "an item fills its line, so it has no square outline; `square` is a push button's");
+            }
             static constexpr std::array<std::string_view, 2> kSizes = {"normal", "small"};
             checkChoice(node, "size", kSizes);
             checkEntryContent(node);

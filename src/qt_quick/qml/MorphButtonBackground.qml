@@ -30,11 +30,13 @@ Rectangle {
     property bool round: false
     // A dense button: no least width of its own.
     property bool compact: false
+    // A square button for a glyph: no least width, and the control's own corners.
+    property bool square: false
     // Whether the outline is stroked in dashes: the surface's `border.style`, for a button that has an outline.
     readonly property bool dashed: scheme.borderDashed && !filled && !item && !ghost
 
     implicitHeight: Theme.targetHeight
-    implicitWidth: ghost || compact ? 0 : Theme.unitWidth * 8
+    implicitWidth: ghost || compact || square ? 0 : Theme.unitWidth * 8
     radius: round ? height / 2 : Theme.radiusControl
     // The fill a push button shades while hovered or pressed: the tint while selected, unless the button is filled.
     readonly property color restFill: selected && !filled ? Qt.alpha(scheme.accent, 0.12) : fill

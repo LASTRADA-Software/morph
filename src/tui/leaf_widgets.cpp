@@ -205,6 +205,11 @@ void ButtonImpl::setStyle(ui::ButtonStyle style) {
     refresh();
 }
 
+void ButtonImpl::setShape(ui::ControlShape shape) {
+    _square = shape == ui::ControlShape::Square;
+    refresh();
+}
+
 void ButtonImpl::setSize(ui::ButtonSize size) {
     _size = size;
     refresh();
@@ -255,7 +260,7 @@ void ButtonImpl::click(::core::tui::Point cell) {
         ::core::tui::Size const inner = requestedSize(*_content);
         return {.width = inner.width + 1, .height = std::max(1, inner.height)};
     }
-    int const brackets = _size == ui::ButtonSize::Small ? 2 : 4;
+    int const brackets = _size == ui::ButtonSize::Small || _square ? 2 : 4;
     return {.width = displayWidth(caption()) + (_style == ui::ButtonStyle::Item ? 2 : brackets), .height = 1};
 }
 
@@ -287,7 +292,7 @@ void ButtonImpl::paint(::core::tui::Canvas& canvas) {
     }
     // A selected push button draws its caption in the list's selected style and keeps its brackets, so it is as wide
     // as an unselected one and still reads as a button.
-    bool const small = _size == ui::ButtonSize::Small;
+    bool const small = _size == ui::ButtonSize::Small || _square;
     int const inset = small ? 1 : 2;
     canvas.putString(0, 0, small ? "[" : "[ ", style);
     std::string const shown = caption();

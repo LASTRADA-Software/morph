@@ -66,8 +66,9 @@ public:
     void setIcon(std::string_view icon) override;
     void setStyle(ui::ButtonStyle style) override;
     void setSelected(bool selected) override;
-    /// A cell has no corners, so a shape draws nothing.
-    void setShape(ui::ControlShape shape) override { static_cast<void>(shape); }
+    /// A cell has no corners, so only `square` draws anything: a square push button drops the spaces inside its
+    /// brackets, as a small one does.
+    void setShape(ui::ControlShape shape) override;
     /// A small push button drops the spaces inside its brackets.
     void setSize(ui::ButtonSize size) override;
     /// Every face of a terminal is monospace, so a mono caption draws nothing new.
@@ -90,6 +91,7 @@ private:
     ui::ButtonEmphasis _emphasis = ui::ButtonEmphasis::Normal;
     ui::ButtonStyle _style = ui::ButtonStyle::Push;
     ui::ButtonSize _size = ui::ButtonSize::Normal;
+    bool _square = false;
     bool _selected = false;
     std::unique_ptr<ContainerBase> _content;
 };

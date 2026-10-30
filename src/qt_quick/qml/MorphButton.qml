@@ -50,13 +50,20 @@ MorphWidget {
     Accessible.onPressAction: root.fire("click", undefined)
 
     focusTarget: button
-    // A round button is at least as wide as it is tall: a circle for a short caption, a stadium for a longer one.
-    implicitWidth: root.round ? Math.max(button.implicitWidth, button.implicitHeight) : button.implicitWidth
+    // A square push button: the one asked for, or, under the theme's `shape.iconOnly`, a push button that gives no
+    // shape and whose caption is an icon alone.
+    readonly property bool squared: root.square || (Theme.iconOnlySquare && !root.round && root.style === 0
+                                                    && root.label === "" && root.icon !== "")
+    // A round or square button is at least as wide as it is tall: a circle or a square for a short caption, a
+    // stadium or a wider button for a longer one.
+    implicitWidth: root.round || root.squared ? Math.max(button.implicitWidth, button.implicitHeight)
+                                              : button.implicitWidth
     implicitHeight: button.implicitHeight
 
     // The caption's font: the body face, strong for a filled button; a small button draws a strong caption in the
     // small step, and a mono one in the mono role's face.
-    readonly property bool strongCaption: root.small || !(root.emphasis === 0 || root.emphasis === 4 || root.ghost)
+    readonly property bool strongCaption: root.small || root.squared
+                                          || !(root.emphasis === 0 || root.emphasis === 4 || root.ghost)
     readonly property font captionFont: {
         if (root.small || root.mono) {
             const pixels = root.small ? Theme.smallPixels : root.mono ? Theme.monoPixels : Theme.bodyPixels
@@ -118,7 +125,7 @@ MorphWidget {
         id: button
         anchors.fill: parent
         text: root.label
-        leftPadding: root.ghost || root.small ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
+        leftPadding: root.ghost || root.small || root.squared ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
         rightPadding: leftPadding
         palette.buttonText: root.emphasis === 4 ? root.scheme.error
                             : root.ghost ? root.scheme.accent
@@ -138,6 +145,7 @@ MorphWidget {
             ghost: root.ghost
             round: root.round
             compact: root.small
+            square: root.squared
             borderColor: root.emphasis === 4 ? root.scheme.errorBorder : root.scheme.controlBorder
             selected: root.selected
             hovered: button.hovered

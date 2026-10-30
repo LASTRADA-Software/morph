@@ -204,11 +204,13 @@ as `[text]`.
 
 **Shape, size and mono.** `ButtonWidget::setShape`, `BadgeWidget::setShape(ControlShape::Round)` draw a control with
 corners of half its height, at least as wide as it is tall: a circle for a short label, a stadium for a longer one, and
-the surface it sits on is drawn in that shape too. `ButtonWidget::setSize(ButtonSize::Small)` makes a push button
+the surface it sits on is drawn in that shape too. `ButtonWidget::setShape(ControlShape::Square)` draws a button for a
+glyph: the theme's corners, no least width, little side padding, at least as wide as tall and a strong caption at the
+body size; a badge takes no `Square`. `ButtonWidget::setSize(ButtonSize::Small)` makes a push button
 dense: the least side padding, a strong label in the small type step, and the control height kept. `setMono(true)` on a
 button or a badge draws the label in the `mono` text role's face. The mount calls each once, and only for the
-non-default value. The terminal has no corners and only one face, so a shape and `mono` draw nothing there; a small
-push button is `[S1]` where a normal one is `[ S1 ]`.
+non-default value. The terminal has no corners and only one face, so a round shape and `mono` draw nothing there; a small
+or square push button is `[S1]` where a normal one is `[ S1 ]`.
 
 **Button style and selection.** `ButtonWidget::setStyle(ButtonStyle)` makes a button an entry of a list (`Item`): it
 behaves as a push button (activation, enablement, tooltip, hover) and is drawn as a line, as wide as its line, its

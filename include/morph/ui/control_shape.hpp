@@ -19,6 +19,9 @@ enum class ControlShape : std::uint8_t {
     Default,  ///< The theme's corners.
     Round,    ///< Corners of half the height, and at least as wide as tall: a circle for a short label, a stadium for
               ///< a longer one.
+    Square,   ///< A button for a glyph (`‹`, `⋯`): the theme's corners, no least width, little side padding, at least
+              ///< as wide as tall and a strong caption at the body size. A longer caption gives a wider button. Only a
+              ///< button has it; a badge does not.
 };
 
 /// @brief How much room a button gives its caption.
@@ -28,9 +31,10 @@ enum class ButtonSize : std::uint8_t {
 };
 
 /// @brief Every shape by its document name, `default` first.
-inline constexpr std::array<std::pair<std::string_view, ControlShape>, 2> kControlShapes = {{
+inline constexpr std::array<std::pair<std::string_view, ControlShape>, 3> kControlShapes = {{
     {"default", ControlShape::Default},
     {"round", ControlShape::Round},
+    {"square", ControlShape::Square},
 }};
 
 /// @brief Every size by its document name, `normal` first.

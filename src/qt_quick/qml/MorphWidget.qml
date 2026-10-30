@@ -37,6 +37,8 @@ Item {
     property bool fillsAcross: true
     // Whether the widget is round: its corners are half its height, and so are its surface's.
     property bool round: false
+    // Whether the widget is a square button for a glyph: the theme's corners, at least as wide as tall.
+    property bool square: false
     property string tooltip: ""
     // Whether C++ listens for the pointer coming to rest here.
     property bool hoverWatched: false
