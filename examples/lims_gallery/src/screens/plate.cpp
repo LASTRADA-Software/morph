@@ -718,6 +718,7 @@ ui::Screen plateScreen() {
     return ui::screen("lims-gallery.plate", [](ui::Scope& screen) {
         Plate const plate = declare(screen);
         screen.title("Plate PL-0193");
+        screen.titleSpans(ui::spans({"Plate ", ui::mono("PL-0193")}));
         screen.subtitle(ui::cond(plate.compact, Text{"ELISA, host cell protein"},
                                  Text{"ELISA, host cell protein · worksheet WS-2026-0415"}));
         screen.subtitleSpans(ui::cond(plate.compact, ui::spans({"ELISA, host cell protein"}),
