@@ -35,7 +35,8 @@ MorphWidget {
     }
 
     // The icon's URL in the theme's set; without one, the icon's name is drawn before the text, as text.
-    readonly property string iconSource: Theme.iconSource(root.icon)
+    readonly property string iconSource: Theme.iconSourceIn(root.icon, root.plain ? root.scheme.text
+                                                                                    : root.toneOf(root.tone))
 
     // A tag insets its label 1 px above and below and one and a half spacing units at each side. A chip is the
     // control height less 6 px, with a spacing step of 2 before the label and its remove button against the end.

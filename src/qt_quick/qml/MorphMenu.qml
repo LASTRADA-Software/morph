@@ -124,7 +124,7 @@ MorphWidget {
                             : root.triggerEmphasis === 0 ? root.scheme.text : "white"
         font: (root.triggerEmphasis === 0 || root.triggerEmphasis === 3) && !root.squareTrigger ? Theme.bodyFont
                                                                                                 : Theme.strongFont
-        icon.source: Theme.iconSource(root.triggerIcon)
+        icon.source: Theme.iconSourceIn(root.triggerIcon, trigger.palette.buttonText)
         icon.color: "transparent"
         contentItem: MorphPlainContent {
             control: trigger
@@ -181,7 +181,7 @@ MorphWidget {
                     control: topEntry
                     color: topEntry.palette.windowText
                 }
-                icon.source: Theme.iconSource(modelData.icon ? modelData.icon : "")
+                icon.source: Theme.iconSourceIn(modelData.icon ? modelData.icon : "", topEntry.palette.windowText)
                 icon.color: "transparent"
                 enabled: modelData.enabled
                 onClicked: {
@@ -236,7 +236,8 @@ MorphWidget {
                         Layout.fillWidth: true
                         text: root.entryText(entry.modelData)
                               + (entry.modelData.keys ? "    " + entry.modelData.keys : "")
-                        icon.source: Theme.iconSource(entry.modelData.icon ? entry.modelData.icon : "")
+                        icon.source: Theme.iconSourceIn(entry.modelData.icon ? entry.modelData.icon : "",
+                                                        entryButton.palette.text)
                         icon.color: "transparent"
                         contentItem: MorphPlainContent {
                             control: entryButton

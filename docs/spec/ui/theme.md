@@ -299,12 +299,20 @@ file the bundle lacks or one that is not an `icon` file, naming the index and th
   Qt Quick draws them as a vector chevron when the set does not name them: a push button with no label whose icon
   is `nav.back` or `nav.forward` (a pager's buttons) shows a `MorphChevron`, in the button's caption colour.
 - **On Qt Quick.** `applyBundleTheme(engine, themes, icons)` hands the set to `Theme.icons` (name to a
-  `data:image/svg+xml` URL) and sets `Theme.iconSet`; `Theme.iconSource(name)` is the URL, or empty. A button, a
+  `data:image/svg+xml` URL) and `Theme.iconSvgs` (name to SVG text) and sets `Theme.iconSet`;
+  `Theme.iconSource(name)` is the URL, or empty. It also writes `Theme.iconGlyphs`, name to glyph for every
+  framework name that has one (`iconGlyph`, the glyphs the terminal draws), whether or not the bundle has a set. A button, a
   badge, an empty state, a menu entry and a single-line or password text input's leading `icon` draw a node's icon
   from the set when it names it, and today's text otherwise (a badge's and a menu entry's name before the label, a
   button and a text input nothing — a text input with no themed icon for its name shows no leading space at all).
   An icon-only push button the set does not name is never blank: with no label it draws, in order, the set's icon, a
   built-in chevron (`nav.back`, `nav.forward`), `Theme.iconGlyphs[name]`, and its accessible name.
+- **`currentColor`.** A themed SVG that paints with `currentColor` is drawn in the colour of the control that shows it:
+  `Theme.iconSourceIn(name, color)` answers the URL with every `currentColor` replaced by the colour's `#rrggbb`,
+  cached by name and colour. A push button and a menu trigger draw it in their caption colour (white on a dark
+  head through a ghost button's accent), a menu entry in its text colour, a badge in its label's colour and a text
+  input's leading icon in the accent. An SVG without `currentColor` is drawn as it is, so an icon set that never
+  uses it keeps its look.
   While the bundle declares a set, a node icon it does not name is reported once per name through the `Components`
   callback (`icon <name> is not in the theme's icon set`); without a set nothing is reported.
 - **On the terminal.** Icons stay text: a framework name is drawn as its glyph (`iconGlyph`: `tone.ok` ✓, `tone.warn`

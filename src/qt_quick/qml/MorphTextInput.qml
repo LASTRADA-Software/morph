@@ -153,7 +153,7 @@ MorphField {
             anchors.left: parent.left
             anchors.leftMargin: Theme.spaceOf(3)
             anchors.verticalCenter: parent.verticalCenter
-            readonly property string themedSource: Theme.iconSource(root.icon)
+            readonly property string themedSource: Theme.iconSourceIn(root.icon, root.scheme.accent)
             visible: root.icon !== "" && themedSource !== ""
             source: themedSource
         }

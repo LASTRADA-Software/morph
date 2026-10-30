@@ -102,7 +102,7 @@ MorphWidget {
             spacing: Theme.spaceOf(2)
 
             Image {
-                source: Theme.iconSource(root.icon)
+                source: Theme.iconSourceIn(root.icon, root.selected ? root.scheme.accent : root.scheme.text)
                 visible: root.icon !== "" && source.toString() !== ""
                 Layout.preferredWidth: Theme.bodyPixels
                 Layout.preferredHeight: Theme.bodyPixels
@@ -131,7 +131,7 @@ MorphWidget {
                             : root.ghost ? root.scheme.accent
                             : root.emphasis === 0 ? root.scheme.text : "white"
         font: root.captionFont
-        icon.source: Theme.iconSource(root.icon)
+        icon.source: Theme.iconSourceIn(root.icon, button.palette.buttonText)
         icon.color: "transparent"
         contentItem: MorphPlainContent {
             control: button

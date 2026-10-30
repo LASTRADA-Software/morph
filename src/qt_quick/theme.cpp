@@ -337,9 +337,11 @@ std::vector<std::string> setIcons(QQmlEngine& engine, std::map<std::string, std:
         return {"Theme"};
     }
     QVariantMap urls;
+    QVariantMap texts;
     for (auto const& [name, svg] : icons) {
         urls.insert(QString::fromStdString(name), QStringLiteral("data:image/svg+xml;base64,") +
                                                       QString::fromLatin1(QByteArray::fromStdString(svg).toBase64()));
+        texts.insert(QString::fromStdString(name), QString::fromStdString(svg));
     }
     std::vector<std::string> unset;
     if (!detail::writeIconGlyphs(*theme)) {
@@ -347,6 +349,9 @@ std::vector<std::string> setIcons(QQmlEngine& engine, std::map<std::string, std:
     }
     if (!theme->setProperty("icons", QVariant::fromValue(urls))) {
         unset.emplace_back("icons");
+    }
+    if (!theme->setProperty("iconSvgs", QVariant::fromValue(texts))) {
+        unset.emplace_back("iconSvgs");
     }
     if (!theme->setProperty("iconSet", !icons.empty())) {
         unset.emplace_back("iconSet");

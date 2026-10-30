@@ -16,10 +16,34 @@ QtObject {
     // Whether the bundle's theme declares an icon set: a node icon it does not name is then reported.
     property bool iconSet: false
 
+    // The bundle's icon set as SVG text: icon name to text; empty while the theme declares none.
+    property var iconSvgs: ({})
+    // Icons already drawn in a colour, by name and colour.
+    property var tintedIcons: ({})
+    onIconSvgsChanged: theme.tintedIcons = ({})
+
     // The URL an icon draws from: the bundle's set's, or empty, for which a component draws today's text or glyph.
     function iconSource(name: string): string {
         const source = name !== "" ? theme.icons[name] : undefined
         return source !== undefined ? source : ""
+    }
+
+    // The URL an icon draws from, in the colour of the control that shows it: every `currentColor` of the icon's SVG
+    // becomes @p color, since Qt's SVG image has no colour of its own to resolve it against. An icon that never paints
+    // `currentColor` is the set's own URL, and one the set lacks is empty.
+    function iconSourceIn(name: string, color: color): string {
+        const svg = name !== "" ? theme.iconSvgs[name] : undefined
+        if (svg === undefined || svg.indexOf("currentColor") < 0)
+            return theme.iconSource(name)
+        const hex = "#" + [color.r, color.g, color.b].map(channel => {
+            const part = Math.round(channel * 255).toString(16)
+            return part.length < 2 ? "0" + part : part
+        }).join("")
+        const key = name + "|" + hex
+        if (!(key in theme.tintedIcons))
+            theme.tintedIcons[key] = "data:image/svg+xml;base64," +
+                    Qt.btoa(unescape(encodeURIComponent(svg.split("currentColor").join(hex))))
+        return theme.tintedIcons[key]
     }
 
     // The families `font.family` names, in order of preference; empty draws in the platform font.

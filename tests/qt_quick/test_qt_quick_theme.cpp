@@ -18,6 +18,7 @@
 #include <QPointF>
 #include <QQuickItem>
 #include <QTemporaryDir>
+#include <QTest>
 #include <QUrl>
 #include <QVariant>
 #include <catch2/catch_template_test_macros.hpp>
@@ -1612,3 +1613,78 @@ TEST_CASE("qt_quick theme: the framework's glyphs reach Theme.iconGlyphs whether
     CHECK_FALSE(glyphs.contains(QStringLiteral("empty")));
 }
 
+namespace {
+
+/// The SVG text of a `data:image/svg+xml;base64,` URL.
+QString svgOf(QString const& url) {
+    QString const prefix = QStringLiteral("data:image/svg+xml;base64,");
+    REQUIRE(url.startsWith(prefix));
+    return QString::fromUtf8(QByteArray::fromBase64(url.mid(prefix.size()).toLatin1()));
+}
+
+std::string dotIcon() {
+    return R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" fill="currentColor"/></svg>)";
+}
+
+}  // namespace
+
+// Mutation: answer `iconSource(name)` whatever the colour (the SVG keeps `currentColor` and Qt draws it black).
+TEST_CASE("qt_quick theme: an icon that paints currentColor is drawn in its control's colour", "[qt_quick]") {
+    Scene scene;
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    std::string const plain =
+        R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d="M1 4l2 2 4-4"/></svg>)";
+    REQUIRE(morph::qt_quick::applyBundleTheme(scene.engine(), {}, {{"dot", dotIcon()}, {"tick", plain}}).empty());
+
+    QString tinted;
+    REQUIRE(QMetaObject::invokeMethod(theme, "iconSourceIn", Q_RETURN_ARG(QString, tinted),
+                                      Q_ARG(QString, QStringLiteral("dot")), Q_ARG(QColor, QColor{"#ffffff"})));
+    QString const svg = svgOf(tinted);
+    CHECK(svg.contains(QStringLiteral("fill=\"#ffffff\"")));
+    CHECK_FALSE(svg.contains(QStringLiteral("currentColor")));
+
+    // An icon without currentColor is drawn as the set gives it, and a name the set lacks has no source.
+    QString untouched;
+    REQUIRE(QMetaObject::invokeMethod(theme, "iconSourceIn", Q_RETURN_ARG(QString, untouched),
+                                      Q_ARG(QString, QStringLiteral("tick")), Q_ARG(QColor, QColor{"#ffffff"})));
+    QString plainUrl;
+    REQUIRE(QMetaObject::invokeMethod(theme, "iconSource", Q_RETURN_ARG(QString, plainUrl),
+                                      Q_ARG(QString, QStringLiteral("tick"))));
+    CHECK(untouched == plainUrl);
+    QString missing = QStringLiteral("x");
+    REQUIRE(QMetaObject::invokeMethod(theme, "iconSourceIn", Q_RETURN_ARG(QString, missing),
+                                      Q_ARG(QString, QStringLiteral("absent")), Q_ARG(QColor, QColor{"#ffffff"})));
+    CHECK(missing.isEmpty());
+}
+
+// Mutation: draw the icon from `iconSource(name)` in the button (the circle is black whatever the accent).
+TEST_CASE("qt_quick theme: a ghost button draws a currentColor icon in its caption colour", "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyBundleTheme(scene.engine(), {}, {{"dot", dotIcon()}}).empty());
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color", "accent": {"$value": "#ff0000"}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto button = scene.backend().createButton(nullptr);
+    button->setIcon("dot");
+    button->setEmphasis(ui::ButtonEmphasis::Ghost);
+    scene.settle();
+    QQuickItem const* const icon = Scene::itemOf(*button).findChild<QQuickItem*>(QStringLiteral("contentIcon"));
+    REQUIRE(icon != nullptr);
+    // The image decodes its data URL off the GUI thread.
+    for (int tries = 0; tries < 200 && !icon->isVisible(); ++tries) {
+        QTest::qWait(10);
+        scene.settle();
+    }
+    REQUIRE(icon->isVisible());
+    QImage const image = scene.window().grabWindow();
+    QPointF const centre = icon->mapToScene(QPointF{icon->width() / 2, icon->height() / 2});
+    qreal const ratio = image.devicePixelRatio();
+    QColor const pixel = image.pixelColor(static_cast<int>(centre.x() * ratio), static_cast<int>(centre.y() * ratio));
+    INFO("pixel " << pixel.name().toStdString());
+    CHECK(pixel.red() > 200);
+    CHECK(pixel.green() < 60);
+    CHECK(pixel.blue() < 60);
+}
