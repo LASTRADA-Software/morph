@@ -156,11 +156,7 @@ MenuImpl::MenuImpl(Context& context, ui::ContainerWidget* parent, ui::MenuStyle 
 }
 
 void MenuImpl::setTrigger(ui::MenuTrigger const& trigger) {
-    // A framework name is drawn from the set when it names it and by the menu's own glyph otherwise, so only another
-    // name the set lacks is reported.
-    if (!std::ranges::contains(ui::kFrameworkIcons, std::string_view{trigger.icon})) {
-        context().checkIcon(trigger.icon);
-    }
+    context().checkIcon(trigger.icon);
     write("triggerLabel", toQString(trigger.label));
     write("triggerIcon", toQString(trigger.icon));
     // MorphMenu's `triggerEmphasis`: 0 normal, 1 primary, 2 danger, 3 ghost.

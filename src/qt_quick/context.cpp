@@ -8,11 +8,13 @@
 #include <QQmlError>
 #include <QUrl>
 #include <QVariant>
+#include <algorithm>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <morph/qt_quick/components.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/theme.hpp>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -153,7 +155,9 @@ void Context::undeclared(QObject const& item, char const* name) {
 }
 
 void Context::checkIcon(std::string_view icon) {
-    if (icon.empty() || _missingIcons.contains(icon)) {
+    // A framework name is drawn from the set when it names it and by the control's own glyph or chevron otherwise, so
+    // only another name the set lacks is reported.
+    if (icon.empty() || _missingIcons.contains(icon) || std::ranges::contains(ui::kFrameworkIcons, icon)) {
         return;
     }
     QObject const* const theme =

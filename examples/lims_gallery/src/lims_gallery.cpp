@@ -125,7 +125,8 @@ constexpr char const* kPaneSurface = R"({
 constexpr char const* kDarkHeadSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#1C1E21" }, "text": { "$value": "#FFFFFF" },
              "accent": { "$value": "#FFFFFF" }, "muted": { "$value": "#C3C9D2" }, "hover": { "$value": "#FFFFFF1F" },
-             "selection": { "$value": "#2B2F36" }, "controlSurface": { "$value": "#1C1E21" }, "controlBorder": { "$value": "#4D5461" } }
+             "selection": { "$value": "#2B2F36" }, "track": { "$value": "#2B2F36" },
+             "controlSurface": { "$value": "#1C1E21" }, "controlBorder": { "$value": "#4D5461" } }
 })";
 
 // The barcode glyph of the receipt screen's scan field, as the design draws it.
