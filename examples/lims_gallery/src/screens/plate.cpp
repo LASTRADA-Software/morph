@@ -726,7 +726,7 @@ ui::Node compactLayout(Plate const& plate) {
             .surface("bar");
     return ui::column({buttons, ui::column({ui::column(rows, {.divided = true}), assignDialog(plate)},
                                            {.gap = 2, .padding = 4})},
-                      {.divided = true, .pageEdge = true})
+                      {.divided = true, .pageEdge = true, .headJoined = true})
         .sizing(ui::stretch(), ui::stretch());
 }
 

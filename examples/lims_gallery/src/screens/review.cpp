@@ -503,17 +503,21 @@ ui::Node compactQueue(Review const& review) {
 
 // ── The worksheet ────────────────────────────────────────────────────────────────────────────────────────────────
 
-ui::Node showChoice(Review const& review) {
+ui::Node showChoice(Review const& review, bool compact) {
     auto const options =
         ui::list({ui::obj({{"key", "all"}, {"label", ui::format("All {0}", {review.resultCount})}}),
                   ui::obj({{"key", "flagged"}, {"label", ui::format("Flagged {0}", {review.flaggedCount})}})});
-    return ui::row({layout::muted("Show"), ui::select({.options = options,
-                                                       .selected = review.show,
-                                                       .label = "Show results",
-                                                       .style = "segmented",
-                                                       .onChoose = ui::set(review.show, ui::event())})
-                                               .testId("show")},
-                   {.gap = 1, .align = Align::Center});
+    auto const choice = ui::select({.options = options,
+                                    .selected = review.show,
+                                    .label = "Show results",
+                                    .style = "segmented",
+                                    .onChoose = ui::set(review.show, ui::event())})
+                            .testId("show");
+    // Compact drops the caption and stretches the control across the page.
+    if (compact) {
+        return choice;
+    }
+    return ui::row({layout::muted("Show"), choice}, {.gap = 1, .align = Align::Center});
 }
 
 ui::Node resultTable(Review const& review) {
@@ -545,12 +549,14 @@ ui::Node resultTable(Review const& review) {
         .testId("results");
 }
 
-ui::Node resultCards(Review const& review) {
+// The compact results: one divided row per result, edge to edge as a direct child of the page's padded column, each
+// row padded by the page's own inset so its text lines up with the page, tinted while it is out of specification.
+ui::Node resultRows(Review const& review) {
     return ui::forEach(
-               review.shownResults, {.key = ui::row("key"), .gap = 2},
+               review.shownResults, {.key = ui::row("key"), .gap = 0, .divided = true},
                [](ui::DeclScope&) {
                    return ui::Nodes{
-                       ui::panel(
+                       ui::column(
                            {ui::row({ui::text({.text = ui::row("sample"),
                                                .spans = ui::spans(
                                                    {ui::styled(ui::row("sample"), {.strong = true, .mono = true})})})
@@ -562,10 +568,11 @@ ui::Node resultCards(Review const& review) {
                             layout::tag(ui::row("evaluation"), ui::row("tone")),
                             layout::muted(ui::format("Changed {0}", {ui::row("change")}))
                                 .visible(ui::ne(ui::row("change"), "—"))},
-                           {.padding = 2})
-                           // An out-of-specification card carries the tint the table's row has.
+                           {.gap = 1, .padding = ui::padding(2, 4)})
+                           // An out-of-specification row carries the tint the table's row has.
                            .surface(ui::cond(ui::eq(ui::row("tone"), "err"), Text{"outOfSpec"}, Text{""}))};
                })
+        .bleed()
         .testId("results");
 }
 
@@ -624,19 +631,42 @@ ui::Node auditList(Review const& review) {
         .testId("audit");
 }
 
+ui::Node selfBanner(Review const& review);
+ui::Node signedBanner(Review const& review);
+
 // The record's tabs, whose counts follow the selected worksheet; the reviewer's pick is kept across worksheets.
 ui::Node recordTabs(Review const& review, bool compact) {
     // A line of room above the comment's caption, which sits close under the cards otherwise.
     auto const room = ui::spacer().sizing(ui::fixed(1), ui::fixed(1));
-    ui::Nodes const resultsPage{showChoice(review), compact ? resultCards(review) : resultTable(review),
-                                commentCards(review), room, reviewComment(review)};
-    return ui::tabs({{.label = "Results", .children = resultsPage},
-                     {.label = compact ? "Previous" : "Previous lots", .children = lotTable(review)},
-                     {.label = ui::format(compact ? "Audit {0}" : "Audit trail · {0}", {review.auditCount}),
-                      .children = auditList(review)},
-                     {.label = ui::format(compact ? "Comments {0}" : "Comments · {0}", {review.commentCount}),
-                      .children = commentCards(review)}})
-        .testId("record-tabs");
+    // The phone's banners sit in the page that scrolls with the results; the expanded ones sit above the tabs.
+    ui::Nodes resultsPage{showChoice(review, compact), compact ? resultRows(review) : resultTable(review),
+                          commentCards(review), room, reviewComment(review)};
+    if (compact) {
+        resultsPage = ui::Nodes{selfBanner(review),   signedBanner(review), showChoice(review, true),
+                                resultRows(review),   commentCards(review), room,
+                                reviewComment(review)};
+    }
+    ui::TabsOptions options;
+    // Compact pages scroll their own padding, so a bleeding child of a page reaches the scroll's edges.
+    auto const page = [compact](ui::Nodes const& children) -> ui::Nodes {
+        if (!compact) {
+            return children;
+        }
+        return ui::Nodes{
+            ui::scroll({ui::column(children, {.gap = 2, .padding = 4})}).sizing(ui::stretch(), ui::stretch())};
+    };
+    std::vector<ui::Tab> tabs{
+        {.label = "Results", .children = page(resultsPage)},
+        {.label = compact ? "Previous" : "Previous lots", .children = page(ui::Nodes{lotTable(review)})},
+        {.label = ui::format(compact ? "Audit {0}" : "Audit trail · {0}", {review.auditCount}),
+         .children = page(ui::Nodes{auditList(review)})},
+        {.label = ui::format(compact ? "Comments {0}" : "Comments · {0}", {review.commentCount}),
+         .children = page(ui::Nodes{commentCards(review)})}};
+    if (compact) {
+        options = {.inset = 4, .pageInset = 0, .stripSurface = "bar"};
+    }
+    auto node = ui::tabs(tabs, options).testId("record-tabs");
+    return compact ? node.sizing(ui::stretch(), ui::stretch()) : node;
 }
 
 ui::Node sheetHead(Review const& review, bool compact) {
@@ -787,19 +817,24 @@ ui::Node expandedLayout(Review const& review) {
         .sizing(ui::stretch(), ui::stretch());
 }
 
-// The decisions stay at the bottom of the phone screen while the worksheet scrolls above them.
+// The worksheet is the phone's page: the back link, the record's tabs (each page scrolling its own padding) and the
+// decisions, ruled off from one another. The root continues the head's block, which carries the sheet line, the
+// worksheet's title and its summary tags.
 ui::Node compactWorksheet(Review const& review) {
-    return ui::pinned({ui::column({ui::button({.label = ui::format("‹ Awaiting review · {0}", {review.waiting}),
-                                               .emphasis = ButtonEmphasis::Ghost,
-                                               .onClick = ui::set(review.showQueue, true)})
-                                       .testId("back"),
-                                   sheetHead(review, true), selfBanner(review), signedBanner(review),
-                                   recordTabs(review, true), decisionDialog(review)},
-                                  {.gap = 2})},
-                      {.bottom = ui::row({returnButton(review, "Return…").sizing(ui::stretch()),
-                                          rejectButton(review, "Reject…").sizing(ui::stretch()),
-                                          approveButton(review, "Approve…").sizing(ui::stretch(2))},
-                                         {.gap = 1})});
+    auto const back = ui::column({ui::button({.label = ui::format("‹ Awaiting review · {0}", {review.waiting}),
+                                              .emphasis = ButtonEmphasis::Ghost,
+                                              .onClick = ui::set(review.showQueue, true)})
+                                      .testId("back")},
+                                 {.padding = ui::padding(1, 4)})
+                          .surface("bar");
+    auto const decisions = ui::row({returnButton(review, "Return…").sizing(ui::stretch()),
+                                    rejectButton(review, "Reject…").sizing(ui::stretch()),
+                                    approveButton(review, "Approve…").sizing(ui::stretch(2))},
+                                   {.gap = 1, .padding = ui::padding(2, 4)})
+                               .surface("bar");
+    return ui::column({back, recordTabs(review, true), decisions, decisionDialog(review)},
+                      {.gap = 0, .divided = true, .pageEdge = true, .headJoined = true})
+        .sizing(ui::stretch(), ui::stretch());
 }
 
 ui::Node compactLayout(Review const& review) {
@@ -810,10 +845,37 @@ ui::Node compactLayout(Review const& review) {
 
 }  // namespace
 
+// The phone's worksheet page carries the sheet line, the worksheet's title and its summary tags in the head, as the
+// design's header does; the queue page and the expanded layout carry none.
+void declareHead(ui::Scope& screen, Review const& review) {
+    Flag const onSheet = ui::eq(review.width, "compact") && !review.showQueue;
+    auto const none = ui::AnyHandle{std::vector<std::string>{}};
+    auto const line =
+        ui::format("{0} · {1} · {2}", {pick(review, "id"), pick(review, "analyst"), pick(review, "submitted")});
+    screen.eyebrow(ui::cond(onSheet, Text{line}, Text{""}));
+    screen.eyebrowSpans(ui::cond(
+        onSheet,
+        ui::AnyHandle{ui::spans({ui::mono(pick(review, "id")),
+                                 ui::format(" · {0} · {1}", {pick(review, "analyst"), pick(review, "submitted")})})},
+        none));
+    screen.titleSpans(ui::cond(
+        onSheet, ui::AnyHandle{ui::spans({ui::format("{0} · {1}", {pick(review, "test"), pick(review, "product")})})},
+        none));
+    // The results count, then the worksheet's own tags: each a part that shows while the list has that entry.
+    auto const summary = ui::concatLists(
+        {ui::list({ui::obj({{"text", ui::format("{0} results", {review.resultCount})}, {"tone", "neutral"}})}),
+         pick(review, "compactSummary")});
+    for (std::int64_t index = 0; index < 4; ++index) {
+        auto const tag = ui::call("first", {ui::slice(summary, index, index + 1)});
+        screen.status({.text = tag.at("text"), .tone = tag.at("tone"), .visible = onSheet && ui::engaged(tag)});
+    }
+}
+
 ui::Screen reviewScreen() {
     return ui::screen("lims-gallery.review", [](ui::Scope& screen) {
         Review const review = declare(screen);
         screen.title("Review and approval");
+        declareHead(screen, review);
         return layout::byWidth(review.width, compactLayout(review), expandedLayout(review))
             .sizing(ui::stretch(), ui::stretch());
     });

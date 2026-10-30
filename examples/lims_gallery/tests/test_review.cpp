@@ -122,11 +122,12 @@ TEST_CASE("review, compact: the worksheet as its own page, the queue behind it",
     CHECK(screen.prop("Tabs", "record-tabs", "tabs") == "[Results,Previous,Audit 3,Comments 1]");
     CHECK(screen.find("Column", "results").has_value());
     // The out-of-specification result's card has the tint its table row has.
-    CHECK(screen.backend().find("Panel", "surface", "outOfSpec").has_value());
+    CHECK(screen.backend().find("Column", "surface", "outOfSpec").has_value());
     screen.click("back");
     CHECK(screen.waitFor([&screen] { return screen.find("Column", "queue").has_value(); }));
     screen.backend().click(queueEntry(screen, "WS-2026-0405 · 48 min"));
-    CHECK(screen.waitForText("sheet-title", "Dissolution · Ibuprofen 400 mg"));
+    CHECK(screen.waitFor(
+        [&screen] { return screen.prop("Text", "shell_title", "spans") == "[Dissolution · Ibuprofen 400 mg]"; }));
     screen.requireNoProblems();
 }
 
