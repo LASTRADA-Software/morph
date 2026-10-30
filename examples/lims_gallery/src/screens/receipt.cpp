@@ -200,14 +200,27 @@ ui::Node notices(Receipt const& receipt) {
                                  {receipt.notice.at("sample"), receipt.notice.at("time"), receipt.notice.at("by")});
     auto const brief = ui::format("Already received: {0}, {1}, {2}.",
                                   {receipt.notice.at("sample"), receipt.notice.at("time"), receipt.notice.at("by")});
+    // The same words as runs: "Already received:" strong, the sample's ID in the mono face. They read the notice
+    // only while there is one.
+    auto const fullRuns = ui::spans({ui::strong("Already received:"), " ", ui::mono(receipt.notice.at("sample")),
+                                     ui::format(" was received at {0} by {1}. Nothing was changed.",
+                                                {receipt.notice.at("time"), receipt.notice.at("by")})});
+    auto const briefRuns =
+        ui::spans({ui::strong("Already received:"), " ", ui::mono(receipt.notice.at("sample")),
+                   ui::format(", {0}, {1}.", {receipt.notice.at("time"), receipt.notice.at("by")})});
     return ui::column(
-        {ui::banner({.tone = "warn", .text = ui::cond(receipt.compact, brief, full)})
+        {ui::banner({.tone = "warn",
+                     .text = ui::cond(receipt.compact, brief, full),
+                     .spans = ui::cond(ui::engaged(receipt.notice), ui::cond(receipt.compact, briefRuns, fullRuns),
+                                       ui::AnyHandle{std::vector<std::string>{}})})
              .visible(ui::engaged(receipt.notice))
              .testId("duplicate"),
          ui::banner({.tone = "err",
                      .text = ui::format("{0} is not a registered sample. Check the label, or register it "
                                         "first.",
-                                        {receipt.unknown})})
+                                        {receipt.unknown}),
+                     .spans = ui::spans({ui::mono(receipt.unknown),
+                                         " is not a registered sample. Check the label, or register it first."})})
              .visible(!ui::isEmpty(receipt.unknown))
              .testId("unknown")},
         {.gap = 1});

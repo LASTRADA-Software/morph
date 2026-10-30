@@ -721,6 +721,8 @@ ui::Screen plateScreen() {
         screen.title("Plate PL-0193");
         screen.subtitle(ui::cond(plate.compact, Text{"ELISA, host cell protein"},
                                  Text{"ELISA, host cell protein · worksheet WS-2026-0415"}));
+        screen.subtitleSpans(ui::cond(plate.compact, ui::spans({"ELISA, host cell protein"}),
+                                      ui::spans({"ELISA, host cell protein · worksheet ", ui::mono("WS-2026-0415")})));
         declareHead(screen, plate);
         return layout::byWidth(plate.width, compactLayout(plate), expandedLayout(plate));
     });

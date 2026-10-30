@@ -66,6 +66,9 @@ TEST_CASE("plate, expanded: the samples to place beside the 12-column plate, A3 
     CHECK(listed == 5);
     CHECK(screen.text("more") == "+ 9 more");
     CHECK(screen.text("selected") == "6 wells selected · A3–A8");
+    // The head's subtitle carries the worksheet's ID in the mono face.
+    CHECK(screen.prop("Text", "head_subtitle", "spans") ==
+          "[ELISA\\, host cell protein · worksheet ,WS-2026-0415;mono]");
     CHECK(screen.shows("Panel", "bulk"));
     // The legend's chips are round mono outline badges.
     CHECK(screen.find("Row", "legend").has_value());

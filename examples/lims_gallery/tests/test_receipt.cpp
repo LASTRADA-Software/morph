@@ -32,8 +32,9 @@ TEST_CASE("receipt, expanded: scan field, duplicate notice, the sample's card an
     screen.requireNoProblems();
     CHECK(screen.prop("TextInput", "scan", "icon") == "scan");
     CHECK(screen.prop("TextInput", "scan", "mono") == "true");
-    CHECK(screen.prop("Banner", "duplicate", "text") ==
-          "Already received: S-26-104217 was received at 09:07 by J. Ruiz. Nothing was changed.");
+    // The notice's words as runs: the label strong and the ID in the mono face.
+    CHECK(screen.prop("Banner", "duplicate", "spans") ==
+          "[Already received:;strong, ,S-26-104217;mono, was received at 09:07 by J. Ruiz. Nothing was changed.]");
     CHECK(screen.prop("Text", "sample-id", "spans") == heading("S-26-104230"));
     CHECK(screen.shows("Panel", "sample"));
     CHECK(screen.prop("TextInput", "type", "readonly") == "true");
@@ -61,8 +62,9 @@ TEST_CASE("receipt, expanded: a scanned duplicate is reported, an unknown id ref
     GalleryScreen screen{kScreen, "expanded"};
     screen.submit("scan", "S-26-104229");
     CHECK(screen.waitFor([&screen] {
-        return screen.prop("Banner", "duplicate", "text") ==
-               "Already received: S-26-104229 was received at 09:39 by J. Ruiz. Nothing was changed.";
+        return screen.prop("Banner", "duplicate", "spans") ==
+               "[Already received:;strong, ,S-26-104229;mono, was received at 09:39 by J. Ruiz. Nothing was "
+               "changed.]";
     }));
     screen.submit("scan", "S-26-999999");
     CHECK(screen.waitFor([&screen] { return screen.shows("Banner", "unknown"); }));
@@ -99,7 +101,8 @@ TEST_CASE("receipt, compact: one column, every field kept, the session folded aw
     GalleryScreen screen{kScreen, "compact"};
     screen.requireNoProblems();
     CHECK(screen.find("TextInput", "scan").has_value());
-    CHECK(screen.prop("Banner", "duplicate", "text") == "Already received: S-26-104217, 09:07, J. Ruiz.");
+    CHECK(screen.prop("Banner", "duplicate", "spans") ==
+          "[Already received:;strong, ,S-26-104217;mono,\\, 09:07\\, J. Ruiz.]");
     CHECK(screen.find("TextInput", "temperature").has_value());
     CHECK(screen.find("Column", "conditions").has_value());
     CHECK(screen.prop("Collapsible", "session-panel", "title") == "This session · 13 scans");
