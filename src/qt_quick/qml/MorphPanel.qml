@@ -27,6 +27,8 @@ MorphWidget {
     // The scheme the frame and the divider draw with: a panel that names no surface is a card, whatever scheme it
     // inherits.
     readonly property MorphScheme frameScheme: root.surface === "" ? Theme.cardScheme : root.scheme
+    // Whether the content is hidden, so the panel is its header row alone.
+    readonly property bool folded: root.collapsible && root.collapsed
     readonly property bool headerRowShown: root.title !== "" || root.collapsible || headerArea.children.length > 0
 
     implicitWidth: frame.implicitWidth
@@ -37,7 +39,8 @@ MorphWidget {
         objectName: "frame"
         anchors.fill: parent
         implicitWidth: inner.implicitWidth + 2 * Theme.spaceOf(root.padding) + 2
-        implicitHeight: inner.implicitHeight + Theme.spaceOf(root.padding) * (root.headerRowShown && root.collapsible ? 1 : 2) + 2
+        implicitHeight: inner.implicitHeight + Theme.spaceOf(root.padding) *
+                        (root.folded ? 0 : root.headerRowShown && root.collapsible ? 1 : 2) + 2
         // A panel that names no surface fills itself as a card. One that names a surface the theme draws leaves the
         // fill to the widget, which draws that surface behind the frame, so the frame is not drawn twice.
         color: root.surface === "" ? Theme.cardScheme.surface
@@ -67,12 +70,17 @@ MorphWidget {
             anchors.rightMargin: Theme.spaceOf(root.padding) + 1
             // A foldable panel's header is flush with the frame's top; its content has the padding above it.
             anchors.topMargin: (root.headerRowShown && root.collapsible ? 0 : Theme.spaceOf(root.padding)) + 1
-            anchors.bottomMargin: Theme.spaceOf(root.padding) + 1
+            // A folded panel is its header row inside the frame: no padding below it and no spacing to the hidden content.
+            anchors.bottomMargin: (root.folded ? 0 : Theme.spaceOf(root.padding)) + 1
+            spacing: root.folded ? 0 : 5  // the layout's default
 
             MorphSectionHeader {
                 id: header
                 visible: root.headerRowShown
                 Layout.fillWidth: true
+                // A header sits at least one step in from the frame, whatever the padding around the content.
+                Layout.leftMargin: Math.max(0, Theme.spaceOf(2) - Theme.spaceOf(root.padding))
+                Layout.rightMargin: Layout.leftMargin
                 title: root.title
                 open: !root.collapsed
                 foldable: root.collapsible
@@ -93,7 +101,7 @@ MorphWidget {
 
             Item {
                 Layout.fillHeight: true
-                visible: !root.contentStretches
+                visible: !root.contentStretches && !root.folded
             }
         }
     }

@@ -19,6 +19,7 @@
 #include <QTest>
 #include <QVariantList>
 #include <algorithm>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <functional>
@@ -484,6 +485,38 @@ TEST_CASE("qt_quick containers: a collapsible panel's header starts at the frame
     CHECK(std::abs(headerTop - (frameTop + 1)) < 0.5);
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     CHECK(named(item, "toggle").height() >= theme->property("targetHeight").toDouble() - 0.5);
+}
+
+// Mutation: leave the padding below and the layout's spacing in place while the content is hidden (the collapsed card
+// is then a header and 13 px more).
+TEST_CASE("qt_quick containers: a collapsed panel is its header row inside the frame, and no taller", "[qt_quick]") {
+    Scene scene;
+    auto panel = scene.backend().createPanel(nullptr);
+    panel->setTitle("Qualification");
+    panel->setPadding(2);
+    panel->setCollapsible(true);
+    panel->setCollapsed(true);
+    auto content = scene.backend().createButton(panel.get());
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*panel);
+    CHECK(named(item, "frame").height() == Catch::Approx(named(item, "toggle").height() + 2).margin(0.5));
+}
+
+// Mutation: inset the header by the panel's padding alone (a panel with no padding then draws its title on the
+// border).
+TEST_CASE("qt_quick containers: a section header keeps a horizontal inset whatever the panel's padding",
+          "[qt_quick]") {
+    Scene scene;
+    auto panel = scene.backend().createPanel(nullptr);
+    panel->setTitle("Stability");
+    panel->setPadding(0);
+    panel->setCollapsible(true);
+    auto content = scene.backend().createButton(panel.get());
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*panel);
+    constexpr double inset = 8;  // the default spacing step 2
+    double const frameLeft = named(item, "frame").mapToScene(QPointF{0, 0}).x();
+    CHECK(named(item, "title").mapToScene(QPointF{0, 0}).x() >= frameLeft + inset);
 }
 
 // Mutation: the old toggle, a ToolButton in the body font with no least height, indented by its own padding.
