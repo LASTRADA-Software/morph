@@ -256,9 +256,11 @@ A name with no factory refuses the mount with `no host screen `<name>` is regist
   a column with a gap of step 3 holding the search, the pins and the groups, so a hidden pin row or group takes no
   gap. Each group is a column of its own, `navigator_group_<module>/<group>_section`, gap step 1, holding a heading in
   the `Overline` text role, `navigator_group_<module>/<group>`, and then its entries. Each entry is a row as wide as the
-  navigator, `nav_row_<id>`, holding a list item (`ButtonStyle::Item`) that stretches, `nav_<id>`, and a badge, `nav_badge_<id>`, hidden until
-  the entry has a count. The search hides a row, and hides a group's column when no row of it shows.
-- **Counts.** `setBadge(id, NavigatorBadge{text, tone})` shows a count at the end of a screen's entry, and
+  navigator, `nav_row_<id>`, holding one list item (`ButtonStyle::Item`) that stretches, `nav_<id>`. The item's content
+  is a row, `nav_content_<id>` (gap step 1, centred), of the title as a text that stretches and a badge,
+  `nav_badge_<id>`, hidden until the entry has a count; the item's background, and so its selection, spans both. The
+  search hides a row, and hides a group's column when no row of it shows.
+- **Counts.** `setBadge(id, NavigatorBadge{text, tone})` shows a count at the end of a screen's entry, inside the item, and
   `setBadge(id, std::nullopt)` takes it away; `badgeOf(id)` answers it. The entry stays one button to assistive
   technology: its accessible name carries the count, "Review, 4", and is its title again without one. A screen the
   navigator does not list answers `false` and changes nothing. The client copies the app document's `navigation`
