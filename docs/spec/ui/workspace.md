@@ -147,7 +147,9 @@ tab is active, as public `Node`s a host can mount somewhere else entirely (a cli
 while `activeHeadShown()` holds, so the head shows once. The lead built for a shell has no minimum width of its own:
 the host places it, and the shell's lead block keeps the one 32-unit minimum, capped at its natural width. A minimum on
 the lead row too would raise the block's natural width to 32 units whenever the lead shows, and a trail that fits
-beside a short lead would wrap to a line of its own. The in-page head's lead keeps its minimum, which is the rule there. `activeHeadShown()` is a tracked read: true while the active
+beside a short lead would wrap to a line of its own. The in-page head's lead keeps its minimum, which is the rule there. `activeTitleSpans()` is a tracked read of the active tab's title runs, empty while the screen gives none: a shell
+draws them in its top bar in place of the tab's caption, and follows them as the screen's state changes, which the
+`onChanged` callback on a caption does not report. `activeHeadShown()` is a tracked read: true while the active
 tab's head has a subtitle, a badge, a tool, an action or a menu entry. It and the parts' own visibility share one rule,
 so the two cannot disagree. It reads
 `WorkspaceModel::active()` directly, not the public `Workspace::active()` index, since the index is a position in

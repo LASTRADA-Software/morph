@@ -2814,6 +2814,11 @@ public:
     /// @param dirty The condition.
     void dirty(AnyHandle const& dirty) { detail::put(_head, "dirty", dirty.json()); }
 
+    /// @brief The title as runs (`spans`), which a shell that knows them draws in its top bar in place of `title`: an
+    ///        identifier in the monospace face beside plain words. `title` stays the tab's caption.
+    /// @param runs The runs.
+    void titleSpans(AnyHandle const& runs) { detail::put(_head, "titleSpans", runs.json()); }
+
     /// @brief The head's line under the title.
     /// @param subtitle The expression.
     void subtitle(AnyHandle const& subtitle) { detail::put(_head, "subtitle", subtitle.json()); }

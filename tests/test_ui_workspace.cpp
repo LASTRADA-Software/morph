@@ -76,6 +76,22 @@ constexpr std::string_view kRunHead = R"({
   "subtitleSpans": { "list": [ "Instruments > ", { "obj": { "text": "EQ-0142", "mono": true } } ] },
   "view": { "kind": "text", "testId": "body", "text": "x" } })";
 
+/// A screen whose title is runs that follow its state, beside the plain line an older client draws.
+constexpr std::string_view kTitled = R"({
+  "vocab": "ui/1", "id": "titled", "title": "Plate PL-0193",
+  "titleSpans": { "list": [ "Plate ", { "obj": { "text": { "ref": "plate" }, "mono": true } } ] },
+  "state": { "plate": { "init": "PL-0193" } },
+  "view": { "kind": "column", "children": [
+    { "kind": "text", "testId": "body", "text": { "ref": "plate" } },
+    { "kind": "button", "testId": "rename", "label": "rename", "onClick": [ { "set": "plate", "value": "PL-0200" } ] }
+  ] } })";
+
+/// A screen whose title runs include one the head cannot read.
+constexpr std::string_view kBadTitle = R"({
+  "vocab": "ui/1", "id": "badtitle", "title": "Plate",
+  "titleSpans": { "list": [ "Plate ", { "list": [ "nested" ] } ] },
+  "view": { "kind": "text", "testId": "body", "text": "x" } })";
+
 /// A screen whose head has only a menu: an entry, a separator, an entry shown while `retireShown`, and a submenu.
 constexpr std::string_view kMenued = R"({
   "vocab": "ui/1", "id": "menued", "title": "Instrument", "menuLabel": "More instrument actions",
@@ -218,6 +234,8 @@ private:
             {"draft", loadOrFail(kDraft, morph::ui::testing::corpusCatalog())},
             {"headed", loadOrFail(kHeaded, morph::ui::testing::corpusCatalog())},
             {"runhead", loadOrFail(kRunHead, morph::ui::testing::corpusCatalog())},
+            {"titled", loadOrFail(kTitled, morph::ui::testing::corpusCatalog())},
+            {"badtitle", loadOrFail(kBadTitle, morph::ui::testing::corpusCatalog())},
             {"menued", loadOrFail(kMenued, morph::ui::testing::corpusCatalog())},
             {"tooled", loadOrFail(kTooled, morph::ui::testing::corpusCatalog())},
             {"asker", loadOrFail(kAsker, morph::ui::testing::corpusCatalog())},
@@ -1216,4 +1234,36 @@ TEST_CASE("workspace: the lead built for a shell has no minimum width, and the i
     }
     REQUIRE(shellLead != -1);
     CHECK(harness.backend.prop(shellLead, "layout") == "stretch(1)/content");
+}
+
+// Mutation: answer no runs for the active tab, or read the tab untracked (the second check fails).
+TEST_CASE("workspace: activeTitleSpans follows the active tab and its screen's state", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    CHECK(shell.activeTitleSpans().empty());
+    REQUIRE(shell.open("titled", {}) == 0U);
+    harness.settle();
+    CHECK(shell.activeTitleSpans() ==
+          std::vector<morph::ui::TextSpan>{{.text = "Plate "}, {.text = "PL-0193", .mono = true}});
+    harness.backend.click(harness.byTestId("Button", "rename"));
+    harness.settle();
+    CHECK(shell.activeTitleSpans() ==
+          std::vector<morph::ui::TextSpan>{{.text = "Plate "}, {.text = "PL-0200", .mono = true}});
+    REQUIRE(shell.open("headed", {}) == 1U);
+    harness.settle();
+    CHECK(shell.activeTitleSpans().empty());
+}
+
+// Mutation: report a dropped run on every read (the reason is listed twice).
+TEST_CASE("workspace: a title run the head cannot read is dropped and reported once", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    reported().clear();
+    REQUIRE(shell.open("badtitle", {}) == 0U);
+    harness.settle();
+    CHECK(shell.activeTitleSpans() == std::vector<morph::ui::TextSpan>{{.text = "Plate "}});
+    CHECK(shell.activeTitleSpans() == std::vector<morph::ui::TextSpan>{{.text = "Plate "}});
+    CHECK(reported().size() == 1);
 }

@@ -3084,6 +3084,10 @@ public:
     /// @return It, or `null`.
     [[nodiscard]] Value identity() const { return detail::evalIn(*_scope, nullptr, _core->doc().identity); }
 
+    /// @brief Evaluates the document's `titleSpans` into runs; a run the head cannot read is dropped and reported.
+    /// @return The runs; none when the document declares none.
+    [[nodiscard]] std::vector<TextSpan> titleSpans() const;
+
     /// @brief Evaluates the document's `subtitle`, the head's line under the title.
     /// @return It, or `null`.
     [[nodiscard]] Value subtitle() const { return detail::evalIn(*_scope, nullptr, _core->doc().subtitle); }
@@ -3324,6 +3328,9 @@ private:
     friend class Inspector;
 
     Screen() = default;
+
+    /// Evaluates a head expression of runs; a run the head cannot read is dropped and reported.
+    [[nodiscard]] std::vector<TextSpan> headSpans(ExprPtr const& expr) const;
 
     /// The states of the screen's own scope that have a value, by name: what a screen that replaces it keeps.
     [[nodiscard]] std::map<std::string, detail::ScreenCore::KeptState, std::less<>> ownState() const {
@@ -9813,8 +9820,7 @@ inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx)
 
 }  // namespace detail
 
-inline std::vector<TextSpan> Screen::subtitleSpans() const {
-    ExprPtr const& expr = _core->doc().subtitleSpans;
+inline std::vector<TextSpan> Screen::headSpans(ExprPtr const& expr) const {
     if (expr == nullptr) {
         return {};
     }
@@ -9830,6 +9836,10 @@ inline std::vector<TextSpan> Screen::subtitleSpans() const {
     }
     return spans;
 }
+
+inline std::vector<TextSpan> Screen::subtitleSpans() const { return headSpans(_core->doc().subtitleSpans); }
+
+inline std::vector<TextSpan> Screen::titleSpans() const { return headSpans(_core->doc().titleSpans); }
 
 inline BorrowedModel Screen::lend(std::string_view alias) const {
     detail::NameRef const* const found = _scope->find(alias);

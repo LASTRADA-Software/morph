@@ -34,7 +34,9 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 - `setHeadShown(shown)` shows or hides the two slots. The frame builds widgets and never sees what is mounted in
   them, so it cannot tell when the head is empty: the client says, and a new frame starts with them hidden. An
   application that mounts something else into the slots calls it itself.
-- `setTitle` sets the top bar's title, `setPrincipal` the sidebar's principal text; compact, the principal is the
+- `setTitle` sets the top bar's title and `setTitleSpans` its runs (an identifier in the mono face beside plain words,
+  each run in the heading role's size and weight), which draw in place of the plain title until they are cleared with an
+  empty list; `setPrincipal` the sidebar's principal text; compact, the principal is the
   sign-out entry's description.
 - The sign-out button calls `ShellFrameOptions::onSignOut`; with none, it and the compact sign-out entry are hidden.
 

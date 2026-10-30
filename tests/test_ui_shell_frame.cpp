@@ -234,3 +234,25 @@ TEST_CASE("shell frame: compact, the sidebar and the principal give way to a nav
     CHECK(backend.prop(sidebar, "visible") == "true");
     CHECK(backend.prop(menu, "visible") == "false");
 }
+
+// Control: ignore the runs (`shell_title` keeps the plain title), or keep them after they are cleared.
+TEST_CASE("shell frame: the title draws a screen's runs in place of its plain title, until they are cleared",
+          "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const title = backend.find("Text", "testId", "shell_title").value();
+    frame.setTitle("Plate PL-0193");
+    CHECK(backend.prop(title, "text") == "Plate PL-0193");
+    CHECK_FALSE(backend.hasProp(title, "spans"));
+
+    frame.setTitleSpans({{.text = "Plate "}, {.text = "PL-0193", .mono = true}});
+    CHECK(backend.prop(title, "spans") == "[Plate ,PL-0193;mono]");
+    // A new caption while the runs show does not replace them.
+    frame.setTitle("Plate PL-0200");
+    CHECK(backend.prop(title, "spans") == "[Plate ,PL-0193;mono]");
+
+    frame.setTitleSpans({});
+    CHECK(backend.prop(title, "text") == "Plate PL-0200");
+}

@@ -367,6 +367,14 @@ public:
         return HeadParts{.lead = ui::row(std::move(lead)), .trail = ui::row(std::move(trail))};
     }
 
+    /// @brief The active tab's title as runs, which a shell that knows them draws in place of the tab's caption. A
+    ///        tracked read.
+    /// @return The runs; empty with no active tab, or while the active screen gives none.
+    [[nodiscard]] std::vector<TextSpan> activeTitleSpans() const {
+        std::optional<WorkspaceTabId> const tab = _model->active().get();
+        return tab ? titleSpansOf(headOf(*tab)) : std::vector<TextSpan>{};
+    }
+
     /// @brief Whether the active tab's head shows anything: a subtitle, a badge, an action or a menu entry. A tracked
     ///        read, so a
     ///        shell that shows the head on a line of its own follows a tab switch and a head's own changes; the head
@@ -739,6 +747,12 @@ private:
         ScreenHead const* const head = headOf(tab);
         return head != nullptr &&
                (!head->subtitle().get().empty() || !subtitleSpansOf(head).empty() || !head->status().get().empty());
+    }
+
+    // The head's title runs; a tracked read, empty for a head that has none.
+    [[nodiscard]] static std::vector<TextSpan> titleSpansOf(ScreenHead const* head) {
+        reactive::Computed<std::vector<TextSpan>> const* const spans = head == nullptr ? nullptr : head->titleSpans();
+        return spans == nullptr ? std::vector<TextSpan>{} : spans->get();
     }
 
     // The head's subtitle runs; a tracked read, empty for a head that has none.

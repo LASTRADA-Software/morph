@@ -494,6 +494,7 @@ private:
             return;
         }
         _headTab = active;
+        _titleSpans.reset();
         _headShown.reset();
         ui::HeadParts parts = _workspace->headPartsForActive();
         _headLead.emplace(_context->runtime(), *_backend, std::move(parts.lead), &_frame->headLeadSlot());
@@ -502,11 +503,15 @@ private:
         // they hold.
         _headShown = std::make_unique<reactive::Effect>(
             _context->runtime(), [this] { _frame->setHeadShown(_workspace->activeHeadShown()); });
+        // The title's runs follow the screen's state, which a callback on the tab's caption does not hear.
+        _titleSpans = std::make_unique<reactive::Effect>(
+            _context->runtime(), [this] { _frame->setTitleSpans(_workspace->activeTitleSpans()); });
     }
 
     // The head row's own mount and its comparison key, always reset together: resetting one without the other would
     // leave the guard above comparing against a tab id from a Workspace instance that no longer exists.
     void resetHead() {
+        _titleSpans.reset();
         _headShown.reset();
         _head.reset();
         _headLead.reset();
@@ -852,6 +857,8 @@ private:
     std::optional<ui::Mounted> _headLead;
     // Shows the frame's head slots while the active tab's head has content; goes with `_head`.
     std::unique_ptr<reactive::Effect> _headShown;
+    // Shows the frame's title as the active tab's runs; goes with `_head`.
+    std::unique_ptr<reactive::Effect> _titleSpans;
     std::optional<ui::WorkspaceTabId> _headTab;
     // Whether a sign-in or sign-out has reloaded the catalog, and whether the session is now signed in.
     bool _changed = false;

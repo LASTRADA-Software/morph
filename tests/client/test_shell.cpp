@@ -143,6 +143,27 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> countingBund
     return served.build();
 }
 
+/// A screen whose title is runs that follow its state: a plate ID in the mono face, renamed by a button.
+constexpr std::string_view kTitled = R"({
+  "vocab": "ui/1", "id": "probe.titled", "title": "Plate PL-0193",
+  "titleSpans": { "list": [ "Plate ", { "obj": { "text": { "ref": "plate" }, "mono": true } } ] },
+  "state": { "plate": { "init": "PL-0193" } },
+  "view": { "kind": "button", "testId": "rename", "label": "rename",
+            "onClick": [ { "set": "plate", "value": "PL-0200" } ] } })";
+
+/// The bundle of that one screen, not public, so the shell starts signed in.
+/// @return It, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> titledBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    ui::CatalogEntry entry;
+    entry.id = "probe.titled";
+    entry.title = "probe.titled";
+    if (auto added = served.addScreen(std::move(entry), std::string{kTitled}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
 /// A widget's property, or nothing while no widget of that kind has that test id.
 // NOLINTBEGIN(bugprone-easily-swappable-parameters): a kind, a test id and a property name, as the backend reads them.
 std::optional<std::string> propOf(ui::testing::RecordingBackend const& backend, std::string_view kind,
@@ -348,4 +369,27 @@ TEST_CASE("Client shell: the app document's navigation counts follow its state o
     }
     source.close();
     CHECK(problems.empty());
+}
+
+// Control: set the title's runs once in `showActiveTitle`, and the second check fails; drop the effect, and the first
+// does.
+TEST_CASE("Client shell: the top bar's title shows a screen's runs, and follows them without a tab switch",
+          "[client][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &titledBundle}, client::LocalSetup{}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "probe.titled"});
+        auto const runs = [&backend] { return propOf(backend, "Text", "shell_title", "spans"); };
+        CHECK(pumpUntil(context.owner(), [&runs] { return runs() == "[Plate ,PL-0193;mono]"; }));
+        backend.click(*backend.find("Button", "testId", "rename"));
+        CHECK(pumpUntil(context.owner(), [&runs] { return runs() == "[Plate ,PL-0200;mono]"; }));
+    }
+    source.close();
 }

@@ -45,8 +45,10 @@ struct MountError {
     std::string reason;
 };
 
-/// @brief A screen's head beside its title: the subtitle, the status badges, the tools, the actions and the head's own
-///        menu a shell shows above the screen (the document's `subtitle`, `status`, `tools`, `actions` and `menu`).
+/// @brief A screen's head beside its title: the title's runs, the subtitle, the status badges, the tools, the actions
+/// and the head's own
+///        menu a shell shows above the screen (the document's `titleSpans`, `subtitle`, `status`, `tools`, `actions`
+///        and `menu`).
 ///
 /// The head is data: the screen evaluates it and the shell draws it, so a host screen's handle can implement it too.
 /// The menu and tool members have defaults, for a head that has neither.
@@ -58,6 +60,11 @@ public:
     ScreenHead(ScreenHead&&) = delete;
     ScreenHead& operator=(ScreenHead&&) = delete;
     virtual ~ScreenHead() = default;
+
+    /// @brief The title as runs, which a shell that knows them draws in its top bar in place of `title`.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
+    ///         its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<std::vector<TextSpan>> const* titleSpans() const { return nullptr; }
 
     /// @brief The subtitle, as text; empty when the screen declares none.
     /// @return It; it keeps its last value once the screen is closed.
@@ -736,6 +743,9 @@ private:
         [[nodiscard]] reactive::Computed<Value> const& identity() const override { return _state->identity; }
 
         [[nodiscard]] ScreenHead* head() noexcept override { return this; }
+        [[nodiscard]] reactive::Computed<std::vector<TextSpan>> const* titleSpans() const override {
+            return &_state->titleSpans;
+        }
         [[nodiscard]] reactive::Computed<std::string> const& subtitle() const override { return _state->subtitle; }
         [[nodiscard]] reactive::Computed<std::vector<TextSpan>> const* subtitleSpans() const override {
             return &_state->subtitleSpans;
@@ -858,6 +868,13 @@ private:
                                }
                                return lastIdentity;
                            }},
+                  titleSpans{*runtime,
+                             [this] {
+                                 if (!closed.get() && generation.get() >= 0) {
+                                     lastTitleSpans = screen->titleSpans();
+                                 }
+                                 return lastTitleSpans;
+                             }},
                   subtitle{*runtime,
                            [this] {
                                if (!closed.get() && generation.get() >= 0) {
@@ -1051,6 +1068,7 @@ private:
                     // The last values a host reads once the screen is gone, whether or not it read them before.
                     lastTitle = detail::host::titleText(screen->title());
                     lastIdentity = screen->identity();
+                    lastTitleSpans = screen->titleSpans();
                     lastSubtitle = detail::host::titleText(screen->subtitle());
                     lastSubtitleSpans = screen->subtitleSpans();
                     runtime->batch([this] { closed.set(true); });
@@ -1087,6 +1105,7 @@ private:
             std::uint64_t watches = 0;
             std::string lastTitle;
             Value lastIdentity;
+            std::vector<TextSpan> lastTitleSpans;
             std::string lastSubtitle;
             std::vector<TextSpan> lastSubtitleSpans;
             std::string lastMenuLabel = "More actions";
@@ -1099,6 +1118,7 @@ private:
             reactive::Computed<std::string> title;
             reactive::Computed<bool> dirty;
             reactive::Computed<Value> identity;
+            reactive::Computed<std::vector<TextSpan>> titleSpans;
             reactive::Computed<std::string> subtitle;
             reactive::Computed<std::vector<TextSpan>> subtitleSpans;
             reactive::Computed<std::vector<HeadBadge>> status;

@@ -211,7 +211,18 @@ public:
 
     /// @brief Shows the shown screen's title in the top bar.
     /// @param title The title; empty shows none.
-    void setTitle(std::string_view title) { _title->setText(title); }
+    void setTitle(std::string_view title) {
+        _titleText = std::string{title};
+        showTitle();
+    }
+
+    /// @brief Shows the shown screen's title as runs in the top bar, in place of the plain title: an identifier in the
+    ///        monospace face beside plain words. The heading role gives every run its size and weight.
+    /// @param spans The runs; empty draws `setTitle`'s text.
+    void setTitleSpans(std::vector<TextSpan> const& spans) {
+        _titleSpans = spans;
+        showTitle();
+    }
 
     /// @brief Shows who is signed in, at the sidebar's foot and as the compact menu's sign-out entry's description.
     /// @param principal The principal's name; empty shows none.
@@ -262,6 +273,16 @@ private:
         auto row = backend.createStack(parent, Axis::Horizontal);
         row->setWrap(true);
         return row;
+    }
+
+    // The title: the runs while there are any, else the plain text. Each call replaces what the text shows whole, so
+    // clearing the runs brings the plain text back.
+    void showTitle() {
+        if (_titleSpans.empty()) {
+            _title->setText(_titleText);
+        } else {
+            _title->setSpans(_titleSpans);
+        }
     }
 
     // The navigation menu lists the navigator's entries, and, with a sign-out handler, a separator and a sign-out
@@ -318,6 +339,8 @@ private:
     std::unique_ptr<SpacerWidget> _right;
     std::function<void()> _onSignOut;
     std::string _principalName;
+    std::string _titleText;
+    std::vector<TextSpan> _titleSpans;
     std::size_t _navEntryCount = 0;
     bool _signedIn = true;
     bool _compact = false;

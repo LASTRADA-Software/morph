@@ -201,7 +201,8 @@ expression of one),
   that reads at the call): `text({.spans = spans({"Lot ", mono(lot)}), .role = "muted"})`. `styled` is not `span`,
   which a node's `span` already means. A `text` also takes `tone`, its colour whatever its role:
   `text({.text = "7", .role = "display", .tone = "err"})`. A dialog or drawer takes `descriptionSpans` beside
-  `description`, and `Scope::subtitleSpans(runs)` gives a screen's head its subtitle as runs beside `subtitle`.
+  `description`, and `Scope::subtitleSpans(runs)` gives a screen's head its subtitle as runs beside `subtitle`, and `Scope::titleSpans(runs)`
+  its title as runs beside `title`.
 - **`group`** takes its children and `GroupOptions{label, required, description, errors, gap}`.
 - **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected, children, shape,
   size, mono}`: an absent `style` writes no key, and `selected`, a condition, is written as given: an item's current

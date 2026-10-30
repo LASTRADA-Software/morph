@@ -63,7 +63,7 @@ refused: a lab writes dates one way everywhere, so the pattern is the applicatio
 | `vocab` | `vocab` | `ui/1` (`kVocabulary`) |
 | `id` | `id` | Non-empty |
 | `title`, `identity`, `dirty` | same | Expressions; `dirty` is a condition |
-| `subtitle`, `subtitleSpans`, `status`, `tools`, `actions`, `menu`, `menuLabel` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
+| `titleSpans`, `subtitle`, `subtitleSpans`, `status`, `tools`, `actions`, `menu`, `menuLabel` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
 | `navigation` | `navigation` | The counts on the navigator's entries, in the app scope ([The app document's navigation](#the-app-documents-navigation)); the app document's only |
 | `params` | `params` | Name to type, in declaration order |
 | `scope` | `models`, `state`, `let`, `queries`, `mutations`, `watch`, `checks` | The screen scope's declarations |
@@ -88,7 +88,9 @@ rather than having it ignored: the author meant a refresh the client would silen
 
 ### The head
 
-A screen's head is what a shell shows above it beside the title: `subtitle` (an expression), `subtitleSpans` (an
+A screen's head is what a shell shows above it beside the title: `titleSpans` (an expression of runs, as a `text`'s
+`spans`: a shell draws them in its top bar in place of `title`, which stays the tab's caption, the navigator's entry,
+the window's title and what an older shell draws; the runs are not compared with `title`), `subtitle` (an expression), `subtitleSpans` (an
 expression of runs, as a `text`'s `spans`: a shell that knows it draws the runs in place of `subtitle`, and `subtitle`
 beside it is what an older shell draws), `status` (parts
 `headBadge`: `{tone, text, icon, visible}`), `tools` (parts `headTool`), `actions` (parts `actionButton`) and its own

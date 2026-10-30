@@ -571,6 +571,9 @@ struct Document {
     ExprPtr identity;
     /// @brief The unsaved-changes expression.
     ExprPtr dirty;
+    /// @brief The title as runs, drawn in place of `title` in a shell's top bar by a client that knows it; `nullptr`
+    ///        when none is declared.
+    ExprPtr titleSpans;
     /// @brief The subtitle expression of the screen's head; `nullptr` when none is declared.
     ExprPtr subtitle;
     /// @brief The subtitle as runs, drawn in place of `subtitle` by a client that knows it; `nullptr` when none is
@@ -1276,6 +1279,7 @@ public:
         doc.title = optionalExpr(*object, "title", "");
         doc.identity = optionalExpr(*object, "identity", "");
         doc.dirty = optionalExpr(*object, "dirty", "");
+        doc.titleSpans = optionalExpr(*object, "titleSpans", "");
         doc.subtitle = optionalExpr(*object, "subtitle", "");
         doc.subtitleSpans = optionalExpr(*object, "subtitleSpans", "");
         doc.status = topParts(*object, "status", "headBadge");
@@ -1287,7 +1291,7 @@ public:
         if (doc.id == "app") {
             // The head belongs to a screen's tab; the app document has no view and so no head.
             for (std::string_view const key :
-                 {"subtitle", "subtitleSpans", "status", "actions", "menu", "menuLabel", "tools"}) {
+                 {"titleSpans", "subtitle", "subtitleSpans", "status", "actions", "menu", "menuLabel", "tools"}) {
                 if (member(*object, key) != nullptr) {
                     refuse(pointerAppend("", key),
                            "`" + std::string{key} + "` is a screen's; the app document has none");
@@ -2543,6 +2547,10 @@ public:
         }
         if (_doc->dirty) {
             checkCondition(*_doc->dirty, root, "`dirty`");
+        }
+        if (_doc->titleSpans) {
+            checkExpr(*_doc->titleSpans, root);
+            checkSpans(_doc->titleSpans);
         }
         if (_doc->subtitle) {
             checkExpr(*_doc->subtitle, root);
