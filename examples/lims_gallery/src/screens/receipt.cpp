@@ -312,7 +312,7 @@ ui::Node sampleHeading(Receipt const& receipt) {
     auto const sampleId = receipt.sample.at("id");
     auto const heading = ui::text({.text = ui::format("Sample {0}", {sampleId}),
                                    .spans = whileSampled(receipt, ui::spans({"Sample ", ui::mono(sampleId)})),
-                                   .role = "section"})
+                                   .role = "heading"})
                              .testId("sample-id");
     return ui::row({heading, layout::tag(receipt.sample.at("status"), "neutral")},
                    {.gap = 1, .align = Align::Center, .wrap = true});
@@ -342,14 +342,18 @@ ui::Node sampleCard(Receipt const& receipt) {
                           .readonly(true)
                           .testId("type");
     return ui::panel(
-               {ui::row({sampleHeading(receipt), ui::spacer().sizing(ui::stretch()), lotLine},
-                        {.gap = 1, .align = Align::Center}),
-                ui::grid({type, temperatureField(receipt), receivedAtField(receipt), locationField(receipt),
-                          containersField(receipt), courierField(receipt)},
-                         {.gap = 2, .columns = 3, .align = Align::Start}),
-                conditions(receipt, false), noteField(receipt),
-                ui::row({rejectButton(receipt, "Reject sample…"), receiveButton(receipt, "Receive and scan next")},
-                        {.gap = 1, .justify = Justify::Between})},
+               {ui::column(
+                   {ui::column({ui::row({sampleHeading(receipt), ui::spacer().sizing(ui::stretch()), lotLine},
+                                        {.gap = 1, .align = Align::Center}),
+                                ui::grid({type, temperatureField(receipt), receivedAtField(receipt),
+                                          locationField(receipt), containersField(receipt), courierField(receipt)},
+                                         {.gap = 2, .columns = 2, .align = Align::Start}),
+                                conditions(receipt, false), noteField(receipt)},
+                               {.gap = 2}),
+                    // A rule above the decisions separates them from the form.
+                    ui::row({rejectButton(receipt, "Reject sample…"), receiveButton(receipt, "Receive and scan next")},
+                            {.gap = 1, .justify = Justify::Between})},
+                   {.gap = 2, .divided = true})},
                {.padding = 3})
         .visible(ui::engaged(receipt.sample))
         .testId("sample");
@@ -372,7 +376,7 @@ ui::Node sessionTable(Receipt const& receipt, bool bleeds) {
         ui::table(receipt.session, {.key = ui::row("sample"),
                                     .columns = {{.name = "time",
                                                  .label = "Time",
-                                                 .width = ui::fixed(8),
+                                                 .width = ui::fixed(6),
                                                  .cell = ui::text({.text = ui::row("time")})},
                                                 {.name = "sample",
                                                  .label = "Sample",
@@ -418,11 +422,12 @@ ui::Node rejectDialog(Receipt const& receipt) {
 ui::Node expandedLayout(Receipt const& receipt) {
     auto const left = ui::column({scanField(receipt, false), notices(receipt), sampleCard(receipt)}, {.gap = 2})
                           .sizing(ui::stretch());
-    auto const session = ui::panel({sessionTable(receipt, true), rejectionLine(receipt).testId("last-rejection")},
-                                   {.title = "This session", .padding = 2})
-                             // The design's 300 px column, in the frontend's character widths.
-                             .sizing(ui::fixed(36))
-                             .testId("session-panel");
+    auto const session =
+        ui::panel({sessionTable(receipt, true), rejectionLine(receipt).testId("last-rejection")},
+                  {.title = "This session", .padding = 2})
+            // Wide enough for the table's three columns beside the sample card on the 785 px page the sidebar leaves.
+            .sizing(ui::fixed(34))
+            .testId("session-panel");
     return ui::pinned(
         ui::column({ui::row({left, session}, {.gap = 2, .align = Align::Start}), rejectDialog(receipt)}));
 }
