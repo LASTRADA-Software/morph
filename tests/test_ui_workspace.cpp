@@ -119,14 +119,16 @@ constexpr std::string_view kEdgeRoot = R"({
 constexpr std::string_view kLeadPlaced = R"({
   "vocab": "ui/1", "id": "leadplaced", "title": "Plate",
   "subtitle": "ELISA", "leadPlacement": { "ref": "place" }, "headSurface": { "ref": "surface" },
+  "pageSurface": { "ref": "pageName" },
   "status": [ { "text": "Draft", "tone": "warn" } ],
   "tools": [ { "id": "q", "kind": "search", "label": "Search", "value": "" } ],
   "actions": [ { "id": "scan", "label": "Scan", "icon": "scan", "iconOnly": { "ref": "compact" }, "onClick": [] } ],
-  "state": { "place": { "init": "end" }, "surface": { "init": "" }, "compact": { "init": true } },
+  "state": { "place": { "init": "end" }, "surface": { "init": "" }, "pageName": { "init": "" }, "compact": { "init": true } },
   "view": { "kind": "column", "children": [
     { "kind": "button", "testId": "below", "label": "below", "onClick": [ { "set": "place", "value": "below" } ] },
     { "kind": "button", "testId": "inline", "label": "inline", "onClick": [ { "set": "place", "value": "inline" } ] },
     { "kind": "button", "testId": "dark", "label": "dark", "onClick": [ { "set": "surface", "value": "darkHead" } ] },
+    { "kind": "button", "testId": "plain", "label": "plain", "onClick": [ { "set": "pageName", "value": "plainPage" } ] },
     { "kind": "button", "testId": "wide", "label": "wide", "onClick": [ { "set": "compact", "value": false } ] }
   ] } })";
 
@@ -1470,4 +1472,21 @@ TEST_CASE("workspace: activeHeadSurface follows the active screen's headSurface"
     REQUIRE(shell.open("headed", {}) == 1U);
     harness.settle();
     CHECK(shell.activeHeadSurface().empty());
+}
+
+// Mutation: read the surface untracked (the second check fails), or answer none.
+TEST_CASE("workspace: activePageSurface follows the active screen's pageSurface", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog(), nullptr, morph::ui::HeadPlacement::External};
+    CHECK(shell.activePageSurface().empty());
+    REQUIRE(shell.open("leadplaced", {}) == 0U);
+    harness.settle();
+    CHECK(shell.activePageSurface().empty());
+    harness.backend.click(harness.byTestId("Button", "plain"));
+    harness.settle();
+    CHECK(shell.activePageSurface() == "plainPage");
+    REQUIRE(shell.open("headed", {}) == 1U);
+    harness.settle();
+    CHECK(shell.activePageSurface().empty());
 }

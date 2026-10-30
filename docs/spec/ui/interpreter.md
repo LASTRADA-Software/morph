@@ -376,7 +376,7 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
 - **The head's placement.** `Screen::leadPlacement()` is a tracked read of the document's `leadPlacement` as a
   `LeadPlacement` (`Below`, `Inline`, `End`); absent is `Below`, and a value that names none of the places is reported
   once at its path and taken as `Below`. `Screen::headSurface()` is a tracked read of `headSurface` as a name, empty for
-  none. `AppRoot::principalPlacement()` answers the app document's `principalPlacement` as a `PrincipalPlacement`
+  none, and `Screen::pageSurface()` of `pageSurface` alike (empty is the built-in `page`). `AppRoot::principalPlacement()` answers the app document's `principalPlacement` as a `PrincipalPlacement`
   (`Sidebar`, `Head`), `Sidebar` when the document gives none.
 - **A footer action.** `actionBarOf` draws each `actions` part of a dialog or drawer as a button with the part's `icon`;
   with `iconOnly` the button's label is empty while the condition holds and the part's label is its accessible name and

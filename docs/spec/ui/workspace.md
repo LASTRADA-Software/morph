@@ -163,7 +163,8 @@ A lead at the `end` counts as trail content. In the page (`HeadPlacement::InPage
 head's place (`Below` with no active tab), `activeHeadOneLine()` of whether the head has no eyebrow and nothing under the
 title (`true` with no active tab), `activeHeadJoined()` of whether the page continues the head's block (the screen's
 `headJoined`, and the page not inset: two tabs inset it), and `activeHeadSurface()` of the surface the screen asks the
-top bar to be drawn on (empty with none). A trail button of an `actionButton` with `iconOnly` has an empty label, and the
+top bar to be drawn on (empty with none); `activePageSurface()` is the same read of the surface it asks the page area
+to be drawn on (empty with none or with no active tab). A trail button of an `actionButton` with `iconOnly` has an empty label, and the
 action's label as its accessible name and tooltip. The head's eyebrow (`HeadParts::eyebrow`, `head_eyebrow`) is the screen's `eyebrowSpans` as the muted text's runs when
 it gives them, else its plain `eyebrow` as one run, hidden while there is none; a shell draws it above the title, and
 the in-page head draws it as a line above the head row (`head_block`, a column of the eyebrow and `head`). A head with

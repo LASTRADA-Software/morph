@@ -89,6 +89,11 @@ public:
     ///         its last value once the screen is closed. An empty name is none.
     [[nodiscard]] virtual reactive::Computed<std::string> const* headSurface() const { return nullptr; }
 
+    /// @brief The name of the surface a shell draws the page area on while the screen is shown.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
+    ///         its last value once the screen is closed. An empty name is the built-in `page` surface.
+    [[nodiscard]] virtual reactive::Computed<std::string> const* pageSurface() const { return nullptr; }
+
     /// @brief The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none.
     /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
     ///         its last value once the screen is closed.
@@ -787,6 +792,9 @@ private:
         [[nodiscard]] reactive::Computed<std::string> const* headSurface() const override {
             return &_state->headSurface;
         }
+        [[nodiscard]] reactive::Computed<std::string> const* pageSurface() const override {
+            return &_state->pageSurface;
+        }
         [[nodiscard]] reactive::Computed<std::string> const* eyebrow() const override { return &_state->eyebrow; }
         [[nodiscard]] reactive::Computed<std::vector<TextSpan>> const* eyebrowSpans() const override {
             return &_state->eyebrowSpans;
@@ -932,6 +940,7 @@ private:
                   leadPlacement{*runtime,
                                 remembered(lastLeadPlacement, [](Screen& open) { return open.leadPlacement(); })},
                   headSurface{*runtime, remembered(lastHeadSurface, [](Screen& open) { return open.headSurface(); })},
+                  pageSurface{*runtime, remembered(lastPageSurface, [](Screen& open) { return open.pageSurface(); })},
                   eyebrow{*runtime, remembered(lastEyebrow,
                                                [](Screen& open) { return detail::host::titleText(open.eyebrow()); })},
                   eyebrowSpans{*runtime,
@@ -1105,6 +1114,7 @@ private:
                     lastHeadJoined = screen->headJoined();
                     lastLeadPlacement = screen->leadPlacement();
                     lastHeadSurface = screen->headSurface();
+                    lastPageSurface = screen->pageSurface();
                     lastEyebrow = detail::host::titleText(screen->eyebrow());
                     lastEyebrowSpans = screen->eyebrowSpans();
                     lastSubtitle = detail::host::titleText(screen->subtitle());
@@ -1148,6 +1158,7 @@ private:
             bool lastHeadJoined = false;
             LeadPlacement lastLeadPlacement = LeadPlacement::Below;
             std::string lastHeadSurface;
+            std::string lastPageSurface;
             std::string lastEyebrow;
             std::vector<TextSpan> lastEyebrowSpans;
             std::string lastSubtitle;
@@ -1167,6 +1178,7 @@ private:
             reactive::Computed<bool> headJoined;
             reactive::Computed<LeadPlacement> leadPlacement;
             reactive::Computed<std::string> headSurface;
+            reactive::Computed<std::string> pageSurface;
             reactive::Computed<std::string> eyebrow;
             reactive::Computed<std::vector<TextSpan>> eyebrowSpans;
             reactive::Computed<std::string> subtitle;

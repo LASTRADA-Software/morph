@@ -64,7 +64,7 @@ refused: a lab writes dates one way everywhere, so the pattern is the applicatio
 | `id` | `id` | Non-empty |
 | `title`, `identity`, `dirty` | same | Expressions; `dirty` is a condition |
 | `titleSpans`, `eyebrow`, `eyebrowSpans`, `subtitle`, `subtitleSpans`, `status`, `tools`, `actions`, `menu`, `menuLabel` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
-| `leadPlacement`, `headSurface` | same | Where the head's lead sits and the surface the shell draws its top bar on while the screen is shown, in the screen scope ([The head](#the-head)); a screen's only |
+| `leadPlacement`, `headSurface`, `pageSurface` | same | Where the head's lead sits, the surface the shell draws its top bar on while the screen is shown, and the surface it draws the page area on, in the screen scope ([The head](#the-head)); a screen's only |
 | `principalPlacement` | `principalPlacement` | Where the shell shows who is signed in: `sidebar` (the default, at the sidebar's foot) or `head` (at the top bar's trailing end); a literal name, the app document's only, and any other name is refused at load |
 | `navigation` | `navigation` | The counts on the navigator's entries, in the app scope ([The app document's navigation](#the-app-documents-navigation)); the app document's only |
 | `params` | `params` | Name to type, in declaration order |
@@ -116,6 +116,11 @@ class can pick one.
 `headSurface` (an expression of a surface's name, `null` or absent for none) is the surface the shell draws its top bar
 on while the screen is shown; a name that is no surface draws as none does. The built-in `toolbarJoined` surface wins
 over it while the page continues the head's block.
+
+`pageSurface` (an expression of a surface's name, `null` or absent for the built-in `page` surface) is the surface the
+shell draws the page area on while the screen is shown, so a screen can sit on a white page at one width and on the
+grey one at another (`cond(compact, "plainPage", null)`); a name that is no surface draws as `page` does. It is a
+screen's member, as every head member is: the app document refuses it.
 
 An `actionButton` part also takes `iconOnly` (a condition): while it holds, the button draws its `icon` alone and its
 label is its accessible name and its tooltip. A part with `iconOnly` and no `icon` is refused (`` an icon-only action

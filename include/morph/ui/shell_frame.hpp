@@ -273,6 +273,11 @@ public:
         showTopBarSurface();
     }
 
+    /// @brief Sets the surface the shown screen asks the page area to be drawn on.
+    /// @param surface The surface's name; empty for none, which is `page`. A name no surface answers to draws as
+    ///        `page` does.
+    void setPageSurface(std::string_view surface) { _page->setSurface(surface.empty() ? "page" : surface); }
+
     /// @brief Moves the principal from the sidebar's foot to the top bar's trailing end. Compact, the head draws
     ///        none and the navigation menu's sign-out entry stays described by the principal.
     /// @param inHead Whether the principal sits in the top bar. A new frame has it in the sidebar.

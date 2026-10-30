@@ -509,13 +509,14 @@ private:
         _headShown = std::make_unique<reactive::Effect>(
             _context->runtime(), [this] { _frame->setHeadShown(_workspace->activeHeadShown()); });
         // How the head lays out follows the screen's own state, which a width change can flip: where the lead sits,
-        // whether the head is one line to centre, whether the page continues the head's block, and the surface the
+        // whether the head is one line to centre, whether the page continues the head's block, and the surfaces the
         // screen asks for.
         _headLayout = std::make_unique<reactive::Effect>(_context->runtime(), [this] {
             _frame->setLeadInline(_workspace->activeLeadPlacement() == ui::LeadPlacement::Inline);
             _frame->setHeadOneLine(_workspace->activeHeadOneLine());
             _frame->setHeadJoined(_workspace->activeHeadJoined());
             _frame->setHeadSurface(_workspace->activeHeadSurface());
+            _frame->setPageSurface(_workspace->activePageSurface());
         });
         // The page is inset unless the shown screen insets itself, and follows a width change or a state change of
         // the screen.

@@ -3138,6 +3138,11 @@ public:
     /// @return The name; empty for none.
     [[nodiscard]] std::string headSurface() const;
 
+    /// @brief The name of the surface the shell draws the page area on while this screen is shown: the document's
+    ///        `pageSurface`, read now. A tracked read.
+    /// @return The name; empty for none, which is the built-in `page` surface.
+    [[nodiscard]] std::string pageSurface() const;
+
     /// @brief Evaluates the document's `titleSpans` into runs; a run the head cannot read is dropped and reported.
     /// @return The runs; none when the document declares none.
     [[nodiscard]] std::vector<TextSpan> titleSpans() const;
@@ -10003,6 +10008,12 @@ inline LeadPlacement Screen::leadPlacement() const {
 
 inline std::string Screen::headSurface() const {
     Value const value = detail::evalIn(*_scope, nullptr, _core->doc().headSurface);
+    std::string const* const name = value.asString();
+    return name == nullptr ? std::string{} : *name;
+}
+
+inline std::string Screen::pageSurface() const {
+    Value const value = detail::evalIn(*_scope, nullptr, _core->doc().pageSurface);
     std::string const* const name = value.asString();
     return name == nullptr ? std::string{} : *name;
 }

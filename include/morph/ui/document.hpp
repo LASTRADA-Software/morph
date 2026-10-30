@@ -590,6 +590,9 @@ struct Document {
     /// @brief The surface the shell draws the top bar on while the screen is shown: an expression of a surface's
     ///        name; `nullptr` when none is declared.
     ExprPtr headSurface;
+    /// @brief The surface the shell draws the page area on while the screen is shown: an expression of a surface's
+    ///        name; `nullptr` when none is declared, which is the built-in `page` surface.
+    ExprPtr pageSurface;
     /// @brief The app document's principal placement, `sidebar` or `head`; empty for the default, `sidebar`.
     std::string principalPlacement;
     /// @brief The head's status badges: `headBadge` parts, in order.
@@ -1294,6 +1297,7 @@ public:
         doc.leadPlacement = optionalExpr(*object, "leadPlacement", "");
         checkLeadPlacementLiteral(doc.leadPlacement);
         doc.headSurface = optionalExpr(*object, "headSurface", "");
+        doc.pageSurface = optionalExpr(*object, "pageSurface", "");
         doc.status = topParts(*object, "status", "headBadge");
         doc.actions = topParts(*object, "actions", "actionButton");
         doc.menu = topParts(*object, "menu", "headMenuItem");
@@ -1304,7 +1308,7 @@ public:
             // The head belongs to a screen's tab; the app document has no view and so no head.
             for (std::string_view const key :
                  {"titleSpans", "eyebrow", "eyebrowSpans", "subtitle", "subtitleSpans", "leadPlacement", "headSurface",
-                  "status", "actions", "menu", "menuLabel", "tools"}) {
+                  "pageSurface", "status", "actions", "menu", "menuLabel", "tools"}) {
                 if (member(*object, key) != nullptr) {
                     refuse(pointerAppend("", key),
                            "`" + std::string{key} + "` is a screen's; the app document has none");
@@ -2603,6 +2607,9 @@ public:
         }
         if (_doc->headSurface) {
             checkExpr(*_doc->headSurface, root);
+        }
+        if (_doc->pageSurface) {
+            checkExpr(*_doc->pageSurface, root);
         }
         if (_doc->menuLabel) {
             checkExpr(*_doc->menuLabel, root);

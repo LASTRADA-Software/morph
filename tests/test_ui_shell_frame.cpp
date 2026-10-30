@@ -416,3 +416,17 @@ TEST_CASE("shell frame: the principal can sit in the top bar instead of the side
     CHECK(backend.prop(headPrincipal, "visible") == "false");
     CHECK(backend.prop(sidebarPrincipal, "visible") == "false");
 }
+
+// Mutation: ignore the name, or leave the empty name as the surface.
+TEST_CASE("shell frame: the page area is drawn on the surface the screen asks for, else page", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const page = backend.find("Column", "testId", "shell_page").value();
+    CHECK(backend.prop(page, "surface") == "page");
+    frame.setPageSurface("plainPage");
+    CHECK(backend.prop(page, "surface") == "plainPage");
+    frame.setPageSurface("");
+    CHECK(backend.prop(page, "surface") == "page");
+}
