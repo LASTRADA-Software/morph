@@ -7,6 +7,7 @@
 #include <morph/ui/document.hpp>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "gallery_harness.hpp"
@@ -74,4 +75,22 @@ TEST_CASE("lims gallery: the app document gives every screen the gallery's date 
     REQUIRE(app.has_value());
     CHECK(app->datePattern == lims_gallery::kDatePattern);
     CHECK(app->dateTimePattern == lims_gallery::kDateTimePattern);
+}
+
+// Seven designs draw their compact window on a white page; samples and console keep the grey one.
+// Mutation: drop a screen's `pageSurface`, or declare the `plainPage` surface nowhere (the page surface is then
+// `page` at compact, and the white-page check fails).
+TEST_CASE("lims gallery: seven screens draw a white page at compact only", "[lims-gallery]") {
+    auto const [screenId, white] = GENERATE(
+        std::pair<std::string_view, bool>{"receipt", true}, std::pair<std::string_view, bool>{"instrument", true},
+        std::pair<std::string_view, bool>{"audit", true}, std::pair<std::string_view, bool>{"stability", true},
+        std::pair<std::string_view, bool>{"plate", true}, std::pair<std::string_view, bool>{"results", true},
+        std::pair<std::string_view, bool>{"review", true}, std::pair<std::string_view, bool>{"samples", false},
+        std::pair<std::string_view, bool>{"console", false});
+    std::string const screen = "lims-gallery." + std::string{screenId};
+    INFO(screen);
+    GalleryScreen compact{screen, "compact"};
+    CHECK(compact.prop("Column", "shell_page", "surface") == (white ? "plainPage" : "page"));
+    GalleryScreen expanded{screen, "expanded"};
+    CHECK(expanded.prop("Column", "shell_page", "surface") == "page");
 }

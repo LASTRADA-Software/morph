@@ -1,7 +1,8 @@
 # Visual review: the screens against their mockups
 
 Every screen was grabbed on Qt Quick at 1000×830 and 390×844, and at narrower and shorter sizes where something
-clipped (`morph_examples_client --app lims-gallery --screen lims-gallery.<id> --grab-size WxH --grab FILE`). Each
+clipped (`morph_examples_client --app lims-gallery --user "Dr. A. Meyer" --screen lims-gallery.<id> --grab-size WxH --grab FILE`;
+`--user` signs the session in, so the head shows the principal). Each
 was compared with its mockup rendered in headless Firefox. Hover, open menus and tab switches can't be grabbed;
 those findings come from the user running the app and are traced to the code.
 

@@ -664,6 +664,7 @@ ui::Screen stabilityScreen() {
                      ui::cond(ui::eq(study.step, 1), Text{kSteps.at(1)},
                               ui::cond(ui::eq(study.step, 2), Text{kSteps.at(2)}, Text{kSteps.at(3)})));
         screen.title(ui::cond(study.compact, stepName, Text{"New stability study · Paracetamol 500 mg tablets"}));
+        layout::plainPageWhenCompact(screen, study.width);
         // Compact puts the step line above the title, where the design does; expanded has the stepper for it.
         screen.eyebrow(
             ui::cond(study.compact, ui::format("Step {0} of 4 · Paracetamol 500 mg", {study.step + 1}), Text{""}));

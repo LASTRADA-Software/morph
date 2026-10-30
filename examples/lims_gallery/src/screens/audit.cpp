@@ -461,6 +461,7 @@ ui::Screen auditScreen() {
     return ui::screen("lims-gallery.audit", [](ui::Scope& screen) {
         Audit const audit = declare(screen);
         screen.title("Audit trail");
+        layout::plainPageWhenCompact(screen, audit.width);
         // The search sits in the head on the expanded layout; compact draws it in the filters drawer.
         screen.tool(ui::HeadSearchOptions{.id = "search",
                                           .label = "Search audit trail",

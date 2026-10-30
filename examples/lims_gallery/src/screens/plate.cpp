@@ -736,6 +736,7 @@ ui::Screen plateScreen() {
     return ui::screen("lims-gallery.plate", [](ui::Scope& screen) {
         Plate const plate = declare(screen);
         screen.title("Plate PL-0193");
+        layout::plainPageWhenCompact(screen, plate.width);
         screen.titleSpans(ui::spans({"Plate ", ui::mono("PL-0193")}));
         // The subtitle follows the title on expanded, and sits under it on compact.
         screen.leadPlacement(ui::cond(plate.compact, Text{"below"}, Text{"inline"}));

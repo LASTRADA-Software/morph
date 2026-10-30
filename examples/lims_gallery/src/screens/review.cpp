@@ -877,6 +877,7 @@ ui::Screen reviewScreen() {
     return ui::screen("lims-gallery.review", [](ui::Scope& screen) {
         Review const review = declare(screen);
         screen.title("Review and approval");
+        layout::plainPageWhenCompact(screen, review.width);
         declareHead(screen, review);
         return layout::byWidth(review.width, compactLayout(review), expandedLayout(review))
             .sizing(ui::stretch(), ui::stretch());

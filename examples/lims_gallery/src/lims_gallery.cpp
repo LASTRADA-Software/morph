@@ -27,7 +27,7 @@ constexpr char const* kThemeIndex = R"({
                 "standard": "theme/standard.tokens.json", "control": "theme/control.tokens.json",
                 "blank": "theme/blank.tokens.json", "sample": "theme/sample.tokens.json",
                 "empty": "theme/empty.tokens.json", "pane": "theme/pane.tokens.json",
-                "darkHead": "theme/dark-head.tokens.json" },
+                "darkHead": "theme/dark-head.tokens.json", "plainPage": "theme/plain-page.tokens.json" },
   "icons": { "scan": "icon/scan.svg" }
 })";
 
@@ -128,6 +128,12 @@ constexpr char const* kDarkHeadSurface = R"({
              "selection": { "$value": "#2B2F36" }, "controlSurface": { "$value": "#1C1E21" }, "controlBorder": { "$value": "#4D5461" } }
 })";
 
+// The page area of a screen whose compact window is white: only the surface colour, so the other roles follow the
+// theme's.
+constexpr char const* kPlainPageSurface = R"({
+  "color": { "$type": "color", "surface": { "$value": "#FFFFFF" } }
+})";
+
 // The barcode glyph of the receipt screen's scan field, as the design draws it.
 constexpr char const* kScanIcon =
     R"(<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none" )"
@@ -205,6 +211,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
                                        std::tuple{"theme", "theme/empty.tokens.json", kEmptySurface},
                                        std::tuple{"theme", "theme/pane.tokens.json", kPaneSurface},
                                        std::tuple{"theme", "theme/dark-head.tokens.json", kDarkHeadSurface},
+                                       std::tuple{"theme", "theme/plain-page.tokens.json", kPlainPageSurface},
                                        std::tuple{"icon", "icon/scan.svg", kScanIcon}}) {
         if (auto added = served.addFile(morph::ui::BundleFile{.kind = kind, .id = fileId, .bytes = bytes}); !added) {
             return std::unexpected(std::move(added.error()));
