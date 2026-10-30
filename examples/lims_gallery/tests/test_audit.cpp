@@ -74,6 +74,8 @@ TEST_CASE("audit, compact: entries stack as cards, filters in a drawer", "[lims-
     CHECK(screen.find("Column", "entries").has_value());
     CHECK(showsText(screen, "24-Oct-2026 09:40:12"));
     CHECK(showsText(screen, "S-26-104170 · Impurity B · Result"));
+    // The whole record line is mono.
+    CHECK(screen.backend().dump().contains("[S-26-104170 · Impurity B · Result;mono]"));
     CHECK(showsText(screen, "Reason: F-02 out of range during defrost cycle."));
     CHECK_FALSE(screen.shows("Table", "trail"));
     CHECK(screen.prop("Button", "open-filters", "label") == "Filters · 4");

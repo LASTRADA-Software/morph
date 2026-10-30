@@ -392,12 +392,8 @@ ui::Node entryCard() {
     auto const recordLine =
         ui::cond(ui::isEmpty(ui::row("detail")), ui::format("{0} · {1}", {ui::row("record"), ui::row("field")}),
                  ui::format("{0} · {1} · {2}", {ui::row("record"), ui::row("detail"), ui::row("field")}));
-    // The record is an identifier, so it is a mono run in its line.
-    auto const recordRuns =
-        ui::cond(ui::isEmpty(ui::row("detail")),
-                 ui::AnyHandle{ui::spans({ui::mono(ui::row("record")), ui::format(" · {0}", {ui::row("field")})})},
-                 ui::AnyHandle{ui::spans({ui::mono(ui::row("record")),
-                                          ui::format(" · {0} · {1}", {ui::row("detail"), ui::row("field")})})});
+    // The whole line is a mono run: the record, what it is about and the field.
+    auto const recordRuns = ui::spans({ui::mono(recordLine)});
     return ui::column(
         {ui::row({layout::section(ui::format("{0} {1}", {ui::row("date"), ui::row("time")})),
                   ui::text({.text = ui::row("user")})},
