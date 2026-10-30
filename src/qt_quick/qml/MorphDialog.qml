@@ -163,12 +163,23 @@ MorphWidget {
                     onClicked: popup.close()
                 }
 
+                // The title is a document's characters, never markup, and centred on the sheet: the trailing item is
+                // as wide as the dismiss button, so the row is balanced and the title is not centred on what the
+                // button leaves.
                 Label {
+                    objectName: "sheetTitle"
                     Layout.fillWidth: true
+                    textFormat: Text.PlainText
+                    horizontalAlignment: Text.AlignHCenter
                     font: Theme.headingFont
                     color: Theme.cardScheme.text
                     elide: Text.ElideRight
                     text: root.title
+                }
+
+                Item {
+                    Layout.preferredWidth: dismissButton.width
+                    Layout.preferredHeight: 1
                 }
             }
 
@@ -193,11 +204,12 @@ MorphWidget {
                 Layout.fillWidth: true
             }
 
-            // Spans the content's width under the head while the description shows.
+            // Spans the overlay, edge to edge, under the head: under the description while it shows, and always on
+            // a sheet.
             Rectangle {
                 id: headRule
                 objectName: "headRule"
-                visible: root.description !== ""
+                visible: root.description !== "" || root.sheet
                 color: Theme.cardScheme.border
                 implicitHeight: 1
                 Layout.fillWidth: true

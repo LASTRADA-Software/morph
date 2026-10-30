@@ -801,3 +801,30 @@ TEMPLATE_TEST_CASE("qt_quick overlays: the head's and the footer's rules span th
     }
 }
 
+// Mutation: leave the sheet's head as it was (the title left-aligned beside the dismiss button, no rule without a
+// description).
+TEST_CASE("qt_quick dialog: a sheet's title is centred on the sheet as plain characters, with a rule under the head",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(390, 600);
+    auto dialog = scene.backend().createDialog(nullptr);
+    dialog->setTitle("<b>Sign</b>");
+    dialog->setSheet(true);
+    dialog->setDismissLabel("Cancel");
+    auto const body = scene.backend().createText(dialog.get());
+    body->setText("Body");
+    dialog->setOpen(true);
+    scene.settle();
+    QQuickItem const* const title = namedIn(*scene.window().contentItem(), QStringLiteral("sheetTitle"));
+    REQUIRE(title != nullptr);
+    CHECK(title->property("text").toString() == QStringLiteral("<b>Sign</b>"));
+    CHECK(title->property("textFormat").toInt() == 0);  // Text.PlainText
+    qreal const centre = title->mapToScene(QPointF{title->width() / 2, 0}).x();
+    CHECK(centre == Catch::Approx(195).margin(1));
+    CHECK(title->property("horizontalAlignment").toInt() == Qt::AlignHCenter);
+    QQuickItem const* const rule = namedIn(*scene.window().contentItem(), QStringLiteral("headRule"));
+    REQUIRE(rule != nullptr);
+    CHECK(rule->isVisible());
+    CHECK(rule->mapToScene(QPointF{0, 0}).x() == Catch::Approx(0).margin(0.5));
+    CHECK(rule->mapToScene(QPointF{rule->width(), 0}).x() == Catch::Approx(390).margin(0.5));
+}
