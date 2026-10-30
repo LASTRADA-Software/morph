@@ -115,7 +115,7 @@ constexpr std::array<std::pair<std::string_view, char const*>, 37> kSchemeProper
 }};
 
 /// The `Theme` property each dimension token of the set sets, besides the spacing scale.
-constexpr std::array<std::pair<std::string_view, char const*>, 13> kDimensionProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 14> kDimensionProperties = {{
     {"radius.control", "radiusControl"},
     {"radius.card", "radiusCard"},
     {"radius.badge", "radiusBadge"},
@@ -129,6 +129,7 @@ constexpr std::array<std::pair<std::string_view, char const*>, 13> kDimensionPro
     {"font.size.display", "displaySize"},
     {"table.cellPaddingX", "tableCellPaddingX"},
     {"table.cellPaddingY", "tableCellPaddingY"},
+    {"input.paddingX", "inputPaddingX"},
 }};
 
 // Whether a surface's outlines are stroked in dashes: `border.style`.

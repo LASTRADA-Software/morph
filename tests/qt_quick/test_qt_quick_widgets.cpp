@@ -39,6 +39,7 @@
 #include <morph/reactive/signal.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <string>
@@ -2165,4 +2166,67 @@ TEST_CASE("qt_quick widgets: a date-time input narrower than its text shows the 
     control.setFocus(false);
     scene.settle();
     CHECK(firstCharacterX(control) == Catch::Approx(padding));
+}
+
+namespace {
+
+/// The inset of a text control's text from its leading edge.
+qreal textInset(QQuickItem const& control) { return control.property("leftPadding").toReal(); }
+
+/// Where the first line starts below the top of a text control. A single-line field reports its rectangle inside
+/// the padding, a text area's includes it.
+qreal textTop(QQuickItem& control, bool multiline) {
+    QRectF rectangle;
+    REQUIRE(
+        QMetaObject::invokeMethod(&control, "positionToRectangle", Q_RETURN_ARG(QRectF, rectangle), Q_ARG(int, 0)));
+    return (multiline ? 0.0 : control.property("topPadding").toReal()) + rectangle.y();
+}
+
+}  // namespace
+
+// Mutation: leave one control on its own step (the text input's 12, the text area's 16, the date input's 12 or the
+// select's 8), or leave the token unread.
+TEST_CASE("qt_quick widgets: every input's text starts input.paddingX from its edge", "[qt_quick]") {
+    Scene scene;
+    auto const tokens =
+        ui::parseTokens(R"({"input": {"paddingX": {"$type": "dimension", "$value": {"value": 10, "unit": "px"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto area = scene.backend().createTextInput(column.get(), ui::TextInputMode::Multiline);
+    auto date = scene.backend().createDateTimeInput(column.get(), ui::DateMode::Date, 0);
+    auto select = scene.backend().createSelect(column.get(), ui::SelectStyle::Dropdown);
+    input->setText("Signer");
+    area->setText("Reason");
+    select->setOptions({{.key = std::string{"a"}, .label = "Alpha"}});
+    select->setSelected(ui::Key{std::string{"a"}});
+    scene.settle();
+    CHECK(textInset(Scene::controlOf(*input)) == Catch::Approx(10.0));
+    CHECK(textInset(Scene::controlOf(*area)) == Catch::Approx(10.0));
+    QQuickItem const& dateControl = Scene::controlOf(*date);
+    CHECK(dateControl.property("leftPadding").toReal() == Catch::Approx(10.0));
+    CHECK(dateControl.property("rightPadding").toReal() >= 10.0);
+    QQuickItem const* const value = findNamed(Scene::itemOf(*select), QStringLiteral("value"));
+    REQUIRE(value != nullptr);
+    CHECK(value->property("leftPadding").toReal() == Catch::Approx(10.0));
+}
+
+// Mutation: leave the text area's vertical padding at its own step (its first line sits lower than a single-line
+// input's text).
+TEST_CASE("qt_quick widgets: a text area's first line sits where a single-line input's text sits", "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto area = scene.backend().createTextInput(column.get(), ui::TextInputMode::Multiline);
+    input->setText("Signer");
+    area->setText("Reason");
+    scene.settle();
+    QQuickItem& inputControl = Scene::controlOf(*input);
+    QQuickItem& areaControl = Scene::controlOf(*area);
+    CHECK(textTop(areaControl, true) == Catch::Approx(textTop(inputControl, false)).margin(1.0));
+    // And with the stock inset, the area's text is as far in as the input's.
+    CHECK(textInset(areaControl) == Catch::Approx(textInset(inputControl)));
 }

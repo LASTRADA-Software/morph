@@ -996,6 +996,9 @@ inline constexpr std::array<KeywordSpec, 3> kKeywords = {{
     {.path = "collapsible.marker", .names = {"shown", "none"}},
 }};
 
+/// @brief The dimension tokens of the set that may not be negative: an inset has no meaning below zero.
+inline constexpr std::array<std::string_view, 1> kNonNegativePaths = {"input.paddingX"};
+
 /// @brief Whether @p name is one of the names of the keyword at @p path.
 /// @param path The keyword's path.
 /// @param name The name.
@@ -1020,6 +1023,23 @@ inline constexpr std::array<KeywordSpec, 3> kKeywords = {{
         if (named == nullptr || !isKeywordName(spec.path, *named)) {
             return std::string{spec.path} + ": only " + std::string{spec.names.front()} + " and " +
                    std::string{spec.names.back()} + " are drawn";
+        }
+    }
+    return std::nullopt;
+}
+
+/// @brief Why a resolved theme gives a dimension a negative length where the set takes none.
+/// @param resolved The resolved tokens.
+/// @return The reason, such as `input.paddingX: must not be negative`, or nothing when no such dimension is negative.
+[[nodiscard]] inline std::optional<std::string> dimensionProblem(TokenSet const& resolved) {
+    for (std::string_view const path : kNonNegativePaths) {
+        auto const found = resolved.find(path);
+        if (found == resolved.end() || found->second.type != "dimension") {
+            continue;
+        }
+        auto const pixels = pixelsOf(found->second.value);
+        if (pixels && *pixels < 0.0) {
+            return std::string{path} + ": must not be negative";
         }
     }
     return std::nullopt;
@@ -1088,6 +1108,9 @@ namespace detail {
         return combinationLabel(variant, density, surface) + ": " + *problem;
     }
     if (auto problem = keywordProblem(*resolved)) {
+        return combinationLabel(variant, density, surface) + ": " + *problem;
+    }
+    if (auto problem = dimensionProblem(*resolved)) {
         return combinationLabel(variant, density, surface) + ": " + *problem;
     }
     return std::nullopt;
@@ -1171,7 +1194,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 68> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 69> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1241,6 +1264,8 @@ inline constexpr std::array<ThemeTokenSpec, 68> kThemeTokens = {{
     // A table cell's and a header label's inset on each axis.
     {.path = "table.cellPaddingX", .kind = ThemeTokenKind::Dimension, .color = "", .number = 8.0},
     {.path = "table.cellPaddingY", .kind = ThemeTokenKind::Dimension, .color = "", .number = 4.0},
+    // The inner inset of every input on each side: a text input's, a text area's, a date input's and a select's value.
+    {.path = "input.paddingX", .kind = ThemeTokenKind::Dimension, .color = "", .number = 8.0},
     {.path = "font.family", .kind = ThemeTokenKind::FontFamily, .color = "", .number = 0.0},
     // The fixed-pitch family of the `mono` text role; none draws in the platform's fixed-pitch font. A sibling of
     // `font.family`: the set keeps one spelling per path.

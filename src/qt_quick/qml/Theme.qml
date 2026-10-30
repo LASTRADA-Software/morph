@@ -186,6 +186,8 @@ QtObject {
     property bool iconOnlySquare: false
     // Whether a collapsible section's and a collapsible panel's header draws its chevron: `collapsible.marker`.
     property bool collapsibleMarker: true
+    // The inner inset of every input on each side: `input.paddingX`.
+    property real inputPaddingX: 8
     // Whether the `overline` text role is drawn in small capitals: `font.overline.case`.
     property bool overlineCaps: false
     readonly property real bodyPixels: bodySize > 0 ? bodySize : platformMetrics.font.pixelSize > 0

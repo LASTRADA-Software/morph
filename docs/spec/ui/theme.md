@@ -181,6 +181,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `color.scrim` (`#0000004d`, black at 30 %): the dim over the window behind a modal dialog or drawer; a sheet draws none | colour |
 | `color.track` (`#e5e5ea`): the unfilled part of a progress bar, and the segmented select's track | colour |
 | `color.table.header` (transparent) | colour |
+| `input.paddingX` (8): the inner inset of every input on each side, the distance from a text input's, a text area's, a date input's or a select's border to its text (and to its prefix, icon and unit); a negative value is refused by `checkTheme` as `input.paddingX: must not be negative`. The terminal pads its inputs by cells and reads no dimension | dimension, in px |
 | `table.cellPaddingX` (8), `table.cellPaddingY` (4): the inset of a table cell and of a header label on each axis; a row is as tall as its tallest cell plus twice the vertical inset, and at least `Theme.targetHeight − 8`. The terminal keeps its one-column gap between cells and no vertical padding | dimension, in px |
 | `color.chart.1` … `color.chart.4` (`#0072b2`, `#c25400`, `#00805e`, `#a8508a`): a chart's series colours, in drawing order | colour |
 | `opacity.stale` | number |
@@ -240,6 +241,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `iconOnlySquare` (true for `square`) | `shape.iconOnly` |
 | `overlineCaps` (true for `uppercase`) | `font.overline.case` |
 | `collapsibleMarker` (true for `shown`) | `collapsible.marker` |
+| `inputPaddingX` | `input.paddingX` |
 
 **A chart's colours.** A series reads `chart1` to `chart4` of its widget's scheme in order; a reference line and a
 marked point read their tone's colour (`muted` for neutral). Each default holds 3:1 against `color.surface` and

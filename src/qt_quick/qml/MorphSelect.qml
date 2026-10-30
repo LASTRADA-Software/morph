@@ -74,11 +74,11 @@ MorphField {
             focused: combo.visualFocus || combo.popup.visible
             readOnly: root.readOnly
         }
-        // The value starts a spacing step of 2 in from the border, and stops short of the chevron.
+        // The value starts `input.paddingX` in from the border, and stops short of the chevron.
         contentItem: Text {
             objectName: "value"
-            leftPadding: Theme.spaceOf(2)
-            rightPadding: combo.indicator.width + Theme.spaceOf(2) * 2
+            leftPadding: Theme.inputPaddingX
+            rightPadding: combo.indicator.width + Theme.inputPaddingX * 2
             text: combo.displayText
             textFormat: Text.PlainText
             font: combo.font
@@ -88,7 +88,7 @@ MorphField {
         }
         indicator: Image {
             objectName: "indicator"
-            x: combo.width - width - Theme.spaceOf(2)
+            x: combo.width - width - Theme.inputPaddingX
             y: (combo.height - height) / 2
             readonly property string chevron: combo.popup.visible ? "nav.collapse" : "nav.expand"
             readonly property string themedSource: Theme.iconSource(chevron)

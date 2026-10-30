@@ -36,7 +36,19 @@ MorphField {
         Keys.onPressed: event => event.accepted = root.takeOwnChord(event)
         color: root.scheme.text
         placeholderTextColor: root.scheme.muted
-        padding: Theme.spaceOf(3)
+        // Each side set itself: the style's own left padding is wider than its others.
+        leftPadding: Theme.inputPaddingX
+        rightPadding: Theme.inputPaddingX
+        // The first line sits where a single-line input's text sits.
+        topPadding: Math.max(0, (Theme.targetHeight - lineMetrics.height) / 2)
+        bottomPadding: topPadding
+        // The area's natural width is its insets alone: the style's own also counts the wrapped text, which is as wide as
+        // the area itself, so an area in a content-sized container would size from its own width.
+        implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset, leftPadding + rightPadding)
+        FontMetrics {
+            id: lineMetrics
+            font: area.font
+        }
         background: MorphInputBackground {
             tone: root.shownTone
             scheme: root.scheme

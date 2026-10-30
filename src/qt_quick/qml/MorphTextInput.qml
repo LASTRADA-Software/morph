@@ -86,10 +86,10 @@ MorphField {
         color: root.scheme.text
         placeholderTextColor: root.scheme.muted
         // The text starts after the icon and the prefix.
-        leftPadding: Theme.spaceOf(3) + (iconImage.visible ? iconImage.width + Theme.spaceOf(1) : 0) +
+        leftPadding: Theme.inputPaddingX + (iconImage.visible ? iconImage.width + Theme.spaceOf(1) : 0) +
                      (prefixLabel.visible ? prefixLabel.implicitWidth + Theme.spaceOf(1) : 0)
         // The text stops before the unit.
-        rightPadding: Theme.spaceOf(3) + (unitLabel.visible ? unitLabel.implicitWidth + Theme.spaceOf(1) : 0)
+        rightPadding: Theme.inputPaddingX + (unitLabel.visible ? unitLabel.implicitWidth + Theme.spaceOf(1) : 0)
         background: MorphInputBackground {
             tone: root.shownTone
             prominent: root.prominent
@@ -129,7 +129,7 @@ MorphField {
             id: unitLabel
             objectName: "unit"
             anchors.right: parent.right
-            anchors.rightMargin: Theme.spaceOf(3)
+            anchors.rightMargin: Theme.inputPaddingX
             anchors.verticalCenter: parent.verticalCenter
             visible: root.unit !== ""
             text: root.unit
@@ -141,7 +141,7 @@ MorphField {
             id: prefixLabel
             objectName: "prefix"
             anchors.left: parent.left
-            anchors.leftMargin: Theme.spaceOf(3) + (iconImage.visible ? iconImage.width + Theme.spaceOf(1) : 0)
+            anchors.leftMargin: Theme.inputPaddingX + (iconImage.visible ? iconImage.width + Theme.spaceOf(1) : 0)
             anchors.verticalCenter: parent.verticalCenter
             visible: root.prefix !== ""
             text: root.prefix
@@ -153,7 +153,7 @@ MorphField {
             id: iconImage
             objectName: "icon"
             anchors.left: parent.left
-            anchors.leftMargin: Theme.spaceOf(3)
+            anchors.leftMargin: Theme.inputPaddingX
             anchors.verticalCenter: parent.verticalCenter
             readonly property string themedSource: Theme.iconSourceIn(root.icon, root.scheme.accent)
             visible: root.icon !== "" && themedSource !== ""
