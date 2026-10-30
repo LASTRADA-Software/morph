@@ -52,7 +52,8 @@ struct Receipt {
     ui::AnyHandle session;
     ui::Handle<std::int64_t> received;
     ui::Handle<std::int64_t> rejected;
-    ui::Handle<std::string> lastRejection;
+    ui::Handle<std::string> rejectedSample;
+    ui::Handle<std::string> rejectedReason;
     ui::Handle<std::string> temperature;
     ui::Handle<std::string> receivedAt;
     ui::Handle<std::string> location;
@@ -89,7 +90,8 @@ void declareRecords(ui::Scope& screen, Receipt& receipt) {
                   sessionRow("09:30", "S-26-104225", "Received")}));
     receipt.received = screen.state("received", std::int64_t{12});
     receipt.rejected = screen.state("rejected", std::int64_t{1});
-    receipt.lastRejection = screen.state("lastRejection", std::string{"S-26-104228 rejected: seal broken."});
+    receipt.rejectedSample = screen.state("rejectedSample", std::string{"S-26-104228"});
+    receipt.rejectedReason = screen.state("rejectedReason", std::string{"seal broken"});
     receipt.sessionIds =
         screen.let("sessionIds",
                    ui::map(receipt.session, "entry", [](ui::AnyHandle const& entry) { return entry.at("sample"); }));
@@ -180,6 +182,7 @@ ui::Node scanField(Receipt const& receipt, bool compact) {
                                     .placeholder = "Waiting for scan…",
                                     .icon = "scan",
                                     .emphasis = morph::ui::InputEmphasis::Prominent,
+                                    .mono = true,
                                     .onChange = ui::set(receipt.scan, ui::event()),
                                     .onSubmit = scanCommands(receipt)})
                          .id(receipt.scanField)
@@ -287,9 +290,18 @@ ui::Node conditions(Receipt const& receipt, bool compact) {
     return ui::group({boxes}, {.label = "Condition on receipt", .required = true, .gap = 1}).testId("conditions");
 }
 
+// Runs of a sample's text, or none once every sample is handled and there is no sample to read them from.
+ui::AnyHandle whileSampled(Receipt const& receipt, ui::AnyHandle const& runs) {
+    return ui::cond(ui::engaged(receipt.sample), runs, ui::AnyHandle{std::vector<std::string>{}});
+}
+
 ui::Node sampleHeading(Receipt const& receipt) {
-    return ui::row({layout::section(ui::format("Sample {0}", {receipt.sample.at("id")})).testId("sample-id"),
-                    layout::tag(receipt.sample.at("status"), "neutral")},
+    auto const id = receipt.sample.at("id");
+    auto const heading = ui::text({.text = ui::format("Sample {0}", {id}),
+                                   .spans = whileSampled(receipt, ui::spans({"Sample ", ui::mono(id)})),
+                                   .role = "section"})
+                             .testId("sample-id");
+    return ui::row({heading, layout::tag(receipt.sample.at("status"), "neutral")},
                    {.gap = 1, .align = Align::Center, .wrap = true});
 }
 
@@ -310,8 +322,8 @@ ui::Node receiveButton(Receipt const& receipt, char const* label) {
 ui::Node sampleCard(Receipt const& receipt) {
     auto const lotLine =
         ui::text({.text = ui::format("Lot {0} · {1}", {receipt.sample.at("lot"), receipt.sample.at("product")}),
-                  .spans = ui::spans({"Lot ", ui::mono(receipt.sample.at("lot")),
-                                      ui::format(" · {0}", {receipt.sample.at("product")})}),
+                  .spans = whileSampled(receipt, ui::spans({"Lot ", ui::mono(receipt.sample.at("lot")),
+                                                            ui::format(" · {0}", {receipt.sample.at("product")})})),
                   .role = "muted"});
     auto const type = layout::captioned(ui::textInput({.value = receipt.sample.at("type"), .label = "Sample type"}))
                           .readonly(true)
@@ -330,6 +342,14 @@ ui::Node sampleCard(Receipt const& receipt) {
         .testId("sample");
 }
 
+// The last rejected sample, its ID in the mono face.
+ui::Node rejectionLine(Receipt const& receipt) {
+    return ui::text({.text = ui::format("{0} rejected: {1}.", {receipt.rejectedSample, receipt.rejectedReason}),
+                     .spans = ui::spans(
+                         {ui::mono(receipt.rejectedSample), ui::format(" rejected: {0}.", {receipt.rejectedReason})}),
+                     .role = "muted"});
+}
+
 ui::Node sessionTable(Receipt const& receipt) {
     auto const outcomeTone = ui::cond(ui::eq(ui::row("outcome"), "Received"), ui::Handle<std::string>{"ok"},
                                       ui::Handle<std::string>{"err"});
@@ -341,7 +361,8 @@ ui::Node sessionTable(Receipt const& receipt) {
                                                    {.name = "sample",
                                                     .label = "Sample",
                                                     .width = ui::fixed(14),
-                                                    .cell = ui::text({.text = ui::row("sample")})},
+                                                    .role = "mono",
+                                                    .cell = ui::text({.text = ui::row("sample"), .role = "mono"})},
                                                    {.name = "outcome",
                                                     .label = "Outcome",
                                                     .width = ui::stretch(),
@@ -357,11 +378,10 @@ ui::Node rejectDialog(Receipt const& receipt) {
          ui::obj({{"key", "container damaged"}, {"label", "Container damaged"}}),
          ui::obj({{"key", "temperature out of range"}, {"label", "Temperature out of range"}}),
          ui::obj({{"key", "label does not match the request"}, {"label", "Label does not match the request"}})});
-    ui::Commands const reject = {
-        ui::set(receipt.rejected, receipt.rejected + 1),
-        ui::set(receipt.lastRejection,
-                ui::format("{0} rejected: {1}.", {receipt.sample.at("id"), receipt.rejectReason})),
-        ui::seq(recordOutcome(receipt, "Rejected")), ui::close(ui::self)};
+    ui::Commands const reject = {ui::set(receipt.rejected, receipt.rejected + 1),
+                                 ui::set(receipt.rejectedSample, receipt.sample.at("id")),
+                                 ui::set(receipt.rejectedReason, receipt.rejectReason),
+                                 ui::seq(recordOutcome(receipt, "Rejected")), ui::close(ui::self)};
     return ui::dialog(
         receipt.rejectDialog,
         {layout::captioned(ui::select({.options = reasons,
@@ -381,12 +401,11 @@ ui::Node rejectDialog(Receipt const& receipt) {
 ui::Node expandedLayout(Receipt const& receipt) {
     auto const left = ui::column({scanField(receipt, false), notices(receipt), sampleCard(receipt)}, {.gap = 2})
                           .sizing(ui::stretch());
-    auto const session =
-        ui::panel({sessionTable(receipt), layout::muted(receipt.lastRejection).testId("last-rejection")},
-                  {.title = "This session", .padding = 2})
-            // The design's 300 px column, in the frontend's character widths.
-            .sizing(ui::fixed(40))
-            .testId("session-panel");
+    auto const session = ui::panel({sessionTable(receipt), rejectionLine(receipt).testId("last-rejection")},
+                                   {.title = "This session", .padding = 2})
+                             // The design's 300 px column, in the frontend's character widths.
+                             .sizing(ui::fixed(40))
+                             .testId("session-panel");
     return ui::pinned(
         ui::column({ui::row({left, session}, {.gap = 2, .align = Align::Start}), rejectDialog(receipt)}));
 }
@@ -407,7 +426,7 @@ ui::Node compactLayout(Receipt const& receipt) {
         ui::column(
             {scanField(receipt, true), notices(receipt), sample,
              ui::collapsible(
-                 {sessionTable(receipt), layout::muted(receipt.lastRejection)},
+                 {sessionTable(receipt), rejectionLine(receipt)},
                  {.title = scans, .open = receipt.sessionOpen, .onToggle = ui::set(receipt.sessionOpen, ui::event())})
                  .testId("session-panel"),
              rejectDialog(receipt)},
