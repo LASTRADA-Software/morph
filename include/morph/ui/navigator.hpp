@@ -403,7 +403,8 @@ private:
         }
         for (Group& group : _groups) {
             group.heading = _backend->createText(_root.get());
-            group.heading->setRole(TextRole::Section);
+            // An overline, which a theme may draw as small capitals; by default it looks as a section does.
+            group.heading->setRole(TextRole::Overline);
             group.heading->setTestId("navigator_group_" + group.module + "/" + group.group);
             group.heading->setText(headingOf(group));
             for (CatalogEntry const& entry : _options.entries) {

@@ -285,3 +285,13 @@ TEST_CASE("shell frame: a frame insets its page until it is told the screen inse
         CHECK(backend.prop(spacer, "visible") == "true");
     }
 }
+
+// Control: give the heading the `Section` role (the recording reads `Section`).
+TEST_CASE("shell frame: the navigator's group headings are overlines", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const heading = backend.find("Text", "testId", "navigator_group_/Library").value();
+    CHECK(backend.prop(heading, "role") == "Overline");
+}

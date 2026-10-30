@@ -235,7 +235,7 @@ A name with no factory refuses the mount with `no host screen `<name>` is regist
 
 `ui::Navigator` (`include/morph/ui/navigator.hpp`) lists the catalog for a person to open screens from.
 - **Grouping.** Entries are grouped by module, then group, in the order each first appears. Each group has a
-  heading in the `Section` text role, `navigator_group_<module>/<group>`, and each entry is a row as wide as the
+  heading in the `Overline` text role, `navigator_group_<module>/<group>`, and each entry is a row as wide as the
   navigator, `nav_row_<id>`, holding a list item (`ButtonStyle::Item`) that stretches, `nav_<id>`, and a badge,
   `nav_badge_<id>`, hidden until the entry has a count. The search shows and hides the row.
 - **Counts.** `setBadge(id, NavigatorBadge{text, tone})` shows a count at the end of a screen's entry, and
