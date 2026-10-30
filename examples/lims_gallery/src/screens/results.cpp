@@ -646,9 +646,9 @@ ui::Screen resultsScreen() {
         Worksheet const sheet = declare(screen);
         Flag const compact = ui::eq(sheet.width, "compact");
         screen.title("Assay and impurities · Paracetamol 500 mg");
-        screen.subtitle(ui::cond(compact, Text{"WS-2026-0412 · HPLC-02"},
-                                 Text{"Worksheet WS-2026-0412 · HPLC-02 · method TM-ASSAY-07 v3"}));
-        screen.subtitleSpans(
+        screen.eyebrow(ui::cond(compact, Text{"WS-2026-0412 · HPLC-02"},
+                                Text{"Worksheet WS-2026-0412 · HPLC-02 · method TM-ASSAY-07 v3"}));
+        screen.eyebrowSpans(
             ui::cond(compact, ui::AnyHandle{ui::spans({ui::mono("WS-2026-0412"), " · HPLC-02"})},
                      ui::AnyHandle{ui::spans({"Worksheet ", ui::mono("WS-2026-0412"), " · HPLC-02 · method ",
                                               ui::mono("TM-ASSAY-07"), " v3"})}));

@@ -37,7 +37,9 @@ TEST_CASE("instrument, expanded: the head's status and actions, the overflow men
           "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
     screen.requireNoProblems();
-    CHECK(screen.text("head_subtitle") == "Instruments › EQ-0142");
+    // The breadcrumb is the head's eyebrow, above the title.
+    CHECK(screen.text("head_eyebrow") == "Instruments › EQ-0142");
+    CHECK_FALSE(screen.shows("Text", "head_subtitle"));
     CHECK(screen.prop("Badge", "head_status_0", "text") == "In service");
     CHECK(screen.prop("Badge", "head_status_1", "text") == "Qualified: IQ, OQ, PQ");
     CHECK(screen.prop("Badge", "head_status_2", "text") == "Calibration due 27-Oct-2026, in 3 days");
@@ -89,7 +91,7 @@ TEST_CASE("instrument, expanded: recording a calibration clears the one that was
 TEST_CASE("instrument, compact: stacked sections, actions in the page, the sections folded", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "compact"};
     screen.requireNoProblems();
-    CHECK(screen.text("head_subtitle") == "EQ-0142");
+    CHECK(screen.text("head_eyebrow") == "EQ-0142");
     CHECK(screen.prop("Badge", "head_status_2", "text") == "Calibration due in 3 days");
     CHECK_FALSE(screen.shows("Button", "head_action_book"));
     CHECK(screen.shows("Button", "book"));

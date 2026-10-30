@@ -638,11 +638,7 @@ ui::Node compactConditions(Study const& study) {
 
 ui::Node compactLayout(Study const& study) {
     auto const parts = wizard(study, true, compactConditions(study), {});
-    return ui::pinned(
-        {parts.body},
-        {.top = ui::Nodes{layout::muted(ui::format("Step {0} of 4 · Paracetamol 500 mg", {study.step + 1})),
-                          parts.indicator},
-         .bottom = {parts.footer}});
+    return ui::pinned({parts.body}, {.top = ui::Nodes{parts.indicator}, .bottom = {parts.footer}});
 }
 
 }  // namespace
@@ -655,6 +651,9 @@ ui::Screen stabilityScreen() {
                      ui::cond(ui::eq(study.step, 1), Text{kSteps.at(1)},
                               ui::cond(ui::eq(study.step, 2), Text{kSteps.at(2)}, Text{kSteps.at(3)})));
         screen.title(ui::cond(study.compact, stepName, Text{"New stability study · Paracetamol 500 mg tablets"}));
+        // Compact puts the step line above the title, where the design does; expanded has the stepper for it.
+        screen.eyebrow(
+            ui::cond(study.compact, ui::format("Step {0} of 4 · Paracetamol 500 mg", {study.step + 1}), Text{""}));
         screen.showErrors(ui::ShowErrors::Always);
         return layout::byWidth(study.width, compactLayout(study), expandedLayout(study))
             .sizing(ui::stretch(), ui::stretch());

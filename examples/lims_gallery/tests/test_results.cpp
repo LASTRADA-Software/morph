@@ -33,6 +33,9 @@ TEST_CASE("results, expanded: the worksheet grid, its calculations and the chang
           "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
     screen.requireNoProblems();
+    // The worksheet line is the head's eyebrow, above the title, with its identifiers in the mono face.
+    CHECK(screen.text("head_eyebrow") == "Worksheet WS-2026-0412 · HPLC-02 · method TM-ASSAY-07 v3");
+    CHECK(screen.backend().prop(screen.find("Text", "head_eyebrow").value(), "spans").contains("WS-2026-0412;mono"));
     CHECK(screen.find("Panel", "suitability").has_value());
     CHECK(screen.shows("Table", "results"));
     // Each sample's results sit under a heading row across the worksheet.

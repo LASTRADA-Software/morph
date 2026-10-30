@@ -87,9 +87,9 @@ ui::Commands book(Instrument const& instrument) {
 void declareHead(ui::Scope& screen, Instrument const& instrument) {
     auto const compact = instrument.compact;
     screen.title("HPLC-02 · Liquid chromatograph");
-    screen.subtitle(ui::cond(compact, Text{"EQ-0142"}, Text{"Instruments › EQ-0142"}));
-    screen.subtitleSpans(ui::cond(compact, ui::AnyHandle{ui::spans({ui::mono("EQ-0142")})},
-                                  ui::AnyHandle{ui::spans({"Instruments › ", ui::mono("EQ-0142")})}));
+    screen.eyebrow(ui::cond(compact, Text{"EQ-0142"}, Text{"Instruments › EQ-0142"}));
+    screen.eyebrowSpans(ui::cond(compact, ui::AnyHandle{ui::spans({ui::mono("EQ-0142")})},
+                                 ui::AnyHandle{ui::spans({"Instruments › ", ui::mono("EQ-0142")})}));
     screen.status({.text = ui::cond(instrument.inService, Text{"In service"}, Text{"Out of service"}),
                    .tone = ui::cond(instrument.inService, Text{"ok"}, Text{"neutral"})});
     screen.status({.text = ui::cond(compact, Text{"IQ, OQ, PQ passed"}, Text{"Qualified: IQ, OQ, PQ"}), .tone = "ok"});

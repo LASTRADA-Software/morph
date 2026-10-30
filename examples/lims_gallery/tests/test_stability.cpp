@@ -99,6 +99,8 @@ TEST_CASE("stability, compact: one condition open at a time, every field kept", 
     CHECK_FALSE(screen.shows("Table", "matrix"));
     CHECK(screen.find("Column", "conditions").has_value());
     CHECK(screen.text("shell_title") == "Conditions and timepoints");
+    // The step line is the head's eyebrow, above the title, and not a line of the pinned top bar.
+    CHECK(screen.text("head_eyebrow") == "Step 2 of 4 · Paracetamol 500 mg");
     CHECK(screen.backend().find("Panel", "title", "25 °C / 60 % RH · 8 pulls").has_value());
     CHECK(screen.backend().find("Panel", "title", "40 °C / 75 % RH · 3 pulls").has_value());
     CHECK(screen.prop("Panel", "summary-section", "title") == "Summary · first pull 03-Dec-2026");
