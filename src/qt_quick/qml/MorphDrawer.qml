@@ -95,7 +95,8 @@ MorphWidget {
         leftPadding: Theme.spaceOf(4)
         rightPadding: Theme.spaceOf(4)
         topPadding: Theme.spaceOf(4)
-        bottomPadding: Theme.spaceOf(4)
+        // The actions stand step 3 from the bottom edge, as the rule above them stands step 3 off them.
+        bottomPadding: footerArea.visible ? Theme.spaceOf(3) : Theme.spaceOf(4)
         background: Rectangle {
             color: Theme.cardScheme.surface
             border.width: 1
@@ -116,6 +117,8 @@ MorphWidget {
 
         contentItem: ColumnLayout {
             id: contentColumn
+            // What a rule's margin adds to the column's spacing to stand step 3 off the item on each side.
+            readonly property real ruleMargin: Theme.spaceOf(3) - contentColumn.spacing
             Accessible.role: root.accessibleRole
             Accessible.name: root.accessibleName
             Accessible.description: root.description
@@ -151,6 +154,8 @@ MorphWidget {
                 Layout.fillWidth: true
                 Layout.leftMargin: -drawer.leftPadding
                 Layout.rightMargin: -drawer.rightPadding
+                Layout.topMargin: contentColumn.ruleMargin
+                Layout.bottomMargin: contentColumn.ruleMargin
             }
 
             // Only the content between the title and the footer scrolls, so both stay reachable however tall the
@@ -165,8 +170,8 @@ MorphWidget {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.maximumHeight: Math.max(0, drawer.height - titleLabel.height - footerArea.height -
-                               (footerRule.visible ? footerRule.height + contentColumn.spacing : 0) -
-                                               contentColumn.spacing * 2 -
+                               (footerRule.visible ? footerRule.height + contentColumn.spacing + 2 * contentColumn.ruleMargin : 0) -
+                                               contentColumn.spacing * 2 - (headRule.visible ? 2 * contentColumn.ruleMargin : 0) -
                                                (root.description === "" ? 0 : descriptionLabel.height +
                                                                               headRule.height +
                                                                               contentColumn.spacing * 2))
@@ -188,6 +193,8 @@ MorphWidget {
                 Layout.fillWidth: true
                 Layout.leftMargin: -drawer.leftPadding
                 Layout.rightMargin: -drawer.rightPadding
+                Layout.topMargin: contentColumn.ruleMargin
+                Layout.bottomMargin: contentColumn.ruleMargin
             }
 
             // Shown while the footer holds something: a layout gives no size to what it hides, so its own
