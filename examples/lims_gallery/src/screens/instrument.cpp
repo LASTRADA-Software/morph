@@ -87,6 +87,7 @@ ui::Commands book(Instrument const& instrument) {
 void declareHead(ui::Scope& screen, Instrument const& instrument) {
     auto const compact = instrument.compact;
     screen.title("HPLC-02 · Liquid chromatograph");
+    layout::plainPageWhenCompact(screen, instrument.width);
     screen.eyebrow(ui::cond(compact, Text{"EQ-0142"}, Text{"Instruments › EQ-0142"}));
     screen.eyebrowSpans(ui::cond(compact, ui::AnyHandle{ui::spans({ui::mono("EQ-0142")})},
                                  ui::AnyHandle{ui::spans({"Instruments › ", ui::mono("EQ-0142")})}));

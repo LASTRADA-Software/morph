@@ -19,6 +19,15 @@ using morph::ui::Align;
 using morph::ui::ButtonEmphasis;
 using morph::ui::Justify;
 
+/// @brief Draws the screen's page area on the white `plainPage` surface while it lays out for the compact width, as
+/// the
+///        designs' compact windows are; the expanded width keeps the grey page.
+/// @param screen The screen.
+/// @param width  The screen's width class, as `widthClass` answers it.
+inline void plainPageWhenCompact(ui::Scope& screen, ui::AnyHandle const& width) {
+    screen.pageSurface(ui::cond(ui::eq(width, "compact"), ui::AnyHandle{"plainPage"}, ui::AnyHandle{nullptr}));
+}
+
 /// @brief The width class the screen lays out for: the client's `{"env": "widthClass"}`, and `expanded` where no
 ///        client sets it.
 /// @param screen The screen.

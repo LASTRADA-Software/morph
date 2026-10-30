@@ -648,6 +648,7 @@ ui::Screen resultsScreen() {
         Worksheet const sheet = declare(screen);
         Flag const compact = ui::eq(sheet.width, "compact");
         screen.title("Assay and impurities · Paracetamol 500 mg");
+        layout::plainPageWhenCompact(screen, sheet.width);
         screen.eyebrow(ui::cond(compact, Text{"WS-2026-0412 · HPLC-02"},
                                 Text{"Worksheet WS-2026-0412 · HPLC-02 · method TM-ASSAY-07 v3"}));
         screen.eyebrowSpans(

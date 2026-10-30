@@ -468,6 +468,7 @@ ui::Screen receiptScreen() {
     return ui::screen("lims-gallery.receipt", [](ui::Scope& screen) {
         Receipt const receipt = declare(screen);
         screen.title("Receive samples");
+        layout::plainPageWhenCompact(screen, receipt.width);
         // The session line and the counts close the title's line, as the design puts them.
         screen.leadPlacement("end");
         screen.subtitle(
