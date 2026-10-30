@@ -1690,6 +1690,7 @@ TEST_CASE("qt_quick containers: a splitter's handle is the scheme's border colou
     CHECK(centre.x() == Catch::Approx(handle->width() / 2).margin(0.5));
     CHECK(centre.y() == Catch::Approx(handle->height() / 2).margin(0.5));
     CHECK(grip.property("color").value<QColor>() == scheme->property("neutralDot").value<QColor>());
+}
 
 // Mutation: leave a row's `divided` unread (no rule, a step-2 gap), or put the rule on the second child's edge instead
 // of in the gap.
