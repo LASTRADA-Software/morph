@@ -33,6 +33,8 @@
 #include "local_apps.hpp"
 
 #if MORPH_CLIENT_HAS_QT_QUICK
+#include <QCoreApplication>
+#include <QEvent>
 #include <QImage>
 #include <QQuickWindow>
 #include <QString>
@@ -136,6 +138,11 @@ bool saveGrab(Grab const& grab) {
         std::cerr << "client: --grab draws the Qt Quick window, and this frontend made none\n";
         return false;
     }
+    // The offscreen window's pointer rests at its origin, over whatever sits there; leaving the window clears every
+    // hover, so no tooltip is drawn over the grab.
+    QEvent leave{QEvent::Leave};
+    QCoreApplication::sendEvent(grab.window, &leave);
+    QCoreApplication::processEvents();
     QImage const image = grab.window->grabWindow();
     if (image.isNull()) {
         std::cerr << "client: --grab: the window gave no image\n";
