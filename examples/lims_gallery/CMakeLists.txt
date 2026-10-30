@@ -24,6 +24,12 @@ add_library(lims_gallery_screens STATIC
 target_include_directories(lims_gallery_screens PUBLIC include)
 target_link_libraries(lims_gallery_screens PUBLIC morph::morph morph::client)
 apply_warnings(lims_gallery_screens)
+# Each screen instantiates a large ui/1 document, and Emscripten compiles them with a lot of memory: a full -j on the
+# WASM runner exhausts its memory. Two at a time there; elsewhere the build's own parallelism.
+if(EMSCRIPTEN)
+    set_property(GLOBAL APPEND PROPERTY JOB_POOLS lims_gallery_screens=2)
+    set_target_properties(lims_gallery_screens PROPERTIES JOB_POOL_COMPILE lims_gallery_screens)
+endif()
 if(DEFINED AF_SANITIZER)
     apply_sanitizers(lims_gallery_screens ${AF_SANITIZER})
 endif()
