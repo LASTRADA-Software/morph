@@ -69,7 +69,9 @@ public:
           _sideEnd{backend.createSpacer(_sidebar.get())},
           _main{backend.createStack(_root.get(), Axis::Vertical)},
           _topBar{backend.createStack(_main.get(), Axis::Vertical)},
+          _topAbove{backend.createSpacer(_topBar.get())},
           _topLine{backend.createStack(_topBar.get(), Axis::Horizontal)},
+          _topBelow{backend.createSpacer(_topBar.get())},
           _topStart{backend.createSpacer(_topLine.get())},
           _topMain{wrappingRow(backend, _topLine.get())},
           _navMenu{backend.createMenu(_topMain.get(), MenuStyle::Button)},
@@ -121,8 +123,15 @@ public:
         // vocabulary does not have.
         _topBar->setSurface("toolbar");
         _topBar->setTestId("shell_topbar");
+        // Zero-sized spacers above and below pad the line by the bar's gap, as they do at the line's two ends by its
+        // own gap; the line is centred across the bar.
+        _topBar->setGap(2);
+        _topAbove->setLayout({.width = {}, .height = Sizing::fixed(0)});
+        _topBelow->setLayout({.width = {}, .height = Sizing::fixed(0)});
+        _topLine->setGap(3);
+        _topLine->setAlign(Align::Center);
         _topLine->setTestId("shell_topbar_line");
-        // Spacers at both ends pad every line of the wrapping row by its gap.
+        // Spacers at both ends pad the line's content by its gap, left and right.
         _topStart->setLayout({.width = Sizing::fixed(0), .height = {}});
         _topEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
         _topMain->setLayout({.width = Sizing::stretch(), .height = {}});
@@ -290,7 +299,9 @@ private:
     // Lazily made, the first time showToast is called.
     std::unique_ptr<ToastWidget> _toast;
     std::unique_ptr<StackWidget> _topBar;
+    std::unique_ptr<SpacerWidget> _topAbove;
     std::unique_ptr<StackWidget> _topLine;
+    std::unique_ptr<SpacerWidget> _topBelow;
     std::unique_ptr<SpacerWidget> _topStart;
     std::unique_ptr<StackWidget> _topMain;
     std::unique_ptr<MenuWidget> _navMenu;

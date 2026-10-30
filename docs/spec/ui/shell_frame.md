@@ -20,8 +20,8 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 | a row, stretch × stretch | `shell` | the whole frame |
 | a row, surface `sidebar`, `fixed(kShellSidebarWidth)` (28) × stretch, gap 3, its content padded by spacers | `shell_sidebar` | the application's name (`shell_application`, a heading), a `ui::Navigator` over `ShellFrameOptions::navigator` that takes the sidebar's spare height (its group headings are sections and its entries body text, so the scale runs name, section, entry), and at its foot the principal (`shell_principal`, muted) above the sign-out button (`shell_signOut`, ghost), both hidden without `onSignOut` |
 | a column, stretch × stretch | — | the main column |
-| a column, surface `toolbar` | `shell_topbar` | the top bar: one line, below |
-| a row, padded by a zero-width spacer at both ends | `shell_topbar_line` | the top line: the two pad spacers around the wrapping row |
+| a column, surface `toolbar`, gap 2, padded above and below by zero-height spacers | `shell_topbar` | the top bar: one line, below, a gap of step 2 from the bar's top and bottom edge |
+| a row, gap 3, `align: center`, padded by a zero-width spacer at both ends | `shell_topbar_line` | the top line: the two pad spacers around the wrapping row, so its content starts a gap of step 3 from the bar's left edge and ends as far from the right, and sits centred across the bar's line |
 | a row that wraps, gap 3, `align: start`, `justify: end`, stretch | `shell_topbar_main` | the navigation menu (`shell_nav_menu`, shown only in [the compact form](#the-compact-form)); a lead block, a column that stretches from `kShellHeadLeadMinimum` (32) units, holding the shown screen's title (`shell_title`, a heading) over the lead slot (`shell_head_lead`); then the trail slot (`shell_head`). Every line of it is padded at both ends by the pad spacers |
 | a column, surface `page`, stretch × stretch | `shell_page` | the page: zero-sized spacers above and either side of the content, each a gap of step 4 away, so the content is padded by step 4 |
 

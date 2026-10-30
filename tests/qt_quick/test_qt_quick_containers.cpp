@@ -1007,6 +1007,50 @@ TEST_CASE("qt_quick containers: a head whose title and action fit in the compact
     CHECK(exportAt.right() <= 390.0);
 }
 
+// The top bar keeps a gutter on every side: its first control starts a gap in from the left edge, its last ends a gap
+// short of the right, and the line has room above and below. Mutation: drop the line's gap and the spacers (the
+// controls touch the edges).
+TEST_CASE("qt_quick containers: the shell's top bar insets its controls and centres them across its line",
+          "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setCompact(true);
+    frame.setTitle("Console");
+    frame.setHeadShown(true);
+    ui::Button action{.label = "Open"};
+    action.common.testId = "inset_action";
+    ui::Mounted const trailMount{scene.runtime(), scene.backend(),
+                                 ui::row(ui::Row{.children = {ui::button(std::move(action))}, .gap = 1}),
+                                 &frame.headSlot()};
+    scene.window().resize(1000, 600);
+    scene.settle();
+    auto const rectOf = [](char const* testId) {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        QQuickItem const* const item = widget->item();
+        REQUIRE(item != nullptr);
+        return QRectF{item->mapToScene(QPointF{0, 0}), QSizeF{item->width(), item->height()}};
+    };
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal gap = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, gap), Q_ARG(int, 3)));
+    QRectF const bar = rectOf("shell_topbar");
+    QRectF const menu = rectOf("shell_nav_menu");
+    QRectF const actionAt = rectOf("inset_action");
+    INFO("the bar " << bar.left() << ".." << bar.right() << " x " << bar.top() << ".." << bar.bottom()
+                    << ", the menu at " << menu.left() << ", " << menu.top() << ", the action " << actionAt.left()
+                    << ".." << actionAt.right() << ", " << actionAt.top() << ".." << actionAt.bottom() << ", a gap is "
+                    << gap);
+    CHECK(menu.left() - bar.left() >= gap - 0.5);
+    CHECK(bar.right() - actionAt.right() >= gap - 0.5);
+    CHECK(menu.top() - bar.top() >= 1.0);
+    CHECK(bar.bottom() - actionAt.bottom() >= 1.0);
+    // Level with one another: the menu and the action are the same height, so their tops agree.
+    CHECK(std::abs(menu.center().y() - actionAt.center().y()) < 1.5);
+}
+
 // Mutation: draw the rules in the scheme's border colour, leave `divided` unread (no rules), or put the rule on the
 // lower child's edge instead of in the gap.
 TEST_CASE("qt_quick containers: a divided column draws a divider rule in each gap and a plain one none",
