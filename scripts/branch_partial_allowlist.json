@@ -121,28 +121,28 @@
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 1963,
+      "line": 1979,
       "source": "default:",
       "context": "download(cmd, fields, primary, path);",
       "reason": "The default arm is unreachable: the switch names every enumerator of CommandKind, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is DocumentParser::command's switch over the command kinds."
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 2333,
+      "line": 2349,
       "source": "default:",
       "context": "case Shape::Keys:",
       "reason": "The default arm is unreachable: the switch names every enumerator of detail::Shape, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is DocumentParser::entry's switch over a key's shape."
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 4428,
+      "line": 4511,
       "source": "default:",
       "context": "if (cmd.value) {",
       "reason": "The default arm is unreachable: the switch names every enumerator of CommandKind, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is DocumentValidator::checkCommand's switch."
     },
     {
       "file": "include/morph/ui/document.hpp",
-      "line": 4771,
+      "line": 4854,
       "source": "default: {",
       "reason": "The default arm is unreachable: the switch names every enumerator of NameCategory, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is ScopeResolver::ref's switch over what a name declares."
     },
