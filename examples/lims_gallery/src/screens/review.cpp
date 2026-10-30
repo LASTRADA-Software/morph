@@ -513,9 +513,9 @@ ui::Node showChoice(Review const& review, bool compact) {
                                   .style = "segmented",
                                   .onChoose = ui::set(review.show, ui::event())})
                           .testId("show");
-    // Compact drops the caption.
+    // Compact drops the caption and the control spans the page's width.
     if (compact) {
-        return choice;
+        return choice.sizing(ui::stretch());
     }
     return ui::row({layout::muted("Show"), choice}, {.gap = 1, .align = Align::Center});
 }
@@ -526,7 +526,7 @@ ui::Node resultTable(Review const& review) {
         {.name = "analyte", .label = "Analyte", .width = ui::content(), .wrap = false},
         {.name = "value",
          .label = "Result",
-         .width = ui::fixed(10),
+         .width = ui::fixed(9),
          .align = Align::End,
          .cell = ui::text({.text = ui::row("value"), .spans = ui::spans({ui::strong(ui::row("value"))})}),
          .wrap = false},
@@ -534,7 +534,7 @@ ui::Node resultTable(Review const& review) {
         {.name = "previous", .label = "Previous lot", .width = ui::content(), .align = Align::End, .wrap = false},
         {.name = "evaluation",
          .label = "Evaluation",
-         .width = ui::fixed(28),
+         .width = ui::content(),
          .cell = layout::tag(ui::row("evaluation"), ui::row("tone"))},
         {.name = "change",
          .label = "Change",
@@ -795,18 +795,20 @@ ui::Node worksheetPane(Review const& review) {
         {ui::column({sheetHead(review, false), selfBanner(review), signedBanner(review), recordTabs(review, false)},
                     {.gap = 2})},
         {.bottom = ui::row({returnButton(review, "Return to analyst…"), rejectButton(review, "Reject…"),
-                            ui::spacer().sizing(ui::stretch()),
+                            // The note takes the room the buttons leave and wraps within it, so a narrow pane never
+                            // pushes Approve past its edge.
                             layout::muted(ui::cond(review.self, Text{"Another reviewer must approve"},
                                                    Text{"Approving needs your signature"}))
+                                .sizing(ui::stretch())
                                 .testId("approve-note"),
                             approveButton(review, "Approve and sign…")},
                            {.gap = 1, .align = Align::Center})});
 }
 
 ui::Node expandedLayout(Review const& review) {
-    // The design's 280 px queue beside the worksheet, in the frontend's character widths. The splitter takes the
-    // page's height, so each pane reaches the page's bottom.
-    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{29, 74}};
+    // The queue takes under a quarter of the page, 23 of 103 units, which leaves the worksheet the room its results
+    // table and its decisions need. The splitter takes the page's height, so each pane reaches the page's bottom.
+    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{23, 80}};
     return ui::column({ui::splitter({queuePane(review).surface("pane"), worksheetPane(review).surface("pane")},
                                     ui::AnyHandle{"horizontal"}, sizes)
                            .sizing(ui::stretch(), ui::stretch())
