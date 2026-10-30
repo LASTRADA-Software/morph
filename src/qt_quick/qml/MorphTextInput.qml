@@ -72,6 +72,8 @@ MorphField {
         font: root.textFont
         id: field
         width: root.controlWidth
+        // A field not being edited shows its text from the start; while it has the focus it follows the cursor.
+        autoScroll: field.activeFocus
         horizontalAlignment: root.textAlign
         Keys.priority: Keys.BeforeItem
         Keys.onReturnPressed: event => root.enterPressed(event)

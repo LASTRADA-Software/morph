@@ -20,6 +20,7 @@
 #include <QQmlEngine>
 #include <QQmlProperty>
 #include <QQuickItem>
+#include <QRectF>
 #include <QString>
 #include <QStringList>
 #include <QTest>
@@ -2096,4 +2097,72 @@ TEST_CASE("qt_quick widgets: a stretched button action is as wide as the banner'
     auto const* const background = action->property("background").value<QObject*>();
     REQUIRE(background != nullptr);
     CHECK_FALSE(background->property("ghost").toBool());
+}
+
+namespace {
+
+/// The x of the first character's rectangle in a single-line text control: 0 while its text starts at the left edge of
+/// the text area, negative once the field has scrolled.
+qreal firstCharacterX(QQuickItem& control) {
+    QRectF rectangle;
+    REQUIRE(
+        QMetaObject::invokeMethod(&control, "positionToRectangle", Q_RETURN_ARG(QRectF, rectangle), Q_ARG(int, 0)));
+    return rectangle.x();
+}
+
+}  // namespace
+
+// Mutation: leave the field's `autoScroll` at its default (the first check reads the end of the text, as stock Qt
+// does).
+TEST_CASE("qt_quick widgets: a text input narrower than its text shows the start until it has the focus",
+          "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(10), .height = ui::Sizing::content()});
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    input->setLayout({.width = ui::Sizing::fixed(10), .height = ui::Sizing::content()});
+    input->setText("Ease, finished product of a lot of letters");
+    scene.settle();
+    QQuickItem& control = Scene::controlOf(*input);
+    REQUIRE(control.width() < 100.0);
+    qreal const padding = 0.0;
+    CHECK(firstCharacterX(control) == Catch::Approx(padding));
+
+    control.forceActiveFocus();
+    scene.settle();
+    scene.key(Qt::Key_End);
+    CHECK(firstCharacterX(control) < 0.0);
+
+    control.setFocus(false);
+    scene.settle();
+    CHECK_FALSE(control.hasActiveFocus());
+    CHECK(firstCharacterX(control) == Catch::Approx(padding));
+}
+
+// Mutation: as above, in the date-time input's field.
+TEST_CASE("qt_quick widgets: a date-time input narrower than its text shows the start until it has the focus",
+          "[qt_quick]") {
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(10), .height = ui::Sizing::content()});
+    auto input = scene.backend().createDateTimeInput(column.get(), ui::DateMode::DateTime, 0);
+    input->setLayout({.width = ui::Sizing::fixed(10), .height = ui::Sizing::content()});
+    input->setValue(
+        morph::time::Timestamp{DateTime{year{2026}, month{10}, day{4}, hours{9}, minutes{41}, seconds{0}}});
+    scene.settle();
+    QQuickItem& control = Scene::controlOf(*input);
+    REQUIRE(control.width() < 100.0);
+    qreal const padding = 0.0;
+    CHECK(firstCharacterX(control) == Catch::Approx(padding));
+
+    control.forceActiveFocus();
+    scene.settle();
+    scene.key(Qt::Key_End);
+    CHECK(firstCharacterX(control) < 0.0);
+
+    control.setFocus(false);
+    scene.settle();
+    CHECK(firstCharacterX(control) == Catch::Approx(padding));
 }
