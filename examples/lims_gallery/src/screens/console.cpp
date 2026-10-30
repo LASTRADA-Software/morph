@@ -464,7 +464,9 @@ ui::Node alert(bool compact) {
                                     compact ? " at 09:40: tailing 2.3, limit 2.0. 18 results on hold."
                                             : " at 09:40 CEST: tailing 2.3, limit 2.0. 18 results from this run "
                                               "are on hold."}),
-                .action = ui::ActionPart{.label = "Open run", .onClick = open("lims-gallery.instrument")}})
+                .action = ui::ActionPart{.label = "Open run", .onClick = open("lims-gallery.instrument")},
+                .actionStyle = morph::ui::BannerActionStyle::Button,
+                .actionStretch = compact})
         .a11y("System suitability failed on HPLC-02", "alert")
         .testId("alert");
 }
