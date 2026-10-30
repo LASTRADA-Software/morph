@@ -37,12 +37,17 @@ MorphWidget {
     readonly property real markerRoom: Theme.spaceOf(1) + marker.implicitWidth
     readonly property real controlWidth: width - (!required || markerAfterCaption ? 0
                                                   : markerFollowsText ? markerRoom : marker.implicitWidth)
-    // The unit a kind shows beside its value, announced last, so a listener hears the value with its unit.
+    // The unit a kind shows beside its value, announced last, so a listener hears the value with its unit; and the
+    // prefix it shows before the value, announced first.
     property string announcedUnit: ""
-    // What assistive technology reads as the field's description: its messages, then its description, then the unit.
-    readonly property string accessibleDescription: errors.concat(description === "" ? [] : [description])
-                                                          .concat(announcedUnit === "" ? [] : [announcedUnit])
-                                                          .join("\n")
+    property string announcedPrefix: ""
+    // What assistive technology reads as the field's description: the prefix, its messages, then its description,
+    // then the unit.
+    readonly property string accessibleDescription: {
+        const lines = errors.concat(description === "" ? [] : [description])
+                            .concat(announcedUnit === "" ? [] : [announcedUnit])
+        return (announcedPrefix === "" ? lines : [announcedPrefix].concat(lines)).join("\n")
+    }
 
     focusTarget: control ? control : root
     implicitWidth: Math.max(captionLabel.visible ? captionLabel.implicitWidth + (required ? markerRoom : 0) : 0,

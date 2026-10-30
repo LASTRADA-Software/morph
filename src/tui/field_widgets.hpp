@@ -95,6 +95,12 @@ public:
     void setOnSubmit(std::function<void(std::string)> onSubmit) override;
     void setOnCommit(std::function<void(std::string)> onCommit) override;
     void setUnit(std::string_view unit) override;
+    /// The prefix is drawn muted before the text, after the icon.
+    void setPrefix(std::string_view prefix) override;
+    /// Every face of a terminal is monospace, so a mono field draws nothing new.
+    void setMono(bool mono) override { static_cast<void>(mono); }
+    /// An end-aligned field draws its text against the field's right edge while the text fits.
+    void setAlign(ui::Align align) override;
     void setDecimals(int decimals) override;
     void setIcon(std::string_view icon) override;
     /// A prominent input draws its text bold; the field's background is unchanged.
@@ -103,9 +109,12 @@ public:
     /// Where the cursor is, as a byte offset into the text shown.
     [[nodiscard]] std::size_t cursor() const noexcept { return _field->cursor(); }
     [[nodiscard]] bool wantsFocus() const override { return true; }
-    /// The messages, the description, then the unit, so a listener hears the value with its unit.
+    /// The prefix, the messages, the description, then the unit, so a listener hears the value between them.
     [[nodiscard]] std::string accessibleDescription() const override {
         std::string text = TuiField::accessibleDescription();
+        if (!_prefix.empty()) {
+            text = text.empty() ? _prefix : _prefix + "\n" + text;
+        }
         if (!_unit.empty()) {
             text += text.empty() ? _unit : "\n" + _unit;
         }
@@ -118,6 +127,7 @@ protected:
     void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
+    void paintText(::core::tui::Canvas& canvas);
     void edited() override;
     void submitted() override;
     /// Only a field given a submit handler takes Enter for itself.
@@ -134,6 +144,8 @@ private:
     std::string _reported;
     std::string _placeholder;
     std::string _unit;  ///< Drawn muted at the right edge, before the marks; the editable width ends a cell before it.
+    std::string _prefix;     ///< Drawn muted before the text, after the icon.
+    bool _alignEnd = false;  ///< Whether the text is drawn against the field's right edge while it fits.
     std::string _icon;  ///< A framework icon name draws as a glyph before the field; any other name draws nothing.
     std::function<void(std::string)> _onChange;
     std::function<void(std::string)> _onSubmit;

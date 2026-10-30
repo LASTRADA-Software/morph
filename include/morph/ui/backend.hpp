@@ -244,6 +244,22 @@ public:
     /// @param unit The unit's display text, UTF-8.
     virtual void setUnit(std::string_view unit) = 0;
 
+    /// @brief Sets the text drawn muted at the field's leading edge, inside it, and announced before the value; empty
+    ///        shows none. Called only on a single-line or password input.
+    /// @param prefix The prefix's display text, UTF-8.
+    virtual void setPrefix(std::string_view prefix) = 0;
+
+    /// @brief Draws the text and the placeholder in the `mono` text role's face. A new field uses the body face; the
+    ///        mount calls it once, only for `true`.
+    /// @param mono Whether to.
+    virtual void setMono(bool mono) = 0;
+
+    /// @brief Places the text in the field. A new field's text starts at the leading edge; the mount calls it once,
+    ///        only for `Center` or `End`, and only on a single-line or password input. An `End` field draws its
+    ///        digits at one width each, so a column of values lines up.
+    /// @param align `Start`, `Center` or `End`; `Stretch` reads as `Start`.
+    virtual void setAlign(Align align) = 0;
+
     /// @brief Sets the fraction digits a number is entered with: what a backend or a kit may use to align or
     ///        format the text. Nothing is required of a backend that draws nothing from it. Called only on a
     ///        single-line or password input.

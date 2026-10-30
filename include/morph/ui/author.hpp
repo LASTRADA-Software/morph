@@ -3603,6 +3603,14 @@ struct TextInputOptions {
     /// @brief How much it stands out: `Prominent` for the screen's focal field, such as a scanner's; `Normal` writes
     ///        no key. Refused on a multiline input.
     InputEmphasis emphasis = InputEmphasis::Normal;
+    /// @brief Text drawn muted at the input's leading edge inside it, and announced before the value, such as `±`;
+    ///        refused on a multiline input.
+    AnyHandle prefix;
+    /// @brief Whether the text and the placeholder are drawn in the `mono` text role's face.
+    bool mono = false;
+    /// @brief Where the text sits: `Start`, `Center` or `End`; absent writes no key, the start. Refused on a
+    ///        multiline input; `Stretch` is refused by the loader.
+    std::optional<Align> align;
     /// @brief When the draft commits.
     std::optional<Commit> commitOn;
     /// @brief Commands run on every edit.
@@ -3624,9 +3632,16 @@ struct TextInputOptions {
         .put("placeholder", options.placeholder)
         .put("mode", options.mode)
         .put("icon", options.icon)
-        .put("unit", options.unit);
+        .put("unit", options.unit)
+        .put("prefix", options.prefix);
     if (options.emphasis == InputEmphasis::Prominent) {
         node.text("emphasis", "prominent");
+    }
+    if (options.mono) {
+        node.flag("mono");
+    }
+    if (options.align) {
+        node.text("align", detail::alignName(*options.align));
     }
     if (options.commitOn) {
         node.text("commitOn", kCommits.at(static_cast<std::size_t>(*options.commitOn)));

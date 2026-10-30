@@ -7442,7 +7442,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         }
         // A multiline input shows no unit and no icon; a computed mode that turns out multiline is reported and
         // its unit and icon left out, so the mount never meets them there. The loader refuses a literal one.
-        for (std::string_view const key : {std::string_view{"unit"}, std::string_view{"icon"}}) {
+        for (std::string_view const key :
+             {std::string_view{"unit"}, std::string_view{"icon"}, std::string_view{"prefix"}}) {
             if (ExprPtr const given = node.prop(key); given != nullptr && spec.mode == TextInputMode::Multiline) {
                 report(given->path, "a multiline input shows no " + std::string{key});
             }
@@ -7451,8 +7452,15 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         if (spec.mode != TextInputMode::Multiline) {
             spec.emphasis = node.name("emphasis") == "prominent" ? InputEmphasis::Prominent : InputEmphasis::Normal;
             spec.icon = onceText("icon");
+            spec.align = alignOf(node.name("align"));
+            if (spec.align == Align::Stretch) {
+                spec.align = Align::Start;
+            }
             if (node.prop("unit")) {
                 spec.unit = textProp("unit");
+            }
+            if (node.prop("prefix")) {
+                spec.prefix = textProp("prefix");
             }
         }
         fieldOf(node, ctx, element, spec.field);

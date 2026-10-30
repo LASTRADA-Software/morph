@@ -318,6 +318,24 @@ void TextInputImpl::setUnit(std::string_view unit) {
     refresh();
 }
 
+// The mount never asks a multiline input for a prefix.
+void TextInputImpl::setPrefix(std::string_view prefix) {
+    if (_mode == ui::TextInputMode::Multiline) {
+        throw std::logic_error{"morph::tui: a multiline text input shows no prefix"};
+    }
+    _prefix = std::string{prefix};
+    refresh();
+}
+
+// The mount never asks a multiline input to align its text.
+void TextInputImpl::setAlign(ui::Align align) {
+    if (_mode == ui::TextInputMode::Multiline) {
+        throw std::logic_error{"morph::tui: a multiline text input's text starts at the leading edge"};
+    }
+    _alignEnd = align == ui::Align::End;
+    refresh();
+}
+
 void TextInputImpl::setDecimals(int decimals) {
     if (_mode == ui::TextInputMode::Multiline) {
         throw std::logic_error{"morph::tui: a multiline text input takes no places"};
@@ -346,7 +364,9 @@ void TextInputImpl::setIcon(std::string_view icon) {
     int const unit = _unit.empty() ? 0 : displayWidth(_unit) + 1;
     std::string_view const glyph = ui::iconGlyph(_icon);
     int const icon = glyph.empty() ? 0 : displayWidth(glyph) + 1;
-    int const width = std::max({20, displayWidth(_field->text()) + 1, displayWidth(_placeholder)}) + unit + icon;
+    int const prefix = _prefix.empty() ? 0 : displayWidth(_prefix) + 1;
+    int const width =
+        std::max({20, displayWidth(_field->text()) + 1, displayWidth(_placeholder)}) + unit + icon + prefix;
     int const height = _mode == ui::TextInputMode::Multiline ? std::max(3, _field->lineCount()) : 1;
     return withCaption({.width = width, .height = height});
 }
@@ -360,17 +380,47 @@ void TextInputImpl::paintControl(::core::tui::Canvas& canvas) {
     if (iconWidth > 0) {
         control.putString(0, 0, glyph, control.theme().textMuted);
     }
+    int const prefixWidth = _prefix.empty() ? 0 : displayWidth(_prefix) + 1;
+    if (prefixWidth > 0) {
+        control.putString(0, iconWidth, _prefix, control.theme().textMuted);
+    }
+    int const start = iconWidth + prefixWidth;
     auto field = control.subcanvas(
-        {.x = iconWidth, .y = 0, .width = std::max(0, control.width() - iconWidth), .height = control.height()});
+        {.x = start, .y = 0, .width = std::max(0, control.width() - start), .height = control.height()});
     if (_unit.empty()) {
-        paintField(*_field, *this, actionable(), field, _prominent);
+        paintText(field);
     } else {
         int const unitX = std::max(0, field.width() - marksWidth() - displayWidth(_unit));
         auto text = field.subcanvas({.x = 0, .y = 0, .width = std::max(0, unitX - 1), .height = field.height()});
-        paintField(*_field, *this, actionable(), text, _prominent);
+        paintText(text);
         field.putString(0, unitX, _unit, field.theme().textMuted);
     }
     paintMarks(control);
+}
+
+// The editable text in @p canvas. An end-aligned single-line field shows its text against the right edge while the
+// text fits: as it is when unfocused, with the cursor's cell after it while focused. Another text, an empty field
+// and a masked one are drawn from the start.
+void TextInputImpl::paintText(::core::tui::Canvas& canvas) {
+    int const textWidth = displayWidth(_field->text());
+    int const room = canvas.width() - (_field->focused() ? 1 : 0);
+    bool const aligned = _alignEnd && _mode == ui::TextInputMode::SingleLine && textWidth > 0 && textWidth < room;
+    if (!aligned) {
+        paintField(*_field, *this, actionable(), canvas, _prominent);
+        return;
+    }
+    int const x = room - textWidth;
+    if (!_field->focused()) {
+        ::core::tui::Style text = canvas.theme().inputNormal;
+        text.bold = _prominent;
+        if (!actionable()) {
+            text = canvas.theme().textMuted;
+        }
+        canvas.putString(0, x, _field->text(), text);
+        return;
+    }
+    auto shifted = canvas.subcanvas({.x = x, .y = 0, .width = canvas.width() - x, .height = canvas.height()});
+    paintField(*_field, *this, actionable(), shifted, _prominent);
 }
 
 void TextInputImpl::edited() {

@@ -531,6 +531,15 @@ TEST_CASE("a table column's align and valign and the table's valign are written 
           R"({"id":"id"}],"valign":"end"})");
 }
 
+// Mutation: leave `prefix`, `mono` or `align` out of textInput() (the key is not written).
+TEST_CASE("a text input's prefix, mono and align are written only when given", "[ui][author]") {
+    CHECK(text(ui::textInput(
+                   {.label = "Window", .unit = "days", .prefix = "±", .mono = true, .align = morph::ui::Align::End})
+                   .json()) ==
+          R"({"kind":"textInput","label":"Window","unit":"days","prefix":"±","mono":true,"align":"end"})");
+    CHECK(text(ui::textInput({.label = "Window"}).json()) == R"({"kind":"textInput","label":"Window"})");
+}
+
 // Mutation: leave `style` out of button() (the item is written as a push button).
 TEST_CASE("a button's style and selection are written, and the loader takes them", "[ui][author]") {
     auto const current = ui::ref<std::string>("current");

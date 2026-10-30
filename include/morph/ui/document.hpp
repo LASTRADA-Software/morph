@@ -775,12 +775,15 @@ inline constexpr std::array<KeySpec, 11> kButtonKeys = {{{"label", Shape::Expr},
                                                          {"size", Shape::Text},
                                                          {"mono", Shape::Flag}}};
 /// @brief The keys of `textInput`.
-inline constexpr std::array<KeySpec, 12> kTextInputKeys = {{{"value", Shape::Expr},
+inline constexpr std::array<KeySpec, 15> kTextInputKeys = {{{"value", Shape::Expr},
                                                             {"placeholder", Shape::Expr},
                                                             {"mode", Shape::Expr},
                                                             {"icon", Shape::Expr},
                                                             {"unit", Shape::Expr},
+                                                            {"prefix", Shape::Expr},
                                                             {"emphasis", Shape::Text},
+                                                            {"mono", Shape::Flag},
+                                                            {"align", Shape::Text},
                                                             {"commitOn", Shape::Text},
                                                             {"label", Shape::Expr},
                                                             {"showLabel", Shape::Flag},
@@ -3640,6 +3643,8 @@ private:
             checkChoice(node, "commitOn", kCommit);
             static constexpr std::array<std::string_view, 2> kInputEmphases = {"normal", "prominent"};
             checkChoice(node, "emphasis", kInputEmphases);
+            static constexpr std::array<std::string_view, 3> kInputAligns = {"start", "center", "end"};
+            checkChoice(node, "align", kInputAligns);
             checkMultilineExtras(node);
         } else if (node.kind == "select") {
             static constexpr std::array<std::string_view, 2> kStale = {"clear", "keep"};
@@ -4071,10 +4076,14 @@ private:
         if (name == nullptr || *name != "multiline") {
             return;
         }
-        for (std::string_view const key : {std::string_view{"unit"}, std::string_view{"icon"}}) {
+        for (std::string_view const key :
+             {std::string_view{"unit"}, std::string_view{"icon"}, std::string_view{"prefix"}}) {
             if (node.prop(key) != nullptr) {
                 refuse(pointerAppend(node.path, key), "a multiline input shows no " + std::string{key});
             }
+        }
+        if (!node.name("align").empty()) {
+            refuse(pointerAppend(node.path, "align"), "a multiline input's text starts at the leading edge");
         }
         if (!node.name("emphasis").empty() && node.name("emphasis") != "normal") {
             refuse(pointerAppend(node.path, "emphasis"), "a multiline input's size is its own; it takes no emphasis");

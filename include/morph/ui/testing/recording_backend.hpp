@@ -995,7 +995,8 @@ private:
     std::unique_ptr<FakeSlot> _content;
 };
 
-/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `decimals`, `icon`, `emphasis`,
+/// @brief A fake `TextInputWidget`: properties `mode`, `text`, `placeholder`, `unit`, `prefix`, `decimals`, `icon`,
+///        `emphasis`, `mono`, `align`,
 ///        `caption`, `captionShown`, the field state, and a text cursor.
 ///
 /// The cursor is a byte offset into the text. A user's edit puts it where the edit left it; `setText` with the text
@@ -1037,6 +1038,11 @@ public:
 
     void setPlaceholder(std::string_view placeholder) override { set("placeholder", formatText(placeholder)); }
     void setUnit(std::string_view unit) override { set("unit", formatText(unit)); }
+    void setPrefix(std::string_view prefix) override { set("prefix", formatText(prefix)); }
+    void setMono(bool mono) override { set("mono", formatBool(mono)); }
+    void setAlign(Align align) override {
+        set("align", align == Align::End ? "end" : align == Align::Center ? "center" : "start");
+    }
     void setDecimals(int decimals) override { set("decimals", std::to_string(decimals)); }
     void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
     void setEmphasis(InputEmphasis emphasis) override {

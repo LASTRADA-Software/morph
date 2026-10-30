@@ -937,6 +937,29 @@ TEST_CASE("interpreter control: a text input's unit is bound, and a computed mul
           }) == 1);
 }
 
+// Mutation: skip `setPrefix`, `setMono` or `setAlign` in the mount (the property is not recorded), or tell the widget
+// the default alignment.
+TEST_CASE("interpreter control: an input's prefix, mono and align reach the backend only when given",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "inputs", "view": {"kind": "column", "children": [
+        {"kind": "textInput", "testId": "window", "label": "Window", "prefix": "±", "mono": true, "align": "end",
+         "unit": "days"},
+        {"kind": "textInput", "testId": "plain", "label": "Plain", "align": "start"},
+        {"kind": "textInput", "testId": "area", "label": "Note", "mode": "multiline", "mono": true}]}})");
+    int const window = h.byTestId("TextInput", "window");
+    CHECK(h.backend.prop(window, "prefix") == "±");
+    CHECK(h.backend.prop(window, "mono") == "true");
+    CHECK(h.backend.prop(window, "align") == "end");
+    int const plain = h.byTestId("TextInput", "plain");
+    CHECK_FALSE(h.backend.hasProp(plain, "prefix"));
+    CHECK_FALSE(h.backend.hasProp(plain, "mono"));
+    CHECK_FALSE(h.backend.hasProp(plain, "align"));
+    int const area = h.byTestId("TextInput", "area");
+    CHECK(h.backend.prop(area, "mono") == "true");
+    CHECK_FALSE(h.backend.hasProp(area, "align"));
+}
+
 // Mutation: take a computed style of no known name as radio (the select records `style=Radio`).
 TEST_CASE("interpreter control: a computed select style naming none is reported once and drawn as a dropdown",
           "[ui][interpreter]") {

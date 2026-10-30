@@ -9,6 +9,8 @@ MorphField {
     id: root
 
     property string placeholder: ""
+    // Whether the text and the placeholder are drawn in the mono face; set once.
+    property bool mono: false
     property bool edited: false
     // Set while C++ writes the text, so the write is not taken for an edit.
     property bool assigning: false
@@ -26,7 +28,7 @@ MorphField {
     defaultRole: Accessible.EditableText
 
     TextArea {
-        font: Theme.bodyFont
+        font: root.mono ? Theme.monoFontOf(Theme.monoPixels, Font.Normal) : Theme.bodyFont
         id: area
         width: root.controlWidth
         // The widget's own chords come before the control's handling of the key.

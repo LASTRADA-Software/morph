@@ -189,8 +189,13 @@ expression of one),
   `text({.spans = spans({"Lot ", mono(lot)}), .role = "muted"})`. `styled` is not `span`, which a node's `span`
   already means.
 - **`group`** takes its children and `GroupOptions{label, required, description, errors, gap}`.
-- **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected, children}`: an absent `style`
-  writes no key, and `selected`, a condition, is written as given: an item's current entry, a push button pressed in.
+- **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected, children, shape,
+  size, mono}`: an absent `style` writes no key, and `selected`, a condition, is written as given: an item's current
+  entry, a push button pressed in. `shape` (`ControlShape::Round`), `size` (`ButtonSize::Small`) and `mono` are
+  written only when not the default.
+- **`textInput`** takes `TextInputOptions{value, label, placeholder, mode, icon, unit, emphasis, prefix, mono, align,
+  commitOn, onChange, onCommit, onSubmit}`; `prefix` is an expression, and `mono` and `align` (`Align::Start`,
+  `Center`, `End`; absent writes no key) are written only when given.
 - **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, tracks, align, justify, wrap, divided}`; an
   absent `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` and `tracks`
   (`GridTrack{width, align}`, each key written only when given) are the grid's, and

@@ -14,9 +14,14 @@ MorphField {
     property bool edited: false
     // The unit, drawn muted at the trailing edge inside the field; empty draws none.
     property string unit: ""
+    // Text drawn muted at the leading edge inside the field, after the icon; empty draws none.
+    property string prefix: ""
+    // Whether the text and the placeholder are drawn in the mono face; set once.
+    property bool mono: false
     // The screen's focal field, such as a scanner's: larger text, the touch height, and an accent outline; set once.
     property bool prominent: false
     announcedUnit: unit
+    announcedPrefix: prefix
     // The fraction digits a number is entered with, -1 for an input that holds no number: carried for a kit's
     // restyle to read; the stock input draws nothing from it.
     property int decimals: -1
@@ -50,9 +55,21 @@ MorphField {
     accessibleItem: field
     defaultRole: Accessible.EditableText
 
+    // The text's font: the heading size at the theme's strong weight for the focal field, else the body size; in the
+    // mono role's face when asked. A weight is always the theme's, never a literal one, since a family without it
+    // may match another face.
+    readonly property font textFont: {
+        if (root.prominent)
+            return root.mono ? Theme.monoFontOf(Theme.headingPixels, Theme.strongWeight)
+                             : Theme.fontOf(Theme.headingPixels, Theme.strongWeight)
+        if (root.mono)
+            return Theme.figuresOf(Theme.monoFontOf(Theme.monoPixels, Font.Normal), Theme.monoFamilies,
+                                   root.tabularFigures)
+        return Theme.figuresOf(Theme.bodyFont, Theme.families, root.tabularFigures)
+    }
+
     TextField {
-        font: root.prominent ? Theme.fontOf(Theme.headingPixels, Font.DemiBold)
-                             : Theme.figuresOf(Theme.bodyFont, Theme.families, root.tabularFigures)
+        font: root.textFont
         id: field
         width: root.controlWidth
         horizontalAlignment: root.textAlign
@@ -66,8 +83,9 @@ MorphField {
         }
         color: root.scheme.text
         placeholderTextColor: root.scheme.muted
-        // The text starts after the icon.
-        leftPadding: Theme.spaceOf(3) + (iconImage.visible ? iconImage.width + Theme.spaceOf(1) : 0)
+        // The text starts after the icon and the prefix.
+        leftPadding: Theme.spaceOf(3) + (iconImage.visible ? iconImage.width + Theme.spaceOf(1) : 0) +
+                     (prefixLabel.visible ? prefixLabel.implicitWidth + Theme.spaceOf(1) : 0)
         // The text stops before the unit.
         rightPadding: Theme.spaceOf(3) + (unitLabel.visible ? unitLabel.implicitWidth + Theme.spaceOf(1) : 0)
         background: MorphInputBackground {
@@ -113,6 +131,19 @@ MorphField {
             anchors.verticalCenter: parent.verticalCenter
             visible: root.unit !== ""
             text: root.unit
+            color: root.scheme.muted
+        }
+
+        Label {
+            textFormat: Text.PlainText
+            id: prefixLabel
+            objectName: "prefix"
+            anchors.left: parent.left
+            anchors.leftMargin: Theme.spaceOf(3) + (iconImage.visible ? iconImage.width + Theme.spaceOf(1) : 0)
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.prefix !== ""
+            text: root.prefix
+            font: root.textFont
             color: root.scheme.muted
         }
 

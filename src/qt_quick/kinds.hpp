@@ -56,6 +56,9 @@ public:
     void setOnSubmit(std::function<void(std::string)> onSubmit) override;
     void setOnCommit(std::function<void(std::string)> onCommit) override;
     void setUnit(std::string_view unit) override;
+    void setPrefix(std::string_view prefix) override;
+    void setMono(bool mono) override;
+    void setAlign(ui::Align align) override;
     void setDecimals(int decimals) override;
     void setIcon(std::string_view icon) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }

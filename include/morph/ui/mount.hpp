@@ -850,9 +850,14 @@ private:
 
     Widget& mountKind(reactive::Scope& scope, TextInput const& spec, ContainerWidget* parent) {
         bool const hasUnit = spec.unit.isBound() || !spec.unit.constant().empty();
-        if ((hasUnit || spec.decimals >= 0 || !spec.icon.empty()) && spec.mode == TextInputMode::Multiline) {
+        bool const hasPrefix = spec.prefix.isBound() || !spec.prefix.constant().empty();
+        if ((hasUnit || hasPrefix || spec.decimals >= 0 || !spec.icon.empty()) &&
+            spec.mode == TextInputMode::Multiline) {
             throw std::logic_error{
-                "morph::ui: a multiline text input holds no number, so it takes no unit, places or icon"};
+                "morph::ui: a multiline text input holds no number, so it takes no unit, prefix, places or icon"};
+        }
+        if (spec.align != Align::Start && spec.mode == TextInputMode::Multiline) {
+            throw std::logic_error{"morph::ui: a multiline text input's text starts at the leading edge"};
         }
         if (spec.emphasis != InputEmphasis::Normal && spec.mode == TextInputMode::Multiline) {
             throw std::logic_error{"morph::ui: a multiline text input's size is its own; it takes no emphasis"};
@@ -866,6 +871,9 @@ private:
         if (hasUnit) {
             bind(scope, spec.unit, [&widget](std::string const& unit) { widget.setUnit(unit); });
         }
+        if (hasPrefix) {
+            bind(scope, spec.prefix, [&widget](std::string const& prefix) { widget.setPrefix(prefix); });
+        }
         if (spec.decimals >= 0) {
             widget.setDecimals(spec.decimals);
         }
@@ -874,6 +882,12 @@ private:
         }
         if (spec.emphasis != InputEmphasis::Normal) {
             widget.setEmphasis(spec.emphasis);
+        }
+        if (spec.mono) {
+            widget.setMono(true);
+        }
+        if (spec.align != Align::Start) {
+            widget.setAlign(spec.align);
         }
         applyCaption(scope, widget, spec.label, spec.showLabel);
         widget.setOnChange(inputEvent(spec.onChange, reassert));

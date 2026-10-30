@@ -151,6 +151,28 @@ void TextInputImpl::setUnit(std::string_view unit) {
     write("unit", toQString(unit));
 }
 
+// MorphTextArea declares no prefix.
+void TextInputImpl::setPrefix(std::string_view prefix) {
+    if (_multiline) {
+        throw std::logic_error{"morph::qt_quick: a multiline text input shows no prefix"};
+    }
+    write("prefix", toQString(prefix));
+}
+
+// MorphTextInput's and MorphTextArea's `mono`.
+void TextInputImpl::setMono(bool mono) { write("mono", mono); }
+
+// MorphTextInput's `textAlign`; an end-aligned field also draws its digits at one width each.
+void TextInputImpl::setAlign(ui::Align align) {
+    if (_multiline) {
+        throw std::logic_error{"morph::qt_quick: a multiline text input's text starts at the leading edge"};
+    }
+    write("textAlign", static_cast<int>(align == ui::Align::End      ? Qt::AlignRight
+                                        : align == ui::Align::Center ? Qt::AlignHCenter
+                                                                     : Qt::AlignLeft));
+    write("tabularFigures", align == ui::Align::End);
+}
+
 void TextInputImpl::setDecimals(int decimals) {
     if (_multiline) {
         throw std::logic_error{"morph::qt_quick: a multiline text input takes no places"};

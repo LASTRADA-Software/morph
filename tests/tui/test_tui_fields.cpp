@@ -134,6 +134,25 @@ TEST_CASE("tui fields: a unit is drawn muted at the right edge before the marks,
     CHECK_THROWS_AS(multiline->setUnit("kg"), std::logic_error);
 }
 
+// Mutation: draw the text from the start (the end-aligned text does not reach the last cell), or drop the prefix.
+TEST_CASE("tui fields: an end-aligned text ends at the field's last cell, and a prefix sits in its first",
+          "[tui][fields]") {
+    Harness harness{10, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const value = harness.make<TextInputImpl>(column.get(), ui::TextInputMode::SingleLine);
+    value->setText("0.21");
+    value->setAlign(ui::Align::End);
+    value->setMono(true);
+    auto const window = harness.make<TextInputImpl>(column.get(), ui::TextInputMode::SingleLine);
+    window->setText("7");
+    window->setPrefix("±");
+    CHECK(harness.draw() == Rows{"      0.21", "± 7"});
+    auto const multiline = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::Multiline);
+    CHECK_THROWS_AS(multiline->setPrefix("±"), std::logic_error);
+    CHECK_THROWS_AS(multiline->setAlign(ui::Align::End), std::logic_error);
+    CHECK(window->accessibleDescription() == "±");
+}
+
 // Mutation: ignore `shown` in setCaption (no caption row is drawn).
 TEST_CASE("tui fields: a shown caption is drawn on its own row above the control", "[tui][fields]") {
     Harness harness{20, 3};

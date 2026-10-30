@@ -704,6 +704,62 @@ TEST_CASE("qt_quick widgets: a filled badge is a tag in the small strong step", 
     CHECK(item.height() <= label->implicitHeight() + 2);
 }
 
+// Mutations: leave `textAlign` unwritten (the text starts at the leading edge); draw the prominent field at
+// `Font.DemiBold` (its weight reads 600); ignore `mono` (the family is the body's); lay the text out from the
+// field's own padding alone (it starts under the prefix).
+TEST_CASE("qt_quick widgets: an input's alignment, mono face, prefix and prominent weight", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const value = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    value->setText("0.21");
+    value->setAlign(ui::Align::End);
+    value->setUnit("%");
+    auto const mono = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    mono->setText("S-26-104170");
+    mono->setMono(true);
+    auto const focal = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    focal->setEmphasis(ui::InputEmphasis::Prominent);
+    focal->setMono(true);
+    focal->setPlaceholder("Scan a barcode");
+    auto const window = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    window->setText("7");
+    window->setPrefix("±");
+    auto const plain = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    plain->setText("x");
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto const fieldOf = [](ui::Widget const& widget) -> QQuickItem& {
+        QList<QQuickItem*> const fields = Scene::itemsOf(Scene::itemOf(widget), "QQuickTextField");
+        REQUIRE_FALSE(fields.isEmpty());
+        return *fields.front();
+    };
+
+    QQuickItem& valueField = fieldOf(*value);
+    CHECK(valueField.property("horizontalAlignment").toInt() == static_cast<int>(Qt::AlignRight));
+    CHECK(Scene::itemOf(*value).property("tabularFigures").toBool());
+    CHECK(fieldOf(*plain).property("horizontalAlignment").toInt() == static_cast<int>(Qt::AlignLeft));
+
+    QStringList const monoFamilies = theme->property("monoFamilies").toStringList();
+    QFont const monoFont = fieldOf(*mono).property("font").value<QFont>();
+    CHECK((monoFamilies.isEmpty() || monoFamilies.contains(monoFont.family())));
+    CHECK(monoFont.family() != fieldOf(*plain).property("font").value<QFont>().family());
+
+    QFont const focalFont = fieldOf(*focal).property("font").value<QFont>();
+    CHECK(static_cast<int>(focalFont.weight()) == theme->property("strongWeight").toInt());
+    CHECK(focalFont.pixelSize() == static_cast<int>(std::lround(theme->property("headingPixels").toReal())));
+    CHECK_FALSE(focalFont.italic());
+
+    QQuickItem& windowField = fieldOf(*window);
+    QQuickItem const* const prefix = windowField.findChild<QQuickItem*>(QStringLiteral("prefix"));
+    REQUIRE(prefix != nullptr);
+    CHECK(prefix->isVisible());
+    CHECK(prefix->x() == fieldOf(*plain).property("leftPadding").toReal());
+    CHECK(windowField.property("leftPadding").toReal() >= prefix->x() + prefix->width());
+    CHECK(Scene::itemOf(*window).property("accessibleDescription").toString() == QStringLiteral("±"));
+    CHECK_FALSE(windowField.findChild<QQuickItem*>(QStringLiteral("unit"))->isVisible());
+}
+
 // Mutation: draw a removable badge as a tag (the border is the tone's, the height the tag's).
 TEST_CASE("qt_quick widgets: a removable badge is a chip", "[qt_quick]") {
     Scene scene;

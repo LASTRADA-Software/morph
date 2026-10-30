@@ -600,6 +600,14 @@ struct TextInput {
     /// @brief How much it stands out; set once, and never on a multiline input. The mount tells the widget only
     ///        `Prominent`.
     InputEmphasis emphasis = InputEmphasis::Normal;
+    /// @brief Whether the text and the placeholder are drawn in the `mono` text role's face; set once.
+    bool mono = false;
+    /// @brief Where the text sits in the field: `Start`, `Center` or `End`; set once. Never on a multiline input,
+    ///        and the mount tells the widget only a value other than `Start`.
+    Align align = Align::Start;
+    /// @brief Text drawn muted at the field's leading edge, inside it, such as `±`; empty shows none. Only a
+    ///        single-line or password input shows one: the mount refuses a multiline input with a prefix.
+    Prop<std::string> prefix;
 };
 
 /// @brief A labelled check box.
