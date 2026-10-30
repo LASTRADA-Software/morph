@@ -989,9 +989,10 @@ struct KeywordSpec {
 };
 
 /// @brief The keyword tokens of the set.
-inline constexpr std::array<KeywordSpec, 2> kKeywords = {{
+inline constexpr std::array<KeywordSpec, 3> kKeywords = {{
     {"shape.iconOnly", {"default", "square"}},
     {"font.overline.case", {"none", "uppercase"}},
+    {"collapsible.marker", {"shown", "none"}},
 }};
 
 /// @brief Whether @p name is one of the names of the keyword at @p path.
@@ -1139,7 +1140,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 67> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 68> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1240,8 +1241,9 @@ inline constexpr std::array<ThemeTokenSpec, 67> kThemeTokens = {{
     {.path = "color.chart.2", .kind = ThemeTokenKind::Color, .color = "#c25400", .number = 0.0},
     {.path = "color.chart.3", .kind = ThemeTokenKind::Color, .color = "#00805e", .number = 0.0},
     {.path = "color.chart.4", .kind = ThemeTokenKind::Color, .color = "#a8508a", .number = 0.0},
-    // Two looks that change every application's shell or sidebar, off by default: an icon-only push button or menu
-    // trigger drawn square, and the `overline` text role drawn in small capitals.
+    // Three looks that change every application's shell, sidebar or sections, off by default: an icon-only push button
+    // or menu trigger drawn square, the `overline` text role drawn in small capitals, and a collapsible section
+    // drawn without its chevron.
     {.path = "shape.iconOnly",
      .kind = ThemeTokenKind::Keyword,
      .color = "",
@@ -1258,6 +1260,14 @@ inline constexpr std::array<ThemeTokenSpec, 67> kThemeTokens = {{
      .family = "",
      .stroke = "",
      .keyword = "none"},
+    {.path = "collapsible.marker",
+     .kind = ThemeTokenKind::Keyword,
+     .color = "",
+     .number = 0.0,
+     .shadow = {},
+     .family = "",
+     .stroke = "",
+     .keyword = "shown"},
 }};
 
 /// @brief A `shadow` of the set, resolved.

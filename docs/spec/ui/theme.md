@@ -62,7 +62,7 @@ any path. `$root` at the top of a file is refused, since there is no group path 
 | `fontWeight` | 1 to 1000, or a DTCG weight name (`semi-bold`, …) |
 | `shadow` | `{"color", "offsetX", "offsetY", "blur", "spread"}` with a colour and four dimensions, or a non-empty list of them |
 | `strokeStyle` | `solid` or `dashed` where the set reads it (`border.style`), refused at `checkTheme` otherwise; accepted unchecked elsewhere |
-| `keyword` | one of the names the token's spec lists (`shape.iconOnly`, `font.overline.case`), refused at `checkTheme` otherwise; DTCG has no type for a switch, and `strokeStyle` names stroke dashes only, so this is a `ui-theme/1` type; accepted unchecked elsewhere |
+| `keyword` | one of the names the token's spec lists (`shape.iconOnly`, `font.overline.case`, `collapsible.marker`), refused at `checkTheme` otherwise; DTCG has no type for a switch, and `strokeStyle` names stroke dashes only, so this is a `ui-theme/1` type; accepted unchecked elsewhere |
 | `typography`, `border`, `gradient`, `transition`, `cubicBezier` | accepted unchecked |
 
 A token of another `$type` stays in the parsed set with its type and no value check; `themeValues` ignores a path
@@ -195,6 +195,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `border.style` (`solid`): how the outline of a button, a badge and an input is stroked on a surface, `solid` or `dashed`; read per surface, so one surface (an empty plate well) can draw dashed controls while the rest draw solid | stroke style: `solid` or `dashed`, read into `ThemeValues::strokes`; any other value is refused by `checkTheme` as `border.style: only solid and dashed are drawn` |
 | `shape.iconOnly` (`default`): whether a push button or a button-style menu whose caption is an icon alone, and which gives no `shape` of its own, is drawn square (`square`, as `shape: square` on a button). It covers the head's `⋯`, the compact shell's ☰ and a screen's `⋯` menus. Read once for the whole theme, not per surface. The terminal reads no theme token and draws `[ ⋯ ]` either way | keyword: `default` or `square`, read into `ThemeValues::keywords`; any other value is refused by `checkTheme` as `shape.iconOnly: only default and square are drawn` |
 | `font.overline.case` (`none`): how the `overline` text role draws. `none` draws it as `section` (body size, strong, muted); `uppercase` draws it at the small size, strong, muted, in capitals, letter-spaced by `0.05 × Theme.smallPixels`. The text is written as it reads and the frontend draws the capitals, so the accessible name stays as written. The terminal draws it bold and muted, as written, whatever the token | keyword: `none` or `uppercase`; any other value is refused as `font.overline.case: only none and uppercase are drawn` |
+| `collapsible.marker` (`shown`): whether a collapsible section's header and a collapsible panel's header draw their ▸/▾ chevron (`shown`) or not (`none`). With `none` the header keeps everything else: it is still the whole row's toggle, at least a touch target tall, with its role, its name and its expanded state, so the state stays where assistive technology reads it. Read once for the whole theme. The terminal reads no theme token and keeps its `▸ `/`▾ ` heading | keyword: `shown` or `none`; any other value is refused as `collapsible.marker: only shown and none are drawn` |
 | `elevation.card` (`#00000014`, offsets 0 and 2, blur 10, spread 0) | shadow; of a list of layers, the first |
 | `elevation.popup` (`#00000024`, offsets 0 and 8, blur 24, spread 0): a menu's, a dropdown's and a date picker's shadow | shadow, as `elevation.card` |
 
@@ -237,6 +238,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `monoFontFamilies` | `font.mono` |
 | `iconOnlySquare` (true for `square`) | `shape.iconOnly` |
 | `overlineCaps` (true for `uppercase`) | `font.overline.case` |
+| `collapsibleMarker` (true for `shown`) | `collapsible.marker` |
 
 **A chart's colours.** A series reads `chart1` to `chart4` of its widget's scheme in order; a reference line and a
 marked point read their tone's colour (`muted` for neutral). Each default holds 3:1 against `color.surface` and

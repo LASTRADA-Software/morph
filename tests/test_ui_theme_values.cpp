@@ -240,3 +240,34 @@ TEST_CASE("ui theme values: the type steps and the strong weight have defaults, 
     CHECK(valuesOf(R"({"font": {"size": {"small": {"$type": "dimension", "$value": {"value": 11, "unit": "px"}}}}})")
               .dimensions.at("font.size.small") == 11.0);
 }
+
+// Mutation: accept any string as the marker (`hidden` reads), or leave `collapsible.marker` out of `kThemeTokens` (the
+// bundle's `none` is dropped).
+TEST_CASE("ui theme values: a collapsible's marker is shown or none, and any other is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().keywords.at("collapsible.marker") == "shown");
+    CHECK(valuesOf(R"({"collapsible": {"marker": {"$type": "keyword", "$value": "none"}}})")
+              .keywords.at("collapsible.marker") == "none");
+
+    auto const parse = [](std::string_view text) {
+        auto tokens = ui::parseTokens(text);
+        REQUIRE(tokens.has_value());
+        return std::move(*tokens);
+    };
+    ui::TokenSet const base = parse(R"({"collapsible": {"marker": {"$type": "keyword", "$value": "none"}}})");
+    ui::TokenSet const hidden = parse(R"({"collapsible": {"marker": {"$type": "keyword", "$value": "hidden"}}})");
+    ui::ThemeIndex index;
+    index.base = "base";
+    index.surfaces.emplace("odd", "hidden");
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        if (id == "base") {
+            return &base;
+        }
+        return id == "hidden" ? &hidden : nullptr;
+    };
+    auto const refused = ui::checkTheme(index, files);
+    REQUIRE(refused.has_value());
+    CHECK(refused->find("collapsible.marker: only shown and none are drawn") != std::string::npos);
+    index.surfaces.clear();
+    CHECK_FALSE(ui::checkTheme(index, files).has_value());
+    CHECK(ui::unreadThemeTokens(index, files).empty());
+}

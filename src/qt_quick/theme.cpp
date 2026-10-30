@@ -165,6 +165,9 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     if (!theme.setProperty("iconOnlySquare", keywordIs(values, "shape.iconOnly", "square"))) {
         unset.emplace_back("iconOnlySquare");
     }
+    if (!theme.setProperty("collapsibleMarker", !keywordIs(values, "collapsible.marker", "none"))) {
+        unset.emplace_back("collapsibleMarker");
+    }
     if (!theme.setProperty("overlineCaps", keywordIs(values, "font.overline.case", "uppercase"))) {
         unset.emplace_back("overlineCaps");
     }

@@ -1637,3 +1637,30 @@ TEST_CASE("qt_quick containers: a title alone on a one-line head is centred on t
     CHECK(std::abs(title.mapToScene(QPointF{0, title.height() / 2}).y() -
                    export_.mapToScene(QPointF{0, export_.height() / 2}).y()) > 3.0);
 }
+
+// Mutation: ignore `collapsible.marker` in the section header (the chevron stays), or let `none` also drop the toggle.
+TEST_CASE("qt_quick containers: a collapsible draws no marker under collapsible.marker none and still toggles",
+          "[qt_quick]") {
+    Scene scene;
+    auto section = scene.backend().createCollapsible(nullptr);
+    section->setTitle("Section");
+    auto content = scene.backend().createText(section.get());
+    content->setText("body");
+    std::vector<bool> toggles;
+    section->setOnToggle([&toggles](bool open) { toggles.push_back(open); });
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*section);
+    CHECK(named(item, "chevronGlyph").isVisible());
+
+    auto const tokens = ui::parseTokens(R"({"collapsible": {"marker": {"$type": "keyword", "$value": "none"}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    scene.settle();
+    CHECK_FALSE(named(item, "chevronGlyph").isVisible());
+    CHECK_FALSE(named(item, "chevron").isVisible());
+    scene.click(named(item, "toggle"));
+    CHECK(toggles == std::vector<bool>{false});
+}
+

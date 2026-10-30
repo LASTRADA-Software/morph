@@ -157,6 +157,8 @@ QtObject {
     property int strongWeight: Font.Bold
     // Whether an icon-only push button or menu trigger that gives no shape is drawn square: `shape.iconOnly`.
     property bool iconOnlySquare: false
+    // Whether a collapsible section's and a collapsible panel's header draws its chevron: `collapsible.marker`.
+    property bool collapsibleMarker: true
     // Whether the `overline` text role is drawn in small capitals: `font.overline.case`.
     property bool overlineCaps: false
     readonly property real bodyPixels: bodySize > 0 ? bodySize : platformMetrics.font.pixelSize > 0

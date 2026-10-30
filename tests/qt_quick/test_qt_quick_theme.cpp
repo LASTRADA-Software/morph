@@ -1580,3 +1580,21 @@ TEST_CASE("qt_quick theme: the theme's keywords reach the Theme singleton", "[qt
     CHECK(theme->property("iconOnlySquare").toBool());
     CHECK(theme->property("overlineCaps").toBool());
 }
+
+// Mutation: leave `collapsible.marker` out of `kThemeTokens` (a bundle's `none` is dropped and the marker stays
+// shown).
+TEST_CASE("qt_quick theme: the collapsible marker reaches the Theme singleton", "[qt_quick]") {
+    Scene scene;
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    CHECK(theme->property("collapsibleMarker").toBool());
+
+    auto const tokens = ui::parseTokens(R"({"collapsible": {"marker": {"$type": "keyword", "$value": "none"}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    CHECK_FALSE(theme->property("collapsibleMarker").toBool());
+}
+

@@ -5,8 +5,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // The header of a section that folds: the title in the strong weight, an optional slot for the node's own header, and
-// a chevron at the trailing edge. The whole row is the toggle, at least a touch target tall; the slot sits above it,
-// so what it holds keeps its own clicks. The toggle reports `toggled`; the section decides what that changes.
+// a chevron at the trailing edge unless the theme draws no marker. The whole row is the toggle, at least a touch
+// target tall; the slot sits above it, so what it holds keeps its own clicks. The toggle reports `toggled`; the section decides what that changes.
 Item {
     id: root
 
@@ -77,13 +77,14 @@ Item {
             objectName: "chevron"
             readonly property string name: root.open ? "nav.collapse" : "nav.expand"
             source: Theme.iconSource(name)
-            visible: root.foldable && source.toString() !== ""
+            visible: root.foldable && Theme.collapsibleMarker && source.toString() !== ""
             sourceSize.height: Theme.bodyPixels
             Accessible.ignored: true
         }
         Label {
             objectName: "chevronGlyph"
-            visible: root.foldable && Theme.iconSource(root.open ? "nav.collapse" : "nav.expand") === ""
+            visible: root.foldable && Theme.collapsibleMarker &&
+                     Theme.iconSource(root.open ? "nav.collapse" : "nav.expand") === ""
             textFormat: Text.PlainText
             font: Theme.bodyFont
             color: root.scheme.muted
