@@ -80,9 +80,9 @@ MorphField {
         Keys.onPressed: event => event.accepted = root.takeOwnChord(event)
         color: root.scheme.text
         placeholderTextColor: root.scheme.muted
-        leftPadding: Theme.spaceOf(3)
+        leftPadding: Theme.inputPaddingX
         // The text stops before the calendar button.
-        rightPadding: Theme.spaceOf(3) + (pickerButton.visible ? pickerButton.implicitWidth : 0)
+        rightPadding: Theme.inputPaddingX + (pickerButton.visible ? pickerButton.implicitWidth : 0)
         background: MorphInputBackground {
             tone: root.shownTone
             scheme: root.scheme

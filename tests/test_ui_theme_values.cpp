@@ -271,3 +271,23 @@ TEST_CASE("ui theme values: a collapsible's marker is shown or none, and any oth
     CHECK_FALSE(ui::checkTheme(index, files).has_value());
     CHECK(ui::unreadThemeTokens(index, files).empty());
 }
+
+// Mutation: leave `input.paddingX` out of `kThemeTokens` (the bundle's 10 is dropped and 8 reads), or drop its check
+// (a negative inset is accepted).
+TEST_CASE("ui theme values: an input's inner padding defaults to 8 and a negative one is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().dimensions.at("input.paddingX") == 8.0);
+    CHECK(valuesOf(R"({"input": {"paddingX": {"$type": "dimension", "$value": {"value": 10, "unit": "px"}}}})")
+              .dimensions.at("input.paddingX") == 10.0);
+
+    auto const tokens =
+        ui::parseTokens(R"({"input": {"paddingX": {"$type": "dimension", "$value": {"value": -2, "unit": "px"}}}})");
+    REQUIRE(tokens.has_value());
+    ui::ThemeIndex index;
+    index.base = "base";
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        return id == "base" ? &*tokens : nullptr;
+    };
+    auto const refused = ui::checkTheme(index, files);
+    REQUIRE(refused.has_value());
+    CHECK(refused->find("input.paddingX: must not be negative") != std::string::npos);
+}

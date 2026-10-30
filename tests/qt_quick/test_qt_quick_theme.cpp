@@ -1726,3 +1726,19 @@ TEST_CASE("qt_quick theme: the joined top bar's scheme is its own and follows th
         CHECK(schemeOf("toolbarJoined")->property("surface").value<QColor>() == QColor{"#DDDDDD"});
     }
 }
+
+// Mutation: leave `input.paddingX` out of the dimension table in theme.cpp (the bundle's 10 never reaches Theme).
+TEST_CASE("qt_quick theme: the input inset reaches the Theme singleton", "[qt_quick]") {
+    Scene scene;
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    CHECK(theme->property("inputPaddingX").toReal() == 8.0);
+    auto const tokens =
+        ui::parseTokens(R"({"input": {"paddingX": {"$type": "dimension", "$value": {"value": 10, "unit": "px"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    CHECK(theme->property("inputPaddingX").toReal() == 10.0);
+}
