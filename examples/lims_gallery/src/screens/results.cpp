@@ -539,8 +539,9 @@ ui::Node expandedLayout(Worksheet const& sheet) {
     return ui::pinned(
         ui::column({suitability(),
                     ui::panel({resultTable(sheet),
-                               layout::muted(
-                                   "Results are entered and reported to the decimal places of their specification.")},
+                               ui::column({layout::muted("Results are entered and reported to the decimal places of "
+                                                         "their specification.")},
+                                          {.padding = 2})},
                               {.padding = 0}),
                     changeDialog(sheet)},
                    {.gap = 2}),
@@ -588,7 +589,7 @@ ui::Node resultField(Worksheet const& sheet) {
     // specification value is valid and saveable, so the evaluation is a tone, not an error.
     auto const input = resultInput(sheet, evaluation, field)
                            .with("unit", field("unit"))
-                           .description(evaluation.label)
+                           .description(ui::cond(evaluation.unreadable, evaluation.label, Text{""}))
                            .tone(ui::cond(evaluation.outOfSpec, Text{"err"}, Text{"neutral"}));
     return ui::column(
         {ui::row({ui::text({.text = caption}),
@@ -597,7 +598,8 @@ ui::Node resultField(Worksheet const& sheet) {
                       .testId("changed")},
                  {.gap = 1, .align = Align::Center}),
          input,
-         ui::row({layout::muted(ui::format("was {0} {1}", {field("original"), field("unit")}))
+         ui::row({layout::tag(evaluation.label, evaluation.tone).visible(!evaluation.unreadable).testId("evaluation"),
+                  layout::muted(ui::format("was {0} {1}", {field("original"), field("unit")}))
                       .visible(ui::eq(field("kind"), "entered") && ui::ne(field("value"), field("original"))),
                   layout::muted(ui::format("RSD {0} %", {sheet.rsd})).visible(ui::eq(field("kind"), "mean"))},
                  {.gap = 1, .align = Align::Center}),
@@ -646,6 +648,10 @@ ui::Screen resultsScreen() {
         screen.title("Assay and impurities · Paracetamol 500 mg");
         screen.subtitle(ui::cond(compact, Text{"WS-2026-0412 · HPLC-02"},
                                  Text{"Worksheet WS-2026-0412 · HPLC-02 · method TM-ASSAY-07 v3"}));
+        screen.subtitleSpans(
+            ui::cond(compact, ui::AnyHandle{ui::spans({ui::mono("WS-2026-0412"), " · HPLC-02"})},
+                     ui::AnyHandle{ui::spans({"Worksheet ", ui::mono("WS-2026-0412"), " · HPLC-02 · method ",
+                                              ui::mono("TM-ASSAY-07"), " v3"})}));
         screen.status({.text = "In progress", .tone = "info"});
         screen.showErrors(ui::ShowErrors::Always);
         return layout::byWidth(sheet.width, compactLayout(sheet), expandedLayout(sheet))

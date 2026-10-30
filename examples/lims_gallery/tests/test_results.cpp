@@ -141,6 +141,10 @@ TEST_CASE("results, compact: one sample at a time, the reason asked inline", "[l
     CHECK(screen.text("sample") == "Sample 2 of 2 · S-26-104170");
     CHECK(screen.shows("Column", "inline-reason"));
     CHECK(screen.backend().find("Text", "text", "was 0.12 %").has_value());
+    // The evaluation is a tag under the field, not a description.
+    CHECK(screen.backend().find("Badge", "text", "Out of spec: above 0.20").has_value());
+    CHECK(screen.backend().find("Badge", "text", "Within spec").has_value());
+    CHECK(screen.backend().dump().contains("[WS-2026-0412;mono, · HPLC-02]"));
     CHECK(screen.prop("Button", "next", "enabled") == "false");
     screen.click("previous");
     CHECK(screen.waitForText("sample", "Sample 1 of 2 · S-26-104176"));
