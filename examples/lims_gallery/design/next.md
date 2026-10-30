@@ -1,6 +1,6 @@
 # LIMS gallery: where the work stands and how to continue
 
-The whole initiative lands as one PR, #1045 (draft), from `feat/lims-gallery`. Do not open separate PRs. Work runs in
+The whole initiative lands as one PR, #1045, from `feat/lims-gallery`. Do not open separate PRs. Work runs in
 side branches, each in its own worktree, and is rebased onto `feat/lims-gallery` when it is folded in.
 
 The live tracker is `status/STATUS.md` in this folder, published as a phone-friendly page (see "The status board"
@@ -10,40 +10,22 @@ below). It lists every lane, its commits, the decisions and the follow-ups; read
 
 | Branch | Holds | State |
 |---|---|---|
-| `feat/lims-gallery` | the gallery, batches A, B, C, E1, E2 (the chart) and D parts 1–2 | pushed; the PR's branch; built and green |
-| `feat/lims-gallery-d3` | batch D part 3 (in progress), from `feat/lims-gallery` | not pushed until its first commits land |
-| `feat/lims-gallery-c`, `feat/lims-gallery-e1`, `feat/lims-gallery-e2`, `lg-fold-e2-on-b2` | already folded into `feat/lims-gallery` | kept for reference only |
+| `feat/lims-gallery` | the gallery and batches A–G with their fixes | pushed; the PR's branch |
+| `lg-fold-h` (worktree `../morph-lims-e1`) | `feat/lims-gallery` plus batch H (design, H-C and H-S lanes), the Emscripten job pool, and this tracker | verified locally: no warnings, every test, Qt 6.8.1 qmllint and Qt Quick tests, GCC `-Wshadow`; not pushed until clang-tidy-diff is clean |
+| `lg-tidy` (`../morph-lims-e2`) | lane T: clears clang-tidy-diff (clang-tidy 22.1.8) over the branch's changed lines | running; fold onto `lg-fold-h` |
+| `lg-i-design` (`../morph-lims-e3`) | batch I's design, from the comparison after batch H | being written |
 
-Worktrees: `../morph-lims-gallery` (`feat/lims-gallery`), `../morph-lims-e1` (`feat/lims-gallery-d3`),
-`../morph-lims-e2` (free since batch C was folded in), each with its own build tree `build/linux-everything`.
-
-Designs, all reviewed, are in `docs/superpowers/specs/2026-10-25-lims-gallery-batch-{b,c,d,e}-design.md`.
-
-## Batch B, landed
-
-Part 1 ("columns and the selection"): G2, G47 with `valign`, G29, G43 and G30. Part 2 ("the row pipeline"): G41 (a
-selected push button), G31 (sortable columns, `sort` on the table and the `sort` form), G28 (`pageSize` and `page`, the
-`slice` function, and the selection kept across pages), G44 (the `runs` form) and G46 (a table's `group` heading rows).
-A table over rows now refuses `filters` and `highlightKey`, and reads `showHeader`. The samples screen sorts, pages and
-shares its order with the compact cards; the audit trail pages; the results worksheet groups by sample; the plate's
-sample wells are selected push buttons, its "to place" list is a slice, and compact lists a plate row's empty wells as
-runs. The plate's empty rows are not folded into one section.
-
-**Batch C ("text, fields and small controls") has landed:** plain text on Qt Quick, spans (G2, G3), stacked and
-toned key-values (G24, G39), the required mark after the caption (G8), a field's description and tone (G10), a dialog's
-description (G6), `group` (G17), a text input's unit (G9), `dangerOutline`, outline badges and segmented selects (G14,
-G33, G53), list entries with content (G52), the application's date pattern (G13) and a prominent text input (G11),
-with conformance cases 50 to 54. The gallery's app document declares the date patterns, and the client, which mounts
-the app document, gives them to every screen.
+Designs are in `docs/superpowers/specs/2026-10-*-lims-gallery-batch-*-design.md`. The comparison after each batch is
+in `visual-review.md`.
 
 ## How to continue
 
-1. Let batch D part 3 (the head's menu G18, G26, G4) finish on its branch.
-2. Rebase it onto `feat/lims-gallery`, build and run the six suites and qmllint, then push.
-3. Batch D part 4 (G50 with #1064, G56), per the batch D design.
-4. Take the PR out of draft and update its body (the closes list is in the tracker).
+Every difference the comparison with the mockups finds is implemented in this branch, as another batch: design (default
+model), a design review, then two or three Sonnet lanes with disjoint files, folded here, re-grabbed and compared
+again. Batch I is the current one. When the comparison finds nothing left but environmental items (the font), fold lane
+T's tidy fixes, push, drive CI to green and merge PR #1045.
 
-**Expect folding conflicts** in `include/morph/ui/testing/backend_conformance.hpp`, `tests/test_ui_conformance.cpp`
+**When folding a later branch, expect conflicts** in `include/morph/ui/testing/backend_conformance.hpp`, `tests/test_ui_conformance.cpp`
 and `docs/spec/ui/backend_contract.md`: every batch appends conformance and layout cases at the end of the same lists.
 Keep both sides, set the array sizes and the count check to the sum, and number each case's description in
 `backend_contract.md`'s lists by its position; the designs' own case numbers do not carry over. Where both sides add

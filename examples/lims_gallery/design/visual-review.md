@@ -112,3 +112,13 @@ Left for later, each a framework addition rather than a fix:
   accent bar together.
 - Runs in a head's title, for plate's mono "PL-0193".
 - An eyebrow line above a head's title, and section labels in small capitals.
+
+## After batch H
+
+Two reviewers compared all ten screens at both widths after batch H. Batch H's items are closed wherever the grabs
+show them; H8 is only partly closed on expanded instrument (the strip is short, and the pages sit 28 px under it). Three
+regressions: the square ☰ grows to the 44 px compact control height and pushes every title right (wrapping instrument's
+badge and results' title); results' "In progress" badge is left alone on the line under the title; review's queue
+entries lost their spacing. 63 differences remain, none high: 22 medium and 41 low, of which 16 are framework gaps
+and about 40 screen fixes. They are batch I, designed in
+`docs/superpowers/specs/2026-10-30-lims-gallery-batch-i-design.md`.
