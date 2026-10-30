@@ -254,9 +254,9 @@ ui::Node detailsCard() {
 }
 
 ui::Node eventList(Instrument const& instrument) {
-    return ui::forEach(instrument.events, {.key = ui::row("what"), .gap = 1},
+    return ui::forEach(instrument.events, {.key = ui::row("what"), .gap = 1, .divided = true},
                        [](ui::DeclScope& /*row*/) {
-                           return ui::Nodes{ui::row({layout::muted(ui::row("when")).sizing(ui::fixed(18)),
+                           return ui::Nodes{ui::row({layout::muted(ui::row("when")).sizing(ui::fixed(15)),
                                                      ui::text({.text = ui::row("what")}).sizing(ui::stretch())},
                                                     {.gap = 2})};
                        })
@@ -274,7 +274,16 @@ ui::Node qualificationList() {
         .testId("qualification");
 }
 
-ui::Node currentBooking() {
+// The expanded card names the worksheet and shows how much of the slot has elapsed; the compact one is the worksheet
+// and its holder on one line, then the slot.
+ui::Node currentBooking(bool compact) {
+    if (compact) {
+        return ui::column({ui::text({.text = "WS-2026-0412 · M. Kaur",
+                                     .spans = ui::spans({ui::mono("WS-2026-0412"), " · M. Kaur"})}),
+                           layout::muted("24-Oct-2026 08:00–14:00")},
+                          {.gap = 1})
+            .testId("current-booking");
+    }
     return ui::column({ui::text({.text = "Worksheet WS-2026-0412",
                                  .spans = ui::spans({"Worksheet ", ui::mono("WS-2026-0412")})}),
                        layout::muted("M. Kaur · 24-Oct-2026 08:00–14:00"),
@@ -325,10 +334,11 @@ ui::Node expandedLayout(Instrument const& instrument) {
                     {.gap = 2})
              .sizing(ui::stretch()),
          ui::column({ui::panel({qualificationList()}, {.title = "Qualification", .padding = 2}),
-                     ui::panel({currentBooking()}, {.title = "Current booking", .padding = 2})},
+                     ui::panel({currentBooking(false)}, {.title = "Current booking", .padding = 2})},
                     {.gap = 2})
-             // The design's 320 px column, in the frontend's character widths.
-             .sizing(ui::fixed(44))},
+             // The design's column is 30% of its 1000 px page; 30 units is that share of the 785 px page the sidebar
+             // leaves.
+             .sizing(ui::fixed(30))},
         {.gap = 2, .align = Align::Start});
     // The root is the page's edge: the strip sits in the head's white block, and the tabs inset their own pages.
     return ui::column({recordTabs(instrument, overview), dialogs(instrument)},
@@ -373,7 +383,7 @@ ui::Node compactLayout(Instrument const& instrument) {
         {.gap = 1, .align = Align::Center});
     auto const overview =
         ui::column({compactDetails(),
-                    section("Current booking", currentBooking(), instrument.bookingOpen).testId("booking-section"),
+                    section("Current booking", currentBooking(true), instrument.bookingOpen).testId("booking-section"),
                     section("Qualification · all passed", qualificationList(), instrument.qualificationOpen)
                         .testId("qualification-section"),
                     section(ui::format("Recent events · {0}", {ui::count(instrument.events)}), eventList(instrument),
