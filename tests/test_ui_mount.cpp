@@ -1033,8 +1033,8 @@ TEST_CASE("ui::Mounted: a text's tone and its runs' tones reach the backend", "[
     toned.field.tone = ui::Tone::Err;
     ui::Mounted const text{runtime, backend, ui::text(toned)};
     CHECK(backend.prop(backend.find("Text", "role", "Display").value(), "tone") == "Err");
-    ui::Text runs{.spans = std::vector<ui::TextSpan>{{.text = "Past due "},
-                                                     {.text = "7", .strong = true, .tone = ui::Tone::Err}}};
+    ui::Text const runs{.spans = std::vector<ui::TextSpan>{{.text = "Past due "},
+                                                           {.text = "7", .strong = true, .tone = ui::Tone::Err}}};
     ui::Mounted const withRuns{runtime, backend, ui::text(runs)};
     CHECK(backend.dump().contains("spans=[Past due ,7;strong;tone=Err]"));
 }

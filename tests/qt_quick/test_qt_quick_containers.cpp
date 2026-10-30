@@ -462,7 +462,7 @@ TEST_CASE("qt_quick containers: a titled panel draws no rule between its header 
     auto content = scene.backend().createButton(panel.get());
     scene.settle();
     QQuickItem& item = Scene::itemOf(*panel);
-    QQuickItem& title = named(item, "title");
+    QQuickItem const& title = named(item, "title");
     CHECK(title.isVisible());
     double const headerBottom = named(item, "toggle").mapToScene(QPointF{0, named(item, "toggle").height()}).y();
     double const contentTop = Scene::itemOf(*content).mapToScene(QPointF{0, 0}).y();
@@ -529,9 +529,9 @@ TEST_CASE("qt_quick containers: a collapsible's header is a tall strong row flus
     scene.settle();
     QQuickItem& item = Scene::itemOf(*section);
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
-    QQuickItem& toggle = named(item, "toggle");
+    QQuickItem const& toggle = named(item, "toggle");
     CHECK(toggle.height() >= theme->property("targetHeight").toDouble() - 0.5);
-    QQuickItem& title = named(item, "title");
+    QQuickItem const& title = named(item, "title");
     CHECK(title.property("font").value<QFont>().weight() >= QFont::DemiBold);
     CHECK(std::abs(title.mapToScene(QPointF{0, 0}).x() - Scene::itemOf(*content).mapToScene(QPointF{0, 0}).x()) < 1.0);
 }
@@ -548,7 +548,7 @@ TEST_CASE("qt_quick containers: a section header is a button that reports whethe
     QQuickItem& toggle = named(Scene::itemOf(*section), "toggle");
     bool const wasActive = QAccessible::isActive();
     QAccessible::setActive(true);
-    QAccessibleInterface* const node = QAccessible::queryAccessibleInterface(&toggle);
+    QAccessibleInterface const* const node = QAccessible::queryAccessibleInterface(&toggle);
     REQUIRE(node != nullptr);
     CHECK(node->role() == QAccessible::Button);
     CHECK(node->text(QAccessible::Name) == QStringLiteral("Section"));
@@ -869,7 +869,7 @@ TEST_CASE("qt_quick containers: the shell's principal sits above its sign-out bu
     // Both sit in the sidebar, the button at its foot.
     qreal const sidebarBottom = sidebar->item()->mapToScene(QPointF{0, sidebar->item()->height()}).y();
     CHECK(button.mapToScene(QPointF{0, button.height()}).y() <= sidebarBottom);
-    CHECK(button.mapToScene(QPointF{0, button.height()}).y() >= sidebarBottom - 2.0 * label.height() - 48.0);
+    CHECK(button.mapToScene(QPointF{0, button.height()}).y() >= sidebarBottom - (2.0 * label.height()) - 48.0);
     CHECK(label.mapToScene(QPointF{0, 0}).x() < sidebar->item()->width());
 }
 
@@ -1501,17 +1501,17 @@ TEST_CASE("qt_quick containers: a selected stack draws the accent bar at its lea
     CHECK(bar->property("color").value<QColor>() == QColor{"#17784a"});
     QImage const image = scene.window().grabWindow();
     QPointF const origin = item.mapToScene(QPointF{});
-    int const y = static_cast<int>(origin.y() + item.height() / 2);
+    int const y = static_cast<int>(origin.y() + (item.height() / 2));
     CHECK(image.pixelColor(static_cast<int>(origin.x()) + 1, y) == QColor{"#17784a"});
     CHECK(image.pixelColor(static_cast<int>(origin.x()) + 5, y) == QColor{"#fafad2"});
 
     bool const wasActive = QAccessible::isActive();
     QAccessible::setActive(true);
-    QAccessibleInterface* const node = QAccessible::queryAccessibleInterface(&item);
+    QAccessibleInterface const* const node = QAccessible::queryAccessibleInterface(&item);
     REQUIRE(node != nullptr);
     CHECK(node->role() == QAccessible::Grouping);
     CHECK(node->state().selected);
-    QAccessibleInterface* const unmarked = QAccessible::queryAccessibleInterface(&Scene::itemOf(*plain));
+    QAccessibleInterface const* const unmarked = QAccessible::queryAccessibleInterface(&Scene::itemOf(*plain));
     REQUIRE(unmarked != nullptr);
     CHECK(unmarked->role() == QAccessible::Client);
 

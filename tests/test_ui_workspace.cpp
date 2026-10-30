@@ -914,7 +914,7 @@ TEST_CASE("workspace: a head with subtitle runs mounts its subtitle text with th
     Workspace shell{harness.runtime, harness.backend, host, catalog()};
     REQUIRE(shell.open("runhead", {}) == 0U);
     harness.settle();
-    morph::ui::ScreenHead* const head = shell.handleOf(0)->head();
+    morph::ui::ScreenHead const* const head = shell.handleOf(0)->head();
     REQUIRE(head != nullptr);
     REQUIRE(head->subtitleSpans() != nullptr);
     CHECK(head->subtitleSpans()->peek() ==

@@ -899,10 +899,10 @@ QObject const* accessibleOf(QQuickItem const& item) {
 }
 
 /// The background item of a button widget's control.
-QQuickItem const& buttonBackground(ui::ButtonWidget const& button) {
+QQuickItem& buttonBackground(ui::ButtonWidget const& button) {
     auto const* const control = Scene::itemOf(button).property("focusTarget").value<QQuickItem*>();
     REQUIRE(control != nullptr);
-    auto const* const background = control->property("background").value<QQuickItem*>();
+    auto* const background = control->property("background").value<QQuickItem*>();
     REQUIRE(background != nullptr);
     return *background;
 }
@@ -935,7 +935,7 @@ TEST_CASE("qt_quick theme: the neutral tone, the hover fill and the track are se
     ghost->setOnClick([] {});
     scene.settle();
     for (ui::ButtonWidget const* const button : {item.get(), ghost.get()}) {
-        auto* const background = const_cast<QQuickItem*>(&buttonBackground(*button));
+        auto* const background = &buttonBackground(*button);
         REQUIRE(background->setProperty("hovered", true));
         CHECK(background->property("color").value<QColor>() == QColor{0x1d, 0x1d, 0x1f, 0x14});
     }
@@ -957,8 +957,8 @@ TEST_CASE("qt_quick theme: a ghost button's label is the accent, a selected item
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), brandTheme()).empty());
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
-    QColor const accent = theme->property("accent").value<QColor>();
-    QColor const selection = theme->property("selection").value<QColor>();
+    auto const accent = theme->property("accent").value<QColor>();
+    auto const selection = theme->property("selection").value<QColor>();
     auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
     auto ghost = scene.backend().createButton(column.get());
     ghost->setLabel("Clear all");
@@ -982,7 +982,7 @@ TEST_CASE("qt_quick theme: a ghost button's label is the accent, a selected item
     CHECK(label->property("color").value<QColor>() == accent);
     CHECK(buttonBackground(*item).property("color").value<QColor>() == selection);
     // A selected push button keeps the accent tint and its ring.
-    QColor const tint = buttonBackground(*push).property("color").value<QColor>();
+    auto const tint = buttonBackground(*push).property("color").value<QColor>();
     CHECK(tint.rgb() == accent.rgb());
     CHECK(std::abs(tint.alphaF() - 0.12F) < 0.01F);
 }
@@ -1137,7 +1137,7 @@ TEST_CASE("qt_quick theme: a control is outlined in controlBorder, not in the di
     auto const resolved = ui::resolveTokens({&*tokens});
     REQUIRE(resolved);
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
-    QObject* const theme = themeOf(scene);
+    QObject const* const theme = themeOf(scene);
     CHECK(theme->property("controlBorder").value<QColor>() == QColor{"#C3C9D2"});
     CHECK(theme->property("divider").value<QColor>() == QColor{"#EDF0F3"});
 
@@ -1214,7 +1214,7 @@ QQuickItem const* panelShadow(ui::Widget const& panel) {
 // Control: fill the panel with the scheme it inherits, and the frame reads the page's background.
 TEST_CASE("qt_quick theme: a panel on the page is a card, and its input fills with controlSurface", "[qt_quick]") {
     Scene scene;
-    QObject* const theme = themeOf(scene);
+    QObject const* const theme = themeOf(scene);
     REQUIRE(theme->property("surface").value<QColor>() != theme->property("background").value<QColor>());
     auto page = scene.backend().createStack(nullptr, ui::Axis::Vertical);
     page->setSurface("page");
@@ -1230,7 +1230,7 @@ TEST_CASE("qt_quick theme: a panel on the page is a card, and its input fills wi
 
 TEST_CASE("qt_quick theme: a panel that names the page surface is flat on the page's background", "[qt_quick]") {
     Scene scene;
-    QObject* const theme = themeOf(scene);
+    QObject const* const theme = themeOf(scene);
     auto page = scene.backend().createStack(nullptr, ui::Axis::Vertical);
     page->setSurface("page");
     auto panel = scene.backend().createPanel(page.get());
@@ -1288,12 +1288,12 @@ TEST_CASE("qt_quick theme: the dark sidebar's search field and pin buttons use t
     morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
     frame.showSignedIn(true);
     scene.settle();
-    QObject* const theme = themeOf(scene);
+    QObject const* const theme = themeOf(scene);
     auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
     REQUIRE(sidebar != nullptr);
 
-    QColor const field = fieldBackground("navigator_search").property("color").value<QColor>();
-    QColor const text = sidebar->property("text").value<QColor>();
+    auto const field = fieldBackground("navigator_search").property("color").value<QColor>();
+    auto const text = sidebar->property("text").value<QColor>();
     CHECK(ui::detail::contrastRatio(rgbaOf(text), rgbaOf(field)) >= 4.5);
     CHECK(field == sidebar->property("controlSurface").value<QColor>());
 
@@ -1310,12 +1310,12 @@ TEST_CASE("qt_quick theme: the dark sidebar's search field and pin buttons use t
     // A hovered navigator entry (a list item) fills with the sidebar's hover colour, which shows on the dark column.
     QQuickItem* const entry = backgroundOf("nav_lims.review");
     REQUIRE(entry->setProperty("hovered", true));
-    QColor const hover = entry->property("color").value<QColor>();
+    auto const hover = entry->property("color").value<QColor>();
     CHECK(hover == sidebar->property("hover").value<QColor>());
     CHECK(hover.alpha() > 0);
 
     // A pin is a push button: it rests on the sidebar's control fill, outlined in the sidebar's control border.
-    QQuickItem* const pin = backgroundOf("pin_lims.review");
+    QQuickItem const* const pin = backgroundOf("pin_lims.review");
     CHECK(pin->property("color").value<QColor>() == sidebar->property("controlSurface").value<QColor>());
     CHECK(borderColorOf(*pin) == sidebar->property("controlBorder").value<QColor>());
 }
@@ -1392,7 +1392,7 @@ TEST_CASE("qt_quick theme: a selected or hovered item's fill is drawn beneath it
     scene.settle();
 
     QQuickItem const& itemItem = Scene::itemOf(*item);
-    auto* const background = const_cast<QQuickItem*>(&buttonBackground(*item));
+    auto* const background = &buttonBackground(*item);
     int const rest = darkPixelsIn(scene.window().grabWindow(), itemItem);
     CHECK(rest > 20);
 
@@ -1490,7 +1490,7 @@ TEST_CASE("qt_quick theme: a round badge is a circle or a stadium, in the mono f
     CHECK(item.width() >= item.height());
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
-    QFont const font = label->property("font").value<QFont>();
+    auto const font = label->property("font").value<QFont>();
     CHECK(font.family() == theme->property("monoFont").value<QFont>().family());
 }
 

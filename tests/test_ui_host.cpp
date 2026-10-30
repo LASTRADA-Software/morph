@@ -1028,7 +1028,7 @@ TEST_CASE("A screen's head reads pageEdge through the switch it is rooted in, an
     REQUIRE(mounted.has_value());
     ScreenHandle& screen = **mounted;
     harness.settle();
-    morph::ui::ScreenHead* const head = screen.head();
+    morph::ui::ScreenHead const* const head = screen.head();
     REQUIRE(head != nullptr);
     REQUIRE(head->pageEdge() != nullptr);
     CHECK(head->pageEdge()->get());
@@ -1046,7 +1046,7 @@ TEST_CASE("A screen's head answers false for a switch case of two nodes, and tru
     REQUIRE(mounted.has_value());
     ScreenHandle& screen = **mounted;
     harness.settle();
-    morph::ui::ScreenHead* const head = screen.head();
+    morph::ui::ScreenHead const* const head = screen.head();
     REQUIRE(head != nullptr);
     std::string const press = GENERATE(as<std::string>{}, "narrow", "other");
     harness.backend.click(harness.byTestId("Button", press));

@@ -574,6 +574,7 @@ TEST_CASE("theme: the tokens nothing reads are reported, an aliased palette toke
     };
     auto const unread = morph::ui::unreadThemeTokens(index, lookup);
     std::vector<std::string> paths;
+    paths.reserve(unread.size());
     for (auto const& token : unread) {
         paths.push_back(token.path);
     }
