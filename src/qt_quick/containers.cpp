@@ -45,11 +45,13 @@ namespace {
 
 // Has the container's `place` run again whenever a cell's implicit size or visibility changes. The container's item is
 // the connection's context, and the call goes through it, not through the widget, which may be gone while Qt still
-// holds the item.
+// holds the item. The call is queued, not direct: `place` writes the cell's width, and a cell whose implicit size
+// follows from its own width (a wrapped text) is mid-way through updating bindings on that width when it reports the
+// change, so a direct write re-enters those bindings, which Qt then leaves at their stale values.
 void placeOnChange(QQuickItem* container, QQuickItem const* cell) {
     auto const place = [target = QPointer<QQuickItem>{container}] {
         if (target != nullptr) {
-            QMetaObject::invokeMethod(target, "place", Qt::DirectConnection);
+            QMetaObject::invokeMethod(target, "place", Qt::QueuedConnection);
         }
     };
     QObject::connect(cell, &QQuickItem::implicitWidthChanged, container, place);
@@ -91,7 +93,7 @@ void GridImpl::adopted(ItemBase& child) {
 
 void GridImpl::place() const {
     if (item() != nullptr) {
-        QMetaObject::invokeMethod(item(), "place", Qt::DirectConnection);
+        QMetaObject::invokeMethod(item(), "place", Qt::QueuedConnection);
     }
 }
 

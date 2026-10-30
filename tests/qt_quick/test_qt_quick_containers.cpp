@@ -821,6 +821,48 @@ TEST_CASE("qt_quick containers: a row whose width its column gives spreads its c
     CHECK(end >= scene.window().width() - 4.0);
 }
 
+// A text in a wrapping row nested in a row keeps the width its row gives it: the row places it from the text's own
+// implicit size, which changes while the text's bindings on its width are still updating, so the placement has to
+// run after them. The text arrives after the row's first layout, and the card is shown after, as a bound text in a
+// card is. Mutation: run `place` directly from the cell's implicit-size signals (the heading's label is left at
+// width 0 and breaks into one character per line, and the tag floats away from it).
+TEST_CASE("qt_quick containers: a wrapping row nested in a row lays its text out on one line", "[qt_quick]") {
+    Scene scene;
+    // Hidden while it is built and shown after, as a card is until its sample arrives.
+    auto card = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    card->setLayout({.width = ui::Sizing::stretch(), .height = {}});
+    card->setVisible(false);
+    auto outer = scene.backend().createStack(card.get(), ui::Axis::Horizontal);
+    outer->setLayout({.width = ui::Sizing::stretch(), .height = {}});
+    outer->setGap(1);
+    outer->setAlign(ui::Align::Center);
+    auto wrapping = scene.backend().createStack(outer.get(), ui::Axis::Horizontal);
+    wrapping->setWrap(true);
+    wrapping->setGap(1);
+    wrapping->setAlign(ui::Align::Center);
+    auto heading = scene.backend().createText(wrapping.get());
+    heading->setRole(ui::TextRole::Section);
+    auto tag = scene.backend().createText(wrapping.get());
+    tag->setText("Registered");
+    auto filler = scene.backend().createSpacer(outer.get());
+    filler->setLayout({.width = ui::Sizing::stretch(), .height = {}});
+    auto lot = scene.backend().createText(outer.get());
+    lot->setText("Lot L-26-0381");
+    heading->setText("Sample S-26-104230");
+    scene.window().resize(700, 400);
+    scene.settle();
+    card->setVisible(true);
+    scene.settle();
+    QQuickItem const& headingItem = Scene::itemOf(*heading);
+    QQuickItem const& tagItem = Scene::itemOf(*tag);
+    qreal const headingRight = headingItem.mapToScene(QPointF{headingItem.width(), 0}).x();
+    qreal const tagLeft = tagItem.mapToScene(QPointF{0, 0}).x();
+    INFO("heading " << headingItem.width() << "x" << headingItem.height() << ", tag at " << tagLeft);
+    CHECK(headingItem.width() > 100.0);
+    CHECK(headingItem.height() < 40.0);
+    CHECK(tagLeft - headingRight < 16.0);
+}
+
 // Mutation: drop the spacer's stretch (the row packs, so the actions stop right after the subtitle).
 TEST_CASE("qt_quick containers: a head row puts its actions at the trailing edge", "[qt_quick]") {
     Scene scene;
