@@ -882,7 +882,8 @@ private:
                                           head->run(actionId);
                                       }
                                   },
-                              .common = {}};
+                              .common = {},
+                              .icon = action.peek().icon};
                 button.common.testId = "head_action_" + action.peek().id;
                 button.common.enabled = Prop<bool>{[&action] { return action.get().enabled; }};
                 return ui::button(std::move(button));

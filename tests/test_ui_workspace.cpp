@@ -62,7 +62,7 @@ constexpr std::string_view kHeaded = R"({
   "subtitle": { "ref": "stage" },
   "status": [ { "text": "Draft", "tone": "warn" }, { "text": "Hidden", "visible": false } ],
   "actions": [
-    { "id": "save", "label": "Save", "emphasis": "primary",
+    { "id": "save", "label": "Save", "icon": "save", "emphasis": "primary",
       "onClick": [ { "set": "stage", "value": { "fn": "concat", "args": [ { "ref": "stage" }, "!" ] } } ] },
     { "id": "publish", "label": "Publish", "enabled": false, "onClick": [ { "set": "stage", "value": "Published" } ] }
   ],
@@ -881,7 +881,7 @@ TEST_CASE("workspace: a document's head answers its subtitle, visible badges and
           std::vector<HeadBadge>{{.text = "Draft", .tone = morph::ui::Tone::Warn, .icon = ""}});
     CHECK(head->actions().peek() == std::vector<HeadAction>{{.id = "save",
                                                              .label = "Save",
-                                                             .icon = "",
+                                                             .icon = "save",
                                                              .emphasis = morph::ui::ButtonEmphasis::Primary,
                                                              .enabled = true},
                                                             {.id = "publish",
@@ -905,6 +905,7 @@ TEST_CASE("workspace: a document's head answers its subtitle, visible badges and
     CHECK(harness.backend.prop(harness.byTestId("Badge", "head_status_0"), "text") == "Draft");
     CHECK(harness.backend.find("Badge", "testId", "head_status_0").has_value());
     CHECK_FALSE(harness.backend.find("Badge", "testId", "head_status_1").has_value());
+    CHECK(harness.backend.prop(harness.byTestId("Button", "head_action_save"), "icon") == "save");
     CHECK(harness.backend.prop(harness.byTestId("Button", "head_action_publish"), "enabled") == "false");
     harness.backend.click(harness.byTestId("Button", "head_action_save"));
     harness.settle();
