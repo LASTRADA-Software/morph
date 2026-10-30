@@ -136,6 +136,12 @@ bool dashed(ui::ThemeValues const& values) {
     return found != values.strokes.end() && found->second == "dashed";
 }
 
+// Whether the keyword at @p path names @p name.
+bool keywordIs(ui::ThemeValues const& values, std::string_view path, std::string_view name) {
+    auto const found = values.keywords.find(path);
+    return found != values.keywords.end() && found->second == name;
+}
+
 // The colours, the stale opacity, the background and the dimensions; each property that would not take its value
 // is added to @p unset.
 void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
@@ -155,6 +161,12 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     }
     if (!theme.setProperty("borderDashed", dashed(values))) {
         unset.emplace_back("borderDashed");
+    }
+    if (!theme.setProperty("iconOnlySquare", keywordIs(values, "shape.iconOnly", "square"))) {
+        unset.emplace_back("iconOnlySquare");
+    }
+    if (!theme.setProperty("overlineCaps", keywordIs(values, "font.overline.case", "uppercase"))) {
+        unset.emplace_back("overlineCaps");
     }
     if (auto const weight = values.numbers.find("font.weight.strong");
         weight != values.numbers.end() && !theme.setProperty("strongWeight", static_cast<int>(weight->second))) {

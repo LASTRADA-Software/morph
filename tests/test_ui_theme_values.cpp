@@ -160,6 +160,40 @@ TEST_CASE("ui theme values: a surface's border style is solid or dashed, and any
     CHECK_FALSE(ui::checkTheme(index, files).has_value());
 }
 
+// Mutation: accept any string as a keyword (`round` reads), or leave the paths out of `kThemeTokens` (the bundle's
+// values are dropped).
+TEST_CASE("ui theme values: a keyword is one of the names its spec lists, and any other is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().keywords.at("shape.iconOnly") == "default");
+    CHECK(ui::themeValues().keywords.at("font.overline.case") == "none");
+    CHECK(valuesOf(R"({"shape": {"iconOnly": {"$type": "keyword", "$value": "square"}}})")
+              .keywords.at("shape.iconOnly") == "square");
+    CHECK(valuesOf(R"({"font": {"overline": {"case": {"$type": "keyword", "$value": "uppercase"}}}})")
+              .keywords.at("font.overline.case") == "uppercase");
+
+    auto const parse = [](std::string_view text) {
+        auto tokens = ui::parseTokens(text);
+        REQUIRE(tokens.has_value());
+        return std::move(*tokens);
+    };
+    ui::TokenSet const base = parse(R"({"shape": {"iconOnly": {"$type": "keyword", "$value": "square"}}})");
+    ui::TokenSet const round = parse(R"({"shape": {"iconOnly": {"$type": "keyword", "$value": "round"}}})");
+    ui::ThemeIndex index;
+    index.base = "base";
+    index.surfaces.emplace("odd", "round");
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        if (id == "base") {
+            return &base;
+        }
+        return id == "round" ? &round : nullptr;
+    };
+    auto const refused = ui::checkTheme(index, files);
+    REQUIRE(refused.has_value());
+    CHECK(refused->find("shape.iconOnly: only default and square are drawn") != std::string::npos);
+    index.surfaces.clear();
+    CHECK_FALSE(ui::checkTheme(index, files).has_value());
+    CHECK(ui::unreadThemeTokens(index, files).empty());
+}
+
 // Mutation: drop the fill's alpha before comparing (the translucent default reads as opaque near-black).
 TEST_CASE("ui theme values: text that cannot be read on a fill is reported", "[ui][theme]") {
     CHECK(ui::themeContrastProblems(ui::themeValues()).empty());

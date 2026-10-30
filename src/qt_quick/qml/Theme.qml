@@ -144,6 +144,10 @@ QtObject {
     property real displaySize: 0
     // The weight of every strong font: `font.weight.strong`.
     property int strongWeight: Font.Bold
+    // Whether an icon-only push button or menu trigger that gives no shape is drawn square: `shape.iconOnly`.
+    property bool iconOnlySquare: false
+    // Whether the `overline` text role is drawn in small capitals: `font.overline.case`.
+    property bool overlineCaps: false
     readonly property real bodyPixels: bodySize > 0 ? bodySize : platformMetrics.font.pixelSize > 0
                                                                    ? platformMetrics.font.pixelSize
                                                                    : platformMetrics.height * 0.75

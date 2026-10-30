@@ -298,9 +298,9 @@ inline constexpr std::string_view kRootMember = "$root";
 }
 
 /// @brief The types the client checks; a token of another `$type` the client still knows is accepted unchecked.
-inline constexpr std::array<std::string_view, 13> kKnownTokenTypes = {
-    "color",  "dimension",  "number", "fontFamily",  "fontWeight", "duration",  "cubicBezier",
-    "shadow", "typography", "border", "strokeStyle", "gradient",   "transition"};
+inline constexpr std::array<std::string_view, 14> kKnownTokenTypes = {
+    "color",  "dimension",  "number", "fontFamily",  "fontWeight", "duration",   "cubicBezier",
+    "shadow", "typography", "border", "strokeStyle", "gradient",   "transition", "keyword"};
 
 /// @brief The named font weights of DTCG.
 inline constexpr std::array<std::string_view, 18> kFontWeights = {
@@ -980,6 +980,49 @@ namespace detail {
 /// @brief The paths of the set read as a stroke style.
 inline constexpr std::array<std::string_view, 1> kStrokePaths = {"border.style"};
 
+/// @brief A keyword token of the set: its path and the names it may take, default first.
+struct KeywordSpec {
+    /// @brief The dotted path.
+    std::string_view path;
+    /// @brief The names, default first.
+    std::array<std::string_view, 2> names;
+};
+
+/// @brief The keyword tokens of the set.
+inline constexpr std::array<KeywordSpec, 2> kKeywords = {{
+    {"shape.iconOnly", {"default", "square"}},
+    {"font.overline.case", {"none", "uppercase"}},
+}};
+
+/// @brief Whether @p name is one of the names of the keyword at @p path.
+/// @param path The keyword's path.
+/// @param name The name.
+/// @return Whether the keyword takes it.
+[[nodiscard]] inline bool isKeywordName(std::string_view path, std::string_view name) {
+    return std::ranges::any_of(kKeywords, [path, name](KeywordSpec const& spec) {
+        return spec.path == path && std::ranges::find(spec.names, name) != spec.names.end();
+    });
+}
+
+/// @brief Why a resolved theme names a keyword that is not drawn.
+/// @param resolved The resolved tokens.
+/// @return The reason, such as `shape.iconOnly: only default and square are drawn`, or nothing when every keyword
+///         the theme gives is one its spec lists.
+[[nodiscard]] inline std::optional<std::string> keywordProblem(TokenSet const& resolved) {
+    for (KeywordSpec const& spec : kKeywords) {
+        auto const found = resolved.find(spec.path);
+        if (found == resolved.end() || found->second.type != "keyword") {
+            continue;
+        }
+        auto const* const named = std::get_if<std::string>(&found->second.value.data);
+        if (named == nullptr || !isKeywordName(spec.path, *named)) {
+            return std::string{spec.path} + ": only " + std::string{spec.names[0]} + " and " +
+                   std::string{spec.names[1]} + " are drawn";
+        }
+    }
+    return std::nullopt;
+}
+
 /// @brief Why a resolved theme strokes an outline in a style that is not drawn.
 /// @param resolved The resolved tokens.
 /// @return The reason, or nothing when every stroke style of the set is `solid` or `dashed`.
@@ -1038,6 +1081,9 @@ inline constexpr std::array<std::string_view, 1> kStrokePaths = {"border.style"}
                 if (auto problem = detail::strokeProblem(*resolved)) {
                     return label(variant, density, surface) + ": " + *problem;
                 }
+                if (auto problem = detail::keywordProblem(*resolved)) {
+                    return label(variant, density, surface) + ": " + *problem;
+                }
             }
         }
     }
@@ -1053,6 +1099,7 @@ enum class ThemeTokenKind : std::uint8_t {
     FontFamily,  ///< A `fontFamily` token: a family name, or a list of them in order of preference.
     FontWeight,  ///< A `fontWeight` token, read as its numeric weight, 1 to 1000, in `ThemeValues::numbers`.
     Stroke,      ///< A `strokeStyle` token: `solid` or `dashed`, in `ThemeValues::strokes`.
+    Keyword,     ///< A `keyword` token: one of the names the spec lists, in `ThemeValues::keywords`.
 };
 
 /// @brief A `shadow` token's default, in the form a `constexpr` table can hold.
@@ -1085,12 +1132,14 @@ struct ThemeTokenSpec {
     std::string_view family;
     /// @brief A stroke style's default: `solid` or `dashed`.
     std::string_view stroke;
+    /// @brief A keyword's default, the first of its names in `detail::kKeywords`.
+    std::string_view keyword;
 };
 
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 65> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 67> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1191,6 +1240,24 @@ inline constexpr std::array<ThemeTokenSpec, 65> kThemeTokens = {{
     {.path = "color.chart.2", .kind = ThemeTokenKind::Color, .color = "#c25400", .number = 0.0},
     {.path = "color.chart.3", .kind = ThemeTokenKind::Color, .color = "#00805e", .number = 0.0},
     {.path = "color.chart.4", .kind = ThemeTokenKind::Color, .color = "#a8508a", .number = 0.0},
+    // Two looks that change every application's shell or sidebar, off by default: an icon-only push button or menu
+    // trigger drawn square, and the `overline` text role drawn in small capitals.
+    {.path = "shape.iconOnly",
+     .kind = ThemeTokenKind::Keyword,
+     .color = "",
+     .number = 0.0,
+     .shadow = {},
+     .family = "",
+     .stroke = "",
+     .keyword = "default"},
+    {.path = "font.overline.case",
+     .kind = ThemeTokenKind::Keyword,
+     .color = "",
+     .number = 0.0,
+     .shadow = {},
+     .family = "",
+     .stroke = "",
+     .keyword = "none"},
 }};
 
 /// @brief A `shadow` of the set, resolved.
@@ -1221,6 +1288,8 @@ struct ThemeValues {
     std::map<std::string, std::vector<std::string>, std::less<>> families;
     /// @brief Every stroke style of the set, by path: `solid` or `dashed`.
     std::map<std::string, std::string, std::less<>> strokes;
+    /// @brief Every keyword of the set, by path: one of the names its spec lists.
+    std::map<std::string, std::string, std::less<>> keywords;
 };
 
 namespace detail {
@@ -1343,6 +1412,15 @@ namespace detail {
                 }
             }
             values.strokes.insert_or_assign(std::string{spec.path}, std::move(stroke));
+        } else if (spec.kind == ThemeTokenKind::Keyword) {
+            std::string keyword{spec.keyword};
+            if (token != nullptr && token->type == "keyword") {
+                if (auto const* const named = std::get_if<std::string>(&token->value.data);
+                    named != nullptr && detail::isKeywordName(spec.path, *named)) {
+                    keyword = *named;
+                }
+            }
+            values.keywords.insert_or_assign(std::string{spec.path}, std::move(keyword));
         } else if (spec.kind == ThemeTokenKind::FontWeight) {
             std::optional<double> weight;
             if (token != nullptr && token->type == "fontWeight") {
@@ -1369,8 +1447,8 @@ namespace detail {
 namespace detail {
 
 /// @brief The `$type`s the set's kinds are read as.
-inline constexpr std::array<std::string_view, 7> kReadTokenTypes = {"color",      "number",     "dimension",  "shadow",
-                                                                    "fontFamily", "fontWeight", "strokeStyle"};
+inline constexpr std::array<std::string_view, 8> kReadTokenTypes = {
+    "color", "number", "dimension", "shadow", "fontFamily", "fontWeight", "strokeStyle", "keyword"};
 
 /// @brief Calls @p reach with the path of every alias inside a value.
 /// @param value The value.

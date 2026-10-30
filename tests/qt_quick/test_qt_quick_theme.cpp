@@ -1561,3 +1561,22 @@ TEST_CASE("qt_quick theme: a button on a dashed surface is outlined in dashes, n
     CHECK(edge.pixels < (last - first) * 3 / 4);
     CHECK(edge.pixels > (last - first) / 3);
 }
+
+// Mutation: leave `shape.iconOnly` and `font.overline.case` out of `kThemeTokens`, and both read their defaults.
+TEST_CASE("qt_quick theme: the theme's keywords reach the Theme singleton", "[qt_quick]") {
+    Scene scene;
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    CHECK_FALSE(theme->property("iconOnlySquare").toBool());
+    CHECK_FALSE(theme->property("overlineCaps").toBool());
+
+    auto const tokens = ui::parseTokens(R"({"shape": {"iconOnly": {"$type": "keyword", "$value": "square"}},
+        "font": {"overline": {"case": {"$type": "keyword", "$value": "uppercase"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    CHECK(theme->property("iconOnlySquare").toBool());
+    CHECK(theme->property("overlineCaps").toBool());
+}
