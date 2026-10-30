@@ -34,18 +34,33 @@ Two kinds of probe ran.
   - the real Qt Quick backend, directly and through the interpreter mounting a JSON document;
   - the gallery's own harness on `RecordingBackend`.
 
-None of the probes touches the tree.
+None of P1 to P7 touches the tree. P8 needed the frontend itself instrumented: it patched two files of the worktree,
+rebuilt, measured, and restored them (below).
 
-**P1. A row that cannot shrink** (`lg-jd-probe1.qml`). A `ColumnLayout` 300 px wide holds a `RowLayout` of two
-`Text`s and two 150 px rectangles, none of them filling, plus a sibling that fills:
+**P1. A row that cannot shrink, in stock Qt and in morph.** In stock Qt Quick Layouts (`lg-jd-probe1.qml`), a
+`ColumnLayout` 300 px wide holds a `RowLayout` of two `Text`s and two 150 px rectangles, none of them filling, plus a
+sibling that fills:
 
 ```
 qml: PROBE col 300 row w 609 row implW 609 rowMin 609 a 0 147 146.78125 b 152 147 r 304 150 p 459 150 fill 609
 ```
 
-The row's minimum is its natural width. The column keeps its own width of 300 px but lays both children out at
-609 px, so the sibling that fills is also 609 px wide. Whatever clips the column then cuts both, and nothing reports
-it.
+There, a layout's minimum is its children's, so the row's 609 px reaches the column, which lays both children out at
+609 px.
+
+**Morph does not behave like that**, as the review's probe showed (`lg-jrev/rev1.qml`, the copied `MorphUi` module):
+a `MorphStack` column 300 px wide holding a content-sized row (texts and a fixed spacer) and a sibling text gives
+
+```
+PROBE col w 300 colLayout w 300 colLayoutMin 0 | row w 300 rowLayout w 622 rowLayoutMin 622 row implW 622 packed true | sib w 300
+```
+
+- A column's children fill its width (`crossFill`, `Layout.fillWidth`), and a `MorphStack` is an `Item` whose own
+  `Layout.minimumWidth` is unset, so the row adds 0 to the column's minimum. The row's box is 300 px and its sibling
+  stays 300 px.
+- Inside the row, a packed row lays its `GridLayout` out at its implicit width, 622 px, past its own box. Whatever
+  clips first cuts that off: a card, a splitter pane, the page.
+- So the overflow stays inside the stack that has it. Nothing above it can see it, and nothing reports it.
 
 **P2. A field given text from outside** (`lg-jd-probe2.qml`). Three stock `TextField`s, 80 px wide, are each assigned
 a 37-character text from script:
@@ -106,21 +121,30 @@ height that is left under the strip, not under the strip.
 **P7. The principal**, from a grab with `--user "Dr. A. Meyer"` (`lg-jd-grabs/console-user.png`). The name closes
 the console's top line at 1000 px, after "Connected".
 
+**P8. Every example app's containers, measured** (the review's B1, point 2). To learn where a container's content
+minimum would change a layout if it became the container's own minimum, `MorphStack.qml` was given a temporary check
+that wrote a Qt warning whenever its content's minimum (`layout.Layout.minimumWidth`, or a wrapping row's widest
+basis) exceeded its width inside its padding, and `frontend.cpp` a temporary window size from the environment. The
+six example render smokes were rebuilt and run at 1024×768 (their default) and 390×844. Both files were then
+restored from their copies and touched, so the next build drops the probe. The counts are in J3; the raw logs are
+`lg-jd-measure/`.
+
+
 ## The items
 
 | Item | Verdict | Where it lands | Lane |
 |---|---|---|---|
-| J1 `bleed` inside a panel | **Reproduced** (P4, P5, a new grab). A library defect: the column the interpreter inserts hides the panel's padding. A tab page's slot does too | a holder column and a slot pass their parent's inset on | J-A |
+| J1 `bleed` inside a panel | **Reproduced** (P4, P5, a new grab). A library defect: the column the interpreter inserts hides the panel's padding. A tab page's slot does too | a holder column passes its parent's inset on; a tab page pads itself (J11) | J-A |
 | J2 the principal in the head | **Reproduced** (P7). The feature works; the grabs had no principal, since no `--user` was passed | the grab command; no framework change | J-B |
-| J3 silent clipping | **Reproduced** (P1) for rows and columns. **Read** for tables: their sideways scroll exists, but its bar is hidden at rest | a report from every container whose content does not fit; a page that scrolls sideways; a table bar that shows | J-A |
+| J3 silent clipping | **Reproduced** (P1, and the review's probe) for rows and columns; **measured** across the six example apps (P8). **Read** for tables: their sideways scroll exists, but its bar is hidden at rest | a container's minimum is its content's; a report once per container; a page that scrolls sideways; a table bar that shows | J-A |
 | J4 a field shows the end of its text | **Reproduced** (P2, on stock Qt) | a field that is not focused shows its text from the start | J-C |
 | J5 the inline lead wraps after the trail | **Read**: the top line is one flow in order, so the last item that does not fit is the one that wraps | the inline lead wraps inside the title's block | J-B |
 | J6 a white compact page | **Read** from the mockups' CSS: seven of the nine compact windows set `background: #fff` | the screen's `pageSurface` | J-B |
 | J7 the dialog's and sheet's rule spacing | **Read**: the rules are items of a column whose spacing is 5 px | a step-3 margin on each side of each rule | J-C |
 | J8 a text area's inner padding | **Reproduced** (P3) | the text area sets its own sides; the token `input.paddingX` | J-C |
 | J9 the sidebar's section overlines | **Read**: the navigator's root stacks its headings and its entries with no gap | each group is a column; the groups and the search are step 3 apart | J-B |
-| J10 navigator selection | **Read**: the badge is the item's sibling, not part of it | the badge goes inside the item; the theme switch `list.selection` | J-B (badge), J-C (look) |
-| J11 review 390's gaps; a scroll in a tab page | **Reproduced** (P6). It is one cause: a tab page's slot does not fill the page area | a tab page fills the page area and scrolls itself | J-A |
+| J10 navigator selection | **Read**: the badge is the item's sibling, not part of it | the badge goes inside the item; `list.selection`, resolved per surface | J-B (badge), J-C (look) |
+| J11 review 390's gaps; a scroll in a tab page | **Reproduced** (P6). It is one cause: a tab page's slot does not fill the page area | a tab page fills the page area, pads itself and scrolls itself | J-A |
 
 ## J1: `bleed` reaches past a panel's and a tab's padding
 
@@ -148,42 +172,54 @@ So `bleed` has no effect there, as the comparison found. Two probes split the pa
     screen writes itself.
   - Batch I's tabs test creates the bleeding text directly in `createTabs(...)`, so it never meets the slot.
 
-This is a defect in shipped library behaviour (`include/morph/ui/interpreter.hpp`, `src/qt_quick/qml`), not a
-gallery bug.
+This is a defect in shipped library behaviour (`include/morph/ui/interpreter.hpp`, `src/qt_quick/qml`, `src/tui`),
+not a gallery bug.
 
-**Decision.** A container that the mount inserts, and that the document did not write, passes its parent's bleed
-inset to its children. The parent a document names is then the parent whose padding a bleed reaches past, as the
-batch I spec already says. The direct-parent rule stands: a container the author wrote (a column with no padding,
-say) still gives its children nothing to bleed past.
+**Decision.** A container that the mount inserts, and that the document did not write, is transparent to `bleed`: the
+parent a document names is the parent whose padding a bleed reaches past, as the batch I spec already says. The
+direct-parent rule stands for containers the author wrote: a column with no padding still gives its children nothing
+to bleed past.
 
-- **The holder column.** `Column` gains `bool holder = false`: the column `lowerAll` makes to hold several children.
-  `listColumn` callers that make one for `lowerAll` set it. A `forEach`'s own column is not a holder.
+Two containers are inserted by the mount.
+
+- **The holder column.** `Column` gains `bool holder = false`. `lowerAll` sets it on every column it makes, since
+  every caller of `lowerAll` (a panel's, a tab's, a scroll's, a switch case's and a table cell's children) wants the
+  same, and only the first two can hold a bleeding child. A `forEach`'s own column, and a column the document wrote,
+  are not holders.
+- **The tab page.** J11 moves the pages' padding into the page's slot, so a tab page's slot is itself the padded
+  parent of the page's children, and passes nothing through. A switch case's slot cannot hold a bleeding child (the
+  loader refuses `bleed` under a `switch`), so a slot needs no pass-through.
 - **The backend.** `StackWidget::setPassesBleed(bool)` is a new pure virtual. The mount calls it once, only with
-  `true`, for a holder column.
-  - The stack's horizontal padding is 0, so its children's bleed inset is the inset its own parent gives it.
-  - It changes nothing else about the stack.
-- **A slot always passes it on.** A slot is never a document node; it is where the mount shows a switch case or a
-  tab page. So `SlotWidget` needs no method, and a backend's slot behaves as if `setPassesBleed(true)` had been
-  called.
+  `true`, for a holder column. Every `StackWidget` implements it: `StackImpl` and `TableRowImpl` on Qt Quick
+  (`src/qt_quick/kinds.hpp`), their terminal counterparts, and `RecordingBackend`. A table row ignores it; it is never
+  a holder.
 
-**Per backend.**
+**Per backend.** The two frontends reach the same result by different means, because one draws children outside
+their parent's bounds and the other cannot.
 
-- **Qt Quick.**
+- **Qt Quick** forwards the inset. A layout honours negative margins and does not clip, so a child can lie past its
+  holder's edges.
   - `MorphStack`'s layout: `childBleedInset: root.insetX + (root.passesBleed ? root.bleedInset : 0)`, with a new
     `property bool passesBleed: false` that `StackImpl::setPassesBleed` writes.
-  - `MorphSlot`'s `column`: `readonly property real childBleedInset: root.bleedInset`.
+  - Both are declared as lane W's `bleedInsetOf` reads them (through a `var`), so Qt 6.8.1's qmllint accepts them.
   - A `MorphWidget`'s own `bleedInset` binding is unchanged.
-- **Terminal.**
-  - `bleedAreas` (`src/tui/widget.cpp`) takes the span the container hands down. A stack that passes the bleed on, and
-    a slot, hand down their own parent's span in place of their own content area.
-  - The panel's span is its frame's inner edges (`container_widgets.cpp`), and the tabs' span is its page area.
+- **The terminal** moves the padding down. core-cpp clips every child to its parent's area (`Screen.cpp`,
+  `screenBounds.intersect(parentBounds)`), so a holder that handed its child a span wider than itself would see the
+  child cut back to its own edges. So:
+  - a panel lays a holder out over the frame's inner span, past its padding, and hands it that padding;
+  - the holder places its children inside that padding, except a bleeding child, which gets the holder's full width;
+  - a tab page's slot is laid over the whole page area and pads its own content (J11), so it is the padded parent
+    there.
+  - `bleedAreas` (`src/tui/widget.cpp`) is the one place that applies "full width for a bleeding child", for the
+    panel, the stack, the slot and the holder alike. `PanelImpl`'s placement (`container_widgets.cpp`) and
+    `TabsImpl::childAreas` (`list_widgets.cpp`) hand down the spans.
 - **`RecordingBackend`** records `passesBleed` on the stack's line.
 
 **Spec.**
 
 - `view_tree.md` (`Column::holder`);
 - `interpreter.md` (`lowerAll`'s holder column);
-- `backend_contract.md` ("Layout hints": the parent a bleed reaches past; `StackWidget::setPassesBleed`; a slot);
+- `backend_contract.md` ("Layout hints": the parent a bleed reaches past; `StackWidget::setPassesBleed`);
 - `document.md` ("Every node", `bleed`: one sentence saying that the parent is the one the document names);
 - `qt_quick/backend.md` and `tui/frontend.md`, the Layout rows.
 
@@ -197,15 +233,19 @@ say) still gives its children nothing to bleed past.
   - "a bleeding child of a tab page reaches the tabs node's edges": a `tabs` node with `inset 4` and `pageInset 4`,
     one tab holding two texts, the first with `bleed`. The first's left is the tabs node's left; the second's is
     `space.4` in.
-  - **Control:** a backend whose holder stack and slot pass nothing on. Both cases fail. Without the fix, the first
-    case measures the same 9 px as P5.
+  - "a bleeding child of a tab page that scrolls still reaches the edges": the same, with the page's content taller
+    than the page. The first text's left is the tabs node's left, it is not clipped, and the page's bar sits at the
+    node's right edge (J11).
+  - **Control:** a backend whose holder stack passes nothing on, and today's tab page padding. The first two cases
+    fail; without the fix, the first measures the same 9 px as P5.
+  - The cases run on both frontends, so the terminal's clip is in the loop.
 - the interpreter's tests (`tests/test_ui_interpreter_detail.cpp`):
   - a panel with two children lowers to a `Column` with `holder` set;
   - a panel with one child lowers to that child, unwrapped;
   - **Control:** drop the flag from `lowerAll`.
 - `tests/test_ui_recording_backend.cpp`: a holder column's line carries `passesBleed`.
 - `tests/qt_quick/test_qt_quick_containers.cpp` and `tests/tui/test_tui_containers.cpp`: the backend-level cases from
-  batch I stay, each joined by a case through a holder stack and through a slot.
+  batch I stay, each joined by a case through a holder stack.
 - **The gallery:** `test_receipt.cpp` checks that the expanded session table's layout records `bleed` and that its
   holder records `passesBleed`. That proves the document side only; the conformance case proves the drawing.
 
@@ -243,106 +283,185 @@ left edge to its inner right edge. "This session" and the footnote stay 8 px in.
 
 **Problem (rows and columns reproduced; tables read).**
 
-- **A row is as narrow as its children's natural widths, and no narrower** (P1). In Qt Quick Layouts a child that
-  does not fill has its preferred width as its minimum. A row of such children has their sum as its minimum.
-  - A parent narrower than that lays the row out at its minimum anyway, and every sibling that fills is laid out
-    that wide too. Then the nearest clip cuts the result: a page, a splitter pane, a card.
-  - This is audit's 1000 px trail. Its chip row is about 640 px wide and does not wrap, so the trail table beside it
-    is laid out wider than its pane, and the Reason column falls off the right edge.
-  - It is also review's footer. The row holds "Approving needs your signature" and the three buttons, and is wider
-    than its pane, so "Approve and sign…" is cut off.
-- **A table wider than its columns allow scrolls sideways.** `MorphTable` puts the rows in `hflick`, which is
-  interactive while `columnsWidth > width`, and attaches `MorphScrollBar`.
-  - The stock bar is the Basic style's `ScrollBar`, whose `policy` is `AsNeeded`, so it shows only while the bar is
-    active. A table at rest therefore looks cut off: stability's Pulls column, console's Test and Status.
-  - The P7 grab shows console's worklist this way: the Status column ends in mid-word at the pane's edge, with no
-    bar.
+- **A row's content can be wider than the row, and that stays inside the row** (P1). A content-sized child of a row
+  does not fill, so its preferred width is its minimum, and a row's `GridLayout` cannot be narrower than its
+  children's sum. But a `MorphStack` is an `Item` whose own `Layout.minimumWidth` is unset, and a column's children
+  fill its width, so the row's box is given whatever its column has. Its layout then runs past the box, and the
+  nearest clip cuts it off: a card, a splitter pane, the page.
+  - **Audit's 1000 px trail.** The chip row is about 640 px wide and does not wrap, in a pane about 530 px wide.
+  - **Review's footer.** The row holds "Approving needs your signature", a stretching spacer and three buttons; it
+    is not packed, so its layout is its box's width, and its minimum is wider. "Approve and sign…" is cut off.
+- **A table wider than its columns allow scrolls sideways, invisibly.** `MorphTable` puts the rows in `hflick`,
+  which is interactive while `columnsWidth > width`. Its bar is a `MorphScrollBar` declared inline
+  (`MorphTable.qml`, `ScrollBar.horizontal: MorphScrollBar {…}`), whose Basic-style `policy` is `AsNeeded`: it shows
+  only while active. A table at rest looks cut off: stability's Pulls column, console's Test and Status. The P7 grab
+  shows console's worklist this way, its Status column ending mid-word at the pane's edge.
+  - The audit trail's Reason column is this case too: the trail table's own sideways scroll, not the page.
 - **Nothing reports either case.** The comparison found them only by looking at the grabs.
 
-**Decision.** Three parts: a report, so the problem is heard; a sideways scroll on the page, so the content can be
-reached; a table bar that shows, so a sideways scroll can be seen. A container does not shrink its children on its
-own. Whether text elides or a row wraps is the document's choice (`wrap`, `minWidth`, stretch), and the report names
-where that choice is missing.
+**Decision.** The user chose both a report and a page that scrolls sideways (Q1). Four parts:
+
+1. a stack's minimum is its content's, so an overflow is seen by its ancestors;
+2. a report, once per container, so the author hears it;
+3. a page that scrolls sideways, so the user can reach the content;
+4. a table bar that shows, so a sideways scroll can be seen.
+
+A container still does not shrink its children on its own. Whether text elides or a row wraps is the document's
+choice (`wrap`, `minWidth`, stretch), and the report names where that choice is missing.
+
+### A container's minimum is its content's
+
+`MorphWidget` gains `property real contentMinimumWidth: -1`, which a container binds to its padding plus its content
+layout's minimum, and `Layout.minimumWidth` becomes
+
+```
+minWidthUnits >= 0 ? minWidthUnits * Theme.unitWidth : honoursContentMinimum ? contentMinimumWidth : -1
+```
+
+with `property bool honoursContentMinimum: true`, which a table row turns off for its cells (below).
+
+- `MorphStack`: `2 * insetX + layout.Layout.minimumWidth`; for a wrapping row, `2 * insetX` plus its widest child's
+  basis, since a wrapping row can be as narrow as its widest child.
+- `MorphPanel`: `2 * Theme.spaceOf(padding) + 2 + inner.Layout.minimumWidth`.
+- `MorphTabs`: `2 * pageInsetPx + pages.Layout.minimumWidth`.
+- A table, a scroll, a slot and every leaf keep `-1`: a table and a scroll take their own overflow, and a slot is a
+  page.
+- A document's `minWidth` still wins, as it does today.
+
+So a row of content-sized children that cannot fit raises its column's minimum, and so on up to the page, where the
+page's slot sees it.
+
+**What it changes, measured (P8).** It changes a layout only where a container is given less than its content's
+minimum today: there, the container now keeps its minimum and its stretching siblings give way, up to the page,
+which then scrolls. Where every container already fits, a minimum that is never binding changes nothing. P8 counted
+the containers given less than their content's minimum on every screen of the six example applications:
+
+| Smoke | At 1024×768 | At 390×844 |
+|---|---|---|
+| `bank_render_smoke` | 0 | 0 |
+| `forms_render_smoke` | 0 | 1: a packed row in a table cell (`cell_sampleId`), 200 px of content in a 170 px cell |
+| `gallery_render_smoke` | 0 | 0 |
+| `ladder_lims_render_smoke` | 0 | 1: a packed row on a page, 549 px of content on a 358 px page |
+| `ladder_bookmarks_render_smoke` | 0 | 3: a row on `bookmarksPage`, 427 px on 358, and two rows on pages, 362 px on 358 |
+| `lims_gallery_render_smoke` (its own widths, 462 and 1382 px) | 7 | 7 |
+
+The seven in the LIMS gallery's own smoke are 1 px apart once rounded (825 on 824, 431 on 430, 199 on 198): layouts
+round each child's width, and a fixed width in units is fractional. They are not overflows anybody sees.
+
+So:
+
+- **At the size every other example smoke runs at, nothing changes.** No container in bank, forms, the gallery, the
+  lims ladder or bookmarks is given less than its content today, so a minimum that is never binding changes no
+  layout, and no smoke sees a report. That last step (a non-binding minimum changes nothing) is inferred from how a
+  layout distributes width, not measured.
+- **At a phone's width, four rows in two ladder apps change** from cut off to a page that scrolls sideways and a
+  report. That is the behaviour the user chose (Q1). Those are example screens, which this repository does not
+  track (`AGENTS.md`); the reports will name them for whoever next re-fits them.
+- **A table cell is the one place propagation would do harm.** A table places each cell at its column's width; a
+  cell whose minimum rose past it would push its row out of line with the header. So a table row's cells do not take
+  their content's minimum: `TableRowImpl` offers each cell `honoursContentMinimum: false`, and `MorphWidget` uses
+  `contentMinimumWidth` only while that is true. forms' cell stays cut at its column, as today, and is reported by its
+  own stack.
+- **Rounding.** The check and the page's sideways scroll ignore a shortfall under 2 px, which covers the gallery's
+  seven.
+
+So the propagation lands with those two exceptions, and needs no decision from the user beyond Q1.
 
 ### The overflow report
 
-- **What is checked.** Every container compares the minimum width of the layout that holds its children with the
-  width that layout was given. Content that is wider overflows. The 0.5 px tolerance absorbs rounding. Each
-  container names the layout it checks:
-  - a stack's `layout`;
-  - a panel's `inner` column;
-  - a slot's `column`;
-  - the tabs node's `pages`;
-  - each pane of a splitter.
-
-  A wrapping row never overflows, unless a single child is wider than the row.
-- **When it reports.** On the change from fitting to overflowing, after the layout settles (`Qt.callLater`). It does
-  not report again until the content fits once more. A resize that keeps overflowing reports nothing new.
-- **How.** The QML fires `overflow` with `{needed, given, child}`, where `child` is the test id of the widest child
-  whose minimum exceeds the width, or "" for none.
-  - The widget's C++ side reports it through `Context::report`. That is the same channel the icon and
-    undeclared-property reports use: a `ComponentFailure` when the application gave `Components`, otherwise stderr.
-  - The text: `` row `review-footer` needs 512 px and has 430 px: `approve-hint` and its siblings neither wrap nor
-    shrink, so they are cut at its edge ``.
-  - A container with no test id is named by its kind and the nearest ancestor that has one: `` a column inside
-    `trail-pane` ``.
-- **A table** reports too, once, on the same change: `` table `conditions` scrolls sideways: its columns need 612 px
-  and it has 490 px ``. Its content is reachable, so this is information rather than a fault. It is still worth
-  saying, because a screen's fixed columns rarely mean it.
+- **What is checked.** A stack compares its content's minimum (`layout.Layout.minimumWidth`, or for a wrapping row
+  its widest child's basis) with the width inside its padding, `width - 2 * insetX`, not with `layout.width`: a
+  packed row lays its layout out at its implicit width, which always equals its minimum. A panel compares
+  `inner.Layout.minimumWidth` with `inner.width`. Content wider by 2 px or more overflows (P8's rounding).
+- **No splitter check.** A splitter's panes are plain widgets with no layout of their own (`MorphSplitter.qml`); the
+  only width to compare would be the implicit one, which reports falsely. Each pane's stack checks itself.
+- **When it checks.** Only while the container is visible, its width is above 0 and it has a window. That leaves out
+  start-up before the window has its size, hidden tab pages, folded sections and closed overlays. The check runs
+  after the layout settles (`Qt.callLater`) on a change of the width, the minimum or the visibility.
+- **How often it reports.** Once per container while it stays mounted: the first time it overflows. A container that
+  fits again and overflows again later, or overflows at another width while the user drags a splitter, does not
+  report again. The pixel values are in the text but not in what identifies the report, so nothing grows with the
+  number of widths seen.
+- **The channel.** Not `Context::report`: its `ComponentFailure` means a component could not be loaded, and it
+  de-duplicates on the whole text. The report is a Qt warning in its own logging category, `morph.layout`, written
+  with `qCWarning` from the container's C++ side (`ContainerItemWidget` gains the `overflow` relay once, for every
+  container). A Qt warning is what every render smoke already records and fails on, and an application can filter the
+  category with `QT_LOGGING_RULES`.
+- **The text.** `` row `review-footer` needs 512 px and has 430 px: `approve-hint` and its siblings neither wrap nor
+  shrink ``. A container with no test id is named by its kind and the nearest ancestor that has one (`` a column
+  inside `trail-pane` ``). The child named is the widest one whose minimum exceeds the width, when there is one.
+- **A table** reports too, once, the first time its columns overflow: `` table `conditions` scrolls sideways: its
+  columns need 612 px and it has 490 px ``. Its content is reachable, so this is information rather than a fault, but
+  a screen's fixed columns rarely mean it.
 
 ### The page scrolls sideways
 
-`MorphSlot` (a workspace page, a tab page) and `MorphScroll` on the vertical axis lay their content column out at
-`Math.max(viewport width, the column's minimum width)`.
-
-- While the content is wider than the viewport, the flickable also scrolls sideways and shows a horizontal bar with
-  `policy: ScrollBar.AlwaysOn`.
-- Content that fits is laid out at the viewport's width, exactly as today.
-- A page that stretches down keeps stretching. Only its width changes.
+A scrollable `MorphSlot` (a workspace page, a tab page) and a vertical `MorphScroll` lay their content column out at
+`Math.max(viewport width, the column's minimum width)`, which the propagated minimums make the content's real need.
+J11 gives `MorphSlot`'s full set of bindings for both axes; `MorphScroll` takes the same horizontal part. While the
+content is wider than the viewport, the flickable also scrolls sideways and shows a horizontal bar made from the
+`scrollBar` part with `policy: ScrollBar.AlwaysOn`. Content that fits is laid out at the viewport's width, exactly as
+today, and a page that stretches down keeps stretching.
 
 ### The table's bar shows
 
-`MorphTable`'s horizontal bar gets `policy: hflick.interactive ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded`. A restyled
-`scrollBar` part keeps that policy, since the table sets it on the instance it makes.
+- `MorphTable` makes its horizontal bar from the `scrollBar` part, as `MorphSlot` and `MorphScroll` do (C++ passes
+  `bar` at creation, `src/qt_quick/table.cpp`), in place of the inline `MorphScrollBar`. Today no restyle reaches the
+  table's bar; after this one does.
+- The table sets `policy: hflick.interactive ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded` on the bar it makes.
+- A bar that is always on would cover the last row, so while `hflick.interactive` the table's `implicitHeight` grows
+  by the bar's height, and the rows end above it.
 
 **Per backend.**
 
-- **Qt Quick:** as above. `ContainerItemWidget` gains the `overflow` relay once, for every container.
-- **Terminal:** a stack, a panel and a slot know their children's natural cells and their own, so they detect the
-  same condition. The terminal has no diagnostics channel, and writing to stderr would draw over the screen, so this
-  batch neither reports overflow there nor scrolls a page sideways. Content keeps being cut at the column. That is
-  listed under **Not in this batch**.
+- **Qt Quick:** as above.
+- **Terminal:** this batch neither reports overflow there nor scrolls a page sideways, and content keeps being cut at
+  the column. The terminal has no diagnostics channel, and writing to stderr would draw over the screen. That is
+  silent, against the vocal-over-silent rule, so it is listed explicitly under **Not in this batch** with the seam it
+  needs.
 
 **Spec.**
 
-- `backend_contract.md` ("Layout": what a backend does when content does not fit);
-- `qt_quick/backend.md` (the report, its text, when it fires; the page's sideways scroll; the table's bar);
+- `backend_contract.md` ("Layout": a container's minimum is its content's; what a backend does when content does not
+  fit);
+- `qt_quick/backend.md` (the minimum; the report, its category, text and timing; the page's sideways scroll; the
+  table's bar from the part);
 - `workspace.md` (a page scrolls sideways when its content cannot be narrower);
 - `tui/frontend.md` (the terminal cuts, unreported).
 
 **Tests.**
 
 - `tests/qt_quick/test_qt_quick_containers.cpp`:
-  - **Row overflow.** A column 300 px wide holding a row of two texts and two fixed 20-unit spacers, which cannot
-    fit. Exactly one report names the column and the row, with the needed and given widths.
-    - Widen the column until it fits, then narrow it again, and there is exactly one more report.
-    - **Control:** a column that fits reports nothing.
-    - **Mutation:** compare the width against the implicit width in place of the minimum, and the case with stretch
-      children reports falsely.
+  - **The minimum rises.** A column 300 px wide holding a content-sized row of two texts and a fixed 40-unit spacer:
+    the column's `Layout.minimumWidth` is the row's content plus padding.
+    - **Control:** today's `MorphWidget`, where it is unset (the review's probe: `colLayoutMin 0`).
+  - **Row overflow reported.** The same column as the content of a 300 px window. Exactly one `morph.layout` warning,
+    naming the row; resize to 299 px, and none more; widen until it fits and narrow again, and none more.
+    - **Control:** a column that fits reports nothing; a packed row compared against `layout.width` reports nothing,
+      which is the mutation that must fail this case.
+  - **A hidden page does not report.** The same row in a tab that is not shown: no warning until it is shown.
   - **Page scroll.** A scrollable slot 300 px wide holding the same row. Its flickable's `contentWidth` is the row's
-    minimum width, and the horizontal bar is visible.
+    minimum width plus the padding, and the horizontal bar is visible.
     - **Control:** a row that fits. `contentWidth` equals the viewport and no bar shows.
-  - **Table bar.** A table 200 px wide whose fixed columns need 400 px. The horizontal bar is visible at rest, and one
-    report names the table.
-    - **Control:** the same table 500 px wide. No bar and no report.
-- **The gallery.** `lims_gallery_render_smoke` renders the ten screens at 1000×830 and 390×844 and fails on any
-  overflow report. It is the check that turns J-F's re-fits into a guarantee.
+- `tests/qt_quick/test_qt_quick_table.cpp`: **Table bar.** A table 200 px wide whose fixed columns need 400 px. The
+  horizontal bar is visible at rest, it is the part's instance (a restyled `scrollBar` part's object name), the last
+  row ends above it, and one warning names the table.
+  - **Control:** the same table 500 px wide. No bar and no warning.
+  - **A cell keeps its column.** A table whose cell holds a packed row wider than its fixed column: the cell's width
+    is the column's, and the header and the row stay in line.
+    - **Control:** a table row that leaves `honoursContentMinimum` on. The cell is wider than its header.
+- **The smokes.** Every render smoke records Qt warnings, so the report reaches all six example smokes with no change
+  to them, at their window sizes. `examples/common/testkit/render_smoke.hpp` and the gallery's smoke let the event
+  loop run after each resize until the posted checks have run (a `QCoreApplication::processEvents` loop over a short
+  settle, as the gallery's smoke does for the width class), so a report is seen before the next screen mounts.
+  - `lims_gallery_render_smoke` renders the ten screens at its two widths and at 1000×830 and 390×844, and fails on
+    any report. It is the check that turns J-F's re-fits into a guarantee.
   - **Control:** revert one of J-F's fixes (audit's chip row without `wrap`), and the smoke fails naming it.
-  - It lands after J-F, since before J-F it fails by design.
+  - It is the one J3 commit that waits for J-F, since before J-F it fails by design.
 
 **Verify.**
 
-- Re-grab audit, review, stability and console at 1000 px **before** J-F's fixes land on the lane's branch. Each logs
+- Re-grab audit, review, stability and console at 1000 px **before** J-F's fixes reach the lane's branch. Each logs
   its overflow, audit's page shows a horizontal bar, and stability's and console's tables show theirs.
 - After J-F, no screen logs one.
 
@@ -519,7 +638,7 @@ step 3.
 - **The scroll cap.** The scroll area's height cap, which subtracts the rules and their spacing, subtracts the new
   margins as well, so a tall dialog still fits the window.
 - **What is left.** That gives 12 px of body under the head rule against the design's 14, and 12 above the footer
-  rule against 14. 14 is not a step, and a dimension token for 2 px is not worth its name. See question Q5.
+  rule against 14. 14 is not a step, and the user chose step 3 for every rule gap (Q5).
 - `MorphDrawer` takes the same change.
 
 **Per backend.** The terminal draws a rule as a row of its own with no gap rows. That is unchanged.
@@ -555,12 +674,15 @@ under the footer rule, with 12 px under them at 1000 px.
 | `input.paddingX` | dimension | 8 | `MorphTextInput`, `MorphTextArea`, `MorphDateTimeInput`, `MorphSelect` (through `Theme.inputPaddingX`) |
 
 - **What reads it.** Each control's left and right inner padding, and the places its prefix, icon and unit are
-  measured from (today `Theme.spaceOf(3)` in the text input and date input, and `spaceOf(2)` in the select).
+  measured from: today `Theme.spaceOf(3)` in the text input and the date input, and in the select its value's
+  `leftPadding` and `rightPadding` (`MorphSelect.qml`, lines 80–81) and the chevron's `x` (line 91), which are
+  `spaceOf(2)`. The select's popup entries (lines 147–148) and its segmented options (lines 311–312) are not inputs'
+  insets and keep their steps.
 - **The text area's other sides.** `MorphTextArea` sets `leftPadding` and `rightPadding` from the token, and its
   `topPadding` and `bottomPadding` to `(Theme.controlHeight - line height) / 2`. Its first line then sits where a
   single-line input's text sits: about 8 px at the default 32 px control and a 16 px line, against the design's 6.
 - **The default** is 8, the select's value today and the design's, so the stock controls agree. That moves every
-  application's text inputs 4 px left, so it is the user's to confirm (Q6).
+  application's text inputs 4 px left; the user confirmed it (Q6).
 - `kThemeTokens` grows by one (with J10, from 68 to 70). `src/qt_quick/theme.cpp` maps the token, and
   `include/morph/ui/theme.hpp` lists it.
 
@@ -604,7 +726,7 @@ sidebar, and a welcome one at its density.
 
 **Spec.** `workspace.md`, "Navigator and pins".
 
-**Tests.** `tests/test_ui_shell_frame.cpp`, where `Navigator` is tested:
+**Tests.** `tests/test_ui_workspace_start.cpp`, where the navigator's tree is tested:
 
 - the root records `gap=3`, and each group's section `gap=1` holding its heading first;
 - a search that matches no entry of a group hides its section;
@@ -613,7 +735,7 @@ sidebar, and a welcome one at its density.
 **Verify.** Re-grab any screen at 1000 px. "GALLERY" sits 12 px under the search box, and each later heading 12 px
 under the entry above it.
 
-## J10: a navigator entry is selected across its badge, and the selection's look is the theme's
+## J10: a navigator entry is selected across its badge, and the selection's look is the surface's
 
 **Problem (read).**
 
@@ -623,9 +745,13 @@ under the entry above it.
 - **The look.**
   - A selected list item draws `scheme.selection`, a 3 px accent bar at its leading edge, and its label (and icon) in
     the accent.
-  - The design's `.nav.on` is `background: #2B3038; color: #fff`: a fill, with the label in the surface's text
-    colour and no bar.
-  - Both looks are reasonable. Changing ours changes every application's lists, so it is a theme switch.
+  - The design's sidebar (`10`, `.nav.on`) is `background: #2B3038; color: #fff`: a fill, with the label in the
+    surface's text colour and no bar.
+  - The design's review queue (`09`, `.qi.sel`) is `background: #EAF5EE; box-shadow: inset 3px 0 0 #17784A`: a tint
+    and a 3 px bar, which is our `accent` look. Review's queue (`review.cpp`) and console's compact list
+    (`console.cpp`) are item-style buttons too.
+  - So one application needs both looks at once, one per surface. A theme-wide switch cannot express that; a token
+    that a surface may set can, as `border.style` is.
 
 **Decision.**
 
@@ -636,20 +762,31 @@ under the entry above it.
 
   The button's background then spans the whole entry, the badge with it. The button keeps its label, which names it
   with its count, as it does today. The entry's row is the button alone.
-- **A selected item's content follows the look.** While an item that has content is selected, its content's `Normal`
-  text role draws in the colour the item's label would have. The item passes its content a scheme whose `text` role
-  is that colour. `muted` and the tones are untouched.
-- **The theme switch.**
+- **A selected item's content follows the look.** While an item that has content is selected, its content's text in
+  the `Normal` role draws in the colour the item's label would have. The mechanism is the scheme the button hands its
+  content, so nothing in QML overrides what C++ passes down:
+  - `MorphButton` declares `readonly property MorphScheme contentScheme`: a `MorphScheme` whose every role is bound
+    to the button's `scheme`, except `text`, which is the accent while the item is selected under the `accent` look
+    and the scheme's `text` otherwise. `Theme.toolbarJoinedScheme` is the precedent for a scheme bound role by role.
+  - `ButtonImpl::scheme()` returns that part in place of `scheme`, so `passSchemeDown` gives the content it once, at
+    adoption, and the bindings carry every later change of the selection or the look.
+  - `muted`, the tones and every other role are the button's.
+- **The token, per surface.**
 
   | Token | Values (default first) | What it switches | Read by |
   |---|---|---|---|
-  | `list.selection` | `accent`, `fill` | A selected list item: `accent` draws the selection colour, a leading accent bar and the label in the accent; `fill` draws the selection colour and the label in the scheme's text colour, with no bar | `MorphButtonBackground`, `MorphButton` (through `Theme.listSelection`) |
+  | `list.selection` | `accent`, `fill` | A selected list item: `accent` draws the selection colour, a leading accent bar and the label in the accent; `fill` draws the selection colour and the label in the scheme's text colour, with no bar | `MorphButtonBackground`, `MorphButton`, through the scheme's `listSelectionFill` |
 
   - It is a `keyword` token, as `collapsible.marker` is. Any other value is refused at `addFile` (`list.selection:
     only accent and fill are drawn`).
-  - It applies to every item-style button: the navigator, menus drawn as lists, and a document's list items. A key
-    means one thing everywhere.
-- **The gallery** sets `list.selection: fill`, and its `sidebar` surface's `color.selection` to `#2B3038`.
+  - It is resolved per surface, as `border.style` is: `MorphScheme` gains `property bool listSelectionFill`, which
+    `theme.cpp` writes for the theme's scheme and for each surface's from that surface's resolved values, so a surface
+    that does not set it keeps the theme's.
+  - Within a surface it applies to every item-style button: the navigator, menus drawn as lists, and a document's
+    list items. A key means one thing on each surface.
+  - The default is `accent`, today's look, so no application changes until its theme sets it.
+- **The gallery's** `sidebar` surface sets `list.selection: fill` and `color.selection: #2B3038`. The theme's base
+  keeps `accent`, so review's queue and console's compact list keep the bar the mockups draw.
 
 **Per backend.**
 
@@ -659,27 +796,34 @@ under the entry above it.
 
 **Spec.**
 
-- `theme.md` (`list.selection`);
-- `qt_quick/backend.md` (the item button's selected look; the content's text role while selected);
+- `theme.md` (`list.selection`, and the Surfaces section: a surface may set it);
+- `qt_quick/backend.md` (the item button's selected look; the content's scheme while selected);
 - `workspace.md`, "Navigator and pins" (the entry: one button with content).
 
 **Tests.**
 
-- `tests/test_ui_shell_frame.cpp`: each entry is a button whose content holds `nav_badge_<id>`; `setBadge` shows it
-  there.
+- `tests/test_ui_workspace_start.cpp`, where the navigator's tree is tested: each entry is a button whose content
+  holds `nav_badge_<id>`; `setBadge` shows it there.
   - **Control:** the old row.
 - `tests/qt_quick/test_qt_quick_widgets.cpp`:
   - a selected item with content of a stretching text and a badge: the background's width is the button's, and the
     badge lies inside it;
-  - under `list.selection: fill`, the bar is hidden and the label is `scheme.text`;
-  - under `accent`, the bar shows and the content's text is the accent;
-  - **Control:** the default theme with the look forced to `accent`. The `fill` checks fail.
+  - on a surface whose `list.selection` is `fill`, the bar is hidden and the content's text is the scheme's `text`;
+  - on the theme's scheme (`accent`), the bar shows and the content's text is the accent;
+  - deselecting the item turns the content's text back to the scheme's `text`, with no re-adoption;
+  - **Control:** a `ButtonImpl::scheme()` that returns `scheme`. The content's text stays `text` when selected under
+    `accent`.
+- `tests/qt_quick/test_qt_quick_theme.cpp`: a theme index whose `sidebar` surface sets `fill` gives
+  `sidebarScheme.listSelectionFill` true and the theme's scheme false.
 - `tests/test_ui_theme.cpp`: `list.selection: bar` is refused.
 
-**Verify.** Re-grab instrument and console at 1000 px. The selected entry's fill runs to the sidebar's inner edge,
-past the badge, with a white label and no bar.
+**Verify.**
 
-## J11: a tab page fills the tabs node, and scrolls itself
+- Re-grab instrument and console at 1000 px. The selected entry's fill runs to the sidebar's inner edge, past the
+  badge, with a white label and no bar.
+- Re-grab review at 1000 px. The queue's selected entry keeps its tint and its accent bar.
+
+## J11: a tab page fills the tabs node, pads itself, and scrolls itself
 
 **Problem (reproduced, P6; measured in the grab).**
 
@@ -704,41 +848,72 @@ past the badge, with a white label and no bar.
 - **The nested scroll.** Lane I-S's note has the same root. A `scroll` that stretches inside a tab page sits in a
   slot that is only as tall as its content, and `MorphScroll`'s natural height is at most 20 lines. So the scroll is
   20 lines tall. That is why the last commit of batch I dropped the scroll, and why the page then stopped scrolling.
+- **The pages' padding is outside the page** (read). `MorphTabs` pads `pages` from outside (`Layout.margins:
+  root.pageInsetPx`). Once a page scrolls and so clips, a child that bleeds past `pageInset` is cut at the clip, and
+  the page's bar sits `pageInset` in from the node's edge. That is why review pads its own page column with
+  `pageInset: 0` today.
 
-**Decision.** A tab page is a page like the workspace's.
+**Decision.** A tab page is a page like the workspace's, and it carries its own padding.
 
 - **It fills the page area.** `Mounter::mountPage` sets each page slot's layout to `stretch` both ways, as
   `Workspace::mountPage` does. A tabs node that is content-sized is unchanged, since its pages' area is then its
   content's height.
+- **It pads itself.** `pages` loses its margins. Each page slot pads its own content by the node's `pageInset`, inside
+  its flickable, and gives that padding as its children's `childBleedInset`. So a page that scrolls clips at the
+  node's edges, its bleeding children reach those edges, and its bar sits at the edge. `pageInset: 0` stops being
+  needed for a page that scrolls; the comment on `MorphTabs.pageInset` ("a page that scrolls pads its own content")
+  is rewritten to say that the page's padding lies inside its scroll.
+  - `MorphSlot` gains `property real contentInset: 0`. `MorphTabs` binds each page's to `pageInsetPx` as the page is
+    added to `pages`.
+  - On the terminal, `TabsImpl::childAreas` lays each page over the whole page area and hands it the padding, and
+    `SlotImpl` places its children inside it (a bleeding one at full width, J1).
 - **It scrolls itself.** The mount makes each page slot scrollable (`SlotWidget::setScrollable(true)`), as the
   workspace makes its pages.
   - Content that keeps its height scrolls inside the page.
   - Content that stretches fills it, never shorter than its `minHeight`.
-  - The screen then needs no `scroll` of its own, and its padded column is the page's content, so its bleeding rows
-    still reach the edges (J1).
-- **A slot scrolls only while its content overflows.** Today `MorphSlot.scrolls` is true for any scrollable slot
-  whose child does not stretch, even when the child fits. That clips, and makes the flickable interactive over
-  content that cannot move. It becomes:
+  - The screen then needs no `scroll` of its own.
+- **A slot scrolls only while its content overflows**, on both frontends. Today a scrollable slot "scrolls" whenever
+  its child does not stretch, even when the child fits: on Qt Quick it clips and its flickable takes input over
+  content that cannot move; on the terminal `SlotImpl::scrolls` makes the page a Tab stop (`wantsFocus`), so once
+  every tab page is scrollable every read-only page would take the focus.
+- **`MorphSlot`, one set of bindings for J3 and J11.** With `inset` for `contentInset`, `needX` for the column's
+  minimum width (`column.Layout.minimumWidth`, J3) plus `2 * inset`, and `needY` for the column's implicit height
+  plus `2 * inset`:
 
   ```
-  scrollable && (stretchesDown ? stretchFloor > height : column.implicitHeight > height + 0.5)
+  overY   = stretchesDown ? stretchFloor > height : needY > height + 0.5
+  overX   = needX > width + 2        (J3's rounding allowance)
+  scrolls = scrollable && (overX || overY)
+  clip:                 scrolls
+  flick.interactive:    scrolls
+  flickableDirection:   overX && overY ? HorizontalAndVerticalFlick : overX ? HorizontalFlick : VerticalFlick
+  flick.contentWidth:   scrollable && overX ? needX : width
+  flick.contentHeight:  scrollable && overY ? needY : height
+  column.x, column.y:   inset
+  column.width:         (scrollable && overX ? needX : width) - 2 * inset
+  column.height:        stretchesDown ? max(flick.height, stretchFloor) - 2 * inset : implicitHeight
+  vertical bar:         visible while scrollable && overY
+  horizontal bar:       made from the `scrollBar` part, as the vertical one is; AlwaysOn while scrollable && overX
   ```
 
-  A workspace page whose content fits is then neither clipped nor interactive.
+  `reveal()` keeps the focused item in view on both axes. `onScrollsChanged` resets `contentX` as it resets
+  `contentY`. A slot that is not scrollable (a switch case) keeps today's bindings, with `inset` 0.
+- **The terminal's `SlotImpl::scrolls`** gets the same vertical rule: true only while its content is taller than the
+  slot, or a stretching child's `minHeight` is. `wantsFocus` follows it, so a page whose content fits is no Tab stop.
 - **Review's All/Flagged** is a screen fix the vocabulary already expresses: `.sizing(ui::stretch())` on the compact
   segmented select, whose segments share a stretched control's width (`MorphSelect`). It belongs to J-F. If J-F
   lands without it, lane J-A's gallery commit makes it.
 
-**Per backend.** The terminal's tabs lay their pages out as a vertical stack in the page area
-(`TabsImpl::childAreas`), so a content-sized page sits at the top there and is not centred. The stretch makes it
-fill the page area on the terminal too, and `setScrollable` makes it scroll as a workspace page does. The terminal's
-`bleedAreas` in `TabsImpl::childAreas` hands its span to the page slot, which J1 makes pass it on.
+**Per backend.** As above. The terminal's tabs lay their pages out as a vertical stack in the page area, so a
+content-sized page sits at the top there and is not centred; the stretch makes it fill the page area there too.
 
 **Spec.**
 
-- `backend_contract.md` (a tabs node's page: a slot that fills and scrolls);
-- `interpreter.md` or `view_tree.md`, wherever the tab page's mount is described;
-- `qt_quick/backend.md` (`MorphSlot.scrolls`).
+- `backend_contract.md` (a tabs node's page: a slot that fills, pads itself by `pageInset`, and scrolls while it
+  overflows);
+- `interpreter.md`, where the tab page's mount is described;
+- `qt_quick/backend.md` (`MorphSlot`'s bindings; `MorphTabs.pageInset`);
+- `tui/frontend.md` (a slot scrolls, and takes the focus, only while it overflows).
 
 **Tests.**
 
@@ -746,26 +921,32 @@ fill the page area on the terminal too, and `setScrollable` makes it scroll as a
   - a tabs node that stretches, 364 px tall, whose page is one short column. The column's top is the strip's rule
     plus `pageInset`, and the strip's top is the node's top;
   - with the page's content taller than the page, the page scrolls: its flickable's `contentHeight` is the content's
-    and its bar is visible;
-  - **Control:** today's mount. The column's top is mid-page, and the strip's top is 5 px or so down.
+    plus twice the inset, its bar is visible, and the bar's right edge is the node's right edge;
+  - **Control:** today's mount and today's `pages` margins. The column's top is mid-page, the strip's top is about
+    5 px down, and the bar is `pageInset` in.
 - `tests/qt_quick/test_qt_quick_containers.cpp`: a scrollable slot whose content fits has `scrolls` false and `clip`
   false.
   - **Control:** today's binding.
+- `tests/tui/test_tui_containers.cpp`: a scrollable slot whose content fits takes no focus on Tab; one whose content
+  is taller does.
+  - **Control:** today's `SlotImpl::scrolls`.
 - `tests/test_ui_mount.cpp` (on `RecordingBackend`): a tab's page slot records `layout=stretch(1)/stretch(1)` and
-  `scrollable`.
+  `scrollable`. Every existing mount test whose expected dump holds a tabs node gains those two on each page slot;
+  the lane updates them, and the diff of those expectations is exactly that.
 
 **Verify.** Re-grab review at 390 px.
 
 - The strip sits directly under the divider, with no grey band.
 - All/Flagged sits `space.4` under the strip's rule, and stretches.
-- The comment field follows the cards. The page scrolls when the comment section is open.
+- The comment field follows the cards. The page scrolls when the comment section is open, and the flagged rows still
+  run edge to edge while it does.
 
 ## Theme tokens
 
 | Token | Kind | Values or default | Item |
 |---|---|---|---|
 | `input.paddingX` | dimension | 8 | J8 |
-| `list.selection` | keyword | `accent` (default), `fill` | J10 |
+| `list.selection` | keyword, resolved per surface | `accent` (default), `fill` | J10 |
 
 - `kThemeTokens` grows from 68 to 70.
 - `kKeywords` gains `list.selection`.
@@ -773,38 +954,47 @@ fill the page area on the terminal too, and `setScrollable` makes it scroll as a
 
 The gallery's bundle (`lims_gallery.cpp`) takes several of these:
 
-- it sets `list.selection: fill`;
-- it gives its `sidebar` surface `color.selection: #2B3038`;
+- its `sidebar` surface sets `list.selection: fill` and `color.selection: #2B3038`, and its base keeps `accent`;
 - it declares the `plainPage` surface (J6);
 - it leaves `input.paddingX` at the default.
 
-## Decisions for the user
+## Decisions
 
-Each has a recommended answer. The lanes start on the recommendation unless told otherwise.
+The user decided the six questions this design raised:
 
-- **Q1. Overflow: report only, or report and scroll sideways?**
-  - **Recommended:** both (J3).
-  - The report tells the author, which is the user's standing preference. The sideways scroll keeps the content
-    reachable for the user of a screen nobody re-fitted.
-  - Reporting alone would leave production screens with content nobody can reach.
-- **Q2. The white compact page: a screen member or a theme switch?**
-  - **Recommended:** the screen member `pageSurface` (J6).
-  - Two of the nine compact mockups (samples, console) keep the grey page with cards on it, so a theme switch would
-    still need a per-screen override.
-- **Q3. A selected list item's look.**
-  - **Recommended:** the theme switch `list.selection`, default `accent` (today's look), with the gallery on `fill`.
-  - The alternative is to make `fill` the default, which changes every application's navigator and lists.
-- **Q4. How the gallery's grabs show a signed-in shell.**
-  - **Recommended:** `--user "Dr. A. Meyer"` in the grab command (J2), with no framework change.
-  - The alternative is a default development principal on `LocalApp`.
-- **Q5. The dialog's body is 12 px under its head rule, against the design's 14.**
-  - **Recommended:** accept step 3 for every rule gap (J7).
-  - The alternative is a dimension token, `overlay.sectionGap`, for 2 px on two edges.
-- **Q6. `input.paddingX` defaults to 8, moving every application's text inputs 4 px left.**
-  - **Recommended:** yes. The select already insets its value by 8, so the stock controls disagree today, and the
-    design draws 8.
-  - The alternative is a default of 12, with the gallery setting 8. The select then moves 4 px right in every other
-    application.
+| | Question | Decision |
+|---|---|---|
+| Q1 | Overflow: report only, or report and scroll sideways? | Report it, and let the page scroll sideways (J3) |
+| Q2 | The white compact page: a screen member or a theme switch? | A per-screen `pageSurface` (J6) |
+| Q3 | A selected list item's look | `list.selection` defaults to `accent`, resolved per surface; the gallery's `sidebar` surface sets `fill` (J10) |
+| Q4 | How the gallery's grabs show a signed-in shell | The grab command passes `--user` (J2) |
+| Q5 | The space around a dialog's and a sheet's rules | 12 px, step 3, on each side (J7) |
+| Q6 | `input.paddingX`'s default | 8 px, so every application's text inputs move 4 px left to match its selects (J8) |
+
+## Review response
+
+The design was reviewed at `cef20bbae` (3 blockers, 8 should-fixes, 6 nits). Every finding is taken; none is pushed
+back.
+
+| Finding | Where it is taken |
+|---|---|
+| B1 the overflow measure misses a packed row; the page never scrolls sideways | J3: the stack compares against the width inside its padding; a container's minimum is its content's, measured across the six example apps first (P8), with a table cell's exception and a 2 px rounding allowance; P1 rewritten |
+| B2 J1 does not draw on the terminal | J1: on the terminal the padding moves down into the holder, which is laid over its parent's inner span; Qt Quick keeps forwarding the inset, since a layout does not clip there (P4). `list_widgets.cpp` is in J-A's files |
+| B3 one theme-wide `list.selection` regresses review's queue | J10: the token is resolved per surface, as `border.style` is; the gallery's `sidebar` sets `fill`, its base keeps `accent` |
+| S1 a scrolling tab page clips its bleeding children and insets its bar | J11: the page's padding moves into the page's slot; a conformance case for a page that overflows and bleeds; `MorphTabs.pageInset`'s comment rewritten |
+| S2 every tab page becomes a terminal Tab stop | J11: the terminal's `SlotImpl::scrolls` follows the same overflow rule, with a test |
+| S3 J3 and J11 change the same `MorphSlot` lines | J11: one set of bindings for both axes, `reveal()` on both |
+| S4 when to check, the splitter, unbounded reports, the channel | J3: checked only while visible, sized and in a window; no splitter check; once per container while mounted; a `morph.layout` Qt warning, not a `ComponentFailure` |
+| S5 the smoke cannot see the report | J3: a Qt warning is what every smoke records; the smokes settle after a resize; P8 measured the other five apps at their smoke size (no report) |
+| S6 the table's bar is not the part | J3: the table makes its bar from the `scrollBar` part, and reserves its height while it shows |
+| S7 how a selected item colours its content | J10: `ButtonImpl::scheme()` hands the content `contentScheme`, a scheme bound role by role whose `text` follows the selection |
+| S8 the lanes share files | Lanes: an owner and an order for each shared file; framework commits do not wait on J-F; only `visual-review.md`'s grab command is a lane's, and the "After batch J" section is the coordinator's |
+| N1 `setPassesBleed` and `TableRowImpl`; the flag in `lowerAll` | J1 |
+| N2 tabs mount dumps change | J11's tests and J-A's file list |
+| N3 the navigator's tests | J9 and J10 name `tests/test_ui_workspace_start.cpp` |
+| N4 the select's lines | J8 |
+| N5 Qt 6.8 `bleedInsetOf` | J1, and the lanes start on `lg-w` |
+| N6 the terminal stays silent | Not in this batch, said explicitly |
 
 ## Defects this batch fixes
 
@@ -814,21 +1004,24 @@ they are not filed separately.
 - **J1:**
   - `bleed` on a child of a panel or a tab that has more than one child reaches past nothing on either frontend;
   - `bleed` on any child of a tab page reaches past nothing, since the page's slot hides the tabs' padding;
+  - on the terminal, a child laid past its parent's area is cut back to it, so forwarding an inset is not enough
+    there;
   - batch I's tests missed both because they build the tree on the backend directly.
-- **J3:** content wider than its container is cut off and nothing reports it; a table that scrolls sideways shows no
-  bar at rest.
+- **J3:** content wider than its container is cut off and nothing reports it; a stack's content minimum never reaches
+  its parent; a table that scrolls sideways shows no bar at rest, and its bar is not the restyled part.
 - **J4:** a field narrower than its text shows the text's end.
 - **J5:** an inline lead wraps after the trail, against `document.md`.
 - **J8:** a text area's text starts 4 px further in than an input's (the Basic style's `leftPadding`).
 - **J11:**
   - a tab page in a tabs node that stretches is centred in the page area and does not fill it;
   - a `scroll` in such a page is 20 lines tall;
-  - a scrollable slot whose content fits is clipped and interactive.
+  - a scrollable slot whose content fits is clipped and interactive, and on the terminal takes the focus on Tab.
 
 ## Not in this batch
 
-- **Overflow on the terminal** (J3): it is neither reported nor scrolled sideways. The terminal has no diagnostics
-  channel that does not draw over the screen. A frontend option for one, `onReport`, would be the seam.
+- **Overflow on the terminal** (J3): it is neither reported nor scrolled sideways, so it stays silent there, against
+  the vocal-over-silent rule. The terminal has no diagnostics channel that does not draw over the screen; a frontend
+  option for one, `onReport`, is the seam it needs, and is the next step for this item.
 - **Screen re-fits for the 785 px page and the per-screen fixes** (lane J-F): audit's chip row `wrap`, samples',
   stability's and console's columns, review's footer and queue split, instrument's right column, receipt's sample
   grid, plate's range text, and stability's compact "Continue". J3's smoke test holds them once they land.
@@ -839,81 +1032,81 @@ they are not filed separately.
 
 ## Lanes
 
-Three lanes. Each starts from `lg-fold-i` once lane W has landed, and their framework files are disjoint except where
-noted. Each lane's gallery changes are its **last** commit, rebased onto J-F's branch, since J-F is changing the same
-screen files now.
+Three lanes, each starting from `lg-w`: lane W's branch on `lg-fold-i`, which carries the Qt 6.8 `bleedInsetOf` fix
+that J-A's new `childBleedInset` declarations follow.
 
-### J-A: layout (J1, J3, J11)
-
-The largest lane. Its framework files:
-
-- `include/morph/ui/view.hpp` (`Column::holder`);
-- `include/morph/ui/interpreter.hpp` (`lowerAll`; the region at about line 6906);
-- `include/morph/ui/mount.hpp` (`setPassesBleed`; `mountPage`'s stretch and `setScrollable`);
-- `include/morph/ui/backend.hpp` (`StackWidget::setPassesBleed`);
-- `include/morph/ui/testing/recording_backend.hpp` and `backend_conformance.hpp`;
-- `src/qt_quick/qml/`: `MorphStack.qml`, `MorphSlot.qml`, `MorphScroll.qml`, `MorphTable.qml`, `MorphPanel.qml`,
-  `MorphTabs.qml`, `MorphSplitter.qml` (each declares the layout it checks for overflow);
-- `src/qt_quick/widget.cpp`/`.hpp` (the overflow relay);
-- `src/qt_quick/kinds.hpp` and `src/qt_quick/containers.cpp`;
-- `src/qt_quick/context.cpp`/`.hpp` (the report's text);
-- `src/tui/widget.cpp`/`.hpp` and `src/tui/container_widgets.cpp` (`bleedAreas` through a holder and a slot).
-
-Its gallery commit:
-
-- `test_receipt.cpp` (J1);
-- review's compact pages: the tab's page column back in place, with no `scroll`, and All/Flagged stretched if J-F
-  did not;
-- `lims_gallery_render_smoke`'s no-overflow check, last of all, after J-F.
-
-It waits on J-F for the smoke check only.
-
-### J-B: shell and navigator (J2, J5, J6, J9, J10's badge)
-
-Its framework files:
-
-- `include/morph/ui/shell_frame.hpp` (the title line; `setPageSurface`);
-- `include/morph/ui/navigator.hpp` (the groups; the item's content);
-- `include/morph/ui/document.hpp` (`pageSurface`);
-- `include/morph/ui/interpreter.hpp` (`Screen::pageSurface`; the region at about line 10004, away from J-A's);
-- `include/morph/ui/host.hpp`, `include/morph/ui/workspace.hpp`, `include/morph/ui/author.hpp`;
-- `src/client/shell.cpp`.
-
-Its gallery commit:
-
-- `lims_gallery.cpp`: the `plainPage` surface;
-- seven screens' `pageSurface`;
-- `design/visual-review.md`'s grab command (`--user`).
-
-The `document.hpp` edit moves the lines the branch-coverage allowlist names, so the lane updates its hints and
-verifies them per commit with the checker's resolver.
+**Framework commits never wait on J-F.** Every framework item has its own tests and controls and lands on `lg-w`'s
+line on its own. Only a lane's gallery commit (screen files, the gallery's tests and bundle) waits for J-F, since J-F
+is changing the same screen files; it is the lane's last commit and is rebased onto `lg-jf` once J-F's work is
+verified. J3's no-overflow smoke is the only check that needs J-F's re-fits to pass.
 
 ### J-C: controls and theme (J4, J7, J8, J10's look)
 
-Its framework files:
+- `include/morph/ui/theme.hpp` (the two tokens; `kThemeTokens` from 68 to 70; `kKeywords`);
+- `src/qt_quick/theme.cpp` (the token map; `listSelectionFill` for the theme's scheme and each surface's);
+- `src/qt_quick/qml/`: `Theme.qml`, `MorphScheme.qml`, `MorphTextInput.qml`, `MorphTextArea.qml`,
+  `MorphDateTimeInput.qml`, `MorphSelect.qml`, `MorphDialog.qml`, `MorphDrawer.qml`, `MorphButton.qml`,
+  `MorphButtonBackground.qml`;
+- `src/qt_quick/kinds.hpp` (`ButtonImpl::scheme()`, one line; shared, below);
+- tests: `tests/qt_quick/test_qt_quick_widgets.cpp`, `test_qt_quick_overlays.cpp`, `test_qt_quick_theme.cpp`,
+  `tests/test_ui_theme.cpp`, `tests/tui/test_tui_fields.cpp`;
+- spec: `theme.md`, `qt_quick/backend.md` (shared, below).
+- **Gallery commit:** `lims_gallery.cpp`'s `sidebar` surface (`list.selection: fill`, `color.selection`).
 
-- `include/morph/ui/theme.hpp` (the two tokens, `kThemeTokens` to 70);
-- `src/qt_quick/theme.cpp` and `src/qt_quick/qml/Theme.qml`;
-- `src/qt_quick/qml/`: `MorphTextInput.qml`, `MorphTextArea.qml`, `MorphDateTimeInput.qml`, `MorphSelect.qml`,
-  `MorphDialog.qml`, `MorphDrawer.qml`, `MorphButton.qml`, `MorphButtonBackground.qml`.
+### J-B: shell and navigator (J2, J5, J6, J9, J10's badge)
 
-Its gallery commit: `lims_gallery.cpp`'s theme index (`list.selection: fill`, `sidebar`'s `color.selection`).
+- `include/morph/ui/shell_frame.hpp` (the title line; `setPageSurface`);
+- `include/morph/ui/navigator.hpp` (the groups; the item's content);
+- `include/morph/ui/document.hpp` (`pageSurface`). The edit moves lines the branch-coverage allowlist names, so the
+  lane updates the hints and verifies them per commit with the checker's resolver;
+- `include/morph/ui/interpreter.hpp` (`Screen::pageSurface`, near line 10004; shared, below);
+- `include/morph/ui/host.hpp`, `workspace.hpp`, `author.hpp`; `src/client/shell.cpp`;
+- tests: `tests/test_ui_shell_frame.cpp`, `tests/test_ui_workspace_start.cpp`, `tests/test_ui_workspace.cpp`,
+  `tests/client/test_shell.cpp`, `tests/tui/test_tui_shell_frame.cpp`, `tests/ui/corpus/documents.json`, and J5's
+  Qt Quick case in `tests/qt_quick/test_qt_quick_containers.cpp` (shared, below);
+- spec: `shell_frame.md`, `host.md`, `author.md`, `client/client.md`, and the shared ones below.
+- **Gallery commit:** `lims_gallery.cpp`'s `plainPage` surface; the seven screens' `pageSurface`;
+  `design/visual-review.md`'s grab command (`--user`).
 
-### Shared files and landing order
+### J-A: layout (J1, J3, J11)
 
-- **`lims_gallery.cpp`** is touched by J-B (a surface and the app document) and J-C (theme tokens), in different
-  string constants.
-- **`interpreter.hpp`** is touched by J-A and J-B in regions about 3000 lines apart.
-- **J10** is split: J-B moves the badge inside the item and J-C draws the look. Either lands alone without harm: the
-  badge inside the item draws today's `accent` look until J-C lands, and J-C's `fill` draws on today's row until J-B
-  lands.
+- `include/morph/ui/view.hpp` (`Column::holder`);
+- `include/morph/ui/interpreter.hpp` (`lowerAll`, near line 6906; shared, below);
+- `include/morph/ui/mount.hpp` (`setPassesBleed`; `mountPage`'s stretch and `setScrollable`);
+- `include/morph/ui/backend.hpp` (`StackWidget::setPassesBleed`);
+- `include/morph/ui/testing/recording_backend.hpp` and `backend_conformance.hpp`;
+- `src/qt_quick/qml/`: `MorphWidget.qml` (the propagated minimum), `MorphStack.qml`, `MorphSlot.qml`,
+  `MorphScroll.qml`, `MorphTable.qml`, `MorphPanel.qml`, `MorphTabs.qml`;
+- `src/qt_quick/widget.cpp`/`.hpp` (the overflow relay), `src/qt_quick/containers.cpp`, `src/qt_quick/table.cpp`
+  (the table's bar from the part; a cell's `honoursContentMinimum`), `src/qt_quick/context.cpp`/`.hpp` (the report), `src/qt_quick/kinds.hpp`
+  (shared, below);
+- `src/tui/widget.cpp`/`.hpp`, `src/tui/container_widgets.cpp`, `src/tui/list_widgets.cpp` (`TabsImpl::childAreas`);
+- `examples/common/testkit/render_smoke.hpp` (settling after a resize);
+- tests: `tests/test_ui_interpreter_detail.cpp`, `tests/test_ui_recording_backend.cpp`, `tests/test_ui_mount.cpp`
+  (and every mount test whose expected dump holds a tabs node: its page slots now record
+  `layout=stretch(1)/stretch(1)` and `scrollable`), `tests/qt_quick/test_qt_quick_containers.cpp`,
+  `tests/qt_quick/test_qt_quick_table.cpp`, `tests/tui/test_tui_containers.cpp`;
+- spec: `view_tree.md`, `backend_contract.md`, `tui/frontend.md`, and the shared ones below.
+- **Gallery commit:** `test_receipt.cpp`; review's compact tab pages (the page column with no `scroll`, All/Flagged
+  stretched if J-F did not); then, once J-F has merged, `lims_gallery_render_smoke`'s no-overflow check.
 
-Landing order:
+### Shared files: owner and order
 
-1. **J-C first.** It is the smallest and is QML plus a token table.
-2. **Then J-B.**
-3. **Then J-A.** Its smoke check needs J-F's re-fits on master, and J-A's own J3 report makes J-F's work
-   measurable. J-A may open its pull request without the smoke commit and add it once J-F has merged.
+The lanes land in the order **J-C, then J-B, then J-A**: smallest first, and J-A last because it touches the most
+shared files. A later lane rebases onto the earlier ones before it merges. Where a file is shared, the first lane in
+that order edits it first, and the later lanes' edits are additions in other places of the file.
 
-Each lane re-grabs the screens its items name, at both sizes and with the `--user` grab command, and records what it
-measured in `design/visual-review.md`'s "After batch J" section.
+| File | Lanes | Owner | What each adds |
+|---|---|---|---|
+| `src/qt_quick/kinds.hpp` | J-C, J-A | J-A | J-C: `ButtonImpl::scheme()` returns `contentScheme`. J-A: `setPassesBleed` on `StackImpl` and `TableRowImpl`, the overflow relay |
+| `include/morph/ui/interpreter.hpp` | J-B, J-A | J-A | J-B: `Screen::pageSurface` near line 10004. J-A: `lowerAll` near line 6906 |
+| `tests/qt_quick/test_qt_quick_containers.cpp` | J-B, J-A | J-A | J-B: one new case for J5, appended. J-A: its cases, appended after |
+| `docs/spec/qt_quick/backend.md` | all three | J-A | J-C: the input, dialog, drawer and item-button rows. J-B: none beyond the frame's, in `shell_frame.md`. J-A: Layout, Slot, Scroll, Table and the report |
+| `docs/spec/ui/document.md` | J-B, J-A | J-B | J-B: `pageSurface`. J-A: one sentence under `bleed` |
+| `docs/spec/ui/workspace.md` | J-B, J-A | J-B | J-B: `activePageSurface`, "Navigator and pins". J-A: a page that scrolls sideways |
+| `docs/spec/ui/interpreter.md` | J-B, J-A | J-A | J-B: `Screen::pageSurface`. J-A: `lowerAll`'s holder |
+| `examples/lims_gallery/src/lims_gallery.cpp` | J-C, J-B | J-B | J-C: the `sidebar` surface's tokens. J-B: the `plainPage` surface. Both gallery commits, in different string constants |
+| `examples/lims_gallery/design/visual-review.md` | J-B | J-B | the grab command. No lane writes an "After batch J" section: the coordinator writes it once, from one set of re-grabs after all three lanes and J-F have merged |
+
+Each lane re-grabs the screens its items name, at both sizes and with the `--user` grab command, and reports what it
+measured to the coordinator, not into `visual-review.md`.
