@@ -41,6 +41,11 @@ void StackImpl::setWrap(bool wrap) {
 
 void StackImpl::setDivided(bool divided) { write("divided", divided); }
 
+void StackImpl::setSelected(bool selected) {
+    write("selectable", true);
+    write("selected", selected);
+}
+
 void StackImpl::setPadding(ui::Padding padding) {
     write("paddingV", padding.vertical);
     write("paddingH", padding.horizontal);

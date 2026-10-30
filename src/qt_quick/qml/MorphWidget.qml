@@ -52,6 +52,8 @@ Item {
     // `accessibleName` and `accessibleRole` itself, and the root then presents no node of its own.
     property Item accessibleItem: null
     property string surface: ""
+    // The corner radius of the surface's background.
+    readonly property real surfaceRadius: round ? height / 2 : surface === "card" ? Theme.radiusCard : 0
     // The colour roles this widget draws with: its own surface's scheme when it has a surface, else the one its
     // container passed down when it adopted it (the theme's at the roots).
     property MorphScheme inheritedScheme: Theme.themeScheme
@@ -338,7 +340,7 @@ Item {
         anchors.fill: parent
         z: -1
         visible: root.surface !== "" && Theme.draws(root.surface)
-        radius: root.round ? height / 2 : root.surface === "card" ? Theme.radiusCard : 0
+        radius: root.surfaceRadius
         color: root.scheme.surface
         border.width: root.surface === "toolbar" || root.surface === "card" ? 1 : 0
         border.color: root.scheme.border

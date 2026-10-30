@@ -16,6 +16,10 @@ MorphWidget {
     property int paddingH: 0
     readonly property real insetY: Theme.spaceOf(root.paddingV)
     readonly property real insetX: Theme.spaceOf(root.paddingH)
+    // Whether the stack can be the chosen entry of a list (C++ sets it with the first `selected`), and whether it is:
+    // a selected one draws the accent's bar at its leading edge and is announced as a selected group.
+    property bool selectable: false
+    property bool selected: false
     // Across the axis (a `ui::Align` index, which C++ also writes on each child as its `crossAlign`) and along it
     // (a `ui::Justify` index: 0 start, 1 center, 2 end, 3 between).
     property int align: 0
@@ -37,6 +41,10 @@ MorphWidget {
     implicitHeight: 2 * root.insetY + (root.wrap ? free.implicitHeight
                                                 : root.axis === 0 && root.between ? root.naturalLength
                                                                                   : layout.implicitHeight)
+
+    defaultRole: root.selectable ? Accessible.Grouping : Accessible.Client
+    Accessible.selectable: root.selectable
+    Accessible.selected: root.selected
 
     onWidthChanged: place()
     onWrapChanged: place()
@@ -269,6 +277,22 @@ MorphWidget {
                 items.push(child)
         }
         return items
+    }
+
+    // The selection's bar: 3 px at the leading edge down the whole height, over the surface's background (z -1) and
+    // under the children, with the surface's own leading corners.
+    Rectangle {
+        objectName: "selectionBar"
+        z: -0.5
+        visible: root.selected
+        x: root.LayoutMirroring.enabled ? root.width - width : 0
+        width: 3
+        height: root.height
+        color: root.scheme.accent
+        topLeftRadius: root.LayoutMirroring.enabled ? 0 : root.surfaceRadius
+        bottomLeftRadius: root.LayoutMirroring.enabled ? 0 : root.surfaceRadius
+        topRightRadius: root.LayoutMirroring.enabled ? root.surfaceRadius : 0
+        bottomRightRadius: root.LayoutMirroring.enabled ? root.surfaceRadius : 0
     }
 
     // A rule below each shown child but the last, centred in the gap that is left of the rule's own pixel.

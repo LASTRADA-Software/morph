@@ -439,6 +439,14 @@ public:
     ///        padding. The stack's natural size includes the inset.
     /// @param padding The steps, each 0 to `kMaxSpacingStep`.
     virtual void setPadding(Padding padding) = 0;
+
+    /// @brief Marks the stack as the chosen entry of a list, or not: while selected it draws the accent's 3 px bar at
+    ///        its leading edge, down its whole height, over its surface and under its children, inside its leading
+    ///        padding. The mount calls it for a stack that gives the key, at mount (possibly with false) and on every
+    ///        change; that first call is what tells a backend the stack can be selected, so one that reserves room
+    ///        for the bar reserves it from then on whether or not the stack is selected.
+    /// @param selected Whether the stack is the chosen entry.
+    virtual void setSelected(bool selected) = 0;
 };
 
 /// @brief Children laid out row-major in columns.

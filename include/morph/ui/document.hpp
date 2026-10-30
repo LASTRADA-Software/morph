@@ -852,21 +852,23 @@ inline constexpr std::array<KeySpec, 14> kHeadToolKeys = {{{"id", Shape::Name, {
                                                            {"enabled", Shape::Condition}}};
 /// @brief The keys of `column` and `row`; `wrap` is a row's and `divided` a column's, each read on the other only to
 ///        refuse it.
-inline constexpr std::array<KeySpec, 8> kContainerKeys = {{{"children", Shape::Nodes},
+inline constexpr std::array<KeySpec, 9> kContainerKeys = {{{"children", Shape::Nodes},
                                                            {"gap", Shape::Expr},
                                                            {"padding", Shape::Expr},
                                                            {"align", Shape::Text},
                                                            {"justify", Shape::Text},
                                                            {"wrap", Shape::Flag},
                                                            {"divided", Shape::Flag},
-                                                           {"pageEdge", Shape::Flag}}};
-/// @brief The keys of `grid`; `justify` is read only to refuse it.
-inline constexpr std::array<KeySpec, 6> kGridKeys = {{{"children", Shape::Nodes},
+                                                           {"pageEdge", Shape::Flag},
+                                                           {"selected", Shape::Condition}}};
+/// @brief The keys of `grid`; `justify` and `selected` are read only to refuse them.
+inline constexpr std::array<KeySpec, 7> kGridKeys = {{{"children", Shape::Nodes},
                                                       {"gap", Shape::Expr},
                                                       {"columns", Shape::Expr},
                                                       {"tracks", Shape::Parts, "track"},
                                                       {"align", Shape::Text},
-                                                      {"justify", Shape::Text}}};
+                                                      {"justify", Shape::Text},
+                                                      {"selected", Shape::Condition}}};
 /// @brief The keys of a `grid` track part.
 inline constexpr std::array<KeySpec, 2> kTrackKeys = {{{"width", Shape::Expr}, {"align", Shape::Text}}};
 /// @brief The keys of `panel`.
@@ -4244,6 +4246,10 @@ private:
         if (!node.name("justify").empty()) {
             refuse(pointerAppend(node.path, "justify"),
                    "a grid's columns are sized by their count or tracks; there is no spare length to justify");
+        }
+        if (node.prop("selected") != nullptr) {
+            refuse(pointerAppend(node.path, "selected"),
+                   "a grid is not an entry of a list; `selected` marks a column or a row");
         }
         auto const tracks = node.parts.find("tracks");
         if (tracks == node.parts.end()) {

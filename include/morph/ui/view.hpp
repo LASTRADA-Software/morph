@@ -767,6 +767,10 @@ struct Column {
     /// @brief The inset of the children: a spacing step on every side, or one step above and below and one at the
     ///        sides; set once.
     Padding padding;
+    /// @brief Whether the stack is the chosen entry of a list: while true it draws the accent's 3 px bar at its
+    ///        leading edge, over its surface and under its children, and takes the `Grouping` accessibility role.
+    ///        Disengaged when none was given. The mount refuses it on a table's row view.
+    std::optional<Prop<bool>> selected;
 };
 
 /// @brief Children laid out left to right.
@@ -796,6 +800,10 @@ struct Row {
     /// @brief The inset of the children: a spacing step on every side, or one step above and below and one at the
     ///        sides; set once.
     Padding padding;
+    /// @brief Whether the stack is the chosen entry of a list: while true it draws the accent's 3 px bar at its
+    ///        leading edge, over its surface and under its children, and takes the `Grouping` accessibility role.
+    ///        Disengaged when none was given. The mount refuses it on a table's row view.
+    std::optional<Prop<bool>> selected;
 };
 
 /// @brief One cell of a `Grid`.

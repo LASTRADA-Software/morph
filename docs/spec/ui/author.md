@@ -210,7 +210,7 @@ expression of one),
 - **`textInput`** takes `TextInputOptions{value, label, placeholder, mode, icon, unit, emphasis, prefix, mono, align,
   commitOn, onChange, onCommit, onSubmit}`; `prefix` is an expression, and `mono` and `align` (`Align::Start`,
   `Center`, `End`; absent writes no key) are written only when given.
-- **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, padding (a column or row; a step, or `padding(vertical, horizontal)`), pageEdge (a column or row), columns, tracks, align, justify, wrap, divided}`; an
+- **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, padding (a column or row; a step, or `padding(vertical, horizontal)`), pageEdge (a column or row), selected (a column or row: a condition), columns, tracks, align, justify, wrap, divided}`; an
   absent `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` and `tracks`
   (`GridTrack{width, align}`, each key written only when given) are the grid's, and
   a grid's `justify` is written so the loader refuses it rather than dropped. `wrap` is a row's: the children

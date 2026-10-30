@@ -3820,6 +3820,10 @@ struct ContainerOptions {
     ///        shown root, the shell lays it at the page's edges and does not inset the page. Written for a grid too,
     ///        so the loader refuses it rather than the author silently losing it.
     bool pageEdge = false;
+    /// @brief A `column` or `row` that is the chosen entry of a list: a condition. While it holds, the stack draws the
+    ///        accent's 3 px bar at its leading edge (inside its leading padding) and is a `Grouping` for assistive
+    ///        technology; absent writes no key. Not on a grid.
+    AnyHandle selected;
 };
 
 /// @brief A two-step padding for `ContainerOptions::padding`: the vertical step above and below, the horizontal step
@@ -3840,7 +3844,10 @@ namespace detail {
 /// @return The node.
 [[nodiscard]] inline Node stackNode(char const* kind, Nodes const& children, ContainerOptions const& options) {
     NodeWriter node{kind};
-    node.put("children", children).put("gap", options.gap).put("padding", options.padding);
+    node.put("children", children)
+        .put("gap", options.gap)
+        .put("padding", options.padding)
+        .put("selected", options.selected);
     if (options.align) {
         node.text("align", alignName(*options.align));
     }

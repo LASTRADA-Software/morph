@@ -631,8 +631,8 @@ private:
     // costs no call.
     Widget& mountStack(reactive::Scope& scope, Axis axis, std::vector<Node> const& children, int gap,
                        Common const& common, ContainerWidget* parent, Align align = Align::Stretch,
-                       Justify justify = Justify::Start, bool wrap = false, bool divided = false,
-                       Padding padding = {}) {
+                       Justify justify = Justify::Start, bool wrap = false, bool divided = false, Padding padding = {},
+                       std::optional<Prop<bool>> const& selected = std::nullopt) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, axis));
         if (wrap) {
             widget.setWrap(true);
@@ -644,6 +644,9 @@ private:
             widget.setPadding(inset);
         }
         applyCommon(scope, widget, common);
+        if (selected) {
+            bind(scope, *selected, [&widget](bool chosen) { widget.setSelected(chosen); });
+        }
         widget.setGap(spacingStep(gap));
         if (align != Align::Stretch) {
             widget.setAlign(align);
@@ -955,7 +958,7 @@ private:
 
     Widget& mountKind(reactive::Scope& scope, Column const& spec, ContainerWidget* parent) {
         return mountStack(scope, Axis::Vertical, spec.children, spec.gap, spec.common, parent, spec.align,
-                          spec.justify, false, spec.divided, spec.padding);
+                          spec.justify, false, spec.divided, spec.padding, spec.selected);
     }
 
     Widget& mountKind(reactive::Scope& scope, Row const& spec, ContainerWidget* parent) {
@@ -963,8 +966,11 @@ private:
             throw std::logic_error{
                 "morph::ui: a row's tone, label and heading are a table row's; this row is not in a table"};
         }
+        if (spec.selected && dynamic_cast<TableWidget*>(parent) != nullptr) {
+            throw std::logic_error{"morph::ui: a table row's selection is the table's; this row gives its own"};
+        }
         return mountStack(scope, Axis::Horizontal, spec.children, spec.gap, spec.common, parent, spec.align,
-                          spec.justify, spec.wrap, false, spec.padding);
+                          spec.justify, spec.wrap, false, spec.padding, spec.selected);
     }
 
     Widget& mountKind(reactive::Scope& scope, Grid const& spec, ContainerWidget* parent) {

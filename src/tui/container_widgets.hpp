@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <core/tui/Canvas.hpp>
 #include <core/tui/Component.hpp>
 #include <core/tui/InputEvent.hpp>
@@ -33,6 +34,10 @@ public:
     void setJustify(ui::Justify justify) override;
     void setWrap(bool wrap) override;
     void setPadding(ui::Padding padding) override;
+    /// From its first call the stack reserves its first column for the selection's bar, inside its leading padding
+    /// when that has a column, else as one more column; the bar is `▌` in the list's selected-item style while
+    /// selected. The column stays reserved while unselected, so the content does not move with the selection.
+    void setSelected(bool selected) override;
     /// Draws no rule: a rule would take a row of its own and double a list's height, and its lines are already apart.
     void setDivided(bool divided) override { static_cast<void>(divided); }
     [[nodiscard]] ui::Axis axis() const noexcept { return _axis; }
@@ -57,10 +62,18 @@ private:
     /// The natural size and the children's places inside the padding.
     [[nodiscard]] ::core::tui::Size innerNaturalSize() const;
     [[nodiscard]] std::vector<::core::tui::Rect> innerAreas(::core::tui::Size size) const;
+    /// The columns between the stack's leading edge and its children: the padding, or one for the selection's bar
+    /// when the padding has none.
+    [[nodiscard]] int leadingColumns() const noexcept {
+        return _selectable ? std::max(_paddingColumns, 1) : _paddingColumns;
+    }
 
     ui::Axis _axis;
     int _paddingRows = 0;
     int _paddingColumns = 0;
+    /// Whether the stack was told `setSelected`, and what it was told last.
+    bool _selectable = false;
+    bool _selected = false;
     int _gap = 0;
     int _gapStep = 0;
     bool _wrap = false;

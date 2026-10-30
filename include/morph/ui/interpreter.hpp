@@ -7716,6 +7716,9 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                         .justify = justifyOf(node.name("justify")),
                         .divided = node.flag("divided"),
                         .padding = stackPadding()};
+            if (node.prop("selected")) {
+                spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
+            }
             commonOf(node, ctx, element, spec.common);
             return ui::column(std::move(spec));
         }
@@ -7725,6 +7728,9 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                  .justify = justifyOf(node.name("justify")),
                  .wrap = node.flag("wrap"),
                  .padding = stackPadding()};
+        if (node.prop("selected")) {
+            spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
+        }
         commonOf(node, ctx, element, spec.common);
         return ui::row(std::move(spec));
     }

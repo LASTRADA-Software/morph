@@ -1377,3 +1377,57 @@ TEST_CASE("qt_quick containers: tabs that do not fit go into a More menu that ch
         CHECK(button->isVisible());
     }
 }
+
+// Mutation: a stack that ignores `selected` draws no bar and keeps the Client role.
+TEST_CASE("qt_quick containers: a selected stack draws the accent bar at its leading edge and is a selected group",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 300);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    theme->setProperty("surface", QColor{"#fafad2"});
+    theme->setProperty("accent", QColor{"#17784a"});
+    auto root = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto card = scene.backend().createStack(root.get(), ui::Axis::Vertical);
+    card->setSurface("bar");
+    card->setPadding(2);
+    card->setSelected(true);
+    auto label = scene.backend().createText(card.get());
+    label->setText("card");
+    auto plain = scene.backend().createStack(root.get(), ui::Axis::Vertical);
+    plain->setPadding(2);
+    auto other = scene.backend().createText(plain.get());
+    other->setText("plain");
+    scene.settle();
+
+    QQuickItem& item = Scene::itemOf(*card);
+    auto* const bar = item.findChild<QQuickItem*>(QStringLiteral("selectionBar"));
+    REQUIRE(bar != nullptr);
+    CHECK(bar->isVisible());
+    CHECK(bar->width() == 3.0);
+    CHECK(bar->x() == 0.0);
+    CHECK(bar->height() == item.height());
+    CHECK(bar->property("color").value<QColor>() == QColor{"#17784a"});
+    QImage const image = scene.window().grabWindow();
+    QPointF const origin = item.mapToScene(QPointF{});
+    int const y = static_cast<int>(origin.y() + item.height() / 2);
+    CHECK(image.pixelColor(static_cast<int>(origin.x()) + 1, y) == QColor{"#17784a"});
+    CHECK(image.pixelColor(static_cast<int>(origin.x()) + 5, y) == QColor{"#fafad2"});
+
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface* const node = QAccessible::queryAccessibleInterface(&item);
+    REQUIRE(node != nullptr);
+    CHECK(node->role() == QAccessible::Grouping);
+    CHECK(node->state().selected);
+    QAccessibleInterface* const unmarked = QAccessible::queryAccessibleInterface(&Scene::itemOf(*plain));
+    REQUIRE(unmarked != nullptr);
+    CHECK(unmarked->role() == QAccessible::Client);
+
+    card->setSelected(false);
+    scene.settle();
+    CHECK_FALSE(bar->isVisible());
+    CHECK_FALSE(QAccessible::queryAccessibleInterface(&item)->state().selected);
+    CHECK(QAccessible::queryAccessibleInterface(&item)->role() == QAccessible::Grouping);
+    QAccessible::setActive(wasActive);
+}

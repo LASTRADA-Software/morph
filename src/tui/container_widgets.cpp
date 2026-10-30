@@ -37,6 +37,12 @@ void StackImpl::setPadding(ui::Padding padding) {
     refresh();
 }
 
+void StackImpl::setSelected(bool selected) {
+    _selectable = true;
+    _selected = selected;
+    refresh();
+}
+
 void StackImpl::setWrap(bool wrap) {
     _wrap = wrap;
     refresh();
@@ -84,7 +90,7 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
 
 ::core::tui::Size StackImpl::naturalSize() const {
     auto const inner = innerNaturalSize();
-    return {.width = inner.width + (2 * _paddingColumns), .height = inner.height + (2 * _paddingRows)};
+    return {.width = inner.width + leadingColumns() + _paddingColumns, .height = inner.height + (2 * _paddingRows)};
 }
 
 ::core::tui::Size StackImpl::innerNaturalSize() const {
@@ -118,9 +124,11 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
 std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) const {
     auto const inside =
         layout::pad({.x = 0, .y = 0, .width = size.width, .height = size.height}, _paddingRows, _paddingColumns);
-    auto areas = innerAreas({.width = inside.width, .height = inside.height});
+    // The selection's column, when the padding has none, comes off the leading side only.
+    int const extra = leadingColumns() - _paddingColumns;
+    auto areas = innerAreas({.width = std::max(inside.width - extra, 0), .height = inside.height});
     for (auto& area : areas) {
-        area.x += inside.x;
+        area.x += inside.x + extra;
         area.y += inside.y;
     }
     return areas;
@@ -168,13 +176,18 @@ std::vector<::core::tui::Rect> StackImpl::innerAreas(::core::tui::Size size) con
 }
 
 void StackImpl::paint(::core::tui::Canvas& canvas) {
-    int const innerWidth = std::max(canvas.size().width - (2 * _paddingColumns), 0);
+    int const innerWidth = std::max(canvas.size().width - leadingColumns() - _paddingColumns, 0);
     if (_wrap && innerWidth != _drawnWidth) {
         // The row's height follows its width, so its container lays it out again at the next frame.
         _drawnWidth = innerWidth;
         refresh();
     }
     placeChildren(childAreas(canvas.size()));
+    if (_selected) {
+        for (int row = 0; row < canvas.size().height; ++row) {
+            canvas.putString(row, 0, "▌", canvas.theme().listItemSelected);
+        }
+    }
 }
 
 ::core::tui::Size ScrollImpl::naturalSize() const { return stackNaturalSize(children(), _scroller.axis(), 0); }

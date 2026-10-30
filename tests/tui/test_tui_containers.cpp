@@ -846,3 +846,30 @@ TEST_CASE("tui containers: a horizontal scroll keeps the focused child in view",
     CHECK(harness.draw() == Rows{"[ 1 ][ 2 ]"});
     buttons.clear();
 }
+
+// Mutation: reserve the column only while selected (the text moves with the selection).
+TEST_CASE("tui containers: a selected stack draws a bar in its first column and keeps its content in place",
+          "[tui][containers]") {
+    Harness harness{8, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    column->setSelected(true);
+    auto const first = harness.make<TextImpl>(column.get());
+    first->setText("ab");
+    auto const second = harness.make<TextImpl>(column.get());
+    second->setText("cd");
+    CHECK(harness.draw() == Rows{"▌ab", "▌cd"});
+    column->setSelected(false);
+    CHECK(harness.draw() == Rows{" ab", " cd"});
+}
+
+TEST_CASE("tui containers: a selected stack with leading padding draws its bar inside the padding",
+          "[tui][containers]") {
+    Harness harness{8, 1};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    // Step 3: two columns either side.
+    column->setPadding(ui::Padding{0, 3});
+    column->setSelected(true);
+    auto const text = harness.make<TextImpl>(column.get());
+    text->setText("ab");
+    CHECK(harness.draw() == Rows{"▌ ab"});
+}

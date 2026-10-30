@@ -1110,3 +1110,21 @@ TEST_CASE("ui::Mounted: a stack's padding reaches the backend as one step or as 
           "  Row#4 gap=0 padding=5/1\n"
           "  Column#5 gap=0\n");
 }
+
+TEST_CASE("ui::Mounted: a stack's selected condition reaches the backend at mount and on every change", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<bool> chosen{runtime, false};
+    ui::Mounted const view{runtime, backend,
+                           ui::column({.children = {ui::column({.selected = [&chosen] { return chosen.get(); }}),
+                                                    ui::row({}), ui::row({.selected = true})}})};
+    CHECK(backend.dump() ==
+          "Column#1 gap=0\n"
+          "  Column#2 gap=0 selected=false\n"
+          "  Row#3 gap=0\n"
+          "  Row#4 gap=0 selected=true\n");
+    chosen.set(true);
+    owner.runAll();
+    CHECK(backend.dump().contains("Column#2 gap=0 selected=true"));
+}
