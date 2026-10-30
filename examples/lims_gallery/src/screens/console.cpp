@@ -26,6 +26,7 @@ namespace {
 namespace ui = layout::ui;
 using layout::Align;
 using layout::ButtonEmphasis;
+using morph::ui::ControlShape;
 using Text = ui::Handle<std::string>;
 using Flag = ui::Handle<bool>;
 using Count = ui::Handle<std::int64_t>;
@@ -736,11 +737,15 @@ ui::Node samplePane(Console const& console) {
     return ui::column(
                {ui::row(
                     {ui::text({.text = console.selected, .role = "section"}).sizing(ui::stretch()).testId("pane-id"),
-                     ui::button({.label = "‹", .onClick = ui::set(console.current, console.current - 1)})
+                     ui::button({.label = "‹",
+                                 .onClick = ui::set(console.current, console.current - 1),
+                                 .shape = ControlShape::Square})
                          .a11y("Previous sample")
                          .enabled(console.current > 0)
                          .testId("previous"),
-                     ui::button({.label = "›", .onClick = ui::set(console.current, console.current + 1)})
+                     ui::button({.label = "›",
+                                 .onClick = ui::set(console.current, console.current + 1),
+                                 .shape = ControlShape::Square})
                          .a11y("Next sample")
                          .enabled(console.current < last)
                          .testId("next")},

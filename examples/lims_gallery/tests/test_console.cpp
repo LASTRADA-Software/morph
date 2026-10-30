@@ -100,3 +100,10 @@ TEST_CASE("console, compact: menu navigation, stacked sections, a sample opens r
     CHECK(screen.mounted().back() == "lims-gallery.results");
     screen.requireNoProblems();
 }
+
+// Mutation: write the sample pager's arrows as default buttons.
+TEST_CASE("console, expanded: the sample pager is square glyph buttons", "[lims-gallery]") {
+    GalleryScreen screen{"lims-gallery.console", "expanded"};
+    CHECK(screen.prop("Button", "previous", "shape") == "square");
+    CHECK(screen.prop("Button", "next", "shape") == "square");
+}

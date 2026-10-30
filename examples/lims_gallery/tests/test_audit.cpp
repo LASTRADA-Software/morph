@@ -87,3 +87,18 @@ TEST_CASE("audit, compact: entries stack as cards, filters in a drawer", "[lims-
     CHECK(screen.waitFor([&screen] { return !showsText(screen, "S-26-104217 · Received at"); }));
     screen.requireNoProblems();
 }
+
+// Mutation: write the pager's arrows as default buttons, or the facet labels as muted capitals again.
+TEST_CASE("audit, expanded: the pager is square glyph buttons and the facet labels are overlines", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    for (char const* arrow : {"‹", "›"}) {
+        auto const button = screen.backend().find("Button", "label", arrow);
+        REQUIRE(button.has_value());
+        CHECK(screen.backend().prop(*button, "shape") == "square");
+    }
+    for (char const* label : {"Record type", "Action"}) {
+        auto const heading = screen.backend().find("Text", "text", label);
+        REQUIRE(heading.has_value());
+        CHECK(screen.backend().prop(*heading, "role") == "Overline");
+    }
+}

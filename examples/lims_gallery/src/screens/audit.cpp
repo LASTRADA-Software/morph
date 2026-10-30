@@ -19,6 +19,7 @@ namespace ui = layout::ui;
 using layout::Align;
 using layout::ButtonEmphasis;
 using layout::Justify;
+using morph::ui::ControlShape;
 using Text = ui::Handle<std::string>;
 using Flag = ui::Handle<bool>;
 
@@ -222,7 +223,7 @@ ui::Commands clearAll(Audit const& audit) {
 // ── The facets ───────────────────────────────────────────────────────────────────────────────────────────────────
 
 ui::Node facetGroup(char const* heading, std::vector<Facet> const& group) {
-    std::vector<ui::Node> boxes{layout::muted(heading)};
+    std::vector<ui::Node> boxes{ui::text({.text = heading, .role = "overline"})};
     for (Facet const& facet : group) {
         boxes.push_back(ui::row(
             {ui::checkbox(
@@ -253,7 +254,7 @@ ui::Node dateField(Text const& value, char const* label, char const* testId) {
 }
 
 ui::Nodes facetFields(Audit const& audit) {
-    return {facetGroup("RECORD TYPE", audit.types), facetGroup("ACTION", audit.actions), userField(audit),
+    return {facetGroup("Record type", audit.types), facetGroup("Action", audit.actions), userField(audit),
             ui::column({dateField(audit.from, "From", "from"), dateField(audit.until, "To", "until")}, {.gap = 1})};
 }
 
@@ -359,10 +360,10 @@ ui::Node pager(Audit const& audit) {
                                                                 ui::ref("trail.viewCount")}))
                         .sizing(ui::stretch())
                         .testId("range"),
-                    ui::button({.label = "‹", .onClick = ui::set(audit.page, page - 1)})
+                    ui::button({.label = "‹", .onClick = ui::set(audit.page, page - 1), .shape = ControlShape::Square})
                         .a11y("Previous page")
                         .enabled(page > 0),
-                    ui::button({.label = "›", .onClick = ui::set(audit.page, page + 1)})
+                    ui::button({.label = "›", .onClick = ui::set(audit.page, page + 1), .shape = ControlShape::Square})
                         .a11y("Next page")
                         .enabled(page < pageCount - 1)},
                    {.gap = 1, .align = Align::Center, .padding = 2})
