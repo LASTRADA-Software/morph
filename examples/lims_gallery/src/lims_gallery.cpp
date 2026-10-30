@@ -63,6 +63,7 @@ constexpr char const* kThemeBase = R"({
             "weight": { "strong": { "$type": "fontWeight", "$value": 700 } },
             "overline": { "case": { "$type": "keyword", "$value": "uppercase" } } },
   "shape": { "iconOnly": { "$type": "keyword", "$value": "square" } },
+  "collapsible": { "marker": { "$type": "keyword", "$value": "none" } },
   "table": { "$type": "dimension", "cellPaddingY": { "$value": { "value": 6, "unit": "px" } } },
   "radius": { "$type": "dimension",
     "control": { "$value": { "value": 6, "unit": "px" } }, "card": { "$value": { "value": 6, "unit": "px" } } },
@@ -130,7 +131,7 @@ constexpr char const* kDarkHeadSurface = R"({
 // The barcode glyph of the receipt screen's scan field, as the design draws it.
 constexpr char const* kScanIcon =
     R"(<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none" )"
-    R"(stroke="#17784A" stroke-width="1.6"><path d="M2 6V2h4M14 2h4v4M18 14v4h-4M6 18H2v-4M6 6v8M9 6v8M12 6v8M15 )"
+    R"(stroke="currentColor" stroke-width="1.6"><path d="M2 6V2h4M14 2h4v4M18 14v4h-4M6 18H2v-4M6 6v8M9 6v8M12 6v8M15 )"
     R"(6v8"/></svg>)";
 
 // A registered screen and its catalog entry's title.

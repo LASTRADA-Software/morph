@@ -363,25 +363,29 @@ ui::Node rejectionLine(Receipt const& receipt) {
                      .role = "muted"});
 }
 
-ui::Node sessionTable(Receipt const& receipt) {
+// The expanded card puts the table's header band and rules at its edges while its title and footnote stay inset;
+// the compact collapsible has no padding to bleed past.
+ui::Node sessionTable(Receipt const& receipt, bool bleeds) {
     auto const outcomeTone = ui::cond(ui::eq(ui::row("outcome"), "Received"), ui::Handle<std::string>{"ok"},
                                       ui::Handle<std::string>{"err"});
-    return ui::table(receipt.session, {.key = ui::row("sample"),
-                                       .columns = {{.name = "time",
-                                                    .label = "Time",
-                                                    .width = ui::fixed(8),
-                                                    .cell = ui::text({.text = ui::row("time")})},
-                                                   {.name = "sample",
-                                                    .label = "Sample",
-                                                    .width = ui::fixed(11),
-                                                    .role = "mono",
-                                                    .cell = ui::text({.text = ui::row("sample"), .role = "mono"})},
-                                                   {.name = "outcome",
-                                                    .label = "Outcome",
-                                                    .width = ui::stretch(),
-                                                    .cell = layout::tag(ui::row("outcome"), outcomeTone)}}})
-        .a11y("This session")
-        .testId("session");
+    ui::Node table =
+        ui::table(receipt.session, {.key = ui::row("sample"),
+                                    .columns = {{.name = "time",
+                                                 .label = "Time",
+                                                 .width = ui::fixed(8),
+                                                 .cell = ui::text({.text = ui::row("time")})},
+                                                {.name = "sample",
+                                                 .label = "Sample",
+                                                 .width = ui::fixed(11),
+                                                 .role = "mono",
+                                                 .cell = ui::text({.text = ui::row("sample"), .role = "mono"})},
+                                                {.name = "outcome",
+                                                 .label = "Outcome",
+                                                 .width = ui::stretch(),
+                                                 .cell = layout::tag(ui::row("outcome"), outcomeTone)}}})
+            .a11y("This session")
+            .testId("session");
+    return bleeds ? table.bleed() : table;
 }
 
 // Rejecting asks why, then records the outcome as receiving does.
@@ -414,7 +418,7 @@ ui::Node rejectDialog(Receipt const& receipt) {
 ui::Node expandedLayout(Receipt const& receipt) {
     auto const left = ui::column({scanField(receipt, false), notices(receipt), sampleCard(receipt)}, {.gap = 2})
                           .sizing(ui::stretch());
-    auto const session = ui::panel({sessionTable(receipt), rejectionLine(receipt).testId("last-rejection")},
+    auto const session = ui::panel({sessionTable(receipt, true), rejectionLine(receipt).testId("last-rejection")},
                                    {.title = "This session", .padding = 2})
                              // The design's 300 px column, in the frontend's character widths.
                              .sizing(ui::fixed(36))
@@ -443,7 +447,7 @@ ui::Node compactLayout(Receipt const& receipt) {
         ui::column(
             {scanField(receipt, true), notices(receipt), sample,
              ui::collapsible(
-                 {sessionTable(receipt), rejectionLine(receipt)},
+                 {sessionTable(receipt, false), rejectionLine(receipt)},
                  {.title = scans, .open = receipt.sessionOpen, .onToggle = ui::set(receipt.sessionOpen, ui::event())})
                  .testId("session-panel"),
              rejectDialog(receipt)},
