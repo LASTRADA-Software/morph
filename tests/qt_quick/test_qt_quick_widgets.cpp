@@ -1953,3 +1953,38 @@ TEST_CASE("qt_quick widgets: a check box has no padding of its own, and its box 
     CHECK(control.height() >= themeNumber(scene, "targetHeight") - 0.5);
 }
 
+// Mutation: leave the connector filling its cell (it touches the label before it and the circle after it).
+TEST_CASE("qt_quick widgets: a step connector stands a step of 2 off the steps either side", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 200);
+    auto steps = scene.backend().createSteps(nullptr);
+    steps->setSteps({{.label = "Product", .state = ui::StepState::Done},
+                     {.label = "Conditions", .state = ui::StepState::Active},
+                     {.label = "Tests", .state = ui::StepState::Pending}});
+    steps->setCurrent(1);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal gap = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, gap), Q_ARG(int, 2)));
+    QQuickItem& indicator = Scene::itemOf(*steps);
+    auto const labels = namedItems(indicator, "label");
+    auto const circles = namedItems(indicator, "circle");
+    auto const connectors = namedItems(indicator, "connector");
+    REQUIRE(labels.size() == 3);
+    REQUIRE(circles.size() == 3);
+    REQUIRE(connectors.size() == 2);
+    for (qsizetype i = 0; i < connectors.size(); ++i) {
+        QQuickItem const& connector = *connectors.at(i);
+        qreal const left = connector.mapToScene(QPointF{0, 0}).x();
+        qreal const right = connector.mapToScene(QPointF{connector.width(), 0}).x();
+        QQuickItem const& before = *labels.at(i);
+        qreal const labelRight = before.mapToScene(QPointF{before.width(), 0}).x();
+        qreal const circleLeft = circles.at(i + 1)->mapToScene(QPointF{0, 0}).x();
+        INFO("connector " << i);
+        CHECK(left >= labelRight + gap - 0.5);
+        CHECK(right <= circleLeft - gap + 0.5);
+        CHECK(connector.width() > 0);
+    }
+}
+

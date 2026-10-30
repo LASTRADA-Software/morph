@@ -59,7 +59,9 @@ MorphWidget {
                 // An active step that is not the current one is drawn as an upcoming one.
                 readonly property bool isDone: stepState === 2
                 readonly property bool isFailed: stepState === 3
-                readonly property real minimumConnector: 3 * Theme.unitWidth
+                // A connector stands a step of 2 off the step before it and the one after it.
+                readonly property real connectorInset: Theme.spaceOf(2)
+                readonly property real minimumConnector: 3 * Theme.unitWidth + 2 * connectorInset
 
                 Layout.fillWidth: isConnector
                 Layout.alignment: Qt.AlignVCenter
@@ -81,7 +83,9 @@ MorphWidget {
                     objectName: "connector"
                     visible: cell.isConnector
                     anchors.left: parent.left
+                    anchors.leftMargin: cell.connectorInset
                     anchors.right: parent.right
+                    anchors.rightMargin: cell.connectorInset
                     anchors.verticalCenter: parent.verticalCenter
                     // The connector follows the step before it.
                     readonly property bool followsDone: cell.isConnector && root.steps[cell.stepIndex].state === 2
