@@ -290,6 +290,8 @@ public:
     /// The line under the title: drawn muted on the first row inside the frame, then a rule row, both above the
     /// content, which loses those two rows.
     void setDescription(std::string_view description);
+    /// The description as runs, drawn on the same row; the accessible description is their joined characters.
+    void setDescriptionSpans(std::vector<ui::TextSpan> const& spans);
     void setOnDismiss(ui::Action onDismiss) { _onDismiss = std::move(onDismiss); }
     void setSheet(bool sheet);
     void setDismissLabel(std::string_view label);
@@ -329,6 +331,7 @@ private:
     std::unique_ptr<::core::tui::Component> _frame;  ///< A Frame.
     std::string _title;
     std::string _description;
+    std::vector<ui::TextSpan> _descriptionRuns;  ///< The description's runs; empty for a plain description.
     ui::Action _onDismiss;
     std::string _dismissLabel = "Close";
     WidgetBase const* _footer = nullptr;
@@ -374,6 +377,7 @@ public:
     void setOpen(bool open) override { _overlay.setOpen(open); }
     void setTitle(std::string_view title) override { _overlay.setTitle(title); }
     void setDescription(std::string_view description) override { _overlay.setDescription(description); }
+    void setDescriptionSpans(std::vector<ui::TextSpan> const& spans) override { _overlay.setDescriptionSpans(spans); }
     [[nodiscard]] std::string accessibleDescription() const override { return _overlay.description(); }
     void setOnDismiss(ui::Action onDismiss) override { _overlay.setOnDismiss(std::move(onDismiss)); }
     void setSheet(bool sheet) override { _overlay.setSheet(sheet); }
@@ -413,6 +417,7 @@ public:
     void setOpen(bool open) override { _overlay.setOpen(open); }
     void setTitle(std::string_view title) override { _overlay.setTitle(title); }
     void setDescription(std::string_view description) override { _overlay.setDescription(description); }
+    void setDescriptionSpans(std::vector<ui::TextSpan> const& spans) override { _overlay.setDescriptionSpans(spans); }
     [[nodiscard]] std::string accessibleDescription() const override { return _overlay.description(); }
     void setOnDismiss(ui::Action onDismiss) override { _overlay.setOnDismiss(std::move(onDismiss)); }
     [[nodiscard]] ui::ContainerWidget& footer() override { return _footer.of(*this); }

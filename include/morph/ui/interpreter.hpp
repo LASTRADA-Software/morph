@@ -3088,6 +3088,10 @@ public:
     /// @return It, or `null`.
     [[nodiscard]] Value subtitle() const { return detail::evalIn(*_scope, nullptr, _core->doc().subtitle); }
 
+    /// @brief Evaluates the document's `subtitleSpans` into runs; a run the head cannot read is dropped and reported.
+    /// @return The runs; none when the document declares none.
+    [[nodiscard]] std::vector<TextSpan> subtitleSpans() const;
+
     /// @brief The head's status badges that are visible now, in order. A tracked read.
     /// @return They.
     [[nodiscard]] std::vector<HeadBadge> status() const {
@@ -6466,53 +6470,6 @@ inline constexpr std::string_view kRoleNames =
     return Tone::Neutral;
 }
 
-/// @brief A span list's runs: each element a record `{text, strong?, mono?}`, or a plain run of any other value
-///        but a list or `null`. A run's text is shown as `textOf` shows any value, so a computed number is a run of
-///        its digits, and a flag is set only by `true`.
-/// @param value   The list; `null` is no runs.
-/// @param format  How a run's value is written.
-/// @param dropped Set when the value is not a list, or an element is a list, `null`, or a record without `text`;
-///                such an element is left out.
-/// @return The runs, in order.
-[[nodiscard]] inline std::vector<TextSpan> spansOf(Value const& value, FormatContext const& format, bool& dropped) {
-    std::vector<TextSpan> spans;
-    if (value.isNull()) {
-        return spans;
-    }
-    ValueList const* const runs = value.asList();
-    if (runs == nullptr) {
-        dropped = true;
-        return spans;
-    }
-    auto const flag = [](Value const* field) {
-        bool const* const set = field != nullptr ? field->asBool() : nullptr;
-        return set != nullptr && *set;
-    };
-    for (Value const& run : *runs) {
-        if (run.asRecord() == nullptr) {
-            if (run.isNull() || run.asList() != nullptr) {
-                dropped = true;
-            } else {
-                spans.push_back(TextSpan{.text = textOf(run, format)});
-            }
-            continue;
-        }
-        Value const* const text = run.field("text");
-        if (text == nullptr) {
-            dropped = true;
-            continue;
-        }
-        spans.push_back(TextSpan{
-            .text = textOf(*text, format), .strong = flag(run.field("strong")), .mono = flag(run.field("mono"))});
-    }
-    return spans;
-}
-
-/// @brief What a span list with a run it drops is told.
-inline constexpr std::string_view kSpansReason =
-    "spans is a list of runs, each a value or a record with `text`; a list, a null or a record without `text` is "
-    "dropped";
-
 /// @brief A tone by its exact name, the strict reading of a value's evaluation: a table row's and a key-value item's
 ///        tone, which unlike `toneOf` takes no alias, so a misspelt name can be reported.
 /// @param value `neutral`, `info`, `ok`, `warn` or `err`; `null` is `Neutral`.
@@ -6540,8 +6497,71 @@ inline constexpr std::string_view kSpansReason =
     return std::nullopt;
 }
 
+/// @brief A span list's runs: each element a record `{text, strong?, mono?, tone?}`, or a plain run of any other value
+///        but a list or `null`. A run's text is shown as `textOf` shows any value, so a computed number is a run of
+///        its digits, and a flag is set only by `true`.
+/// @param value   The list; `null` is no runs.
+/// @param format  How a run's value is written.
+/// @param dropped Set when the value is not a list, or an element is a list, `null`, or a record without `text`;
+///                such an element is left out.
+/// @param badTone Set, when given, when a run's `tone` is none of the tone names; the run is kept, untoned.
+/// @return The runs, in order.
+[[nodiscard]] inline std::vector<TextSpan> spansOf(Value const& value, FormatContext const& format, bool& dropped,
+                                                   bool* badTone = nullptr) {
+    std::vector<TextSpan> spans;
+    if (value.isNull()) {
+        return spans;
+    }
+    ValueList const* const runs = value.asList();
+    if (runs == nullptr) {
+        dropped = true;
+        return spans;
+    }
+    auto const flag = [](Value const* field) {
+        bool const* const set = field != nullptr ? field->asBool() : nullptr;
+        return set != nullptr && *set;
+    };
+    for (Value const& run : *runs) {
+        if (run.asRecord() == nullptr) {
+            if (run.isNull() || run.asList() != nullptr) {
+                dropped = true;
+            } else {
+                spans.push_back(TextSpan{.text = textOf(run, format)});
+            }
+            continue;
+        }
+        Value const* const text = run.field("text");
+        if (text == nullptr) {
+            dropped = true;
+            continue;
+        }
+        Tone tone = Tone::Neutral;
+        if (Value const* const named = run.field("tone")) {
+            if (std::optional<Tone> const known = toneNamed(*named)) {
+                tone = *known;
+            } else if (badTone != nullptr) {
+                *badTone = true;
+            }
+        }
+        spans.push_back(TextSpan{.text = textOf(*text, format),
+                                 .strong = flag(run.field("strong")),
+                                 .mono = flag(run.field("mono")),
+                                 .tone = tone});
+    }
+    return spans;
+}
+
+/// @brief What a span list with a run it drops is told.
+inline constexpr std::string_view kSpansReason =
+    "spans is a list of runs, each a value or a record with `text`; a list, a null or a record without `text` is "
+    "dropped";
+
 /// @brief What a tone of no known name is told.
 inline constexpr std::string_view kToneNames = "a tone is neutral, info, ok, warn or err, or null for none";
+
+/// @brief What a span list with a run of a tone of no known name is told.
+inline constexpr std::string_view kSpanToneReason =
+    "a run's tone is neutral, info, ok, warn or err, or null for none; a run of another tone is drawn untoned";
 
 /// @brief A splitter's `sizes`: a list of numbers, each read as `intOf` reads it.
 /// @param value The value.
@@ -6905,9 +6925,13 @@ inline KeyValueItem ScreenCore::keyValueItemOf(Value const& item, std::string co
                      .value = value == nullptr ? std::string{} : textOf(*value, format)};
     if (Value const* const spans = item.field("spans")) {
         bool dropped = false;
-        out.spans = spansOf(*spans, format, dropped);
+        bool badTone = false;
+        out.spans = spansOf(*spans, format, dropped, &badTone);
         if (dropped) {
             report(path, kSpansReason);
+        }
+        if (badTone) {
+            report(path, kSpanToneReason);
         }
     }
     if (Value const* const tone = item.field("tone")) {
@@ -6970,9 +6994,14 @@ inline Node ScreenCore::lowerGroup(DocNode const& node, LowerCtx const& ctx, Ele
 inline Prop<std::vector<TextSpan>> ScreenCore::spansProp(LowerCtx const& ctx, ExprPtr const& expr) {
     return slotProp<std::vector<TextSpan>>([this, scope = ctx.scope, bindings = ctx.bindings, expr] {
         bool dropped = false;
-        std::vector<TextSpan> spans = spansOf(evalIn(*scope, bindings.get(), expr), session.formatting(), dropped);
+        bool badTone = false;
+        std::vector<TextSpan> spans =
+            spansOf(evalIn(*scope, bindings.get(), expr), session.formatting(), dropped, &badTone);
         if (dropped) {
             report(expr->path, kSpansReason);
+        }
+        if (badTone) {
+            report(expr->path, kSpanToneReason);
         }
         return spans;
     });
@@ -8464,6 +8493,9 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
             .child = std::move(body),
             .onDismiss = std::move(onDismiss),
             .side = side && textOf(once(ctx, side), session.formatting()) == "start" ? Side::Start : Side::End};
+        if (ExprPtr const spans = node.prop("descriptionSpans")) {
+            spec.descriptionSpans = spansProp(ctx, spans);
+        }
         commonOf(node, ctx, element, spec.common);
         return ui::drawer(std::move(spec));
     }
@@ -8475,6 +8507,9 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
                 .common = {},
                 .sheet = bindProp<bool>(ctx, node.prop("sheet"), false, boolOf),
                 .dismissLabel = bindProp<std::string>(ctx, node.prop("dismissLabel"), std::string{"Close"}, stringOf)};
+    if (ExprPtr const spans = node.prop("descriptionSpans")) {
+        spec.descriptionSpans = spansProp(ctx, spans);
+    }
     commonOf(node, ctx, element, spec.common);
     return ui::dialog(std::move(spec));
 }
@@ -9742,6 +9777,24 @@ inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx)
 // NOLINTEND(misc-no-recursion)
 
 }  // namespace detail
+
+inline std::vector<TextSpan> Screen::subtitleSpans() const {
+    ExprPtr const& expr = _core->doc().subtitleSpans;
+    if (expr == nullptr) {
+        return {};
+    }
+    bool dropped = false;
+    bool badTone = false;
+    std::vector<TextSpan> spans =
+        detail::spansOf(detail::evalIn(*_scope, nullptr, expr), _core->session.formatting(), dropped, &badTone);
+    if (dropped) {
+        _core->report(expr->path, detail::kSpansReason);
+    }
+    if (badTone) {
+        _core->report(expr->path, detail::kSpanToneReason);
+    }
+    return spans;
+}
 
 inline BorrowedModel Screen::lend(std::string_view alias) const {
     detail::NameRef const* const found = _scope->find(alias);

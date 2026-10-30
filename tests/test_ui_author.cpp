@@ -1582,6 +1582,24 @@ TEST_CASE("a text's spans are written as runs that the loader takes", "[ui][auth
     CHECK(added.has_value());
 }
 
+// Mutation: leave `tone` out of text() or of styled() (the keys are not written), or `descriptionSpans` out of the
+// dialog writer.
+TEST_CASE("a text's tone, a toned run and a dialog's description runs are written", "[ui][author]") {
+    CHECK(text(ui::text({.text = "7", .role = "display", .tone = "err"}).json()) ==
+          R"({"kind":"text","text":"7","role":"display","tone":"err"})");
+    CHECK(text(ui::text({.spans = ui::spans(
+                             {"a ", ui::toned("b", "ok"), ui::styled("c", {.strong = true, .tone = "err"})})})
+                   .json()) == R"({"kind":"text","spans":{"list":["a ",{"obj":{"text":"b","tone":"ok"}},)"
+                               R"({"obj":{"text":"c","strong":true,"tone":"err"}}]}})");
+    auto const sign = ui::element("sign");
+    auto const json = text(
+        ui::dialog(
+            sign, {ui::text({.text = "x"})},
+            {.title = "Sign", .description = "Plain", .descriptionSpans = ui::spans({"Plain ", ui::strong("bold")})})
+            .json());
+    CHECK(json.contains(R"("description":"Plain","descriptionSpans":{"list":["Plain ",)"));
+}
+
 // Mutation: leave `description` out of the dialog writer (the key is not written).
 TEST_CASE("a dialog's description is written beside its title", "[ui][author]") {
     auto const sign = ui::element("sign");

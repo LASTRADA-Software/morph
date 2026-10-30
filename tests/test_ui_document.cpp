@@ -345,16 +345,48 @@ TEST_CASE("ui document: a key-value's fieldLayout is inline or stacked, and its 
     CHECK(run.error().reason == "a run's record gives its `text`");
 }
 
-// Mutation: drop the text's refusal of `description` (the text loads).
-TEST_CASE("ui document: an input takes a description and a tone, and a text refuses them", "[ui][document]") {
+// Mutation: drop the text's refusal of `description` (the text loads), or refuse `tone` on a text again.
+TEST_CASE("ui document: an input takes a description and a tone, and a text takes a tone but no description",
+          "[ui][document]") {
     CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "d", "view": {"kind": "textInput",
         "description": "Required range 2–8 °C", "tone": {"if": [true, "err", null]}}})")
+              .has_value());
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "d", "view": {"kind": "text", "text": "7",
+        "role": "display", "tone": "err"}})")
               .has_value());
     auto const text = loadDocumentText(R"({"vocab": "ui/1", "id": "d", "view": {"kind": "text", "text": "x",
         "description": "y"}})");
     REQUIRE_FALSE(text.has_value());
     CHECK(text.error().path == "/view/description");
     CHECK(text.error().reason == "a text is not described; put the line in the text");
+}
+
+// Mutation: drop `tone` from the run keys (the first loads fail), drop the literal tone check (the pink run loads),
+// or drop `subtitleSpans` / `descriptionSpans` from their keys (the last two are refused as unknown).
+TEST_CASE("ui document: a run takes a tone, and a head's subtitle and an overlay's description take runs",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": [{"obj": {"text": "7", "tone": "err"}}, {"obj": {"text": "x", "tone": null}}]}}})")
+              .has_value());
+    auto const pink = loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": [{"obj": {"text": "7", "tone": "pink"}}]}}})");
+    REQUIRE_FALSE(pink.has_value());
+    CHECK(pink.error().reason == "a run's `tone` is neutral, info, ok, warn or err");
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": [{"obj": {"text": "7", "tone": {"ref": "t"}}}]}}, "state": {"t": {"init": "err"}}})")
+              .has_value());
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "s", "title": "Instrument",
+        "subtitleSpans": {"list": ["Instruments › ", {"obj": {"text": "EQ-0142", "mono": true}}]},
+        "view": {"kind": "text", "text": "x"}})")
+              .has_value());
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "dialog", "title": "Confirm",
+        "description": "plain", "descriptionSpans": {"list": ["a ", {"obj": {"text": "b", "strong": true}}]},
+        "children": []}})")
+              .has_value());
+    auto const noText = loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "drawer", "title": "t",
+        "descriptionSpans": {"list": [{"obj": {"strong": true}}]}, "children": []}})");
+    REQUIRE_FALSE(noText.has_value());
+    CHECK(noText.error().reason == "a run's record gives its `text`");
 }
 
 // Mutation: drop `group` from the kinds (every document here is refused for its kind).

@@ -823,6 +823,9 @@ void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& run
     for (ui::TextSpan const& run : runs) {
         ::core::tui::Style runStyle = style;
         runStyle.bold = style.bold || run.strong;
+        if (run.tone != ui::Tone::Neutral) {
+            runStyle.fg = toneStyle(canvas.theme(), run.tone).fg;
+        }
         bool first = true;
         for (auto const line : splitLines(run.text)) {
             if (!first) {

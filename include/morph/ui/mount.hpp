@@ -796,9 +796,8 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, Text const& spec, ContainerWidget* parent) {
-        if (spec.field.description.isBound() || !spec.field.description.constant().empty() ||
-            spec.field.tone.isBound() || spec.field.tone.constant() != Tone::Neutral) {
-            throw std::logic_error{"morph::ui: a text is not described or toned; put the line in the text"};
+        if (spec.field.description.isBound() || !spec.field.description.constant().empty()) {
+            throw std::logic_error{"morph::ui: a text is not described; put the line in the text"};
         }
         TextWidget& widget = scope.adopt(_backend->createText(parent));
         applyCommon(scope, widget, spec.common);
@@ -1217,7 +1216,11 @@ private:
     template <typename Spec, typename OverlayWidget>
     Widget& mountOverlay(reactive::Scope& scope, Spec const& spec, OverlayWidget& widget) {
         bind(scope, spec.title, [&widget](std::string const& title) { widget.setTitle(title); });
-        if (spec.description.isBound() || !spec.description.constant().empty()) {
+        // Runs replace the plain description, so an overlay that has them is never told its plain one.
+        if (hasSpans(spec.descriptionSpans)) {
+            bind(scope, spec.descriptionSpans,
+                 [&widget](std::vector<TextSpan> const& spans) { widget.setDescriptionSpans(spans); });
+        } else if (spec.description.isBound() || !spec.description.constant().empty()) {
             bind(scope, spec.description,
                  [&widget](std::string const& description) { widget.setDescription(description); });
         }

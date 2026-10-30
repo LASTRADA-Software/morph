@@ -733,7 +733,15 @@ private:
     // Whether the head has a subtitle or a badge.
     [[nodiscard]] bool leadHasContent(WorkspaceTabId tab) const {
         ScreenHead const* const head = headOf(tab);
-        return head != nullptr && (!head->subtitle().get().empty() || !head->status().get().empty());
+        return head != nullptr &&
+               (!head->subtitle().get().empty() || !subtitleSpansOf(head).empty() || !head->status().get().empty());
+    }
+
+    // The head's subtitle runs; a tracked read, empty for a head that has none.
+    [[nodiscard]] static std::vector<TextSpan> subtitleSpansOf(ScreenHead const* head) {
+        reactive::Computed<std::vector<TextSpan>> const* const spans =
+            head == nullptr ? nullptr : head->subtitleSpans();
+        return spans == nullptr ? std::vector<TextSpan>{} : spans->get();
     }
 
     // Whether the head has a tool, an action or a menu entry.
@@ -811,9 +819,21 @@ private:
         row.common.layout.width = Sizing::stretch();
         row.common.layout.minWidth = kHeadLeadMinimum;
         row.common.visible = Prop<bool>{[this, tab] { return leadHasContent(tab); }};
+        // The runs when the screen gives them, else its plain subtitle as one run, so the text is bound to one thing.
+        auto const spans = [this, tab, subtitle] {
+            std::vector<TextSpan> runs = subtitleSpansOf(headOf(tab));
+            if (runs.empty()) {
+                std::string plain = subtitle();
+                if (!plain.empty()) {
+                    runs.push_back(TextSpan{.text = std::move(plain)});
+                }
+            }
+            return runs;
+        };
         Text text{.text = Prop<std::string>{subtitle}, .role = TextRole::Muted, .field = {}, .common = {}};
+        text.spans = Prop<std::vector<TextSpan>>{spans};
         text.common.testId = "head_subtitle";
-        text.common.visible = Prop<bool>{[subtitle] { return !subtitle().empty(); }};
+        text.common.visible = Prop<bool>{[spans] { return !spans().empty(); }};
         row.children.push_back(ui::text(std::move(text)));
         row.children.push_back(ui::forEach<PlacedBadge>(
             [status] {

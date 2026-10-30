@@ -9,8 +9,8 @@ import QtQuick.Layouts
 MorphWidget {
     id: root
 
-    // [{label, value, richText, tone}]: `value` is the characters shown, `richText` a value's runs as escaped rich
-    // text (empty for a plain value), `tone` the `Tone` index (0 none).
+    // [{label, value, runs, tone}]: `value` is the characters shown, `runs` a value's runs as a text's (empty for a
+    // plain value), `tone` the `Tone` index (0 none).
     property var items: []
     // Whether each caption sits above its value; set once.
     property bool captionsAbove: false
@@ -21,8 +21,9 @@ MorphWidget {
     // A pair's value: its runs or its text, toned or not.
     component Value: Label {
         required property var pair
-        textFormat: pair && pair.richText !== "" ? Text.RichText : Text.PlainText
-        text: !pair ? "" : pair.richText !== "" ? pair.richText : pair.value
+        readonly property bool hasRuns: pair && pair.runs.length > 0
+        textFormat: hasRuns ? Text.RichText : Text.PlainText
+        text: !pair ? "" : hasRuns ? root.runsHtml(pair.runs) : pair.value
         font: pair && pair.tone !== 0 ? Theme.strongFont : Theme.bodyFont
         color: pair && pair.tone !== 0 ? root.toneOf(pair.tone) : root.scheme.text
         wrapMode: Text.Wrap

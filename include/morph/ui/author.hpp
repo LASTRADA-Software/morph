@@ -2818,6 +2818,11 @@ public:
     /// @param subtitle The expression.
     void subtitle(AnyHandle const& subtitle) { detail::put(_head, "subtitle", subtitle.json()); }
 
+    /// @brief The head's line under the title as runs (`spans`), which a shell that knows them draws in place of the
+    ///        `subtitle` beside it: an identifier in the monospace face, a bold word.
+    /// @param runs The runs.
+    void subtitleSpans(AnyHandle const& runs) { detail::put(_head, "subtitleSpans", runs.json()); }
+
     /// @brief Appends a status badge to the head.
     /// @param badge The badge.
     void status(HeadBadgeOptions const& badge) { detail::append(_head, "status", detail::headBadge(badge)); }
@@ -3456,18 +3461,20 @@ private:
 
 }  // namespace detail
 
-/// @brief The look of a run of text: its weight and its face.
+/// @brief The look of a run of text: its weight, its face and its colour.
 struct SpanStyle {
     /// @brief Whether the run is drawn in the strong weight.
     bool strong = false;
     /// @brief Whether the run is drawn in the theme's monospace face.
     bool mono = false;
+    /// @brief The tone (`ok`, `warn`, `err`, `info`) whose colour the run is drawn in; absent keeps the text's own.
+    AnyHandle tone;
 };
 
 /// @brief A run of text in a span list with the look @p style gives: `{"obj": {"text": …, "strong": true, …}}`, each
-///        flag written only when set.
+///        flag and the tone written only when set.
 /// @param text  The run's text; data is never parsed for markup.
-/// @param style Its weight and face.
+/// @param style Its weight, face and colour.
 /// @return The run.
 [[nodiscard]] inline AnyHandle styled(AnyHandle const& text, SpanStyle style) {
     std::vector<std::pair<std::string, AnyHandle>> fields{{"text", text}};
@@ -3476,6 +3483,9 @@ struct SpanStyle {
     }
     if (style.mono) {
         fields.emplace_back("mono", AnyHandle{true});
+    }
+    if (style.tone.present()) {
+        fields.emplace_back("tone", style.tone);
     }
     return obj(fields);
 }
@@ -3490,8 +3500,17 @@ struct SpanStyle {
 /// @return The run.
 [[nodiscard]] inline AnyHandle mono(AnyHandle const& text) { return styled(text, {.mono = true}); }
 
-/// @brief A span list: the runs of a text, a banner or a key-value item, in order. A string is a plain run; `strong`,
-///        `mono` and `styled` make the others.
+/// @brief A run of text drawn in a tone's colour, for a span list.
+/// @param text The run's text.
+/// @param tone The tone: `ok`, `warn`, `err` or `info`; a computed one is read when the run is drawn.
+/// @return The run.
+[[nodiscard]] inline AnyHandle toned(AnyHandle const& text, AnyHandle const& tone) {
+    return styled(text, {.tone = tone});
+}
+
+/// @brief A span list: the runs of a text, a banner, a key-value item, a dialog's or drawer's description or a
+///        screen's subtitle, in order. A string is a plain run; `strong`, `mono`, `toned` and `styled` make the
+///        others.
 /// @param runs The runs.
 /// @return The list, `{"list": [...]}`.
 [[nodiscard]] inline AnyHandle spans(std::vector<AnyHandle> const& runs) { return list(runs); }
@@ -3504,6 +3523,9 @@ struct TextOptions {
     AnyHandle spans;
     /// @brief The typographic role, such as `heading`.
     AnyHandle role;
+    /// @brief The tone (`ok`, `warn`, `err`, `info`; `neutral` or null for none) whose colour the text is drawn in,
+    ///        whatever its role: the role keeps the size, weight and face.
+    AnyHandle tone;
     /// @brief Whether the shown value is being recalculated.
     AnyHandle stale;
 };
@@ -3516,6 +3538,7 @@ struct TextOptions {
         .put("text", options.text)
         .put("spans", options.spans)
         .put("role", options.role)
+        .put("tone", options.tone)
         .put("stale", options.stale)
         .done();
 }
@@ -4080,6 +4103,9 @@ struct DialogOptions {
     AnyHandle title;
     /// @brief A line under the title, in the head, ruled off from the body: the accessible description.
     AnyHandle description;
+    /// @brief The description as runs (`spans`), shown in place of `description` by a client that knows them, and the
+    ///        accessible description by their characters; `description` beside it is what an older client shows.
+    AnyHandle descriptionSpans;
     /// @brief Whether it is open; absent for `open` and `close` commands alone.
     AnyHandle open;
     /// @brief When its element errors show.
@@ -4117,6 +4143,7 @@ namespace detail {
     node.text("id", element.name())
         .put("title", options.title)
         .put("description", options.description)
+        .put("descriptionSpans", options.descriptionSpans)
         .put("open", options.open);
     if (options.showErrors) {
         node.text("showErrors", showErrorsName(*options.showErrors));

@@ -9,9 +9,10 @@ MorphField {
 
     // The characters shown: the text, or a text's runs joined, which assistive technology reads.
     property string text: ""
-    // A text's runs as escaped rich text, built in C++; while it is not empty the label shows it, and a plain text
-    // never goes through rich text.
-    property string richText: ""
+    // A text's runs, `{text, strong, mono, tone}` with each text escaped; while there are any, the label shows their
+    // markup (`runsHtml`), and a plain text never goes through rich text.
+    property var runs: []
+    readonly property bool hasRuns: runs.length > 0
     property int role: 0
     // Where the text sits across the widget: a table sets it from its column's `align`.
     property int textAlign: Qt.AlignLeft
@@ -25,8 +26,8 @@ MorphField {
     // A required text's mark follows the end of its last line. Rich text reports no lines, so for spans the mark
     // follows the widest line, on the last one.
     markerFollowsText: true
-    textEndX: root.richText !== "" ? label.contentWidth : label.lastLineEnd
-    textEndY: root.richText !== "" ? Math.max(0, label.contentHeight - metrics.height) : label.lastLineY
+    textEndX: root.hasRuns ? label.contentWidth : label.lastLineEnd
+    textEndY: root.hasRuns ? Math.max(0, label.contentHeight - metrics.height) : label.lastLineY
 
     FontMetrics {
         id: metrics
@@ -35,9 +36,9 @@ MorphField {
 
     Label {
         id: label
-        textFormat: root.richText !== "" ? Text.RichText : Text.PlainText
+        textFormat: root.hasRuns ? Text.RichText : Text.PlainText
         width: root.controlWidth
-        text: root.richText !== "" ? root.richText : root.text
+        text: root.hasRuns ? root.runsHtml(root.runs) : root.text
         wrapMode: Text.Wrap
         horizontalAlignment: root.textAlign
         font: Theme.figuresOf(root.role === 2 ? Theme.headingFont
@@ -48,7 +49,8 @@ MorphField {
                                                                                   : Theme.fontOf(Theme.bodyPixels,
                                                                                                  Font.Normal),
                               root.role === 6 ? Theme.monoFamilies : Theme.families, root.tabularFigures)
-        color: root.textColorOf(root.role)
+        // A tone is the text's colour, whatever its role; the role keeps the size, weight and face.
+        color: root.tone !== 0 ? root.toneOf(root.tone) : root.textColorOf(root.role)
         Accessible.ignored: true
         // Where the last line laid out ends, and where it sits.
         property real lastLineEnd: 0

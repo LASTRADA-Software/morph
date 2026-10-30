@@ -994,7 +994,7 @@ TEST_CASE("ui::Mounted: two rows that fail in one run are one report, and neithe
 
 // Mutation: drop the text's description check (a described text then mounts).
 TEST_CASE(
-    "ui::Mounted: a C++ tree's text takes no description or tone, a push button no content, and a text area "
+    "ui::Mounted: a C++ tree's text takes no description, a push button no content, and a text area "
     "no emphasis",
     "[ui]") {
     Owner owner;
@@ -1003,11 +1003,7 @@ TEST_CASE(
     ui::Text described{.text = "x"};
     described.field.description = "a line";
     CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::text(described)}),
-                      Catch::Matchers::ContainsSubstring("a text is not described or toned"));
-    ui::Text toned{.text = "x"};
-    toned.field.tone = ui::Tone::Warn;
-    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::text(toned)}),
-                      Catch::Matchers::ContainsSubstring("a text is not described or toned"));
+                      Catch::Matchers::ContainsSubstring("a text is not described"));
     ui::Button push{.label = "Go"};
     push.child = ui::text({.text = "inside"});
     CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::button(push)}),
@@ -1026,6 +1022,21 @@ TEST_CASE(
     focal.emphasis = ui::InputEmphasis::Prominent;
     ui::Mounted const view{runtime, backend, ui::textInput(focal)};
     CHECK(backend.find("TextInput", "emphasis", "Prominent").has_value());
+}
+
+// Mutation: skip the tone in the mount (the text records none), or the spans (the run's tone is not recorded).
+TEST_CASE("ui::Mounted: a text's tone and its runs' tones reach the backend", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Text toned{.text = "7", .role = ui::TextRole::Display};
+    toned.field.tone = ui::Tone::Err;
+    ui::Mounted const text{runtime, backend, ui::text(toned)};
+    CHECK(backend.prop(backend.find("Text", "role", "Display").value(), "tone") == "Err");
+    ui::Text runs{.spans = std::vector<ui::TextSpan>{{.text = "Past due "},
+                                                     {.text = "7", .strong = true, .tone = ui::Tone::Err}}};
+    ui::Mounted const withRuns{runtime, backend, ui::text(runs)};
+    CHECK(backend.dump().contains("spans=[Past due ,7;strong;tone=Err]"));
 }
 
 // Mutation: never call setWrap in mountStack (the log loses it), or call it after the children are mounted.

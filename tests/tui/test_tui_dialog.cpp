@@ -1060,3 +1060,24 @@ TEST_CASE("tui dialog: a description takes the first row inside the frame, a rul
     CHECK(at("Sure?") == title + 3);
     CHECK(scene.dialog->accessibleDescription() == "Sign the results");
 }
+
+// Mutation: drop the runs (the description row shows only the plain text), or read the runs' tone as none.
+TEST_CASE("tui dialog: a description given as runs draws them on its row and reads as their characters",
+          "[tui][dialog]") {
+    Harness harness{50, 12};
+    Scene scene{harness, {}};
+    scene.dialog->setDescriptionSpans(
+        {{.text = "Impurity B: "}, {.text = "0.21 %", .strong = true, .tone = ui::Tone::Err}});
+    scene.dialog->setOpen(true);
+    Rows const rows = harness.draw();
+    std::size_t row = 0;
+    while (row < rows.size() && !rows.at(row).contains("Impurity B: 0.21 %")) {
+        ++row;
+    }
+    REQUIRE(row < rows.size());
+    auto const column = static_cast<int>(rows.at(row).find("0.21"));
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(static_cast<int>(row), column).style.bold);
+    CHECK(buffer.at(static_cast<int>(row), column).style.fg == harness.screen().theme().error.fg);
+    CHECK(scene.dialog->accessibleDescription() == "Impurity B: 0.21 %");
+}

@@ -806,6 +806,33 @@ TEST_CASE("interpreter control: a text's and a banner's spans record their runs 
           }) == 1);
 }
 
+// Mutation: drop the tone from spansOf (the run records none); report a bad tone on every evaluation (the count is
+// two); keep the run's tone when it is none of the names (the run records `Err`).
+TEST_CASE(
+    "interpreter control: a run's tone is read, a text's tone is applied, and a bad computed tone is reported once",
+    "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "tones",
+      "state": {"tone": {"init": "err"}, "n": {"init": 1}},
+      "view": {"kind": "column", "children": [
+        {"kind": "text", "testId": "kpi", "role": "display", "tone": {"ref": "tone"}, "text": "7"},
+        {"kind": "text", "testId": "line",
+         "spans": {"list": ["Past due ", {"obj": {"text": "7", "strong": true, "tone": {"ref": "tone"}}}]}},
+        {"kind": "button", "testId": "bad", "label": "Bad",
+         "onClick": [{"set": "tone", "value": "pink"}, {"set": "n", "value": 2}]}]}})");
+    CHECK(h.backend.prop(h.byTestId("Text", "kpi"), "tone") == "Err");
+    int const line = h.byTestId("Text", "line");
+    CHECK(h.backend.prop(line, "spans") == "[Past due ,7;strong;tone=Err]");
+    h.backend.click(h.byTestId("Button", "bad"));
+    h.settle();
+    CHECK(h.backend.prop(line, "spans") == "[Past due ,7;strong]");
+    h.backend.click(h.byTestId("Button", "bad"));
+    h.settle();
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.path == "/view/children/1/spans";
+          }) == 1);
+}
+
 // Mutation: read every item's tone as none (the `;tone=Err` is not recorded).
 TEST_CASE("interpreter control: a stacked key-value records its captions, its items' runs and their tones",
           "[ui][interpreter]") {

@@ -26,13 +26,11 @@ namespace morph::qt_quick::detail {
 
 // ── Fields ────────────────────────────────────────────────────────────────
 
-/// Runs of text as the rich text a label draws: each run's text escaped, a strong run bold, a mono run in
-/// @p monoFamilies, the whole kept in `white-space:pre-wrap` so line feeds and runs of spaces stay as a plain text
-/// keeps them.
-[[nodiscard]] QString richTextOf(std::vector<ui::TextSpan> const& spans, QStringList const& monoFamilies);
-
-/// The monospace families the engine's `Theme` draws `font.mono` in, first choice first.
-[[nodiscard]] QStringList monoFamiliesOf(Context const& context);
+/// Runs of text as the list a label's markup is built from, in QML: one map per run holding `text` (escaped for
+/// rich text), `strong`, `mono` and `tone` (the `Tone` index, 0 none). The markup itself is built in QML
+/// (`MorphWidget.runsHtml`), from the theme and the widget's scheme as they are when it is drawn, so a theme applied
+/// after the mount restyles the runs.
+[[nodiscard]] QVariantList runsOf(std::vector<ui::TextSpan> const& spans);
 
 class TextImpl final : public FieldItemWidget<ui::TextWidget> {
 public:
@@ -42,8 +40,6 @@ public:
     void setSpans(std::vector<ui::TextSpan> const& spans) override;
     /// A text is not described; the mount never asks.
     void setDescription(std::string_view description) override;
-    /// A text is not toned; the mount never asks.
-    void setTone(ui::Tone tone) override;
     [[nodiscard]] std::string shownText() const override;
 };
 
@@ -435,7 +431,14 @@ public:
         }
     }
     void setTitle(std::string_view title) override { this->write("title", toQString(title)); }
-    void setDescription(std::string_view description) override { this->write("description", toQString(description)); }
+    void setDescription(std::string_view description) override {
+        this->write("descriptionRuns", QVariantList{});
+        this->write("description", toQString(description));
+    }
+    void setDescriptionSpans(std::vector<ui::TextSpan> const& spans) override {
+        this->write("description", toQString(ui::spansText(spans)));
+        this->write("descriptionRuns", runsOf(spans));
+    }
     void setOnDismiss(ui::Action onDismiss) override {
         this->relay().on(QStringLiteral("dismiss"), [onDismiss = std::move(onDismiss)](QVariant const&) {
             if (onDismiss) {

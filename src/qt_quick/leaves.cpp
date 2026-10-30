@@ -246,13 +246,13 @@ BannerImpl::BannerImpl(Context& context, ui::ContainerWidget* parent)
 void BannerImpl::setTone(ui::Tone tone) { write("tone", static_cast<int>(tone)); }
 
 void BannerImpl::setText(std::string_view text) {
-    write("richText", QString{});
+    write("runs", QVariantList{});
     write("text", toQString(text));
 }
 
 void BannerImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
     write("text", toQString(ui::spansText(spans)));
-    write("richText", richTextOf(spans, monoFamiliesOf(context())));
+    write("runs", runsOf(spans));
 }
 
 void BannerImpl::setActionLabel(std::string_view label) { write("actionLabel", toQString(label)); }
@@ -371,15 +371,14 @@ std::string ChartImpl::shownText() const { return toUtf8(read("summary").toStrin
 KeyValueImpl::KeyValueImpl(Context& context, ui::ContainerWidget* parent)
     : ItemWidget{context, QStringLiteral("MorphKeyValue"), parent} {}
 
-// `value` is the characters shown, which the pair's accessible name reads; `richText` the runs of a value with spans.
+// `value` is the characters shown, which the pair's accessible name reads; `runs` the runs of a value with spans.
 void KeyValueImpl::setItems(std::vector<ui::KeyValueItem> const& items) {
     QVariantList list;
-    QStringList const monoFamilies = monoFamiliesOf(context());
     for (ui::KeyValueItem const& item : items) {
         bool const runs = !item.spans.empty();
         list.append(QVariantMap{{QStringLiteral("label"), toQString(item.label)},
                                 {QStringLiteral("value"), toQString(runs ? ui::spansText(item.spans) : item.value)},
-                                {QStringLiteral("richText"), runs ? richTextOf(item.spans, monoFamilies) : QString{}},
+                                {QStringLiteral("runs"), runs ? runsOf(item.spans) : QVariantList{}},
                                 {QStringLiteral("tone"), static_cast<int>(item.tone)}});
     }
     write("items", list);

@@ -12,8 +12,8 @@ MorphWidget {
     property int tone: 0
     // The characters shown: the message, or its runs joined.
     property string text: ""
-    // The message's runs as escaped rich text, built in C++; while it is not empty the label shows it.
-    property string richText: ""
+    // The message's runs, as a text's; while there are any, the label shows their markup.
+    property var runs: []
     property string actionLabel: ""
     property bool dismissible: false
 
@@ -47,10 +47,10 @@ MorphWidget {
 
         Label {
             objectName: "message"
-            textFormat: root.richText !== "" ? Text.RichText : Text.PlainText
+            textFormat: root.runs.length > 0 ? Text.RichText : Text.PlainText
             font: Theme.bodyFont
             Layout.fillWidth: true
-            text: root.richText !== "" ? root.richText : root.text
+            text: root.runs.length > 0 ? root.runsHtml(root.runs) : root.text
             wrapMode: Text.Wrap
         }
 

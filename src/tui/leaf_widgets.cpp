@@ -96,8 +96,8 @@ void TextImpl::setDescription(std::string_view description) {
 }
 
 void TextImpl::setTone(ui::Tone tone) {
-    static_cast<void>(tone);
-    throw std::logic_error{"morph::tui: a text is not toned"};
+    _tone = tone;
+    refresh();
 }
 
 void TextImpl::setRole(ui::TextRole role) {
@@ -120,7 +120,11 @@ void TextImpl::setRole(ui::TextRole role) {
 }
 
 void TextImpl::paintControl(::core::tui::Canvas& canvas) {
-    ::core::tui::Style const style = roleStyle(canvas.theme(), _role);
+    ::core::tui::Style style = roleStyle(canvas.theme(), _role);
+    if (_tone != ui::Tone::Neutral) {
+        // The tone is the colour; the role keeps its weight.
+        style.fg = toneStyle(canvas.theme(), _tone).fg;
+    }
     if (!_runs.empty()) {
         paintRuns(canvas, _runs, style, true);
     } else {

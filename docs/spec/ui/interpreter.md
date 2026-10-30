@@ -368,8 +368,9 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   that no focused widget inside took: a button, a text input with `onSubmit` or that commits on Enter, and a table
   take it first.
 - **The head.** A screen's `status`, `tools`, `actions` and `menu` are lowered once, at mount, in the screen scope;
-  `Screen::status()`, `tools()`, `actions()` and `menu()` read the visible ones (a tracked read), `Screen::subtitle()`
-  and `menuLabel()` evaluate `subtitle` and `menuLabel`, and `Screen::runAction(id)`, `chooseMenuEntry(id)`,
+  `Screen::status()`, `tools()`, `actions()` and `menu()` read the visible ones (a tracked read), `Screen::subtitle()`,
+  `subtitleSpans()` and `menuLabel()` evaluate `subtitle`, `subtitleSpans` (into runs, with a run it cannot read
+  dropped and a tone of no known name reported once) and `menuLabel`, and `Screen::runAction(id)`, `chooseMenuEntry(id)`,
   `editTool(id, value)` and `submitTool(id)` run an enabled, visible part's commands as a user event, reporting an
   unknown, hidden or disabled id. A head tool is controlled: the interpreter holds no draft for it, so its `value` or
   `selected` is the document's binding alone, and an edit reaches the screen only through its commands.

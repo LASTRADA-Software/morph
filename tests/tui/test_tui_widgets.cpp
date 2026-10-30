@@ -794,6 +794,27 @@ TEST_CASE("tui widgets: a text's runs draw in order, a strong run bold and its n
     CHECK(harness.draw() == Rows{"plain"});
 }
 
+// Mutation: ignore a run's tone in paintRuns (the run keeps the text's colour), or let a text's tone replace its
+// boldness (a heading is no longer bold).
+TEST_CASE("tui widgets: a toned run takes the tone's colour, and a toned text keeps its role's boldness",
+          "[tui][widgets]") {
+    Harness harness{30, 3};
+    auto const& theme = harness.screen().theme();
+    auto const text = harness.make<TextImpl>(nullptr);
+    text->setSpans({{.text = "Past due "}, {.text = "7", .tone = ui::Tone::Err}});
+    CHECK(harness.draw() == Rows{"Past due 7"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK_FALSE(buffer.at(0, 0).style.fg == theme.error.fg);
+    CHECK(buffer.at(0, 9).style.fg == theme.error.fg);
+    text->setText("Past due 7");
+    text->setRole(ui::TextRole::Heading);
+    text->setTone(ui::Tone::Err);
+    static_cast<void>(harness.draw());
+    auto const& drawn = harness.screen().renderedBuffer();
+    CHECK(drawn.at(0, 0).style.fg == theme.error.fg);
+    CHECK(drawn.at(0, 0).style.bold);
+}
+
 // Mutation: leave the mark's cells out of the text's natural size (the mark then overwrites its last characters).
 TEST_CASE("tui widgets: a required text draws its mark after its last line, at its natural width in a row",
           "[tui][widgets]") {

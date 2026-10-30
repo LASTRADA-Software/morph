@@ -2792,17 +2792,19 @@ struct WrappingRow {
     return checks.result();
 }
 
-/// @brief Case: a Text given spans reads as its runs' characters, joined in order: a run's markup is characters.
+/// @brief Case: a Text given spans reads as its runs' characters, joined in order: a run's markup is characters, and
+///        a run's tone changes its colour and nothing it reads.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> textSpansReadAsCharacters(ConformanceProbe& probe) {
-    Mounted const view{
-        probe.runtime(), probe.backend(),
-        ui::text({.spans = std::vector<TextSpan>{
-                      {.text = "Lot "}, {.text = "L-26-0381", .mono = true}, {.text = " <b>x</b>", .strong = true}}})};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::text({.spans = std::vector<TextSpan>{{.text = "Lot "},
+                                                                {.text = "L-26-0381", .mono = true},
+                                                                {.text = " <b>x</b>", .strong = true},
+                                                                {.text = " 7 left", .tone = Tone::Err}}})};
     probe.settle();
     Checks checks;
-    checks.text("a Text with spans", "Lot L-26-0381 <b>x</b>", probe.textOf(view.root()));
+    checks.text("a Text with spans", "Lot L-26-0381 <b>x</b> 7 left", probe.textOf(view.root()));
     return checks.result();
 }
 

@@ -23,7 +23,7 @@ public:
     void setSpans(std::vector<ui::TextSpan> const& spans) override;
     /// A text is not described; the mount never asks.
     void setDescription(std::string_view description) override;
-    /// A text is not toned; the mount never asks.
+    /// The tone is the text's colour; the role keeps its weight.
     void setTone(ui::Tone tone) override;
     [[nodiscard]] std::string probeText() const override { return _text; }
     [[nodiscard]] bool placedAcrossColumn() const override { return true; }
@@ -38,6 +38,7 @@ private:
     // The runs, while the text has spans; empty for a plain text.
     std::vector<ui::TextSpan> _runs;
     ui::TextRole _role = ui::TextRole::Normal;
+    ui::Tone _tone = ui::Tone::Neutral;
 };
 
 /// Button: `[ label ]`, activated by Enter, Space or a click; a list item draws ` label` across its whole slot. A list

@@ -488,11 +488,11 @@ struct FieldState {
     ///        shows none. Not on a text.
     Prop<std::string> description;
     /// @brief An evaluation of the value that does not make it invalid, drawn as the control's outline and the
-    ///        description's colour; `Neutral` is none. Not on a text.
+    ///        description's colour; `Neutral` is none. On a text it is the text's colour.
     Prop<Tone> tone = Tone::Neutral;
 };
 
-/// @brief A run of text inside a sentence, drawn in the node's role with its own weight and face.
+/// @brief A run of text inside a sentence, drawn in the node's role with its own weight, face and colour.
 struct TextSpan {
     /// @brief The run's text, UTF-8; shown as its characters, never as markup.
     std::string text;
@@ -500,9 +500,11 @@ struct TextSpan {
     bool strong = false;
     /// @brief Whether the run is drawn in the theme's monospace face (`font.mono`).
     bool mono = false;
+    /// @brief The run's colour, the tone's; `Neutral` is the text's own colour.
+    Tone tone = Tone::Neutral;
 
     /// @brief Memberwise equality.
-    /// @return Whether text and both flags match.
+    /// @return Whether text, both flags and the tone match.
     bool operator==(TextSpan const&) const = default;
 };
 
@@ -893,6 +895,9 @@ struct Dialog {
     Prop<bool> sheet = false;
     /// @brief The label of a sheet's dismiss control, which dismisses as Escape does.
     Prop<std::string> dismissLabel = std::string{"Close"};
+    /// @brief The description as runs; while bound or not empty, shown in place of `description`, which an older
+    ///        client draws.
+    Prop<std::vector<TextSpan>> descriptionSpans;
 };
 
 /// @brief A progress indicator.
@@ -1433,6 +1438,8 @@ struct Drawer {
     Side side = Side::End;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief The description as runs, as a dialog's.
+    Prop<std::vector<TextSpan>> descriptionSpans;
 };
 
 /// @brief A row of buttons in the footer of the dialog or drawer whose content holds it: what a document's overlay

@@ -140,8 +140,8 @@ public:
     virtual void setDescription(std::string_view description) = 0;
 
     /// @brief Evaluates the value without making it invalid: outlines the control in the tone and draws the
-    ///        description in the tone's colour. A field with errors is drawn as `Err` whatever its tone. A text takes
-    ///        none: the mount never calls it on one, and a backend refuses it there.
+    ///        description in the tone's colour. A field with errors is drawn as `Err` whatever its tone. A text
+    ///        takes it as its colour, whatever its role.
     /// @param tone The tone; `Neutral` is none.
     virtual void setTone(Tone tone) = 0;
 };
@@ -158,8 +158,8 @@ public:
     virtual void setRole(TextRole role) = 0;
 
     /// @brief Replaces what the text shows with runs, in order, in the text's role: a strong run in the backend's
-    ///        bold weight, a mono run in its monospace face, and every run's text as its characters. The mount calls
-    ///        it in place of `setText` for a text that has spans.
+    ///        bold weight, a mono run in its monospace face, a toned run in the tone's colour, and every run's text as
+    ///        its characters. The mount calls it in place of `setText` for a text that has spans.
     /// @param spans The runs.
     virtual void setSpans(std::vector<TextSpan> const& spans) = 0;
 };
@@ -559,6 +559,12 @@ public:
     ///        overlay's accessible description. The mount calls it only when bound or not empty.
     /// @param description The line, UTF-8; empty shows none.
     virtual void setDescription(std::string_view description) = 0;
+
+    /// @brief Shows the description as runs, as `TextWidget::setSpans` shows a text, and makes their joined
+    ///        characters the overlay's accessible description. The mount calls it in place of `setDescription` for a
+    ///        dialog whose document gives runs.
+    /// @param spans The runs.
+    virtual void setDescriptionSpans(std::vector<TextSpan> const& spans) = 0;
 
     /// @brief Sets what a user dismissal (Esc on the TUI) of the open dialog calls.
     /// @param onDismiss The handler; empty does nothing.
@@ -968,6 +974,10 @@ public:
     /// @brief Shows a line under the title, as `DialogWidget::setDescription` does.
     /// @param description The line, UTF-8; empty shows none.
     virtual void setDescription(std::string_view description) = 0;
+
+    /// @brief Shows the description as runs, as `DialogWidget::setDescriptionSpans` does.
+    /// @param spans The runs.
+    virtual void setDescriptionSpans(std::vector<TextSpan> const& spans) = 0;
 
     /// @brief Sets what a user dismissal (Esc on the TUI) calls.
     /// @param onDismiss The handler; empty does nothing.

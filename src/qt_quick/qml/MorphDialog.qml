@@ -13,6 +13,9 @@ MorphWidget {
     property string title: ""
     // A line under the title, in the head, divided from the body by a rule: the overlay's accessible description.
     property string description: ""
+    // The description as runs (`{text, strong, mono, tone}`, each text escaped), which `description` then holds the
+    // joined characters of; while there are any, the label shows their markup.
+    property var descriptionRuns: []
     property bool sheet: false
     property string dismissLabel: "Close"
     // Set while C++ opens or closes it, so that is not taken for a dismissal.
@@ -181,11 +184,11 @@ MorphWidget {
             Label {
                 id: descriptionLabel
                 objectName: "description"
-                textFormat: Text.PlainText
+                textFormat: root.descriptionRuns.length > 0 ? Text.RichText : Text.PlainText
                 font: Theme.bodyFont
                 color: Theme.cardScheme.muted
                 visible: root.description !== ""
-                text: root.description
+                text: root.descriptionRuns.length > 0 ? root.runsHtml(root.descriptionRuns) : root.description
                 wrapMode: Text.Wrap
                 Layout.fillWidth: true
             }

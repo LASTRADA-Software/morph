@@ -544,7 +544,12 @@ struct Harness {
     /// @brief A widget's text.
     /// @param testId The text widget's test id.
     /// @return Its text.
-    std::string text(std::string_view testId) const { return backend.prop(byTestId("Text", testId), "text"); }
+    std::string text(std::string_view testId) const {
+        int const id = byTestId("Text", testId);
+        std::string plain = backend.prop(id, "text");
+        // A text with runs is recorded as its runs; its text is their characters, joined.
+        return plain.empty() ? detail::spansCharacters(backend.prop(id, "spans")) : plain;
+    }
 };
 
 /// @brief Reads an expression in a screen.

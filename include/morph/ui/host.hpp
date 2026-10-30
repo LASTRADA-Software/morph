@@ -63,6 +63,11 @@ public:
     /// @return It; it keeps its last value once the screen is closed.
     [[nodiscard]] virtual reactive::Computed<std::string> const& subtitle() const = 0;
 
+    /// @brief The subtitle as runs, which a shell that knows them draws in place of `subtitle`.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
+    ///         its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<std::vector<TextSpan>> const* subtitleSpans() const { return nullptr; }
+
     /// @brief The status badges that are visible, in order.
     /// @return They; empty once the screen is closed.
     [[nodiscard]] virtual reactive::Computed<std::vector<HeadBadge>> const& status() const = 0;
@@ -732,6 +737,9 @@ private:
 
         [[nodiscard]] ScreenHead* head() noexcept override { return this; }
         [[nodiscard]] reactive::Computed<std::string> const& subtitle() const override { return _state->subtitle; }
+        [[nodiscard]] reactive::Computed<std::vector<TextSpan>> const* subtitleSpans() const override {
+            return &_state->subtitleSpans;
+        }
         [[nodiscard]] reactive::Computed<std::vector<HeadBadge>> const& status() const override {
             return _state->status;
         }
@@ -857,6 +865,13 @@ private:
                                }
                                return lastSubtitle;
                            }},
+                  subtitleSpans{*runtime,
+                                [this] {
+                                    if (!closed.get() && generation.get() >= 0) {
+                                        lastSubtitleSpans = screen->subtitleSpans();
+                                    }
+                                    return lastSubtitleSpans;
+                                }},
                   status{*runtime,
                          [this] {
                              return !closed.get() && generation.get() >= 0 ? screen->status()
@@ -1037,6 +1052,7 @@ private:
                     lastTitle = detail::host::titleText(screen->title());
                     lastIdentity = screen->identity();
                     lastSubtitle = detail::host::titleText(screen->subtitle());
+                    lastSubtitleSpans = screen->subtitleSpans();
                     runtime->batch([this] { closed.set(true); });
                     screen.reset();
                 }
@@ -1072,6 +1088,7 @@ private:
             std::string lastTitle;
             Value lastIdentity;
             std::string lastSubtitle;
+            std::vector<TextSpan> lastSubtitleSpans;
             std::string lastMenuLabel = "More actions";
             // What the screen was mounted with, for a remount.
             ParamMap params;
@@ -1083,6 +1100,7 @@ private:
             reactive::Computed<bool> dirty;
             reactive::Computed<Value> identity;
             reactive::Computed<std::string> subtitle;
+            reactive::Computed<std::vector<TextSpan>> subtitleSpans;
             reactive::Computed<std::vector<HeadBadge>> status;
             reactive::Computed<std::vector<HeadAction>> actions;
             reactive::Computed<std::vector<HeadMenuEntry>> menu;

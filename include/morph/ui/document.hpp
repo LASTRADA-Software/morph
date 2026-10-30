@@ -573,6 +573,9 @@ struct Document {
     ExprPtr dirty;
     /// @brief The subtitle expression of the screen's head; `nullptr` when none is declared.
     ExprPtr subtitle;
+    /// @brief The subtitle as runs, drawn in place of `subtitle` by a client that knows it; `nullptr` when none is
+    ///        declared.
+    ExprPtr subtitleSpans;
     /// @brief The head's status badges: `headBadge` parts, in order.
     std::vector<DocNodePtr> status;
     /// @brief The head's actions: `actionButton` parts, in order.
@@ -728,7 +731,7 @@ inline constexpr std::array<KeySpec, 18> kCommonKeys = {{
     {"keys", Shape::Keys},
 }};
 
-/// @brief The input decorations text and the inputs take; a text refuses `description` and `tone`.
+/// @brief The input decorations text and the inputs take; a text refuses `description`.
 inline constexpr std::array<KeySpec, 6> kFieldKeys = {{
     {"readonly", Shape::Condition},
     {"required", Shape::Condition},
@@ -888,7 +891,7 @@ inline constexpr std::array<KeySpec, 3> kTabsKeys = {
 inline constexpr std::array<KeySpec, 3> kTabKeys = {
     {{"id", Shape::Name}, {"label", Shape::Expr}, {"children", Shape::Nodes}}};
 /// @brief The keys of `dialog` and `drawer`.
-inline constexpr std::array<KeySpec, 13> kDialogKeys = {{{"open", Shape::Condition},
+inline constexpr std::array<KeySpec, 14> kDialogKeys = {{{"open", Shape::Condition},
                                                          {"gap", Shape::Expr},
                                                          {"title", Shape::Expr},
                                                          {"description", Shape::Expr},
@@ -900,7 +903,8 @@ inline constexpr std::array<KeySpec, 13> kDialogKeys = {{{"open", Shape::Conditi
                                                          {"actions", Shape::Parts, "actionButton", kInner},
                                                          {"side", Shape::Expr},
                                                          {"sheet", Shape::Condition},
-                                                         {"dismissLabel", Shape::Expr}}};
+                                                         {"dismissLabel", Shape::Expr},
+                                                         {"descriptionSpans", Shape::Expr}}};
 /// @brief The keys of `group`: a labelled set of inputs, lowered to a column of existing kinds.
 inline constexpr std::array<KeySpec, 6> kGroupKeys = {{{"label", Shape::Expr},
                                                        {"required", Shape::Condition},
@@ -1263,6 +1267,7 @@ public:
         doc.identity = optionalExpr(*object, "identity", "");
         doc.dirty = optionalExpr(*object, "dirty", "");
         doc.subtitle = optionalExpr(*object, "subtitle", "");
+        doc.subtitleSpans = optionalExpr(*object, "subtitleSpans", "");
         doc.status = topParts(*object, "status", "headBadge");
         doc.actions = topParts(*object, "actions", "actionButton");
         doc.menu = topParts(*object, "menu", "headMenuItem");
@@ -1271,7 +1276,8 @@ public:
         doc.navigation = navigation(*object, doc.id);
         if (doc.id == "app") {
             // The head belongs to a screen's tab; the app document has no view and so no head.
-            for (std::string_view const key : {"subtitle", "status", "actions", "menu", "menuLabel", "tools"}) {
+            for (std::string_view const key :
+                 {"subtitle", "subtitleSpans", "status", "actions", "menu", "menuLabel", "tools"}) {
                 if (member(*object, key) != nullptr) {
                     refuse(pointerAppend("", key),
                            "`" + std::string{key} + "` is a screen's; the app document has none");
@@ -2531,6 +2537,10 @@ public:
         if (_doc->subtitle) {
             checkExpr(*_doc->subtitle, root);
         }
+        if (_doc->subtitleSpans) {
+            checkExpr(*_doc->subtitleSpans, root);
+            checkSpans(_doc->subtitleSpans);
+        }
         if (_doc->menuLabel) {
             checkExpr(*_doc->menuLabel, root);
         }
@@ -3656,13 +3666,12 @@ private:
             // Absent keeps the schema's own mode, so a misspelt mode would silently do the same.
             static constexpr std::array<std::string_view, 2> kSubmitModes = {"explicit", "auto"};
             checkChoice(node, "submit", kSubmitModes);
+            checkSpans(node.prop("descriptionSpans"));
         } else if (node.kind == "text") {
             checkTextRole(node);
             checkSpans(node.prop("spans"));
-            for (std::string_view const key : {std::string_view{"description"}, std::string_view{"tone"}}) {
-                if (node.prop(key) != nullptr) {
-                    refuse(pointerAppend(node.path, key), "a text is not described; put the line in the text");
-                }
+            if (node.prop("description") != nullptr) {
+                refuse(pointerAppend(node.path, "description"), "a text is not described; put the line in the text");
             }
         } else if (node.kind == "banner") {
             checkSpans(node.prop("spans"));
@@ -4107,6 +4116,18 @@ private:
         }
     }
 
+    // A literal run's tone: one of the tone names, or null for none.
+    static void checkLiteralRunTone(Value const& tone, std::string const& path) {
+        std::string const* const name = tone.asString();
+        if (tone.isNull()) {
+            return;
+        }
+        if (name == nullptr ||
+            (*name != "neutral" && *name != "info" && *name != "ok" && *name != "warn" && *name != "err")) {
+            refuse(path, "a run's `tone` is neutral, info, ok, warn or err");
+        }
+    }
+
     // A literal run: a string, or a record of a string `text` and boolean flags.
     static void checkLiteralRun(Value const& run, std::string const& path) {
         if (run.asString() != nullptr) {
@@ -4120,10 +4141,12 @@ private:
             refuse(path, "a run's record gives its `text`");
         }
         for (auto const& [key, value] : *record) {
-            if (key != "text" && key != "strong" && key != "mono") {
-                refuse(path, "a run takes `text`, `strong` and `mono`, not `" + key + "`");
+            if (key != "text" && key != "strong" && key != "mono" && key != "tone") {
+                refuse(path, "a run takes `text`, `strong`, `mono` and `tone`, not `" + key + "`");
             }
-            if (key != "text" && value.asBool() == nullptr) {
+            if (key == "tone") {
+                checkLiteralRunTone(value, path);
+            } else if (key != "text" && value.asBool() == nullptr) {
                 refuse(path, "a run's `" + key + "` is true or false");
             }
         }
@@ -4135,8 +4158,12 @@ private:
         for (auto const& [key, value] : run.fields) {
             if (key == "text") {
                 hasText = true;
+            } else if (key == "tone") {
+                if (value->kind == ExprKind::Literal) {
+                    checkLiteralRunTone(value->literal, value->path);
+                }
             } else if (key != "strong" && key != "mono") {
-                refuse(value->path, "a run takes `text`, `strong` and `mono`, not `" + key + "`");
+                refuse(value->path, "a run takes `text`, `strong`, `mono` and `tone`, not `" + key + "`");
             } else if (value->kind == ExprKind::Literal && value->literal.asBool() == nullptr) {
                 refuse(value->path, "a run's `" + key + "` is true or false");
             }

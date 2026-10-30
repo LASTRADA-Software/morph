@@ -184,10 +184,12 @@ expression of one),
   `menuButton(MenuButtonOptions{label, icon, emphasis}, items)` writes a `style: button` menu; an icon-only one names
   itself with `.a11y(...)`.
 - **`text` and `banner`** take `spans` beside `text` (declared right after it, so a call names `.spans` before
-  `.role`). The free helpers build the runs: `strong(text)`, `mono(text)` and `styled(text, SpanStyle{.strong,
-  .mono})` each a record run, and `spans({…})` the list (`list` under a name that reads at the call):
-  `text({.spans = spans({"Lot ", mono(lot)}), .role = "muted"})`. `styled` is not `span`, which a node's `span`
-  already means.
+  `.role`). The free helpers build the runs: `strong(text)`, `mono(text)`, `toned(text, tone)` and
+  `styled(text, SpanStyle{.strong, .mono, .tone})` each a record run, and `spans({…})` the list (`list` under a name
+  that reads at the call): `text({.spans = spans({"Lot ", mono(lot)}), .role = "muted"})`. `styled` is not `span`,
+  which a node's `span` already means. A `text` also takes `tone`, its colour whatever its role:
+  `text({.text = "7", .role = "display", .tone = "err"})`. A dialog or drawer takes `descriptionSpans` beside
+  `description`, and `Scope::subtitleSpans(runs)` gives a screen's head its subtitle as runs beside `subtitle`.
 - **`group`** takes its children and `GroupOptions{label, required, description, errors, gap}`.
 - **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected, children, shape,
   size, mono}`: an absent `style` writes no key, and `selected`, a condition, is written as given: an item's current

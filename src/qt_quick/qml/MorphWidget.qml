@@ -94,6 +94,37 @@ Item {
         }
     }
 
+    // A colour as a CSS hex colour, which rich text reads: `#rrggbb`.
+    function cssColor(value: color): string {
+        const hex = channel => ("0" + Math.round(channel * 255).toString(16)).slice(-2)
+        return "#" + hex(value.r) + hex(value.g) + hex(value.b)
+    }
+
+    // The rich text of a list of runs, each `{text, strong, mono, tone}` with its text already escaped, in one
+    // `pre-wrap` span so line feeds and runs of spaces stay as a plain text keeps them. A strong run is drawn at the
+    // theme's strong weight, a mono run in the theme's mono families and a toned run in its tone's colour in this
+    // widget's scheme. It reads the theme and the scheme when it is evaluated, so a binding to it follows both.
+    function runsHtml(runs: var): string {
+        const quoted = Array.from(Theme.monoFamilies).map(family => "'" + family.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'")
+        const monoFamily = (quoted.length > 0 ? quoted.join(",") : "monospace")
+            .replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        let html = "<span style=\"white-space:pre-wrap\">"
+        for (const run of runs) {
+            let style = ""
+            if (run.strong) {
+                style += "font-weight:" + Theme.strongWeight + ";"
+            }
+            if (run.mono) {
+                style += "font-family:" + monoFamily + ";"
+            }
+            if (run.tone !== 0) {
+                style += "color:" + root.cssColor(root.toneOf(run.tone)) + ";"
+            }
+            html += style === "" ? run.text : "<span style=\"" + style + "\">" + run.text + "</span>"
+        }
+        return html + "</span>"
+    }
+
     // A tone's fill in this widget's scheme: `color.<tone>.bg`.
     function toneBgOf(index: int): color {
         switch (index) {

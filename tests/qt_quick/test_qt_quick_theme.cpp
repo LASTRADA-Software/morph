@@ -123,6 +123,32 @@ TEST_CASE("qt_quick theme: a token set reaches a generated screen's widget and f
     CHECK(labelColor(item, QStringLiteral("Samples")) == QColor{"#1d1d1f"});
 }
 
+// Mutation: build the runs' markup in C++ at setSpans (the mounted run keeps the colour it was mounted with).
+TEST_CASE("qt_quick theme: a mounted toned run takes a later theme's colour", "[qt_quick]") {
+    Scene scene;
+    ui::Mounted const mounted{
+        scene.runtime(), scene.backend(),
+        ui::text({.spans = std::vector<ui::TextSpan>{{.text = "Past due "}, {.text = "7", .tone = ui::Tone::Err}},
+                  .common = {.testId = "line"}})};
+    scene.settle();
+    QObject const& label = Scene::controlOf(mounted.root());
+    auto const* const theme =
+        scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QString const before = theme->property("error").value<QColor>().name();
+    CHECK(label.property("text").toString().contains(QStringLiteral("color:") + before));
+
+    auto const tokens = ui::parseTokens(R"({"color": {"$type": "color", "err": {"$value": "#123456"}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    scene.settle();
+    QString const markup = label.property("text").toString();
+    CHECK(markup.contains(QStringLiteral("color:#123456")));
+    CHECK_FALSE(markup.contains(QStringLiteral("color:") + before));
+}
+
 TEST_CASE("qt_quick theme: a tab's label takes the scheme colour under every style", "[qt_quick]") {
     Scene scene;
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), brandTheme()).empty());

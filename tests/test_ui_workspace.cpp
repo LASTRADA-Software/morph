@@ -69,6 +69,13 @@ constexpr std::string_view kHeaded = R"({
   "state": { "stage": { "init": "Editing" } },
   "view": { "kind": "text", "testId": "body", "text": { "ref": "stage" } } })";
 
+/// A screen whose head gives its subtitle as runs beside the plain line an older client draws.
+constexpr std::string_view kRunHead = R"({
+  "vocab": "ui/1", "id": "runhead", "title": "Instrument",
+  "subtitle": "Instruments > EQ-0142",
+  "subtitleSpans": { "list": [ "Instruments > ", { "obj": { "text": "EQ-0142", "mono": true } } ] },
+  "view": { "kind": "text", "testId": "body", "text": "x" } })";
+
 /// A screen whose head has only a menu: an entry, a separator, an entry shown while `retireShown`, and a submenu.
 constexpr std::string_view kMenued = R"({
   "vocab": "ui/1", "id": "menued", "title": "Instrument", "menuLabel": "More instrument actions",
@@ -210,6 +217,7 @@ private:
             {"home", loadOrFail(kHome, morph::ui::testing::corpusCatalog())},
             {"draft", loadOrFail(kDraft, morph::ui::testing::corpusCatalog())},
             {"headed", loadOrFail(kHeaded, morph::ui::testing::corpusCatalog())},
+            {"runhead", loadOrFail(kRunHead, morph::ui::testing::corpusCatalog())},
             {"menued", loadOrFail(kMenued, morph::ui::testing::corpusCatalog())},
             {"tooled", loadOrFail(kTooled, morph::ui::testing::corpusCatalog())},
             {"asker", loadOrFail(kAsker, morph::ui::testing::corpusCatalog())},
@@ -836,6 +844,23 @@ TEST_CASE("workspace: a head's search and select are drawn in its row, controlle
     CHECK_FALSE(head->submit("lab"));
     CHECK(reported() == std::vector<std::string>{"head tool later is hidden", "head tool x is unknown",
                                                  "head tool lab is a select, which is not submitted"});
+}
+
+// Mutation: leave the runs out of the head's text (it draws the plain subtitle), or leave `subtitleSpans` out of the
+// head (a host that knows runs finds none).
+TEST_CASE("workspace: a head with subtitle runs mounts its subtitle text with those runs", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("runhead", {}) == 0U);
+    harness.settle();
+    morph::ui::ScreenHead* const head = shell.handleOf(0)->head();
+    REQUIRE(head != nullptr);
+    REQUIRE(head->subtitleSpans() != nullptr);
+    CHECK(head->subtitleSpans()->peek() ==
+          std::vector<morph::ui::TextSpan>{{.text = "Instruments > "}, {.text = "EQ-0142", .mono = true}});
+    int const subtitle = harness.byTestId("Text", "head_subtitle");
+    CHECK(harness.backend.prop(subtitle, "spans") == "[Instruments > ,EQ-0142;mono]");
 }
 
 // Mutation: answer null from a document screen's `head()` (nothing reaches the head or the row).

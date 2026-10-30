@@ -125,20 +125,6 @@ template <typename Special>
     return formatted + "]";
 }
 
-/// @brief Formats runs of text: `[Lot ,L-26-0381;mono]`, each run its text followed by `;strong` and `;mono` when set.
-/// @param spans The runs.
-/// @return Their text; `=`, `,`, `[`, `]` and `;` in a run are escaped, so a run cannot forge a flag.
-[[nodiscard]] inline std::string formatSpans(std::vector<TextSpan> const& spans) {
-    std::string formatted = "[";
-    for (TextSpan const& span : spans) {
-        formatted += formatted.size() == 1 ? "" : ",";
-        formatted += escape(span.text, [](char character) { return std::string_view{"=,[];"}.contains(character); });
-        formatted += span.strong ? ";strong" : "";
-        formatted += span.mono ? ";mono" : "";
-    }
-    return formatted + "]";
-}
-
 /// @brief Formats a key: an integer in decimal, a string in double quotes, so `7` and `"7"` differ.
 /// @param key The key.
 /// @return Its text. A string key is escaped as `formatItem` escapes, and a double quote in it is preceded by a
@@ -375,6 +361,53 @@ template <typename T, typename F>
         default:
             return "unknown";
     }
+}
+
+/// @brief Formats runs of text: `[Lot ,L-26-0381;mono,7;tone=Err]`, each run its text followed by `;strong`, `;mono`
+///        and `;tone=<tone>` when set.
+/// @param spans The runs.
+/// @return Their text; `=`, `,`, `[`, `]` and `;` in a run are escaped, so a run cannot forge a flag.
+[[nodiscard]] inline std::string formatSpans(std::vector<TextSpan> const& spans) {
+    std::string formatted = "[";
+    for (TextSpan const& span : spans) {
+        formatted += formatted.size() == 1 ? "" : ",";
+        formatted += escape(span.text, [](char character) { return std::string_view{"=,[];"}.contains(character); });
+        formatted += span.strong ? ";strong" : "";
+        formatted += span.mono ? ";mono" : "";
+        if (span.tone != Tone::Neutral) {
+            formatted += ";tone=";
+            formatted += enumName(span.tone);
+        }
+    }
+    return formatted + "]";
+}
+
+/// @brief The characters of runs as `formatSpans` records them: each run's text up to its first unescaped `;`, joined.
+/// @param recorded The recorded runs, `[a,b;strong]`; anything shorter than the brackets reads as no characters.
+/// @return Their text, unescaped.
+[[nodiscard]] inline std::string spansCharacters(std::string_view recorded) {
+    std::string joined;
+    if (recorded.size() < 2) {
+        return joined;
+    }
+    std::string_view const inner = recorded.substr(1, recorded.size() - 2);
+    bool flags = false;
+    for (std::size_t at = 0; at < inner.size(); ++at) {
+        char const character = inner.at(at);
+        if (character == '\\' && at + 1 < inner.size()) {
+            ++at;
+            if (!flags) {
+                joined += inner.at(at) == 'n' ? '\n' : inner.at(at);
+            }
+        } else if (character == ',') {
+            flags = false;
+        } else if (character == ';') {
+            flags = true;
+        } else if (!flags) {
+            joined += character;
+        }
+    }
+    return joined;
 }
 
 /// @brief A side's name.
@@ -931,7 +964,7 @@ public:
     void setTone(Tone tone) override { this->set("tone", enumName(tone)); }
 };
 
-/// @brief A fake `TextWidget`: properties `text`, `spans` (as `formatSpans` gives them), `role`.
+/// @brief A fake `TextWidget`: properties `text`, `spans` (as `formatSpans` gives them), `role`, `tone`.
 class FakeText final : public FakeField<TextWidget> {
 public:
     using FakeField<TextWidget>::FakeField;
@@ -943,13 +976,6 @@ public:
     void setDescription(std::string_view description) override {
         static_cast<void>(description);
         throw std::logic_error{"RecordingBackend: a text is not described"};
-    }
-    /// @brief Refuses a tone: a text is not toned.
-    /// @param tone The tone, ignored.
-    /// @throws std::logic_error always.
-    void setTone(Tone tone) override {
-        static_cast<void>(tone);
-        throw std::logic_error{"RecordingBackend: a text is not toned"};
     }
     void setRole(TextRole role) override { set("role", enumName(role)); }
 };
@@ -1335,6 +1361,9 @@ public:
     void setOpen(bool open) override { set("open", formatBool(open)); }
     void setTitle(std::string_view title) override { set("title", formatText(title)); }
     void setDescription(std::string_view description) override { set("description", formatText(description)); }
+    void setDescriptionSpans(std::vector<TextSpan> const& spans) override {
+        set("descriptionSpans", formatSpans(spans));
+    }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
     void setSheet(bool sheet) override { set("sheet", formatBool(sheet)); }
     void setDismissLabel(std::string_view label) override { set("dismissLabel", formatText(label)); }
@@ -1553,6 +1582,9 @@ public:
     void setOpen(bool open) override { set("open", formatBool(open)); }
     void setTitle(std::string_view title) override { set("title", formatText(title)); }
     void setDescription(std::string_view description) override { set("description", formatText(description)); }
+    void setDescriptionSpans(std::vector<TextSpan> const& spans) override {
+        set("descriptionSpans", formatSpans(spans));
+    }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
 };
 

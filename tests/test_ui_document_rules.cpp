@@ -199,13 +199,13 @@ TEST_CASE("ui document rules: literal spans are a list of runs, each a string or
     CHECK(refusal(text(R"({"lit": [7]})")) == "/view/spans: a run is a string or a record with `text`");
     CHECK(refusal(text(R"({"lit": [{"strong": true}]})")) == "/view/spans: a run's record gives its `text`");
     CHECK(refusal(text(R"({"lit": [{"text": "x", "loud": true}]})")) ==
-          "/view/spans: a run takes `text`, `strong` and `mono`, not `loud`");
+          "/view/spans: a run takes `text`, `strong`, `mono` and `tone`, not `loud`");
     CHECK(refusal(text(R"({"lit": [{"text": "x", "strong": 1}]})")) ==
           "/view/spans: a run's `strong` is true or false");
     CHECK(refusal(text(R"({"list": [{"lit": [1]}]})")) ==
           "/view/spans/list/0: a run is a string or a record with `text`");
     CHECK(refusal(text(R"({"list": [{"obj": {"text": "x", "loud": true}}]})")) ==
-          "/view/spans/list/0/obj/loud: a run takes `text`, `strong` and `mono`, not `loud`");
+          "/view/spans/list/0/obj/loud: a run takes `text`, `strong`, `mono` and `tone`, not `loud`");
 }
 
 // Mutation: drop the read-only content check (an input inside an entry then loads).

@@ -1283,6 +1283,52 @@ TEST_CASE("qt_quick widgets: every text a document gives is drawn as its charact
     }
 }
 
+// Mutation: ignore `tone` in MorphText (the colour stays the role's), or colour the role's font instead (the font
+// stays heading-sized and the colour check passes, so the font check is what keeps the role).
+TEST_CASE("qt_quick widgets: a text's tone is its colour whatever its role, and the role keeps its font",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const toned = scene.backend().createText(column.get());
+    toned->setText("7");
+    toned->setRole(ui::TextRole::Heading);
+    toned->setTone(ui::Tone::Err);
+    auto const plain = scene.backend().createText(column.get());
+    plain->setText("7");
+    plain->setRole(ui::TextRole::Heading);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QObject const& label = Scene::controlOf(*toned);
+    CHECK(label.property("font").value<QFont>() == theme->property("headingFont").value<QFont>());
+    CHECK(label.property("color").value<QColor>() == theme->property("error").value<QColor>());
+    CHECK(Scene::controlOf(*plain).property("color").value<QColor>() != theme->property("error").value<QColor>());
+}
+
+// Mutation: unwrap a mono run's span (it breaks anywhere in the line, and the heights below differ), or drop the
+// tone from the run list (the toned run keeps the text colour).
+TEST_CASE(
+    "qt_quick widgets: a mono run inside a narrow text still wraps with its sentence, and a toned run is "
+    "coloured",
+    "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const narrow = scene.backend().createText(column.get());
+    narrow->setSpans({{.text = "S-26-104170", .mono = true}});
+    auto const toned = scene.backend().createText(column.get());
+    toned->setSpans({{.text = "x", .tone = ui::Tone::Ok}});
+    scene.settle();
+    QObject& label = Scene::controlOf(*narrow);
+    qreal const oneLine = Scene::controlOf(*toned).property("implicitHeight").toReal();
+    label.setProperty("width", 20.0);
+    scene.settle();
+    CHECK(label.property("implicitHeight").toReal() > oneLine + 1);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(Scene::controlOf(*toned).property("text").toString().contains(
+        QStringLiteral("color:") + theme->property("success").value<QColor>().name()));
+}
+
 // Mutation: drop `toHtmlEscaped` (the markup run draws as styled `x & y`, narrower); drop the `pre-wrap` span (the
 // line feed and the spaces fold); build a mono run without its `font-family` (as wide as the body font).
 TEST_CASE("qt_quick widgets: a text's runs are escaped rich text that keeps their characters and faces",
@@ -1314,7 +1360,9 @@ TEST_CASE("qt_quick widgets: a text's runs are escaped rich text that keeps thei
     CHECK(std::abs(Scene::controlOf(*lines).property("implicitHeight").toReal() - (2 * lineHeight)) < 1.0);
     CHECK(std::abs(widthOf(*spaced) - plainWidth(scene.engine(), QStringLiteral("a     b"), font)) < 1.0);
     // A machine without a fixed-pitch family would draw the mono run in a proportional fallback and measure nothing.
-    QStringList const families = detail::monoFamiliesOf(base(*mono).context());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QStringList const families = theme->property("monoFamilies").toStringList();
     REQUIRE_FALSE(families.isEmpty());
     REQUIRE(QFontInfo{QFont{families.first()}}.fixedPitch());
     CHECK(widthOf(*mono) > widthOf(*body) + 10);

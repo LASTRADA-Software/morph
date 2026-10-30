@@ -790,6 +790,13 @@ void OverlayCore::setTitle(std::string_view title) {
 
 void OverlayCore::setDescription(std::string_view description) {
     _description = std::string{description};
+    _descriptionRuns.clear();
+    _self->refresh();
+}
+
+void OverlayCore::setDescriptionSpans(std::vector<ui::TextSpan> const& spans) {
+    _description = ui::spansText(spans);
+    _descriptionRuns = spans;
     _self->refresh();
 }
 
@@ -906,7 +913,11 @@ void OverlayCore::paintFrame(::core::tui::Canvas& canvas) {
     if (!_description.empty() && canvas.height() > 3) {
         // One row, clipped at the frame's width like any terminal text, then a rule across the frame's inside.
         auto line = canvas.subcanvas({.x = 2, .y = 1, .width = std::max(0, canvas.width() - 4), .height = 1});
-        line.putString(0, 0, splitLines(_description).front(), theme.textMuted);
+        if (_descriptionRuns.empty()) {
+            line.putString(0, 0, splitLines(_description).front(), theme.textMuted);
+        } else {
+            paintRuns(line, _descriptionRuns, theme.textMuted, false);
+        }
         for (int column = 1; column + 1 < canvas.width(); ++column) {
             canvas.putString(2, column, "─", theme.dialogBorder);
         }
