@@ -180,3 +180,15 @@
 {"logged": "2026-10-30 14:29:09", "event": "start", "task": "J.D", "title": "Batch J design", "group": "J"}
 {"logged": "2026-10-30 15:05:19", "event": "done", "task": "J.D"}
 {"logged": "2026-10-30 15:05:19", "event": "start", "task": "J.DR", "title": "Review batch J design", "group": "J"}
+{"logged": "2026-10-30 20:21:33", "event": "done", "task": "J.DR"}
+{"logged": "2026-10-30 20:21:33", "event": "start", "task": "J.DV", "title": "Revise batch J design", "group": "J"}
+{"logged": "2026-10-30 21:16:53", "event": "done", "task": "J.DV"}
+{"logged": "2026-10-30 21:23:40", "event": "done", "task": "J.F"}
+{"logged": "2026-10-30 21:23:40", "event": "start", "task": "J.C", "title": "Lane J-C", "group": "J"}
+{"logged": "2026-10-30 21:23:40", "event": "start", "task": "J.B", "title": "Lane J-B", "group": "J"}
+{"logged": "2026-10-30 22:00:08", "event": "done", "task": "I.W"}
+{"logged": "2026-10-30 22:00:08", "event": "start", "task": "J.A", "title": "Lane J-A", "group": "J"}
+{"logged": "2026-10-30 22:53:44", "event": "done", "task": "J.C"}
+{"logged": "2026-10-30 22:54:39", "event": "done", "task": "J.B"}
+{"logged": "2026-10-31 00:03:49", "event": "done", "task": "J.A"}
+{"logged": "2026-10-31 00:03:49", "event": "start", "task": "J.V", "title": "Lane V: verify the fold", "group": "J"}

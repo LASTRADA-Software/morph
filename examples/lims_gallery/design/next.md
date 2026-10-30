@@ -6,31 +6,24 @@ side branches, each in its own worktree, and is rebased onto `feat/lims-gallery`
 The live tracker is `status/STATUS.md` in this folder, published as a phone-friendly page (see "The status board"
 below). It lists every lane, its commits, the decisions and the follow-ups; read it first.
 
-## Resume here (paused 2026-10-30)
+## Resume here
 
 Everything below this section is older history; this section is current.
 
-| Branch | Worktree | Holds | State |
-|---|---|---|---|
-| `feat/lims-gallery` | `../morph-lims-gallery` (on `lg-is`) | PR #1045's branch | pushed at the pre-batch-H state; not yet updated |
-| `lg-fold-i` | `../morph-lims-e2` | batch H + batch I (lanes I-Q, I-V, I-S) + lane T's clang-tidy fixes | pushed; built, not yet fully verified |
-| `lg-w` | `../morph-lims-e2` | `lg-fold-i` + one WIP commit of lane W (Qt 6.8.1 qmllint `childBleedInset`, the `darkHead` `color.track` and `nav.*` icon warnings) | WIP, unverified |
-| `lg-jf` | `../morph-lims-e1` | `lg-fold-i` + one WIP commit of lane J-F (re-fit screens to the 785 px page beside the 1000 px sidebar) | WIP, unverified |
-| `lg-j-design` | `../morph-lims-e3` | `lg-fold-i` + the batch J design + this tracker | design not yet reviewed |
+`feat/lims-gallery` (PR #1045) holds batches A to J: batch I (lanes I-Q, I-V, I-S) with lane T's clang-tidy fixes and
+lane W's CI fixes, lane J-F's re-fit of the screens to the 785 px page beside the 1000 px sidebar, and batch J (lanes
+J-C, J-B, J-A) verified by lane V: no build warnings, every ctest, GCC `-Wshadow`, Qt 6.8.1 qmllint and Qt Quick
+tests, clang-tidy 22 over the whole diff, clang-format 22, the coverage allowlist, Doxygen, every example's render
+smoke (which now fails on any layout overflow) and a TUI mount.
 
-Next steps, in order:
-1. Finish lane W from `lg-w` (brief: `handoff/lane-w-brief.md`): every CI check on the fold — build without
-   warnings, full ctest, GCC `-Wshadow`, Qt 6.8.1 qmllint and offscreen Qt Quick tests, clang-tidy 22 over the whole
-   branch diff, clang-format 22, the coverage allowlist, Doxygen. Squash its WIP commit into real commits.
-2. Finish lane J-F from `lg-jf` (brief: `handoff/lane-jf-brief.md`, plus review 390's All/Flagged stretching full
-   width). Reviewers' reports it answers: `handoff/lg-ir-findings-{A,B}.md`.
-3. Rerun the review of `docs/superpowers/specs/2026-10-30-lims-gallery-batch-j-design.md` (default model), take its
-   findings, then implement lanes J-C, J-B, J-A on Sonnet, from `lg-w` once verified. The user's answers: overflow
-   reports and the page scrolls sideways; a per-screen `pageSurface`; `list.selection` defaults to `accent` (gallery
-   sets `fill`); `input.paddingX` defaults to 8; grabs pass `--user`; 12 px around dialog rules.
-4. Fold W, J-F and J; re-grab all 20 screens (with `--user "Dr. A. Meyer"`) and compare with the mockups (two
-   reviewers). Any remaining gap becomes another batch.
-5. Force-push the fold to `feat/lims-gallery`, drive PR #1045's CI green, merge.
+The design specs are `docs/superpowers/specs/2026-10-30-lims-gallery-batch-{i,j}-design.md`; lane briefs and the
+comparison reports that drove batch J are in `handoff/`.
+
+Next steps:
+1. Compare the grabs after batch J with the mockups (two reviewers, grabs signed in with `--user "Dr. A. Meyer"`).
+   Any remaining gap that needs the framework becomes another batch on this branch; write the "After batch J" section
+   of `visual-review.md` from that comparison.
+2. Drive PR #1045's CI to green, then merge once no known gaps remain.
 
 ## Branches
 
