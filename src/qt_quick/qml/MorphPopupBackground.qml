@@ -2,7 +2,8 @@
 import QtQuick
 
 // The frame of a popup that opens from a control (a menu, the date picker, a select's drop-down): the card scheme's
-// surface and border, the control radius, and the popup shadow below it.
+// surface, a 1 px rule in its divider colour, the control radius, and the popup shadow below it. The popup insets its
+// content from this frame by a spacing step of 1.
 Rectangle {
     id: root
 
@@ -10,7 +11,7 @@ Rectangle {
 
     color: root.scheme.surface
     border.width: 1
-    border.color: root.scheme.border
+    border.color: root.scheme.divider
     radius: Theme.radiusControl
 
     Rectangle {

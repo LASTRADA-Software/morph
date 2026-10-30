@@ -190,7 +190,7 @@ MorphWidget {
     Popup {
         id: popup
         y: root.buttonStyle ? trigger.height : bar.height
-        padding: 2
+        padding: Theme.spaceOf(1)
         onAboutToShow: root.placePopup()
         onWidthChanged: {
             if (visible)

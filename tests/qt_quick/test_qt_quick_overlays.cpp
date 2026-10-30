@@ -4,10 +4,13 @@
 // Escape or a click outside with one, and holding their content out of reach while closed.
 
 #include <QColor>
+#include <QFont>
 #include <QMetaObject>
 #include <QPointF>
 #include <QQuickItem>
 #include <QTest>
+#include <QVariant>
+#include <QVariantList>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -528,6 +531,102 @@ TEST_CASE("qt_quick overlays: a dropdown select's list and a date input's calend
     CHECK(calendar.left >= 0);
     CHECK(calendar.right <= 400);
     CHECK(framedByMorph(*picker));
+}
+
+namespace {
+
+/// The `Theme` step @p step in px.
+qreal spaceOf(QObject& theme, int step) {
+    QVariantList const steps = theme.property("space").toList();
+    REQUIRE(step >= 0);
+    REQUIRE(static_cast<qsizetype>(step) < steps.size());
+    return steps.at(step).toReal();
+}
+
+/// The colour role @p role of the theme's card scheme, which a popup is drawn with.
+QColor cardRole(QObject& theme, char const* role) {
+    auto* const card = theme.property("cardScheme").value<QObject*>();
+    REQUIRE(card != nullptr);
+    return card->property(role).value<QColor>();
+}
+
+}  // namespace
+
+// Mutations: put the Basic style's content item back (the value sits 12 px in); take the popup's own frame out (the
+// style's plain Rectangle, radius 0); drop the row cap (all twelve rows show); draw the current option at
+// `Font.DemiBold` and without the check; take the palette's highlight for `scheme.hover`.
+TEST_CASE(
+    "qt_quick overlays: a select's value is inset a step of 2, and its list is a framed list of at most eight "
+    "rows with the current option marked",
+    "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 600);
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto select = scene.backend().createSelect(column.get(), ui::SelectStyle::Dropdown);
+    std::vector<ui::SelectOption> options;
+    for (int number = 1; number <= 12; ++number) {
+        options.push_back(
+            {.key = std::string{"o"} + std::to_string(number), .label = "Option " + std::to_string(number)});
+    }
+    select->setOptions(options);
+    select->setSelected(std::string{"o3"});
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QQuickItem* control = nullptr;
+    for (QQuickItem* const candidate : Scene::itemsOf(Scene::itemOf(*select), "QQuickComboBox")) {
+        control = candidate;
+    }
+    REQUIRE(control != nullptr);
+    auto* const value = control->property("contentItem").value<QObject*>();
+    REQUIRE(value != nullptr);
+    CHECK(value->property("leftPadding").toReal() == spaceOf(*theme, 2));
+
+    auto* const popup = control->property("popup").value<QObject*>();
+    REQUIRE(popup != nullptr);
+    QMetaObject::invokeMethod(popup, "open");
+    scene.settle();
+    REQUIRE(popup->property("visible").toBool());
+    auto* const frame = popup->property("background").value<QObject*>();
+    REQUIRE(frame != nullptr);
+    CHECK(framedByMorph(*popup));
+    CHECK(frame->property("radius").toReal() == theme->property("radiusControl").toReal());
+    CHECK(frame->property("border").value<QObject*>()->property("color").value<QColor>() ==
+          cardRole(*theme, "divider"));
+
+    auto* const list = popup->property("contentItem").value<QQuickItem*>();
+    REQUIRE(list != nullptr);
+    qreal const row = theme->property("targetHeight").toReal() - 2;
+    qreal const inset = spaceOf(*theme, 1);
+    CHECK(popup->property("height").toReal() <= (8 * row) + (2 * inset) + 0.5);
+    CHECK(list->property("contentHeight").toReal() > list->height());
+
+    auto const optionAt = [&list](int index) {
+        QQuickItem* item = nullptr;
+        REQUIRE(QMetaObject::invokeMethod(list, "itemAtIndex", Qt::DirectConnection, qReturnArg(item), index));
+        REQUIRE(item != nullptr);
+        return item;
+    };
+    QQuickItem* const current = optionAt(2);
+    QQuickItem* const other = optionAt(3);
+    CHECK(current->height() == row);
+    QFont const currentFont = current->property("font").value<QFont>();
+    CHECK(static_cast<int>(currentFont.weight()) == theme->property("strongWeight").toInt());
+    CHECK(static_cast<int>(other->property("font").value<QFont>().weight()) == static_cast<int>(QFont::Normal));
+    auto const* const mark = current->findChild<QQuickItem*>(QStringLiteral("check"));
+    auto const* const otherMark = other->findChild<QQuickItem*>(QStringLiteral("check"));
+    REQUIRE(mark != nullptr);
+    REQUIRE(otherMark != nullptr);
+    CHECK(mark->isVisible());
+    CHECK_FALSE(otherMark->isVisible());
+
+    auto const* const fill = other->property("background").value<QQuickItem*>();
+    REQUIRE(fill != nullptr);
+    CHECK(fill->property("color").value<QColor>().alpha() == 0);
+    other->setProperty("highlighted", true);
+    scene.settle();
+    CHECK(fill->property("color").value<QColor>() == cardRole(*theme, "hover"));
+    CHECK(fill->property("radius").toReal() == theme->property("radiusBadge").toReal());
 }
 
 // Control: drop `Overlay.modal` from MorphDialog and MorphDrawer (no item named "scrim" exists, and the Basic style's

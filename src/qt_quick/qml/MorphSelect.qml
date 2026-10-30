@@ -54,7 +54,14 @@ MorphField {
     ComboBox {
         font: Theme.bodyFont
         id: combo
+        // An option is a row of the control height less 2 px; the list shows at most `maxRows` of them.
+        readonly property real optionHeight: Theme.targetHeight - 2
+        readonly property int maxRows: 8
         visible: !root.radio && !root.segmented
+        // The value and the chevron place themselves; the style's own padding would add to their insets.
+        padding: 0
+        leftPadding: 0
+        rightPadding: 0
         // The widget's own chords come before the control's handling of the key.
         Keys.priority: Keys.BeforeItem
         Keys.onPressed: event => event.accepted = root.takeOwnChord(event)
@@ -66,6 +73,18 @@ MorphField {
             scheme: root.scheme
             focused: combo.visualFocus || combo.popup.visible
             readOnly: root.readOnly
+        }
+        // The value starts a spacing step of 2 in from the border, and stops short of the chevron.
+        contentItem: Text {
+            objectName: "value"
+            leftPadding: Theme.spaceOf(2)
+            rightPadding: combo.indicator.width + Theme.spaceOf(2) * 2
+            text: combo.displayText
+            textFormat: Text.PlainText
+            font: combo.font
+            color: root.scheme.text
+            elide: Text.ElideRight
+            verticalAlignment: Text.AlignVCenter
         }
         indicator: Image {
             objectName: "indicator"
@@ -81,16 +100,18 @@ MorphField {
                 anchors.centerIn: parent
                 visible: parent.themedSource === ""
                 text: combo.popup.visible ? "▴" : "▾"
-                color: root.scheme.text
+                color: root.scheme.muted
             }
         }
-        // The drop-down: under the combo, as wide as it, in the shared popup frame.
+        // The drop-down: under the combo, as wide as it, in the shared popup frame; at most eight rows tall, then it
+        // scrolls.
         popup: Popup {
             id: dropdown
             y: combo.height
             width: combo.width
-            implicitHeight: Math.min(contentItem.implicitHeight, 400) + topPadding + bottomPadding
-            padding: 1
+            implicitHeight: Math.min(contentItem.implicitHeight, combo.optionHeight * combo.maxRows) + topPadding +
+                            bottomPadding
+            padding: Theme.spaceOf(1)
             onAboutToShow: placement.place(dropdown, combo)
             onWidthChanged: {
                 if (visible)
@@ -102,6 +123,7 @@ MorphField {
             }
 
             contentItem: ListView {
+                objectName: "options"
                 clip: true
                 implicitHeight: contentHeight
                 model: combo.popup.visible ? combo.delegateModel : null
@@ -115,19 +137,47 @@ MorphField {
         // The style's delegate draws an option's label as an IconLabel, which reads markup.
         delegate: ItemDelegate {
             id: option
+            objectName: "option"
             required property int index
             required property string modelData
+            readonly property bool current: combo.currentIndex === index
             width: ListView.view ? ListView.view.width : implicitWidth
+            height: combo.optionHeight
+            padding: 0
+            leftPadding: Theme.spaceOf(2)
+            rightPadding: Theme.spaceOf(2)
             text: modelData
             font.family: combo.font.family
             font.pixelSize: combo.font.pixelSize
-            font.weight: combo.currentIndex === index ? Font.DemiBold : Font.Normal
+            // The theme's strong weight, never a literal one: a family without that weight may match another face.
+            font.weight: option.current ? Theme.strongWeight : Font.Normal
             highlighted: combo.highlightedIndex === index
             hoverEnabled: combo.hoverEnabled
-            contentItem: MorphPlainContent {
-                control: option
-                color: option.palette.text
-                alignment: Qt.AlignLeft
+            palette.text: Theme.cardScheme.text
+            contentItem: Item {
+                MorphPlainContent {
+                    anchors.fill: parent
+                    anchors.rightMargin: check.visible ? check.implicitWidth + Theme.spaceOf(2) : 0
+                    control: option
+                    color: Theme.cardScheme.text
+                    alignment: Qt.AlignLeft
+                }
+                Text {
+                    id: check
+                    objectName: "check"
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: option.current
+                    text: "✓"
+                    textFormat: Text.PlainText
+                    font: option.font
+                    color: Theme.cardScheme.accent
+                }
+            }
+            background: Rectangle {
+                objectName: "optionFill"
+                radius: Theme.radiusBadge
+                color: option.highlighted || option.hovered ? Theme.cardScheme.hover : "transparent"
             }
         }
         // Declared, as the text input's field declares them.
