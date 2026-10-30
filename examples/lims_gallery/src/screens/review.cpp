@@ -507,12 +507,12 @@ ui::Node showChoice(Review const& review, bool compact) {
     auto const options =
         ui::list({ui::obj({{"key", "all"}, {"label", ui::format("All {0}", {review.resultCount})}}),
                   ui::obj({{"key", "flagged"}, {"label", ui::format("Flagged {0}", {review.flaggedCount})}})});
-    ui::Node choice = ui::select({.options = options,
-                                  .selected = review.show,
-                                  .label = "Show results",
-                                  .style = "segmented",
-                                  .onChoose = ui::set(review.show, ui::event())})
-                          .testId("show");
+    ui::Node const choice = ui::select({.options = options,
+                                        .selected = review.show,
+                                        .label = "Show results",
+                                        .style = "segmented",
+                                        .onChoose = ui::set(review.show, ui::event())})
+                                .testId("show");
     // Compact drops the caption and the control spans the page's width.
     if (compact) {
         return choice.sizing(ui::stretch());

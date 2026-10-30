@@ -1969,8 +1969,8 @@ struct WideRow {
     WideRow(Scene& scene, ui::ContainerWidget* parent, std::string const& testId) {
         row = scene.backend().createStack(parent, ui::Axis::Horizontal);
         row->setTestId(testId);
-        for (auto* const label : {"Approving needs your signature and a second reviewer",
-                                  "Approving needs your signature and a second reviewer"}) {
+        for (auto const* const label : {"Approving needs your signature and a second reviewer",
+                                        "Approving needs your signature and a second reviewer"}) {
             texts.push_back(scene.backend().createText(row.get()));
             texts.back()->setText(label);
         }
@@ -2004,7 +2004,7 @@ TEST_CASE("qt_quick containers: a container's minimum width is its padding and i
     // The row's content: both texts, which together are more than the whole window.
     CHECK(rowMinimum >= 2 * Scene::itemOf(*wide.texts.at(0)).implicitWidth());
     CHECK(rowMinimum > 300);
-    CHECK(columnItem.property("contentMinimumWidth").toDouble() == Catch::Approx(rowMinimum + 2 * step));
+    CHECK(columnItem.property("contentMinimumWidth").toDouble() == Catch::Approx(rowMinimum + (2 * step)));
 
     // The column that fits its content has a minimum that is not binding: nothing is wider than it.
     Scene roomy;
@@ -2089,7 +2089,7 @@ TEST_CASE("qt_quick containers: a scrollable page whose content cannot be narrow
     slot->setScrollable(true);
     WideRow const wide{scene, slot.get(), "row"};
     scene.settle();
-    QQuickItem& slotItem = Scene::itemOf(*slot);
+    QQuickItem const& slotItem = Scene::itemOf(*slot);
     auto const* const flick = slotItem.findChild<QQuickItem*>(QStringLiteral("flick"));
     REQUIRE(flick != nullptr);
     double const minimum = Scene::itemOf(*wide.row).property("contentMinimumWidth").toDouble();
@@ -2106,7 +2106,7 @@ TEST_CASE("qt_quick containers: a scrollable page whose content cannot be narrow
     fitting->setScrollable(true);
     WideRow const fits{roomy, fitting.get(), "row"};
     roomy.settle();
-    QQuickItem& fitItem = Scene::itemOf(*fitting);
+    QQuickItem const& fitItem = Scene::itemOf(*fitting);
     auto const* const fitFlick = fitItem.findChild<QQuickItem*>(QStringLiteral("flick"));
     REQUIRE(fitFlick != nullptr);
     CHECK(fitFlick->property("contentWidth").toDouble() == Catch::Approx(fitFlick->width()));
@@ -2139,7 +2139,7 @@ TEST_CASE("qt_quick containers: a tab page fills the page area, pads itself, and
     label->setText("short page");
     scene.settle();
 
-    QQuickItem& item = Scene::itemOf(*tabs);
+    QQuickItem const& item = Scene::itemOf(*tabs);
     auto const* const strip = item.findChild<QQuickItem*>(QStringLiteral("stripSurface"));
     REQUIRE(strip != nullptr);
     // The strip sits at the node's top, the page's content one inset under the strip's rule.
@@ -2148,7 +2148,7 @@ TEST_CASE("qt_quick containers: a tab page fills the page area, pads itself, and
     CHECK(Scene::itemOf(*column).mapToItem(&item, QPointF{0, 0}).y() == Catch::Approx(rule + step).margin(0.5));
     CHECK(Scene::itemOf(*column).mapToItem(&item, QPointF{0, 0}).x() == Catch::Approx(step).margin(0.5));
     // A page whose content fits neither clips nor takes input.
-    QQuickItem& slotItem = Scene::itemOf(*slot);
+    QQuickItem const& slotItem = Scene::itemOf(*slot);
     CHECK_FALSE(slotItem.property("scrolls").toBool());
     CHECK_FALSE(slotItem.clip());
 
@@ -2164,7 +2164,7 @@ TEST_CASE("qt_quick containers: a tab page fills the page area, pads itself, and
     auto const* const flick = slotItem.findChild<QQuickItem*>(QStringLiteral("flick"));
     REQUIRE(flick != nullptr);
     CHECK(flick->property("contentHeight").toDouble() ==
-          Catch::Approx(Scene::itemOf(*column).implicitHeight() + 2 * step).margin(1.0));
+          Catch::Approx(Scene::itemOf(*column).implicitHeight() + (2 * step)).margin(1.0));
     auto const* const bar = qobject_cast<QQuickItem*>(slotItem.property("barItem").value<QObject*>());
     REQUIRE(bar != nullptr);
     CHECK(bar->isVisible());

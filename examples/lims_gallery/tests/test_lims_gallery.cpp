@@ -105,8 +105,8 @@ TEST_CASE("lims gallery: the sidebar surface fills the current entry and the bas
     }
     auto const index = morph::ui::parseThemeIndex(indexText);
     REQUIRE(index.has_value());
-    morph::ui::TokenFileLookup const files = [&tokens](std::string_view id) -> morph::ui::TokenSet const* {
-        auto const found = tokens.find(id);
+    morph::ui::TokenFileLookup const files = [&tokens](std::string_view name) -> morph::ui::TokenSet const* {
+        auto const found = tokens.find(name);
         return found == tokens.end() ? nullptr : &found->second;
     };
     CHECK_FALSE(morph::ui::checkTheme(*index, files).has_value());
