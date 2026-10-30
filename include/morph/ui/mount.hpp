@@ -631,7 +631,8 @@ private:
     // costs no call.
     Widget& mountStack(reactive::Scope& scope, Axis axis, std::vector<Node> const& children, int gap,
                        Common const& common, ContainerWidget* parent, Align align = Align::Stretch,
-                       Justify justify = Justify::Start, bool wrap = false, bool divided = false, int padding = 0) {
+                       Justify justify = Justify::Start, bool wrap = false, bool divided = false,
+                       Padding padding = {}) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, axis));
         if (wrap) {
             widget.setWrap(true);
@@ -639,8 +640,8 @@ private:
         if (divided) {
             widget.setDivided(true);
         }
-        if (spacingStep(padding) != 0) {
-            widget.setPadding(spacingStep(padding));
+        if (Padding const inset = clampedPadding(padding); inset != Padding{}) {
+            widget.setPadding(inset);
         }
         applyCommon(scope, widget, common);
         widget.setGap(spacingStep(gap));

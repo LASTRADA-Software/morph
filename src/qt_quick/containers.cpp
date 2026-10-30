@@ -41,7 +41,10 @@ void StackImpl::setWrap(bool wrap) {
 
 void StackImpl::setDivided(bool divided) { write("divided", divided); }
 
-void StackImpl::setPadding(int padding) { write("padding", padding); }
+void StackImpl::setPadding(ui::Padding padding) {
+    write("paddingV", padding.vertical);
+    write("paddingH", padding.horizontal);
+}
 
 namespace {
 

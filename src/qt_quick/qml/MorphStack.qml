@@ -11,9 +11,11 @@ MorphWidget {
     // 0 vertical, 1 horizontal; fixed at creation.
     property int axis: 0
     property int gap: 0
-    // A spacing step the children are inset by on every side.
-    property int padding: 0
-    readonly property real inset: Theme.spaceOf(root.padding)
+    // The spacing steps the children are inset by above and below, and at the sides.
+    property int paddingV: 0
+    property int paddingH: 0
+    readonly property real insetY: Theme.spaceOf(root.paddingV)
+    readonly property real insetX: Theme.spaceOf(root.paddingH)
     // Across the axis (a `ui::Align` index, which C++ also writes on each child as its `crossAlign`) and along it
     // (a `ui::Justify` index: 0 start, 1 center, 2 end, 3 between).
     property int align: 0
@@ -29,17 +31,17 @@ MorphWidget {
     // Under `between` the layout's spacing comes from the stack's length, so its implicit length along the axis would
     // feed that length back to a parent that sizes the stack from it, growing on every pass; the stack's own natural
     // length is the children's and the gaps' instead.
-    implicitWidth: 2 * root.inset + (root.wrap ? root.wrappedNaturalWidth
+    implicitWidth: 2 * root.insetX + (root.wrap ? root.wrappedNaturalWidth
                                                 : root.axis === 1 && root.between ? root.naturalLength
                                                                                   : layout.implicitWidth)
-    implicitHeight: 2 * root.inset + (root.wrap ? free.implicitHeight
+    implicitHeight: 2 * root.insetY + (root.wrap ? free.implicitHeight
                                                 : root.axis === 0 && root.between ? root.naturalLength
                                                                                   : layout.implicitHeight)
 
     onWidthChanged: place()
     onWrapChanged: place()
     onGapChanged: place()
-    onPaddingChanged: place()
+    onPaddingHChanged: place()
     onAlignChanged: place()
     onJustifyChanged: place()
 
@@ -83,7 +85,7 @@ MorphWidget {
         if (count < 2)
             return root.gapLength
         const used = root.shownLengths.reduce((sum, length) => sum + length, 0)
-        const length = (root.axis === 0 ? root.height : root.width) - 2 * root.inset
+        const length = root.axis === 0 ? root.height - 2 * root.insetY : root.width - 2 * root.insetX
         return Math.max(root.gapLength, (length - used) / (count - 1))
     }
 
@@ -153,7 +155,7 @@ MorphWidget {
 
     // The same, at most the row's width.
     function basisOf(cell: Item): real {
-        return Math.min(root.naturalBasisOf(cell), root.width - 2 * root.inset)
+        return Math.min(root.naturalBasisOf(cell), root.width - 2 * root.insetX)
     }
 
     // Lays a wrapping row out: children fill lines in order, a child starting a new line when its basis, and a gap,
@@ -166,7 +168,7 @@ MorphWidget {
         if (!root.wrap)
             return
         const space = Theme.spaceOf(root.gap)
-        const lineWidth = root.width - 2 * root.inset
+        const lineWidth = root.width - 2 * root.insetX
         const cells = []
         for (let i = 0; i < free.children.length; ++i) {
             const cell = free.children[i]
@@ -288,7 +290,10 @@ MorphWidget {
     Item {
         id: free
         anchors.fill: parent
-        anchors.margins: root.inset
+        anchors.leftMargin: root.insetX
+        anchors.rightMargin: root.insetX
+        anchors.topMargin: root.insetY
+        anchors.bottomMargin: root.insetY
         visible: root.wrap
         onChildrenChanged: root.place()
     }
@@ -296,10 +301,10 @@ MorphWidget {
     GridLayout {
         id: layout
         visible: !root.wrap
-        x: root.inset + (root.axis === 1 && root.packed ? root.leadOf(root.width - 2 * root.inset - width) : 0)
-        y: root.inset + (root.axis === 0 && root.packed ? root.leadOf(root.height - 2 * root.inset - height) : 0)
-        width: root.axis === 1 && root.packed ? implicitWidth : root.width - 2 * root.inset
-        height: root.axis === 0 && root.packed ? implicitHeight : root.height - 2 * root.inset
+        x: root.insetX + (root.axis === 1 && root.packed ? root.leadOf(root.width - 2 * root.insetX - width) : 0)
+        y: root.insetY + (root.axis === 0 && root.packed ? root.leadOf(root.height - 2 * root.insetY - height) : 0)
+        width: root.axis === 1 && root.packed ? implicitWidth : root.width - 2 * root.insetX
+        height: root.axis === 0 && root.packed ? implicitHeight : root.height - 2 * root.insetY
         flow: root.axis === 0 ? GridLayout.TopToBottom : GridLayout.LeftToRight
         rowSpacing: root.axis === 0 && root.between ? root.betweenSpacing : root.gapLength
         columnSpacing: root.axis === 1 && root.between ? root.betweenSpacing : root.gapLength

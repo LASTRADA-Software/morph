@@ -148,10 +148,15 @@ takes its series as `ChartSeries{label, points, y, x, xLabel, tone, note, joined
 `PointExpression`, a function from the point's element (`row()`) to an expression, and its lines as
 `ReferenceLine{value, label, tone, style}` with a `LineStyle`. Children come first, as a `Nodes` list (`{a, b}`, or one node),
 options second. `tabs(tabs, TabsOptions{.selected, .onChoose})` takes `Tab{id, label, children}` pages.
-`pinned(content, PinnedOptions{.top, .bottom, .surface})` writes the bar-that-stays-in-view idiom: a `divided` column
-sized to stretch both ways holding the top bar, a vertical `scroll` sized to stretch both ways around `content`, and
-the bottom bar. A bar is a `column` of its list with `padding: 2` on `surface` (default the built-in `bar`; an empty
-`surface` writes the column with none); an empty list leaves its bar out.
+`pinned(content, PinnedOptions{.top, .bottom, .surface, .inset})` writes the bar-that-stays-in-view idiom: a `divided`
+column with `pageEdge: true`, sized to stretch both ways, holding the top bar, a vertical `scroll` sized to stretch both
+ways around `content`, and the bottom bar. `inset` is a spacing step, default 4 (the shell's page inset): `content`
+sits in a `column` padded by it on every side, and a bar is a `column` of its list padded `{"lit": [2, inset]}` on
+`surface` (default the built-in `bar`; an empty `surface` writes the column with none), so a bar's surface and rule span
+the column while its content lines up with the body's. `.inset = 0` writes the content as it is, a bar padded by 2 on
+every side and no `pageEdge`, and the shell insets the page. An empty list leaves its bar out, and a bar whose nodes all
+have a `visible` condition is visible while any of them is (a list with an unconditioned node always shows). `padding(
+vertical, horizontal)` writes a stack's two-step padding, the constant `{"lit": [vertical, horizontal]}`.
 `stepper(StepperOptions{.step, .steps, .backLabel, .continueLabel, .finishLabel, .onFinish, .extra, .labelled,
 .continueStretches, .testIdPrefix})` writes a wizard over screen state, with no node of its own: a column of a `steps`
 indicator built from the steps' labels and `step`, a `switch` on `step` with one case per step, and a footer row of
@@ -205,7 +210,7 @@ expression of one),
 - **`textInput`** takes `TextInputOptions{value, label, placeholder, mode, icon, unit, emphasis, prefix, mono, align,
   commitOn, onChange, onCommit, onSubmit}`; `prefix` is an expression, and `mono` and `align` (`Align::Start`,
   `Center`, `End`; absent writes no key) are written only when given.
-- **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, padding (a column or row), columns, tracks, align, justify, wrap, divided}`; an
+- **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, padding (a column or row; a step, or `padding(vertical, horizontal)`), pageEdge (a column or row), columns, tracks, align, justify, wrap, divided}`; an
   absent `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` and `tracks`
   (`GridTrack{width, align}`, each key written only when given) are the grid's, and
   a grid's `justify` is written so the loader refuses it rather than dropped. `wrap` is a row's: the children

@@ -719,6 +719,36 @@ inline constexpr int kMaxSpacingStep = 5;
 /// @return @p value clamped to `[0, kMaxSpacingStep]`.
 [[nodiscard]] constexpr int spacingStep(int value) noexcept { return std::clamp(value, 0, kMaxSpacingStep); }
 
+/// @brief The inset of a stack's children: one spacing step above and below, one at the sides.
+struct Padding {
+    /// @brief The step above and below, 0 to `kMaxSpacingStep`.
+    int vertical = 0;
+    /// @brief The step at the leading and trailing sides, 0 to `kMaxSpacingStep`.
+    int horizontal = 0;
+
+    /// @brief The same step on every side.
+    /// @param step A spacing step.
+    // NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions): `.padding = 3` writes every side.
+    constexpr Padding(int step = 0) noexcept : vertical(step), horizontal(step) {}
+
+    /// @brief A step for each axis.
+    /// @param vertical_   The step above and below.
+    /// @param horizontal_ The step at the sides.
+    constexpr Padding(int vertical_, int horizontal_) noexcept : vertical(vertical_), horizontal(horizontal_) {}
+
+    /// @brief Whether both steps match.
+    /// @param other The other padding.
+    /// @return Whether both axes are equal.
+    [[nodiscard]] constexpr bool operator==(Padding const& other) const noexcept = default;
+};
+
+/// @brief A padding with each step clamped as `spacingStep` clamps one.
+/// @param padding The padding as written.
+/// @return It, with both steps in `[0, kMaxSpacingStep]`.
+[[nodiscard]] constexpr Padding clampedPadding(Padding padding) noexcept {
+    return Padding{spacingStep(padding.vertical), spacingStep(padding.horizontal)};
+}
+
 /// @brief Children stacked top to bottom.
 struct Column {
     /// @brief The children, in order; a null child is skipped.
@@ -734,8 +764,9 @@ struct Column {
     /// @brief Whether a 1 px rule in the theme's divider colour is drawn between each two shown children, centred in
     ///        the gap; set once. The terminal draws none.
     bool divided = false;
-    /// @brief The inset of the children from every edge: a spacing step, 0 to `kMaxSpacingStep`; set once.
-    int padding = 0;
+    /// @brief The inset of the children: a spacing step on every side, or one step above and below and one at the
+    ///        sides; set once.
+    Padding padding;
 };
 
 /// @brief Children laid out left to right.
@@ -762,8 +793,9 @@ struct Row {
     /// @brief Whether children that do not fit on one line continue on the next, as a flex row with `wrap` does;
     ///        set once. A table row never wraps.
     bool wrap = false;
-    /// @brief The inset of the children from every edge: a spacing step, 0 to `kMaxSpacingStep`; set once.
-    int padding = 0;
+    /// @brief The inset of the children: a spacing step on every side, or one step above and below and one at the
+    ///        sides; set once.
+    Padding padding;
 };
 
 /// @brief One cell of a `Grid`.

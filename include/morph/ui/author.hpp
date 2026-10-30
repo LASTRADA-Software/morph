@@ -3814,9 +3814,22 @@ struct ContainerOptions {
     ///        `row`.
     bool divided = false;
     /// @brief The inset of the children from every edge of a `column` or `row`: a spacing step, 0 to
-    ///        `kMaxSpacingStep`. Not on a grid.
+    ///        `kMaxSpacingStep`, or `padding(vertical, horizontal)`. Not on a grid.
     AnyHandle padding;
+    /// @brief Whether a `column` or `row` insets its own content and so is the page's edge: when it is the screen's
+    ///        shown root, the shell lays it at the page's edges and does not inset the page. Written for a grid too,
+    ///        so the loader refuses it rather than the author silently losing it.
+    bool pageEdge = false;
 };
+
+/// @brief A two-step padding for `ContainerOptions::padding`: the vertical step above and below, the horizontal step
+///        at the sides, written as the constant list `{"lit": [vertical, horizontal]}`.
+/// @param vertical   The step above and below, 0 to `kMaxSpacingStep`.
+/// @param horizontal The step at the sides, 0 to `kMaxSpacingStep`.
+/// @return The padding.
+[[nodiscard]] inline AnyHandle padding(int vertical, int horizontal) {
+    return AnyHandle{std::vector<std::int64_t>{vertical, horizontal}};
+}
 
 namespace detail {
 
@@ -3840,6 +3853,9 @@ namespace detail {
     }
     if (options.divided) {
         node.flag("divided");
+    }
+    if (options.pageEdge) {
+        node.flag("pageEdge");
     }
     return node.done();
 }
@@ -3975,33 +3991,68 @@ struct PinnedOptions {
     Nodes bottom;
     /// @brief The surface each bar is drawn on; empty draws the bars on the surface around them.
     std::string surface = "bar";
+    /// @brief The page's inset, a spacing step: the shell's own, 4. The content and each bar's content are inset by
+    /// it,
+    ///        and the column is marked as the page's edge, so the shell does not inset the page around it. 0 writes
+    ///        the content as it is and bars padded by 2 on every side, and the shell insets the page.
+    int inset = 4;
 };
+
+namespace detail {
+
+/// @brief The condition under which a list of nodes shows something: the nodes' own `visible` conditions or-ed, when
+///        every node has one.
+/// @param nodes The nodes.
+/// @return The condition; absent when a node has none, which always shows, or when the list is empty.
+[[nodiscard]] inline AnyHandle anyShown(Nodes const& nodes) {
+    AnyHandle shown;
+    for (Json const& item : std::get<Json::array_t>(nodes.json().data)) {
+        auto const& members = std::get<Json::object_t>(item.data);
+        auto const found = members.find("visible");
+        if (found == members.end()) {
+            return {};
+        }
+        AnyHandle const condition = AnyHandle::raw(found->second);
+        shown = shown.present() ? AnyHandle::raw(call("or", {shown.json(), condition.json()})) : condition;
+    }
+    return shown;
+}
+
+}  // namespace detail
 
 /// @brief Content that scrolls between bars that stay in view: a divided column that stretches both ways, holding the
 ///        top bar, a vertical `scroll` that stretches in height around @p content, and the bottom bar. A bar is a
-///        `column` of its nodes inset by a spacing step of 2, drawn on `PinnedOptions::surface` (the built-in `bar`:
-///        the theme's surface colour with no border), so a rule separates it from the content; an empty list leaves
-///        its bar out. The scroll takes the column's spare height, so the bars stay at the column's ends however
-///        long the content is. Use it as a screen's root, which the workspace then lets fill the page.
+///        `column` of its nodes drawn on `PinnedOptions::surface` (the built-in `bar`: the theme's surface colour with
+///        no border), so a rule separates it from the content; an empty list leaves its bar out, and a bar whose nodes
+///        all have a `visible` condition shows while any of them does. The column spans the page: the content is
+///        inset by `PinnedOptions::inset` inside the scroll, and each bar is padded by step 2 above and below and by
+///        the inset at its sides, so a bar's surface and rule reach the page's edges and its content lines up with the
+///        body's. The scroll takes the column's spare height, so the bars stay at the column's ends however long the
+///        content is. Use it as a screen's root, which the workspace then lets fill the page.
 /// @param content The content that scrolls.
 /// @param options The bars.
 /// @return The column.
 [[nodiscard]] inline Node pinned(Nodes const& content, PinnedOptions const& options = {}) {
     std::vector<Node> children;
+    bool const inset = options.inset > 0;
     // Each bar carries its list's catalog facts, so the column names every model and action it does.
-    auto const bar = [&options](Nodes const& nodes) {
-        Node const node = column(nodes, {.padding = 2});
+    auto const bar = [&options, inset](Nodes const& nodes) {
+        Node node = column(nodes, {.padding = inset ? padding(2, options.inset) : AnyHandle{2}});
+        if (AnyHandle const shown = detail::anyShown(nodes); shown.present()) {
+            node = node.visible(shown);
+        }
         return options.surface.empty() ? node : node.surface(options.surface);
     };
     auto const present = [](Nodes const& nodes) { return !std::get<Json::array_t>(nodes.json().data).empty(); };
     if (present(options.top)) {
         children.push_back(bar(options.top));
     }
-    children.push_back(scroll(content).sizing(stretch(), stretch()));
+    children.push_back(
+        scroll(inset ? Nodes{column(content, {.padding = options.inset})} : content).sizing(stretch(), stretch()));
     if (present(options.bottom)) {
         children.push_back(bar(options.bottom));
     }
-    return column(Nodes{children}, {.divided = true}).sizing(stretch(), stretch());
+    return column(Nodes{children}, {.divided = true, .pageEdge = inset}).sizing(stretch(), stretch());
 }
 
 /// @brief A scope's builder: declares on the scope and returns the nodes that read it.

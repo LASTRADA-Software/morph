@@ -7338,6 +7338,23 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         ExprPtr const expr = node.prop(key);
         return expr ? boolOf(once(ctx, expr), format) : fallback;
     };
+    // A stack's padding: one step, or the loader-checked constant list of the vertical and the horizontal step. A
+    // computed padding that yields a list is not a step: it is reported once and taken as 0.
+    auto stackPadding = [&]() -> Padding {
+        ExprPtr const expr = node.prop("padding");
+        if (!expr) {
+            return {};
+        }
+        Value const value = once(ctx, expr);
+        if (ValueList const* const steps = value.asList()) {
+            if (expr->kind == ExprKind::Literal && steps->size() == 2) {
+                return Padding{static_cast<int>(intOf(steps->at(0), 0)), static_cast<int>(intOf(steps->at(1), 0))};
+            }
+            report(node.path + "/padding", "a computed `padding` is one spacing step, not a list; taken as 0");
+            return {};
+        }
+        return Padding{static_cast<int>(intOf(value, 0))};
+    };
     auto onceText = [&](std::string_view key) {
         ExprPtr const expr = node.prop(key);
         return expr ? textOf(once(ctx, expr), format) : std::string{};
@@ -7698,7 +7715,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                         .align = alignOf(node.name("align")),
                         .justify = justifyOf(node.name("justify")),
                         .divided = node.flag("divided"),
-                        .padding = static_cast<int>(onceInt("padding", 0))};
+                        .padding = stackPadding()};
             commonOf(node, ctx, element, spec.common);
             return ui::column(std::move(spec));
         }
@@ -7707,7 +7724,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                  .align = alignOf(node.name("align")),
                  .justify = justifyOf(node.name("justify")),
                  .wrap = node.flag("wrap"),
-                 .padding = static_cast<int>(onceInt("padding", 0))};
+                 .padding = stackPadding()};
         commonOf(node, ctx, element, spec.common);
         return ui::row(std::move(spec));
     }

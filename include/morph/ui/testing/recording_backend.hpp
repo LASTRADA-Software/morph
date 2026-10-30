@@ -1216,7 +1216,11 @@ public:
     void setJustify(Justify justify) override { set("justify", formatJustify(justify)); }
     void setWrap(bool wrap) override { set("wrap", wrap ? "true" : "false"); }
     void setDivided(bool divided) override { set("divided", divided ? "true" : "false"); }
-    void setPadding(int padding) override { set("padding", std::to_string(padding)); }
+    void setPadding(Padding padding) override {
+        set("padding", padding.vertical == padding.horizontal
+                           ? std::to_string(padding.vertical)
+                           : std::to_string(padding.vertical) + "/" + std::to_string(padding.horizontal));
+    }
 };
 
 /// @brief A fake `GridWidget`: properties `columns`, `tracks`, `gap`, `align`, and `span` on a child.

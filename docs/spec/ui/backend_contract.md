@@ -287,7 +287,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)`; a dropdown's list opens under the field, at the field's start when it fits in the window, else ending at the field's end, and always inside the window | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
 | `MenuWidget` | `setItems(entries)`, `setTrigger(MenuTrigger{label, icon, emphasis})` (a button-style menu's); a popup opens under its control, at the control's start when it fits in the window, else ending at the control's end, and always inside the window | `setOnActivate(path)` |
-| `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)`, `setWrap(bool)`, `setDivided(bool)`, `setPadding(int)` (once, before any child, only for a padded stack; the stack's natural size includes the inset) | — |
+| `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)`, `setWrap(bool)`, `setDivided(bool)`, `setPadding(Padding)` (the vertical step above and below, the horizontal step at the sides; once, before any child, only for a padded stack; the stack's natural size includes the inset) | — |
 | `GridWidget` | `setColumns` (at least one), `setTracks(tracks)` (at least one, in place of `setColumns`), `setGap`, `setSpan(child, span)`, `setAlign(Align)` | — |
 | `SpacerWidget` | — | — |
 | `PanelWidget` | `setTitle`, `setHeader(Widget&)` (shown beside the title, called at most once), `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |

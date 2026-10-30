@@ -434,10 +434,11 @@ public:
     /// @param divided Always true: a stack that is not divided is never told.
     virtual void setDivided(bool divided) = 0;
 
-    /// @brief Insets the children from the stack's edges on every side. The mount calls it once, before the stack's
-    ///        first child, and only for a stack that has padding. The stack's natural size includes the inset.
-    /// @param padding The spacing step, 0 to `kMaxSpacingStep`.
-    virtual void setPadding(int padding) = 0;
+    /// @brief Insets the children from the stack's edges: the vertical step above and below, the horizontal step at
+    ///        the sides. The mount calls it once, before the stack's first child, and only for a stack that has
+    ///        padding. The stack's natural size includes the inset.
+    /// @param padding The steps, each 0 to `kMaxSpacingStep`.
+    virtual void setPadding(Padding padding) = 0;
 };
 
 /// @brief Children laid out row-major in columns.

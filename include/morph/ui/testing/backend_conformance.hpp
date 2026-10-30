@@ -1874,6 +1874,35 @@ struct Measured {
     return checks.result();
 }
 
+/// @brief Case: a two-step padding insets a column's ends and its sides apart.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> twoStepPaddingInsetsEndsAndSidesApart(ConformanceProbe& probe) {
+    Mounted const sides{probe.runtime(), probe.backend(),
+                        insideColumn(ui::column(Column{.children = {sizedText("a", {})}, .padding = Padding{0, 4}}))};
+    Mounted const ends{probe.runtime(), probe.backend(),
+                       insideColumn(ui::column(Column{.children = {sizedText("a", {})}, .padding = Padding{4, 0}}))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const atSides = measured(probe, sides);
+    Measured const atEnds = measured(probe, ends);
+    bool const found = atSides.children.size() == 1 && atEnds.children.size() == 1 && atSides.container != nullptr &&
+                       atEnds.container != nullptr;
+    checks.that(found, "both columns hold one child");
+    if (found) {
+        WidgetBounds const sideBox = geometry.of(*atSides.container);
+        WidgetBounds const sideChild = geometry.of(*atSides.children.at(0));
+        WidgetBounds const endBox = geometry.of(*atEnds.container);
+        WidgetBounds const endChild = geometry.of(*atEnds.children.at(0));
+        checks.that(sideChild.y == sideBox.y, "a column padded [0, 4] starts its child at its top edge");
+        checks.that(sideChild.x > sideBox.x, "a column padded [0, 4] starts its child inside its left edge");
+        checks.that(endChild.x == endBox.x, "a column padded [4, 0] starts its child at its left edge");
+        checks.that(endChild.y > endBox.y, "a column padded [4, 0] starts its child below its top edge");
+    }
+    return checks.result();
+}
+
 /// @brief Case: along a row, a content child is at least its minimum wide.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -3071,7 +3100,7 @@ struct WrappingRow {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 25> const cases{{
+    static std::array<ConformanceCase, 26> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3110,6 +3139,8 @@ struct WrappingRow {
         {.name = "a column with wrap: false keeps its cells to one line",
          .run = detail::noWrapColumnKeepsCellsToOneLine},
         {.name = "a column's padding insets its children", .run = detail::paddingInsetsChildren},
+        {.name = "a stack's two-step padding insets its ends and its sides apart",
+         .run = detail::twoStepPaddingInsetsEndsAndSidesApart},
     }};
     return cases;
 }

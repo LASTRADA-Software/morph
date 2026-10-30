@@ -316,7 +316,7 @@ public:
     void setJustify(ui::Justify justify) override;
     void setWrap(bool wrap) override;
     void setDivided(bool divided) override;
-    void setPadding(int padding) override;
+    void setPadding(ui::Padding padding) override;
 
 protected:
     /// A wrapping row places its children itself, again whenever one's size or visibility changes.
@@ -610,7 +610,8 @@ public:
     void setWrap(bool wrap) override { static_cast<void>(wrap); }
     /// As `setAlign`.
     void setDivided(bool divided) override { static_cast<void>(divided); }
-    void setPadding(int padding) override { static_cast<void>(padding); }
+    /// As `setAlign`.
+    void setPadding(ui::Padding padding) override { static_cast<void>(padding); }
     /// Its key, once the table was told it.
     [[nodiscard]] std::optional<ui::Key> const& key() const noexcept { return _key; }
     void setKey(ui::Key key);

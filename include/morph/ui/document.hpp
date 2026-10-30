@@ -852,13 +852,14 @@ inline constexpr std::array<KeySpec, 14> kHeadToolKeys = {{{"id", Shape::Name, {
                                                            {"enabled", Shape::Condition}}};
 /// @brief The keys of `column` and `row`; `wrap` is a row's and `divided` a column's, each read on the other only to
 ///        refuse it.
-inline constexpr std::array<KeySpec, 7> kContainerKeys = {{{"children", Shape::Nodes},
+inline constexpr std::array<KeySpec, 8> kContainerKeys = {{{"children", Shape::Nodes},
                                                            {"gap", Shape::Expr},
                                                            {"padding", Shape::Expr},
                                                            {"align", Shape::Text},
                                                            {"justify", Shape::Text},
                                                            {"wrap", Shape::Flag},
-                                                           {"divided", Shape::Flag}}};
+                                                           {"divided", Shape::Flag},
+                                                           {"pageEdge", Shape::Flag}}};
 /// @brief The keys of `grid`; `justify` is read only to refuse it.
 inline constexpr std::array<KeySpec, 6> kGridKeys = {{{"children", Shape::Nodes},
                                                       {"gap", Shape::Expr},
@@ -3627,8 +3628,37 @@ private:
         }
     }
 
+    // A stack's literal `padding` list is two spacing steps, vertical then horizontal, each 0 to 5; a panel's is one
+    // step. A computed padding is read at mount.
+    static void checkPadding(DocNode const& node) {
+        ExprPtr const padding = node.prop("padding");
+        if (padding == nullptr || padding->kind != ExprKind::Literal) {
+            return;
+        }
+        ValueList const* const list = padding->literal.asList();
+        if (list == nullptr) {
+            return;
+        }
+        if (node.kind == "panel") {
+            refuse(pointerAppend(node.path, "padding"), "a panel's `padding` is one spacing step, not a list");
+        }
+        // The largest spacing step, as `kMaxSpacingStep` (view.hpp) names it.
+        static constexpr std::int64_t kMostSteps = 5;
+        bool const steps = list->size() == 2 && std::ranges::all_of(*list, [](Value const& step) {
+                               std::int64_t const* const whole = step.asInt();
+                               return whole != nullptr && *whole >= 0 && *whole <= kMostSteps;
+                           });
+        if (!steps) {
+            refuse(pointerAppend(node.path, "padding"),
+                   "a `padding` list is two spacing steps, vertical then horizontal, each from 0 to 5");
+        }
+    }
+
     // The keys of a kind that take one of a closed set of values, and the pairs of keys that need each other.
     static void checkKindValues(DocNode const& node) {
+        if (node.kind == "column" || node.kind == "row" || node.kind == "panel") {
+            checkPadding(node);
+        }
         if (node.kind == "button") {
             static constexpr std::array<std::string_view, 5> kEmphasis = {"normal", "primary", "danger", "ghost",
                                                                           "dangerOutline"};

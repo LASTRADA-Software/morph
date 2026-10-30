@@ -328,8 +328,9 @@ TEST_CASE("handles read fields by member pointer below a name", "[ui][author]") 
 TEST_CASE(
     "pinned writes a divided column around a stretching scroll, with each bar a padded column on the bar surface",
     "[ui][author]") {
-    ui::Node const node = ui::pinned(ui::text({.text = "body"}),
-                                     {.top = ui::text({.text = "head"}), .bottom = ui::text({.text = "bar"})});
+    ui::Node const node =
+        ui::pinned(ui::text({.text = "body"}),
+                   {.top = ui::text({.text = "head"}), .bottom = ui::text({.text = "bar"}), .inset = 0});
     CHECK(
         text(node) ==
         R"({"kind":"column","children":[{"kind":"column","children":[{"kind":"text","text":"head"}],"padding":2,"surface":"bar"},)"
@@ -337,7 +338,8 @@ TEST_CASE(
         R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}},)"
         R"({"kind":"column","children":[{"kind":"text","text":"bar"}],"padding":2,"surface":"bar"}],"divided":true,)"
         R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}})");
-    ui::Node const bare = ui::pinned(ui::text({.text = "body"}), {.bottom = ui::text({.text = "bar"}), .surface = ""});
+    ui::Node const bare =
+        ui::pinned(ui::text({.text = "body"}), {.bottom = ui::text({.text = "bar"}), .surface = "", .inset = 0});
     CHECK(text(bare) == R"({"kind":"column","children":[{"kind":"scroll","children":[{"kind":"text","text":"body"}],)"
                         R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}},)"
                         R"({"kind":"column","children":[{"kind":"text","text":"bar"}],"padding":2}],"divided":true,)"
@@ -1699,4 +1701,32 @@ TEST_CASE("author: a key-value writes its caption layout only when given", "[ui]
     CHECK(text(ui::keyValue(
               ui::KeyValueOptions{.items = ui::ref("pairs"), .fieldLayout = morph::forms::FieldLayout::Inline})) ==
           R"({"kind":"keyValue","items":{"ref":"pairs"},"fieldLayout":"inline"})");
+}
+
+// Mutation: write today's helper (no page edge, no inset around the content, bars padded by 2 on every side).
+TEST_CASE("pinned marks its column as the page's edge and insets the content and each bar's sides", "[ui][author]") {
+    ui::Node const node = ui::pinned(ui::text({.text = "body"}), {.bottom = ui::text({.text = "bar"})});
+    CHECK(text(node) ==
+          R"({"kind":"column","children":[{"kind":"scroll","children":[{"kind":"column",)"
+          R"("children":[{"kind":"text","text":"body"}],"padding":4}],)"
+          R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}},)"
+          R"({"kind":"column","children":[{"kind":"text","text":"bar"}],"padding":{"lit":[2,4]},"surface":"bar"}],)"
+          R"("divided":true,"pageEdge":true,"sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}})");
+}
+
+// Mutation: write no `visible` on the bar (today's helper).
+TEST_CASE("pinned shows a bar while any of its nodes shows, when every node has a condition", "[ui][author]") {
+    auto const a = ui::ref("a");
+    auto const b = ui::ref("b");
+    ui::Node const one = ui::pinned(ui::text({.text = "body"}), {.bottom = ui::text({.text = "x"}).visible(a)});
+    CHECK(text(one).contains(R"("kind":"column","children":[{"kind":"text","text":"x","visible":{"ref":"a"}}],)"));
+    CHECK(text(one).contains(R"("visible":{"ref":"a"},"surface":"bar")"));
+    ui::Node const two =
+        ui::pinned(ui::text({.text = "body"}),
+                   {.bottom = ui::Nodes{ui::text({.text = "x"}).visible(a), ui::text({.text = "y"}).visible(b)}});
+    CHECK(text(two).contains(R"("visible":{"fn":"or","args":[{"ref":"a"},{"ref":"b"}]},"surface":"bar")"));
+    ui::Node const mixed =
+        ui::pinned(ui::text({.text = "body"}),
+                   {.bottom = ui::Nodes{ui::text({.text = "x"}).visible(a), ui::text({.text = "y"})}});
+    CHECK_FALSE(text(mixed).contains(R"("visible":{"ref":"a"},"surface")"));
 }

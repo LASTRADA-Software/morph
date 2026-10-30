@@ -1094,3 +1094,19 @@ TEST_CASE("ui::Mounted: a divided column records divided before its first child,
           "Column#1 gap=0\n"
           "  Text#2 role=Normal text=a\n");
 }
+
+TEST_CASE("ui::Mounted: a stack's padding reaches the backend as one step or as a step for each axis", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::column({.children = {ui::column({.padding = 3}), ui::row({.padding = ui::Padding{2, 4}}),
+                                 ui::row({.padding = ui::Padding{9, 1}}), ui::column({})}})};
+    CHECK(backend.dump() ==
+          "Column#1 gap=0\n"
+          "  Column#2 gap=0 padding=3\n"
+          "  Row#3 gap=0 padding=2/4\n"
+          "  Row#4 gap=0 padding=5/1\n"
+          "  Column#5 gap=0\n");
+}

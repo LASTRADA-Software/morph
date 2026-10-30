@@ -32,7 +32,7 @@ public:
     void setAlign(ui::Align align) override;
     void setJustify(ui::Justify justify) override;
     void setWrap(bool wrap) override;
-    void setPadding(int padding) override;
+    void setPadding(ui::Padding padding) override;
     /// Draws no rule: a rule would take a row of its own and double a list's height, and its lines are already apart.
     void setDivided(bool divided) override { static_cast<void>(divided); }
     [[nodiscard]] ui::Axis axis() const noexcept { return _axis; }

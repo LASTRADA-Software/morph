@@ -31,9 +31,9 @@ void StackImpl::setGap(int gap) {
     refresh();
 }
 
-void StackImpl::setPadding(int padding) {
-    _paddingRows = layout::stepCells(padding, ui::Axis::Vertical);
-    _paddingColumns = layout::stepCells(padding, ui::Axis::Horizontal);
+void StackImpl::setPadding(ui::Padding padding) {
+    _paddingRows = layout::stepCells(padding.vertical, ui::Axis::Vertical);
+    _paddingColumns = layout::stepCells(padding.horizontal, ui::Axis::Horizontal);
     refresh();
 }
 
