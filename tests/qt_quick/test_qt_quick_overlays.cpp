@@ -707,10 +707,10 @@ TEST_CASE(
         REQUIRE(item != nullptr);
         return item;
     };
-    QQuickItem* const current = optionAt(2);
+    QQuickItem const* const current = optionAt(2);
     QQuickItem* const other = optionAt(3);
     CHECK(current->height() == row);
-    QFont const currentFont = current->property("font").value<QFont>();
+    auto const currentFont = current->property("font").value<QFont>();
     CHECK(static_cast<int>(currentFont.weight()) == theme->property("strongWeight").toInt());
     CHECK(static_cast<int>(other->property("font").value<QFont>().weight()) == static_cast<int>(QFont::Normal));
     auto const* const mark = current->findChild<QQuickItem*>(QStringLiteral("check"));

@@ -423,7 +423,7 @@ TEST_CASE(
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
     auto const colorOf = [](QQuickItem const& item) { return item.property("color").value<QColor>(); };
-    QColor const surface = theme->property("surface").value<QColor>();
+    auto const surface = theme->property("surface").value<QColor>();
     CHECK(sameColour(colorOf(partOf(*table.rows.at(0), "tint")),
                      halfOver(surface, theme->property("successBg").value<QColor>())));
     CHECK(sameColour(colorOf(partOf(*table.rows.at(1), "tint")),
@@ -808,7 +808,7 @@ TEST_CASE("qt_quick table: with a select column a selected row has the bar and n
     REQUIRE(theme != nullptr);
     CHECK(partOf(*table.rows.at(1), "selectionBar").isVisible());
     CHECK(partOf(*table.rows.at(1), "fill").property("color").value<QColor>().alpha() == 0);
-    for (QQuickItem* const box : {&selectBoxOf(*table.rows.at(0)), &selectAllOf(*table.table)}) {
+    for (QQuickItem const* const box : {&selectBoxOf(*table.rows.at(0)), &selectAllOf(*table.table)}) {
         auto const* const indicator = box->property("indicator").value<QQuickItem*>();
         REQUIRE(indicator != nullptr);
         CHECK(indicator->objectName() == QStringLiteral("boxIndicator"));
@@ -998,7 +998,7 @@ TEST_CASE("qt_quick table: an overline cell keeps its capitals and letter spacin
     auto name = scene.backend().createText(row.get());
     name->setText("pH");
     scene.settle();
-    QFont const font = Scene::controlOf(*kind).property("font").value<QFont>();
+    auto const font = Scene::controlOf(*kind).property("font").value<QFont>();
     CHECK(font.featureValue(QFont::Tag{"tnum"}) == 1);
     CHECK(font.capitalization() == QFont::AllUppercase);
     CHECK(font.letterSpacing() > 0.0);

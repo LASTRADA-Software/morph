@@ -700,7 +700,7 @@ TEST_CASE("qt_quick widgets: a filled badge is a tag in the small strong step", 
     REQUIRE(fill != nullptr);
     REQUIRE(label != nullptr);
     CHECK(fill->property("radius").toReal() == theme->property("radiusBadge").toReal());
-    QFont const font = label->property("font").value<QFont>();
+    auto const font = label->property("font").value<QFont>();
     CHECK(font.pixelSize() == static_cast<int>(theme->property("smallPixels").toReal()));
     CHECK(static_cast<int>(font.weight()) == theme->property("strongWeight").toInt());
     CHECK(item.height() <= label->implicitHeight() + 2);
@@ -737,22 +737,22 @@ TEST_CASE("qt_quick widgets: an input's alignment, mono face, prefix and promine
         return *fields.front();
     };
 
-    QQuickItem& valueField = fieldOf(*value);
+    QQuickItem const& valueField = fieldOf(*value);
     CHECK(valueField.property("horizontalAlignment").toInt() == static_cast<int>(Qt::AlignRight));
     CHECK(Scene::itemOf(*value).property("tabularFigures").toBool());
     CHECK(fieldOf(*plain).property("horizontalAlignment").toInt() == static_cast<int>(Qt::AlignLeft));
 
     QStringList const monoFamilies = theme->property("monoFamilies").toStringList();
-    QFont const monoFont = fieldOf(*mono).property("font").value<QFont>();
+    auto const monoFont = fieldOf(*mono).property("font").value<QFont>();
     CHECK((monoFamilies.isEmpty() || monoFamilies.contains(monoFont.family())));
     CHECK(monoFont.family() != fieldOf(*plain).property("font").value<QFont>().family());
 
-    QFont const focalFont = fieldOf(*focal).property("font").value<QFont>();
+    auto const focalFont = fieldOf(*focal).property("font").value<QFont>();
     CHECK(static_cast<int>(focalFont.weight()) == theme->property("strongWeight").toInt());
     CHECK(focalFont.pixelSize() == static_cast<int>(std::lround(theme->property("headingPixels").toReal())));
     CHECK_FALSE(focalFont.italic());
 
-    QQuickItem& windowField = fieldOf(*window);
+    QQuickItem const& windowField = fieldOf(*window);
     QQuickItem const* const prefix = windowField.findChild<QQuickItem*>(QStringLiteral("prefix"));
     REQUIRE(prefix != nullptr);
     CHECK(prefix->isVisible());
@@ -1642,6 +1642,7 @@ TEST_CASE("qt_quick widgets: a date input with a pattern shows, reads and picks 
 namespace {
 
 // The items named @p name below @p root in the visual tree, in the order the model made them, left to right.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
 void collectNamed(QQuickItem& item, QString const& name, QList<QQuickItem*>& found) {
     for (QQuickItem* const child : item.childItems()) {
         if (child->objectName() == name && child->isVisible()) {
@@ -1679,8 +1680,8 @@ TEST_CASE("qt_quick widgets: steps are numbered circles joined by connectors tha
     scene.settle();
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
-    QColor const accent = theme->property("accent").value<QColor>();
-    QColor const controlBorder = theme->property("controlBorder").value<QColor>();
+    auto const accent = theme->property("accent").value<QColor>();
+    auto const controlBorder = theme->property("controlBorder").value<QColor>();
     QQuickItem& indicator = Scene::itemOf(*steps);
 
     auto const circles = namedItems(indicator, "circle");
@@ -1781,20 +1782,20 @@ TEST_CASE(
     auto const plain = scene.backend().createButton(row.get());
     plain->setLabel("\xE2\x80\xB9");
     scene.settle();
-    QObject* const theme = themeOf(scene);
-    QQuickItem const& item = Scene::itemOf(*square);
+    QObject const* const theme = themeOf(scene);
+    QQuickItem& item = Scene::itemOf(*square);
     double const target = theme->property("targetHeight").toReal();
     CHECK(item.height() == target);
     CHECK(item.width() == target);
     CHECK(Scene::itemOf(*plain).width() > target);
     QQuickItem const& background = controlBackground(item);
     CHECK(background.property("radius").toReal() == theme->property("radiusControl").toReal());
-    QList<QQuickItem*> const texts = Scene::itemsOf(const_cast<QQuickItem&>(item), "QQuickText");
+    QList<QQuickItem*> const texts = Scene::itemsOf(item, "QQuickText");
     REQUIRE_FALSE(texts.isEmpty());
-    QFont const font = texts.front()->property("font").value<QFont>();
+    auto const font = texts.front()->property("font").value<QFont>();
     CHECK(font.pixelSize() == static_cast<int>(std::lround(theme->property("bodyPixels").toReal())));
     CHECK(font.weight() == static_cast<QFont::Weight>(theme->property("strongWeight").toInt()));
-    QFont const normal = Scene::itemsOf(Scene::itemOf(*plain), "QQuickText").front()->property("font").value<QFont>();
+    auto const normal = Scene::itemsOf(Scene::itemOf(*plain), "QQuickText").front()->property("font").value<QFont>();
     CHECK(normal.weight() != font.weight());
 }
 
@@ -1837,9 +1838,9 @@ TEST_CASE(
     overline->setRole(ui::TextRole::Overline);
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
     scene.settle();
-    QObject* const theme = themeOf(scene);
+    QObject const* const theme = themeOf(scene);
     auto const labelFont = [&] { return Scene::controlOf(*overline).property("font").value<QFont>(); };
-    QFont const strong = theme->property("strongFont").value<QFont>();
+    auto const strong = theme->property("strongFont").value<QFont>();
     CHECK(labelFont().pixelSize() == strong.pixelSize());
     CHECK(labelFont().weight() == strong.weight());
     CHECK(labelFont().capitalization() == QFont::MixedCase);

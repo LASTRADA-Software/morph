@@ -546,7 +546,7 @@ struct Harness {
     /// @return Its text.
     std::string text(std::string_view testId) const {
         int const id = byTestId("Text", testId);
-        std::string plain = backend.prop(id, "text");
+        std::string const plain = backend.prop(id, "text");
         // A text with runs is recorded as its runs; its text is their characters, joined.
         return plain.empty() ? detail::spansCharacters(backend.prop(id, "spans")) : plain;
     }
