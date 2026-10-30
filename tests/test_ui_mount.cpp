@@ -931,7 +931,9 @@ TEST_CASE("ui::Mounted: a constant Tabs index shows its page and leaves the user
                                               {.label = "B", .node = ui::text({.text = "b"})}},
                                      .selected = std::size_t{1},
                                      .onSelect = [&picks](std::size_t index) { picks.push_back(index); }})};
-    CHECK(backend.dump() == "Tabs#1 selected=1 tabs=[A,B]\n  Slot#2\n    Text#3 role=Normal text=b\n");
+    CHECK(backend.dump() ==
+          "Tabs#1 selected=1 tabs=[A,B]\n  Slot#2 layout=stretch(1)/stretch(1) scrollable=true\n    Text#3 "
+          "role=Normal text=b\n");
     backend.chooseIndex(1, 0);
     owner.runAll();
     CHECK(picks == std::vector<std::size_t>{0});

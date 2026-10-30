@@ -1961,6 +1961,46 @@ struct Measured {
     return checks.result();
 }
 
+/// @brief Case: a tabs node with a page inset of 5 steps whose one page holds a holder column of a bleeding child and
+///        a sibling lays the bleeding child from the node's left edge to its right edge while the sibling stays
+///        inside the inset; with the page taller than the tabs node, so that it scrolls, it still does.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> bleedingChildOfTabPageReachesNodeEdges(ConformanceProbe& probe) {
+    Checks checks;
+    for (bool const scrolls : {false, true}) {
+        std::vector<Node> lines;
+        lines.push_back(sizedText("bleeds", {.bleed = true}));
+        for (int line = 0; line < (scrolls ? 12 : 1); ++line) {
+            lines.push_back(sizedText("inside " + std::to_string(line), {}));
+        }
+        Tabs tabs{.tabs = {{.label = "A", .node = ui::column(Column{.children = std::move(lines), .holder = true})}},
+                  .inset = 5,
+                  .pageInset = 5};
+        tabs.common.layout = {.width = Sizing::fixed(40), .height = scrolls ? Sizing::fixed(8) : Sizing::content()};
+        Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::tabs(std::move(tabs)))};
+        probe.settle();
+        Geometry geometry{probe, checks};
+        Measured const found = measured(probe, view);
+        ContainerWidget const* const page = found.children.empty() ? nullptr : asContainer(*found.children.at(0));
+        ContainerWidget const* const held =
+            page != nullptr && probe.childCount(*page) == 1 ? asContainer(*probe.childAt(*page, 0)) : nullptr;
+        std::string const where = scrolls ? " (a page that scrolls)" : "";
+        checks.that(found.container != nullptr && held != nullptr && probe.childCount(*held) >= 2,
+                    "the tabs node holds a page with a column of children" + where);
+        if (found.container != nullptr && held != nullptr && probe.childCount(*held) >= 2) {
+            WidgetBounds const node = geometry.of(*found.container);
+            WidgetBounds const bleeding = geometry.of(*probe.childAt(*held, 0));
+            WidgetBounds const inside = geometry.of(*probe.childAt(*held, 1));
+            geometry.near("the bleeding child's left edge, against the tabs node's" + where, node.x, bleeding.x);
+            geometry.near("the bleeding child's width, against the tabs node's" + where, node.width, bleeding.width);
+            checks.that(inside.x - node.x >= 1.5, "the sibling stays inside the page inset" + where + ": it is " +
+                                                      std::to_string(inside.x - node.x) + " in");
+        }
+    }
+    return checks.result();
+}
+
 /// @brief Case: along a row, a content child is at least its minimum wide.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -3181,7 +3221,7 @@ struct WrappingRow {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 29> const cases{{
+    static std::array<ConformanceCase, 30> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3228,6 +3268,8 @@ struct WrappingRow {
          .run = detail::bleedingChildSpansPaddedColumn},
         {.name = "a bleeding child of a panel with two children reaches the frame's inner edges",
          .run = detail::bleedingChildOfHeldPanelReachesFrame},
+        {.name = "a bleeding child of a tab page reaches the tabs node's edges, also while the page scrolls",
+         .run = detail::bleedingChildOfTabPageReachesNodeEdges},
     }};
     return cases;
 }

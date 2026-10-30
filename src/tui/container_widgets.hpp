@@ -255,10 +255,12 @@ private:
 };
 
 /// The slot a Switch case or a Tabs page mounts into: its children stacked vertically, no gap. A scrollable one whose
-/// shown children all keep their content height is a vertical `ScrollViewport` over them: it follows the focus, takes
-/// the arrows, PageUp and PageDown, Home and End and the wheel, and takes the focus itself while nothing inside can. A
-/// child that stretches down fills the slot, which then does not scroll, unless the child's `minHeight` is more than
-/// the slot's height: the slot then scrolls the child at that height.
+/// content is taller than it is a vertical `ScrollViewport` over them: it follows the focus, takes the arrows, PageUp
+/// and PageDown, Home and End and the wheel, and takes the focus itself while nothing inside can; content that fits
+/// does not scroll and is no Tab stop. A child that stretches down fills the slot, which then does not scroll, unless
+/// the child's `minHeight` is more than the slot's height: the slot then scrolls the child at that height. A tab page
+/// pads its content by its tabs node's page inset inside the scroll, and a child that bleeds takes the slot's whole
+/// width.
 class SlotImpl final : public TuiContainer<ui::SlotWidget> {
 public:
     explicit SlotImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
@@ -266,12 +268,16 @@ public:
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     [[nodiscard]] bool wantsFocus() const override;
+    /// A tab page pads its own content by its tabs node's page inset; any other slot by nothing.
+    [[nodiscard]] ::core::tui::Size contentInsets() const override;
+    [[nodiscard]] int bleedColumns() const override { return contentInsets().width; }
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     [[nodiscard]] bool wheel(int delta) override;
 
 private:
-    // Whether the slot scrolls when it is @p height tall: scrollable, and no shown child that stretches down fits.
+    // Whether the slot scrolls when it is @p height tall: scrollable, and its content does not fit: a child that
+    // stretches down is shorter than its `minHeight` (and the padding), or none stretches and the content is taller.
     [[nodiscard]] bool scrolls(int height) const;
     // The slot's height as of the last frame.
     [[nodiscard]] int height() const;

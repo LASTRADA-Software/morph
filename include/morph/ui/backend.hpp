@@ -531,9 +531,12 @@ class SlotWidget : public ContainerWidget {
 public:
     /// @brief Whether the slot scrolls a child that does not stretch in height. A scrollable slot shows such a
     ///        child at its natural height inside a vertical viewport of the slot's own height, which keeps the
-    ///        focused widget in view; a child that stretches in height is laid out as in a slot that does not
-    ///        scroll, filling it. The slot reads its shown child's height sizing itself, so a new child follows
-    ///        without another call. A new slot does not scroll.
+    ///        focused widget in view, and scrolls only while the child is taller than the slot (a slot whose content
+    ///        fits takes no input and no focus); a child that stretches in height is laid out as in a slot that does
+    ///        not scroll, filling it, but is never shorter than its `minHeight`, and the slot scrolls it while it is
+    ///        shorter than that. Where the frontend can, a slot whose content cannot be narrower than it scrolls
+    ///        sideways too. The slot reads its shown child's height sizing itself, so a new child follows without
+    ///        another call. A new slot does not scroll.
     /// @param scrollable Whether it scrolls.
     virtual void setScrollable(bool scrollable) = 0;
 };
@@ -574,9 +577,9 @@ public:
     /// @param inset A spacing step, 1 to `kMaxSpacingStep`; the mount never passes another value.
     virtual void setInset(int inset) = 0;
 
-    /// @brief Pads each page by its own step in place of `setInset`'s, so a page that scrolls can pad its scrolled
-    ///        content and let a bleeding child of that content reach the scroll's edges. The mount calls it once,
-    ///        only when the view gives a page inset, which may be 0.
+    /// @brief Pads each page by its own step in place of `setInset`'s. Each page pads its own content, inside its
+    ///        scroll, so a page that scrolls clips at the widget's edges, shows its bar there, and lets a bleeding
+    ///        child reach them. The mount calls it once, only when the view gives a page inset, which may be 0.
     /// @param inset A spacing step, 0 to `kMaxSpacingStep`.
     virtual void setPageInset(int inset) = 0;
 

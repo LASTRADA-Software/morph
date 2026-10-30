@@ -1202,6 +1202,10 @@ private:
         auto page = mountPass([&] {
             auto built = std::make_unique<reactive::Scope>(*_rt, pageScope.depth());
             SlotWidget& slot = built->adopt(_backend->createSlot(&widget));
+            // A page fills the area under the strip, pads itself by the node's `pageInset` and scrolls itself while
+            // its content overflows, as a workspace's page does.
+            slot.setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+            slot.setScrollable(true);
             static_cast<void>(mount(*built, node, &slot));
             return std::pair{std::move(built), &slot};
         });

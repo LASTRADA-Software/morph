@@ -1242,14 +1242,10 @@ std::string TabsImpl::probeText() const { return _selected < _labels.size() ? _l
 // A shown bar keeps its one row, with no blank row under it: a terminal row costs more than the separation earns.
 std::vector<::core::tui::Rect> TabsImpl::childAreas(::core::tui::Size size) const {
     int const barRows = _barShown ? 1 : 0;
-    auto areas = stackAreas(children(),
-                            {.x = _pageColumns,
-                             .y = barRows + _pageRows,
-                             .width = std::max(0, size.width - (2 * _pageColumns)),
-                             .height = std::max(0, size.height - barRows - (2 * _pageRows))},
-                            StackSpec{.axis = ui::Axis::Vertical});
-    bleedAreas(children(), areas, {.x = 0, .y = 0, .width = size.width, .height = size.height});
-    return areas;
+    // Each page fills the area under the bar and pads its own content.
+    return stackAreas(children(),
+                      {.x = 0, .y = barRows, .width = size.width, .height = std::max(0, size.height - barRows)},
+                      StackSpec{.axis = ui::Axis::Vertical});
 }
 
 // The width of the labels from @p first to @p last, both included.
