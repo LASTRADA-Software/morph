@@ -46,8 +46,8 @@ TEST_CASE("stability, expanded: step 2 of the wizard, the matrix and the summary
     CHECK(screen.backend().prop(monthBox(screen, "25 °C", "T0"), "checked") == "true");
     CHECK(screen.backend().prop(monthBox(screen, "25 °C", "1 m"), "checked") == "false");
     CHECK(holdsPair(screen, "summary-pairs", "Pulls:15"));
-    CHECK(holdsPair(screen, "summary-pairs", "First pull:03-Dec-2026 (40 °C\\, 1 m)"));
-    CHECK(holdsPair(screen, "summary-pairs", "Last pull:03-Nov-2029"));
+    CHECK(holdsPair(screen, "summary-pairs", "First pull:[03-Dec-2026 (40 °C\\, 1 m);mono]"));
+    CHECK(holdsPair(screen, "summary-pairs", "Last pull:[03-Nov-2029;mono]"));
     CHECK(holdsPair(screen, "summary-pairs", "Containers:180 needed\\, 150 in stock;tone=Err"));
     CHECK(screen.prop("TextInput", "per-pull", "errors") ==
           "[15 pulls × 12 \\= 180 units needed\\, 150 in stock for lot L-26-0381.]");
@@ -63,7 +63,7 @@ TEST_CASE("stability, expanded: a timepoint changes the summary, and enough cont
     screen.backend().toggle(monthBox(screen, "40 °C", "1 m"));
     CHECK(screen.waitFor([&screen] {
         return holdsPair(screen, "summary-pairs", "Pulls:14") &&
-               holdsPair(screen, "summary-pairs", "First pull:03-Feb-2027 (25 °C\\, 3 m)");
+               holdsPair(screen, "summary-pairs", "First pull:[03-Feb-2027 (25 °C\\, 3 m);mono]");
     }));
     screen.edit("per-pull", "10");
     CHECK(screen.waitFor([&screen] { return !screen.shows("Banner", "attention"); }));
@@ -87,8 +87,8 @@ TEST_CASE("stability: the pull dates follow the study start, a month on from 31 
     REQUIRE(instant.has_value());
     screen.backend().setDateTime(start.value_or(0), morph::time::Timestamp{instant.value_or(morph::time::DateTime{})});
     CHECK(screen.waitFor([&screen] {
-        return holdsPair(screen, "summary-pairs", "First pull:28-Feb-2027 (40 °C\\, 1 m)") &&
-               holdsPair(screen, "summary-pairs", "Last pull:31-Jan-2030");
+        return holdsPair(screen, "summary-pairs", "First pull:[28-Feb-2027 (40 °C\\, 1 m);mono]") &&
+               holdsPair(screen, "summary-pairs", "Last pull:[31-Jan-2030;mono]");
     }));
     screen.requireNoProblems();
 }
@@ -103,6 +103,9 @@ TEST_CASE("stability, compact: one condition open at a time, every field kept", 
     CHECK(screen.backend().find("Panel", "title", "40 °C / 75 % RH · 3 pulls").has_value());
     CHECK(screen.prop("Panel", "summary-section", "title") == "Summary · first pull 03-Dec-2026");
     CHECK(screen.prop("TextInput", "per-pull", "errors") == "[180 units needed\\, 150 in stock for lot L-26-0381.]");
+    // The summary's identifiers are mono runs.
+    CHECK(screen.backend().dump().contains("L-26-0381;mono"));
+    CHECK(screen.backend().dump().contains("STP-0114 v2;mono"));
     // The units sit inside the inputs, not in their captions.
     CHECK(screen.prop("TextInput", "per-pull", "unit") == "units");
     CHECK(screen.prop("TextInput", "window", "unit") == "days");

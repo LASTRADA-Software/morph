@@ -6,9 +6,11 @@
 // study needs are its pulls times the containers per pull; more than the chosen lot has in stock is an error that
 // keeps the wizard on the second step.
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -273,15 +275,17 @@ ui::Node matrix(Study const& study) {
 
 ui::Commands applyTemplate(Study const& study) { return ui::set(study.conditions, ichConditions()); }
 
-ui::Node addCondition(Study const& study) {
+ui::Node addCondition(Study const& study, bool compact = false) {
     auto const keys = ui::map(study.conditions, "condition", [](ui::AnyHandle const& item) { return item.at("id"); });
-    return ui::button({.label = "Add condition",
-                       .onClick = ui::set(
-                           study.conditions,
-                           ui::concatLists({study.conditions,
-                                            ui::list({condition("rf", "5 °C ± 3 °C", "refrigerated", "5 °C", {})})}))})
-        .enabled(!ui::includes(keys, "rf"))
-        .testId("add-condition");
+    auto const button =
+        ui::button({.label = "Add condition",
+                    .onClick = ui::set(
+                        study.conditions,
+                        ui::concatLists({study.conditions,
+                                         ui::list({condition("rf", "5 °C ± 3 °C", "refrigerated", "5 °C", {})})}))})
+            .enabled(!ui::includes(keys, "rf"))
+            .testId("add-condition");
+    return compact ? button.sizing(ui::stretch()) : button;
 }
 
 // ── The fields ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -332,12 +336,17 @@ ui::Node attention(Study const& study, bool compact) {
 }
 
 // Captions beside their values, then @p toned, pairs written whole.
+// The captions in @p monoLabels have their value drawn in the monospace face, as identifiers and dates are.
 ui::Node pairs(std::vector<std::pair<char const*, ui::AnyHandle>> const& items, std::string const& testId,
-               std::vector<ui::AnyHandle> const& toned = {}) {
+               std::vector<ui::AnyHandle> const& toned = {}, std::vector<std::string_view> const& monoLabels = {}) {
     std::vector<ui::AnyHandle> listed;
     listed.reserve(items.size() + toned.size());
     for (auto const& [label, value] : items) {
-        listed.push_back(ui::obj({{"label", label}, {"value", value}}));
+        if (std::ranges::find(monoLabels, std::string_view{label}) != monoLabels.end()) {
+            listed.push_back(ui::obj({{"label", label}, {"value", value}, {"spans", ui::spans({ui::mono(value)})}}));
+        } else {
+            listed.push_back(ui::obj({{"label", label}, {"value", value}}));
+        }
     }
     listed.insert(listed.end(), toned.begin(), toned.end());
     return ui::keyValue(ui::list(listed)).testId(testId);
@@ -351,14 +360,15 @@ ui::AnyHandle containersPair(Study const& study) {
 }
 
 ui::Node summary(Study const& study) {
-    return ui::column({pairs({{"Product", "Paracetamol 500 mg"},
-                              {"Lot", study.lot},
-                              {"Protocol", "STP-0114 v2"},
-                              {"Pulls", ui::format("{0}", {study.pulls})},
-                              {"First pull", study.firstPull},
-                              {"Last pull", study.lastPull}},
-                             "summary-pairs", {containersPair(study)})},
-                      {.gap = 1})
+    return ui::column(
+               {pairs({{"Product", "Paracetamol 500 mg"},
+                       {"Lot", study.lot},
+                       {"Protocol", "STP-0114 v2"},
+                       {"Pulls", ui::format("{0}", {study.pulls})},
+                       {"First pull", study.firstPull},
+                       {"Last pull", study.lastPull}},
+                      "summary-pairs", {containersPair(study)}, {"Lot", "Protocol", "First pull", "Last pull"})},
+               {.gap = 1})
         .testId("summary");
 }
 
@@ -610,17 +620,20 @@ ui::Node conditionSection(Study const& study) {
 }
 
 ui::Node compactConditions(Study const& study) {
-    return ui::column({attention(study, true), startField(study),
-                       ui::grid({windowField(study), perPullField(study, true)}, {.gap = 2, .columns = 2}),
-                       ui::forEach(study.conditions, {.key = ui::row("id"), .gap = 1},
-                                   [&study](ui::DeclScope&) { return ui::Nodes{conditionSection(study)}; })
-                           .testId("conditions"),
-                       addCondition(study),
-                       ui::panel({summary(study)}, {.title = ui::format("Summary · first pull {0}", {study.firstDate}),
-                                                    .collapsible = true,
-                                                    .collapsed = true})
-                           .testId("summary-section")},
-                      {.gap = 2});
+    return ui::column(
+        {attention(study, true), startField(study),
+         // The fields' tops line up although only one has an error text below it.
+         ui::row({windowField(study).sizing(ui::stretch()), perPullField(study, true).sizing(ui::stretch())},
+                 {.gap = 2, .align = Align::Start}),
+         ui::forEach(study.conditions, {.key = ui::row("id"), .gap = 1},
+                     [&study](ui::DeclScope&) { return ui::Nodes{conditionSection(study)}; })
+             .testId("conditions"),
+         addCondition(study, true),
+         ui::panel({summary(study)}, {.title = ui::format("Summary · first pull {0}", {study.firstDate}),
+                                      .collapsible = true,
+                                      .collapsed = true})
+             .testId("summary-section")},
+        {.gap = 2});
 }
 
 ui::Node compactLayout(Study const& study) {
