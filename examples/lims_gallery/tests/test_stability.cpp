@@ -122,12 +122,14 @@ TEST_CASE("stability, compact: one condition open at a time, every field kept", 
     auto const first = screen.backend().find("Panel", "title", "25 °C / 60 % RH · 8 pulls");
     auto const second = screen.backend().find("Panel", "title", "40 °C / 75 % RH · 3 pulls");
     REQUIRE((first && second));
-    CHECK(screen.backend().prop(*first, "collapsed") == "false");
-    CHECK(screen.backend().prop(*second, "collapsed") == "true");
-    screen.backend().collapse(*second, false);
+    int const firstId = first.value_or(-1);
+    int const secondId = second.value_or(-1);
+    CHECK(screen.backend().prop(firstId, "collapsed") == "false");
+    CHECK(screen.backend().prop(secondId, "collapsed") == "true");
+    screen.backend().collapse(secondId, false);
     CHECK(screen.waitFor([&] {
-        return screen.backend().prop(*second, "collapsed") == "false" &&
-               screen.backend().prop(*first, "collapsed") == "true";
+        return screen.backend().prop(secondId, "collapsed") == "false" &&
+               screen.backend().prop(firstId, "collapsed") == "true";
     }));
     screen.click("add-condition");
     CHECK(screen.waitFor(

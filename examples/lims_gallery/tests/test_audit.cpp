@@ -20,8 +20,8 @@ bool showsText(GalleryScreen& screen, std::string_view text) {
     if (screen.backend().find("Text", "text", text).has_value()) {
         return true;
     }
-    return std::ranges::any_of(screen.backend().all("Text"), [&screen, text](int id) {
-        return morph::ui::testing::detail::spansCharacters(screen.backend().prop(id, "spans")) == text;
+    return std::ranges::any_of(screen.backend().all("Text"), [&screen, text](int widgetId) {
+        return morph::ui::testing::detail::spansCharacters(screen.backend().prop(widgetId, "spans")) == text;
     });
 }
 
@@ -95,12 +95,12 @@ TEST_CASE("audit, expanded: the pager is square glyph buttons and the facet labe
     for (auto const& [name, icon] : {std::pair{"Previous page", "nav.back"}, std::pair{"Next page", "nav.forward"}}) {
         auto const button = screen.backend().find("Button", "a11yName", name);
         REQUIRE(button.has_value());
-        CHECK(screen.backend().prop(*button, "shape") == "square");
-        CHECK(screen.backend().prop(*button, "icon") == icon);
+        CHECK(screen.backend().prop(button.value_or(-1), "shape") == "square");
+        CHECK(screen.backend().prop(button.value_or(-1), "icon") == icon);
     }
     for (char const* label : {"Record type", "Action"}) {
         auto const heading = screen.backend().find("Text", "text", label);
         REQUIRE(heading.has_value());
-        CHECK(screen.backend().prop(*heading, "role") == "Overline");
+        CHECK(screen.backend().prop(heading.value_or(-1), "role") == "Overline");
     }
 }

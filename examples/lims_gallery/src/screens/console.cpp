@@ -490,7 +490,7 @@ ui::Node kpis(bool compact) {
     }
     // The tiles stretch to the row's tallest, so a tile with no note is as tall as one with. Tracks size the columns
     // equally and place the cells to fill their rows.
-    std::vector<ui::GridTrack> tracks(compact ? 2U : 4U);
+    std::vector<ui::GridTrack> const tracks(compact ? 2U : 4U);
     return ui::grid(tiles, {.gap = 1, .tracks = tracks, .align = Align::Stretch}).testId("kpis");
 }
 
@@ -819,9 +819,9 @@ ui::Node expandedLayout(Console const& console) {
 
 ui::Node compactCard() {
     // The id is an identifier: a strong run in the mono face.
-    auto const id = ui::text(
+    auto const idText = ui::text(
         {.text = ui::row("id"), .spans = ui::spans({ui::styled(ui::row("id"), {.strong = true, .mono = true})})});
-    return ui::column({ui::row({id.sizing(ui::stretch()), dueCell()}, {.gap = 1, .align = Align::Center}),
+    return ui::column({ui::row({idText.sizing(ui::stretch()), dueCell()}, {.gap = 1, .align = Align::Center}),
                        ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("product")})}),
                        ui::row({layout::tag(ui::row("priority"), ui::row("priorityTone")),
                                 layout::tag(ui::row("status"), ui::row("statusTone"))},

@@ -82,6 +82,7 @@ struct WidthReport {
 };
 
 // The first item under @p root whose object name is @p name, depth first.
+// NOLINTNEXTLINE(misc-no-recursion): the walk follows the item tree to any depth.
 QQuickItem* findItem(QQuickItem* root, QString const& name) {
     if (root->objectName() == name) {
         return root;
@@ -121,7 +122,8 @@ public:
             }
         }
         // Last, so the window is left at the probe's size only after every other mount.
-        _mounts.push_back(Mount{.screen = "lims-gallery.receipt", .width = "compact", .units = 0.0, .probe = true});
+        Mount probeMount{.screen = "lims-gallery.receipt", .width = "compact", .units = 0.0, .probe = true};
+        _mounts.push_back(std::move(probeMount));
         _report->expected.push_back("lims-gallery.receipt@compact");
         next();
     }
@@ -176,7 +178,7 @@ private:
 
     // Reads where the receipt page's Receive button ended up in the probe window.
     void probe() {
-        QQuickItem* const button = findItem(_shown->window->contentItem(), QStringLiteral("receive"));
+        QQuickItem const* const button = findItem(_shown->window->contentItem(), QStringLiteral("receive"));
         _report->footerFound = button != nullptr;
         if (button == nullptr) {
             return;
@@ -263,5 +265,5 @@ TEST_CASE("lims gallery render smoke: every screen at both width classes, offscr
     REQUIRE(report.footerFound);
     CHECK(report.footerBottom <= report.windowHeight);
     // The page's padding is a few units.
-    CHECK(report.footerBottom >= report.windowHeight - 4.0 * report.unitHeight);
+    CHECK(report.footerBottom >= report.windowHeight - (4.0 * report.unitHeight));
 }

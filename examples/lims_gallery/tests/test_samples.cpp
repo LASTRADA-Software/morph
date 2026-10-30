@@ -28,8 +28,8 @@ bool showsText(GalleryScreen& screen, std::string_view text) {
     if (screen.backend().find("Text", "text", text).has_value()) {
         return true;
     }
-    return std::ranges::any_of(screen.backend().all("Text"), [&screen, text](int id) {
-        return morph::ui::testing::detail::spansCharacters(screen.backend().prop(id, "spans")) == text;
+    return std::ranges::any_of(screen.backend().all("Text"), [&screen, text](int widgetId) {
+        return morph::ui::testing::detail::spansCharacters(screen.backend().prop(widgetId, "spans")) == text;
     });
 }
 

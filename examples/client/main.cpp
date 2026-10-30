@@ -120,11 +120,14 @@ bool takeGrabSize(std::vector<std::string>& args, Grab& grab) {
         if (cross == std::string::npos) {
             return false;
         }
-        char const* const first = size.data();
-        auto const [widthEnd, widthError] = std::from_chars(first, first + cross, grab.width);
-        auto const [heightEnd, heightError] = std::from_chars(first + cross + 1, first + size.size(), grab.height);
-        if (widthError != std::errc{} || heightError != std::errc{} || widthEnd != first + cross ||
-            heightEnd != first + size.size() || grab.width <= 0 || grab.height <= 0) {
+        std::string_view const widthText = std::string_view{size}.substr(0, cross);
+        std::string_view const heightText = std::string_view{size}.substr(cross + 1);
+        auto const [widthEnd, widthError] =
+            std::from_chars(widthText.data(), std::to_address(widthText.end()), grab.width);
+        auto const [heightEnd, heightError] =
+            std::from_chars(heightText.data(), std::to_address(heightText.end()), grab.height);
+        if (widthError != std::errc{} || heightError != std::errc{} || widthEnd != std::to_address(widthText.end()) ||
+            heightEnd != std::to_address(heightText.end()) || grab.width <= 0 || grab.height <= 0) {
             return false;
         }
     }
