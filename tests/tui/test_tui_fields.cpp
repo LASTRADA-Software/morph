@@ -1081,3 +1081,14 @@ TEST_CASE("tui fields: a prominent input draws its text bold", "[tui][fields]") 
     CHECK(harness.draw() == Rows{"S-123"});
     CHECK(harness.screen().renderedBuffer().at(0, 0).style.bold);
 }
+
+// A field narrower than a text it was given draws the text's first cells. core-cpp's `InputField` puts the cursor at
+// the end of a programmatic text and scrolls to it, so today the field shows the text's tail; the case is expected to
+// fail until the field is told to show the start, and starts failing the build when it does not any more.
+TEST_CASE("tui fields: a field narrower than a text it was given draws the text's first cells",
+          "[tui][fields][!shouldfail]") {
+    Harness harness{10, 1};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    input->setText("Ease, finished product of a lot of letters");
+    CHECK(harness.draw() == Rows{"Ease, fini"});
+}
