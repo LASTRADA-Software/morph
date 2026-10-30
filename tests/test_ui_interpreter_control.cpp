@@ -882,6 +882,32 @@ TEST_CASE("interpreter control: a field's tone evaluates its value without makin
     CHECK(h.text("ready") == "false");
 }
 
+// Mutation: skip `setShape`, `setSize` or `setMono` in the mount (the property is not recorded), or record one for a
+// node that gave none.
+TEST_CASE("interpreter control: a button's and a badge's shape, size and mono reach the backend only when given",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "shapes", "view": {"kind": "column", "children": [
+        {"kind": "button", "testId": "well", "label": "S1", "shape": "round", "size": "small", "mono": true},
+        {"kind": "button", "testId": "plain", "label": "Save"},
+        {"kind": "badge", "testId": "tag", "text": "QC", "shape": "round", "mono": true},
+        {"kind": "badge", "testId": "plainTag", "text": "OK"}]}})");
+    int const well = h.byTestId("Button", "well");
+    CHECK(h.backend.prop(well, "shape") == "round");
+    CHECK(h.backend.prop(well, "size") == "small");
+    CHECK(h.backend.prop(well, "mono") == "true");
+    int const plain = h.byTestId("Button", "plain");
+    CHECK_FALSE(h.backend.hasProp(plain, "shape"));
+    CHECK_FALSE(h.backend.hasProp(plain, "size"));
+    CHECK_FALSE(h.backend.hasProp(plain, "mono"));
+    int const tag = h.byTestId("Badge", "tag");
+    CHECK(h.backend.prop(tag, "shape") == "round");
+    CHECK(h.backend.prop(tag, "mono") == "true");
+    int const plainTag = h.byTestId("Badge", "plainTag");
+    CHECK_FALSE(h.backend.hasProp(plainTag, "shape"));
+    CHECK_FALSE(h.backend.hasProp(plainTag, "mono"));
+}
+
 // Mutation: drop the unit's binding (no `unit` is recorded); drop the computed-mode check (the mount throws).
 TEST_CASE("interpreter control: a text input's unit is bound, and a computed multiline mode drops it with a report",
           "[ui][interpreter]") {

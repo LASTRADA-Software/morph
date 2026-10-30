@@ -7372,6 +7372,9 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         if (node.name("style") == "item") {
             spec.style = ButtonStyle::Item;
         }
+        spec.shape = shapeNamed(node.name("shape")).value_or(ControlShape::Default);
+        spec.size = sizeNamed(node.name("size")).value_or(ButtonSize::Normal);
+        spec.mono = node.flag("mono");
         if (node.prop("selected")) {
             spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
             // An entry's content, drawn in place of its label: one node as it is, several in a column.
@@ -7444,6 +7447,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                 report(given->path, "a multiline input shows no " + std::string{key});
             }
         }
+        spec.mono = node.flag("mono");
         if (spec.mode != TextInputMode::Multiline) {
             spec.emphasis = node.name("emphasis") == "prominent" ? InputEmphasis::Prominent : InputEmphasis::Normal;
             spec.icon = onceText("icon");
@@ -7742,6 +7746,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         Badge spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Neutral, toneOf), .text = textProp("text")};
         spec.icon = onceText("icon");
         spec.style = node.name("style") == "outline" ? BadgeStyle::Outline : BadgeStyle::Filled;
+        spec.shape = shapeNamed(node.name("shape")).value_or(ControlShape::Default);
+        spec.mono = node.flag("mono");
         if (Commands const* const onRemove = node.event("onRemove")) {
             spec.onRemove = [this, ctx, onRemove] { runEvent(onRemove, ctx, Value{}); };
             spec.removeLabel = textProp("removeLabel");

@@ -176,6 +176,9 @@ public:
     void setEmphasis(ui::ButtonEmphasis emphasis) override;
     void setIcon(std::string_view icon) override;
     void setStyle(ui::ButtonStyle style) override;
+    void setShape(ui::ControlShape shape) override;
+    void setSize(ui::ButtonSize size) override;
+    void setMono(bool mono) override;
     void setSelected(bool selected) override;
     /// The content, a `MorphSlot` in the button's `content` item, made the first time it is asked for.
     ui::ContainerWidget& content() override;
@@ -249,6 +252,8 @@ public:
     void setIcon(std::string_view icon) override;
     void setOnRemove(ui::Action onRemove, std::string_view label) override;
     void setStyle(ui::BadgeStyle style) override;
+    void setShape(ui::ControlShape shape) override;
+    void setMono(bool mono) override;
     [[nodiscard]] std::string shownText() const override;
 };
 

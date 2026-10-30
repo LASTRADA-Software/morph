@@ -61,6 +61,12 @@ public:
     void setIcon(std::string_view icon) override;
     void setStyle(ui::ButtonStyle style) override;
     void setSelected(bool selected) override;
+    /// A cell has no corners, so a shape draws nothing.
+    void setShape(ui::ControlShape shape) override { static_cast<void>(shape); }
+    /// A small push button drops the spaces inside its brackets.
+    void setSize(ui::ButtonSize size) override;
+    /// Every face of a terminal is monospace, so a mono caption draws nothing new.
+    void setMono(bool mono) override { static_cast<void>(mono); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override { return _label; }
@@ -78,6 +84,7 @@ private:
     ui::Action _onClick;
     ui::ButtonEmphasis _emphasis = ui::ButtonEmphasis::Normal;
     ui::ButtonStyle _style = ui::ButtonStyle::Push;
+    ui::ButtonSize _size = ui::ButtonSize::Normal;
     bool _selected = false;
     std::unique_ptr<ContainerBase> _content;
 };

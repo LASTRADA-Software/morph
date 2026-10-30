@@ -2966,13 +2966,35 @@ struct WrappingRow {
     return checks.result();
 }
 
+/// @brief Case: a small push button is narrower than a normal one with the same label.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> smallButtonIsNarrower(ConformanceProbe& probe) {
+    Row row{.children = {ui::button(Button{.label = "STD1", .size = ButtonSize::Small}),
+                         ui::button(Button{.label = "STD1"})}};
+    row.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the row holds two buttons");
+    if (children.size() == 2) {
+        double const small = geometry.of(*children.at(0)).width;
+        double const normal = geometry.of(*children.at(1)).width;
+        checks.that(small > 0 && small < normal, "a small button is " + std::to_string(small) +
+                                                     " wide, beside a normal one " + std::to_string(normal) + " wide");
+    }
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 22> const cases{{
+    static std::array<ConformanceCase, 23> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3006,6 +3028,8 @@ struct WrappingRow {
          .run = detail::wrappingRowStartsLineWhenOutOfRoom},
         {.name = "a stretch child of a wrapping row takes its line's spare width",
          .run = detail::wrappingRowStretchTakesLineSpare},
+        {.name = "a small push button is narrower than a normal one with the same label",
+         .run = detail::smallButtonIsNarrower},
     }};
     return cases;
 }

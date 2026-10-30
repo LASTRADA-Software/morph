@@ -75,6 +75,12 @@ add_test(NAME qt_quick_chart_scale_2 COMMAND morph_qt_quick_tests "[chart]")
 set_tests_properties(qt_quick_chart_scale_2 PROPERTIES LABELS "qt_quick" TIMEOUT 120
                      ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=2")
 
+# A dashed outline paints on a Canvas at the device pixel ratio: its case runs again at a ratio of 2, where the dashes
+# must still be broken by gaps.
+add_test(NAME qt_quick_dashed_scale_2 COMMAND morph_qt_quick_tests "[dashed]")
+set_tests_properties(qt_quick_dashed_scale_2 PROPERTIES LABELS "qt_quick" TIMEOUT 120
+                     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=2")
+
 # Every QML file the renderer compiles passes qmllint with no warning: the MorphUi components the backend
 # instantiates, through the module's own lint target, which knows its import paths.
 add_test(NAME qt_quick_qmllint

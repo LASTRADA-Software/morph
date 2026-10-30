@@ -38,6 +38,7 @@
 #include "badge_style.hpp"
 #include "button_emphasis.hpp"
 #include "button_style.hpp"
+#include "control_shape.hpp"
 #include "input_emphasis.hpp"
 
 /// @file
@@ -3538,6 +3539,12 @@ struct ButtonOptions {
     /// @brief A list entry's content, drawn in place of its label, which still names it; display kinds only, and only
     ///        with `ButtonStyle::Item`, which the loader checks.
     Nodes children;
+    /// @brief The button's outline; `Default` writes no key.
+    ControlShape shape = ControlShape::Default;
+    /// @brief The button's density; `Normal` writes no key.
+    ButtonSize size = ButtonSize::Normal;
+    /// @brief Whether the caption is drawn in the `mono` text role's face.
+    bool mono = false;
 };
 
 /// @brief A `button` node.
@@ -3550,6 +3557,15 @@ struct ButtonOptions {
     }
     if (options.style) {
         writer.text("style", *options.style == ButtonStyle::Item ? "item" : "push");
+    }
+    if (options.shape != ControlShape::Default) {
+        writer.text("shape", std::string{shapeName(options.shape)});
+    }
+    if (options.size != ButtonSize::Normal) {
+        writer.text("size", std::string{sizeName(options.size)});
+    }
+    if (options.mono) {
+        writer.flag("mono");
     }
     return std::move(writer)
         .put("label", options.label)
@@ -4643,19 +4659,31 @@ struct BadgeOptions {
     Commands onRemove;
     /// @brief The remove control's accessible name; absent: `Remove ` and the text.
     AnyHandle removeLabel;
+    /// @brief Filled, the default, which writes no key, or outlined: the surface's fill, with the tone's outline
+    ///        colour as border and its colour as text.
+    BadgeStyle style = BadgeStyle::Filled;
+    /// @brief The badge's outline; `Default` writes no key.
+    ControlShape shape = ControlShape::Default;
+    /// @brief Whether the label is drawn in the `mono` text role's face.
+    bool mono = false;
 };
 
 /// @brief A `badge` node with its options.
-/// @param options The text, tone, icon, and what removing it does.
+/// @param options The text, tone, icon, style, shape, and what removing it does.
 /// @return The node.
 [[nodiscard]] inline Node badge(BadgeOptions const& options) {
-    return detail::NodeWriter{"badge"}
-        .put("tone", options.tone)
-        .put("text", options.text)
-        .put("icon", options.icon)
-        .put("onRemove", options.onRemove)
-        .put("removeLabel", options.removeLabel)
-        .done();
+    detail::NodeWriter node{"badge"};
+    node.put("tone", options.tone).put("text", options.text).put("icon", options.icon);
+    if (options.style == BadgeStyle::Outline) {
+        node.text("style", "outline");
+    }
+    if (options.shape != ControlShape::Default) {
+        node.text("shape", std::string{shapeName(options.shape)});
+    }
+    if (options.mono) {
+        node.flag("mono");
+    }
+    return node.put("onRemove", options.onRemove).put("removeLabel", options.removeLabel).done();
 }
 
 /// @brief A `progress` node.

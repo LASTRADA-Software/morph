@@ -829,6 +829,15 @@ private:
         if (spec.style == ButtonStyle::Item) {
             widget.setStyle(spec.style);
         }
+        if (spec.shape != ControlShape::Default) {
+            widget.setShape(spec.shape);
+        }
+        if (spec.size != ButtonSize::Normal) {
+            widget.setSize(spec.size);
+        }
+        if (spec.mono) {
+            widget.setMono(true);
+        }
         if (spec.selected.isBound() || spec.selected.constant()) {
             bind(scope, spec.selected, [&widget](bool selected) { widget.setSelected(selected); });
         }
@@ -1675,6 +1684,12 @@ private:
         widget.setIcon(spec.icon);
         if (spec.style != BadgeStyle::Filled) {
             widget.setStyle(spec.style);
+        }
+        if (spec.shape != ControlShape::Default) {
+            widget.setShape(spec.shape);
+        }
+        if (spec.mono) {
+            widget.setMono(true);
         }
         if (spec.onRemove) {
             // An empty label names the control after the badge's text, which may be bound as well.

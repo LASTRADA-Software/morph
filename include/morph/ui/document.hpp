@@ -763,14 +763,17 @@ inline constexpr std::array<std::string_view, 3> kTransferValues = {"progress", 
 inline constexpr std::array<KeySpec, 3> kTextKeys = {
     {{"text", Shape::Expr}, {"spans", Shape::Expr}, {"role", Shape::Expr}}};
 /// @brief The keys of `button`.
-inline constexpr std::array<KeySpec, 8> kButtonKeys = {{{"label", Shape::Expr},
-                                                        {"icon", Shape::Expr},
-                                                        {"emphasis", Shape::Text},
-                                                        {"style", Shape::Text},
-                                                        {"selected", Shape::Condition},
-                                                        {"onClick", Shape::Commands},
-                                                        {"onActivate", Shape::Commands},
-                                                        {"children", Shape::Nodes}}};
+inline constexpr std::array<KeySpec, 11> kButtonKeys = {{{"label", Shape::Expr},
+                                                         {"icon", Shape::Expr},
+                                                         {"emphasis", Shape::Text},
+                                                         {"style", Shape::Text},
+                                                         {"selected", Shape::Condition},
+                                                         {"onClick", Shape::Commands},
+                                                         {"onActivate", Shape::Commands},
+                                                         {"children", Shape::Nodes},
+                                                         {"shape", Shape::Text},
+                                                         {"size", Shape::Text},
+                                                         {"mono", Shape::Flag}}};
 /// @brief The keys of `textInput`.
 inline constexpr std::array<KeySpec, 12> kTextInputKeys = {{{"value", Shape::Expr},
                                                             {"placeholder", Shape::Expr},
@@ -1002,12 +1005,14 @@ inline constexpr std::array<KeySpec, 4> kNavigationBadgeKeys = {{{"screen", Shap
                                                                  {"tone", Shape::Expr},
                                                                  {"visible", Shape::Condition}}};
 /// @brief The keys of `badge`.
-inline constexpr std::array<KeySpec, 6> kBadgeKeys = {{{"tone", Shape::Expr},
+inline constexpr std::array<KeySpec, 8> kBadgeKeys = {{{"tone", Shape::Expr},
                                                        {"text", Shape::Expr},
                                                        {"icon", Shape::Expr},
                                                        {"style", Shape::Text},
                                                        {"onRemove", Shape::Commands},
-                                                       {"removeLabel", Shape::Expr}}};
+                                                       {"removeLabel", Shape::Expr},
+                                                       {"shape", Shape::Text},
+                                                       {"mono", Shape::Flag}}};
 /// @brief The keys of `progress`.
 inline constexpr std::array<KeySpec, 2> kProgressKeys = {{{"value", Shape::Expr}, {"label", Shape::Expr}}};
 /// @brief The keys of `steps`.
@@ -3612,6 +3617,10 @@ private:
             checkChoice(node, "emphasis", kEmphasis);
             static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
             checkChoice(node, "style", kStyles);
+            static constexpr std::array<std::string_view, 2> kShapes = {"default", "round"};
+            checkChoice(node, "shape", kShapes);
+            static constexpr std::array<std::string_view, 2> kSizes = {"normal", "small"};
+            checkChoice(node, "size", kSizes);
             checkEntryContent(node);
         } else if (node.kind == "grid") {
             checkGrid(node);
@@ -3655,6 +3664,8 @@ private:
         } else if (node.kind == "badge") {
             static constexpr std::array<std::string_view, 2> kBadgeStyles = {"filled", "outline"};
             checkChoice(node, "style", kBadgeStyles);
+            static constexpr std::array<std::string_view, 2> kBadgeShapes = {"default", "round"};
+            checkChoice(node, "shape", kBadgeShapes);
         } else if (node.kind == "keyValue") {
             static constexpr std::array<std::string_view, 2> kCaptionPlaces = {"inline", "stacked"};
             checkChoice(node, "fieldLayout", kCaptionPlaces);

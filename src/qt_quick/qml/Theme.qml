@@ -90,6 +90,8 @@ QtObject {
     property color controlSurface: "#ffffff"
     property color controlBorder: "#c7c7cc"
     property color divider: "#dcdce0"
+    // Whether outlines are stroked in dashes: `border.style`.
+    property bool borderDashed: false
     property color surface: "#ffffff"
     property color border: "#c7c7cc"
     property color selection: "#cfe3ff"
@@ -185,6 +187,16 @@ QtObject {
         return Qt.font(spec)
     }
 
+    // The `mono` role's families at a size and a weight: an identifier in a control.
+    function monoFontOf(pixels: real, weight: int): font {
+        return Qt.font({
+            family: monoFamilies.length > 0 ? monoFamilies[0] : "monospace",
+            families: monoFamilies.length > 0 ? monoFamilies : ["monospace"],
+            pixelSize: Math.round(pixels),
+            weight: weight
+        })
+    }
+
     // The text font at a size and a weight, in the families text is drawn in.
     function fontOf(pixels: real, weight: int): font {
         return Qt.font({
@@ -236,6 +248,7 @@ QtObject {
         controlSurface: theme.controlSurface
         controlBorder: theme.controlBorder
         divider: theme.divider
+        borderDashed: theme.borderDashed
         error: theme.error
         success: theme.success
         info: theme.info
@@ -275,6 +288,7 @@ QtObject {
         controlSurface: theme.controlSurface
         controlBorder: theme.controlBorder
         divider: theme.divider
+        borderDashed: theme.borderDashed
         error: theme.error
         success: theme.success
         info: theme.info
@@ -314,6 +328,7 @@ QtObject {
         controlSurface: theme.controlSurface
         controlBorder: theme.controlBorder
         divider: theme.divider
+        borderDashed: theme.borderDashed
         error: theme.error
         success: theme.success
         info: theme.info
@@ -392,6 +407,7 @@ QtObject {
         controlSurface: theme.controlSurface
         controlBorder: theme.controlBorder
         divider: theme.divider
+        borderDashed: theme.borderDashed
         error: theme.error
         success: theme.success
         info: theme.info

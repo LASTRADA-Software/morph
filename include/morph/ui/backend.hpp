@@ -193,6 +193,20 @@ public:
     /// @param selected Whether it is selected.
     virtual void setSelected(bool selected) = 0;
 
+    /// @brief Sets the button's outline. A new button has the theme's corners; the mount calls it once, only for
+    ///        `Round`.
+    /// @param shape The shape.
+    virtual void setShape(ControlShape shape) = 0;
+
+    /// @brief Sets the button's density. A new button is normal; the mount calls it once, only for `Small`.
+    /// @param size The size.
+    virtual void setSize(ButtonSize size) = 0;
+
+    /// @brief Draws the caption in the `mono` text role's face. A new button uses the body face; the mount calls it
+    ///        once, only for `true`.
+    /// @param mono Whether to.
+    virtual void setMono(bool mono) = 0;
+
     /// @brief The entry's content: a container the button owns and draws as the entry in place of its label, which
     ///        then names it without being drawn. The mount asks for it only for an `Item` that has content. The entry
     ///        stays one button: one focus stop, and a click anywhere on its content is the button's.
@@ -840,6 +854,16 @@ public:
     ///        draws the surface's fill with the tone's colour as border and text.
     /// @param style The style.
     virtual void setStyle(BadgeStyle style) = 0;
+
+    /// @brief Sets the badge's outline. A new badge has the theme's corners; the mount calls it once, only for
+    ///        `Round`.
+    /// @param shape The shape.
+    virtual void setShape(ControlShape shape) = 0;
+
+    /// @brief Draws the label in the `mono` text role's face. A new badge uses its own face; the mount calls it once,
+    ///        only for `true`.
+    /// @param mono Whether to.
+    virtual void setMono(bool mono) = 0;
 };
 
 /// @brief A progress bar.

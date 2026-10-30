@@ -130,6 +130,36 @@ TEST_CASE("ui theme values: the badge radius is a token with a default", "[ui][t
     CHECK(values.dimensions.at("radius.badge") == 2.0);
 }
 
+// Mutation: accept any string as a stroke style (`dotted` reads), or leave `border.style` out of `kThemeTokens` (the
+// bundle's `dashed` is dropped).
+TEST_CASE("ui theme values: a surface's border style is solid or dashed, and any other is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().strokes.at("border.style") == "solid");
+    ui::ThemeValues const dashed = valuesOf(R"({"border": {"style": {"$type": "strokeStyle", "$value": "dashed"}}})");
+    CHECK(dashed.strokes.at("border.style") == "dashed");
+
+    auto const parse = [](std::string_view text) {
+        auto tokens = ui::parseTokens(text);
+        REQUIRE(tokens.has_value());
+        return std::move(*tokens);
+    };
+    ui::TokenSet const base = parse(R"({"border": {"style": {"$type": "strokeStyle", "$value": "dashed"}}})");
+    ui::TokenSet const dotted = parse(R"({"border": {"style": {"$type": "strokeStyle", "$value": "dotted"}}})");
+    ui::ThemeIndex index;
+    index.base = "base";
+    index.surfaces.emplace("empty", "dotted");
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        if (id == "base") {
+            return &base;
+        }
+        return id == "dotted" ? &dotted : nullptr;
+    };
+    auto const refused = ui::checkTheme(index, files);
+    REQUIRE(refused.has_value());
+    CHECK(refused->find("border.style: only solid and dashed are drawn") != std::string::npos);
+    index.surfaces.clear();
+    CHECK_FALSE(ui::checkTheme(index, files).has_value());
+}
+
 // Mutation: drop the fill's alpha before comparing (the translucent default reads as opaque near-black).
 TEST_CASE("ui theme values: text that cannot be read on a fill is reported", "[ui][theme]") {
     CHECK(ui::themeContrastProblems(ui::themeValues()).empty());

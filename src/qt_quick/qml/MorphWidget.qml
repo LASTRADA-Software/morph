@@ -35,6 +35,8 @@ Item {
     // False for a kind whose width is its label (a button, a badge, a checkbox): it keeps that width at the start of
     // the line it fills, as the terminal draws it.
     property bool fillsAcross: true
+    // Whether the widget is round: its corners are half its height, and so are its surface's.
+    property bool round: false
     property string tooltip: ""
     // Whether C++ listens for the pointer coming to rest here.
     property bool hoverWatched: false
@@ -298,7 +300,7 @@ Item {
         anchors.fill: parent
         z: -1
         visible: root.surface !== "" && Theme.draws(root.surface)
-        radius: root.surface === "card" ? Theme.radiusCard : 0
+        radius: root.round ? height / 2 : root.surface === "card" ? Theme.radiusCard : 0
         color: root.scheme.surface
         border.width: root.surface === "toolbar" || root.surface === "card" ? 1 : 0
         border.color: root.scheme.border

@@ -30,6 +30,20 @@ using morph::tui::testing::Harness;
 using morph::tui::testing::ResizableOutput;
 using Rows = std::vector<std::string>;
 
+// Mutation: ignore `setSize` in ButtonImpl (the small button keeps its inner spaces).
+TEST_CASE("tui widgets: a small push button drops the spaces inside its brackets", "[tui][widgets]") {
+    Harness harness{20, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const small = harness.make<ButtonImpl>(column.get());
+    small->setLabel("S1");
+    small->setSize(ui::ButtonSize::Small);
+    small->setShape(ui::ControlShape::Round);
+    small->setMono(true);
+    auto const normal = harness.make<ButtonImpl>(column.get());
+    normal->setLabel("S1");
+    CHECK(harness.draw() == Rows{"[S1]", "[ S1 ]"});
+}
+
 TEST_CASE("tui widgets: a column renders its children top to bottom", "[tui][widgets]") {
     Harness harness{20, 4};
     auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);

@@ -961,7 +961,8 @@ public:
     void setScrollable(bool scrollable) override { set("scrollable", scrollable ? "true" : "false"); }
 };
 
-/// @brief A fake `ButtonWidget`: properties `label`, `emphasis`, `icon`, `style` and `selected`; a `Column` child
+/// @brief A fake `ButtonWidget`: properties `label`, `emphasis`, `icon`, `style`, `selected`, `shape`, `size` and
+/// `mono`; a `Column` child
 ///        once its content is asked for.
 class FakeButton final : public FakeLeaf<ButtonWidget> {
 public:
@@ -986,6 +987,9 @@ public:
     void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
     void setStyle(ButtonStyle style) override { set("style", enumName(style)); }
     void setSelected(bool selected) override { set("selected", selected ? "true" : "false"); }
+    void setShape(ControlShape shape) override { set("shape", std::string{shapeName(shape)}); }
+    void setSize(ButtonSize size) override { set("size", std::string{sizeName(size)}); }
+    void setMono(bool mono) override { set("mono", formatBool(mono)); }
 
 private:
     std::unique_ptr<FakeSlot> _content;
@@ -1359,7 +1363,8 @@ private:
     int _shown = 0;
 };
 
-/// @brief A fake `BadgeWidget`: properties `tone`, `text`, `icon`, `style`, and `removable` of a removable one.
+/// @brief A fake `BadgeWidget`: properties `tone`, `text`, `icon`, `style`, `shape`, `mono`, and `removable` of a
+///        removable one.
 class FakeBadge final : public FakeLeaf<BadgeWidget> {
 public:
     using FakeLeaf<BadgeWidget>::FakeLeaf;
@@ -1368,6 +1373,8 @@ public:
     void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
 
     void setStyle(BadgeStyle style) override { set("style", style == BadgeStyle::Outline ? "Outline" : "Filled"); }
+    void setShape(ControlShape shape) override { set("shape", std::string{shapeName(shape)}); }
+    void setMono(bool mono) override { set("mono", formatBool(mono)); }
 
     /// @brief Records property `removable`, the remove control's name, and keeps @p onRemove for
     ///        `RecordingBackend::dismiss`.

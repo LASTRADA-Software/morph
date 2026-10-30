@@ -78,7 +78,9 @@ constexpr char const* kOutOfSpecSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#FFF5F5" }, "border": { "$value": "#F2C0C0" } }
 })";
 
-// A plate's template wells: standards blue, controls amber, the blank grey, so they read apart from the samples.
+// A plate's wells, from the design's CSS: standards blue, controls amber, the blank grey, a sample well white with a
+// solid outline and an empty one white with a dashed outline. The surface's `color.surface` fills the round shape
+// behind a well; the control roles are what the well's button draws with.
 constexpr char const* kStandardSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#E6ECFF" }, "border": { "$value": "#5B7BE0" },
              "text": { "$value": "#1F3FA8" },
@@ -91,17 +93,17 @@ constexpr char const* kControlSurface = R"({
              "controlSurface": { "$value": "#FFF1D6" }, "controlBorder": { "$value": "#D19100" } }
 })";
 
-// A well that holds a sample, outlined solid, and an empty one, muted: no surface draws a dashed outline.
 constexpr char const* kSampleSurface = R"({
-  "color": { "$type": "color", "surface": { "$value": "#FFFFFF" }, "border": { "$value": "#4D5461" },
+  "color": { "$type": "color", "surface": { "$value": "#FFFFFF" }, "border": { "$value": "#9AA2AE" },
              "text": { "$value": "#1C1E21" },
-             "controlSurface": { "$value": "#FFFFFF" }, "controlBorder": { "$value": "#4D5461" } }
+             "controlSurface": { "$value": "#FFFFFF" }, "controlBorder": { "$value": "#9AA2AE" } }
 })";
 
 constexpr char const* kEmptySurface = R"({
-  "color": { "$type": "color", "surface": { "$value": "#F6F7F9" }, "border": { "$value": "#DDE1E6" },
-             "text": { "$value": "#7A828F" },
-             "controlSurface": { "$value": "#F6F7F9" }, "controlBorder": { "$value": "#DDE1E6" } }
+  "color": { "$type": "color", "surface": { "$value": "#F6F7F9" }, "border": { "$value": "#C3C9D2" },
+             "text": { "$value": "#5F6673" },
+             "controlSurface": { "$value": "#FFFFFF" }, "controlBorder": { "$value": "#C3C9D2" } },
+  "border": { "style": { "$type": "strokeStyle", "$value": "dashed" } }
 })";
 
 constexpr char const* kBlankSurface = R"({

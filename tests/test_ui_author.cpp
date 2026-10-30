@@ -542,6 +542,23 @@ TEST_CASE("a button's style and selection are written, and the loader takes them
     CHECK(text(ui::button({.label = "P"}).json()) == R"({"kind":"button","label":"P"})");
 }
 
+// Mutation: leave `shape`, `size` or `mono` out of button() or badge() (the key is not written, and the well is a
+// plain button).
+TEST_CASE("a button's and a badge's shape, size and mono are written only when given", "[ui][author]") {
+    CHECK(text(ui::button({.label = "S1",
+                           .shape = morph::ui::ControlShape::Round,
+                           .size = morph::ui::ButtonSize::Small,
+                           .mono = true})
+                   .json()) == R"({"kind":"button","shape":"round","size":"small","mono":true,"label":"S1"})");
+    CHECK(text(ui::button({.label = "S1"}).json()) == R"({"kind":"button","label":"S1"})");
+    CHECK(text(ui::badge({.text = "QC",
+                          .style = morph::ui::BadgeStyle::Outline,
+                          .shape = morph::ui::ControlShape::Round,
+                          .mono = true})
+                   .json()) == R"({"kind":"badge","text":"QC","style":"outline","shape":"round","mono":true})");
+    CHECK(text(ui::badge({.text = "QC"}).json()) == R"({"kind":"badge","text":"QC"})");
+}
+
 template <typename M>
 concept ResultBinds = requires(ui::Scope& screen, M mutation) { screen.let("r", mutation.result()); };
 

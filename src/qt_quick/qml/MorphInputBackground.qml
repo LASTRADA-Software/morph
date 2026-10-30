@@ -29,8 +29,17 @@ Rectangle {
     implicitWidth: Theme.unitWidth * 20
     radius: Theme.radiusControl
     color: readOnly ? Theme.background : scheme.controlSurface
-    border.width: focused || prominent ? 2 : 1
+    // Whether the plain outline is stroked in dashes: the surface's `border.style`.
+    readonly property bool dashed: scheme.borderDashed && !focused && !prominent && tone === 0
+    border.width: focused || prominent ? 2 : dashed ? 0 : 1
     border.color: tone !== 0 ? toneColor : prominent ? scheme.accent : focused ? scheme.focus : scheme.controlBorder
+
+    MorphDashedOutline {
+        objectName: "dashedOutline"
+        visible: background.dashed
+        color: background.scheme.controlBorder
+        radius: background.radius
+    }
 
     // The ring: a sibling's outline, since a Rectangle draws nothing outside itself.
     Rectangle {

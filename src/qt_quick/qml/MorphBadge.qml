@@ -21,9 +21,12 @@ MorphWidget {
     // Whether the badge has a remove button, and the button's accessible name; set by C++ before the first frame.
     property bool removable: false
     property string removeLabel: ""
+    // Whether the label is drawn in the mono face; set once. `round` is the widget's.
+    property bool mono: false
     // A neutral outline or chip takes the text colour and the control border; a toned one, the tone's colours.
     readonly property bool plain: root.tone === 0 && (root.outline || root.removable)
     readonly property bool framed: root.outline || root.removable
+    readonly property color outlineColor: root.tone === 0 ? root.scheme.controlBorder : root.toneBorderOf(root.tone)
 
     focusTarget: root.removable ? remove : root
 
@@ -37,22 +40,32 @@ MorphWidget {
     // A tag insets its label 1 px above and below and one and a half spacing units at each side. A chip is the
     // control height less 6 px, with a spacing step of 2 before the label and its remove button against the end.
     readonly property real chipHeight: Theme.targetHeight - 6
-    implicitWidth: content.implicitWidth + (root.removable ? Theme.spaceOf(2) : Theme.spaceOf(1) * 3)
+    readonly property real naturalWidth: content.implicitWidth +
+                                         (root.removable ? Theme.spaceOf(2) : Theme.spaceOf(1) * 3)
+    // A round badge is at least as wide as it is tall: a circle for a short label, a stadium for a longer one.
+    implicitWidth: root.round ? Math.max(root.naturalWidth, implicitHeight) : root.naturalWidth
     implicitHeight: root.removable ? root.chipHeight : label.implicitHeight + 2
 
     Rectangle {
         objectName: "fill"
         anchors.fill: parent
-        radius: Theme.radiusBadge
+        radius: root.round ? height / 2 : Theme.radiusBadge
         color: root.removable ? root.scheme.controlSurface
                               : root.outline ? root.scheme.surface : root.toneBgOf(root.tone)
-        border.width: root.framed ? 1 : 0
-        border.color: root.tone === 0 ? root.scheme.controlBorder : root.toneBorderOf(root.tone)
+        border.width: root.framed && !root.scheme.borderDashed ? 1 : 0
+        border.color: root.outlineColor
+
+        MorphDashedOutline {
+            objectName: "dashedOutline"
+            visible: root.framed && root.scheme.borderDashed
+            color: root.outlineColor
+            radius: parent.radius
+        }
     }
 
     Row {
         id: content
-        x: root.removable ? Theme.spaceOf(2) : Theme.spaceOf(1) * 1.5
+        x: root.removable ? Theme.spaceOf(2) : root.round ? (root.width - width) / 2 : Theme.spaceOf(1) * 1.5
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.spaceOf(1)
 
@@ -70,7 +83,9 @@ MorphWidget {
             textFormat: Text.PlainText
             id: label
             objectName: "label"
-            font: root.removable ? Theme.bodyFont : Theme.smallStrongFont
+            font: root.removable ? Theme.bodyFont
+                                 : root.mono ? Theme.monoFontOf(Theme.smallPixels, Theme.strongWeight)
+                                             : Theme.smallStrongFont
             text: (root.icon !== "" && root.iconSource === "" ? root.icon + " " : "") + root.text
             color: root.plain ? root.scheme.text : root.toneOf(root.tone)
             anchors.verticalCenter: parent.verticalCenter

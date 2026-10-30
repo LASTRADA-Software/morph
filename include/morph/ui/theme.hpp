@@ -975,8 +975,32 @@ using TokenFileLookup = std::function<TokenSet const*(std::string_view fileId)>;
     return resolveTokens(layers);
 }
 
+namespace detail {
+
+/// @brief The paths of the set read as a stroke style.
+inline constexpr std::array<std::string_view, 1> kStrokePaths = {"border.style"};
+
+/// @brief Why a resolved theme strokes an outline in a style that is not drawn.
+/// @param resolved The resolved tokens.
+/// @return The reason, or nothing when every stroke style of the set is `solid` or `dashed`.
+[[nodiscard]] inline std::optional<std::string> strokeProblem(TokenSet const& resolved) {
+    for (std::string_view const path : kStrokePaths) {
+        auto const found = resolved.find(path);
+        if (found == resolved.end() || found->second.type != "strokeStyle") {
+            continue;
+        }
+        auto const* const named = std::get_if<std::string>(&found->second.value.data);
+        if (named == nullptr || (*named != "solid" && *named != "dashed")) {
+            return std::string{path} + ": only solid and dashed are drawn";
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace detail
+
 /// @brief Checks that every combination of a theme resolves: each variant (or none), density (or none) and surface
-///        (or none) over `base`.
+///        (or none) over `base`, and that none strokes an outline in a style that is not drawn.
 /// @param index The theme index.
 /// @param files The bundle's token files.
 /// @return Why the theme is refused, naming the combination, or nothing.
@@ -1011,6 +1035,9 @@ using TokenFileLookup = std::function<TokenSet const*(std::string_view fileId)>;
                 if (!resolved) {
                     return label(variant, density, surface) + ": " + resolved.error();
                 }
+                if (auto problem = detail::strokeProblem(*resolved)) {
+                    return label(variant, density, surface) + ": " + *problem;
+                }
             }
         }
     }
@@ -1025,6 +1052,7 @@ enum class ThemeTokenKind : std::uint8_t {
     Shadow,      ///< A `shadow` token: a colour and four px lengths; of a list of layers, the first.
     FontFamily,  ///< A `fontFamily` token: a family name, or a list of them in order of preference.
     FontWeight,  ///< A `fontWeight` token, read as its numeric weight, 1 to 1000, in `ThemeValues::numbers`.
+    Stroke,      ///< A `strokeStyle` token: `solid` or `dashed`, in `ThemeValues::strokes`.
 };
 
 /// @brief A `shadow` token's default, in the form a `constexpr` table can hold.
@@ -1055,12 +1083,14 @@ struct ThemeTokenSpec {
     ThemeShadowSpec shadow{};
     /// @brief A font family's default; empty for none, which draws in the platform font.
     std::string_view family;
+    /// @brief A stroke style's default: `solid` or `dashed`.
+    std::string_view stroke;
 };
 
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 64> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 65> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1147,6 +1177,14 @@ inline constexpr std::array<ThemeTokenSpec, 64> kThemeTokens = {{
      .shadow = {.color = "#00000024", .offsetX = 0.0, .offsetY = 8.0, .blur = 24.0, .spread = 0.0}},
     // Transparent: an unset theme fills a table's header with nothing, matching today's appearance exactly.
     {.path = "color.table.header", .kind = ThemeTokenKind::Color, .color = "#00000000", .number = 0.0},
+    // How the outline of a button, a badge and an input is stroked on a surface: solid, or dashed. Read per surface.
+    {.path = "border.style",
+     .kind = ThemeTokenKind::Stroke,
+     .color = "",
+     .number = 0.0,
+     .shadow = {},
+     .family = "",
+     .stroke = "solid"},
     // A chart's series colours, in drawing order: Okabe and Ito's hues, darkened until each holds 3:1 against both
     // `color.surface` and `color.background`, the contrast a graphical object needs.
     {.path = "color.chart.1", .kind = ThemeTokenKind::Color, .color = "#0072b2", .number = 0.0},
@@ -1181,6 +1219,8 @@ struct ThemeValues {
     std::map<std::string, ThemeShadow, std::less<>> shadows;
     /// @brief Every font family list of the set, by path, in order of preference; empty for none.
     std::map<std::string, std::vector<std::string>, std::less<>> families;
+    /// @brief Every stroke style of the set, by path: `solid` or `dashed`.
+    std::map<std::string, std::string, std::less<>> strokes;
 };
 
 namespace detail {
@@ -1294,6 +1334,15 @@ namespace detail {
                                             .spread = spec.shadow.spread}));
         } else if (spec.kind == ThemeTokenKind::FontFamily) {
             values.families.insert_or_assign(std::string{spec.path}, detail::familyValue(spec, token));
+        } else if (spec.kind == ThemeTokenKind::Stroke) {
+            std::string stroke{spec.stroke};
+            if (token != nullptr && token->type == "strokeStyle") {
+                if (auto const* const named = std::get_if<std::string>(&token->value.data);
+                    named != nullptr && (*named == "solid" || *named == "dashed")) {
+                    stroke = *named;
+                }
+            }
+            values.strokes.insert_or_assign(std::string{spec.path}, std::move(stroke));
         } else if (spec.kind == ThemeTokenKind::FontWeight) {
             std::optional<double> weight;
             if (token != nullptr && token->type == "fontWeight") {
@@ -1320,8 +1369,8 @@ namespace detail {
 namespace detail {
 
 /// @brief The `$type`s the set's kinds are read as.
-inline constexpr std::array<std::string_view, 6> kReadTokenTypes = {"color",  "number",     "dimension",
-                                                                    "shadow", "fontFamily", "fontWeight"};
+inline constexpr std::array<std::string_view, 7> kReadTokenTypes = {"color",      "number",     "dimension",  "shadow",
+                                                                    "fontFamily", "fontWeight", "strokeStyle"};
 
 /// @brief Calls @p reach with the path of every alias inside a value.
 /// @param value The value.

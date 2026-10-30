@@ -108,6 +108,14 @@ void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
 // MorphButton's `style`: 0 push, 1 item.
 void ButtonImpl::setStyle(ui::ButtonStyle style) { write("style", style == ui::ButtonStyle::Item ? 1 : 0); }
 
+// MorphButton's `round`.
+void ButtonImpl::setShape(ui::ControlShape shape) { write("round", shape == ui::ControlShape::Round); }
+
+// MorphButton's `small`.
+void ButtonImpl::setSize(ui::ButtonSize size) { write("small", size == ui::ButtonSize::Small); }
+
+void ButtonImpl::setMono(bool mono) { write("mono", mono); }
+
 void ButtonImpl::setSelected(bool selected) {
     write("selectable", true);
     write("selected", selected);
@@ -282,6 +290,11 @@ void BadgeImpl::setOnRemove(ui::Action onRemove, std::string_view label) {
 }
 
 void BadgeImpl::setStyle(ui::BadgeStyle style) { write("outline", style == ui::BadgeStyle::Outline); }
+
+// MorphBadge's `round`.
+void BadgeImpl::setShape(ui::ControlShape shape) { write("round", shape == ui::ControlShape::Round); }
+
+void BadgeImpl::setMono(bool mono) { write("mono", mono); }
 
 std::string BadgeImpl::shownText() const { return toUtf8(read("text").toString()); }
 

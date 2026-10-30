@@ -36,10 +36,17 @@ std::string wellLabel(GalleryScreen& screen, std::string const& name) {
 TEST_CASE("plate, expanded: the samples to place beside the 12-column plate, A3 to A8 selected", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
     screen.requireNoProblems();
-    CHECK(screen.prop("Grid", "plate", "tracks") ==
-          "[fixed(3),stretch(1);align=center,stretch(1);align=center,stretch(1);align=center,stretch(1);align=center,"
-          "stretch(1);align=center,stretch(1);align=center,stretch(1);align=center,stretch(1);align=center,"
-          "stretch(1);align=center,stretch(1);align=center,stretch(1);align=center,stretch(1);align=center]");
+    std::string tracks = "[fixed(3)";
+    for (int column = 0; column < 12; ++column) {
+        tracks += ",fixed(6);align=center";
+    }
+    CHECK(screen.prop("Grid", "plate", "tracks") == tracks + "]");
+    // A well is a round, dense button in the mono face, on fixed tracks that hold its whole label.
+    for (std::string const name : {"A1", "A2", "B2", "B3", "D5"}) {
+        CHECK(screen.backend().prop(well(screen, name), "shape") == "round");
+        CHECK(screen.backend().prop(well(screen, name), "size") == "small");
+        CHECK(screen.backend().prop(well(screen, name), "mono") == "true");
+    }
     CHECK(wellLabel(screen, "A1") == "STD1");
     CHECK(wellLabel(screen, "A2") == "QC");
     CHECK(wellLabel(screen, "B2") == "B");
@@ -60,6 +67,18 @@ TEST_CASE("plate, expanded: the samples to place beside the 12-column plate, A3 
     CHECK(screen.text("more") == "+ 9 more");
     CHECK(screen.text("selected") == "6 wells selected · A3–A8");
     CHECK(screen.shows("Panel", "bulk"));
+    // The legend's chips are round mono outline badges.
+    CHECK(screen.find("Row", "legend").has_value());
+    std::size_t chips = 0;
+    for (int const badge : screen.backend().all("Badge")) {
+        if (screen.backend().hasProp(badge, "shape")) {
+            CHECK(screen.backend().prop(badge, "shape") == "round");
+            CHECK(screen.backend().prop(badge, "mono") == "true");
+            CHECK(screen.backend().prop(badge, "style") == "Outline");
+            ++chips;
+        }
+    }
+    CHECK(chips == 5);
 }
 
 TEST_CASE("plate, expanded: a sample dragged into a well leaves the samples to place", "[lims-gallery]") {

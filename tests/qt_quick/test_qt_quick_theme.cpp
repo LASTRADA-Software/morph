@@ -10,10 +10,12 @@
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QFontMetricsF>
+#include <QImage>
 #include <QMetaObject>
 #include <QMetaProperty>
 #include <QObject>
 #include <QPalette>
+#include <QPointF>
 #include <QQuickItem>
 #include <QTemporaryDir>
 #include <QUrl>
@@ -1374,4 +1376,161 @@ TEST_CASE("qt_quick theme: a selected or hovered item's fill is drawn beneath it
     item->setSelected(true);
     scene.settle();
     CHECK(darkPixelsIn(scene.window().grabWindow(), itemItem) > 20);
+}
+
+namespace {
+
+/// A theme with a red control border and the surfaces `well` (solid, yellow) and `empty` (dashed, yellow), so a
+/// control on either shows where its outline and its surface are drawn.
+std::map<std::string, ui::ThemeValues, std::less<>> wellSurfaces() {
+    auto const solid = ui::parseTokens(R"({"color": {"$type": "color", "surface": {"$value": "#ffee88"},
+        "controlBorder": {"$value": "#ff0000"}}})");
+    auto const dashed = ui::parseTokens(R"({"color": {"$type": "color", "surface": {"$value": "#ffee88"},
+        "controlBorder": {"$value": "#ff0000"}},
+      "border": {"style": {"$type": "strokeStyle", "$value": "dashed"}}})");
+    REQUIRE(solid);
+    REQUIRE(dashed);
+    auto const solidResolved = ui::resolveTokens({&*solid});
+    auto const dashedResolved = ui::resolveTokens({&*dashed});
+    REQUIRE(solidResolved);
+    REQUIRE(dashedResolved);
+    return {{"well", ui::themeValues(*solidResolved)}, {"empty", ui::themeValues(*dashedResolved)}};
+}
+
+/// The count of red pixels along the row of device pixels @p row of @p image, from @p first to @p last, and how many
+/// runs of them there are.
+struct RedRuns {
+    int pixels = 0;
+    int runs = 0;
+};
+
+RedRuns redAlong(QImage const& image, int row, int first, int last) {
+    RedRuns found;
+    bool inside = false;
+    for (int x = first; x < last; ++x) {
+        QColor const color = image.pixelColor(x, row);
+        bool const red = color.red() > 200 && color.green() < 80 && color.blue() < 80;
+        found.pixels += red ? 1 : 0;
+        found.runs += red && !inside ? 1 : 0;
+        inside = red;
+    }
+    return found;
+}
+
+}  // namespace
+
+// Mutation: leave `radius: 0` on the surface's background in MorphWidget (the corner reads the surface's yellow).
+TEST_CASE("qt_quick theme: a round button draws its surface with its own shape", "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), wellSurfaces()).empty());
+    scene.window().resize(300, 200);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const well = scene.backend().createButton(column.get());
+    well->setLabel("S1");
+    well->setSurface("well");
+    well->setShape(ui::ControlShape::Round);
+    well->setSize(ui::ButtonSize::Small);
+    well->setOnClick([] {});
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*well);
+    QQuickItem const* const background = surfaceBackground(item);
+    REQUIRE(background != nullptr);
+    CHECK(background->property("radius").toReal() == item.height() / 2);
+    CHECK(item.width() >= item.height());
+    QImage const image = scene.window().grabWindow();
+    QPointF const origin = item.mapToScene(QPointF{1.0, 1.0});
+    CHECK(image.pixelColor(static_cast<int>(origin.x()), static_cast<int>(origin.y())) != QColor{"#ffee88"});
+}
+
+// Mutation: leave `radius: height / 2` out of a round badge's fill (it keeps the tag's corners).
+TEST_CASE("qt_quick theme: a round badge is a circle or a stadium, in the mono face when asked", "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const badge = scene.backend().createBadge(column.get());
+    badge->setText("QC");
+    badge->setStyle(ui::BadgeStyle::Outline);
+    badge->setShape(ui::ControlShape::Round);
+    badge->setMono(true);
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*badge);
+    QQuickItem const* const fill = item.findChild<QQuickItem*>(QStringLiteral("fill"));
+    QQuickItem const* const label = item.findChild<QQuickItem*>(QStringLiteral("label"));
+    REQUIRE(fill != nullptr);
+    REQUIRE(label != nullptr);
+    CHECK(fill->property("radius").toReal() == fill->height() / 2);
+    CHECK(item.width() >= item.height());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QFont const font = label->property("font").value<QFont>();
+    CHECK(font.family() == theme->property("monoFont").value<QFont>().family());
+}
+
+// Mutation: leave the padding at the button's own (the label elides in the six-unit track) or ignore `small` (the
+// same).
+TEST_CASE("qt_quick theme: a small mono button keeps its label whole in a narrow track, a normal one elides it",
+          "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.window().resize(400, 200);
+    auto const grid = scene.backend().createGrid(nullptr);
+    grid->setTracks({{.width = ui::Sizing::fixed(6), .align = ui::Align::Start},
+                     {.width = ui::Sizing::fixed(6), .align = ui::Align::Start}});
+    auto const small = scene.backend().createButton(grid.get());
+    small->setLabel("STD1");
+    small->setShape(ui::ControlShape::Round);
+    small->setSize(ui::ButtonSize::Small);
+    small->setMono(true);
+    auto const normal = scene.backend().createButton(grid.get());
+    normal->setLabel("STD1");
+    normal->setShape(ui::ControlShape::Round);
+    normal->setMono(true);
+    scene.settle();
+    auto const truncated = [](QQuickItem& item) {
+        QList<QQuickItem*> const texts = Scene::itemsOf(item, "QQuickText");
+        REQUIRE_FALSE(texts.isEmpty());
+        return texts.front()->property("truncated").toBool();
+    };
+    CHECK_FALSE(truncated(Scene::itemOf(*small)));
+    CHECK(truncated(Scene::itemOf(*normal)));
+}
+
+// Mutation: read the token and ignore it (no outline is drawn dashed), or draw the solid border as well.
+TEST_CASE("qt_quick theme: a button on a dashed surface is outlined in dashes, not in a border",
+          "[qt_quick][dashed]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), wellSurfaces()).empty());
+    scene.window().resize(300, 200);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const dashed = scene.backend().createButton(column.get());
+    dashed->setLabel("A wide caption for the outline");
+    dashed->setSurface("empty");
+    auto const solid = scene.backend().createButton(column.get());
+    solid->setLabel("A wide caption for the outline");
+    solid->setSurface("well");
+    scene.settle();
+    auto const* const outline = buttonBackground(*dashed).findChild<QQuickItem*>(QStringLiteral("dashedOutline"));
+    REQUIRE(outline != nullptr);
+    CHECK(outline->isVisible());
+    CHECK(buttonBackground(*dashed).property("border").value<QObject*>()->property("width").toReal() == 0.0);
+    CHECK(outline->width() == buttonBackground(*dashed).width());
+    CHECK(outline->height() == buttonBackground(*dashed).height());
+    auto const* const none = buttonBackground(*solid).findChild<QQuickItem*>(QStringLiteral("dashedOutline"));
+    REQUIRE(none != nullptr);
+    CHECK_FALSE(none->isVisible());
+    CHECK(buttonBackground(*solid).property("border").value<QObject*>()->property("width").toReal() == 1.0);
+
+    // The stroke has gaps along the top edge, at the window's device resolution.
+    QImage const image = scene.window().grabWindow();
+    qreal const ratio = image.devicePixelRatio();
+    QQuickItem const& item = Scene::itemOf(*dashed);
+    QPointF const corner = item.mapToScene(QPointF{0.0, 0.0});
+    int const row = static_cast<int>((corner.y() + 0.5) * ratio);
+    int const first = static_cast<int>(corner.x() * ratio) + static_cast<int>(10 * ratio);
+    int const last = static_cast<int>((corner.x() + item.width()) * ratio) - static_cast<int>(10 * ratio);
+    RedRuns const edge = redAlong(image, row, first, last);
+    INFO("device pixel ratio " << ratio << ", " << edge.pixels << " red pixels in " << edge.runs << " runs");
+    CHECK(edge.runs >= 3);
+    CHECK(edge.pixels < (last - first) * 3 / 4);
+    CHECK(edge.pixels > (last - first) / 3);
 }

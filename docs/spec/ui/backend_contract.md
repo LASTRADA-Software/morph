@@ -198,9 +198,17 @@ read as a second control beside it rather than part of it. The terminal draws `P
 in the error colour, and falls back to `Normal`'s plain style for `Ghost`.
 
 **Badge style.** `BadgeWidget::setStyle(BadgeStyle::Outline)` draws a badge outlined: the surface's fill with the
-tone's colour as border and text, where a filled one is drawn in the tone's fill. A red outline then means one thing
+tone's outline colour as border and its colour as text, where a filled one is drawn in the tone's fill. A red outline then means one thing
 (STAT) and a red fill another (out of specification). The terminal draws an outline badge as `(text)`, a filled one
 as `[text]`.
+
+**Shape, size and mono.** `ButtonWidget::setShape`, `BadgeWidget::setShape(ControlShape::Round)` draw a control with
+corners of half its height, at least as wide as it is tall: a circle for a short label, a stadium for a longer one, and
+the surface it sits on is drawn in that shape too. `ButtonWidget::setSize(ButtonSize::Small)` makes a push button
+dense: the least side padding, a strong label in the small type step, and the control height kept. `setMono(true)` on a
+button or a badge draws the label in the `mono` text role's face. The mount calls each once, and only for the
+non-default value. The terminal has no corners and only one face, so a shape and `mono` draw nothing there; a small
+push button is `[S1]` where a normal one is `[ S1 ]`.
 
 **Button style and selection.** `ButtonWidget::setStyle(ButtonStyle)` makes a button an entry of a list (`Item`): it
 behaves as a push button (activation, enablement, tooltip, hover) and is drawn as a line, as wide as its line, its
@@ -274,7 +282,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `ContainerWidget` | `moveChild(child, index)` | — |
 | `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale`, `setDescription`, `setTone` (a text refuses the last two) | — |
 | `TextWidget` | `setText`, `setRole`, `setSpans` | — |
-| `ButtonWidget` | `setLabel`, `setEmphasis`, `setIcon` (once, for a button with an icon), `setStyle` (once, for an item), `setSelected`, `content()` (an item's content, asked for only when it has some) | `setOnClick` (Enter, Space or a click) |
+| `ButtonWidget` | `setLabel`, `setEmphasis`, `setIcon` (once, for a button with an icon), `setStyle` (once, for an item), `setShape`, `setSize`, `setMono` (each once, only for a non-default value), `setSelected`, `content()` (an item's content, asked for only when it has some) | `setOnClick` (Enter, Space or a click) |
 | `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only), `setIcon` (an icon of the theme's icon set, drawn at the leading edge; single-line and password only, called once), `setCaption(label, shown)` (the field's label, and whether the input draws it as a visible caption above its control), `setEmphasis` (once, only for `Prominent`: drawn as the focal control, on Qt Quick larger and outlined in the accent, on the terminal bold) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)`; a dropdown's list opens under the field, at the field's start when it fits in the window, else ending at the field's end, and always inside the window | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
@@ -294,7 +302,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)`, `setOnCommit(value)` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
 | `BannerWidget` | `setTone`, `setText`, `setSpans`, `setActionLabel`, `setDismissible` (once) | `setOnAction`, `setOnDismiss` |
-| `BadgeWidget` | `setTone`, `setText`, `setIcon` (once), `setStyle` (once, only for `Outline`) | `setOnRemove(onRemove, label)`: only for a removable badge, which then draws a remove control after its text (the framework icon `close`) named `label`, and takes the focus; Delete, Backspace, Enter or Space on it, or a click on its control, calls `onRemove`. A badge without it takes no focus |
+| `BadgeWidget` | `setTone`, `setText`, `setIcon` (once), `setStyle` (once, only for `Outline`), `setShape` (once, only for `Round`), `setMono` (once, only for `true`) | `setOnRemove(onRemove, label)`: only for a removable badge, which then draws a remove control after its text (the framework icon `close`) named `label`, and takes the focus; Delete, Backspace, Enter or Space on it, or a click on its control, calls `onRemove`. A badge without it takes no focus |
 | `ProgressWidget` | `setValue(optional<double>)`, `setLabel` | — |
 | `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)` | — |
 | `KeyValueWidget` | `setItems(vector<KeyValueItem>)`, `setCaptionPlacement` (once, only for `Above`) | — |

@@ -27,6 +27,10 @@ MorphWidget {
     // to assistive technology. The control is not `checkable`, since a click would flip `checked` whatever the
     // document answers.
     property bool selectable: false
+    // A dense button: the least side padding and the small type step; set once. `round` is the widget's.
+    property bool small: false
+    // Whether the caption is drawn in the mono face; set once.
+    property bool mono: false
     // Set by C++ once an item has content: the content column becomes the button's content item.
     property bool hasContent: false
     // Where C++ puts an item's content.
@@ -46,8 +50,21 @@ MorphWidget {
     Accessible.onPressAction: root.fire("click", undefined)
 
     focusTarget: button
-    implicitWidth: button.implicitWidth
+    // A round button is at least as wide as it is tall: a circle for a short caption, a stadium for a longer one.
+    implicitWidth: root.round ? Math.max(button.implicitWidth, button.implicitHeight) : button.implicitWidth
     implicitHeight: button.implicitHeight
+
+    // The caption's font: the body face, strong for a filled button; a small button draws a strong caption in the
+    // small step, and a mono one in the mono role's face.
+    readonly property bool strongCaption: root.small || !(root.emphasis === 0 || root.emphasis === 4 || root.ghost)
+    readonly property font captionFont: {
+        if (root.small || root.mono) {
+            const pixels = root.small ? Theme.smallPixels : root.mono ? Theme.monoPixels : Theme.bodyPixels
+            const weight = root.strongCaption ? Theme.strongWeight : Font.Normal
+            return root.mono ? Theme.monoFontOf(pixels, weight) : Theme.fontOf(pixels, weight)
+        }
+        return root.strongCaption ? Theme.strongFont : Theme.bodyFont
+    }
 
     // An item's content: the icon, then the label at the start of the line, in the accent while selected. The push
     // button keeps its style's own centred content.
@@ -101,12 +118,12 @@ MorphWidget {
         id: button
         anchors.fill: parent
         text: root.label
-        leftPadding: root.ghost ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
-        rightPadding: root.ghost ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
+        leftPadding: root.ghost || root.small ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
+        rightPadding: leftPadding
         palette.buttonText: root.emphasis === 4 ? root.scheme.error
                             : root.ghost ? root.scheme.accent
                             : root.emphasis === 0 ? root.scheme.text : "white"
-        font: root.emphasis === 0 || root.emphasis === 4 || root.ghost ? Theme.bodyFont : Theme.strongFont
+        font: root.captionFont
         icon.source: Theme.iconSource(root.icon)
         icon.color: "transparent"
         contentItem: MorphPlainContent {
@@ -119,6 +136,8 @@ MorphWidget {
             filled: root.emphasis === 1 || root.emphasis === 2
             item: root.style === 1
             ghost: root.ghost
+            round: root.round
+            compact: root.small
             borderColor: root.emphasis === 4 ? root.scheme.errorBorder : root.scheme.controlBorder
             selected: root.selected
             hovered: button.hovered

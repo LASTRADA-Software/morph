@@ -61,7 +61,8 @@ any path. `$root` at the top of a file is refused, since there is no group path 
 | `fontFamily` | a name, or a non-empty list of names |
 | `fontWeight` | 1 to 1000, or a DTCG weight name (`semi-bold`, …) |
 | `shadow` | `{"color", "offsetX", "offsetY", "blur", "spread"}` with a colour and four dimensions, or a non-empty list of them |
-| `typography`, `border`, `strokeStyle`, `gradient`, `transition`, `cubicBezier` | accepted unchecked |
+| `strokeStyle` | `solid` or `dashed` where the set reads it (`border.style`), refused at `checkTheme` otherwise; accepted unchecked elsewhere |
+| `typography`, `border`, `gradient`, `transition`, `cubicBezier` | accepted unchecked |
 
 A token of another `$type` stays in the parsed set with its type and no value check; `themeValues` ignores a path
 whose type is not the set's, and the report in [What the client reads](#what-the-client-reads) names it. Refused: text that is not a JSON object or nests deeper
@@ -142,6 +143,8 @@ replaces one, and declares any other:
 | `sidebar` | `#1f2430` | text `#c9ccd6`, muted `#7d8396`, accent `#4c8dff`, selection, border, track and divider `#2f3646`, control fill `#2a3040`, control outline `#3a4152`, hover `#ffffff14`, the neutral tone `#7d8396` (its fill that at 15 %); the rest the theme's |
 | `toolbar` | `color.surface`, with a border `#e3e5ea` | the theme's |
 
+A surface's `border.style` is read like any token of it. While it is `dashed`, the outline of a button, a badge and an input on the surface is stroked in dashes (a `MorphDashedOutline`) in place of the solid border; the surface's own background has no border to dash, except a card's and a toolbar's, which stay solid. A round button or badge (`shape: round`) draws the surface's background with its own corners, half its height, so no square shows behind it.
+
 **In the client.** A bundle carries its theme files by id (`Bundle::themes`). Once a bundle is open and before the
 shell mounts, the Qt Quick frontend applies it with `applyBundleTheme`: the index's `base`, and each of its surfaces
 resolved with its layer; a bundle without a theme index restores the defaults. It does so unless the frontend is told
@@ -187,13 +190,14 @@ built in nor in the theme draws nothing and changes no colour.
 | `font.weight.strong` (700): the weight of every strong font (`strongFont`, `headingFont`, the table header, a section, a strong run) | font weight: a number from 1 to 1000 or a DTCG weight name (`semi-bold` is 600), read into `ThemeValues::numbers` |
 | `font.family` (none: the platform font) | font family: a name, or a list of names in order of preference |
 | `font.mono` (none: the platform's fixed-pitch font), the family of the `mono` text role: a sibling of `font.family`, as the set keeps one spelling per path | font family, as `font.family` |
+| `border.style` (`solid`): how the outline of a button, a badge and an input is stroked on a surface, `solid` or `dashed`; read per surface, so one surface (an empty plate well) can draw dashed controls while the rest draw solid | stroke style: `solid` or `dashed`, read into `ThemeValues::strokes`; any other value is refused by `checkTheme` as `border.style: only solid and dashed are drawn` |
 | `elevation.card` (`#00000014`, offsets 0 and 2, blur 10, spread 0) | shadow; of a list of layers, the first |
 | `elevation.popup` (`#00000024`, offsets 0 and 8, blur 24, spread 0): a menu's, a dropdown's and a date picker's shadow | shadow, as `elevation.card` |
 
 `themeValues(resolved)` gives every path of the set the theme's value when the theme has it with the set's type, and
 its default otherwise; a token outside the set is ignored. A dimension is read in px, and a `rem` is 16 px
 (`kPixelsPerRem`): the renderers do not change the root font size. `ThemeValues` keeps colours, numbers and
-dimensions in three maps, shadows in a fourth, and font family lists (`families`) in a fifth.
+dimensions in three maps, shadows in a fourth, font family lists (`families`) in a fifth, and stroke styles (`strokes`) in a sixth.
 
 The six `space` tokens are the spacing scale: `space.<step>` is how far apart a `gap` or `padding` of that step puts
 things (`docs/spec/ui/view_tree.md`, the spacing step). Other `space.*` paths, `control.*`, `font.*` and

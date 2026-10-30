@@ -26,6 +26,8 @@ namespace {
 namespace ui = layout::ui;
 using layout::Align;
 using layout::ButtonEmphasis;
+using morph::ui::ButtonSize;
+using morph::ui::ControlShape;
 using morph::ui::Value;
 using morph::ui::ValueList;
 using morph::ui::ValueRecord;
@@ -35,6 +37,8 @@ using Count = ui::Handle<std::int64_t>;
 
 constexpr std::array<char const*, 8> kRowNames{"A", "B", "C", "D", "E", "F", "G", "H"};
 constexpr int kColumns = 12;
+// A well's grid track, in units: wide enough for the longest label, `STD1`, in the dense mono face.
+constexpr int kWellTrack = 6;
 constexpr int kRowCount = static_cast<int>(kRowNames.size());
 
 // Sample n of the worksheet is S-26-(kIdBase + n); the wells show it as Sn.
@@ -168,6 +172,12 @@ struct Plate {
     ui::AnyHandle toPlaceCount;
     // Each sample well's sample, or null while it is empty, by well name.
     std::map<std::string, ui::AnyHandle> samples;
+    // What each sample well shows, by well name: its button's label and surface, and its line on compact. They are
+    // named so that a row's records, one expression, stay within the bound on an expression's size.
+    std::map<std::string, ui::AnyHandle> labels;
+    std::map<std::string, ui::AnyHandle> surfaces;
+    std::map<std::string, ui::AnyHandle> lines;
+    std::map<std::string, ui::AnyHandle> runs;
     // Each well's element, by well name, so arrow keys can move focus to it.
     std::map<std::string, ui::Element> elements;
 };
@@ -193,7 +203,20 @@ void declareWells(ui::Scope& screen, Plate& plate) {
     for (Well const& well : allWells()) {
         plate.elements.emplace(well.name, ui::element("well" + well.name));
         if (well.kind == Kind::Sample) {
-            plate.samples.emplace(well.name, screen.let("sample" + well.name, sampleOf(plate, well.name)));
+            auto const sample = screen.let("sample" + well.name, sampleOf(plate, well.name));
+            plate.samples.emplace(well.name, sample);
+            auto const placed = ui::engaged(sample);
+            plate.labels.emplace(
+                well.name,
+                screen.let("label" + well.name, ui::cond(placed, Text{ui::format("S{0}", {sample})}, Text{"·"})));
+            plate.surfaces.emplace(well.name,
+                                   screen.let("surface" + well.name, ui::cond(placed, Text{"sample"}, Text{"empty"})));
+            plate.lines.emplace(
+                well.name,
+                screen.let("line" + well.name,
+                           ui::cond(placed, Text{ui::format("Sample {0}", {fullId(sample)})}, Text{"Empty"})));
+            plate.runs.emplace(well.name, screen.let("run" + well.name, ui::cond(placed, ui::AnyHandle{well.name},
+                                                                                 ui::AnyHandle{"empty"})));
         }
     }
 }
@@ -287,8 +310,7 @@ ui::Commands clearWells(Plate const& plate) {
             ui::set(plate.selection, ui::AnyHandle{std::vector<std::string>{}})};
 }
 
-ui::Commands toggleWell(Plate const& plate, std::string const& well) {
-    auto const name = ui::AnyHandle{well};
+ui::Commands toggleWell(Plate const& plate, ui::AnyHandle const& name) {
     return ui::set(plate.selection,
                    ui::cond(ui::includes(plate.selection, name),
                             ui::filter(plate.selection, "item",
@@ -342,8 +364,13 @@ ui::Node withArrowKeys(ui::Node node, Plate const& plate, Well const& well) {
     return node;
 }
 
+// A well is a round, dense button in the mono face: a circle for a short label and a stadium for a longer one.
+ui::ButtonOptions wellOptions(ui::AnyHandle const& label) {
+    return {.label = label, .shape = ControlShape::Round, .size = ButtonSize::Small, .mono = true};
+}
+
 ui::Node templateWell(Plate const& plate, Well const& well) {
-    auto const node = ui::button({.label = well.label})
+    auto const node = ui::button(wellOptions(ui::AnyHandle{well.label}))
                           .surface(well.surface)
                           .id(plate.elements.at(well.name))
                           .a11y(well.name + ", " + well.role)
@@ -356,29 +383,29 @@ ui::Node sampleWell(Plate const& plate, Well const& well) {
     auto const name = ui::AnyHandle{well.name};
     auto const selected = ui::includes(plate.selection, name);
     auto const role = ui::cond(ui::engaged(sample), Text{ui::format("sample {0}", {fullId(sample)})}, Text{"empty"});
+    auto options = wellOptions(plate.labels.at(well.name));
+    options.onClick = toggleWell(plate, name);
+    options.selected = selected;
     auto const node =
-        ui::button({.label = ui::cond(ui::engaged(sample), Text{ui::format("S{0}", {sample})}, Text{"·"}),
-                    .onClick = toggleWell(plate, well.name),
-                    .selected = selected})
+        ui::button(options)
             .id(plate.elements.at(well.name))
             .a11y(ui::format("{0}, {1}{2}", {name, role, ui::cond(selected, Text{", selected"}, Text{""})}))
             .drop(ui::map(plate.toPlace, "item", [](ui::AnyHandle const& item) { return item.at("n"); }),
                   place(plate, name, ui::event()))
             .key("Enter", openAssign(plate, name, firstToPlace(plate)))
-            .surface(ui::cond(ui::engaged(sample), Text{"sample"}, Text{"empty"}))
+            .surface(plate.surfaces.at(well.name))
             .testId("well-" + well.name);
     return withArrowKeys(node, plate, well);
 }
 
 ui::Node header(std::string const& text) { return ui::text({.text = text, .role = "muted"}).alignSelf(Align::Center); }
 
-// The row letters' narrow track, then twelve centred well tracks sharing the rest, so a column number sits over its
-// wells. The wells stretch rather than take the design's 44 px: a standard's push button (`STD1`) needs more on both
-// frontends, and twelve wider fixed tracks would overflow the plate's panel.
+// The row letters' narrow track, then twelve centred well tracks of six units, so a column number sits over its wells
+// and a dense well's label fits whole.
 std::vector<ui::GridTrack> plateTracks() {
     std::vector<ui::GridTrack> tracks{{.width = ui::fixed(3)}};
     for (int column = 1; column <= kColumns; ++column) {
-        tracks.push_back({.width = ui::stretch(), .align = Align::Center});
+        tracks.push_back({.width = ui::fixed(kWellTrack), .align = Align::Center});
     }
     return tracks;
 }
@@ -402,9 +429,14 @@ ui::Node plateGrid(Plate const& plate) {
         .testId("plate");
 }
 
+// A legend chip: a round mono outline badge on the well's own surface, so the surface's roles colour it.
 ui::Node chip(char const* label, char const* surface, char const* meaning) {
-    return ui::row({ui::row({ui::text({.text = label})}).surface(surface), layout::muted(meaning)},
-                   {.gap = 1, .align = Align::Center});
+    return ui::row(
+        {ui::badge(
+             {.text = label, .style = morph::ui::BadgeStyle::Outline, .shape = ControlShape::Round, .mono = true})
+             .surface(surface),
+         layout::muted(meaning)},
+        {.gap = 1, .align = Align::Center});
 }
 
 ui::Node legend() {
@@ -418,15 +450,15 @@ ui::Node legend() {
 
 ui::Node sourceRow(Plate const& plate) {
     auto const sample = ui::row("n");
-    return ui::row(
+    return ui::row({ui::text({.text = "⋮⋮", .role = "muted"}),
                {ui::text({.text = "⋮⋮", .role = "muted"}), ui::text({.text = fullId(sample)}).sizing(ui::stretch()),
-                ui::button({.label = "Assign…",
-                            .onClick = openAssign(plate,
-                                                  ui::coalesce({ui::call("first", {plate.emptySelected}),
-                                                                ui::call("first", {plate.emptyWells})}),
-                                                  sample)})
-                    .a11y(ui::format("Assign {0}", {fullId(sample)}))},
-               {.gap = 1, .align = Align::Center})
+                    ui::button({.label = "Assign…",
+                                .onClick = openAssign(plate,
+                                                      ui::coalesce({ui::call("first", {plate.emptySelected}),
+                                                                    ui::call("first", {plate.emptyWells})}),
+                                                      sample)})
+                        .a11y(ui::format("Assign {0}", {fullId(sample)}))},
+                   {.gap = 1, .align = Align::Center})
         .drag(sample)
         .a11y(ui::format("{0}, drag into a well", {fullId(sample)}))
         .testId("source");
@@ -577,21 +609,25 @@ ui::Node expandedLayout(Plate const& plate) {
 
 // ── Compact: the wells listed by row ─────────────────────────────────────────────────────────────────────────────
 
-// A plate row's wells as records: the well's name, its line's text, and `run`, which adjacent empty sample wells
-// share so they list as one line; every other well has a run of its own.
+// A plate row's wells as records: the well's name, its line's text, the label and surface of its marker, and `run`,
+// which adjacent empty sample wells share so they list as one line; every other well has a run of its own.
 ui::AnyHandle rowWells(Plate const& plate, std::size_t row) {
     std::vector<ui::AnyHandle> wells;
     for (int column = 1; column <= kColumns; ++column) {
         Well const& well = wellOf(row, column);
         if (well.kind != Kind::Sample) {
-            wells.push_back(ui::obj({{"name", well.name}, {"text", well.description}, {"run", well.name}}));
+            wells.push_back(ui::obj({{"name", well.name},
+                                     {"text", well.description},
+                                     {"label", well.label},
+                                     {"surface", well.surface},
+                                     {"run", well.name}}));
             continue;
         }
-        auto const sample = plate.samples.at(well.name);
-        wells.push_back(ui::obj(
-            {{"name", well.name},
-             {"text", ui::cond(ui::engaged(sample), Text{ui::format("Sample {0}", {fullId(sample)})}, Text{"Empty"})},
-             {"run", ui::cond(ui::engaged(sample), ui::AnyHandle{well.name}, ui::AnyHandle{"empty"})}}));
+        wells.push_back(ui::obj({{"name", well.name},
+                                 {"text", plate.lines.at(well.name)},
+                                 {"label", plate.labels.at(well.name)},
+                                 {"surface", plate.surfaces.at(well.name)},
+                                 {"run", plate.runs.at(well.name)}}));
     }
     return ui::list(wells);
 }
@@ -602,8 +638,13 @@ ui::Node runLine(Plate const& plate) {
     auto const count = Count{ui::row("count")};
     Flag const empty = ui::eq(ui::row("key"), "empty");
     Flag const several = count > 1;
+    // The run's first well, as the grid draws it: a tap on a sample well selects it.
+    auto marker = wellOptions(ui::row("first.label"));
+    marker.onClick = ui::Commands{ui::ifThen(ui::includes(plate.sampleWells, first), toggleWell(plate, first))};
+    marker.selected = ui::includes(plate.selection, first);
     return ui::row(
-        {ui::text({.text = ui::cond(several, Text{ui::format("{0}–{1}", {first, ui::row("last.name")})}, Text{first}),
+        {ui::button(marker).surface(ui::row("first.surface")).a11y(ui::format("Select {0}", {first})).testId("marker"),
+         ui::text({.text = ui::cond(several, Text{ui::format("{0}–{1}", {first, ui::row("last.name")})}, Text{first}),
                    .role = "section"})
              .sizing(ui::fixed(8)),
          ui::text({.text = ui::cond(empty && several, Text{ui::format("Empty, {0} wells", {count})},

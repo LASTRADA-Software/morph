@@ -130,6 +130,12 @@ constexpr std::array<std::pair<std::string_view, char const*>, 13> kDimensionPro
     {"table.cellPaddingY", "tableCellPaddingY"},
 }};
 
+// Whether a surface's outlines are stroked in dashes: `border.style`.
+bool dashed(ui::ThemeValues const& values) {
+    auto const found = values.strokes.find("border.style");
+    return found != values.strokes.end() && found->second == "dashed";
+}
+
 // The colours, the stale opacity, the background and the dimensions; each property that would not take its value
 // is added to @p unset.
 void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
@@ -146,6 +152,9 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     if (auto const stale = values.numbers.find("opacity.stale");
         stale != values.numbers.end() && !theme.setProperty("staleOpacity", stale->second)) {
         unset.emplace_back("staleOpacity");
+    }
+    if (!theme.setProperty("borderDashed", dashed(values))) {
+        unset.emplace_back("borderDashed");
     }
     if (auto const weight = values.numbers.find("font.weight.strong");
         weight != values.numbers.end() && !theme.setProperty("strongWeight", static_cast<int>(weight->second))) {
@@ -234,7 +243,7 @@ void setShadowAndSpace(QObject& theme, ui::ThemeValues const& values, std::vecto
     }
 }
 
-// Each surface's colours, onto the scheme the theme keeps for it.
+// Each surface's colours, and how it strokes an outline, onto the scheme the theme keeps for it.
 void setSurfaces(QObject& theme, std::map<std::string, ui::ThemeValues, std::less<>> const& surfaces,
                  std::vector<std::string>& unset) {
     for (auto const& [name, surface] : surfaces) {
@@ -255,6 +264,9 @@ void setSurfaces(QObject& theme, std::map<std::string, ui::ThemeValues, std::les
             if (!scheme->setProperty(property, QColor{color.r, color.g, color.b, color.a})) {
                 unset.push_back(name + "." + property);
             }
+        }
+        if (!scheme->setProperty("borderDashed", dashed(surface))) {
+            unset.push_back(name + ".borderDashed");
         }
     }
 }

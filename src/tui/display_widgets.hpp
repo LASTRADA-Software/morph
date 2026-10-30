@@ -95,6 +95,10 @@ public:
         _style = style;
         refresh();
     }
+    /// A cell has no corners, so a shape draws nothing.
+    void setShape(ui::ControlShape shape) override { static_cast<void>(shape); }
+    /// Every face of a terminal is monospace, so a mono label draws nothing new.
+    void setMono(bool mono) override { static_cast<void>(mono); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::string probeText() const override { return _text; }
     [[nodiscard]] bool placedAcrossColumn() const override { return true; }

@@ -22,6 +22,7 @@
 #include "badge_style.hpp"
 #include "button_emphasis.hpp"
 #include "button_style.hpp"
+#include "control_shape.hpp"
 #include "input_emphasis.hpp"
 
 /// @file
@@ -554,6 +555,12 @@ struct Button {
     Node child;
     /// @brief Whether the button is selected: a list entry is the current one, a push button is pressed in.
     Prop<bool> selected = false;
+    /// @brief Its outline: the theme's corners, or round; set once.
+    ControlShape shape = ControlShape::Default;
+    /// @brief Its density: normal, or small, with the least side padding and the small type step; set once.
+    ButtonSize size = ButtonSize::Normal;
+    /// @brief Whether the caption is drawn in the `mono` text role's face; set once.
+    bool mono = false;
 };
 
 /// @brief An editable text field. The backend never reports its own `setText` back through `onChange`.
@@ -1215,6 +1222,10 @@ struct Badge {
     Action onRemove;
     /// @brief The remove control's accessible name; empty: `Remove ` and the badge's text.
     Prop<std::string> removeLabel;
+    /// @brief Its outline: the theme's corners, or round; set once.
+    ControlShape shape = ControlShape::Default;
+    /// @brief Whether the label is drawn in the `mono` text role's face; set once.
+    bool mono = false;
 };
 
 /// @brief A progress bar.
