@@ -510,7 +510,8 @@ ui::Node resultTable(Review const& review) {
         {.name = "change",
          .label = "Change",
          .width = ui::stretch(),
-         .cell = ui::text({.text = ui::row("change"), .role = "muted"})}};
+         .cell = ui::text({.text = ui::row("change"), .role = "muted"}),
+         .wrap = false}};
     return ui::table(review.shownResults, {.key = ui::row("key"),
                                            .columns = columns,
                                            .rowTone = ui::cond(ui::eq(ui::row("tone"), "err"), ui::AnyHandle{"err"},

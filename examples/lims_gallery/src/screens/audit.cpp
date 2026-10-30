@@ -365,7 +365,7 @@ ui::Node pager(Audit const& audit) {
                     ui::button({.label = "›", .onClick = ui::set(audit.page, page + 1)})
                         .a11y("Next page")
                         .enabled(page < pageCount - 1)},
-                   {.gap = 1, .align = Align::Center})
+                   {.gap = 1, .align = Align::Center, .padding = 2})
         .testId("pager");
 }
 
