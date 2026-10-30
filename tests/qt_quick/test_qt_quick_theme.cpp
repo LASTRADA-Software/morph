@@ -1306,3 +1306,49 @@ TEST_CASE("qt_quick theme: every built-in scheme sets every colour role MorphSch
     // Five schemes, each with every role: more than the roles of any one.
     CHECK(roles >= 5 * 35);
 }
+
+namespace {
+
+/// How many pixels inside @p item's rectangle of @p image are dark enough to be text on a light fill.
+int darkPixelsIn(QImage const& image, QQuickItem const& item) {
+    QRectF const area = item.mapRectToScene(QRectF{0, 0, item.width(), item.height()});
+    int dark = 0;
+    for (int y = static_cast<int>(area.top()); y < static_cast<int>(area.bottom()); ++y) {
+        for (int x = static_cast<int>(area.left()) + 6; x < static_cast<int>(area.right()); ++x) {
+            dark += image.pixelColor(x, y).lightness() < 120 ? 1 : 0;
+        }
+    }
+    return dark;
+}
+
+}  // namespace
+
+// Mutation: drop `contentColumn.parent = button` in MorphButton.qml (the content stays under the button's own fill,
+// and a selected item's text disappears).
+TEST_CASE("qt_quick theme: a selected or hovered item's fill is drawn beneath its content", "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), brandTheme()).empty());
+    scene.window().resize(300, 200);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto item = scene.backend().createButton(column.get());
+    item->setStyle(ui::ButtonStyle::Item);
+    item->setLabel("Entry");
+    item->setOnClick([] {});
+    auto text = scene.backend().createText(&item->content());
+    text->setText("Impurity B, 0.12 %");
+    scene.settle();
+
+    QQuickItem const& itemItem = Scene::itemOf(*item);
+    auto* const background = const_cast<QQuickItem*>(&buttonBackground(*item));
+    int const rest = darkPixelsIn(scene.window().grabWindow(), itemItem);
+    CHECK(rest > 20);
+
+    REQUIRE(background->setProperty("hovered", true));
+    scene.settle();
+    CHECK(darkPixelsIn(scene.window().grabWindow(), itemItem) > 20);
+
+    REQUIRE(background->setProperty("hovered", false));
+    item->setSelected(true);
+    scene.settle();
+    CHECK(darkPixelsIn(scene.window().grabWindow(), itemItem) > 20);
+}

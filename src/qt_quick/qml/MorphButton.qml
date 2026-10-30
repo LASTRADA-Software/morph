@@ -56,8 +56,12 @@ MorphWidget {
             button.contentItem = itemContent.createObject(button)
     }
     onHasContentChanged: {
-        if (root.hasContent)
+        if (root.hasContent) {
             button.contentItem = contentColumn
+            // Inside the button, above its background: the column is declared before the button, so left a child of
+            // the widget it would be painted under the button's fill.
+            contentColumn.parent = button
+        }
     }
 
     ColumnLayout {
