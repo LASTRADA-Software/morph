@@ -24,6 +24,14 @@ Item {
     property int crossAlign: 0
     property int alignAcross: 0
     readonly property int placedAlign: alignSelf >= 0 ? alignSelf : crossAlign
+    // Whether the widget's sides lie at its container's edges, past the container's horizontal padding: the container
+    // gives that padding as `childBleedInset`, and a layout honours the negative margins it becomes.
+    property bool bleed: false
+    readonly property real bleedInset: {
+        const holder = root.parent
+        const inset = holder ? holder["childBleedInset"] : undefined
+        return inset !== undefined ? inset : 0
+    }
     property int minWidthUnits: -1
     property int maxWidthUnits: -1
     property int minHeightUnits: -1
@@ -218,6 +226,8 @@ Item {
     Layout.minimumHeight: minHeightUnits >= 0 ? minHeightUnits * Theme.unitHeight : -1
     Layout.maximumHeight: maxHeightUnits >= 0 ? maxHeightUnits * Theme.unitHeight : -1
     Layout.columnSpan: columnSpan
+    Layout.leftMargin: bleed ? -bleedInset : 0
+    Layout.rightMargin: bleed ? -bleedInset : 0
 
     Accessible.name: accessibleName
     Accessible.role: accessibleRole

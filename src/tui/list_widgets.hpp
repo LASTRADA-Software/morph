@@ -319,6 +319,8 @@ public:
     /// The tabs start the step's columns in from the leading edge, and the pages are padded by the step's rows and
     /// columns.
     void setInset(int inset) override;
+    /// The pages are padded by the step's rows and columns in place of the inset's.
+    void setPageInset(int inset) override;
     /// The terminal draws nothing for a surface: the strip's surface is not inverted.
     void setStripSurface(std::string_view surface) override { static_cast<void>(surface); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
@@ -340,6 +342,10 @@ private:
     std::string _moreLabel = "More";
     int _insetRows = 0;
     int _insetColumns = 0;
+    // The pages' padding: the inset's until a page inset is given.
+    int _pageRows = 0;
+    int _pageColumns = 0;
+    bool _pageInsetGiven = false;
 
     // The columns a painted label or marker covers, and what a click there chooses: a label its own tab, a marker
     // the tab before or after the highlighted one (`step` -1 or 1).

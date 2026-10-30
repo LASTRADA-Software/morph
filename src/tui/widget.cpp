@@ -785,6 +785,15 @@ int alignedExtent(ui::Align align, ui::Sizing sizing, int requested, int space, 
     return layout::crossExtent(sizing, space, bounds);
 }
 
+void bleedAreas(std::span<WidgetBase* const> children, std::vector<::core::tui::Rect>& areas, ::core::tui::Rect span) {
+    for (auto const [child, area] : std::views::zip(children, areas)) {
+        if (child->shown() && child->layout().bleed && area.width > 0 && area.height > 0) {
+            area.x = span.x;
+            area.width = span.width;
+        }
+    }
+}
+
 std::vector<::core::tui::Rect> stackAreas(std::span<WidgetBase* const> children, ::core::tui::Rect area,
                                           StackSpec const& spec) {
     Placement const placement{.area = area, .vertical = spec.axis == ui::Axis::Vertical};

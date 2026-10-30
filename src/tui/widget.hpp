@@ -577,6 +577,9 @@ struct StackSpec {
 /// columns; a child past the last extent takes its natural extent.
 [[nodiscard]] std::vector<::core::tui::Rect> stackAreas(std::span<WidgetBase* const> children, ::core::tui::Rect area,
                                                         StackSpec const& spec);
+/// Widens the area of each shown child whose layout says `bleed` to @p span, the container's full width at the sides
+/// its padding leaves; the child's place down the container is unchanged. @p areas has one area per child, in order.
+void bleedAreas(std::span<WidgetBase* const> children, std::vector<::core::tui::Rect>& areas, ::core::tui::Rect span);
 /// Places @p children inside @p area (in the container's coordinates) as `stackAreas` says. Hidden children get an
 /// empty area, so they neither render nor take a click (see `forgetDrawnBounds`).
 void arrangeStack(std::span<WidgetBase* const> children, ::core::tui::Rect area, StackSpec const& spec);

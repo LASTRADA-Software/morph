@@ -15,10 +15,13 @@ MorphWidget {
     property list<string> labels: []
     property bool barShown: true
     property string moreLabel: "More"
-    // A spacing step: the strip and its rule span the width, the first tab starts this far in, and each page is padded
-    // by it on every side.
+    // A spacing step: the strip and its rule span the width, and the first tab starts this far in. Each page is padded by
+    // it on every side unless `pageInset` says otherwise.
     property int inset: 0
     readonly property real insetPx: Theme.spaceOf(root.inset)
+    // The padding of each page: a spacing step, or -1 for `inset`'s. A page that scrolls pads its own content.
+    property int pageInset: -1
+    readonly property real pageInsetPx: root.pageInset >= 0 ? Theme.spaceOf(root.pageInset) : root.insetPx
     // The surface the strip, and nothing else, is drawn on; empty draws it on the surface around it.
     property string stripSurface: ""
     // How many leading tabs the bar shows; the rest are the More menu's.
@@ -96,8 +99,9 @@ MorphWidget {
     focusTarget: bar.visible ? bar : pages
     implicitWidth: Math.max(bar.visible ? bar.implicitWidth + (more.visible ? more.implicitWidth : 0) + 2 * root.insetPx
                                         : 0,
-                            pages.implicitWidth + 2 * root.insetPx)
-    implicitHeight: (bar.visible ? bar.implicitHeight + layout.spacing : 0) + pages.implicitHeight + 2 * root.insetPx
+                            pages.implicitWidth + 2 * root.pageInsetPx)
+    implicitHeight: (bar.visible ? bar.implicitHeight + layout.spacing : 0) + pages.implicitHeight
+                    + 2 * root.pageInsetPx
 
     FontMetrics {
         id: metrics
@@ -260,7 +264,9 @@ MorphWidget {
             id: pages
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: root.insetPx
+            Layout.margins: root.pageInsetPx
+            // What a bleeding child reaches past: the pages' padding.
+            readonly property real childBleedInset: root.pageInsetPx
             spacing: 0
         }
     }

@@ -413,6 +413,10 @@ struct LayoutHints {
     /// @brief Where the node sits across its row's, column's or grid row's axis; `nullopt` takes the container's
     ///        `align`.
     std::optional<Align> alignSelf;
+    /// @brief Whether the node's sides lie at its parent's edges, past the parent's horizontal padding, while its
+    ///        siblings stay inside it. Only a direct child of a column, a panel or a tab page bleeds, and only
+    ///        across: the node's place along the parent is its siblings'.
+    bool bleed = false;
 
     /// @brief Memberwise equality.
     /// @return Whether the sizings, the bounds and the alignment match.
@@ -927,8 +931,12 @@ struct Tabs {
     Common common{};
     /// @brief The strip's inset, a spacing step, 0 to `kMaxSpacingStep`; set once. The strip and its rule span the
     ///        node's width, the first tab starts this far in from the leading edge, and each page is padded by it on
-    ///        every side.
+    ///        every side unless `pageInset` says otherwise.
     int inset = 0;
+    /// @brief The padding of each page, a spacing step, 0 to `kMaxSpacingStep`; set once. Disengaged pads the pages
+    ///        by `inset`. A page that scrolls gives 0 and pads its own scrolled content, so a child of that content
+    ///        can bleed to the scroll's edges.
+    std::optional<int> pageInset;
     /// @brief The surface the strip, and nothing else, is drawn on; empty draws it on the surface around it. Set once.
     std::string stripSurface;
 };

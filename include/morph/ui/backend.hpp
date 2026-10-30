@@ -560,11 +560,18 @@ public:
     /// @param label The label, UTF-8.
     virtual void setMoreLabel(std::string_view label) = 0;
 
-    /// @brief Insets the strip and the pages: the strip and its rule span the widget's width, the first tab starts
-    ///        this far in from the leading edge, and each page is padded by it on every side. The mount calls it once,
-    ///        only for a nonzero step.
+    /// @brief Insets the strip and, unless `setPageInset` is called, the pages: the strip and its rule span the
+    ///        widget's width, the first tab starts this far in from the leading edge, and each page is padded by it on
+    ///        every side, with nothing else between the strip's rule and the page. The mount calls it once, only for a
+    ///        nonzero step.
     /// @param inset A spacing step, 1 to `kMaxSpacingStep`; the mount never passes another value.
     virtual void setInset(int inset) = 0;
+
+    /// @brief Pads each page by its own step in place of `setInset`'s, so a page that scrolls can pad its scrolled
+    ///        content and let a bleeding child of that content reach the scroll's edges. The mount calls it once,
+    ///        only when the view gives a page inset, which may be 0.
+    /// @param inset A spacing step, 0 to `kMaxSpacingStep`.
+    virtual void setPageInset(int inset) = 0;
 
     /// @brief Draws the strip, and nothing else, on a surface across the widget's width. The mount calls it once,
     ///        only for a nonempty name.

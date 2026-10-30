@@ -873,3 +873,18 @@ TEST_CASE("tui containers: a selected stack with leading padding draws its bar i
     text->setText("ab");
     CHECK(harness.draw() == Rows{"▌ ab"});
 }
+
+// Mutation: ignore the hint (the bleeding text is drawn from the padding's edge, in column 2).
+TEST_CASE("tui containers: a bleeding child of a padded column starts at the column's first cell",
+          "[tui][containers]") {
+    Harness harness{8, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    // Step 4: two columns either side.
+    column->setPadding(ui::Padding{0, 4});
+    auto const inside = harness.make<TextImpl>(column.get());
+    inside->setText("xy");
+    auto const bleeding = harness.make<TextImpl>(column.get());
+    bleeding->setText("ab");
+    bleeding->setLayout({.bleed = true});
+    CHECK(harness.draw() == Rows{"  xy", "ab"});
+}

@@ -726,24 +726,13 @@ struct KindSpec {
 
 // NOLINTBEGIN(modernize-use-designated-initializers): the kind table reads as rows; names on every field would not.
 /// @brief The keys every node takes.
-inline constexpr std::array<KeySpec, 18> kCommonKeys = {{
-    {"id", Shape::Name},
-    {"visible", Shape::Condition},
-    {"enabled", Shape::Condition},
-    {"tooltip", Shape::Expr},
-    {"sizing", Shape::Expr},
-    {"minWidth", Shape::Expr},
-    {"maxWidth", Shape::Expr},
-    {"minHeight", Shape::Expr},
-    {"maxHeight", Shape::Expr},
-    {"alignSelf", Shape::Text},
-    {"span", Shape::Expr},
-    {"testId", Shape::Text},
-    {"surface", Shape::Expr},
-    {"autofocus", Shape::Expr},
-    {"a11y", Shape::Part, "a11y"},
-    {"drag", Shape::Part, "drag"},
-    {"drop", Shape::Part, "drop"},
+inline constexpr std::array<KeySpec, 19> kCommonKeys = {{
+    {"id", Shape::Name},           {"visible", Shape::Condition}, {"enabled", Shape::Condition},
+    {"tooltip", Shape::Expr},      {"sizing", Shape::Expr},       {"minWidth", Shape::Expr},
+    {"maxWidth", Shape::Expr},     {"minHeight", Shape::Expr},    {"maxHeight", Shape::Expr},
+    {"alignSelf", Shape::Text},    {"bleed", Shape::Flag},        {"span", Shape::Expr},
+    {"testId", Shape::Text},       {"surface", Shape::Expr},      {"autofocus", Shape::Expr},
+    {"a11y", Shape::Part, "a11y"}, {"drag", Shape::Part, "drag"}, {"drop", Shape::Part, "drop"},
     {"keys", Shape::Keys},
 }};
 
@@ -905,11 +894,12 @@ inline constexpr std::array<KeySpec, 3> kSwitchKeys = {
 inline constexpr std::array<KeySpec, 2> kCaseKeys = {
     {{"when", Shape::Expr, {}, kRequired}, {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `tabs`.
-inline constexpr std::array<KeySpec, 6> kTabsKeys = {{{"tabs", Shape::Parts, "tab"},
+inline constexpr std::array<KeySpec, 7> kTabsKeys = {{{"tabs", Shape::Parts, "tab"},
                                                       {"selected", Shape::Expr},
                                                       {"onChoose", Shape::Commands},
                                                       {"moreLabel", Shape::Expr},
                                                       {"inset", Shape::Expr},
+                                                      {"pageInset", Shape::Expr},
                                                       {"stripSurface", Shape::Text}}};
 /// @brief The keys of a `tabs` page part.
 inline constexpr std::array<KeySpec, 3> kTabKeys = {
@@ -3294,21 +3284,31 @@ private:
         if (!node.name("alignSelf").empty()) {
             refuse(pointerAppend(node.path, "alignSelf"), std::string{kAlignSelfPlaces});
         }
+        if (node.flag("bleed")) {
+            refuse(pointerAppend(node.path, "bleed"), std::string{kBleedPlaces});
+        }
         checkElement(node, context, false);
     }
 
     // What `alignSelf` places a node in.
     static constexpr std::string_view kAlignSelfPlaces = "`alignSelf` places a node in its row, column or grid";
 
+    // What `bleed` reaches past: the horizontal padding of the stack, panel or tab page that holds the node.
+    static constexpr std::string_view kBleedPlaces = "`bleed` is a child's of a column, a panel or a tab";
+
     // A child that places itself sits in a row, a column, a grid or a `forEach`; any other parent (a panel, a dialog,
     // a tab page) has no cross axis to place it on.
     static void checkPlacements(DocNode const& parent) {
         bool const places =
             parent.kind == "row" || parent.kind == "column" || parent.kind == "grid" || parent.kind == "forEach";
+        bool const bleeds = parent.kind == "column" || parent.kind == "panel" || parent.kind == "tab";
         for (auto const& [key, nodes] : parent.children) {
             for (DocNodePtr const& child : nodes) {
                 if (!child->name("alignSelf").empty() && (!places || key != "children")) {
                     refuse(pointerAppend(child->path, "alignSelf"), std::string{kAlignSelfPlaces});
+                }
+                if (child->flag("bleed") && (!bleeds || key != "children")) {
+                    refuse(pointerAppend(child->path, "bleed"), std::string{kBleedPlaces});
                 }
             }
         }
@@ -3677,15 +3677,19 @@ private:
         }
     }
 
-    // A tabs node's `inset` is a literal spacing step, 0 to 5: the strip is laid out once.
+    // A tabs node's `inset` and `pageInset` are literal spacing steps, 0 to 5: the strip and the pages are laid out
+    // once.
     static void checkTabsInset(DocNode const& node) {
-        ExprPtr const inset = node.prop("inset");
-        if (inset == nullptr) {
-            return;
-        }
-        std::int64_t const* const step = inset->kind == ExprKind::Literal ? inset->literal.asInt() : nullptr;
-        if (step == nullptr || *step < 0 || *step > 5) {
-            refuse(pointerAppend(node.path, "inset"), "`inset` is a literal spacing step from 0 to 5");
+        for (std::string_view const key : {"inset", "pageInset"}) {
+            ExprPtr const inset = node.prop(key);
+            if (inset == nullptr) {
+                continue;
+            }
+            std::int64_t const* const step = inset->kind == ExprKind::Literal ? inset->literal.asInt() : nullptr;
+            if (step == nullptr || *step < 0 || *step > 5) {
+                refuse(pointerAppend(node.path, key),
+                       "`" + std::string{key} + "` is a literal spacing step from 0 to 5");
+            }
         }
     }
 
@@ -3755,7 +3759,7 @@ private:
             checkGrid(node);
         } else if (node.kind == "column" && node.flags.contains("wrap")) {
             refuse(pointerAppend(node.path, "wrap"), "only a row wraps; a column has no lines to continue on");
-        } else if (node.kind == "row" && node.flags.contains("divided") && node.flags.contains("wrap")) {
+        } else if (node.kind == "row" && node.flag("divided") && node.flag("wrap")) {
             refuse(pointerAppend(node.path, "divided"),
                    "a wrapping row has no single line to rule between; `divided` is for a row that does not `wrap`");
         } else if (node.kind == "forEach") {

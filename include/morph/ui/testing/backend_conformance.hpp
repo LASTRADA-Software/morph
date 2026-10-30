@@ -1903,6 +1903,30 @@ struct Measured {
     return checks.result();
 }
 
+/// @brief Case: a bleeding child of a padded column spans the column's width while a sibling stays inset.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> bleedingChildSpansPaddedColumn(ConformanceProbe& probe) {
+    Column column{.children = {sizedText("inside", {}), sizedText("bleeds", {.bleed = true})},
+                  .padding = Padding{0, 4}};
+    column.common.layout = {.width = Sizing::fixed(40)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::column(std::move(column)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const found = measured(probe, view);
+    checks.that(found.container != nullptr && found.children.size() == 2, "the column holds two children");
+    if (found.container != nullptr && found.children.size() == 2) {
+        WidgetBounds const box = geometry.of(*found.container);
+        WidgetBounds const inset = geometry.of(*found.children.at(0));
+        WidgetBounds const bleeding = geometry.of(*found.children.at(1));
+        checks.that(inset.x > box.x, "the sibling stays inside the column's padding");
+        geometry.near("the bleeding child's left edge, against the column's", box.x, bleeding.x);
+        geometry.near("the bleeding child's width, against the column's", box.width, bleeding.width);
+    }
+    return checks.result();
+}
+
 /// @brief Case: along a row, a content child is at least its minimum wide.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -3123,7 +3147,7 @@ struct WrappingRow {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 27> const cases{{
+    static std::array<ConformanceCase, 28> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3166,6 +3190,8 @@ struct WrappingRow {
          .run = detail::twoStepPaddingInsetsEndsAndSidesApart},
         {.name = "a square push button is narrower than a normal one with the same label",
          .run = detail::squareButtonIsNarrower},
+        {.name = "a bleeding child spans its padded column's width while a sibling stays inset",
+         .run = detail::bleedingChildSpansPaddedColumn},
     }};
     return cases;
 }

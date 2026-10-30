@@ -7112,6 +7112,7 @@ inline void ScreenCore::layoutOf(DocNode const& node, LowerCtx const& ctx, Layou
     if (std::string_view const placed = node.name("alignSelf"); !placed.empty()) {
         layout.alignSelf = alignOf(placed);
     }
+    layout.bleed = node.flag("bleed");
     // Literal integers, checked at load.
     for (auto const& [key, bound] :
          {std::pair{"minWidth", &LayoutHints::minWidth}, std::pair{"maxWidth", &LayoutHints::maxWidth},
@@ -8694,6 +8695,9 @@ inline Node ScreenCore::lowerTabs(DocNode const& node, LowerCtx const& ctx, Elem
     spec.moreLabel = bindProp<std::string>(ctx, node.prop("moreLabel"), std::string{"More"}, stringOf);
     if (ExprPtr const inset = node.prop("inset")) {
         spec.inset = static_cast<int>(intOf(once(ctx, inset), 0));
+    }
+    if (ExprPtr const pageInset = node.prop("pageInset")) {
+        spec.pageInset = static_cast<int>(intOf(once(ctx, pageInset), 0));
     }
     spec.stripSurface = std::string{node.name("stripSurface")};
     ExprPtr const selected = node.prop("selected");

@@ -148,7 +148,7 @@ Every kind of the kind table has a builder whose options struct holds the kind's
 takes its series as `ChartSeries{label, points, y, x, xLabel, tone, note, joined}`, where each per-point key is a
 `PointExpression`, a function from the point's element (`row()`) to an expression, and its lines as
 `ReferenceLine{value, label, tone, style}` with a `LineStyle`. Children come first, as a `Nodes` list (`{a, b}`, or one node),
-options second. `tabs(tabs, TabsOptions{.selected, .onChoose, .moreLabel, .inset, .stripSurface})` takes `Tab{id, label, children}` pages; `inset` (a spacing step, written as a literal) and `stripSurface` (a surface name) let a tabs node be a page's edge-to-edge root, its strip on that surface across the width.
+options second. `tabs(tabs, TabsOptions{.selected, .onChoose, .moreLabel, .inset, .pageInset, .stripSurface})` takes `Tab{id, label, children}` pages; `inset` (a spacing step, written as a literal), `pageInset` (the same for the pages, which `inset` pads when it is absent; 0 for a page that pads its own scrolled content) and `stripSurface` (a surface name) let a tabs node be a page's edge-to-edge root, its strip on that surface across the width.
 `pinned(content, PinnedOptions{.top, .bottom, .surface, .inset})` writes the bar-that-stays-in-view idiom: a `divided`
 column with `pageEdge: true`, sized to stretch both ways, holding the top bar, a vertical `scroll` sized to stretch both
 ways around `content`, and the bottom bar. `inset` is a spacing step, default 4 (the shell's page inset): `content`
@@ -182,7 +182,7 @@ The keys every node takes are member functions of `Node`, each returning a copy 
 `id(element)`, `visible`, `enabled`, `tooltip`, `sizing`, `span`, `autofocus`, `testId`, `surface` (a name, or an
 expression of one),
 `a11y(name, role)`, `drag(payload)`, `drop(accepts, commands)`, `key(chord, commands)`, the bounds `minWidth(n)`,
-`maxWidth(n)`, `minHeight(n)`, `maxHeight(n)`, `alignSelf(Align)`, and the input decorations `readonly`, `required`, `errors`, `stale`.
+`maxWidth(n)`, `minHeight(n)`, `maxHeight(n)`, `alignSelf(Align)`, `bleed()` (the node's sides lie at its parent's edges, past the parent's horizontal padding; the parent is a column, a panel or a tab page), and the input decorations `readonly`, `required`, `errors`, `stale`.
 `sizing(width, height)` writes both dimensions as a record, a literal one when both are literal. The free helpers
 `content()`, `fixed(n)` and `stretch(w = 1)` answer literal sizings (`"content"`, `{"lit": {"fixed": n}}`,
 `{"lit": {"stretch": w}}`), which the loader checks; a record built with `obj` is evaluated at mount. `with(key, handle)` and

@@ -712,3 +712,15 @@ TEST_CASE("recording backend: the width class is expanded until set, and a chang
     backend.setWidthClass("expanded");
     CHECK(heard.size() == 2);
 }
+
+// Mutation: leave `bleed` out of the layout string, or record `setPageInset` under another name.
+TEST_CASE("recording backend: a bleeding layout and a tabs node's page inset are recorded", "[ui][backend]") {
+    RecordingBackend backend;
+    auto label = backend.createText(nullptr);
+    label->setLayout({.width = ui::Sizing::stretch(), .bleed = true});
+    CHECK(backend.dump() == "Text#1 layout=stretch(1)/content bleed\n");
+    auto tabs = backend.createTabs(nullptr);
+    tabs->setInset(4);
+    tabs->setPageInset(0);
+    CHECK(backend.dump().contains("Tabs#2 inset=4 pageInset=0"));
+}

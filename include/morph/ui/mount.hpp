@@ -1074,6 +1074,9 @@ private:
         if (spacingStep(spec.inset) != 0) {
             widget.setInset(spacingStep(spec.inset));
         }
+        if (spec.pageInset) {
+            widget.setPageInset(spacingStep(*spec.pageInset));
+        }
         if (!spec.stripSurface.empty()) {
             widget.setStripSurface(spec.stripSurface);
         }

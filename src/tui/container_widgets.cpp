@@ -131,6 +131,9 @@ std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) con
         area.x += inside.x + extra;
         area.y += inside.y;
     }
+    if (_axis == ui::Axis::Vertical) {
+        bleedAreas(children(), areas, {.x = 0, .y = 0, .width = size.width, .height = size.height});
+    }
     return areas;
 }
 
@@ -505,6 +508,8 @@ std::vector<::core::tui::Rect> PanelImpl::childAreas(::core::tui::Size size) con
         }
         ++index;
     }
+    // A bleeding child ends at the frame's inner edges, past the padding.
+    bleedAreas(children(), areas, {.x = 1, .y = 0, .width = std::max(0, size.width - 2), .height = 0});
     return areas;
 }
 

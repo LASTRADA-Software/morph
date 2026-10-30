@@ -93,6 +93,8 @@ MorphWidget {
 
             ColumnLayout {
                 id: column
+                // What a bleeding child reaches past: the panel's padding, so it ends at the frame's inner edges.
+                readonly property real childBleedInset: Theme.spaceOf(root.padding)
                 visible: !root.collapsible || !root.collapsed
                 Layout.topMargin: root.headerRowShown && root.collapsible ? Theme.spaceOf(root.padding) : 0
                 Layout.fillWidth: true

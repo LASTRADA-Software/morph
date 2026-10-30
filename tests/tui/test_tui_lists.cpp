@@ -1126,3 +1126,16 @@ TEST_CASE("tui lists: a tabs node's inset starts its first tab and its pages in 
     tabs->setStripSurface("bar");
     CHECK(harness.draw() == Rows{"  [One] Two", "", "  first"});
 }
+
+// Mutation: let `setPageInset` change the strip's inset, or ignore it (the page keeps the strip's two columns).
+TEST_CASE("tui lists: a tabs node's page inset pads the pages apart from the strip", "[tui][lists]") {
+    Harness harness{20, 5};
+    auto const tabs = harness.make<TabsImpl>(nullptr);
+    tabs->setTabs({"One", "Two"});
+    tabs->setSelected(0);
+    auto const page = harness.make<TextImpl>(tabs.get());
+    page->setText("first");
+    tabs->setInset(4);
+    tabs->setPageInset(0);
+    CHECK(harness.draw() == Rows{"  [One] Two", "first"});
+}

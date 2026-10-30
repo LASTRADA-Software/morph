@@ -1762,3 +1762,81 @@ TEST_CASE("qt_quick containers: a tab is the control height and an inset strip p
     double const rule = strip->mapToItem(&item, QPointF{0, strip->height()}).y();
     CHECK(Scene::itemOf(*page).mapToItem(&item, QPointF{0, 0}).y() == Catch::Approx(rule + step));
 }
+
+// Mutation: leave `bleed` unread (the bleeding text stays inside the padding), or bleed past the frame's border.
+TEST_CASE("qt_quick containers: a bleeding child reaches its padded column's and its panel's inner edges",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 400);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    double const step = theme->property("space").value<QList<qreal>>().at(2);
+    REQUIRE(step > 0.0);
+
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setPadding(ui::Padding{0, 2});
+    column->setLayout({.width = ui::Sizing::fixed(40)});
+    auto inside = scene.backend().createText(column.get());
+    inside->setText("inside");
+    auto bleeding = scene.backend().createText(column.get());
+    bleeding->setText("bleeds");
+    bleeding->setLayout({.bleed = true});
+
+    auto panel = scene.backend().createPanel(nullptr);
+    panel->setPadding(2);
+    panel->setLayout({.width = ui::Sizing::fixed(40)});
+    auto panelInside = scene.backend().createText(panel.get());
+    panelInside->setText("inside");
+    auto panelBleeding = scene.backend().createText(panel.get());
+    panelBleeding->setText("bleeds");
+    panelBleeding->setLayout({.bleed = true});
+    scene.settle();
+
+    QQuickItem& columnItem = Scene::itemOf(*column);
+    QQuickItem& insideItem = Scene::itemOf(*inside);
+    QQuickItem& bleedItem = Scene::itemOf(*bleeding);
+    CHECK(insideItem.mapToItem(&columnItem, QPointF{0, 0}).x() == Catch::Approx(step));
+    CHECK(bleedItem.mapToItem(&columnItem, QPointF{0, 0}).x() == Catch::Approx(0.0));
+    CHECK(bleedItem.width() == Catch::Approx(columnItem.width()).margin(0.5));
+
+    QQuickItem& panelItem = Scene::itemOf(*panel);
+    QQuickItem& panelInsideItem = Scene::itemOf(*panelInside);
+    QQuickItem& panelBleedItem = Scene::itemOf(*panelBleeding);
+    // The frame's border is 1 px: a child reaches the inner edge, not over the border.
+    CHECK(panelInsideItem.mapToItem(&panelItem, QPointF{0, 0}).x() == Catch::Approx(1.0 + step));
+    CHECK(panelBleedItem.mapToItem(&panelItem, QPointF{0, 0}).x() == Catch::Approx(1.0));
+    CHECK(panelBleedItem.width() == Catch::Approx(panelItem.width() - 2.0).margin(0.5));
+}
+
+// Mutation: ignore `pageInset` (the page keeps the strip's inset), or let it move the strip.
+TEST_CASE("qt_quick containers: a tabs node's page inset pads the pages apart from its strip", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 300);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    double const step = theme->property("space").value<QList<qreal>>().at(4);
+    auto tabs = scene.backend().createTabs(nullptr);
+    tabs->setTabs({"One", "Two"});
+    tabs->setInset(4);
+    tabs->setPageInset(0);
+    auto page = scene.backend().createStack(tabs.get(), ui::Axis::Vertical);
+    auto label = scene.backend().createText(page.get());
+    label->setText("page");
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*tabs);
+    QList<QQuickItem*> const buttons = Scene::itemsOf(item, "QQuickTabButton");
+    REQUIRE_FALSE(buttons.isEmpty());
+    CHECK(buttons.front()->mapToItem(&item, QPointF{0, 0}).x() == Catch::Approx(step));
+    CHECK(Scene::itemOf(*label).mapToItem(&item, QPointF{0, 0}).x() == Catch::Approx(0.0));
+
+    // Pages padded apart from the strip: a bleeding page reaches the node's edges, the others stay inside.
+    tabs->setPageInset(2);
+    auto bleeding = scene.backend().createText(tabs.get());
+    bleeding->setText("bleeds");
+    bleeding->setLayout({.bleed = true});
+    scene.settle();
+    double const pageStep = theme->property("space").value<QList<qreal>>().at(2);
+    CHECK(Scene::itemOf(*label).mapToItem(&item, QPointF{0, 0}).x() == Catch::Approx(pageStep));
+    CHECK(Scene::itemOf(*bleeding).mapToItem(&item, QPointF{0, 0}).x() == Catch::Approx(0.0));
+    CHECK(Scene::itemOf(*bleeding).width() == Catch::Approx(item.width()).margin(0.5));
+}

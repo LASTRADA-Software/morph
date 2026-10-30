@@ -213,7 +213,8 @@ template <typename Special>
     };
     return formatSizing(hints.width) + bounds(hints.minWidth, hints.maxWidth) + "/" + formatSizing(hints.height) +
            bounds(hints.minHeight, hints.maxHeight) +
-           (hints.alignSelf ? " self=" + formatAlign(*hints.alignSelf) : std::string{});
+           (hints.alignSelf ? " self=" + formatAlign(*hints.alignSelf) : std::string{}) +
+           (hints.bleed ? " bleed" : std::string{});
 }
 
 /// @brief Formats a date-time value.
@@ -1341,6 +1342,7 @@ public:
     void setBarShown(bool shown) override { set("barShown", shown ? "true" : "false"); }
     void setMoreLabel(std::string_view label) override { set("moreLabel", formatText(label)); }
     void setInset(int inset) override { set("inset", std::to_string(inset)); }
+    void setPageInset(int inset) override { set("pageInset", std::to_string(inset)); }
     void setStripSurface(std::string_view surface) override { set("stripSurface", formatText(surface)); }
 };
 

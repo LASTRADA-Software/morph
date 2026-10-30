@@ -150,6 +150,11 @@ void ItemBase::showLayout(ui::LayoutHints const& hints) const {
     } else {
         offer("alignSelf", -1);
     }
+    if (hints.bleed) {
+        write("bleed", true);
+    } else {
+        offer("bleed", false);
+    }
     for (auto const& [name, bound] :
          {std::pair{"minWidthUnits", hints.minWidth}, std::pair{"maxWidthUnits", hints.maxWidth},
           std::pair{"minHeightUnits", hints.minHeight}, std::pair{"maxHeightUnits", hints.maxHeight}}) {

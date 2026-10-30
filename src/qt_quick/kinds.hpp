@@ -396,6 +396,7 @@ public:
     void setBarShown(bool shown) override;
     void setMoreLabel(std::string_view label) override;
     void setInset(int inset) override;
+    void setPageInset(int inset) override;
     void setStripSurface(std::string_view surface) override;
     /// The highlighted tab, or -1.
     [[nodiscard]] int highlighted() const;

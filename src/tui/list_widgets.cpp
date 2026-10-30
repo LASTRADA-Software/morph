@@ -1204,6 +1204,17 @@ void TabsImpl::setBarShown(bool shown) {
 void TabsImpl::setInset(int inset) {
     _insetRows = layout::stepCells(inset, ui::Axis::Vertical);
     _insetColumns = layout::stepCells(inset, ui::Axis::Horizontal);
+    if (!_pageInsetGiven) {
+        _pageRows = _insetRows;
+        _pageColumns = _insetColumns;
+    }
+    refresh();
+}
+
+void TabsImpl::setPageInset(int inset) {
+    _pageInsetGiven = true;
+    _pageRows = layout::stepCells(inset, ui::Axis::Vertical);
+    _pageColumns = layout::stepCells(inset, ui::Axis::Horizontal);
     refresh();
 }
 
@@ -1218,8 +1229,8 @@ std::string TabsImpl::labelText(std::size_t index) const {
         bar += displayWidth(labelText(index));
     }
     auto body = stackNaturalSize(children(), ui::Axis::Vertical, 0);
-    body.width += 2 * _insetColumns;
-    body.height += 2 * _insetRows;
+    body.width += 2 * _pageColumns;
+    body.height += 2 * _pageRows;
     if (!_barShown) {
         return body;
     }
@@ -1231,12 +1242,14 @@ std::string TabsImpl::probeText() const { return _selected < _labels.size() ? _l
 // A shown bar keeps its one row, with no blank row under it: a terminal row costs more than the separation earns.
 std::vector<::core::tui::Rect> TabsImpl::childAreas(::core::tui::Size size) const {
     int const barRows = _barShown ? 1 : 0;
-    return stackAreas(children(),
-                      {.x = _insetColumns,
-                       .y = barRows + _insetRows,
-                       .width = std::max(0, size.width - (2 * _insetColumns)),
-                       .height = std::max(0, size.height - barRows - (2 * _insetRows))},
-                      StackSpec{.axis = ui::Axis::Vertical});
+    auto areas = stackAreas(children(),
+                            {.x = _pageColumns,
+                             .y = barRows + _pageRows,
+                             .width = std::max(0, size.width - (2 * _pageColumns)),
+                             .height = std::max(0, size.height - barRows - (2 * _pageRows))},
+                            StackSpec{.axis = ui::Axis::Vertical});
+    bleedAreas(children(), areas, {.x = 0, .y = 0, .width = size.width, .height = size.height});
+    return areas;
 }
 
 // The width of the labels from @p first to @p last, both included.

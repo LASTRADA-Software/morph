@@ -88,7 +88,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Spacer | nothing; stretches in a stack | — |
 | Panel | a box with a title; a collapsible one folds to its title line | Enter, Space, click on the title |
 | Scroll | a viewport that follows the focus | arrows, PageUp/PageDown, Home/End, wheel |
-| Tabs | with an inset, the tabs start the step's columns in (step 4: 2 columns) and the pages are padded by its rows and columns; the strip's surface draws nothing new, as `bar` is not inverted. A one-row bar over the page slots, with no blank row under it (a terminal row costs more than the separation earns); a bar narrower than its labels draws whole labels from a first visible one, which painting moves so the highlighted label fits, with `‹` at the start and `›` at the end while labels are cut there; a hidden bar gives its row to the pages and takes no focus; `moreLabel` is stored and not drawn, since the markers already reach every tab | Left, Right, click on a label; a click on `‹` or `›` selects the previous or next tab |
+| Tabs | with an inset, the tabs start the step's columns in (step 4: 2 columns) and the pages are padded by its rows and columns, or by a page inset's when the node gives one; the strip's surface draws nothing new, as `bar` is not inverted. A one-row bar over the page slots, with no blank row under it (a terminal row costs more than the separation earns); a bar narrower than its labels draws whole labels from a first visible one, which painting moves so the highlighted label fits, with `‹` at the start and `›` at the end while labels are cut there; a hidden bar gives its row to the pages and takes no focus; `moreLabel` is stored and not drawn, since the markers already reach every tab | Left, Right, click on a label; a click on `‹` or `›` selects the previous or next tab |
 | Dialog | a centred box over everything; a description given as runs draws them on the description's row, as a text draws runs; its footer is the box's bottom row, its children against the right edge, one cell apart, and stays last when the content mounts again. As a sheet the box fills the viewport, its top row draws `[dismissLabel]` before the title, and its footer takes the box's last rows under content that fills the rest | Esc dismisses; a press on a sheet's `[dismissLabel]` dismisses as Esc does |
 | Drawer | a box against its side, the screen's height; its footer as a dialog's | Esc dismisses |
 | Busy | a spinner and its label while active | — |
@@ -162,6 +162,8 @@ as the column, in a row as tall as the row, and one its maximum stops sits at th
 of a panel, slot or scroll area, fills its width the same way, and a grid row is as tall as its tallest cell's
 requested height clamped into that cell's bounds. A widget's requested size, which a container's natural size sums,
 is its natural size clamped into its bounds.
+
+**Bleed.** A shown child whose layout says `bleed` takes the whole width of its container past the padding (`bleedAreas`): a column's, the inner edges of a panel's frame, a tabs node's, whatever the page inset; its place down the container is unchanged.
 
 **Alignment.** Across the axis a child's `alignSelf`, else its stack's `align`, places it (`slotOf`): under `start`,
 `center` or `end` a Content child takes its requested extent instead of the stack's (`alignedExtent`), every other

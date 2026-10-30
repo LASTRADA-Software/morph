@@ -2010,6 +2010,16 @@ public:
     /// @return The node with it.
     [[nodiscard]] Node alignSelf(Align align) const { return withText("alignSelf", detail::alignName(align)); }
 
+    /// @brief Lays the node's sides at its parent's edges, past the parent's horizontal padding, while its siblings
+    ///        stay inside it. The parent is a column, a panel or a tab page, and the node its direct child; the loader
+    ///        refuses it anywhere else.
+    /// @return The node with it.
+    [[nodiscard]] Node bleed() const {
+        Node out = *this;
+        detail::put(out._json, "bleed", true);
+        return out;
+    }
+
     /// @brief The least width, in backend units.
     /// @param units The bound, 0 or more.
     /// @return The node with it.
@@ -4174,6 +4184,10 @@ struct TabsOptions {
     ///        width, the first tab starts this far in, and each page is padded by it on every side. A tabs node with
     ///        it can be a page's edge-to-edge root. 0 writes none.
     int inset = 0;
+    /// @brief A spacing step, 0 to `kMaxSpacingStep`, written as a literal, that pads each page in place of `inset`.
+    ///        A page that scrolls gives 0 and pads its own scrolled content, so that content's bleeding children reach
+    ///        the scroll's edges. Absent pads the pages by `inset`.
+    std::optional<int> pageInset;
     /// @brief The surface the strip, and nothing else, is drawn on, such as `"bar"`; empty draws it on the surface
     ///        around it.
     std::string stripSurface;
@@ -4202,6 +4216,7 @@ struct TabsOptions {
         .put("onChoose", options.onChoose)
         .put("moreLabel", options.moreLabel)
         .put("inset", options.inset != 0 ? AnyHandle{options.inset} : AnyHandle{})
+        .put("pageInset", options.pageInset ? AnyHandle{*options.pageInset} : AnyHandle{})
         .text("stripSurface", options.stripSurface)
         .done();
 }

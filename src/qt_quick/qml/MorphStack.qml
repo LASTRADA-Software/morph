@@ -325,6 +325,8 @@ MorphWidget {
 
     GridLayout {
         id: layout
+        // What a bleeding child reaches past: the stack's horizontal padding.
+        readonly property real childBleedInset: root.insetX
         visible: !root.wrap
         x: root.insetX + (root.axis === 1 && root.packed ? root.leadOf(root.width - 2 * root.insetX - width) : 0)
         y: root.insetY + (root.axis === 0 && root.packed ? root.leadOf(root.height - 2 * root.insetY - height) : 0)

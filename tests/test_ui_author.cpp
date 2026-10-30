@@ -1758,3 +1758,13 @@ TEST_CASE("a screen's head writes its lead placement, its surface and an icon-on
     CHECK(emitted->text.contains(R"("headSurface":"darkHead")"));
     CHECK(emitted->text.contains(R"("actions":[{"id":"scan","label":"Scan","icon":"scan","iconOnly":true}])"));
 }
+
+// Mutation: drop the flag from `bleed()`, or write `pageInset` when none is given.
+TEST_CASE("bleed() writes the flag and tabs writes pageInset as a literal step, 0 included", "[ui][author]") {
+    CHECK(text(ui::text({.text = "x"}).bleed()) == R"({"kind":"text","text":"x","bleed":true})");
+    ui::Node const node = ui::tabs({{.id = "a", .label = "A", .children = ui::text({.text = "x"})}},
+                                   {.inset = 4, .pageInset = 0, .stripSurface = "bar"});
+    CHECK(text(node).contains(R"("inset":4,"pageInset":0,"stripSurface":"bar")"));
+    ui::Node const plain = ui::tabs({{.id = "a", .label = "A", .children = ui::text({.text = "x"})}}, {.inset = 4});
+    CHECK_FALSE(text(plain).contains("pageInset"));
+}
