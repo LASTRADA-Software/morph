@@ -164,6 +164,25 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> titledBundle
     return served.build();
 }
 
+/// A screen with an eyebrow above its title.
+constexpr std::string_view kEyebrowed = R"({
+  "vocab": "ui/1", "id": "probe.eyebrowed", "title": "Results",
+  "eyebrow": "Step 2 of 4",
+  "view": { "kind": "text", "testId": "eyebrowed", "text": "eyebrowed" } })";
+
+/// The bundle of that one screen, not public, so the shell starts signed in.
+/// @return It, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> eyebrowBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    ui::CatalogEntry entry;
+    entry.id = "probe.eyebrowed";
+    entry.title = "probe.eyebrowed";
+    if (auto added = served.addScreen(std::move(entry), std::string{kEyebrowed}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
 /// A widget's property, or nothing while no widget of that kind has that test id.
 // NOLINTBEGIN(bugprone-easily-swappable-parameters): a kind, a test id and a property name, as the backend reads them.
 std::optional<std::string> propOf(ui::testing::RecordingBackend const& backend, std::string_view kind,
@@ -390,6 +409,32 @@ TEST_CASE("Client shell: the top bar's title shows a screen's runs, and follows 
         CHECK(pumpUntil(context.owner(), [&runs] { return runs() == "[Plate ,PL-0193;mono]"; }));
         backend.click(*backend.find("Button", "testId", "rename"));
         CHECK(pumpUntil(context.owner(), [&runs] { return runs() == "[Plate ,PL-0200;mono]"; }));
+    }
+    source.close();
+}
+
+// Control: never mount the eyebrow part (no `head_eyebrow`), or mount it in the lead slot (it is not in the eyebrow
+// slot).
+TEST_CASE("Client shell: a screen's eyebrow is mounted in the frame's eyebrow slot, above the title",
+          "[client][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &eyebrowBundle}, client::LocalSetup{}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "probe.eyebrowed"});
+        REQUIRE(pumpUntil(context.owner(),
+                          [&backend] { return backend.find("Text", "testId", "head_eyebrow").has_value(); }));
+        int const slot = backend.find("Column", "testId", "shell_head_eyebrow").value();
+        int const eyebrow = backend.find("Text", "testId", "head_eyebrow").value();
+        CHECK(pumpUntil(context.owner(), [&] { return backend.children(slot) == std::vector<int>{eyebrow}; }));
+        CHECK(backend.prop(eyebrow, "spans") == "[Step 2 of 4]");
+        CHECK(propOf(backend, "Column", "shell_head_eyebrow", "visible") == "true");
     }
     source.close();
 }

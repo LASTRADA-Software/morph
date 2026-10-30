@@ -76,6 +76,7 @@ public:
           _topMain{wrappingRow(backend, _topLine.get())},
           _navMenu{backend.createMenu(_topMain.get(), MenuStyle::Button)},
           _leadBlock{backend.createStack(_topMain.get(), Axis::Vertical)},
+          _eyebrow{backend.createStack(_leadBlock.get(), Axis::Vertical)},
           _title{backend.createText(_leadBlock.get())},
           _headLead{backend.createStack(_leadBlock.get(), Axis::Vertical)},
           _headSlot{backend.createStack(_topMain.get(), Axis::Horizontal)},
@@ -155,6 +156,8 @@ public:
         _navMenu->setVisible(false);
         _navigator->setOnChanged([this] { showNavEntries(); });
         _leadBlock->setLayout({.width = Sizing::stretch(), .height = {}, .minWidth = kShellHeadLeadMinimum});
+        _eyebrow->setTestId("shell_head_eyebrow");
+        _eyebrow->setVisible(false);
         _title->setRole(TextRole::Heading);
         _title->setTestId("shell_title");
         _headLead->setLayout({.width = Sizing::stretch(), .height = {}});
@@ -190,6 +193,11 @@ public:
     /// @return It.
     [[nodiscard]] Navigator& navigator() noexcept { return *_navigator; }
 
+    /// @brief The container a client mounts the active head's eyebrow into: at the top of the lead block, above the
+    ///        title, shown only while `setHeadShown(true)`.
+    /// @return It.
+    [[nodiscard]] ContainerWidget& headEyebrowSlot() noexcept { return *_eyebrow; }
+
     /// @brief The container a client mounts the active head's lead into: under the title, in the top bar's first
     ///        line, shown only while `setHeadShown(true)`.
     /// @return It.
@@ -201,10 +209,11 @@ public:
     /// @return It.
     [[nodiscard]] ContainerWidget& headSlot() noexcept { return *_headSlot; }
 
-    /// @brief Shows or hides the two head slots. The frame cannot tell whether what is mounted there shows anything,
+    /// @brief Shows or hides the three head slots. The frame cannot tell whether what is mounted there shows anything,
     ///        so the client says; a new frame starts with them hidden.
     /// @param shown Whether the slots are shown.
     void setHeadShown(bool shown) {
+        _eyebrow->setVisible(shown);
         _headLead->setVisible(shown);
         _headSlot->setVisible(shown);
     }
@@ -327,6 +336,9 @@ private:
     std::unique_ptr<StackWidget> _topMain;
     std::unique_ptr<MenuWidget> _navMenu;
     std::unique_ptr<StackWidget> _leadBlock;
+    // Declared between the lead block and the title: members are made in declaration order, so the slot is the first
+    // child of the block.
+    std::unique_ptr<StackWidget> _eyebrow;
     std::unique_ptr<TextWidget> _title;
     std::unique_ptr<StackWidget> _headLead;
     std::unique_ptr<StackWidget> _headSlot;

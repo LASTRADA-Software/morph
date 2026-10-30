@@ -55,8 +55,10 @@ enum class HeadPlacement : std::uint8_t {
 /// @brief The narrowest a head's lead is given before the trail wraps to a line of its own, in units.
 inline constexpr int kHeadLeadMinimum = 32;
 
-/// @brief The two parts of the active screen's head, for a host that lays them out itself.
+/// @brief The parts of the active screen's head, for a host that lays them out itself.
 struct HeadParts {
+    /// @brief The eyebrow, muted, the line a host draws above the title; hidden while the head has none.
+    Node eyebrow;
     /// @brief The subtitle, muted, then the badges, on one wrapping line: beside one another while they fit, and
     /// wrapped
     ///        under one another where they do not.
@@ -356,15 +358,22 @@ public:
             // of its own: with one, a lead's natural width would never be less than it.
             Row lead = buildHeadLead(*tab);
             lead.common.layout.minWidth.reset();
-            return HeadParts{.lead = ui::row(std::move(lead)), .trail = ui::row(buildHeadTrail(*tab))};
+            return HeadParts{.eyebrow = ui::text(buildHeadEyebrow(*tab)),
+                             .lead = ui::row(std::move(lead)),
+                             .trail = ui::row(buildHeadTrail(*tab))};
         }
+        Text eyebrow{.text = std::string{}, .role = TextRole::Muted, .field = {}, .common = {}};
+        eyebrow.common.testId = "head_eyebrow";
+        eyebrow.common.visible = false;
         Row lead{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
         lead.common.testId = "head_lead";
         lead.common.visible = false;
         Row trail{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
         trail.common.testId = "head_trail";
         trail.common.visible = false;
-        return HeadParts{.lead = ui::row(std::move(lead)), .trail = ui::row(std::move(trail))};
+        return HeadParts{.eyebrow = ui::text(std::move(eyebrow)),
+                         .lead = ui::row(std::move(lead)),
+                         .trail = ui::row(std::move(trail))};
     }
 
     /// @brief The active tab's title as runs, which a shell that knows them draws in place of the tab's caption. A
@@ -375,8 +384,8 @@ public:
         return tab ? titleSpansOf(headOf(*tab)) : std::vector<TextSpan>{};
     }
 
-    /// @brief Whether the active tab's head shows anything: a subtitle, a badge, an action or a menu entry. A tracked
-    ///        read, so a
+    /// @brief Whether the active tab's head shows anything: an eyebrow, a subtitle, a badge, a tool, an action or a
+    ///        menu entry. A tracked read, so a
     ///        shell that shows the head on a line of its own follows a tab switch and a head's own changes; the head
     ///        row's own visibility is the same rule.
     /// @return Whether there is an active tab whose head has content.
@@ -740,7 +749,44 @@ private:
     }
 
     // Whether a tab's head has a subtitle, a badge, a tool, an action or a menu entry; a tracked read.
-    [[nodiscard]] bool headHasContent(WorkspaceTabId tab) const { return leadHasContent(tab) || trailHasContent(tab); }
+    [[nodiscard]] bool headHasContent(WorkspaceTabId tab) const {
+        return eyebrowHasContent(tab) || leadHasContent(tab) || trailHasContent(tab);
+    }
+
+    // Whether the head has an eyebrow.
+    [[nodiscard]] bool eyebrowHasContent(WorkspaceTabId tab) const { return !eyebrowRunsOf(tab).empty(); }
+
+    // The head's eyebrow runs when the screen gives them, else its plain eyebrow as one run; a tracked read.
+    [[nodiscard]] std::vector<TextSpan> eyebrowRunsOf(WorkspaceTabId tab) const {
+        ScreenHead const* const head = headOf(tab);
+        if (head == nullptr) {
+            return {};
+        }
+        reactive::Computed<std::vector<TextSpan>> const* const spans = head->eyebrowSpans();
+        std::vector<TextSpan> runs = spans == nullptr ? std::vector<TextSpan>{} : spans->get();
+        if (runs.empty()) {
+            reactive::Computed<std::string> const* const plain = head->eyebrow();
+            std::string line = plain == nullptr ? std::string{} : plain->get();
+            if (!line.empty()) {
+                runs.push_back(TextSpan{.text = std::move(line)});
+            }
+        }
+        return runs;
+    }
+
+    // The head's eyebrow as a muted text, hidden while there is none.
+    [[nodiscard]] Text buildHeadEyebrow(WorkspaceTabId tab) const {
+        auto const plain = [this, tab] {
+            ScreenHead const* const head = headOf(tab);
+            reactive::Computed<std::string> const* const eyebrow = head == nullptr ? nullptr : head->eyebrow();
+            return eyebrow == nullptr ? std::string{} : eyebrow->get();
+        };
+        Text text{.text = Prop<std::string>{plain}, .role = TextRole::Muted, .field = {}, .common = {}};
+        text.spans = Prop<std::vector<TextSpan>>{[this, tab] { return eyebrowRunsOf(tab); }};
+        text.common.testId = "head_eyebrow";
+        text.common.visible = Prop<bool>{[this, tab] { return eyebrowHasContent(tab); }};
+        return text;
+    }
 
     // Whether the head has a subtitle or a badge.
     [[nodiscard]] bool leadHasContent(WorkspaceTabId tab) const {
@@ -939,20 +985,26 @@ private:
         return row;
     }
 
-    // The head row above a tab's screen: the lead and the trail on one wrapping line, the trail at the trailing edge,
-    // dropping to a line of its own where it does not fit beside the lead's minimum. Hidden while the head has no
-    // content, so a screen without a head looks as it would without the row.
+    // The head above a tab's screen: the eyebrow, then the row of the lead and the trail on one wrapping line, the
+    // trail at the trailing edge, dropping to a line of its own where it does not fit beside the lead's minimum.
+    // Hidden while the head has no content, so a screen without a head looks as it would without it.
     [[nodiscard]] Node headRow(WorkspaceTabId tab) const {
         Row row{.children = {}, .gap = 2, .common = {}, .tone = std::nullopt};
         row.children.push_back(ui::row(buildHeadLead(tab)));
         row.children.push_back(ui::row(buildHeadTrail(tab)));
         row.common.testId = "head";
         row.common.layout.width = Sizing::stretch();
-        row.common.visible = Prop<bool>{[this, tab] { return headHasContent(tab); }};
+        row.common.visible = Prop<bool>{[this, tab] { return leadHasContent(tab) || trailHasContent(tab); }};
         row.align = Align::Start;
         row.justify = Justify::End;
         row.wrap = true;
-        return ui::row(std::move(row));
+        Column block{.children = {}, .gap = 1, .common = {}};
+        block.children.push_back(ui::text(buildHeadEyebrow(tab)));
+        block.children.push_back(ui::row(std::move(row)));
+        block.common.testId = "head_block";
+        block.common.layout.width = Sizing::stretch();
+        block.common.visible = Prop<bool>{[this, tab] { return headHasContent(tab); }};
+        return ui::column(std::move(block));
     }
 
     // The model changed: the bar shows its tabs in order, with their captions, and the active tab's page.

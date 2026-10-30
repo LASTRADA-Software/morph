@@ -22,16 +22,17 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 | a column, stretch × stretch | — | the main column |
 | a column, surface `toolbar`, gap 2, padded above and below by zero-height spacers | `shell_topbar` | the top bar: one line, below, a gap of step 2 from the bar's top and bottom edge |
 | a row, gap 3, `align: center`, padded by a zero-width spacer at both ends | `shell_topbar_line` | the top line: the two pad spacers around the wrapping row, so its content starts a gap of step 3 from the bar's left edge and ends as far from the right, and sits centred across the bar's line |
-| a row that wraps, gap 3, `align: start`, `justify: end`, stretch | `shell_topbar_main` | the navigation menu (`shell_nav_menu`, shown only in [the compact form](#the-compact-form)); a lead block, a column that stretches from `kShellHeadLeadMinimum` (32) units, holding the shown screen's title (`shell_title`, a heading) over the lead slot (`shell_head_lead`); then the trail slot (`shell_head`). Every line of it is padded at both ends by the pad spacers |
+| a row that wraps, gap 3, `align: start`, `justify: end`, stretch | `shell_topbar_main` | the navigation menu (`shell_nav_menu`, shown only in [the compact form](#the-compact-form)); a lead block, a column that stretches from `kShellHeadLeadMinimum` (32) units, holding the eyebrow slot (`shell_head_eyebrow`), the shown screen's title (`shell_title`, a heading) and the lead slot (`shell_head_lead`), in that order; then the trail slot (`shell_head`). Every line of it is padded at both ends by the pad spacers |
 | a column, surface `page`, stretch × stretch | `shell_page` | the page: zero-sized spacers above and either side of the content, each a gap of step 4 away, so the content is padded by step 4 |
 
 - `page()` is the content container, where the client places the workspace.
 - `navigator()` is the navigator, for its pins and search.
-- `headLeadSlot()` and `headSlot()` are the containers a client mounts the active head's two parts into —
-  `Workspace::headPartsForActive()` builds them: the lead (the subtitle and the badges on one wrapping line) under the
+- `headEyebrowSlot()`, `headLeadSlot()` and `headSlot()` are the containers a client mounts the active head's three
+  parts into — `Workspace::headPartsForActive()` builds them: the eyebrow (a muted line above the title, hidden while
+  the head has none), the lead (the subtitle and the badges on one wrapping line) under the
   title, and the trail (tools, actions and menu) at the line's trailing edge. Where the trail does not fit beside the
   lead block's 32 units (or its natural width where that is less), it drops to a line of its own at the trailing edge.
-- `setHeadShown(shown)` shows or hides the two slots. The frame builds widgets and never sees what is mounted in
+- `setHeadShown(shown)` shows or hides the three slots. The frame builds widgets and never sees what is mounted in
   them, so it cannot tell when the head is empty: the client says, and a new frame starts with them hidden. An
   application that mounts something else into the slots calls it itself.
 - `setTitle` sets the top bar's title and `setTitleSpans` its runs (an identifier in the mono face beside plain words,

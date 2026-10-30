@@ -3088,6 +3088,14 @@ public:
     /// @return The runs; none when the document declares none.
     [[nodiscard]] std::vector<TextSpan> titleSpans() const;
 
+    /// @brief Evaluates the document's `eyebrow`, the head's line above the title.
+    /// @return It, or `null`.
+    [[nodiscard]] Value eyebrow() const { return detail::evalIn(*_scope, nullptr, _core->doc().eyebrow); }
+
+    /// @brief Evaluates the document's `eyebrowSpans` into runs; a run the head cannot read is dropped and reported.
+    /// @return The runs; none when the document declares none.
+    [[nodiscard]] std::vector<TextSpan> eyebrowSpans() const;
+
     /// @brief Evaluates the document's `subtitle`, the head's line under the title.
     /// @return It, or `null`.
     [[nodiscard]] Value subtitle() const { return detail::evalIn(*_scope, nullptr, _core->doc().subtitle); }
@@ -9840,6 +9848,8 @@ inline std::vector<TextSpan> Screen::headSpans(ExprPtr const& expr) const {
 inline std::vector<TextSpan> Screen::subtitleSpans() const { return headSpans(_core->doc().subtitleSpans); }
 
 inline std::vector<TextSpan> Screen::titleSpans() const { return headSpans(_core->doc().titleSpans); }
+
+inline std::vector<TextSpan> Screen::eyebrowSpans() const { return headSpans(_core->doc().eyebrowSpans); }
 
 inline BorrowedModel Screen::lend(std::string_view alias) const {
     detail::NameRef const* const found = _scope->find(alias);

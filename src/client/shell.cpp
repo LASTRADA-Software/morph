@@ -497,6 +497,7 @@ private:
         _titleSpans.reset();
         _headShown.reset();
         ui::HeadParts parts = _workspace->headPartsForActive();
+        _headEyebrow.emplace(_context->runtime(), *_backend, std::move(parts.eyebrow), &_frame->headEyebrowSlot());
         _headLead.emplace(_context->runtime(), *_backend, std::move(parts.lead), &_frame->headLeadSlot());
         _head.emplace(_context->runtime(), *_backend, std::move(parts.trail), &_frame->headSlot());
         // The head's slots show while the active tab's head shows anything; the frame cannot tell from the rows
@@ -515,6 +516,7 @@ private:
         _headShown.reset();
         _head.reset();
         _headLead.reset();
+        _headEyebrow.reset();
         _headTab.reset();
     }
 
@@ -853,6 +855,8 @@ private:
     // (never one without the other) ahead of _workspace, since both are built from the Workspace's own data and
     // mounted into the ShellFrame.
     std::optional<ui::Mounted> _head;
+    // The eyebrow of the head, mounted beside `_head`, the trail.
+    std::optional<ui::Mounted> _headEyebrow;
     // The lead of the head, mounted beside `_head`, the trail.
     std::optional<ui::Mounted> _headLead;
     // Shows the frame's head slots while the active tab's head has content; goes with `_head`.

@@ -32,7 +32,7 @@ and is its `InterpreterHost` for `navigate`.
 | `ParamMap` | A screen's params by name: `ValueRecord`, what `Interpreter::mount` takes. |
 | `MountError` | `{screenId, reason}`: an unknown screen, a refused param, a refused mount. |
 | `ScreenHandle` | One mounted screen: `title()`, `dirty()` and `identity()` as `reactive::Computed`, `requestClose(done)`, `forceClose()`, the save seam `canSave()` and `save(done)`, and `head()`. |
-| `ScreenHead` | A screen's head beside its title: `titleSpans()`, a nullable `reactive::Computed` pointer to the title's runs, `subtitle()`, `status()` (the visible `HeadBadge{text, tone, icon}`s) and `actions()` (the visible `HeadAction{id, label, icon, emphasis, enabled}`s) as `reactive::Computed`, and `run(actionId)`; the head's own menu, `menu()` (the visible `HeadMenuEntry`s) and `menuLabel()`, nullable `reactive::Computed` pointers, and `choose(entryId)`; `tools()` (the visible `HeadTool`s), a nullable `reactive::Computed` pointer, and `edit(toolId, value)` and `submit(toolId)`; the menu and tool members have defaults for a head without them. |
+| `ScreenHead` | A screen's head beside its title: `eyebrow()`, `eyebrowSpans()` and `titleSpans()`, nullable `reactive::Computed` pointers to the line above the title and the title's runs, `subtitle()`, `status()` (the visible `HeadBadge{text, tone, icon}`s) and `actions()` (the visible `HeadAction{id, label, icon, emphasis, enabled}`s) as `reactive::Computed`, and `run(actionId)`; the head's own menu, `menu()` (the visible `HeadMenuEntry`s) and `menuLabel()`, nullable `reactive::Computed` pointers, and `choose(entryId)`; `tools()` (the visible `HeadTool`s), a nullable `reactive::Computed` pointer, and `edit(toolId, value)` and `submit(toolId)`; the menu and tool members have defaults for a head without them. |
 | `ScreenHost` | `mount(screenId, params)`, `identityOf(screenId, params)`, and `onNavigate(screenId, params)`, which the host implements. |
 
 `identity()` is beside spec 6 §4's `title` and `dirty` because a host re-keys a tab when a screen's identity
@@ -124,7 +124,7 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
 - `title()` is the document's `title` as text: a string as is, `null` as empty, anything else as its canonical JSON.
   `dirty()` is whether `dirty` is `true`. `title()` and `identity()` keep their last values once the screen has
   closed, and `dirty()` is then `false`.
-- `head()` of a document screen is its head: the document's `titleSpans` as runs, its `subtitle` as text, its visible `status` badges and its
+- `head()` of a document screen is its head: the document's `eyebrow` and `eyebrowSpans`, its `titleSpans` as runs, its `subtitle` as text, its visible `status` badges and its
   visible `actions`, empty when the document declares none. A host screen's `head()` is null unless its handle
   overrides it. `run(id)` runs the action's `onClick` as a user event in the screen scope, in one batch, and answers
   `true`; for an id the head does not hold, or holds hidden or disabled, it answers `false` and reports a diagnostic

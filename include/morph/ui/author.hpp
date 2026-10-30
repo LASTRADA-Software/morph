@@ -2819,6 +2819,15 @@ public:
     /// @param runs The runs.
     void titleSpans(AnyHandle const& runs) { detail::put(_head, "titleSpans", runs.json()); }
 
+    /// @brief The head's line above the title.
+    /// @param eyebrow The expression.
+    void eyebrow(AnyHandle const& eyebrow) { detail::put(_head, "eyebrow", eyebrow.json()); }
+
+    /// @brief The head's line above the title as runs (`spans`), which a shell that knows them draws in place of the
+    ///        `eyebrow` beside it.
+    /// @param runs The runs.
+    void eyebrowSpans(AnyHandle const& runs) { detail::put(_head, "eyebrowSpans", runs.json()); }
+
     /// @brief The head's line under the title.
     /// @param subtitle The expression.
     void subtitle(AnyHandle const& subtitle) { detail::put(_head, "subtitle", subtitle.json()); }

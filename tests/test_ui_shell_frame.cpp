@@ -136,6 +136,7 @@ TEST_CASE("shell frame: the head shares the title's wrapping line, its slots sho
     ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
     int const main = backend.find("Row", "testId", "shell_topbar_main").value();
     int const lead = backend.find("Column", "testId", "shell_head_lead").value();
+    int const eyebrow = backend.find("Column", "testId", "shell_head_eyebrow").value();
     int const slot = backend.find("Row", "testId", "shell_head").value();
     int const title = backend.find("Text", "testId", "shell_title").value();
     int const menu = backend.find("Menu", "testId", "shell_nav_menu").value();
@@ -149,7 +150,7 @@ TEST_CASE("shell frame: the head shares the title's wrapping line, its slots sho
     CHECK(backend.children(main).at(0) == menu);
     int const block = backend.children(main).at(1);
     CHECK(backend.prop(block, "layout") == "stretch(1) min=32/content");
-    CHECK(backend.children(block) == std::vector<int>{title, lead});
+    CHECK(backend.children(block) == std::vector<int>{eyebrow, title, lead});
     CHECK(backend.children(main).at(2) == slot);
     // The pad spacers are outside the wrapping row, so every line of it is padded at both ends.
     CHECK(within(backend, backend.find("Row", "testId", "shell_topbar_line").value(), main));
@@ -157,12 +158,15 @@ TEST_CASE("shell frame: the head shares the title's wrapping line, its slots sho
 
     CHECK(backend.prop(lead, "visible") == "false");
     CHECK(backend.prop(slot, "visible") == "false");
+    CHECK(backend.prop(eyebrow, "visible") == "false");
     frame.setHeadShown(true);
     CHECK(backend.prop(lead, "visible") == "true");
     CHECK(backend.prop(slot, "visible") == "true");
+    CHECK(backend.prop(eyebrow, "visible") == "true");
     frame.setHeadShown(false);
     CHECK(backend.prop(lead, "visible") == "false");
     CHECK(backend.prop(slot, "visible") == "false");
+    CHECK(backend.prop(eyebrow, "visible") == "false");
 }
 
 // Control: route the last index to `Navigator::choose`, and sign-out is not called.

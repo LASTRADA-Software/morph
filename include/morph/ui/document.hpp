@@ -574,6 +574,11 @@ struct Document {
     /// @brief The title as runs, drawn in place of `title` in a shell's top bar by a client that knows it; `nullptr`
     ///        when none is declared.
     ExprPtr titleSpans;
+    /// @brief The eyebrow expression of the screen's head, the line above the title; `nullptr` when none is declared.
+    ExprPtr eyebrow;
+    /// @brief The eyebrow as runs, drawn in place of `eyebrow` by a client that knows it; `nullptr` when none is
+    ///        declared.
+    ExprPtr eyebrowSpans;
     /// @brief The subtitle expression of the screen's head; `nullptr` when none is declared.
     ExprPtr subtitle;
     /// @brief The subtitle as runs, drawn in place of `subtitle` by a client that knows it; `nullptr` when none is
@@ -1280,6 +1285,8 @@ public:
         doc.identity = optionalExpr(*object, "identity", "");
         doc.dirty = optionalExpr(*object, "dirty", "");
         doc.titleSpans = optionalExpr(*object, "titleSpans", "");
+        doc.eyebrow = optionalExpr(*object, "eyebrow", "");
+        doc.eyebrowSpans = optionalExpr(*object, "eyebrowSpans", "");
         doc.subtitle = optionalExpr(*object, "subtitle", "");
         doc.subtitleSpans = optionalExpr(*object, "subtitleSpans", "");
         doc.status = topParts(*object, "status", "headBadge");
@@ -1290,8 +1297,8 @@ public:
         doc.navigation = navigation(*object, doc.id);
         if (doc.id == "app") {
             // The head belongs to a screen's tab; the app document has no view and so no head.
-            for (std::string_view const key :
-                 {"titleSpans", "subtitle", "subtitleSpans", "status", "actions", "menu", "menuLabel", "tools"}) {
+            for (std::string_view const key : {"titleSpans", "eyebrow", "eyebrowSpans", "subtitle", "subtitleSpans",
+                                               "status", "actions", "menu", "menuLabel", "tools"}) {
                 if (member(*object, key) != nullptr) {
                     refuse(pointerAppend("", key),
                            "`" + std::string{key} + "` is a screen's; the app document has none");
@@ -2551,6 +2558,13 @@ public:
         if (_doc->titleSpans) {
             checkExpr(*_doc->titleSpans, root);
             checkSpans(_doc->titleSpans);
+        }
+        if (_doc->eyebrow) {
+            checkExpr(*_doc->eyebrow, root);
+        }
+        if (_doc->eyebrowSpans) {
+            checkExpr(*_doc->eyebrowSpans, root);
+            checkSpans(_doc->eyebrowSpans);
         }
         if (_doc->subtitle) {
             checkExpr(*_doc->subtitle, root);

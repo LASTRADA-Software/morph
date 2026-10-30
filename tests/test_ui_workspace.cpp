@@ -92,6 +92,22 @@ constexpr std::string_view kBadTitle = R"({
   "titleSpans": { "list": [ "Plate ", { "list": [ "nested" ] } ] },
   "view": { "kind": "text", "testId": "body", "text": "x" } })";
 
+/// A screen whose eyebrow is runs beside the plain line an older client draws.
+constexpr std::string_view kEyebrowRuns = R"({
+  "vocab": "ui/1", "id": "eyebrowruns", "title": "Instrument",
+  "eyebrow": "Worksheet WS-1",
+  "eyebrowSpans": { "list": [ "Worksheet ", { "obj": { "text": "WS-1", "mono": true } } ] },
+  "view": { "kind": "text", "testId": "body", "text": "x" } })";
+
+/// A screen whose head is an eyebrow alone, shown while `lineShown`.
+constexpr std::string_view kEyebrowOnly = R"({
+  "vocab": "ui/1", "id": "eyebrowonly", "title": "Results",
+  "eyebrow": { "if": [ { "ref": "lineShown" }, "Step 2 of 4", "" ] },
+  "state": { "lineShown": { "init": true } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "clear", "label": "clear", "onClick": [ { "set": "lineShown", "value": false } ] }
+  ] } })";
+
 /// A screen whose head has only a menu: an entry, a separator, an entry shown while `retireShown`, and a submenu.
 constexpr std::string_view kMenued = R"({
   "vocab": "ui/1", "id": "menued", "title": "Instrument", "menuLabel": "More instrument actions",
@@ -236,6 +252,8 @@ private:
             {"runhead", loadOrFail(kRunHead, morph::ui::testing::corpusCatalog())},
             {"titled", loadOrFail(kTitled, morph::ui::testing::corpusCatalog())},
             {"badtitle", loadOrFail(kBadTitle, morph::ui::testing::corpusCatalog())},
+            {"eyebrowruns", loadOrFail(kEyebrowRuns, morph::ui::testing::corpusCatalog())},
+            {"eyebrowonly", loadOrFail(kEyebrowOnly, morph::ui::testing::corpusCatalog())},
             {"menued", loadOrFail(kMenued, morph::ui::testing::corpusCatalog())},
             {"tooled", loadOrFail(kTooled, morph::ui::testing::corpusCatalog())},
             {"asker", loadOrFail(kAsker, morph::ui::testing::corpusCatalog())},
@@ -1266,4 +1284,42 @@ TEST_CASE("workspace: a title run the head cannot read is dropped and reported o
     CHECK(shell.activeTitleSpans() == std::vector<morph::ui::TextSpan>{{.text = "Plate "}});
     CHECK(shell.activeTitleSpans() == std::vector<morph::ui::TextSpan>{{.text = "Plate "}});
     CHECK(reported().size() == 1);
+}
+
+// Mutation: leave the eyebrow out of `headHasContent` (a head with only an eyebrow is hidden), or hide the eyebrow
+// text while it has runs.
+TEST_CASE("workspace: the eyebrow is a muted line of the head, and a head with only an eyebrow has content",
+          "[ui][workspace]") {
+    using morph::ui::Mounted;
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog(), nullptr, morph::ui::HeadPlacement::External};
+    REQUIRE(shell.open("eyebrowonly", {}) == 0U);
+    harness.settle();
+    CHECK(shell.activeHeadShown());
+    morph::ui::HeadParts parts = shell.headPartsForActive();
+    Mounted const eyebrow{harness.runtime, harness.backend, std::move(parts.eyebrow)};
+    harness.settle();
+    int const text = harness.byTestId("Text", "head_eyebrow");
+    CHECK(harness.backend.prop(text, "spans") == "[Step 2 of 4]");
+    CHECK(harness.backend.prop(text, "role") == "Muted");
+    CHECK(harness.backend.prop(text, "visible") == "true");
+    harness.backend.click(harness.byTestId("Button", "clear"));
+    harness.settle();
+    CHECK(harness.backend.prop(text, "visible") == "false");
+    CHECK_FALSE(shell.activeHeadShown());
+}
+
+// Mutation: leave the eyebrow out of the in-page head (no `head_eyebrow`), or put it after the head row.
+TEST_CASE("workspace: the in-page head shows its eyebrow above the head row", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("eyebrowruns", {}) == 0U);
+    harness.settle();
+    int const eyebrow = harness.byTestId("Text", "head_eyebrow");
+    int const head = harness.byTestId("Row", "head");
+    int const block = harness.byTestId("Column", "head_block");
+    CHECK(harness.backend.children(block) == std::vector<int>{eyebrow, head});
+    CHECK(harness.backend.prop(eyebrow, "spans") == "[Worksheet ,WS-1;mono]");
 }
