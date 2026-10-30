@@ -351,13 +351,14 @@ TEST_CASE("qt_quick dialog: a dialog's footer actions sit against the footer's r
     sign->setLabel("Confirm");
     dialog->setOpen(true);
     scene.settle();
-    // The rule above the footer spans the content's width: the footer's actions end at its right edge.
-    QQuickItem const* const rule = namedIn(*scene.window().contentItem(), QStringLiteral("footerRule"));
-    REQUIRE(rule != nullptr);
-    qreal const right = rule->mapToScene(QPointF{rule->width(), 0}).x();
+    // The footer spans the content's width: its actions end at its right edge.
+    auto* const footer =
+        qvariant_cast<QQuickItem*>(Scene::itemOf(static_cast<ui::Widget&>(*dialog)).property("footer"));
+    REQUIRE(footer != nullptr);
+    qreal const right = footer->mapToScene(QPointF{footer->width(), 0}).x();
     QQuickItem const& last = Scene::itemOf(*sign);
     CHECK(last.mapToScene(QPointF{last.width(), 0}).x() == Catch::Approx(right).margin(1));
-    CHECK(Scene::itemOf(*undo).mapToScene(QPointF{0, 0}).x() > rule->mapToScene(QPointF{0, 0}).x() + 20);
+    CHECK(Scene::itemOf(*undo).mapToScene(QPointF{0, 0}).x() > footer->mapToScene(QPointF{0, 0}).x() + 20);
 }
 
 // Mutation: draw the title in `strongFont`; draw no rule, or draw it while the footer holds nothing.
@@ -766,3 +767,37 @@ TEMPLATE_TEST_CASE("qt_quick overlays: a modal overlay dims the window behind it
     scene.settle();
     CHECK(scrimColor() == QColor{0x14, 0x18, 0x1f, 0x59});
 }
+
+// Mutation: leave the rules inside the popup's padding (they start a step of 4 in and stop short of the right edge).
+TEMPLATE_TEST_CASE("qt_quick overlays: the head's and the footer's rules span the overlay", "[qt_quick]",
+                   ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    std::unique_ptr<TestType> overlay;
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(nullptr);
+    } else {
+        overlay = scene.backend().createDrawer(nullptr, ui::Side::End);
+    }
+    overlay->setTitle("Change");
+    overlay->setDescription("Why it changes");
+    auto const body = scene.backend().createText(overlay.get());
+    body->setText("Body");
+    auto const save = scene.backend().createButton(&overlay->footer());
+    save->setLabel("Save");
+    overlay->setOpen(true);
+    scene.settle();
+    QObject const* const popup = popupOf(Scene::itemOf(static_cast<ui::Widget&>(*overlay)));
+    REQUIRE(popup != nullptr);
+    auto* const background = popup->property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    for (char const* const name : {"headRule", "footerRule"}) {
+        INFO(name);
+        QQuickItem const* const rule = namedIn(*scene.window().contentItem(), QString::fromLatin1(name));
+        REQUIRE(rule != nullptr);
+        CHECK(rule->isVisible());
+        CHECK(rule->mapToItem(background, QPointF{0, 0}).x() == Catch::Approx(0).margin(0.5));
+        CHECK(rule->mapToItem(background, QPointF{rule->width(), 0}).x() ==
+              Catch::Approx(background->width()).margin(0.5));
+    }
+}
+

@@ -141,7 +141,7 @@ MorphWidget {
                 Layout.fillWidth: true
             }
 
-            // Spans the content's width under the head while the description shows.
+            // Spans the overlay, edge to edge, under the head while the description shows.
             Rectangle {
                 id: headRule
                 objectName: "headRule"
@@ -149,6 +149,8 @@ MorphWidget {
                 color: Theme.cardScheme.border
                 implicitHeight: 1
                 Layout.fillWidth: true
+                Layout.leftMargin: -drawer.leftPadding
+                Layout.rightMargin: -drawer.rightPadding
             }
 
             // Only the content between the title and the footer scrolls, so both stay reachable however tall the
@@ -184,6 +186,8 @@ MorphWidget {
                 color: Theme.divider
                 implicitHeight: 1
                 Layout.fillWidth: true
+                Layout.leftMargin: -drawer.leftPadding
+                Layout.rightMargin: -drawer.rightPadding
             }
 
             // Shown while the footer holds something: a layout gives no size to what it hides, so its own

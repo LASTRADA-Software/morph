@@ -201,6 +201,8 @@ MorphWidget {
                 color: Theme.cardScheme.border
                 implicitHeight: 1
                 Layout.fillWidth: true
+                Layout.leftMargin: -popup.leftPadding
+                Layout.rightMargin: -popup.rightPadding
             }
 
             // Only the content between the title and the footer scrolls, so both stay reachable however tall the
@@ -236,6 +238,8 @@ MorphWidget {
                 color: Theme.divider
                 implicitHeight: 1
                 Layout.fillWidth: true
+                Layout.leftMargin: -popup.leftPadding
+                Layout.rightMargin: -popup.rightPadding
             }
 
             // Shown while the footer holds something: a layout gives no size to what it hides, so its own
