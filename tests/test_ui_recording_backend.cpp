@@ -686,12 +686,12 @@ TEST_CASE("a backend that reports no hovering and loads no components keeps the 
               nullptr, ui::CustomRequest{.name = "Chart", .props = {}, .minVersion = 1}) == nullptr);
 }
 
-TEST_CASE("ui backend: a width in units is compact below 80, medium below 160, expanded from 160", "[ui][backend]") {
+TEST_CASE("ui backend: a width in units is compact below 80, medium below 108, expanded from 108", "[ui][backend]") {
     CHECK(ui::widthClassOf(0) == "compact");
     CHECK(ui::widthClassOf(79.5) == "compact");
     CHECK(ui::widthClassOf(80) == "medium");
-    CHECK(ui::widthClassOf(159.5) == "medium");
-    CHECK(ui::widthClassOf(160) == "expanded");
+    CHECK(ui::widthClassOf(107.5) == "medium");
+    CHECK(ui::widthClassOf(108) == "expanded");
 }
 
 // Mutation: call the listener from setOnWidthClass (it hears `expanded` first), or on every setWidthClass (it hears

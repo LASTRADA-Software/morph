@@ -788,7 +788,7 @@ constexpr int kExpandedMinHeight = 40;
 ui::Node expandedLayout(Console const& console) {
     // The design's 360 px sample pane, in the frontend's character widths, beside the worklist. The splitter takes the
     // page's height under the charts.
-    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{70, 45}};
+    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{53, 45}};
     return ui::column(
                {alert(false), kpis(false),
                 ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),

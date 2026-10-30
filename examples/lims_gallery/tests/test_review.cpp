@@ -76,9 +76,9 @@ TEST_CASE("review: the splitter's sizes reach the splitter", "[lims-gallery]") {
     auto const written = lims_gallery::reviewScreen().write();
     REQUIRE(written.has_value());
     auto const text = written.value_or(morph::ui::author::Emitted{}).text;
-    CHECK(text.contains(R"("sizes":{"lit":[37,96]})"));
+    CHECK(text.contains(R"("sizes":{"lit":[29,74]})"));
     GalleryScreen screen{kScreen, "expanded"};
-    CHECK(screen.prop("Splitter", "split", "sizes") == "[37,96]");
+    CHECK(screen.prop("Splitter", "split", "sizes") == "[29,74]");
 }
 
 // The review's `navigate` asks for a dialog, and the generic client draws one over the review: no tab is added. The

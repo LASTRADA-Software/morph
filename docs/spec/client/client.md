@@ -124,7 +124,7 @@ below `expanded`: on `compact` and `medium`, when it is built and on each change
 the window's. Below `expanded` the sidebar is gone, so the page is nearly the window, and a document's class describes
 the space it gets; with the sidebar, an 80-unit `medium` window, an 80-column terminal among them, would leave the
 page 52 units, narrower than any `compact` window. On `expanded` the page is the window less the sidebar's 28 units,
-at least 132.
+at least 80 (`expanded` begins at `kExpandedWidthUnits`, 108, which is the compact bound plus the sidebar).
 
 The frame shows its sidebar (with the principal and the sign-out button at its foot, or, compact, the navigation menu's sign-out entry) and top bar while the shell is signed in, and the page alone
 otherwise (`ShellFrame::showSignedIn`). The shell is signed in after a sign-in, until a sign-out, and from the start

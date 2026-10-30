@@ -424,7 +424,7 @@ TEST_CASE("qt_quick frontend: the shell reads the window's width class, and hear
             [&shown, &engineOf](QQmlEngine& engine, QQuickWindow& window) {
                 shown = &window;
                 engineOf = &engine;
-                window.resize(widthFor(engine, 120), 900);
+                window.resize(widthFor(engine, 100), 900);
             }};
     qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
     CHECK(frontend.run(source) == 0);

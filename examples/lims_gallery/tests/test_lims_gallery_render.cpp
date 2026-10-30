@@ -33,7 +33,7 @@
 
 namespace {
 
-// Each width class and a window width in units inside it: below 80 units is compact, 160 and over expanded.
+// Each width class and a window width in units inside it: below 80 units is compact, 108 and over expanded.
 constexpr std::array<std::pair<std::string_view, double>, 2> kWidths{{{"compact", 60.0}, {"expanded", 180.0}}};
 
 // The window of the footer probe, in pixels: a phone.

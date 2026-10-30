@@ -49,7 +49,7 @@ clients keeps such documents free of it. The shared corpus is
 | `{"host": "name"}` | `Host` | A value the application registered, `null` when absent |
 
 `widthClass` is the width of the surface the client draws on, in the unit `fixed(n)` counts: `compact` below 80
-units, `medium` below 160, `expanded` otherwise (`ui::widthClassOf`). The client sets it from its view backend before
+units, `medium` below 108 (`kExpandedWidthUnits`: the compact bound, 80, plus the shell sidebar's 28), `expanded` otherwise (`ui::widthClassOf`). The client sets it from its view backend before
 the first mount and updates it on a resize. The terminal counts its columns, so an 80-column terminal is `medium`; Qt
 Quick counts the window's width in `Theme.unitWidth`s. A document's breakpoints therefore sit at the same number of
 its own units on both frontends.

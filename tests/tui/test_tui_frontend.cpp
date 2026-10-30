@@ -499,13 +499,13 @@ TEST_CASE("tui::Frontend: the width class is the screen's columns, and a resize 
                          ui::AppContext& context, ui::IViewBackend& backend,
                          std::expected<ui::Bundle, ui::ConnectError> /*opened*/) -> std::unique_ptr<ui::MountedShell> {
             grow = context.scheduler().after(10ms, [&rig] {
-                rig.output->resize({.width = 100, .height = 3});
-                rig.source.pushEvents({core::tui::ResizeEvent{.columns = 100, .rows = 3},
-                                       core::tui::ResizeEvent{.columns = 120, .rows = 3}});
+                rig.output->resize({.width = 90, .height = 3});
+                rig.source.pushEvents({core::tui::ResizeEvent{.columns = 90, .rows = 3},
+                                       core::tui::ResizeEvent{.columns = 100, .rows = 3}});
                 rig.source.closeInput();
             });
             return std::make_unique<WidthShell>(backend, heard);
         }));
-    // 70 columns are compact; 100 and then 120 are both medium, reported once.
+    // 70 columns are compact; 90 and then 100 are both medium, reported once.
     CHECK(heard == std::vector<std::string>{"compact", "medium"});
 }

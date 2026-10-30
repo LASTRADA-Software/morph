@@ -321,7 +321,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 pass; empty clears it. Registering does not call the listener: the caller reads `widthClass()` for the current class,
 so the initial value has one write path, before the first mount. Both are pure, so a backend cannot silently report
 nothing. Every backend classes its width in units through `ui::widthClassOf(units)` (`compact` below 80, `medium` below
-160, `expanded` otherwise), so the thresholds live in one place: the terminal its viewport's columns, Qt Quick its host
+108 (`kExpandedWidthUnits`), `expanded` otherwise), so the thresholds live in one place: the terminal its viewport's columns, Qt Quick its host
 item's width over `Theme.unitWidth`.
 
 ## Selection by key

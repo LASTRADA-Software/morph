@@ -1318,16 +1318,20 @@ public:
     virtual void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) = 0;
 };
 
+/// @brief The width, in units, from which a surface is `expanded`: the compact bound, 80, plus the shell's sidebar
+///        (28), the narrowest window whose page beside that sidebar is not itself compact.
+inline constexpr int kExpandedWidthUnits = 108;
+
 /// @brief A width in the vocabulary's units (what `fixed(n)` counts) as a width class: `compact` below 80 units,
-///        `medium` below 160, `expanded` otherwise. Every backend classes its surface with it, so a document's
-///        breakpoints sit at the same number of its own units on every frontend.
+///        `medium` below `kExpandedWidthUnits` (108), `expanded` otherwise. Every backend classes its surface with
+///        it, so a document's breakpoints sit at the same number of its own units on every frontend.
 /// @param units The width, in units: a terminal's columns, or a window's width over its unit width.
 /// @return The class: `compact`, `medium` or `expanded`.
 [[nodiscard]] inline std::string widthClassOf(double units) {
     if (units < 80.0) {
         return "compact";
     }
-    if (units < 160.0) {
+    if (units < static_cast<double>(kExpandedWidthUnits)) {
         return "medium";
     }
     return "expanded";

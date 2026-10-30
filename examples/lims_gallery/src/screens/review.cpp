@@ -761,7 +761,7 @@ ui::Node worksheetPane(Review const& review) {
 ui::Node expandedLayout(Review const& review) {
     // The design's 280 px queue beside the worksheet, in the frontend's character widths. The splitter takes the
     // page's height, so each pane reaches the page's bottom.
-    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{37, 96}};
+    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{29, 74}};
     return ui::column({ui::splitter({queuePane(review).surface("pane"), worksheetPane(review).surface("pane")},
                                     ui::AnyHandle{"horizontal"}, sizes)
                            .sizing(ui::stretch(), ui::stretch())

@@ -23,6 +23,8 @@ namespace morph::ui {
 
 /// @brief The frame's width for the sidebar, in units.
 inline constexpr int kShellSidebarWidth = 28;
+static_assert(kShellSidebarWidth + 80 <= kExpandedWidthUnits,
+              "the page beside the sidebar must not be narrower than a compact window");
 
 /// @brief The narrowest the top bar's title and head lead are given before the head's trail wraps to a line of its
 ///        own, in units; the same bound as the in-page head's.

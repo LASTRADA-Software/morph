@@ -1086,11 +1086,13 @@ TEST_CASE("qt_quick widgets: the backend's width class follows the host's width 
     double const unit = theme->property("unitWidth").toDouble();
     REQUIRE(unit > 0);
     CHECK(scene.backend().widthClass() == ui::widthClassOf(800 / unit));
+    scene.window().resize(static_cast<int>(std::ceil(100 * unit)), 600);
+    scene.settle();
 
     std::vector<std::string> classes;
     scene.backend().setOnWidthClass([&classes](std::string const& name) { classes.push_back(name); });
     CHECK(classes.empty());
-    for (double const units : {170.0, 165.0, 120.0, 70.0, 75.0}) {
+    for (double const units : {170.0, 120.0, 100.0, 70.0, 75.0}) {
         scene.window().resize(static_cast<int>(std::ceil(units * unit)), 600);
         scene.settle();
     }
