@@ -41,7 +41,7 @@ TEST_CASE("samples, expanded: the table, its out-of-spec tone, and three rows se
     CHECK(screen.shows("Table", "samples"));
     CHECK(screen.prop("Table", "samples", "columns") ==
           "[Sample:fixed(11);sortable=true,Product · lot:stretch(2),Tests:stretch(2),Priority:fixed(7),"
-          "Status:fixed(10),Due:fixed(12);sortable=true;wrap=false,Specification:fixed(10)]");
+          "Status:fixed(10),Due:fixed(12);sortable=true;wrap=false,Specification:fixed(12)]");
     // Sorted by due time, earliest first, 25 rows a page.
     CHECK(screen.prop("Table", "samples", "sort") == "5:Ascending");
     CHECK(screen.text("range") == "1–25 of 38");

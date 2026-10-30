@@ -777,7 +777,7 @@ ui::Node samplePane(Console const& console) {
                          .enabled(!console.held)
                          .tooltip(ui::cond(console.held, Text{kHoldReason}, Text{""}))
                          .testId("submit")},
-                    {.gap = 1, .align = Align::Center}),
+                    {.gap = 1, .align = Align::Center, .wrap = true}),
                 rerunDialog(console)},
                {.gap = 2})
         .a11y(ui::format("Sample {0}", {console.selected}))

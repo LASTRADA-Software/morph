@@ -127,7 +127,7 @@ constexpr std::array<Result, 11> kResults{{
      .value = "0.21 %",
      .spec = "≤ 0.20 %",
      .previous = "0.09 %",
-     .evaluation = "Out of spec: above 0.20",
+     .evaluation = "Out of spec",
      .tone = "err",
      .change = "0.12 → 0.21 · integration corrected",
      .flagged = true},
@@ -138,7 +138,7 @@ constexpr std::array<Result, 11> kResults{{
      .value = "99.4 % LC",
      .spec = "95.0–105.0",
      .previous = "100.1 % LC",
-     .evaluation = "Out of trend: −0.7 % vs. last 5 lots",
+     .evaluation = "Out of trend",
      .tone = "warn",
      .change = "—",
      .flagged = true},
@@ -449,7 +449,7 @@ ui::Node queueEntry(Review const& review) {
         {ui::row({ui::text({.text = ui::row("id"),
                             .spans = ui::spans({ui::styled(ui::row("id"), {.strong = true, .mono = true})})}),
                   ui::text({.text = ui::row("age"), .role = "muted"})},
-                 {.gap = 1, .justify = Justify::Between}),
+                 {.gap = 1, .justify = Justify::Between, .wrap = true}),
          ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("analyst")}), .role = "muted"}),
          tagRow(ui::row("tags"), "queue-tags"),
          layout::muted(kSelfReview).visible(Flag{ui::row("self")}).testId("queue-self")},
@@ -530,8 +530,8 @@ ui::Node resultTable(Review const& review) {
          .align = Align::End,
          .cell = ui::text({.text = ui::row("value"), .spans = ui::spans({ui::strong(ui::row("value"))})}),
          .wrap = false},
-        {.name = "spec", .label = "Specification", .width = ui::content(), .wrap = false},
-        {.name = "previous", .label = "Previous lot", .width = ui::content(), .align = Align::End, .wrap = false},
+        {.name = "spec", .label = "Spec.", .width = ui::content(), .wrap = false},
+        {.name = "previous", .label = "Previous", .width = ui::content(), .align = Align::End, .wrap = false},
         {.name = "evaluation",
          .label = "Evaluation",
          .width = ui::content(),
@@ -806,9 +806,9 @@ ui::Node worksheetPane(Review const& review) {
 }
 
 ui::Node expandedLayout(Review const& review) {
-    // The queue takes under a quarter of the page, 23 of 103 units, which leaves the worksheet the room its results
+    // The queue takes a fifth of the page, 20 of 103 units, which leaves the worksheet the room its results
     // table and its decisions need. The splitter takes the page's height, so each pane reaches the page's bottom.
-    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{23, 80}};
+    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{20, 83}};
     return ui::column({ui::splitter({queuePane(review).surface("pane"), worksheetPane(review).surface("pane")},
                                     ui::AnyHandle{"horizontal"}, sizes)
                            .sizing(ui::stretch(), ui::stretch())
