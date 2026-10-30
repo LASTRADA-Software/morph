@@ -39,11 +39,15 @@ MorphField {
     // A text that wraps asks for the width of its longest line, read from the font's advances for the same reason: the
     // label's own implicit width follows the width it is given, which on Qt 6.8 closes a loop through a required
     // text's mark. Spans are rich text, whose lines the label alone can measure.
+    // The label lays a line out in a pixel more than its advance, so a wrapping text given exactly its advance would
+    // break its last word: a text asks for the advance plus this.
+    readonly property real wrapSlack: 1
     // A text has no caption, so this is the field's width with the mark that follows the text.
     implicitWidth: (root.oneLine ? metrics.advanceWidth(root.text)
                     : root.hasRuns ? label.implicitWidth
                                    : root.text.split("\n").reduce(
-                                         (widest, line) => Math.max(widest, metrics.advanceWidth(line)), 0)) +
+                                         (widest, line) => Math.max(widest, metrics.advanceWidth(line)), 0) +
+                                     root.wrapSlack) +
                    (root.required ? root.markerRoom : 0)
     // While the text is elided, its full text is the tooltip, unless the node gives its own.
     tooltipText: root.tooltip !== "" ? root.tooltip : root.elided ? root.text : ""
