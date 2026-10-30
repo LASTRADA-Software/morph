@@ -1664,3 +1664,29 @@ TEST_CASE("qt_quick containers: a collapsible draws no marker under collapsible.
     CHECK(toggles == std::vector<bool>{false});
 }
 
+// Mutation: leave the Basic style's handle (a plain bar in the palette's colours, with no grip).
+TEST_CASE("qt_quick containers: a splitter's handle is the scheme's border colour with a centred grip", "[qt_quick]") {
+    Scene scene;
+    auto splitter = scene.backend().createSplitter(nullptr, ui::Axis::Horizontal);
+    splitter->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::fixed(10)});
+    auto left = scene.backend().createText(splitter.get());
+    auto right = scene.backend().createText(splitter.get());
+    left->setText("left");
+    right->setText("right");
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*splitter);
+    auto* const handle = item.property("handleItem").value<QQuickItem*>();
+    REQUIRE(handle != nullptr);
+    auto* const scheme = item.property("scheme").value<QObject*>();
+    REQUIRE(scheme != nullptr);
+    CHECK(handle->property("color").value<QColor>() == scheme->property("border").value<QColor>());
+    QQuickItem const& grip = named(*handle, "grip");
+    CHECK(grip.isVisible());
+    CHECK(grip.width() == Catch::Approx(2.0).margin(0.01));
+    CHECK(grip.height() == Catch::Approx(std::min(28.0, handle->height() / 3)).margin(0.01));
+    QPointF const centre = grip.mapToItem(handle, QPointF{grip.width() / 2, grip.height() / 2});
+    // `centerIn` rounds to a whole pixel.
+    CHECK(centre.x() == Catch::Approx(handle->width() / 2).margin(0.5));
+    CHECK(centre.y() == Catch::Approx(handle->height() / 2).margin(0.5));
+    CHECK(grip.property("color").value<QColor>() == scheme->property("neutralDot").value<QColor>());
+}
