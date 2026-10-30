@@ -232,7 +232,7 @@ ui::Node facetGroup(char const* heading, std::vector<Facet> const& group) {
              ui::spacer().sizing(ui::stretch()), layout::muted(facet.count)},
             {.gap = 1, .align = Align::Center}));
     }
-    return ui::column(boxes, {.gap = 0});
+    return ui::column(boxes, {.gap = 1});
 }
 
 ui::Node userField(Audit const& audit) {
@@ -269,8 +269,9 @@ ui::Node facetsPanel(Audit const& audit) {
                 ui::column(facetFields(audit), {.gap = 3})},
                {.gap = 2, .padding = ui::padding(3, 3)})
         .surface("bar")
-        // The design's 220 px rail.
-        .sizing(ui::fixed(29))
+        // The design's rail is 22% of its 1000 px page; 22 units is the same share of the 785 px page the sidebar
+        // leaves.
+        .sizing(ui::fixed(22))
         .a11y("Filters")
         .testId("facets");
 }
@@ -298,7 +299,7 @@ ui::Node chips(Audit const& audit) {
     row.push_back(chip(ui::format("{0} – {1}", {end(audit.from), end(audit.until)}), "Remove dates",
                        {ui::set(audit.from, std::string{}), ui::set(audit.until, std::string{})}, audit.dated)
                       .testId("chip-dates"));
-    return ui::row(row, {.gap = 1, .align = Align::Center}).testId("chips");
+    return ui::row(row, {.gap = 1, .align = Align::Center, .wrap = true}).testId("chips");
 }
 
 // ── The trail ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -323,25 +324,25 @@ ui::Node trailTable(Audit const& audit) {
                 .columns =
                     {{.name = "when",
                       .label = "When",
-                      .width = ui::fixed(12),
+                      .width = ui::fixed(10),
                       .cell = ui::column({ui::text({.text = ui::row("date")}), ui::text({.text = ui::row("time")})},
                                          {.gap = 0}),
                       .wrap = false},
-                     {.name = "user", .label = "User", .width = ui::fixed(8)},
+                     {.name = "user", .label = "User", .width = ui::fixed(6)},
                      {.name = "record",
                       .label = "Record",
-                      .width = ui::fixed(13),
+                      .width = ui::fixed(12),
                       .role = "mono",
                       .cell =
                           ui::column({ui::text({.text = ui::row("record"), .role = "mono"}),
                                       ui::text({.text = ui::row("detail")}).visible(!ui::isEmpty(ui::row("detail")))},
                                      {.gap = 0})},
-                     {.name = "field", .label = "Field", .width = ui::fixed(12)},
-                     {.name = "old", .label = "Old value", .width = ui::stretch(), .cell = oldValue(ui::row("old"))},
-                     {.name = "new", .label = "New value", .width = ui::stretch(), .cell = newValue(ui::row("new"))},
+                     {.name = "field", .label = "Field", .width = ui::fixed(8)},
+                     {.name = "old", .label = "Old value", .width = ui::stretch(2), .cell = oldValue(ui::row("old"))},
+                     {.name = "new", .label = "New value", .width = ui::stretch(2), .cell = newValue(ui::row("new"))},
                      {.name = "reason",
                       .label = "Reason",
-                      .width = ui::stretch(2),
+                      .width = ui::stretch(3),
                       .cell = ui::text({.text = ui::cond(noReason, ui::AnyHandle{"—"}, reason),
                                         .role = ui::cond(noReason, Text{"muted"}, Text{"normal"})})}},
                 .pageSize = std::int64_t{25},
@@ -387,7 +388,7 @@ ui::Node searchField(Audit const& audit) {
 
 ui::Node expandedLayout(Audit const& audit) {
     auto const main = ui::column({chips(audit), ui::panel({trailTable(audit), pager(audit)}, {.padding = 0})},
-                                 {.gap = 2, .padding = 4})
+                                 {.gap = 2, .padding = 3})
                           .sizing(ui::stretch());
     // The page's own edge: the rail runs the page's height, with a rule between it and the trail.
     return ui::row({facetsPanel(audit), main}, {.align = Align::Stretch, .divided = true, .pageEdge = true})
