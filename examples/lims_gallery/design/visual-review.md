@@ -122,8 +122,7 @@ the icons that paint `currentColor` follow their control.
 
 Closed and checked in the grabs:
 
-- Receipt's session line and counts close the title's line; the principal ("Dr. A. Meyer") closes every expanded
-  head; the session table's header band reaches its card's edges.
+- Receipt's session line and counts close the title's line.
 - Results' "In progress" sits at the right of the eyebrow's line; its compact head carries the sample as the title
   and the previous/next buttons join it.
 - Console's compact head is dark with a white menu and scan icon and no rule; its alert's "Open run" is a framed
@@ -137,8 +136,42 @@ Closed and checked in the grabs:
 
 Left, each environmental or a design limit rather than a gap:
 
-- Console's and review's expanded tables are wider than their panes at 1000 px, as the mockups' own are; the fonts
-  (Inter, JetBrains Mono) are not installed here, so character widths are wider than the designs'.
+- Review's results table is wider than its pane at 1000 px, as the mockup's own is (its Change column is the clipped
+  one); the fonts (Inter, JetBrains Mono) are not installed here, so character widths are wider than the designs'.
+- The principal ("Dr. A. Meyer") does not show in any grab's head: the grab session has no signed-in principal, so
+  `principalPlacement: "head"` has nothing to place. The head's placement is not exercised by these grabs.
+- The receipt session table's header band and rules stop 8 px inside the card's edges: `bleed` on a table inside a
+  `panel` has no measurable effect, so the band does not reach the card's edges.
 - A tab's page is its own scroll, so a nested `scroll` in a page does not fill it: review's pages pad themselves with
   a column instead.
 - The `Show` control of review's compact results keeps a gap above it that the design does not have.
+
+### Fitted to the 785 px page
+
+With the sidebar showing, the page beside it is about 785 px, and one `fixed(n)` unit is about 7-9 px. The expanded
+screens were laid out for 1000 px; their columns were re-fitted so that nothing clips or breaks inside a word at
+1000×830, and 390×844 is unchanged except where noted.
+
+- Audit: the filter rail is `fixed(22)`; the trail's fixed columns are narrower and Old value, New value and Reason
+  share the rest 2:2:3; the chip row wraps; the facet check boxes are 22 px apart.
+- Samples: Product · lot and Tests stretch 2:2 and the other columns are narrower, so rows are one or two lines
+  (about 48 px) instead of 66-83 px. On compact the tag row sits one gap under the text line.
+- Receipt: the sample grid has two columns and the session column is `fixed(34)`, so Sample type and Received at show
+  their start. A rule separates the form from Reject and Receive, and the sample heading is the heading role.
+- Stability: the timepoint and Pulls columns are narrower and the summary is `fixed(27)`, so Pulls shows and the
+  condition names wrap between words; compact's footer says "Continue".
+- Review: the queue is 23 of 103 splitter units and the footer's note takes the room the buttons leave, so "Approve
+  and sign..." is whole; the Evaluation column sizes to its content. The Evaluation tags are still clipped by a few
+  characters at the table's edge; the table is wider than the pane.
+- Console: the splitter is 60:38 and the worklist's fixed columns are narrower, so Test shows about ten characters
+  and Status is whole; the sample pane's input and tag are narrower so its labels wrap between words. Compact's
+  worklist is one white card with dividers.
+- Instrument: the right column is `fixed(30)` and an event's date column `fixed(15)`, so each event is one line;
+  events are divided; compact's current booking is one line plus the slot and has no progress bar.
+- Plate: the selection bar's count keeps its natural width and the bar wraps between items; compact's well rows
+  are divided.
+- E-signature: "Approved" is plain in compact's "Signing at..." line.
+
+Left for the framework: the receipt's "Already received" banner wraps at this width; a read-only field narrower than
+its text shows the end of the text; tables and footers wider than their pane clip without a scroll or a report; the
+audit rail's date fields clip their start below about 21 units.
