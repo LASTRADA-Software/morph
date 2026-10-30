@@ -3490,7 +3490,7 @@ struct SpanStyle {
 /// @param text  The run's text; data is never parsed for markup.
 /// @param style Its weight, face and colour.
 /// @return The run.
-[[nodiscard]] inline AnyHandle styled(AnyHandle const& text, SpanStyle style) {
+[[nodiscard]] inline AnyHandle styled(AnyHandle const& text, SpanStyle const& style) {
     std::vector<std::pair<std::string, AnyHandle>> fields{{"text", text}};
     if (style.strong) {
         fields.emplace_back("strong", AnyHandle{true});
@@ -4029,7 +4029,7 @@ namespace detail {
     AnyHandle shown;
     for (Json const& item : std::get<Json::array_t>(nodes.json().data)) {
         auto const& members = std::get<Json::object_t>(item.data);
-        auto const found = members.find("visible");
+        auto const* const found = members.find("visible");
         if (found == members.end()) {
             return {};
         }
@@ -4901,6 +4901,48 @@ struct StepperParts {
     Node footer;
 };
 
+namespace detail {
+
+/// @brief What Continue does on a step that cannot continue: its `onBlocked` commands, then the focus on its
+///        `blocking` element when it names one.
+/// @param step The step.
+/// @return The commands.
+[[nodiscard]] inline Commands stepBlockedCommands(StepperStep const& step) {
+    if (step.blocking && !step.onBlocked.empty()) {
+        return Commands{seq(step.onBlocked), focus(*step.blocking)};
+    }
+    if (step.blocking) {
+        return Commands{focus(*step.blocking)};
+    }
+    return step.onBlocked;
+}
+
+/// @brief Continue's text: the last step's finish text, else the step's own, else the shared one.
+/// @param options The step state, the steps and the footer.
+/// @return The text, switching on the step.
+[[nodiscard]] inline Handle<std::string> stepperContinueText(StepperOptions const& options) {
+    using Label = Handle<std::string>;
+    auto const last = static_cast<std::int64_t>(options.steps.size()) - 1;
+    auto const hasOwnLabel = [](StepperStep const& step) { return step.continueLabel.has_value(); };
+    if (!std::ranges::any_of(options.steps, hasOwnLabel)) {
+        return cond(eq(options.step, last), Label{options.finishLabel}, Label{options.continueLabel});
+    }
+    auto const textOf = [&](std::int64_t position) {
+        auto const& own = options.steps.at(static_cast<std::size_t>(position)).continueLabel;
+        if (own) {
+            return *own;
+        }
+        return position == last ? options.finishLabel : options.continueLabel;
+    };
+    Label text{textOf(last)};
+    for (auto position = last - 1; position >= 0; --position) {
+        text = cond(eq(options.step, position), Label{textOf(position)}, text);
+    }
+    return text;
+}
+
+}  // namespace detail
+
 /// @brief The parts of a wizard over screen state: a `steps` indicator built from the steps' labels and `step`, a
 ///        `switch` on `step` with one case per step, and a footer row of Back, a spacer, `extra` and Continue. Back
 ///        moves one step back and is disabled on the first; Continue moves one step on, or runs `onFinish` on the
@@ -4918,22 +4960,13 @@ struct StepperParts {
     std::optional<Handle<bool>> enabled;
     auto const last = static_cast<std::int64_t>(options.steps.size()) - 1;
     std::int64_t index = 0;
-    bool anyContinueLabel = false;
     for (StepperStep const& step : options.steps) {
         Label const state = cond(options.step > index, Label{"done"},
                                  cond(eq(options.step, index), Label{"active"}, Label{"pending"}));
         items.push_back(obj({{"label", step.label}, {"state", state}}));
         cases.emplace_back(AnyHandle{index}, step.children);
-        anyContinueLabel = anyContinueLabel || step.continueLabel.has_value();
         Commands const moveOn = index == last ? options.onFinish : Commands{set(options.step, options.step + 1)};
-        Commands blocked;
-        if (step.blocking && !step.onBlocked.empty()) {
-            blocked = Commands{seq(step.onBlocked), focus(*step.blocking)};
-        } else if (step.blocking) {
-            blocked = Commands{focus(*step.blocking)};
-        } else {
-            blocked = step.onBlocked;
-        }
+        Commands const blocked = detail::stepBlockedCommands(step);
         Commands const onStep =
             step.canContinue.present() ? Commands{ifThen(step.canContinue, moveOn, blocked)} : moveOn;
         onSteps.push_back(onStep);
@@ -4949,9 +4982,9 @@ struct StepperParts {
     // An else-chain, not one `if` per step: a step's own `set` would otherwise satisfy the next step's test, and one
     // click would move two steps.
     Commands continueCommands;
-    for (auto at = static_cast<std::int64_t>(onSteps.size()) - 1; at >= 0; --at) {
-        continueCommands =
-            Commands{ifThen(eq(options.step, at), onSteps.at(static_cast<std::size_t>(at)), continueCommands)};
+    for (auto position = static_cast<std::int64_t>(onSteps.size()) - 1; position >= 0; --position) {
+        continueCommands = Commands{
+            ifThen(eq(options.step, position), onSteps.at(static_cast<std::size_t>(position)), continueCommands)};
     }
     std::vector<Node> footer{withId(
         button({.label = options.backLabel, .onClick = set(options.step, options.step - 1)}).enabled(options.step > 0),
@@ -4963,19 +4996,9 @@ struct StepperParts {
     for (Json const& node : std::get<Json::array_t>(extra.data)) {
         footer.emplace_back(node, options.extra.facts());
     }
-    // Continue's text: the last step's finish text, else the step's own, else the shared one.
-    Label continueText = cond(eq(options.step, last), Label{options.finishLabel}, Label{options.continueLabel});
-    if (anyContinueLabel) {
-        auto const textOf = [&](std::int64_t at) {
-            auto const& own = options.steps.at(static_cast<std::size_t>(at)).continueLabel;
-            return own ? *own : at == last ? options.finishLabel : options.continueLabel;
-        };
-        continueText = Label{textOf(last)};
-        for (auto at = last - 1; at >= 0; --at) {
-            continueText = cond(eq(options.step, at), Label{textOf(at)}, continueText);
-        }
-    }
-    Node next = button({.label = continueText, .emphasis = ButtonEmphasis::Primary, .onClick = continueCommands});
+    Node next = button({.label = detail::stepperContinueText(options),
+                        .emphasis = ButtonEmphasis::Primary,
+                        .onClick = continueCommands});
     if (options.continueStretches) {
         next = next.sizing(stretch(), content());
     }

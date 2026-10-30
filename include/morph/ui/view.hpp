@@ -737,6 +737,7 @@ struct Padding {
     /// @brief A step for each axis.
     /// @param vertical_   The step above and below.
     /// @param horizontal_ The step at the sides.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): vertical, then horizontal; swapped, only the axes trade places.
     constexpr Padding(int vertical_, int horizontal_) noexcept : vertical(vertical_), horizontal(horizontal_) {}
 
     /// @brief Whether both steps match.

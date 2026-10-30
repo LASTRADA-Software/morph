@@ -2655,6 +2655,14 @@ public:
     // NOLINTNEXTLINE(misc-no-recursion): one level per nested node of the document.
     [[nodiscard]] Node lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx, int gap = 0);
 
+    /// @brief The size request of one child of a holder.
+    /// @param node The child.
+    /// @param own  The names the holder's own scope declares.
+    /// @param ctx  Where the holder is lowered.
+    /// @return The child's hints; content size where its sizing reads a name in @p own.
+    [[nodiscard]] LayoutHints nodeHints(DocNode const& node, std::set<std::string, std::less<>> const& own,
+                                        LowerCtx const& ctx);
+
     /// @brief The size request of a holder of @p content: the largest stretch of its children on each axis.
     ///
     /// A literal sizing is read as written and a computed one is evaluated once in the enclosing scope. A computed
@@ -2831,6 +2839,8 @@ private:
     Node lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     void presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options);
     Node lowerTabs(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    Prop<std::size_t> controlledTabSelection(DocNode const& node, LowerCtx const& ctx, ExprPtr const& selected,
+                                             std::shared_ptr<std::vector<std::string>> const& ids);
     std::shared_ptr<RtScope> rowScope(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
                                       std::vector<DocNode const*> const& content, std::string key);
     bool focusTarget(Command const& command, RtScope const& scope, Bindings const* bindings);
@@ -6812,6 +6822,7 @@ inline constexpr int kDialogGap = 3;
 /// @param expr  The expression.
 /// @param names The names.
 /// @return Whether any form of the expression names one.
+// NOLINTNEXTLINE(misc-no-recursion): an expression nests its arguments and fields, and the walk follows them.
 [[nodiscard]] inline bool readsAny(ExprPtr const& expr, std::set<std::string, std::less<>> const& names) {
     if (!expr) {
         return false;
@@ -6819,13 +6830,23 @@ inline constexpr int kDialogGap = 3;
     if (!expr->name.empty() && names.contains(expr->name)) {
         return true;
     }
-    return std::ranges::any_of(expr->args, [&](ExprPtr const& arg) { return readsAny(arg, names); }) ||
-           std::ranges::any_of(expr->fields, [&](auto const& field) { return readsAny(field.second, names); });
+    for (ExprPtr const& arg : expr->args) {
+        if (readsAny(arg, names)) {
+            return true;
+        }
+    }
+    for (auto const& field : expr->fields) {
+        if (readsAny(field.second, names)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// @brief Collects the element ids of a document subtree.
 /// @param node The root.
 /// @param out  Receives the ids.
+// NOLINTNEXTLINE(misc-no-recursion): a node's children and parts are nodes, and the walk follows them.
 inline void collectIds(DocNode const& node, std::set<std::string, std::less<>>& out) {
     if (!node.id.empty()) {
         out.insert(node.id);
@@ -6839,6 +6860,7 @@ inline void collectIds(DocNode const& node, std::set<std::string, std::less<>>& 
     }
 }
 
+// NOLINTNEXTLINE(misc-no-recursion): lowering a node lowers its children, which come back through here.
 inline Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx, int gap) {
     if (nodes.size() == 1) {
         return lower(*nodes.front(), ctx);
@@ -6849,6 +6871,29 @@ inline Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx con
         children.push_back(lower(*child, ctx));
     }
     return ui::column(listColumn(std::move(children), gap));
+}
+
+inline LayoutHints ScreenCore::nodeHints(DocNode const& node, std::set<std::string, std::less<>> const& own,
+                                         LowerCtx const& ctx) {
+    LayoutHints hints;
+    if (ExprPtr const sizing = node.prop("sizing")) {
+        if (sizing->kind != ExprKind::Literal && readsAny(sizing, own)) {
+            report(sizing->path,
+                   "this sizing reads a name the case declares, so the case is held at its "
+                   "content size");
+        } else {
+            Value const value = once(ctx, sizing);
+            Value const* const width = value.field("width");
+            Value const* const height = value.field("height");
+            if (width != nullptr || height != nullptr) {
+                hints.width = width != nullptr && isSizing(*width) ? sizingOf(*width) : Sizing::content();
+                hints.height = height != nullptr && isSizing(*height) ? sizingOf(*height) : Sizing::content();
+            } else if (isSizing(value)) {
+                hints.width = sizingOf(value);
+            }
+        }
+    }
+    return hints;
 }
 
 inline LayoutHints ScreenCore::holderHints(std::span<DocNode const* const> content, ScopeDecl const* decl,
@@ -6877,24 +6922,7 @@ inline LayoutHints ScreenCore::holderHints(std::span<DocNode const* const> conte
     std::vector<Sizing> widths;
     std::vector<Sizing> heights;
     for (DocNode const* const node : content) {
-        LayoutHints hints;
-        if (ExprPtr const sizing = node->prop("sizing")) {
-            if (sizing->kind != ExprKind::Literal && readsAny(sizing, own)) {
-                report(sizing->path,
-                       "this sizing reads a name the case declares, so the case is held at its "
-                       "content size");
-            } else {
-                Value const value = once(ctx, sizing);
-                Value const* const width = value.field("width");
-                Value const* const height = value.field("height");
-                if (width != nullptr || height != nullptr) {
-                    hints.width = width != nullptr && isSizing(*width) ? sizingOf(*width) : Sizing::content();
-                    hints.height = height != nullptr && isSizing(*height) ? sizingOf(*height) : Sizing::content();
-                } else if (isSizing(value)) {
-                    hints.width = sizingOf(value);
-                }
-            }
-        }
+        LayoutHints const hints = nodeHints(*node, own, ctx);
         widths.push_back(hints.width);
         heights.push_back(hints.height);
     }
@@ -8619,6 +8647,27 @@ inline Node ScreenCore::lowerSwitch(DocNode const& node, LowerCtx const& ctx) {
     return ui::switchOf(std::move(spec));
 }
 
+// The tab a bound `selected` names. A value that names no tab shows the first, and is reported once.
+inline Prop<std::size_t> ScreenCore::controlledTabSelection(DocNode const& node, LowerCtx const& ctx,
+                                                            ExprPtr const& selected,
+                                                            std::shared_ptr<std::vector<std::string>> const& ids) {
+    auto const unknownReported = std::make_shared<bool>(false);
+    return Prop<std::size_t>{[this, scope = ctx.scope, bindings = ctx.bindings, selected, ids, unknownReported,
+                              path = pointerAppend(node.path, "selected")]() -> std::size_t {
+        Value const value = evalIn(*scope, bindings.get(), selected);
+        std::string const* const named = value.asString();
+        auto const found = named == nullptr ? ids->end() : std::ranges::find(*ids, *named);
+        if (found != ids->end()) {
+            return static_cast<std::size_t>(std::distance(ids->begin(), found));
+        }
+        if (!*unknownReported) {
+            *unknownReported = true;
+            report(path, canonicalJson(value) + " names no tab; the first is shown");
+        }
+        return 0;
+    }};
+}
+
 // A document names tabs by id; the view tree by index, so the ids map to indices once. A bound `selected` is the
 // controlled index: a pick runs `onChoose` and the page follows `selected` alone. Without it the node keeps the
 // user's pick itself, as a bound index too, whose page follows the pick: a constant would move only the highlight.
@@ -8640,26 +8689,8 @@ inline Node ScreenCore::lowerTabs(DocNode const& node, LowerCtx const& ctx, Elem
     Commands const* const onChoose = node.event("onChoose");
     bool const controlled = selected && (selected->kind != ExprKind::Literal || !selected->literal.isNull());
     auto const picked = std::make_shared<reactive::Signal<std::size_t>>(runtime(), std::size_t{0});
-    if (controlled) {
-        // A value that names no tab shows the first, and is unknownReported once.
-        auto const unknownReported = std::make_shared<bool>(false);
-        spec.selected = [this, scope = ctx.scope, bindings = ctx.bindings, selected, ids, unknownReported,
-                         path = pointerAppend(node.path, "selected")]() -> std::size_t {
-            Value const value = evalIn(*scope, bindings.get(), selected);
-            std::string const* const named = value.asString();
-            auto const found = named == nullptr ? ids->end() : std::ranges::find(*ids, *named);
-            if (found != ids->end()) {
-                return static_cast<std::size_t>(std::distance(ids->begin(), found));
-            }
-            if (!*unknownReported) {
-                *unknownReported = true;
-                report(path, canonicalJson(value) + " names no tab; the first is shown");
-            }
-            return 0;
-        };
-    } else {
-        spec.selected = [picked] { return picked->get(); };
-    }
+    spec.selected = controlled ? controlledTabSelection(node, ctx, selected, ids)
+                               : Prop<std::size_t>{[picked] { return picked->get(); }};
     spec.onSelect = [this, ctx, onChoose, ids, picked, controlled, element](std::size_t index) {
         if (!controlled) {
             picked->set(index);

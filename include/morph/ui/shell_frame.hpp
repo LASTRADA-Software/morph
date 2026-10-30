@@ -86,7 +86,8 @@ public:
           _padded{backend.createStack(_page.get(), Axis::Horizontal)},
           _left{backend.createSpacer(_padded.get())},
           _content{backend.createStack(_padded.get(), Axis::Vertical)},
-          _right{backend.createSpacer(_padded.get())} {
+          _right{backend.createSpacer(_padded.get())},
+          _onSignOut{options.onSignOut} {
         _root->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
         _root->setTestId("shell");
 
@@ -113,7 +114,6 @@ public:
         _signOut->setEmphasis(ButtonEmphasis::Ghost);
         _signOut->setTestId("shell_signOut");
         _signOut->setVisible(static_cast<bool>(options.onSignOut));
-        _onSignOut = options.onSignOut;
         _signOut->setOnClick(std::move(options.onSignOut));
 
         _main->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});

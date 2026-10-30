@@ -1069,7 +1069,11 @@ public:
     void setPrefix(std::string_view prefix) override { set("prefix", formatText(prefix)); }
     void setMono(bool mono) override { set("mono", formatBool(mono)); }
     void setAlign(Align align) override {
-        set("align", align == Align::End ? "end" : align == Align::Center ? "center" : "start");
+        if (align == Align::End) {
+            set("align", "end");
+        } else {
+            set("align", align == Align::Center ? "center" : "start");
+        }
     }
     void setDecimals(int decimals) override { set("decimals", std::to_string(decimals)); }
     void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }

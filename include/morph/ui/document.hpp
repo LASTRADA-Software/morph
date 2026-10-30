@@ -3693,26 +3693,31 @@ private:
         }
     }
 
+    // The closed-set keys of a button, and the shape and style pair that cannot go together.
+    static void checkButtonValues(DocNode const& node) {
+        static constexpr std::array<std::string_view, 5> kEmphasis = {"normal", "primary", "danger", "ghost",
+                                                                      "dangerOutline"};
+        checkChoice(node, "emphasis", kEmphasis);
+        static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
+        checkChoice(node, "style", kStyles);
+        static constexpr std::array<std::string_view, 3> kShapes = {"default", "round", "square"};
+        checkChoice(node, "shape", kShapes);
+        if (node.name("shape") == "square" && node.name("style") == "item") {
+            refuse(pointerAppend(node.path, "shape"),
+                   "an item fills its line, so it has no square outline; `square` is a push button's");
+        }
+        static constexpr std::array<std::string_view, 2> kSizes = {"normal", "small"};
+        checkChoice(node, "size", kSizes);
+        checkEntryContent(node);
+    }
+
     // The keys of a kind that take one of a closed set of values, and the pairs of keys that need each other.
     static void checkKindValues(DocNode const& node) {
         if (node.kind == "column" || node.kind == "row" || node.kind == "panel") {
             checkPadding(node);
         }
         if (node.kind == "button") {
-            static constexpr std::array<std::string_view, 5> kEmphasis = {"normal", "primary", "danger", "ghost",
-                                                                          "dangerOutline"};
-            checkChoice(node, "emphasis", kEmphasis);
-            static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
-            checkChoice(node, "style", kStyles);
-            static constexpr std::array<std::string_view, 3> kShapes = {"default", "round", "square"};
-            checkChoice(node, "shape", kShapes);
-            if (node.name("shape") == "square" && node.name("style") == "item") {
-                refuse(pointerAppend(node.path, "shape"),
-                       "an item fills its line, so it has no square outline; `square` is a push button's");
-            }
-            static constexpr std::array<std::string_view, 2> kSizes = {"normal", "small"};
-            checkChoice(node, "size", kSizes);
-            checkEntryContent(node);
+            checkButtonValues(node);
         } else if (node.kind == "grid") {
             checkGrid(node);
         } else if (node.kind == "column" && node.flags.contains("wrap")) {
