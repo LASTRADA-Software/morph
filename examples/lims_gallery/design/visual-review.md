@@ -112,3 +112,33 @@ Left for later, each a framework addition rather than a fix:
   accent bar together.
 - Runs in a head's title, for plate's mono "PL-0193".
 - An eyebrow line above a head's title, and section labels in small capitals.
+
+## After batch I
+
+All ten screens were re-grabbed at 1000×830 and 390×844 after batch I's items landed. The sidebar shows at 1000 px
+(`expanded` begins at 108 units), a head's lead sits where its screen puts it, a head that is one line is centred,
+a joined page continues the head's block with its rule under the whole block, a dialog's rules span the overlay, and
+the icons that paint `currentColor` follow their control.
+
+Closed and checked in the grabs:
+
+- Receipt's session line and counts close the title's line; the principal ("Dr. A. Meyer") closes every expanded
+  head; the session table's header band reaches its card's edges.
+- Results' "In progress" sits at the right of the eyebrow's line; its compact head carries the sample as the title
+  and the previous/next buttons join it.
+- Console's compact head is dark with a white menu and scan icon and no rule; its alert's "Open run" is a framed
+  button, stretched under the text on compact; the two bottom panes are one card.
+- Plate's subtitle follows its title; its compact buttons sit in the head's white block, and the wells read "A1 ·
+  Standard 1, 100 ng/mL" as one text.
+- Review's phone worksheet carries its sheet line, title and tags in the head; its tabs scroll their own padding and
+  the flagged rows run edge to edge.
+- The pagers draw chevrons; a banner's link is the accent, not the default blue; the audit facets rail runs the
+  page's full height.
+
+Left, each environmental or a design limit rather than a gap:
+
+- Console's and review's expanded tables are wider than their panes at 1000 px, as the mockups' own are; the fonts
+  (Inter, JetBrains Mono) are not installed here, so character widths are wider than the designs'.
+- A tab's page is its own scroll, so a nested `scroll` in a page does not fill it: review's pages pad themselves with
+  a column instead.
+- The `Show` control of review's compact results keeps a gap above it that the design does not have.

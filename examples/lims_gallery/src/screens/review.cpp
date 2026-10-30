@@ -507,13 +507,13 @@ ui::Node showChoice(Review const& review, bool compact) {
     auto const options =
         ui::list({ui::obj({{"key", "all"}, {"label", ui::format("All {0}", {review.resultCount})}}),
                   ui::obj({{"key", "flagged"}, {"label", ui::format("Flagged {0}", {review.flaggedCount})}})});
-    auto const choice = ui::select({.options = options,
-                                    .selected = review.show,
-                                    .label = "Show results",
-                                    .style = "segmented",
-                                    .onChoose = ui::set(review.show, ui::event())})
-                            .testId("show");
-    // Compact drops the caption and stretches the control across the page.
+    ui::Node choice = ui::select({.options = options,
+                                  .selected = review.show,
+                                  .label = "Show results",
+                                  .style = "segmented",
+                                  .onChoose = ui::set(review.show, ui::event())})
+                          .testId("show");
+    // Compact drops the caption.
     if (compact) {
         return choice;
     }
@@ -647,15 +647,15 @@ ui::Node recordTabs(Review const& review, bool compact) {
                                 reviewComment(review)};
     }
     ui::TabsOptions options;
-    // Compact pages scroll their own padding, so a bleeding child of a page reaches the scroll's edges.
+    // A tab's page scrolls itself, so with `pageInset: 0` a compact page's own padding lies inside the scroll, and a
+    // bleeding child of the page's column reaches the scroll's edges.
     auto const page = [compact](ui::Nodes const& children) -> ui::Nodes {
         if (!compact) {
             return children;
         }
-        return ui::Nodes{
-            ui::scroll({ui::column(children, {.gap = 2, .padding = 4})}).sizing(ui::stretch(), ui::stretch())};
+        return ui::Nodes{ui::column(children, {.gap = 2, .padding = 4})};
     };
-    std::vector<ui::Tab> tabs{
+    std::vector<ui::Tab> const tabs{
         {.label = "Results", .children = page(resultsPage)},
         {.label = compact ? "Previous" : "Previous lots", .children = page(ui::Nodes{lotTable(review)})},
         {.label = ui::format(compact ? "Audit {0}" : "Audit trail · {0}", {review.auditCount}),
@@ -817,8 +817,8 @@ ui::Node expandedLayout(Review const& review) {
         .sizing(ui::stretch(), ui::stretch());
 }
 
-// The worksheet is the phone's page: the back link, the record's tabs (each page scrolling its own padding) and the
-// decisions, ruled off from one another. The root continues the head's block, which carries the sheet line, the
+// The worksheet is the phone's page: the back link, the record's tabs (each page padding itself inside its scroll) and
+// the decisions, ruled off from one another. The root continues the head's block, which carries the sheet line, the
 // worksheet's title and its summary tags.
 ui::Node compactWorksheet(Review const& review) {
     auto const back = ui::column({ui::button({.label = ui::format("‹ Awaiting review · {0}", {review.waiting}),
@@ -847,7 +847,7 @@ ui::Node compactLayout(Review const& review) {
 
 // The phone's worksheet page carries the sheet line, the worksheet's title and its summary tags in the head, as the
 // design's header does; the queue page and the expanded layout carry none.
-void declareHead(ui::Scope& screen, Review const& review) {
+static void declareHead(ui::Scope& screen, Review const& review) {
     Flag const onSheet = ui::eq(review.width, "compact") && !review.showQueue;
     auto const none = ui::AnyHandle{std::vector<std::string>{}};
     auto const line =

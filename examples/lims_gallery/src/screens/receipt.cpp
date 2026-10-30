@@ -368,7 +368,7 @@ ui::Node rejectionLine(Receipt const& receipt) {
 ui::Node sessionTable(Receipt const& receipt, bool bleeds) {
     auto const outcomeTone = ui::cond(ui::eq(ui::row("outcome"), "Received"), ui::Handle<std::string>{"ok"},
                                       ui::Handle<std::string>{"err"});
-    ui::Node table =
+    ui::Node const table =
         ui::table(receipt.session, {.key = ui::row("sample"),
                                     .columns = {{.name = "time",
                                                  .label = "Time",
