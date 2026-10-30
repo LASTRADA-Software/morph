@@ -95,3 +95,20 @@ Added screen fixes:
 
 Not in any batch: an eyebrow line above a head's title (instrument's breadcrumb), the dialog title's 16 px size and a
 rule above a dialog's footer (batch G owns both per its design), section labels in small grey capitals (audit).
+
+## After batch G
+
+A last comparison after batch G found two regressions (dialog actions at the left, fixed; review's tall row, which
+was its change column wrapping off-screen, fixed in the screen) and medium differences, fixed in the framework (a
+folded section is its 44 px header, a section header keeps its inset, tabs fit as many as fit before "More", a head
+action shows its icon) and in the screens.
+
+Left for later, each a framework addition rather than a fix:
+
+- A pinned bar that bleeds to the window's edge on compact. The shell's page inset holds it 16 px in; a bar would
+  need to cancel the inset it sits in, or a screen would need to opt out of the page inset.
+- A square, glyph-sized button for pagers (audit, samples, console, results).
+- A control inside a selectable entry, so samples' compact cards can carry their checkbox and the selection's
+  accent bar together.
+- Runs in a head's title, for plate's mono "PL-0193".
+- An eyebrow line above a head's title, and section labels in small capitals.
