@@ -828,3 +828,53 @@ TEST_CASE("qt_quick dialog: a sheet's title is centred on the sheet as plain cha
     CHECK(rule->mapToScene(QPointF{0, 0}).x() == Catch::Approx(0).margin(0.5));
     CHECK(rule->mapToScene(QPointF{rule->width(), 0}).x() == Catch::Approx(390).margin(0.5));
 }
+
+// Mutation: drop the rules' margins (the gaps are the layout's 5 px), or leave the popup's bottom padding at step 4.
+TEMPLATE_TEST_CASE(
+    "qt_quick overlays: a rule stands step 3 off its neighbours and the actions sit step 3 off the edge", "[qt_quick]",
+    ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    std::unique_ptr<TestType> overlay;
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(nullptr);
+    } else {
+        overlay = scene.backend().createDrawer(nullptr, ui::Side::End);
+    }
+    overlay->setTitle("Sign the results");
+    overlay->setDescription("Enter your password to sign the results.");
+    auto const field = scene.backend().createTextInput(overlay.get(), ui::TextInputMode::SingleLine);
+    auto const done = scene.backend().createButton(&overlay->footer());
+    done->setLabel("Done");
+    auto const cancel = scene.backend().createButton(&overlay->footer());
+    cancel->setLabel("Cancel");
+    overlay->setOpen(true);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal const step = theme->property("space").value<QList<qreal>>().at(3);
+    QQuickItem const& contentRoot = *scene.window().contentItem();
+    QQuickItem const* const headRule = namedIn(contentRoot, QStringLiteral("headRule"));
+    QQuickItem const* const footerRule = namedIn(contentRoot, QStringLiteral("footerRule"));
+    REQUIRE((headRule != nullptr && footerRule != nullptr));
+    REQUIRE(footerRule->isVisible());
+    auto const top = [](QQuickItem const& item) { return item.mapToScene(QPointF{0, 0}).y(); };
+    auto const bottom = [&top](QQuickItem const& item) { return top(item) + item.height(); };
+    QQuickItem const& fieldItem = Scene::itemOf(*field);
+    QQuickItem const& doneItem = Scene::itemOf(*done);
+    QQuickItem const* const description = namedIn(contentRoot, QStringLiteral("description"));
+    REQUIRE(description != nullptr);
+    CHECK(top(fieldItem) == Catch::Approx(bottom(*headRule) + step).margin(0.6));
+    CHECK(top(*headRule) == Catch::Approx(bottom(*description) + step).margin(0.6));
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        // A drawer's body fills its height, so only a dialog's footer follows its body closely.
+        CHECK(top(*footerRule) == Catch::Approx(bottom(fieldItem) + step).margin(0.6));
+    }
+    CHECK(top(doneItem) == Catch::Approx(bottom(*footerRule) + step).margin(0.6));
+    // The actions end where the content does, and the popup pads step 3 below them.
+    QObject const* const popup = popupOf(Scene::itemOf(static_cast<ui::Widget&>(*overlay)));
+    REQUIRE(popup != nullptr);
+    auto const* const popupContent = qobject_cast<QQuickItem const*>(popup->property("contentItem").value<QObject*>());
+    REQUIRE(popupContent != nullptr);
+    CHECK(bottom(Scene::itemOf(*cancel)) == Catch::Approx(bottom(*popupContent)).margin(0.6));
+    CHECK(popup->property("bottomPadding").toReal() == Catch::Approx(step));
+}
