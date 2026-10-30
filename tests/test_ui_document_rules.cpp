@@ -340,8 +340,10 @@ TEST_CASE(
     CHECK(refusal(document(R"({"kind": "column", "divided": true, "children": []})")) == "loads");
     CHECK(refusal(document(R"({"kind": "column", "divided": {"ref": "x"}, "children": []})")) ==
           "/view/divided: `divided` is a literal `true` or `false`");
-    CHECK(refusal(document(R"({"kind": "row", "divided": true, "children": []})")) ==
-          "/view/divided: only a column is divided; a row has no rules between rows");
+    CHECK(refusal(document(R"({"kind": "row", "divided": true, "children": []})")) == "loads");
+    CHECK(refusal(document(R"({"kind": "row", "divided": true, "wrap": true, "children": []})")) ==
+          "/view/divided: a wrapping row has no single line to rule between; `divided` is for a row that does not "
+          "`wrap`");
     CHECK(refusal(each(R"("divided": true,)")) == "loads");
     CHECK(refusal(each(R"("axis": "horizontal", "divided": true,)")) ==
           "/view/divided: `divided` draws rules between rows of a column; this `forEach`'s `axis` is \"horizontal\"");
