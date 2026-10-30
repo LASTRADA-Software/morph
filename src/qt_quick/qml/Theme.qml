@@ -515,6 +515,48 @@ QtObject {
         chart3: theme.chart3
         chart4: theme.chart4
     }
+    // The shell's top bar while the page continues the head's block: the bar's roles, each bound to the bar's, so a
+    // theme that restyles `bar` restyles it too and one that declares `toolbarJoined` replaces these alone.
+    readonly property MorphScheme toolbarJoinedScheme: MorphScheme {
+        surface: theme.barScheme.surface
+        text: theme.barScheme.text
+        muted: theme.barScheme.muted
+        accent: theme.barScheme.accent
+        focus: theme.barScheme.focus
+        selection: theme.barScheme.selection
+        border: theme.barScheme.border
+        neutral: theme.barScheme.neutral
+        neutralBg: theme.barScheme.neutralBg
+        neutralBorder: theme.barScheme.neutralBorder
+        neutralDot: theme.barScheme.neutralDot
+        hover: theme.barScheme.hover
+        track: theme.barScheme.track
+        controlSurface: theme.barScheme.controlSurface
+        controlBorder: theme.barScheme.controlBorder
+        divider: theme.barScheme.divider
+        borderDashed: theme.barScheme.borderDashed
+        error: theme.barScheme.error
+        success: theme.barScheme.success
+        info: theme.barScheme.info
+        warn: theme.barScheme.warn
+        successBg: theme.barScheme.successBg
+        successBorder: theme.barScheme.successBorder
+        successDot: theme.barScheme.successDot
+        warnBg: theme.barScheme.warnBg
+        warnBorder: theme.barScheme.warnBorder
+        warnDot: theme.barScheme.warnDot
+        errorBg: theme.barScheme.errorBg
+        errorBorder: theme.barScheme.errorBorder
+        errorDot: theme.barScheme.errorDot
+        infoBg: theme.barScheme.infoBg
+        infoBorder: theme.barScheme.infoBorder
+        infoDot: theme.barScheme.infoDot
+        tableHeader: theme.barScheme.tableHeader
+        chart1: theme.barScheme.chart1
+        chart2: theme.barScheme.chart2
+        chart3: theme.barScheme.chart3
+        chart4: theme.barScheme.chart4
+    }
     property var extraSchemes: ({})
     readonly property Component schemeComponent: Component {
         MorphScheme {}
@@ -535,6 +577,8 @@ QtObject {
             return toolbarScheme
         case "bar":
             return barScheme
+        case "toolbarJoined":
+            return toolbarJoinedScheme
         default:
             if (!(name in extraSchemes))
                 extraSchemes[name] = schemeComponent.createObject(theme) as MorphScheme
@@ -549,7 +593,7 @@ QtObject {
 
     // Whether a surface name is one the theme draws a background for.
     function draws(name: string): bool {
-        return name === "page" || name === "card" || name === "sidebar" || name === "toolbar" || name === "bar" || (name in extraSchemes)
+        return name === "page" || name === "card" || name === "sidebar" || name === "toolbar" || name === "toolbarJoined" || name === "bar" || (name in extraSchemes)
     }
 
     // A text role's colour: Normal, Muted, Heading, Error, Success.

@@ -3868,6 +3868,11 @@ struct ContainerOptions {
 /// @brief A two-step padding for `ContainerOptions::padding`: the vertical step above and below, the horizontal step
 ///        at the sides, written as the constant list `{"lit": [vertical, horizontal]}`.
 /// @param vertical   The step above and below, 0 to `kMaxSpacingStep`.
+    /// @brief Whether the stack's first child continues the head's block: as the screen's shown root, the shell draws
+    ///        its top bar on the `toolbarJoined` surface, with no rule under it, and the first child draws the rule
+    ///        under the whole block. Needs `pageEdge`, since an inset page has a margin between it and the head; the
+    ///        loader refuses it without. A `column` or `row`; written for a grid too, so the loader refuses it.
+    bool headJoined = false;
 /// @param horizontal The step at the sides, 0 to `kMaxSpacingStep`.
 /// @return The padding.
 [[nodiscard]] inline AnyHandle padding(int vertical, int horizontal) {
@@ -3912,6 +3917,9 @@ namespace detail {
 /// @param children The children.
 /// @param options  The gap and the alignment.
 /// @return The node.
+    if (options.headJoined) {
+        node.flag("headJoined");
+    }
 [[nodiscard]] inline Node column(Nodes const& children, ContainerOptions const& options = {}) {
     return detail::stackNode("column", children, options);
 }
@@ -4073,7 +4081,22 @@ namespace detail {
 ///        all have a `visible` condition shows while any of them does. The column spans the page: the content is
 ///        inset by `PinnedOptions::inset` inside the scroll, and each bar is padded by step 2 above and below and by
 ///        the inset at its sides, so a bar's surface and rule reach the page's edges and its content lines up with the
-///        body's. The scroll takes the column's spare height, so the bars stay at the column's ends however long the
+/// @brief Whether any of the nodes has a `visible` condition.
+/// @param nodes The nodes.
+/// @return Whether one can hide.
+[[nodiscard]] inline bool anyConditioned(Nodes const& nodes) {
+    for (Json const& item : std::get<Json::array_t>(nodes.json().data)) {
+        if (std::get<Json::object_t>(item.data).contains("visible")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+///        body's. When the top bar always shows (it has nodes, none with a `visible` condition) and the page is inset,
+///        the column also says it `headJoined`: the bar continues the head's block, so the shell draws no rule
+///        between them and the column's own rule under the bar is the block's. The scroll takes the column's spare
+///        height, so the bars stay at the column's ends however long the
 ///        content is. Use it as a screen's root, which the workspace then lets fill the page.
 /// @param content The content that scrolls.
 /// @param options The bars.
@@ -4098,7 +4121,9 @@ namespace detail {
     if (present(options.bottom)) {
         children.push_back(bar(options.bottom));
     }
-    return column(Nodes{children}, {.divided = true, .pageEdge = inset}).sizing(stretch(), stretch());
+    bool const joined = inset && present(options.top) && !detail::anyConditioned(options.top);
+    return column(Nodes{children}, {.divided = true, .pageEdge = inset, .headJoined = joined})
+        .sizing(stretch(), stretch());
 }
 
 /// @brief A scope's builder: declares on the scope and returns the nodes that read it.

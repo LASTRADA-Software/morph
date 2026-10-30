@@ -133,7 +133,7 @@ disappear, not to restyle the defaults. The theme is still applied.
 
 ## Surfaces
 
-A surface is a named set of colour roles a node and everything inside it draw with (`Common::surface`). Five are
+A surface is a named set of colour roles a node and everything inside it draw with (`Common::surface`). Six are
 built in, so an application gets the shell's look with no theme file; a theme index's surface of the same name
 replaces one, and declares any other:
 
@@ -144,6 +144,7 @@ replaces one, and declares any other:
 | `sidebar` | `#1f2430` | text `#c9ccd6`, muted `#7d8396`, accent `#4c8dff`, selection, border, track and divider `#2f3646`, control fill `#2a3040`, control outline `#3a4152`, hover `#ffffff14`, the neutral tone `#7d8396` (its fill that at 15 %); the rest the theme's |
 | `toolbar` | `color.surface`, with a border `#e3e5ea` | the theme's |
 | `bar` | `color.surface`, with no border, radius or shadow; the bars `pinned` writes | the theme's |
+| `toolbarJoined` | the `bar`'s: `color.surface`, no border | the `bar`'s, through its own scheme whose every role is bound to `bar`'s, so a theme that restyles `bar` restyles it too and one that declares `toolbarJoined` replaces these roles alone; the shell draws its top bar on it while the page continues the head's block |
 
 A surface's `border.style` is read like any token of it. While it is `dashed`, the outline of a button, a badge and an input on the surface is stroked in dashes (a `MorphDashedOutline`) in place of the solid border; the surface's own background has no border to dash, except a card's and a toolbar's, which stay solid. A round button or badge (`shape: round`) draws the surface's background with its own corners, half its height, so no square shows behind it.
 

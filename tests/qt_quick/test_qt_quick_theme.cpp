@@ -1688,3 +1688,41 @@ TEST_CASE("qt_quick theme: a ghost button draws a currentColor icon in its capti
     CHECK(pixel.green() < 60);
     CHECK(pixel.blue() < 60);
 }
+
+// Mutation: answer `barScheme` for `toolbarJoined` (the first check fails), or give `toolbarJoinedScheme` roles of its
+// own that are not bound to the bar's (the second fails).
+TEST_CASE("qt_quick theme: the joined top bar's scheme is its own and follows the bar's", "[qt_quick]") {
+    Scene scene;
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto const schemeOf = [theme](char const* name) {
+        QVariant made;
+        REQUIRE(QMetaObject::invokeMethod(theme, "schemeObject", Qt::DirectConnection, qReturnArg(made),
+                                          QVariant{QString::fromLatin1(name)}));
+        auto* const found = made.value<QObject*>();
+        REQUIRE(found != nullptr);
+        return found;
+    };
+    CHECK(schemeOf("toolbarJoined")->property("surface").value<QColor>() ==
+          schemeOf("bar")->property("surface").value<QColor>());
+    {
+        std::map<std::string, std::string, std::less<>> const themes{
+            {"theme/index.json",
+             R"({"vocab": "ui-theme/1", "base": "theme/base.json", "surfaces": {"toolbarJoined": "theme/joined.json"}})"},
+            {"theme/base.json", R"({"color": {"$type": "color", "accent": {"$value": "#aa0055"}}})"},
+            {"theme/joined.json", R"({"color": {"$type": "color", "surface": {"$value": "#EEEEEE"}}})"}};
+        REQUIRE(morph::qt_quick::applyBundleTheme(scene.engine(), themes).empty());
+        CHECK(schemeOf("toolbarJoined")->property("surface").value<QColor>() == QColor{"#EEEEEE"});
+        CHECK(schemeOf("bar")->property("surface").value<QColor>() != QColor{"#EEEEEE"});
+    }
+    {
+        std::map<std::string, std::string, std::less<>> const themes{
+            {"theme/index.json",
+             R"({"vocab": "ui-theme/1", "base": "theme/base.json", "surfaces": {"bar": "theme/bar.json"}})"},
+            {"theme/base.json", R"({"color": {"$type": "color", "accent": {"$value": "#aa0055"}}})"},
+            {"theme/bar.json", R"({"color": {"$type": "color", "surface": {"$value": "#DDDDDD"}}})"}};
+        REQUIRE(morph::qt_quick::applyBundleTheme(scene.engine(), themes).empty());
+        CHECK(schemeOf("bar")->property("surface").value<QColor>() == QColor{"#DDDDDD"});
+        CHECK(schemeOf("toolbarJoined")->property("surface").value<QColor>() == QColor{"#DDDDDD"});
+    }
+}

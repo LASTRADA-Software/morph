@@ -156,7 +156,7 @@ sits in a `column` padded by it on every side, and a bar is a `column` of its li
 `surface` (default the built-in `bar`; an empty `surface` writes the column with none), so a bar's surface and rule span
 the column while its content lines up with the body's. `.inset = 0` writes the content as it is, a bar padded by 2 on
 every side and no `pageEdge`, and the shell insets the page. An empty list leaves its bar out, and a bar whose nodes all
-have a `visible` condition is visible while any of them is (a list with an unconditioned node always shows). `padding(
+have a `visible` condition is visible while any of them is (a list with an unconditioned node always shows). A page with a top bar, an inset and no `visible` condition on any of the top bar's nodes also writes `headJoined: true`: the bar continues the head's block, so the shell draws no rule between them. A bar that can hide would leave the head with no rule under it while hidden, so such a page writes none, and a screen that wants it writes the key itself (`ContainerOptions::headJoined`). `padding(
 vertical, horizontal)` writes a stack's two-step padding, the constant `{"lit": [vertical, horizontal]}`.
 `stepper(StepperOptions{.step, .steps, .backLabel, .continueLabel, .finishLabel, .onFinish, .extra, .labelled,
 .continueStretches, .testIdPrefix})` writes a wizard over screen state, with no node of its own: a column of a `steps`

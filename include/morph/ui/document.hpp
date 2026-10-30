@@ -857,15 +857,16 @@ inline constexpr std::array<KeySpec, 14> kHeadToolKeys = {{{"id", Shape::Name, {
                                                            {"enabled", Shape::Condition}}};
 /// @brief The keys of `column` and `row`; `wrap` is a row's, read on a column only to refuse it, and `divided` a
 ///        column's or a row's that does not wrap.
-inline constexpr std::array<KeySpec, 9> kContainerKeys = {{{"children", Shape::Nodes},
-                                                           {"gap", Shape::Expr},
-                                                           {"padding", Shape::Expr},
-                                                           {"align", Shape::Text},
-                                                           {"justify", Shape::Text},
-                                                           {"wrap", Shape::Flag},
-                                                           {"divided", Shape::Flag},
-                                                           {"pageEdge", Shape::Flag},
-                                                           {"selected", Shape::Condition}}};
+inline constexpr std::array<KeySpec, 10> kContainerKeys = {{{"children", Shape::Nodes},
+                                                            {"gap", Shape::Expr},
+                                                            {"padding", Shape::Expr},
+                                                            {"align", Shape::Text},
+                                                            {"justify", Shape::Text},
+                                                            {"wrap", Shape::Flag},
+                                                            {"divided", Shape::Flag},
+                                                            {"pageEdge", Shape::Flag},
+                                                            {"headJoined", Shape::Flag},
+                                                            {"selected", Shape::Condition}}};
 /// @brief The keys of `grid`; `justify` and `selected` are read only to refuse them.
 inline constexpr std::array<KeySpec, 7> kGridKeys = {{{"children", Shape::Nodes},
                                                       {"gap", Shape::Expr},
@@ -3742,6 +3743,10 @@ private:
         }
         if (node.kind == "button") {
             static constexpr std::array<std::string_view, 5> kEmphasis = {"normal", "primary", "danger", "ghost",
+        if ((node.kind == "column" || node.kind == "row") && node.flag("headJoined") && !node.flag("pageEdge")) {
+            refuse(pointerAppend(node.path, "headJoined"),
+                   "`headJoined` needs `pageEdge`: an inset page has a margin between it and the head");
+        }
                                                                           "dangerOutline"};
             checkChoice(node, "emphasis", kEmphasis);
             static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};

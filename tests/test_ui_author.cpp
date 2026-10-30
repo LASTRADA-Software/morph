@@ -1768,3 +1768,16 @@ TEST_CASE("bleed() writes the flag and tabs writes pageInset as a literal step, 
     ui::Node const plain = ui::tabs({{.id = "a", .label = "A", .children = ui::text({.text = "x"})}}, {.inset = 4});
     CHECK_FALSE(text(plain).contains("pageInset"));
 }
+
+// Mutation: write `headJoined` for every top bar (the second, third and fourth checks fail), or never (the first).
+TEST_CASE("pinned says the page is headJoined only for an inset page whose top bar always shows", "[ui][author]") {
+    ui::Node const always = ui::pinned(ui::text({.text = "body"}), {.top = ui::text({.text = "bar"})});
+    CHECK(text(always).contains(R"("headJoined":true)"));
+    ui::Node const hideable =
+        ui::pinned(ui::text({.text = "body"}), {.top = ui::text({.text = "bar"}).visible(ui::ref("a"))});
+    CHECK_FALSE(text(hideable).contains("headJoined"));
+    ui::Node const bottomOnly = ui::pinned(ui::text({.text = "body"}), {.bottom = ui::text({.text = "bar"})});
+    CHECK_FALSE(text(bottomOnly).contains("headJoined"));
+    ui::Node const flush = ui::pinned(ui::text({.text = "body"}), {.top = ui::text({.text = "bar"}), .inset = 0});
+    CHECK_FALSE(text(flush).contains("headJoined"));
+}

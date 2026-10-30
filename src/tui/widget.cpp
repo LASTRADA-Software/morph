@@ -210,7 +210,7 @@ namespace {
 
 /// Whether the terminal draws a surface inverted: the dark navigator column and the top bar of the app shell.
 [[nodiscard]] bool invertsSurface(std::string_view surface) noexcept {
-    return surface == "sidebar" || surface == "toolbar";
+    return surface == "sidebar" || surface == "toolbar" || surface == "toolbarJoined";
 }
 
 /// Marks every cell of @p area inverse: what an inverted surface does to what a widget on it painted. Set rather than

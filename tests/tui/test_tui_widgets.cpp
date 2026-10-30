@@ -933,3 +933,27 @@ TEST_CASE("tui widgets: an icon-only button with no glyph draws its accessible n
     labelled->setAccessibleName("Start");
     CHECK(harness.draw() == Rows{"[ ‹  ]", "[ Scan ]", "[ Go ]"});
 }
+
+// Mutation: leave `toolbarJoined` out of the inverted surfaces (the joined top bar then draws plain).
+TEST_CASE("tui widgets: the toolbar surfaces, joined to the head's block or not, draw their subtree inverse",
+          "[tui][widgets]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const toolbar = harness.make<StackImpl>(column.get(), ui::Axis::Vertical);
+    toolbar->setSurface("toolbar");
+    auto const toolbarText = harness.make<TextImpl>(toolbar.get());
+    toolbarText->setText("toolbar");
+    auto const joined = harness.make<StackImpl>(column.get(), ui::Axis::Vertical);
+    joined->setSurface("toolbarJoined");
+    auto const joinedText = harness.make<TextImpl>(joined.get());
+    joinedText->setText("joined");
+    auto const bar = harness.make<StackImpl>(column.get(), ui::Axis::Vertical);
+    bar->setSurface("bar");
+    auto const barText = harness.make<TextImpl>(bar.get());
+    barText->setText("bar");
+    CHECK(harness.draw() == Rows{"toolbar", "joined", "bar"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.inverse);
+    CHECK(buffer.at(1, 0).style.inverse);
+    CHECK_FALSE(buffer.at(2, 0).style.inverse);
+}
