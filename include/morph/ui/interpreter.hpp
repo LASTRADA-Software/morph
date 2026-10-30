@@ -6636,7 +6636,9 @@ inline constexpr std::string_view kRoleNames =
     return spans;
 }
 
-/// Whether a scope declares any name, so a node in it reads names the screen's own scope lacks.
+/// @brief Whether a scope declares any name, so a node in it reads names the screen's own scope lacks.
+/// @param scope The scope.
+/// @return True when it declares a model, state, let, query, mutation, watch or check.
 [[nodiscard]] inline bool declaresNames(ScopeDecl const& scope) noexcept {
     return !(scope.models.empty() && scope.state.empty() && scope.lets.empty() && scope.queries.empty() &&
              scope.mutations.empty() && scope.watches.empty() && scope.checks.empty());
