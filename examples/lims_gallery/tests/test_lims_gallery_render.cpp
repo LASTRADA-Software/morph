@@ -123,7 +123,7 @@ public:
         }
         // Last, so the window is left at the probe's size only after every other mount.
         Mount probeMount{.screen = "lims-gallery.receipt", .width = "compact", .units = 0.0, .probe = true};
-        _mounts.push_back(std::move(probeMount));
+        _mounts.emplace_back(std::move(probeMount));
         _report->expected.push_back("lims-gallery.receipt@compact");
         next();
     }
