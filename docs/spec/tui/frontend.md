@@ -96,7 +96,7 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | DateTimeInput | `YYYY-MM-DD[ HH:MM]` in the display zone, or its pattern, as wide as the pattern writes; the stepping keys work on the parsed instant | typing; Up/Down step |
 | Slider | `[====\|----] value` | Left, Right, Home, End, press and drag on the track |
 | FilePicker | a path field, prompted `Open: ` or `Save: ` | typing; Enter |
-| Banner | its text in its tone (spans as a text's, on the one row, a strong run bold, a toned run in its tone's foreground), `[ action ]`, `[x]` when dismissible | Enter runs the action; Esc or Delete dismisses; a click on either |
+| Banner | its text in its tone (spans as a text's, on the one row, a strong run bold, a toned run in its tone's foreground), `[ action ]` (on a row of its own under the text for a stretched action), `[x]` when dismissible; under `actionStyle` `link` the action is drawn inside the sentence, underlined in the accent, at the run marked `action` or else after the text, and a click on those cells runs it | Enter runs the action; Esc or Delete dismisses; a click on either |
 | Badge | `[text]` in its tone, `(text)` when outlined, a framework icon's glyph before the text; a removable one `[text ×]`, inverse while focused | a removable one: Delete, Backspace, Enter or Space while focused, or a click on the `×`, removes it; a click elsewhere on it focuses it |
 | Progress | `[####......] 40%` and the label; `<=>` when indeterminate | — |
 | Steps | a row per step: `[ ]` pending, `[>]` active, `[x]` done, `[!]` failed; the current one accented; unlabelled, the marks in one row joined by `─` that fills the width | — |

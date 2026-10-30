@@ -872,6 +872,14 @@ public:
     /// @brief Sets what a dismissal calls. A dismissal leaves the banner shown: the application hides it.
     /// @param onDismiss The handler; empty does nothing.
     virtual void setOnDismiss(Action onDismiss) = 0;
+
+    /// @brief Sets how the action is drawn. The mount calls it once, only for a banner whose style is not `Ghost`
+    ///        or that stretches its action. A `Link` draws the action inside the message, at the span marked
+    ///        `action` or else after the message, and stays a button to assistive technology.
+    /// @param style   How the action is drawn.
+    /// @param stretch Whether the action takes a line of its own under the message, as wide as the banner; never
+    ///                true with `Link`.
+    virtual void setActionStyle(BannerActionStyle style, bool stretch) = 0;
 };
 
 /// @brief A passive, transient message outside the normal flow: non-modal, dims nothing, and never takes keyboard

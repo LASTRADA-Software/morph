@@ -31,6 +31,7 @@ public:
     void setOnAction(ui::Action onAction) override { _onAction = std::move(onAction); }
     void setDismissible(bool dismissible) override;
     void setOnDismiss(ui::Action onDismiss) override { _onDismiss = std::move(onDismiss); }
+    void setActionStyle(ui::BannerActionStyle style, bool stretch) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return !_actionLabel.empty() || _dismissible; }
     [[nodiscard]] std::string probeText() const override { return _text; }
@@ -42,9 +43,12 @@ public:
     void dismiss();
 
 private:
-    /// Where the action and the dismissal show on the row: their first column, or none.
+    /// Where the action and the dismissal show: the action's first cell and width, or none, and the dismissal's
+    /// first column on the first row.
     struct Controls {
         std::optional<int> action;
+        int actionRow = 0;
+        int actionWidth = 0;
         std::optional<int> dismissal;
     };
     [[nodiscard]] Controls controls() const;
@@ -55,6 +59,8 @@ private:
     // The runs, while the message has spans; empty for a plain message.
     std::vector<ui::TextSpan> _runs;
     std::string _actionLabel;
+    ui::BannerActionStyle _actionStyle = ui::BannerActionStyle::Ghost;
+    bool _actionStretch = false;
     bool _dismissible = false;
     ui::Action _onAction;
     ui::Action _onDismiss;

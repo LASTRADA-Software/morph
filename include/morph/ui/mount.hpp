@@ -1712,6 +1712,9 @@ private:
         widget.setOnAction(event(spec.action.onClick));
         widget.setDismissible(spec.dismissible);
         widget.setOnDismiss(event(spec.onDismiss));
+        if (spec.actionStyle != BannerActionStyle::Ghost || spec.actionStretch) {
+            widget.setActionStyle(spec.actionStyle, spec.actionStretch);
+        }
         return widget;
     }
 

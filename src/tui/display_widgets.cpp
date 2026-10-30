@@ -93,12 +93,41 @@ void BannerImpl::setDismissible(bool dismissible) {
     refresh();
 }
 
+void BannerImpl::setActionStyle(ui::BannerActionStyle style, bool stretch) {
+    _actionStyle = style;
+    _actionStretch = stretch && style != ui::BannerActionStyle::Link;
+    refresh();
+}
+
+// A link is drawn inside the sentence, at the run marked `action` or else after the text; a button is `[ label ]`
+// after the text, or on a row of its own under it when it stretches.
 BannerImpl::Controls BannerImpl::controls() const {
     Controls placed;
     int column = displayWidth(_text) + 2;
     if (!_actionLabel.empty()) {
-        placed.action = column;
-        column += displayWidth(actionText(_actionLabel)) + 1;
+        if (_actionStyle == ui::BannerActionStyle::Link) {
+            int start = 0;
+            placed.actionWidth = displayWidth(_actionLabel);
+            auto const marked = std::ranges::find_if(_runs, [](ui::TextSpan const& run) { return run.action; });
+            if (marked != _runs.end()) {
+                for (auto run = _runs.begin(); run != marked; ++run) {
+                    start += displayWidth(run->text);
+                }
+                placed.actionWidth = displayWidth(marked->text);
+            } else {
+                start = displayWidth(_text) + 1;
+                column = start + placed.actionWidth + 2;
+            }
+            placed.action = start;
+        } else if (_actionStretch) {
+            placed.action = 0;
+            placed.actionRow = 1;
+            placed.actionWidth = displayWidth(actionText(_actionLabel));
+        } else {
+            placed.action = column;
+            placed.actionWidth = displayWidth(actionText(_actionLabel));
+            column += placed.actionWidth + 1;
+        }
     }
     if (_dismissible) {
         placed.dismissal = column;
@@ -112,15 +141,16 @@ BannerImpl::Controls BannerImpl::controls() const {
     if (placed.dismissal) {
         width = *placed.dismissal + static_cast<int>(kDismissal.size());
     } else if (placed.action) {
-        width = *placed.action + displayWidth(actionText(_actionLabel));
+        width = std::max(width, *placed.action + placed.actionWidth);
     }
-    return {.width = width, .height = 1};
+    return {.width = width, .height = _actionStretch && !_actionLabel.empty() ? 2 : 1};
 }
 
 void BannerImpl::paint(::core::tui::Canvas& canvas) {
     auto const& theme = canvas.theme();
     auto const& style = toneStyle(theme, _tone);
-    canvas.fill({.x = 0, .y = 0, .width = canvas.width(), .height = 1}, ' ', style);
+    canvas.fill({.x = 0, .y = 0, .width = canvas.width(), .height = canvas.height()}, ' ', style);
+    bool const link = _actionStyle == ui::BannerActionStyle::Link && !_actionLabel.empty();
     if (_runs.empty()) {
         canvas.putString(0, 0, _text, style);
     } else {
@@ -128,8 +158,18 @@ void BannerImpl::paint(::core::tui::Canvas& canvas) {
     }
     auto const placed = controls();
     auto const& control = controlStyle(theme, actionable(), hasFocus());
-    if (placed.action) {
-        canvas.putString(0, *placed.action, actionText(_actionLabel), control);
+    if (placed.action && link) {
+        // The link: underlined in the accent, in the sentence where its run is, else after the text.
+        ::core::tui::Style linkStyle = style;
+        linkStyle.fg = theme.textAccent.fg;
+        linkStyle.underline = true;
+        linkStyle.bold = hasFocus();
+        bool const inRuns = std::ranges::any_of(_runs, [](ui::TextSpan const& run) { return run.action; });
+        if (!inRuns) {
+            canvas.putString(0, *placed.action, _actionLabel, linkStyle);
+        }
+    } else if (placed.action) {
+        canvas.putString(placed.actionRow, *placed.action, actionText(_actionLabel), control);
     }
     if (placed.dismissal) {
         canvas.putString(0, *placed.dismissal, kDismissal, control);
@@ -170,8 +210,8 @@ void BannerImpl::dismiss() {
 
 void BannerImpl::click(::core::tui::Point cell) {
     auto const placed = controls();
-    if (placed.action && cell.x >= *placed.action &&
-        cell.x < *placed.action + displayWidth(actionText(_actionLabel))) {
+    if (placed.action && cell.y == placed.actionRow && cell.x >= *placed.action &&
+        cell.x < *placed.action + placed.actionWidth) {
         activate();
     } else if (placed.dismissal && cell.x >= *placed.dismissal &&
                cell.x < *placed.dismissal + static_cast<int>(kDismissal.size())) {

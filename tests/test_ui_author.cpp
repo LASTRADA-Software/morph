@@ -1769,6 +1769,24 @@ TEST_CASE("bleed() writes the flag and tabs writes pageInset as a literal step, 
     CHECK_FALSE(text(plain).contains("pageInset"));
 }
 
+// Mutation: write the style for a ghost banner, or drop the action mark from the run.
+TEST_CASE("banner writes its action style and stretch, and actionRun marks the link's run", "[ui][author]") {
+    ui::Node const link = ui::banner({.spans = ui::spans({"1 field needs attention: ", ui::actionRun("Go"), "."}),
+                                      .action = ui::ActionPart{.label = "Go"},
+                                      .actionStyle = morph::ui::BannerActionStyle::Link});
+    CHECK(text(link).contains(R"("actionStyle":"link")"));
+    CHECK(text(link).contains(R"("action":true)"));
+    ui::Node const plain = ui::banner({.text = "x", .action = ui::ActionPart{.label = "Go"}});
+    CHECK_FALSE(text(plain).contains("actionStyle"));
+    CHECK_FALSE(text(plain).contains("actionStretch"));
+    ui::Node const stretched = ui::banner({.text = "x",
+                                           .action = ui::ActionPart{.label = "Go"},
+                                           .actionStyle = morph::ui::BannerActionStyle::Button,
+                                           .actionStretch = true});
+    CHECK(text(stretched).contains(R"("actionStyle":"button")"));
+    CHECK(text(stretched).contains(R"("actionStretch":true)"));
+}
+
 // Mutation: write `headJoined` for every top bar (the second, third and fourth checks fail), or never (the first).
 TEST_CASE("pinned says the page is headJoined only for an inset page whose top bar always shows", "[ui][author]") {
     ui::Node const always = ui::pinned(ui::text({.text = "body"}), {.top = ui::text({.text = "bar"})});

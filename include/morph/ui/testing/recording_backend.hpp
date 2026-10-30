@@ -377,6 +377,7 @@ template <typename T, typename F>
         formatted += escape(span.text, [](char character) { return std::string_view{"=,[];"}.contains(character); });
         formatted += span.strong ? ";strong" : "";
         formatted += span.mono ? ";mono" : "";
+        formatted += span.action ? ";action" : "";
         if (span.tone != Tone::Neutral) {
             formatted += ";tone=";
             formatted += enumName(span.tone);
@@ -1384,7 +1385,7 @@ public:
 };
 
 /// @brief A fake `BannerWidget`: properties `tone`, `text`, `spans` (as `formatSpans` gives them), `actionLabel`,
-///        `dismissible`.
+///        `dismissible`, and, once told, `actionStyle` and `actionStretch`.
 class FakeBanner final : public FakeLeaf<BannerWidget> {
 public:
     using FakeLeaf<BannerWidget>::FakeLeaf;
@@ -1395,6 +1396,10 @@ public:
     void setOnAction(Action onAction) override { callbacks().action = std::move(onAction); }
     void setDismissible(bool dismissible) override { set("dismissible", formatBool(dismissible)); }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
+    void setActionStyle(BannerActionStyle style, bool stretch) override {
+        set("actionStyle", std::string{bannerActionStyleName(style)});
+        set("actionStretch", formatBool(stretch));
+    }
 };
 
 /// @brief A fake `ToastWidget`: properties `text`, `tone`, and `shown` (incremented on every `show`, so a test can

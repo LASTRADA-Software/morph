@@ -208,7 +208,8 @@ std::optional<ui::Tone> WidgetBase::effectiveRowTone() const noexcept {
 
 namespace {
 
-/// Whether the terminal draws a surface inverted: the dark navigator column and the top bar of the app shell.
+/// Whether the terminal draws a surface inverted: the dark navigator column and the top bar of the app shell, joined
+/// to the head's block or not.
 [[nodiscard]] bool invertsSurface(std::string_view surface) noexcept {
     return surface == "sidebar" || surface == "toolbar" || surface == "toolbarJoined";
 }
@@ -832,6 +833,11 @@ void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& run
     for (ui::TextSpan const& run : runs) {
         ::core::tui::Style runStyle = style;
         runStyle.bold = style.bold || run.strong;
+        if (run.action) {
+            // The banner's link: the accent, underlined.
+            runStyle.fg = canvas.theme().textAccent.fg;
+            runStyle.underline = true;
+        }
         if (run.tone != ui::Tone::Neutral) {
             runStyle.fg = toneStyle(canvas.theme(), run.tone).fg;
         }

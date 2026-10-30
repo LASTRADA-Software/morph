@@ -6620,7 +6620,8 @@ inline constexpr std::string_view kRoleNames =
         spans.push_back(TextSpan{.text = textOf(*text, format),
                                  .strong = flag(run.field("strong")),
                                  .mono = flag(run.field("mono")),
-                                 .tone = tone});
+                                 .tone = tone,
+                                 .action = flag(run.field("action"))});
     }
     return spans;
 }
@@ -7893,6 +7894,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         spec.action = actionPart();
         spec.dismissible = onceBool("dismissible", false);
         spec.onDismiss = action("onDismiss");
+        spec.actionStyle = bannerActionStyleNamed(node.name("actionStyle")).value_or(BannerActionStyle::Ghost);
+        spec.actionStretch = node.flag("actionStretch");
         commonOf(node, ctx, element, spec.common);
         return ui::banner(std::move(spec));
     }

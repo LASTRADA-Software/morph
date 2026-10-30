@@ -1002,11 +1002,13 @@ inline constexpr std::array<KeySpec, 5> kFilePickerKeys = {{{"accept", Shape::Ex
                                                             {"label", Shape::Expr},
                                                             {"onPick", Shape::Commands}}};
 /// @brief The keys of `banner`.
-inline constexpr std::array<KeySpec, 6> kBannerKeys = {{{"tone", Shape::Expr},
+inline constexpr std::array<KeySpec, 8> kBannerKeys = {{{"tone", Shape::Expr},
                                                         {"text", Shape::Expr},
                                                         {"spans", Shape::Expr},
                                                         {"dismissible", Shape::Expr},
                                                         {"action", Shape::Part, "action"},
+                                                        {"actionStyle", Shape::Text},
+                                                        {"actionStretch", Shape::Flag},
                                                         {"onDismiss", Shape::Commands}}};
 /// @brief The keys of an `action` part.
 inline constexpr std::array<KeySpec, 2> kActionKeys = {{{"label", Shape::Expr}, {"onClick", Shape::Commands}}};
@@ -3741,12 +3743,12 @@ private:
         if (node.kind == "column" || node.kind == "row" || node.kind == "panel") {
             checkPadding(node);
         }
-        if (node.kind == "button") {
-            static constexpr std::array<std::string_view, 5> kEmphasis = {"normal", "primary", "danger", "ghost",
         if ((node.kind == "column" || node.kind == "row") && node.flag("headJoined") && !node.flag("pageEdge")) {
             refuse(pointerAppend(node.path, "headJoined"),
                    "`headJoined` needs `pageEdge`: an inset page has a margin between it and the head");
         }
+        if (node.kind == "button") {
+            static constexpr std::array<std::string_view, 5> kEmphasis = {"normal", "primary", "danger", "ghost",
                                                                           "dangerOutline"};
             checkChoice(node, "emphasis", kEmphasis);
             static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
@@ -3800,7 +3802,7 @@ private:
                 refuse(pointerAppend(node.path, "description"), "a text is not described; put the line in the text");
             }
         } else if (node.kind == "banner") {
-            checkSpans(node.prop("spans"));
+            checkBanner(node);
         } else if (node.kind == "badge") {
             static constexpr std::array<std::string_view, 2> kBadgeStyles = {"filled", "outline"};
             checkChoice(node, "style", kBadgeStyles);
@@ -4105,19 +4107,44 @@ private:
         }
     }
 
+    // A banner's action: its style is one of three; the link style places the action in the message's runs, and a
+    // stretched action is a button on a line of its own, so it needs an action and is no link.
+    static void checkBanner(DocNode const& node) {
+        static constexpr std::array<std::string_view, 3> kStyles = {"ghost", "button", "link"};
+        checkChoice(node, "actionStyle", kStyles);
+        bool const link = node.name("actionStyle") == "link";
+        checkSpans(node.prop("spans"), link);
+        if (node.flag("actionStretch")) {
+            if (link) {
+                refuse(pointerAppend(node.path, "actionStretch"),
+                       "`actionStretch` puts a button on a line of its own; a `link` action sits in the message");
+            }
+            if (node.parts.find("action") == node.parts.end()) {
+                refuse(pointerAppend(node.path, "actionStretch"), "`actionStretch` stretches the banner's `action`");
+            }
+        }
+    }
+
+    // What an `action` run is told where the loader refuses it.
+    static constexpr std::string_view kActionRunPlaces =
+        "an `action` run is the link of a banner whose `actionStyle` is "
+        "\"link\"; at most one run of its spans takes it";
+
     // A span list written out: each literal run a string, each record run a `text` with at most the flags `strong`
-    // and `mono`, each literal flag a boolean. A computed list, or a computed element, is checked as it is drawn.
-    static void checkSpans(ExprPtr const& spans) {
+    // and `mono`, each literal flag a boolean. A computed list, or a computed element, is checked as it is drawn. A
+    // run may carry `action` where @p actionAllowed, once at most.
+    static void checkSpans(ExprPtr const& spans, bool actionAllowed = false) {
         if (spans == nullptr) {
             return;
         }
+        int actions = 0;
         if (spans->kind == ExprKind::Literal) {
             ValueList const* const runs = spans->literal.asList();
             if (runs == nullptr) {
                 refuse(spans->path, "`spans` is a list of runs");
             }
             for (Value const& run : *runs) {
-                checkLiteralRun(run, spans->path);
+                checkLiteralRun(run, spans->path, actionAllowed, actions);
             }
             return;
         }
@@ -4126,9 +4153,9 @@ private:
         }
         for (ExprPtr const& run : spans->args) {
             if (run->kind == ExprKind::Literal) {
-                checkLiteralRun(run->literal, run->path);
+                checkLiteralRun(run->literal, run->path, actionAllowed, actions);
             } else if (run->kind == ExprKind::Object) {
-                checkRunRecord(*run);
+                checkRunRecord(*run, actionAllowed, actions);
             }
         }
     }
@@ -4255,8 +4282,15 @@ private:
         }
     }
 
+    // A run marked `action`: allowed in a link banner's spans, once.
+    static void checkActionRun(std::string const& path, bool actionAllowed, int& actions) {
+        if (!actionAllowed || ++actions > 1) {
+            refuse(path, std::string{kActionRunPlaces});
+        }
+    }
+
     // A literal run: a string, or a record of a string `text` and boolean flags.
-    static void checkLiteralRun(Value const& run, std::string const& path) {
+    static void checkLiteralRun(Value const& run, std::string const& path, bool actionAllowed, int& actions) {
         if (run.asString() != nullptr) {
             return;
         }
@@ -4268,7 +4302,7 @@ private:
             refuse(path, "a run's record gives its `text`");
         }
         for (auto const& [key, value] : *record) {
-            if (key != "text" && key != "strong" && key != "mono" && key != "tone") {
+            if (key != "text" && key != "strong" && key != "mono" && key != "tone" && key != "action") {
                 refuse(path, "a run takes `text`, `strong`, `mono` and `tone`, not `" + key + "`");
             }
             if (key == "tone") {
@@ -4276,11 +4310,14 @@ private:
             } else if (key != "text" && value.asBool() == nullptr) {
                 refuse(path, "a run's `" + key + "` is true or false");
             }
+            if (key == "action" && value.asBool() != nullptr && *value.asBool()) {
+                checkActionRun(path, actionAllowed, actions);
+            }
         }
     }
 
     // A run written as an `obj`: a `text`, and flags that are booleans when written as constants.
-    static void checkRunRecord(Expr const& run) {
+    static void checkRunRecord(Expr const& run, bool actionAllowed, int& actions) {
         bool hasText = false;
         for (auto const& [key, value] : run.fields) {
             if (key == "text") {
@@ -4289,10 +4326,12 @@ private:
                 if (value->kind == ExprKind::Literal) {
                     checkLiteralRunTone(value->literal, value->path);
                 }
-            } else if (key != "strong" && key != "mono") {
+            } else if (key != "strong" && key != "mono" && key != "action") {
                 refuse(value->path, "a run takes `text`, `strong`, `mono` and `tone`, not `" + key + "`");
             } else if (value->kind == ExprKind::Literal && value->literal.asBool() == nullptr) {
                 refuse(value->path, "a run's `" + key + "` is true or false");
+            } else if (key == "action" && value->kind == ExprKind::Literal && *value->literal.asBool()) {
+                checkActionRun(value->path, actionAllowed, actions);
             }
         }
         if (!hasText) {

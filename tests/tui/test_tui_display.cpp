@@ -211,3 +211,50 @@ TEST_CASE("tui badge: an outline badge is drawn in parentheses", "[tui][display]
     badge->setStyle(ui::BadgeStyle::Outline);
     CHECK(harness.draw() == Rows{"(STAT)"});
 }
+
+// Mutation: ignore the style (the link is drawn as the bracketed button after the text, and the stretched button
+// stays on the text's row).
+TEST_CASE("tui banner: a button action is bracketed, a stretched one is on its own row", "[tui][display]") {
+    Harness harness{40, 3};
+    auto const banner = harness.make<BannerImpl>(nullptr);
+    int actions = 0;
+    banner->setText("Run 4 is overdue");
+    banner->setActionLabel("Open run");
+    banner->setOnAction([&] { ++actions; });
+    banner->setActionStyle(ui::BannerActionStyle::Button, false);
+    CHECK(harness.draw() == Rows{"Run 4 is overdue  [ Open run ]"});
+    banner->setActionStyle(ui::BannerActionStyle::Button, true);
+    CHECK(harness.draw() == Rows{"Run 4 is overdue", "[ Open run ]"});
+    static_cast<void>(harness.click({.x = 3, .y = 1}));
+    CHECK(actions == 1);
+    static_cast<void>(harness.click({.x = 3, .y = 0}));
+    CHECK(actions == 1);
+}
+
+// Mutation: draw the link without the underline, or fire on any cell of the row.
+TEST_CASE("tui banner: a link action is underlined inside its sentence and a click on it runs the action",
+          "[tui][display]") {
+    Harness harness{50, 2};
+    auto const banner = harness.make<BannerImpl>(nullptr);
+    int actions = 0;
+    banner->setSpans(
+        {{.text = "1 field needs attention: "}, {.text = "Containers per pull", .action = true}, {.text = "."}});
+    banner->setActionLabel("Containers per pull");
+    banner->setOnAction([&] { ++actions; });
+    banner->setActionStyle(ui::BannerActionStyle::Link, false);
+    CHECK(harness.draw() == Rows{"1 field needs attention: Containers per pull."});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 25).style.underline);
+    CHECK_FALSE(buffer.at(0, 5).style.underline);
+    CHECK_FALSE(buffer.at(0, 44).style.underline);
+    static_cast<void>(harness.click({.x = 30, .y = 0}));
+    CHECK(actions == 1);
+    static_cast<void>(harness.click({.x = 5, .y = 0}));
+    CHECK(actions == 1);
+
+    auto const plain = harness.make<BannerImpl>(nullptr);
+    plain->setText("Offline");
+    plain->setActionLabel("Retry");
+    plain->setActionStyle(ui::BannerActionStyle::Link, false);
+    CHECK(plain->naturalSize().width == 13);
+}

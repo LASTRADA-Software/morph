@@ -2016,3 +2016,83 @@ TEST_CASE("qt_quick widgets: an icon-only button is never blank when the theme d
     REQUIRE(closeText != nullptr);
     CHECK(closeText->property("text").toString() == QStringLiteral("×"));
 }
+
+// Mutation: ignore the style (no anchor in the label and no proxy), fire the action on a click of the proxy only, or
+// leave the stretched action in the message's row.
+TEST_CASE("qt_quick widgets: a link banner draws its action as an anchor in the sentence, behind an accessible proxy",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 300);
+    auto banner = scene.backend().createBanner(nullptr);
+    banner->setLayout({.width = ui::Sizing::stretch()});
+    banner->setTone(ui::Tone::Warn);
+    banner->setSpans(
+        {{.text = "1 field needs attention: "}, {.text = "Containers per pull", .action = true}, {.text = "."}});
+    banner->setActionLabel("Containers per pull");
+    banner->setActionStyle(ui::BannerActionStyle::Link, false);
+    int fired = 0;
+    banner->setOnAction([&fired] { ++fired; });
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*banner);
+    auto* const message = item.findChild<QQuickItem*>(QStringLiteral("message"));
+    REQUIRE(message != nullptr);
+    QString const markup = message->property("text").toString();
+    CHECK(markup.count(QStringLiteral("<a href=\"action\"")) == 1);
+    CHECK((markup.contains(QStringLiteral("Containers per pull</span></a>")) ||
+           markup.contains(QStringLiteral("Containers per pull</a>"))));
+    CHECK(markup.indexOf(QStringLiteral("</a>")) < markup.lastIndexOf(QStringLiteral(".")));
+    CHECK(item.findChild<QQuickItem*>(QStringLiteral("action"))->isVisible() == false);
+
+    QMetaObject::invokeMethod(message, "linkActivated", Q_ARG(QString, QStringLiteral("action")));
+    CHECK(fired == 1);
+
+    auto* const proxy = item.findChild<QQuickItem*>(QStringLiteral("actionProxy"));
+    REQUIRE(proxy != nullptr);
+    QAccessibleInterface const* const node = QAccessible::queryAccessibleInterface(proxy);
+    REQUIRE(node != nullptr);
+    CHECK(node->role() == QAccessible::Button);
+    CHECK(node->text(QAccessible::Name) == QStringLiteral("Containers per pull"));
+    proxy->forceActiveFocus();
+    scene.key(Qt::Key_Return);
+    CHECK(fired == 2);
+}
+
+// Mutation: a link banner whose runs name no action gets no anchor after them.
+TEST_CASE("qt_quick widgets: a link banner without an action run puts the link after the message", "[qt_quick]") {
+    Scene scene;
+    auto banner = scene.backend().createBanner(nullptr);
+    banner->setText("Offline");
+    banner->setActionLabel("Retry");
+    banner->setActionStyle(ui::BannerActionStyle::Link, false);
+    scene.settle();
+    auto* const message = Scene::itemOf(*banner).findChild<QQuickItem*>(QStringLiteral("message"));
+    REQUIRE(message != nullptr);
+    QString const markup = message->property("text").toString();
+    CHECK(markup.contains(QStringLiteral("Offline")));
+    CHECK(markup.indexOf(QStringLiteral("Offline")) < markup.indexOf(QStringLiteral("<a href=\"action\"")));
+    CHECK(markup.contains(QStringLiteral("Retry")));
+}
+
+// Mutation: ignore `stretch` (the action stays at the trailing edge of the message's row).
+TEST_CASE("qt_quick widgets: a stretched button action is as wide as the banner's content and below the text",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 300);
+    auto banner = scene.backend().createBanner(nullptr);
+    banner->setLayout({.width = ui::Sizing::stretch()});
+    banner->setText("Run 4 is overdue");
+    banner->setActionLabel("Open run");
+    banner->setActionStyle(ui::BannerActionStyle::Button, true);
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*banner);
+    auto* const message = item.findChild<QQuickItem*>(QStringLiteral("message"));
+    auto* const action = item.findChild<QQuickItem*>(QStringLiteral("action"));
+    REQUIRE((message != nullptr && action != nullptr));
+    QPointF const messageAt = message->mapToItem(&item, QPointF{0, 0});
+    QPointF const actionAt = action->mapToItem(&item, QPointF{0, 0});
+    CHECK(actionAt.y() >= messageAt.y() + message->height());
+    CHECK(action->width() == Catch::Approx(item.width() - 2 * actionAt.x()).margin(1.0));
+    auto const* const background = action->property("background").value<QObject*>();
+    REQUIRE(background != nullptr);
+    CHECK_FALSE(background->property("ghost").toBool());
+}

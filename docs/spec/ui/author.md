@@ -196,6 +196,7 @@ expression of one),
   a `menu` node's entries give none); `menuSeparator()` is an entry with `separator`, which writes nothing else.
   `menuButton(MenuButtonOptions{label, icon, emphasis}, items)` writes a `style: button` menu; an icon-only one names
   itself with `.a11y(...)`.
+- **`banner`** also takes `BannerOptions{actionStyle (BannerActionStyle: Ghost, Button, Link), actionStretch}`; `actionRun(text)` is the run of its `spans` that is a `Link` action's text, at its place in the sentence.
 - **`text` and `banner`** take `spans` beside `text` (declared right after it, so a call names `.spans` before
   `.role`). The free helpers build the runs: `strong(text)`, `mono(text)`, `toned(text, tone)` and
   `styled(text, SpanStyle{.strong, .mono, .tone})` each a record run, and `spans({…})` the list (`list` under a name

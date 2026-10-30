@@ -24,6 +24,8 @@ Item {
     property int crossAlign: 0
     property int alignAcross: 0
     readonly property int placedAlign: alignSelf >= 0 ? alignSelf : crossAlign
+    // Whether the keyboard focus is on the accessible proxy of an action drawn as a link in this widget's runs.
+    property bool linkFocused: false
     // Whether the widget's sides lie at its container's edges, past the container's horizontal padding: the container
     // gives that padding as `childBleedInset`, and a layout honours the negative margins it becomes.
     property bool bleed: false
@@ -133,7 +135,16 @@ Item {
             if (run.tone !== 0) {
                 style += "color:" + root.cssColor(root.toneOf(run.tone)) + ";"
             }
-            html += style === "" ? run.text : "<span style=\"" + style + "\">" + run.text + "</span>"
+            const markup = style === "" ? run.text : "<span style=\"" + style + "\">" + run.text + "</span>"
+            // The banner's action: a link the label's `linkActivated` fires, in the accent and underlined. While the
+            // accessible proxy has the focus, its markup is drawn on the focus colour so a keyboard user sees where
+            // the focus is. The inner span sets the colour because an anchor takes the style's link colour otherwise.
+            const linkStyle = "color:" + root.cssColor(root.linkFocused ? root.scheme.surface : root.scheme.accent)
+                + ";text-decoration:underline;"
+                + (root.linkFocused ? "background-color:" + root.cssColor(root.scheme.focus) + ";" : "")
+            html += run.action
+                ? "<a href=\"action\"><span style=\"" + linkStyle + "\">" + run.text + "</span></a>"
+                : markup
         }
         return html + "</span>"
     }

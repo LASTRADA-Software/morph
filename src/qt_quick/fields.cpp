@@ -74,7 +74,8 @@ QVariantList runsOf(std::vector<ui::TextSpan> const& spans) {
         runs.append(QVariantMap{{QStringLiteral("text"), toQString(span.text).toHtmlEscaped()},
                                 {QStringLiteral("strong"), span.strong},
                                 {QStringLiteral("mono"), span.mono},
-                                {QStringLiteral("tone"), static_cast<int>(span.tone)}});
+                                {QStringLiteral("tone"), static_cast<int>(span.tone)},
+                                {QStringLiteral("action"), span.action}});
     }
     return runs;
 }

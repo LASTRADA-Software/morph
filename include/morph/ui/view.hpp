@@ -20,6 +20,7 @@
 #include "../util/datetime.hpp"
 #include "alignment.hpp"
 #include "badge_style.hpp"
+#include "banner_action_style.hpp"
 #include "button_emphasis.hpp"
 #include "button_style.hpp"
 #include "control_shape.hpp"
@@ -509,9 +510,12 @@ struct TextSpan {
     bool mono = false;
     /// @brief The run's colour, the tone's; `Neutral` is the text's own colour.
     Tone tone = Tone::Neutral;
+    /// @brief Whether the run is the action of a banner drawn as a link: the run's text is the link, at its place in
+    ///        the sentence. Only a banner reads it.
+    bool action = false;
 
     /// @brief Memberwise equality.
-    /// @return Whether text, both flags and the tone match.
+    /// @return Whether text, both flags, the tone and the action mark match.
     bool operator==(TextSpan const&) const = default;
 };
 
@@ -1286,6 +1290,12 @@ struct Banner {
     Action onDismiss;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief How the action is drawn; set once. `Link` draws it inside the message, at the run of `spans` marked
+    ///        `action`, else after the message.
+    BannerActionStyle actionStyle = BannerActionStyle::Ghost;
+    /// @brief Whether the action takes a line of its own under the message, as wide as the banner; set once. Not with
+    ///        `Link`.
+    bool actionStretch = false;
 };
 
 /// @brief A short label marking a state, such as a count or a status.

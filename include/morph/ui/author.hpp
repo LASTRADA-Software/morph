@@ -36,6 +36,7 @@
 #include "../util/rational.hpp"
 #include "alignment.hpp"
 #include "badge_style.hpp"
+#include "banner_action_style.hpp"
 #include "button_emphasis.hpp"
 #include "button_style.hpp"
 #include "control_shape.hpp"
@@ -3529,6 +3530,14 @@ struct SpanStyle {
     return obj(fields);
 }
 
+/// @brief The run of a banner's spans that is its action, drawn as a link at its place in the sentence. The banner's
+///        `actionStyle` is `Link`; the loader refuses the run anywhere else and a second one in the same spans.
+/// @param text The link's text.
+/// @return The run.
+[[nodiscard]] inline AnyHandle actionRun(AnyHandle const& text) {
+    return obj(std::vector<std::pair<std::string, AnyHandle>>{{"text", text}, {"action", AnyHandle{true}}});
+}
+
 /// @brief A run of text in the strong weight, for a span list.
 /// @param text The run's text.
 /// @return The run.
@@ -3859,6 +3868,11 @@ struct ContainerOptions {
     ///        shown root, the shell lays it at the page's edges and does not inset the page. Written for a grid too,
     ///        so the loader refuses it rather than the author silently losing it.
     bool pageEdge = false;
+    /// @brief Whether the stack's first child continues the head's block: as the screen's shown root, the shell draws
+    ///        its top bar on the `toolbarJoined` surface, with no rule under it, and the first child draws the rule
+    ///        under the whole block. Needs `pageEdge`, since an inset page has a margin between it and the head; the
+    ///        loader refuses it without. A `column` or `row`; written for a grid too, so the loader refuses it.
+    bool headJoined = false;
     /// @brief A `column` or `row` that is the chosen entry of a list: a condition. While it holds, the stack draws the
     ///        accent's 3 px bar at its leading edge (inside its leading padding) and is a `Grouping` for assistive
     ///        technology; absent writes no key. Not on a grid.
@@ -3868,11 +3882,6 @@ struct ContainerOptions {
 /// @brief A two-step padding for `ContainerOptions::padding`: the vertical step above and below, the horizontal step
 ///        at the sides, written as the constant list `{"lit": [vertical, horizontal]}`.
 /// @param vertical   The step above and below, 0 to `kMaxSpacingStep`.
-    /// @brief Whether the stack's first child continues the head's block: as the screen's shown root, the shell draws
-    ///        its top bar on the `toolbarJoined` surface, with no rule under it, and the first child draws the rule
-    ///        under the whole block. Needs `pageEdge`, since an inset page has a margin between it and the head; the
-    ///        loader refuses it without. A `column` or `row`; written for a grid too, so the loader refuses it.
-    bool headJoined = false;
 /// @param horizontal The step at the sides, 0 to `kMaxSpacingStep`.
 /// @return The padding.
 [[nodiscard]] inline AnyHandle padding(int vertical, int horizontal) {
@@ -3908,6 +3917,9 @@ namespace detail {
     if (options.pageEdge) {
         node.flag("pageEdge");
     }
+    if (options.headJoined) {
+        node.flag("headJoined");
+    }
     return node.done();
 }
 
@@ -3917,9 +3929,6 @@ namespace detail {
 /// @param children The children.
 /// @param options  The gap and the alignment.
 /// @return The node.
-    if (options.headJoined) {
-        node.flag("headJoined");
-    }
 [[nodiscard]] inline Node column(Nodes const& children, ContainerOptions const& options = {}) {
     return detail::stackNode("column", children, options);
 }
@@ -4072,15 +4081,6 @@ namespace detail {
     return shown;
 }
 
-}  // namespace detail
-
-/// @brief Content that scrolls between bars that stay in view: a divided column that stretches both ways, holding the
-///        top bar, a vertical `scroll` that stretches in height around @p content, and the bottom bar. A bar is a
-///        `column` of its nodes drawn on `PinnedOptions::surface` (the built-in `bar`: the theme's surface colour with
-///        no border), so a rule separates it from the content; an empty list leaves its bar out, and a bar whose nodes
-///        all have a `visible` condition shows while any of them does. The column spans the page: the content is
-///        inset by `PinnedOptions::inset` inside the scroll, and each bar is padded by step 2 above and below and by
-///        the inset at its sides, so a bar's surface and rule reach the page's edges and its content lines up with the
 /// @brief Whether any of the nodes has a `visible` condition.
 /// @param nodes The nodes.
 /// @return Whether one can hide.
@@ -4093,6 +4093,15 @@ namespace detail {
     return false;
 }
 
+}  // namespace detail
+
+/// @brief Content that scrolls between bars that stay in view: a divided column that stretches both ways, holding the
+///        top bar, a vertical `scroll` that stretches in height around @p content, and the bottom bar. A bar is a
+///        `column` of its nodes drawn on `PinnedOptions::surface` (the built-in `bar`: the theme's surface colour with
+///        no border), so a rule separates it from the content; an empty list leaves its bar out, and a bar whose nodes
+///        all have a `visible` condition shows while any of them does. The column spans the page: the content is
+///        inset by `PinnedOptions::inset` inside the scroll, and each bar is padded by step 2 above and below and by
+///        the inset at its sides, so a bar's surface and rule reach the page's edges and its content lines up with the
 ///        body's. When the top bar always shows (it has nodes, none with a `visible` condition) and the page is inset,
 ///        the column also says it `headJoined`: the bar continues the head's block, so the shell draws no rule
 ///        between them and the column's own rule under the bar is the block's. The scroll takes the column's spare
@@ -4812,6 +4821,11 @@ struct BannerOptions {
     std::optional<ActionPart> action;
     /// @brief Commands run when it is dismissed.
     Commands onDismiss;
+    /// @brief How the action is drawn; `Ghost` writes no key. `Link` draws it inside the message, at the run
+    ///        `actionRun` makes in `spans`, else after the message.
+    BannerActionStyle actionStyle = BannerActionStyle::Ghost;
+    /// @brief Whether the action takes a line of its own under the message, as wide as the banner. Not with `Link`.
+    bool actionStretch = false;
 };
 
 /// @brief A `banner` node.
@@ -4824,6 +4838,12 @@ struct BannerOptions {
         .put("spans", options.spans)
         .put("dismissible", options.dismissible);
     detail::actionPart(node, options.action);
+    if (options.actionStyle != BannerActionStyle::Ghost) {
+        node.text("actionStyle", std::string{bannerActionStyleName(options.actionStyle)});
+    }
+    if (options.actionStretch) {
+        node.flag("actionStretch");
+    }
     return node.put("onDismiss", options.onDismiss).done();
 }
 

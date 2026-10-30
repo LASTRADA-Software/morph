@@ -270,6 +270,11 @@ void BannerImpl::setOnDismiss(ui::Action onDismiss) {
     relay().on(QStringLiteral("dismiss"), actionHandler(std::move(onDismiss)));
 }
 
+void BannerImpl::setActionStyle(ui::BannerActionStyle style, bool stretch) {
+    write("actionStyle", static_cast<int>(style));
+    write("actionStretch", stretch);
+}
+
 std::string BannerImpl::shownText() const { return toUtf8(read("text").toString()); }
 
 // ── Badge, Progress, Steps, KeyValue ──────────────────────────────────────

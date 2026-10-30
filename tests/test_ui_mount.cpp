@@ -1128,3 +1128,21 @@ TEST_CASE("ui::Mounted: a stack's selected condition reaches the backend at moun
     owner.runAll();
     CHECK(backend.dump().contains("Column#2 gap=0 selected=true"));
 }
+
+// Mutation: never tell the banner its style (the dump has no actionStyle), or tell a ghost banner it too.
+TEST_CASE("ui::Mounted: a banner is told its action style only when it is not the default", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::column({.children = {
+                        ui::banner({.text = "a", .actionStyle = ui::BannerActionStyle::Link}),
+                        ui::banner({.text = "b"}), ui::banner({.text = "c", .actionStretch = true}),
+                        ui::row({.children = {ui::text({.text = "x"}), ui::text({.text = "y"})}, .divided = true})}})};
+    std::string const dump = backend.dump();
+    CHECK(dump.contains("Banner#2 actionLabel= actionStretch=false actionStyle=link"));
+    CHECK_FALSE(dump.contains("Banner#3 actionStretch"));
+    CHECK(dump.contains("Banner#4 actionLabel= actionStretch=true actionStyle=ghost"));
+    CHECK(dump.contains("Row#5 divided=true"));
+}

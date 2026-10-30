@@ -240,6 +240,7 @@ public:
     void setOnAction(ui::Action onAction) override;
     void setDismissible(bool dismissible) override;
     void setOnDismiss(ui::Action onDismiss) override;
+    void setActionStyle(ui::BannerActionStyle style, bool stretch) override;
     [[nodiscard]] std::string shownText() const override;
 };
 

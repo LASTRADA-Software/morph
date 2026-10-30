@@ -511,6 +511,7 @@ target_sources(morph
         include/morph/ui/input_emphasis.hpp
         include/morph/ui/button_emphasis.hpp
         include/morph/ui/control_shape.hpp
+        include/morph/ui/banner_action_style.hpp
         include/morph/ui/badge_style.hpp
         include/morph/ui/button_style.hpp
         include/morph/ui/service.hpp
