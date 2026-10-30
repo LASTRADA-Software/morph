@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "gallery_harness.hpp"
 
@@ -92,6 +93,9 @@ TEST_CASE("samples, expanded: the pager turns the page, and a header sorts from 
     GalleryScreen screen{kScreen, "expanded"};
     int const table = screen.find("Table", "samples").value_or(0);
     CHECK(screen.prop("Button", "previous-page", "enabled") == "false");
+    // The pager's buttons are glyph-sized squares.
+    CHECK(screen.prop("Button", "previous-page", "shape") == "square");
+    CHECK(screen.prop("Button", "next-page", "shape") == "square");
     screen.click("next-page");
     CHECK(screen.waitFor([&screen] { return screen.text("range") == "26–38 of 38"; }));
     CHECK(screen.prop("Button", "next-page", "enabled") == "false");
@@ -136,7 +140,38 @@ TEST_CASE("samples, compact: rows become cards with the same selection, the bar 
     screen.click("assign");
     REQUIRE(screen.waitFor([&screen] { return screen.find("Select", "worksheet").has_value(); }));
     screen.click("action_assign");
-    CHECK(screen.waitFor([&screen] { return !screen.shows("Panel", "bulk"); }));
+    CHECK(screen.waitFor([&screen] { return !screen.shows("Row", "bulk"); }));
     CHECK(screen.waitFor([&screen] { return screen.backend().find("Badge", "text", "Assigned").has_value(); }));
     screen.requireNoProblems();
+}
+
+// Mutation: leave the bulk bar's `visible` off its row (the bar column keeps its strip with nothing selected), or
+// draw it in a tinted panel (it is no `Row`).
+TEST_CASE("samples, compact: the bulk bar is the pinned bottom bar, and takes no room while nothing is selected",
+          "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "compact"};
+    screen.requireNoProblems();
+    auto const bar = screen.backend().find("Column", "surface", "bar");
+    REQUIRE(bar.has_value());
+    CHECK(screen.shows("Row", "bulk"));
+    CHECK(screen.backend().prop(bar.value_or(0), "visible") != "false");
+    // "Clear selection" is the menu's third entry.
+    screen.backend().chooseMenuEntry(screen.find("Menu", "more-bulk").value_or(0), std::vector<std::size_t>{2});
+    CHECK(screen.waitFor([&screen] { return !screen.shows("Row", "bulk"); }));
+    CHECK(screen.backend().prop(screen.backend().find("Column", "surface", "bar").value_or(0), "visible") == "false");
+}
+
+// Mutation: leave `selected` off the card (no bar, and the card stays a plain client item).
+TEST_CASE("samples, compact: a checked card is a selected group, and unchecking it clears the mark",
+          "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "compact"};
+    screen.requireNoProblems();
+    auto const card = [&screen] { return screen.backend().find("Column", "a11yName", "S-26-104170"); };
+    REQUIRE(card().has_value());
+    CHECK(screen.backend().prop(card().value_or(0), "selected") == "true");
+    auto const box = selectBox(screen, "S-26-104170");
+    REQUIRE(box.has_value());
+    screen.backend().toggle(box.value_or(0));
+    CHECK(
+        screen.waitFor([&screen, &card] { return screen.backend().prop(card().value_or(0), "selected") == "false"; }));
 }

@@ -22,6 +22,7 @@ namespace ui = layout::ui;
 using layout::Align;
 using layout::ButtonEmphasis;
 using layout::Justify;
+using morph::ui::ControlShape;
 using Text = ui::Handle<std::string>;
 using Flag = ui::Handle<bool>;
 using morph::ui::Value;
@@ -568,11 +569,11 @@ ui::Node pageFooter(Samples const& list) {
                             .onChoose = {ui::set(list.pageSize, ui::event()), ui::set(list.page, std::int64_t{0})}})
                     .sizing(ui::fixed(8))
                     .testId("page-size"),
-                ui::button({.label = "‹", .onClick = ui::set(list.page, page - 1)})
+                ui::button({.label = "‹", .onClick = ui::set(list.page, page - 1), .shape = ControlShape::Square})
                     .a11y("Previous page")
                     .enabled(page > 0)
                     .testId("previous-page"),
-                ui::button({.label = "›", .onClick = ui::set(list.page, page + 1)})
+                ui::button({.label = "›", .onClick = ui::set(list.page, page + 1), .shape = ControlShape::Square})
                     .a11y("Next page")
                     .enabled(page < pageCount - 1)
                     .testId("next-page")},
@@ -608,10 +609,14 @@ ui::Node cardContent(Samples const& list) {
                    {.gap = 2, .align = Align::Start});
 }
 
-// A card is a padded entry of the one divided list, tinted while its sample is out of specification.
+// A card is a padded entry of the one divided list, tinted while its sample is out of specification. A selected card
+// draws the selection's bar at its leading edge, inside its padding, beside the tint; its check box is the one control
+// that selects, and the card is named by its sample so a reader announces the group.
 ui::Node sampleCard(Samples const& list) {
     Flag const outOfSpec = ui::eq(ui::row("specTone"), "err");
-    return ui::column({cardContent(list)}, {.padding = 2}).surface(ui::cond(outOfSpec, Text{"outOfSpec"}, Text{""}));
+    return ui::column({cardContent(list)}, {.padding = 2, .selected = ui::includes(list.selected, ui::row("id"))})
+        .surface(ui::cond(outOfSpec, Text{"outOfSpec"}, Text{""}))
+        .a11y(ui::row("id"));
 }
 
 ui::Node compactFilters(Samples const& list) {
@@ -626,20 +631,18 @@ ui::Node compactFilters(Samples const& list) {
 }
 
 ui::Node compactBulkBar(Samples const& list) {
-    return ui::panel({ui::row({ui::text({.text = selectedLabel(list, true), .role = "section"})
-                                   .sizing(ui::stretch())
-                                   .testId("selected"),
-                               ui::button({.label = "Assign to worksheet", .onClick = ui::open(list.assignDialog)})
-                                   .testId("assign"),
-                               ui::menuButton({.icon = "more"},
-                                              {{.label = "Change priority…", .onClick = ui::open(list.priorityDialog)},
-                                               {.label = "Print labels", .onClick = printLabels(list)},
-                                               {.label = "Clear selection", .onClick = clearSelection(list)}})
-                                   .a11y("More bulk actions")
-                                   .testId("more-bulk")},
-                              {.gap = 1, .align = Align::Center})},
-                     {.padding = 1})
-        .surface("selected")
+    return ui::row(
+               {ui::text({.text = selectedLabel(list, true), .role = "section"})
+                    .sizing(ui::stretch())
+                    .testId("selected"),
+                ui::button({.label = "Assign to worksheet", .onClick = ui::open(list.assignDialog)}).testId("assign"),
+                ui::menuButton({.icon = "more"},
+                               {{.label = "Change priority…", .onClick = ui::open(list.priorityDialog)},
+                                {.label = "Print labels", .onClick = printLabels(list)},
+                                {.label = "Clear selection", .onClick = clearSelection(list)}})
+                    .a11y("More bulk actions")
+                    .testId("more-bulk")},
+               {.gap = 1, .align = Align::Center})
         .a11y("Bulk actions")
         .visible(list.selectedCount > 0)
         .testId("bulk");
