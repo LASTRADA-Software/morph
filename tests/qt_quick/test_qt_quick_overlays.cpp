@@ -298,6 +298,46 @@ QQuickItem* namedItem(QQuickItem* root, QString const& name) {
 
 }  // namespace
 
+// Mutation: leave the footer unstretched on a sheet (its action keeps its own width), or stretch it on a dialog too.
+TEST_CASE("qt_quick dialog: a sheet's footer action fills the sheet's width, a dialog's keeps its own", "[qt_quick]") {
+    Scene scene;
+    auto const dialog = scene.backend().createDialog(nullptr);
+    dialog->setTitle("Sign");
+    auto const body = scene.backend().createText(dialog.get());
+    body->setText("Sure?");
+    auto const sign = scene.backend().createButton(&dialog->footer());
+    sign->setLabel("Sign and approve");
+    dialog->setOpen(true);
+    scene.settle();
+    qreal const natural = Scene::itemOf(*sign).width();
+    CHECK(natural < 300);
+    dialog->setSheet(true);
+    scene.settle();
+    CHECK(Scene::itemOf(*sign).width() > 600);
+    dialog->setSheet(false);
+    scene.settle();
+    CHECK(Scene::itemOf(*sign).width() < 600);
+
+    // An overlay's actions arrive as a row of them, which shares the footer's width too.
+    auto const barred = scene.backend().createDialog(nullptr);
+    barred->setSheet(true);
+    auto const bar = scene.backend().createStack(&barred->footer(), ui::Axis::Horizontal);
+    auto const inBar = scene.backend().createButton(bar.get());
+    inBar->setLabel("Sign");
+    barred->setOpen(true);
+    scene.settle();
+    CHECK(Scene::itemOf(*inBar).width() > 600);
+
+    // A dialog that is a sheet before its footer holds anything stretches the action that arrives.
+    auto const first = scene.backend().createDialog(nullptr);
+    first->setSheet(true);
+    auto const late = scene.backend().createButton(&first->footer());
+    late->setLabel("Sign and approve");
+    first->setOpen(true);
+    scene.settle();
+    CHECK(Scene::itemOf(*late).width() > 600);
+}
+
 // Mutation: draw the title in `strongFont`; draw no rule, or draw it while the footer holds nothing.
 TEMPLATE_TEST_CASE("qt_quick overlays: the title is heading-sized and a footer holding an action has a rule above it",
                    "[qt_quick]", ui::DialogWidget, ui::DrawerWidget) {

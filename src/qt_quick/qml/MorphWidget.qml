@@ -190,7 +190,12 @@ Item {
 
     // A content child under an alignment other than stretch keeps its own extent across; a stretch child keeps its
     // fill, and its maximum with the alignment places it.
-    Layout.fillWidth: widthKind === 2 || (widthKind === 0 && fillsWidth && fillsAcross && !(alignAcross === 1 && placedAlign !== 0))
+    // Whether this widget hands the width it has to each widget in it, as a row of actions in a sheet's footer does:
+    // the widget's content item holds them, so each takes a share of the row's spare width, whatever its own sizing.
+    property bool sharesWidth: false
+    readonly property bool takesShare: parent !== null && ((parent.parent as MorphWidget)?.sharesWidth ?? false)
+    Layout.fillWidth: takesShare || widthKind === 2 ||
+                      (widthKind === 0 && fillsWidth && fillsAcross && !(alignAcross === 1 && placedAlign !== 0))
     Layout.fillHeight: heightKind === 2 || (heightKind === 0 && fillsHeight && !(alignAcross === 2 && placedAlign !== 0))
     Layout.alignment: {
         if (alignAcross === 0 || placedAlign === 0)

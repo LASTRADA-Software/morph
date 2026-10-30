@@ -43,7 +43,7 @@ MorphWidget {
     readonly property bool stretchesAlong: {
         for (const child of layout.children) {
             const along = root.axis === 0 ? child.heightKind : child.widthKind
-            if (child.visible && along === 2)
+            if (child.visible && (along === 2 || (root.axis === 1 && child.takesShare)))
                 return true
         }
         return false

@@ -243,6 +243,9 @@ MorphWidget {
             ColumnLayout {
                 id: footerArea
                 Layout.fillWidth: true
+                // A sheet's footer fills the sheet's width, so its action is as wide as a thumb needs; the footer
+                // reads this from the area it sits in.
+                property bool stretchesFooter: root.sheet
                 visible: {
                     for (let i = 0; i < footerArea.children.length; ++i) {
                         if ((footerArea.children[i] as MorphFooter)?.holding)

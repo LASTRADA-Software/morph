@@ -33,6 +33,11 @@ MorphField {
                                                   : root.text
     // Whether the text is shown cut short.
     readonly property bool elided: root.fitted !== root.text
+    // A one-line text asks for the width of its whole text, not of what it shows, so a column sized by its widest cell
+    // is not narrowed by the cut it makes in that cell.
+    // A text has no caption, so this is the field's width with the mark that follows the text.
+    implicitWidth: Math.max(root.oneLine ? metrics.advanceWidth(root.text) : 0, label.implicitWidth) +
+                   (root.required ? root.markerRoom : 0)
     // While the text is elided, its full text is the tooltip, unless the node gives its own.
     tooltipText: root.tooltip !== "" ? root.tooltip : root.elided ? root.text : ""
     control: label
