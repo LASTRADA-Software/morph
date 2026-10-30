@@ -104,6 +104,7 @@ TEST_CASE("receipt, compact: one column, every field kept, the session folded aw
     CHECK(screen.prop("Banner", "duplicate", "spans") ==
           "[Already received:;strong, ,S-26-104217;mono,\\, 09:07\\, J. Ruiz.]");
     CHECK(screen.find("TextInput", "temperature").has_value());
+    CHECK(screen.backend().dump().contains(" · Lot ,L-26-0381;mono]"));
     CHECK(screen.find("Column", "conditions").has_value());
     CHECK(screen.prop("Collapsible", "session-panel", "title") == "This session · 13 scans");
     CHECK(screen.prop("Badge", "head_status_0", "text") == "12");

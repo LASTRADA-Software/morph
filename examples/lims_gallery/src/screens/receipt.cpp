@@ -426,8 +426,12 @@ ui::Node expandedLayout(Receipt const& receipt) {
 ui::Node compactLayout(Receipt const& receipt) {
     auto const sampleLine = ui::format("{0} · Lot {1}", {receipt.sample.at("type"), receipt.sample.at("lot")});
     auto const sample =
-        ui::column({sampleHeading(receipt), layout::muted(sampleLine), temperatureField(receipt),
-                    receivedAtField(receipt), locationField(receipt),
+        ui::column({sampleHeading(receipt),
+                    ui::text({.text = sampleLine,
+                              .spans = whileSampled(receipt, ui::spans({receipt.sample.at("type"), " · Lot ",
+                                                                        ui::mono(receipt.sample.at("lot"))})),
+                              .role = "muted"}),
+                    temperatureField(receipt), receivedAtField(receipt), locationField(receipt),
                     ui::grid({containersField(receipt), courierField(receipt)}, {.gap = 2, .columns = 2}),
                     conditions(receipt, true), noteField(receipt)},
                    {.gap = 2})
