@@ -84,6 +84,33 @@ void TextImpl::setText(std::string_view text) {
     refresh();
 }
 
+namespace {
+
+// @p line cut to @p width cells: unchanged while it fits, else its longest prefix that leaves a cell for an ellipsis,
+// then the ellipsis.
+std::string elidedLine(std::string_view line, int width) {
+    if (displayWidth(line) <= width) {
+        return std::string{line};
+    }
+    if (width <= 0) {
+        return {};
+    }
+    std::size_t kept = 0;
+    while (kept < line.size()) {
+        std::size_t next = kept + 1;
+        while (next < line.size() && (static_cast<unsigned char>(line.at(next)) & 0xC0U) == 0x80U) {
+            ++next;
+        }
+        if (displayWidth(line.substr(0, next)) > width - 1) {
+            break;
+        }
+        kept = next;
+    }
+    return std::string{line.substr(0, kept)} + "…";
+}
+
+}  // namespace
+
 void TextImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
     _text = ui::spansText(spans);
     _runs = spans;
@@ -98,6 +125,13 @@ void TextImpl::setDescription(std::string_view description) {
 void TextImpl::setTone(ui::Tone tone) {
     _tone = tone;
     refresh();
+}
+
+void TextImpl::setElided(bool elided) {
+    if (_elided != elided) {
+        _elided = elided;
+        refresh();
+    }
 }
 
 void TextImpl::setRole(ui::TextRole role) {
@@ -128,12 +162,13 @@ void TextImpl::paintControl(::core::tui::Canvas& canvas) {
     if (!_runs.empty()) {
         paintRuns(canvas, _runs, style, true);
     } else {
+        bool const elide = _elided || _role == ui::TextRole::Mono;
         int row = 0;
         for (auto const line : splitLines(_text)) {
             if (row >= canvas.height()) {
                 break;
             }
-            canvas.putString(row, 0, line, style);
+            canvas.putString(row, 0, elide ? elidedLine(line, canvas.width()) : std::string{line}, style);
             ++row;
         }
     }

@@ -104,6 +104,18 @@ TEST_CASE("ui document rules: a literal sort names sortable columns, each once, 
           "/view/sort: the sort names `a` twice");
 }
 
+// Mutation: read `wrap` as an expression (the computed one loads).
+TEST_CASE("ui document rules: a table column's wrap is a literal boolean", "[ui][document][table]") {
+    auto const column = [](std::string_view wrap) {
+        return document(R"({"kind": "table", "rows": {"lit": []}, "columns": [{"id": "a", "label": "A", "wrap": )" +
+                        std::string{wrap} + "}]}");
+    };
+    CHECK(refusal(column("false")) == "loads");
+    CHECK(refusal(column("true")) == "loads");
+    CHECK_FALSE(refusal(column(R"({"ref": "x"})")) == "loads");
+    CHECK_FALSE(refusal(column(R"("no")")) == "loads");
+}
+
 // Mutation: drop the model-backed checks (each of these tables loads).
 TEST_CASE("ui document rules: a model-backed table's engine sorts, groups, pages and selects",
           "[ui][document][table]") {

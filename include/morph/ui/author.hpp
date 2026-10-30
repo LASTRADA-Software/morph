@@ -4245,7 +4245,8 @@ struct TableColumn {
     AnyHandle label;
     /// @brief The width.
     AnyHandle width;
-    /// @brief The column's text role; absent writes no key, `Normal`.
+    /// @brief The column's text role; absent writes no key, `Normal`. A `mono` role also makes a `fixed(n)` width
+    ///        count n monospace characters, plus the cell padding, even when the column has its own `cell`.
     AnyHandle role;
     /// @brief Where a cell's text, or a label-width cell, sits across the column, and the header label with it:
     ///        `Start`, `Center` or `End`; absent writes no key, the start. `Stretch` writes `stretch`, which the
@@ -4261,6 +4262,9 @@ struct TableColumn {
     /// @brief The value a sortable column orders the rows by, read per row as `key` is; absent: the row's field
     ///        named by the column's `name`.
     AnyHandle sortBy;
+    /// @brief Whether the column's text cells may break across lines; `false` draws each on one line, cut at the
+    ///        column's width with an ellipsis, and writes `wrap: false`.
+    bool wrap = true;
 };
 
 /// @brief Columns from cells alone, without ids or labels.
@@ -4382,6 +4386,9 @@ namespace detail {
     }
     if (column.sortable) {
         detail::put(part, "sortable", true);
+    }
+    if (!column.wrap) {
+        detail::put(part, "wrap", false);
     }
     if (column.sortBy.present()) {
         detail::put(part, "sortBy", column.sortBy.json());

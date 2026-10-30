@@ -55,7 +55,7 @@ MorphWidget {
     // A cell fills its column's width, except a kind whose width is its label (`fillsAcross`
     // false: a badge, a check box, a button), which keeps its natural width at the column's start, centre or end.
     // A cell that draws text (`textAlign`) draws it at the column's start, centre or end, and an end column's
-    // digits are tabular so they line up across rows. Every cell keeps its own height, up to the row's, and sits at
+    // digits are tabular so they line up across rows. In a column whose `wrap` is false it draws on one line, elided. Every cell keeps its own height, up to the row's, and sits at
     // the row's top, centre or bottom by its column's `valign`; `stretch` fills the row's height.
     function place() {
         const inset = Theme.tableCellPaddingX
@@ -98,6 +98,8 @@ MorphWidget {
             }
             if (cell.textAlign !== undefined)
                 cell.textAlign = across === 3 ? Qt.AlignRight : across === 2 ? Qt.AlignHCenter : Qt.AlignLeft
+            if (cell.singleLine !== undefined)
+                cell.singleLine = i < root.columns.length && !root.columns[i].wrap
             if (cell.tabularFigures !== undefined)
                 cell.tabularFigures = across === 3
             x += w

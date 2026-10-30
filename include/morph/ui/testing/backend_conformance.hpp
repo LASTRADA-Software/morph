@@ -2103,6 +2103,34 @@ struct Measured {
     return checks.result();
 }
 
+/// @brief Case: in a 5-unit column with `wrap: false`, a text longer than the column is as tall as a text of one
+///        character: it is kept to one line, not broken across several.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> noWrapColumnKeepsCellsToOneLine(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(),
+                                                    {{.id = 1, .label = "99.4 % LC"}, {.id = 2, .label = "x"}}};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       insideColumn(ui::table<Entry>(
+                           {{.label = "Assay", .width = Sizing::fixed(5), .wrap = false}},
+                           [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+                           [](reactive::Signal<Entry> const& entry) {
+                               return std::vector<Node>{ui::text({.text = [&entry] { return entry.get().label; }})};
+                           }))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Widget const* const table = probe.childAt(rootContainer(view), 0);
+    std::vector<Widget*> const longer = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 0);
+    std::vector<Widget*> const shorter = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 1);
+    checks.that(longer.size() == 1 && shorter.size() == 1, "the table holds two rows of one cell");
+    if (longer.size() == 1 && shorter.size() == 1) {
+        geometry.near("the long text's height, against the short text's", geometry.of(*shorter.front()).height,
+                      geometry.of(*longer.front()).height);
+    }
+    return checks.result();
+}
+
 /// @brief One report of a table's selection: the keys, sorted, and the kind of change.
 struct SelectionReport {
     /// @brief The keys reported, sorted.
@@ -2996,7 +3024,7 @@ struct WrappingRow {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 23> const cases{{
+    static std::array<ConformanceCase, 24> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3032,6 +3060,8 @@ struct WrappingRow {
          .run = detail::wrappingRowStretchTakesLineSpare},
         {.name = "a small push button is narrower than a normal one with the same label",
          .run = detail::smallButtonIsNarrower},
+        {.name = "a column with wrap: false keeps its cells to one line",
+         .run = detail::noWrapColumnKeepsCellsToOneLine},
     }};
     return cases;
 }

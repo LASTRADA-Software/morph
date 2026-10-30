@@ -216,8 +216,10 @@ Item {
     // The tooltip, made the first time the widget has one: the attached ToolTip's content item reads markup, and a
     // tooltip is a document's text.
     property ToolTip tip: null
-    onTooltipChanged: {
-        if (root.tooltip !== "" && root.tip === null)
+    // What the tooltip says: the node's own `tooltip`, unless a kind has something to say when it has none.
+    property string tooltipText: tooltip
+    onTooltipTextChanged: {
+        if (root.tooltipText !== "" && root.tip === null)
             root.tip = tipComponent.createObject(root) as ToolTip
     }
 
@@ -227,8 +229,8 @@ Item {
         ToolTip {
             id: tipPopup
             objectName: "tooltip"
-            text: root.tooltip
-            visible: root.tooltip !== "" && hover.hovered
+            text: root.tooltipText
+            visible: root.tooltipText !== "" && hover.hovered
             delay: 600
             contentItem: Text {
                 text: tipPopup.text

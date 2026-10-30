@@ -951,15 +951,16 @@ inline constexpr std::array<KeySpec, 27> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"valign", Shape::Text},
                                                         {"empty", Shape::Nodes}}};
 /// @brief The keys of a `table` column part.
-inline constexpr std::array<KeySpec, 9> kColumnKeys = {{{"id", Shape::Name},
-                                                        {"label", Shape::Expr},
-                                                        {"width", Shape::Expr},
-                                                        {"role", Shape::Expr},
-                                                        {"align", Shape::Text},
-                                                        {"valign", Shape::Text},
-                                                        {"sortable", Shape::Flag},
-                                                        {"sortBy", Shape::Expr, {}, kInner},
-                                                        {"cell", Shape::Nodes, {}, kInner}}};
+inline constexpr std::array<KeySpec, 10> kColumnKeys = {{{"id", Shape::Name},
+                                                         {"label", Shape::Expr},
+                                                         {"width", Shape::Expr},
+                                                         {"role", Shape::Expr},
+                                                         {"align", Shape::Text},
+                                                         {"valign", Shape::Text},
+                                                         {"sortable", Shape::Flag},
+                                                         {"wrap", Shape::Flag},
+                                                         {"sortBy", Shape::Expr, {}, kInner},
+                                                         {"cell", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of a `table` group part: the value its rows are grouped by, and the heading drawn before each
 ///        group, both read in the row scope.
 inline constexpr std::array<KeySpec, 2> kTableGroupKeys = {

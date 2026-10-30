@@ -1312,6 +1312,35 @@ TEST_CASE("qt_quick widgets: every text a document gives is drawn as its charact
     }
 }
 
+// Mutation: leave the elided text without a tooltip, or let the automatic tooltip win over the node's own.
+TEST_CASE("qt_quick widgets: an elided mono text's tooltip is its full text, and a node's own tooltip wins",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const elided = scene.backend().createText(column.get());
+    elided->setRole(ui::TextRole::Mono);
+    elided->setText("S-26-104170-AND-A-LONG-TAIL");
+    auto const own = scene.backend().createText(column.get());
+    own->setRole(ui::TextRole::Mono);
+    own->setText("S-26-104170-AND-A-LONG-TAIL");
+    own->setTooltip("Sample");
+    auto const fits = scene.backend().createText(column.get());
+    fits->setRole(ui::TextRole::Mono);
+    fits->setText("S-1");
+    scene.settle();
+    for (ui::TextWidget* const widget : {elided.get(), own.get(), fits.get()}) {
+        // A width narrower than the long text elides it; the short one still fits.
+        widget->setLayout({.width = ui::Sizing::fixed(12)});
+    }
+    scene.settle();
+    CHECK(Scene::itemOf(*elided).property("elided").toBool());
+    CHECK(Scene::controlOf(*elided).property("lineCount").toInt() == 1);
+    CHECK(Scene::itemOf(*elided).property("tooltipText").toString() == QStringLiteral("S-26-104170-AND-A-LONG-TAIL"));
+    CHECK(Scene::itemOf(*own).property("tooltipText").toString() == QStringLiteral("Sample"));
+    CHECK_FALSE(Scene::itemOf(*fits).property("elided").toBool());
+    CHECK(Scene::itemOf(*fits).property("tooltipText").toString().isEmpty());
+}
+
 // Mutation: ignore `tone` in MorphText (the colour stays the role's), or colour the role's font instead (the font
 // stays heading-sized and the colour check passes, so the font check is what keeps the role).
 TEST_CASE("qt_quick widgets: a text's tone is its colour whatever its role, and the role keeps its font",

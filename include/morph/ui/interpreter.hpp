@@ -8810,7 +8810,8 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                                       .role = columnRole,
                                       .align = cellPlaceNamed(part->name("align")).value_or(Align::Start),
                                       .valign = cellPlaceNamed(part->name("valign")).value_or(tableValign),
-                                      .sortable = part->flag("sortable")});
+                                      .sortable = part->flag("sortable"),
+                                      .wrap = part->flag("wrap", true)});
         cells.push_back(part.get());
         fields.emplace_back(part->id);
         roles.push_back(columnRole);

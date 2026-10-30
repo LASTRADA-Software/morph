@@ -71,7 +71,8 @@ MorphWidget {
     readonly property var widths: root.columnWidths(width - root.lead)
 
     // A column's declared width describes its content, with `table.cellPaddingX` added on both sides, so the padding
-    // never takes room from the content: a fixed column is its units plus the padding, a content column its widest
+    // never takes room from the content: a fixed column is its units plus the padding (a unit is a body character,
+    // or the mono face's advance in a column whose role is mono, whatever its cells draw), a content column its widest
     // cell plus the padding. No column is narrower than its header: a content column is at least its header and its
     // widest cell, a stretch column at least its header (its cells are meant to take what is left, so they do not
     // raise it), each with the padding a side and never under 8 units. A stretch column takes its share of what the others leave, and
@@ -90,7 +91,9 @@ MorphWidget {
                                     8 * Theme.unitWidth)
             let w = 0
             if (column.kind === 1)
-                w = column.amount * Theme.unitWidth + pad
+                // A mono column's n characters are whole pixels wide, so the text, which a pixel of rounding can make
+                // wider than n advances, is never cut short for want of it.
+                w = (column.role === 6 ? Math.ceil(column.amount * Theme.monoAdvance) : column.amount * Theme.unitWidth) + pad
             else if (column.kind === 0)
                 w = Math.max(root.cachedWidth(i) + pad, header)
             else

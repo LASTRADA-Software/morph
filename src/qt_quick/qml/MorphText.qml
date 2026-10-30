@@ -13,6 +13,11 @@ MorphField {
     // markup (`runsHtml`), and a plain text never goes through rich text.
     property var runs: []
     readonly property bool hasRuns: runs.length > 0
+    // Whether the text is drawn on one line and elided at its end, as a table sets it for a column that does not wrap.
+    // A mono text is always one line: an identifier broken across lines reads as two. Runs are rich text, which is
+    // not elided, so they wrap with their sentence.
+    property bool singleLine: false
+    readonly property bool oneLine: (singleLine || role === 6) && !hasRuns
     property int role: 0
     // Where the text sits across the widget: a table sets it from its column's `align`.
     property int textAlign: Qt.AlignLeft
@@ -22,6 +27,14 @@ MorphField {
     // The widget's item is the node a driver finds, so it reads the text; the label inside it is not a second node.
     defaultName: text
     defaultRole: Accessible.StaticText
+    // A one-line text cut short of its text with an ellipsis, by the label's font: the label itself is told about
+    // each line it lays out, which keeps it from eliding.
+    readonly property string fitted: root.oneLine ? metrics.elidedText(root.text, Qt.ElideRight, root.controlWidth)
+                                                  : root.text
+    // Whether the text is shown cut short.
+    readonly property bool elided: root.fitted !== root.text
+    // While the text is elided, its full text is the tooltip, unless the node gives its own.
+    tooltipText: root.tooltip !== "" ? root.tooltip : root.elided ? root.text : ""
     control: label
     // A required text's mark follows the end of its last line. Rich text reports no lines, so for spans the mark
     // follows the widest line, on the last one.
@@ -38,8 +51,8 @@ MorphField {
         id: label
         textFormat: root.hasRuns ? Text.RichText : Text.PlainText
         width: root.controlWidth
-        text: root.hasRuns ? root.runsHtml(root.runs) : root.text
-        wrapMode: Text.Wrap
+        text: root.hasRuns ? root.runsHtml(root.runs) : root.fitted
+        wrapMode: root.oneLine ? Text.NoWrap : Text.Wrap
         horizontalAlignment: root.textAlign
         font: Theme.figuresOf(root.role === 2 ? Theme.headingFont
                                               : root.role === 5 ? Theme.strongFont

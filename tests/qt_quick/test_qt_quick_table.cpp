@@ -127,6 +127,40 @@ TEST_CASE("qt_quick table: the selection mode limits what the user selects, not 
     CHECK_FALSE(detail::TableImpl::marked(*detail::baseOf(*table.rows.at(1))));
 }
 
+// Mutation: measure a mono column in `Theme.unitWidth` (the identifier is cut short), or leave `singleLine` unset
+// (the 5-unit text wraps onto several lines).
+TEST_CASE("qt_quick table: a fixed mono column holds its identifiers whole, and a column without wrap keeps one line",
+          "[qt_quick]") {
+    Scene scene;
+    // A mono face wider than the body font's average character, as a theme with a larger mono size draws.
+    ui::ThemeValues wider = ui::themeValues();
+    wider.dimensions.insert_or_assign("font.size.mono", 18.0);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), wider).empty());
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "Sample", .width = ui::Sizing::fixed(11), .role = ui::TextRole::Mono},
+                       {.label = "Assay", .width = ui::Sizing::fixed(5), .wrap = false},
+                       {.label = "Note", .width = ui::Sizing::fixed(5)}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    auto id = scene.backend().createText(row.get());
+    id->setRole(ui::TextRole::Mono);
+    id->setText("S-26-104170");
+    auto unwrapped = scene.backend().createText(row.get());
+    unwrapped->setText("99.4 % LC");
+    auto wrapped = scene.backend().createText(row.get());
+    wrapped->setText("99.4 % LC");
+    scene.settle();
+    QObject const& idLabel = Scene::controlOf(*id);
+    CHECK_FALSE(Scene::itemOf(*id).property("elided").toBool());
+    CHECK(idLabel.property("lineCount").toInt() == 1);
+    QObject const& unwrappedLabel = Scene::controlOf(*unwrapped);
+    CHECK(unwrappedLabel.property("lineCount").toInt() == 1);
+    CHECK(Scene::itemOf(*unwrapped).property("elided").toBool());
+    CHECK(Scene::controlOf(*wrapped).property("lineCount").toInt() > 1);
+    // The row is one line of the tallest cell, not the wrapped text's several.
+    CHECK(Scene::itemOf(*unwrapped).height() < Scene::itemOf(*wrapped).height());
+}
+
 TEST_CASE("qt_quick table: cells sit under their headers, and a hidden cell keeps its column", "[qt_quick]") {
     Scene scene;
     Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);

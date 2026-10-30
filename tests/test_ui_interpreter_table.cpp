@@ -68,6 +68,19 @@ TEST_CASE("table: a column's align and valign reach the view, the table's valign
     CHECK(h.backend.prop(table, "columns") == "[Sample:content;valign=start,Area:content;align=end;valign=end]");
 }
 
+// Mutation: leave `wrap` out of the column the interpreter lowers (the column records no `wrap=false`).
+TEST_CASE("table: a column's wrap: false reaches the view, and a column without it wraps", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "nowrap",
+      "state": { "items": { "init": { "lit": [ { "id": "S-1", "area": "99.4 % LC" } ] } } },
+      "view": { "kind": "table", "rows": { "ref": "items" },
+                "columns": [ { "id": "id", "label": "Sample" },
+                             { "id": "area", "label": "Area", "wrap": false } ] } })");
+    int const table = h.backend.all("Table").front();
+    CHECK(h.backend.prop(table, "columns") == "[Sample:content,Area:content;wrap=false]");
+}
+
 TEST_CASE("table: a computed column's place that names none is reported once and takes the default",
           "[ui][interpreter]") {
     Harness h;

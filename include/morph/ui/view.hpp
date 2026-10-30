@@ -1080,8 +1080,9 @@ struct TableColumn {
     std::string label;
     /// @brief The column's width request.
     Sizing width = Sizing::content();
-    /// @brief The text style of this column's default cell; `Normal` renders unchanged. Has no effect on a column
-    ///        with its own `.cell`, or on a `Table` constructed directly without going through the interpreter.
+    /// @brief The text style of this column's default cell; `Normal` renders unchanged. Has no effect on the style of
+    ///        a column's own `.cell`, or on a `Table` constructed directly without going through the interpreter. A
+    ///        `Mono` role also sets the column's width unit: a fixed width counts monospace characters.
     TextRole role = TextRole::Normal;
     /// @brief Where a cell sits across the column: the text of a text cell or a text input cell, and a label-width
     ///        cell (a badge, a check box, a push button) at its natural width, at the start, centre or end; the
@@ -1093,6 +1094,9 @@ struct TableColumn {
     Align valign = Align::Center;
     /// @brief Whether a click on the column's header asks to sort by it (`Table::onSort`).
     bool sortable = false;
+    /// @brief Whether the column's text cells may break across lines. With `false` each is drawn on one line and cut
+    ///        at the column's width with an ellipsis, such as a value with its unit in a narrow column.
+    bool wrap = true;
 };
 
 /// @brief Keyed rows of cells under column headers. Each row's view is a `Row` whose children are the cells, one

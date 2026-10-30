@@ -27,6 +27,9 @@ public:
     void setTone(ui::Tone tone) override;
     [[nodiscard]] std::string probeText() const override { return _text; }
     [[nodiscard]] bool placedAcrossColumn() const override { return true; }
+    /// Whether a line wider than the text is drawn cut with an ellipsis in its last cell, as a table sets it for a
+    /// column that does not wrap. A mono text is always drawn so: an identifier is never broken across rows.
+    void setElided(bool elided);
 
 protected:
     [[nodiscard]] ::core::tui::Size controlSize() const override;
@@ -39,6 +42,7 @@ private:
     std::vector<ui::TextSpan> _runs;
     ui::TextRole _role = ui::TextRole::Normal;
     ui::Tone _tone = ui::Tone::Neutral;
+    bool _elided = false;
 };
 
 /// Button: `[ label ]`, activated by Enter, Space or a click; a list item draws ` label` across its whole slot. A list

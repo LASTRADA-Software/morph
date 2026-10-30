@@ -494,4 +494,11 @@ QtObject {
             return neutral
         }
     }
+
+    // The mono face's character advance: the width unit of a monospace column, whose characters are each this wide.
+    readonly property FontMetrics monoMetrics: FontMetrics {
+        font: theme.monoFont
+    }
+    // `advanceWidth` is a call, which a binding does not follow, so the font is read for the binding to follow it.
+    readonly property real monoAdvance: monoMetrics.font.pixelSize > 0 ? monoMetrics.advanceWidth("0") : 0
 }

@@ -17,6 +17,7 @@
 #include "tui/chord.hpp"
 #include "tui/container_widgets.hpp"
 #include "tui/layout.hpp"
+#include "tui/leaf_widgets.hpp"
 
 namespace morph::tui::detail {
 
@@ -447,6 +448,12 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
                 stack->setColumnLayout({across}, kColumnGap, {CellPlace{.across = ui::Align::Start}});
             } else {
                 stack->setColumnLayout(widths, kColumnGap, places);
+                // A column that does not wrap cuts its text cells at its width with an ellipsis.
+                for (auto const [column, cell] : std::views::zip(_columns, stack->children())) {
+                    if (auto* const text = dynamic_cast<TextImpl*>(cell)) {
+                        text->setElided(!column.wrap);
+                    }
+                }
             }
         }
     }

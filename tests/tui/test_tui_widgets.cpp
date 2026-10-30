@@ -794,6 +794,20 @@ TEST_CASE("tui widgets: a text's runs draw in order, a strong run bold and its n
     CHECK(harness.draw() == Rows{"plain"});
 }
 
+// Mutation: draw a mono text with no ellipsis (it is cut like any text), or elide every role (the normal text ends
+// in one too).
+TEST_CASE("tui widgets: a mono text wider than its row ends in an ellipsis, and a normal text is cut",
+          "[tui][widgets]") {
+    Harness harness{8, 2};
+    auto const text = harness.make<TextImpl>(nullptr);
+    text->setRole(ui::TextRole::Mono);
+    text->setText("S-26-104170");
+    CHECK(harness.draw() == Rows{"S-26-10…"});
+    CHECK(text->probeText() == "S-26-104170");
+    text->setRole(ui::TextRole::Normal);
+    CHECK(harness.draw() == Rows{"S-26-104"});
+}
+
 // Mutation: ignore a run's tone in paintRuns (the run keeps the text's colour), or let a text's tone replace its
 // boldness (a heading is no longer bold).
 TEST_CASE("tui widgets: a toned run takes the tone's colour, and a toned text keeps its role's boldness",
