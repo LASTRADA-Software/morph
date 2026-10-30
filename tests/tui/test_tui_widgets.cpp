@@ -903,3 +903,16 @@ TEST_CASE("tui widgets: a square push button drops the spaces inside its bracket
     button->setShape(ui::ControlShape::Square);
     CHECK(harness.draw() == Rows{"[\xE2\x80\xB9]"});
 }
+
+// Mutation: map Overline to Normal in roleStyle (the label is neither bold nor muted).
+TEST_CASE("tui widgets: an overline text is bold and muted, written as it reads", "[tui][widgets]") {
+    Harness harness{20, 1};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const overline = harness.make<TextImpl>(column.get());
+    overline->setText("Record type");
+    overline->setRole(ui::TextRole::Overline);
+    CHECK(harness.draw() == Rows{"Record type"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.bold);
+    CHECK(buffer.at(0, 0).style.fg == harness.screen().theme().textMuted.fg);
+}

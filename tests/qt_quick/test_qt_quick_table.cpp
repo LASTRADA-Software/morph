@@ -978,3 +978,28 @@ TEST_CASE("qt_quick table: a cell is inset by table.cellPaddingY and a row grows
     CHECK(rowItem.height() >= restingHeight);
     CHECK(rowItem.height() >= cell.implicitHeight() + 12.0);
 }
+
+// Mutation: today's `figuresOf`, which rebuilds the font without its capitalisation and letter spacing.
+TEST_CASE("qt_quick table: an overline cell keeps its capitals and letter spacing beside tabular figures",
+          "[qt_quick]") {
+    Scene scene;
+    ui::ThemeValues values = ui::themeValues();
+    values.keywords.insert_or_assign("font.overline.case", "uppercase");
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns(
+        {{.label = "Kind", .width = ui::Sizing::fixed(12), .role = ui::TextRole::Overline, .align = ui::Align::End},
+         {.label = "Name"}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    auto kind = scene.backend().createText(row.get());
+    kind->setRole(ui::TextRole::Overline);
+    kind->setText("Assay 7");
+    auto name = scene.backend().createText(row.get());
+    name->setText("pH");
+    scene.settle();
+    QFont const font = Scene::controlOf(*kind).property("font").value<QFont>();
+    CHECK(font.featureValue(QFont::Tag{"tnum"}) == 1);
+    CHECK(font.capitalization() == QFont::AllUppercase);
+    CHECK(font.letterSpacing() > 0.0);
+}

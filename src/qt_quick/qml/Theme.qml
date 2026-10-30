@@ -46,6 +46,17 @@ QtObject {
     // The small size, regular and strong: a table header (strong), a footnote, a timestamp, a tag.
     readonly property font smallFont: fontOf(smallPixels, Font.Normal)
     readonly property font smallStrongFont: fontOf(smallPixels, strongWeight)
+    // An overline: a short label over a group. It is drawn as a section (body size, strong) unless `overlineCaps`, when
+    // it is the small size, strong, in capitals, letter-spaced by 0.05 times that size. The font is built whole, with
+    // its capitalisation and letter spacing, since a font rebuilt from it keeps only what it is given.
+    readonly property font overlineFont: overlineCaps ? Qt.font({
+        family: families[0],
+        families: families,
+        pixelSize: Math.round(smallPixels),
+        weight: strongWeight,
+        capitalization: Font.AllUppercase,
+        letterSpacing: 0.05 * smallPixels
+    }) : strongFont
     // A field's caption above its control.
     readonly property font captionFont: fontOf(captionPixels, Font.Normal)
     // A figure that stands out, such as a KPI's number: the display size, strong.
@@ -180,6 +191,8 @@ QtObject {
             families: families.length > 0 ? families : [base.family],
             weight: base.weight,
             italic: base.italic,
+            capitalization: base.capitalization,
+            letterSpacing: base.letterSpacing,
             features: {
                 "tnum": 1
             }

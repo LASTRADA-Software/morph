@@ -24,9 +24,9 @@ namespace morph::tui::detail {
 
 namespace {
 
-// A section heading is the muted style, bold: a step below a heading, which is bold body text. `Mono` is body text:
-// a terminal draws every cell in one fixed-pitch font already. `Display` is bold, as `Heading` is, and `Small` is
-// normal: a cell has one size.
+// A section heading and an overline are the muted style, bold: a step below a heading, which is bold body text. `Mono`
+// is body text: a terminal draws every cell in one fixed-pitch font already. `Display` is bold, as `Heading` is, and
+// `Small` is normal: a cell has one size.
 ::core::tui::Style roleStyle(::core::tui::Theme const& theme, ui::TextRole role) {
     if (role == ui::TextRole::Muted) {
         return theme.textMuted;
@@ -40,7 +40,7 @@ namespace {
     if (role == ui::TextRole::Success) {
         return theme.success;
     }
-    if (role == ui::TextRole::Section) {
+    if (role == ui::TextRole::Section || role == ui::TextRole::Overline) {
         ::core::tui::Style section = theme.textMuted;
         section.bold = true;
         return section;

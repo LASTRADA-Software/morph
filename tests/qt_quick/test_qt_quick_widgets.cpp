@@ -1799,9 +1799,8 @@ TEST_CASE(
 }
 
 // Mutation: ignore `Theme.iconOnlySquare` in the menu's trigger.
-TEST_CASE(
-    "qt_quick widgets: under shape.iconOnly an icon-only menu trigger is square, and otherwise is not",
-    "[qt_quick]") {
+TEST_CASE("qt_quick widgets: under shape.iconOnly an icon-only menu trigger is square, and otherwise is not",
+          "[qt_quick]") {
     Scene scene;
     scene.window().resize(400, 200);
     auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
@@ -1824,4 +1823,44 @@ TEST_CASE(
     scene.settle();
     CHECK(trigger.width() == trigger.height());
     CHECK(Scene::itemOf(*labelled).width() > Scene::itemOf(*labelled).height());
+}
+
+// Mutation: draw an overline as a section whatever the token (the size check fails).
+TEST_CASE(
+    "qt_quick widgets: an overline is small, strong, muted capitals under font.overline.case, and a section otherwise",
+    "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 200);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const overline = scene.backend().createText(column.get());
+    overline->setText("Record type");
+    overline->setRole(ui::TextRole::Overline);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.settle();
+    QObject* const theme = themeOf(scene);
+    auto const labelFont = [&] { return Scene::controlOf(*overline).property("font").value<QFont>(); };
+    QFont const strong = theme->property("strongFont").value<QFont>();
+    CHECK(labelFont().pixelSize() == strong.pixelSize());
+    CHECK(labelFont().weight() == strong.weight());
+    CHECK(labelFont().capitalization() == QFont::MixedCase);
+
+    auto const tokens =
+        ui::parseTokens(R"({"font": {"overline": {"case": {"$type": "keyword", "$value": "uppercase"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    scene.settle();
+    QFont const font = labelFont();
+    CHECK(font.pixelSize() == static_cast<int>(std::lround(theme->property("smallPixels").toReal())));
+    CHECK(font.weight() == static_cast<QFont::Weight>(theme->property("strongWeight").toInt()));
+    CHECK(font.capitalization() == QFont::AllUppercase);
+    CHECK(font.letterSpacing() > 0.0);
+    CHECK(Scene::controlOf(*overline).property("color").value<QColor>() == theme->property("muted").value<QColor>());
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface const* const node = QAccessible::queryAccessibleInterface(&Scene::itemOf(*overline));
+    REQUIRE(node != nullptr);
+    CHECK(node->text(QAccessible::Name) == QStringLiteral("Record type"));
+    QAccessible::setActive(wasActive);
 }

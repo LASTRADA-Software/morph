@@ -6434,12 +6434,15 @@ namespace detail {
     if (name == "small") {
         return TextRole::Small;
     }
+    if (name == "overline") {
+        return TextRole::Overline;
+    }
     return std::nullopt;
 }
 
 /// @brief What a role that names none is told: the names `roleNamed` reads.
 inline constexpr std::string_view kRoleNames =
-    "a role is normal, muted, heading, section, error, success, mono, display or small";
+    "a role is normal, muted, heading, section, error, success, mono, display, small or overline";
 
 /// @brief A text role by name, as `roleNamed` reads it.
 /// @param value  The name.

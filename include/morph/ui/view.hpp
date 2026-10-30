@@ -235,15 +235,18 @@ private:
 
 /// @brief How a `Text` is styled; each backend maps a role to its theme.
 enum class TextRole : std::uint8_t {
-    Normal,   ///< Body text.
-    Muted,    ///< Secondary text.
-    Heading,  ///< A section heading.
-    Error,    ///< An error message.
-    Success,  ///< A confirmation.
-    Section,  ///< The heading of a group within a list: body size, bold and muted, below a `Heading`.
-    Mono,     ///< An identifier: the theme's fixed-pitch family (`font.mono`) at `font.size.mono`, the text colour.
-    Display,  ///< A figure that stands out, such as a KPI's number: `font.size.display`, strong, the text colour.
-    Small,    ///< A footnote or a timestamp: `font.size.small`, regular, the text colour.
+    Normal,    ///< Body text.
+    Muted,     ///< Secondary text.
+    Heading,   ///< A section heading.
+    Error,     ///< An error message.
+    Success,   ///< A confirmation.
+    Section,   ///< The heading of a group within a list: body size, bold and muted, below a `Heading`.
+    Mono,      ///< An identifier: the theme's fixed-pitch family (`font.mono`) at `font.size.mono`, the text colour.
+    Display,   ///< A figure that stands out, such as a KPI's number: `font.size.display`, strong, the text colour.
+    Small,     ///< A footnote or a timestamp: `font.size.small`, regular, the text colour.
+    Overline,  ///< A short label over a group: as `Section` unless the theme's `font.overline.case` is `uppercase`,
+               ///< which draws it at `font.size.small`, strong, muted, in letter-spaced capitals. Written as it
+               ///< reads; the terminal draws it as `Section`, whatever the theme.
 };
 
 /// @brief How a `TextInput` edits.
