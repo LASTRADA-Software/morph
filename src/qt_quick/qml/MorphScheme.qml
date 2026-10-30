@@ -27,6 +27,9 @@ QtObject {
     property color divider: "#dcdce0"
     // Whether the outlines of the controls on this surface are stroked in dashes: `border.style`.
     property bool borderDashed: false
+    // Whether a selected list item is drawn as a plain fill, with its label in the text colour and no accent bar:
+    // `list.selection`.
+    property bool listSelectionFill: false
     property color error: "#c62828"
     property color success: "#2e7d32"
     property color info: "#1565c0"

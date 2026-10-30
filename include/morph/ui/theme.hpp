@@ -990,10 +990,11 @@ struct KeywordSpec {
 };
 
 /// @brief The keyword tokens of the set.
-inline constexpr std::array<KeywordSpec, 3> kKeywords = {{
+inline constexpr std::array<KeywordSpec, 4> kKeywords = {{
     {.path = "shape.iconOnly", .names = {"default", "square"}},
     {.path = "font.overline.case", .names = {"none", "uppercase"}},
     {.path = "collapsible.marker", .names = {"shown", "none"}},
+    {.path = "list.selection", .names = {"accent", "fill"}},
 }};
 
 /// @brief The dimension tokens of the set that may not be negative: an inset has no meaning below zero.
@@ -1194,7 +1195,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 69> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 70> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1324,6 +1325,16 @@ inline constexpr std::array<ThemeTokenSpec, 69> kThemeTokens = {{
      .family = "",
      .stroke = "",
      .keyword = "shown"},
+    // How a selected list item is marked, read per surface: the selection colour with an accent bar and an accent
+    // label (`accent`), or the selection colour alone with the label in the surface's text colour (`fill`).
+    {.path = "list.selection",
+     .kind = ThemeTokenKind::Keyword,
+     .color = "",
+     .number = 0.0,
+     .shadow = {},
+     .family = "",
+     .stroke = "",
+     .keyword = "accent"},
 }};
 
 /// @brief A `shadow` of the set, resolved.

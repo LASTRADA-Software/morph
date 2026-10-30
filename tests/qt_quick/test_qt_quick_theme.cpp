@@ -1730,6 +1730,48 @@ TEST_CASE("qt_quick theme: the joined top bar's scheme is its own and follows th
     }
 }
 
+// Mutation: leave the surface's `listSelectionFill` unwritten (the sidebar keeps the theme's), or write the theme's
+// value to every surface (the theme's own scheme turns `fill`).
+TEST_CASE("qt_quick theme: a surface's list selection is its own and the theme's scheme keeps accent", "[qt_quick]") {
+    Scene scene;
+    auto const sidebarTokens = ui::parseTokens(R"({"list": {"selection": {"$type": "keyword", "$value": "fill"}}})");
+    REQUIRE(sidebarTokens);
+    auto const sidebarResolved = ui::resolveTokens({&*sidebarTokens});
+    REQUIRE(sidebarResolved);
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"sidebar", ui::themeValues(*sidebarResolved)}};
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), surfaces).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
+    auto* const own = theme->property("themeScheme").value<QObject*>();
+    auto* const page = theme->property("pageScheme").value<QObject*>();
+    REQUIRE((sidebar != nullptr && own != nullptr && page != nullptr));
+    CHECK(sidebar->property("listSelectionFill").toBool());
+    CHECK_FALSE(own->property("listSelectionFill").toBool());
+    CHECK_FALSE(page->property("listSelectionFill").toBool());
+}
+
+// Mutation: leave a built-in surface's `listSelectionFill` unbound (the sidebar or the bar keeps accent under a theme
+// that fills).
+TEST_CASE("qt_quick theme: a theme's list selection reaches every built-in surface that does not set its own",
+          "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"list": {"selection": {"$type": "keyword", "$value": "fill"}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    CHECK(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    for (char const* const name : {"themeScheme", "pageScheme", "cardScheme", "sidebarScheme", "toolbarScheme",
+                                   "barScheme", "toolbarJoinedScheme"}) {
+        auto* const scheme = theme->property(name).value<QObject*>();
+        REQUIRE(scheme != nullptr);
+        INFO(name);
+        CHECK(scheme->property("listSelectionFill").toBool());
+    }
+}
+
 // Mutation: leave `input.paddingX` out of the dimension table in theme.cpp (the bundle's 10 never reaches Theme).
 TEST_CASE("qt_quick theme: the input inset reaches the Theme singleton", "[qt_quick]") {
     Scene scene;

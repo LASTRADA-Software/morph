@@ -272,6 +272,37 @@ TEST_CASE("ui theme values: a collapsible's marker is shown or none, and any oth
     CHECK(ui::unreadThemeTokens(index, files).empty());
 }
 
+// Mutation: accept any string as the selection look (`bar` reads), or leave `list.selection` out of `kThemeTokens` (a
+// bundle's `fill` is dropped).
+TEST_CASE("ui theme values: a list selection is accent or fill, and any other is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().keywords.at("list.selection") == "accent");
+    CHECK(
+        valuesOf(R"({"list": {"selection": {"$type": "keyword", "$value": "fill"}}})").keywords.at("list.selection") ==
+        "fill");
+
+    auto const parse = [](std::string_view text) {
+        auto tokens = ui::parseTokens(text);
+        REQUIRE(tokens.has_value());
+        return std::move(*tokens);
+    };
+    ui::TokenSet const base = parse(R"({"list": {"selection": {"$type": "keyword", "$value": "fill"}}})");
+    ui::TokenSet const bar = parse(R"({"list": {"selection": {"$type": "keyword", "$value": "bar"}}})");
+    ui::ThemeIndex index;
+    index.base = "base";
+    index.surfaces.emplace("odd", "bar");
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        if (id == "base") {
+            return &base;
+        }
+        return id == "bar" ? &bar : nullptr;
+    };
+    auto const refused = ui::checkTheme(index, files);
+    REQUIRE(refused.has_value());
+    CHECK(refused->find("list.selection: only accent and fill are drawn") != std::string::npos);
+    index.surfaces.clear();
+    CHECK_FALSE(ui::checkTheme(index, files).has_value());
+}
+
 // Mutation: leave `input.paddingX` out of `kThemeTokens` (the bundle's 10 is dropped and 8 reads), or drop its check
 // (a negative inset is accepted).
 TEST_CASE("ui theme values: an input's inner padding defaults to 8 and a negative one is refused", "[ui][theme]") {

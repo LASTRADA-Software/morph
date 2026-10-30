@@ -3,7 +3,7 @@ import QtQuick
 
 // What a button is drawn on: the control height and radius, outlined on the surface colour, a shade darker while
 // hovered or pressed. A list item's is unframed: clear, the hover colour while hovered, and while selected the selection
-// colour with an accent bar at its leading edge. A selected push button keeps its frame and size and draws an accent ring outside
+// colour with an accent bar at its leading edge, unless the surface's list selection is a fill, which has no bar. A selected push button keeps its frame and size and draws an accent ring outside
 // its border; unless filled it also takes the item's accent tint, since the default theme's focus and accent colours
 // are the same and a ring alone would read as focus. A ghost button is unframed the same way but has no "current"
 // concept: just the hover tint while hovered or pressed, transparent otherwise. A round button's corners are half its
@@ -55,7 +55,7 @@ Rectangle {
     }
 
     Rectangle {
-        visible: background.item && background.selected
+        visible: background.item && background.selected && !background.scheme.listSelectionFill
         width: 3
         height: parent.height
         color: background.scheme.accent

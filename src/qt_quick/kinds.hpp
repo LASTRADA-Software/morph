@@ -185,7 +185,8 @@ public:
 
 protected:
     [[nodiscard]] QQuickItem* contentFor(ItemBase& child) override;
-    [[nodiscard]] QObject* scheme() const override { return part("scheme"); }
+    /// The scheme the content draws in: the button's, with its text role following the selection.
+    [[nodiscard]] QObject* scheme() const override { return part("contentScheme"); }
 
 private:
     std::unique_ptr<ContainerItemWidget<ui::SlotWidget>> _content;

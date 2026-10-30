@@ -171,6 +171,9 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     if (!theme.setProperty("collapsibleMarker", !keywordIs(values, "collapsible.marker", "none"))) {
         unset.emplace_back("collapsibleMarker");
     }
+    if (!theme.setProperty("listSelectionFill", keywordIs(values, "list.selection", "fill"))) {
+        unset.emplace_back("listSelectionFill");
+    }
     if (!theme.setProperty("overlineCaps", keywordIs(values, "font.overline.case", "uppercase"))) {
         unset.emplace_back("overlineCaps");
     }
@@ -286,6 +289,9 @@ void setSurfaces(QObject& theme, std::map<std::string, ui::ThemeValues, std::les
         }
         if (!scheme->setProperty("borderDashed", dashed(surface))) {
             unset.push_back(name + ".borderDashed");
+        }
+        if (!scheme->setProperty("listSelectionFill", keywordIs(surface, "list.selection", "fill"))) {
+            unset.push_back(name + ".listSelectionFill");
         }
     }
 }
