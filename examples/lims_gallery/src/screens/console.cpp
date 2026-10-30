@@ -752,9 +752,9 @@ ui::Node samplePane(Console const& console) {
 
 // ── Layouts ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-// The least height the page keeps for the worklist and the sample pane's splitter beneath the alert, the tiles and
-// the charts; a shorter window scrolls the page instead of squeezing the splitter.
-constexpr int kExpandedMinHeight = 52;
+// The least page height, in units: the alert, the tiles and the charts take about 25 of them, leaving 15 for the
+// worklist and the sample pane's splitter. A shorter window scrolls the page instead of squeezing the splitter.
+constexpr int kExpandedMinHeight = 40;
 
 ui::Node expandedLayout(Console const& console) {
     // The design's 360 px sample pane, in the frontend's character widths, beside the worklist. The splitter takes the
@@ -828,7 +828,12 @@ ui::Screen consoleScreen() {
         Console const console = declare(screen);
         screen.title("Overview");
         declareHead(screen, console);
-        return layout::byWidth(console.width, compactLayout(console), expandedLayout(console));
+        // The switch stretches so that the expanded root fills the page; the compact layout then scrolls inside it,
+        // since a stretching child of the page is not scrolled by the page.
+        return layout::byWidth(console.width,
+                               ui::scroll({compactLayout(console)}).sizing(ui::stretch(), ui::stretch()),
+                               expandedLayout(console))
+            .sizing(ui::stretch(), ui::stretch());
     });
 }
 
