@@ -42,7 +42,8 @@ QtObject {
         const key = name + "|" + hex
         if (!(key in theme.tintedIcons))
             theme.tintedIcons[key] = "data:image/svg+xml;base64," +
-                    Qt.btoa(unescape(encodeURIComponent(svg.split("currentColor").join(hex))))
+                    Qt.btoa(Uint8Array.from(unescape(encodeURIComponent(svg.split("currentColor").join(hex))),
+                                            ch => ch.charCodeAt(0)).buffer)
         return theme.tintedIcons[key]
     }
 
