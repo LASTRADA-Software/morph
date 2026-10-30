@@ -651,11 +651,12 @@ ui::Node resultLine(Console const& console) {
         {ui::text({.text = ui::format("{0} · {1}", {ui::row("name"), ui::row("spec")})}).sizing(ui::stretch()),
          ui::textInput({.value = evaluation.shown,
                         .label = ui::format("{0} result", {ui::row("name")}),
+                        .unit = ui::row("unit"),
+                        .align = morph::ui::Align::End,
                         .onCommit = enterResult(console)})
              .readonly(Flag{ui::row("total")})
-             .sizing(ui::fixed(9))
+             .sizing(ui::fixed(14))
              .testId("pane-result"),
-         ui::text({.text = ui::row("unit")}).sizing(ui::fixed(5)),
          layout::tag(evaluation.label, evaluation.tone).testId("pane-evaluation")},
         {.gap = 1, .align = Align::Center});
 }

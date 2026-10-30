@@ -422,6 +422,7 @@ ui::Node resultInput(Worksheet const& sheet, Evaluation const& evaluation, Field
     Text const unreadableMessage = ui::format("Enter to {0} decimal places.", {field("places")});
     return ui::textInput({.value = evaluation.shown,
                           .label = ui::format("{0} result, {1}", {field("analyte"), field("sample")}),
+                          .align = morph::ui::Align::End,
                           .onCommit = commitResult(sheet)})
         .readonly(evaluation.calculated)
         .errors(
