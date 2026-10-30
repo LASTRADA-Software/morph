@@ -221,10 +221,14 @@ GridPlan planGrid(std::span<Item const> columns, std::span<GridCell const> cells
 
 namespace {
 
-/// An item's basis along a wrapping line of @p length cells.
+/// An item's basis along a wrapping line of @p length cells: a stretch item's minimum, no more than its natural
+/// extent when it has one (it needs no more room than it fills), else what it asks for.
 int basisOf(Item const& item, int length) noexcept {
-    int const wanted = isStretch(item.sizing) && item.minimum > 0 ? item.minimum : requestOf(item);
-    return std::min(clampInto(wanted, boundsOfItem(item)), std::max(0, length));
+    if (isStretch(item.sizing) && item.minimum > 0) {
+        int const wanted = item.natural > 0 ? std::min(item.minimum, item.natural) : item.minimum;
+        return std::min({wanted, maximumOf(boundsOfItem(item)), std::max(0, length)});
+    }
+    return std::min(requestOf(item), std::max(0, length));
 }
 
 /// Places one line's @p members (indices into @p items, in order) in @p length cells.

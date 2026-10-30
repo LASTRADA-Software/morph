@@ -26,7 +26,7 @@ MorphWidget {
     // Under `between` the layout's spacing comes from the stack's length, so its implicit length along the axis would
     // feed that length back to a parent that sizes the stack from it, growing on every pass; the stack's own natural
     // length is the children's and the gaps' instead.
-    implicitWidth: root.wrap ? free.implicitWidth
+    implicitWidth: root.wrap ? root.wrappedNaturalWidth
                              : root.axis === 1 && root.between ? root.naturalLength : layout.implicitWidth
     implicitHeight: root.wrap ? free.implicitHeight
                               : root.axis === 0 && root.between ? root.naturalLength : layout.implicitHeight
@@ -81,6 +81,25 @@ MorphWidget {
         return Math.max(root.gapLength, (length - used) / (count - 1))
     }
 
+    // A wrapping row's natural width: its shown children's one-line widths and the gaps between those with a basis. A
+    // binding on the children alone, not a value `place` writes, so asking a row for its width never lays it out, and
+    // the width it was last laid out at has no part in it.
+    readonly property real wrappedNaturalWidth: {
+        if (!root.wrap)
+            return 0
+        const space = Theme.spaceOf(root.gap)
+        let natural = 0
+        for (let i = 0; i < free.children.length; ++i) {
+            const cell = free.children[i]
+            if (!cell.visible)
+                continue
+            if (natural > 0 && root.naturalBasisOf(cell) > 0)
+                natural += space
+            natural += root.naturalWidth(cell)
+        }
+        return natural
+    }
+
     function leadOf(spare: real): real {
         return root.justify === 1 ? Math.max(0, spare) / 2 : root.justify === 2 ? Math.max(0, spare) : 0
     }
@@ -111,17 +130,24 @@ MorphWidget {
                              widget.maxHeightUnits, Theme.unitHeight)
     }
 
-    // A child's basis along a wrapping row: a stretch child's minimum width, else its natural width, within its
-    // bounds and at most the row's width.
-    function basisOf(cell: Item): real {
+    // A child's basis along a wrapping row, whatever the row's width: a stretch child's minimum width, no more than its
+    // natural width when it has one (it needs no more room than it fills), else its natural width, within its bounds.
+    function naturalBasisOf(cell: Item): real {
         const widget = cell as MorphWidget
         let basis = root.naturalWidth(cell)
         if (widget && widget.widthKind === 2) {
-            basis = widget.minWidthUnits >= 0 ? widget.minWidthUnits * Theme.unitWidth : cell.implicitWidth
+            const least = widget.minWidthUnits * Theme.unitWidth
+            basis = widget.minWidthUnits < 0 ? cell.implicitWidth
+                                             : cell.implicitWidth > 0 ? Math.min(least, cell.implicitWidth) : least
             if (widget.maxWidthUnits >= 0)
                 basis = Math.min(basis, widget.maxWidthUnits * Theme.unitWidth)
         }
-        return Math.min(basis, root.width)
+        return basis
+    }
+
+    // The same, at most the row's width.
+    function basisOf(cell: Item): real {
+        return Math.min(root.naturalBasisOf(cell), root.width)
     }
 
     // Lays a wrapping row out: children fill lines in order, a child starting a new line when its basis, and a gap,
@@ -135,18 +161,13 @@ MorphWidget {
             return
         const space = Theme.spaceOf(root.gap)
         const cells = []
-        let natural = 0
         for (let i = 0; i < free.children.length; ++i) {
             const cell = free.children[i]
             if (!cell.visible)
                 continue
             const basis = root.basisOf(cell)
-            if (natural > 0 && basis > 0)
-                natural += space
-            natural += root.naturalWidth(cell)
             cells.push({"item": cell, "basis": basis, "width": basis})
         }
-        free.implicitWidth = natural
         if (root.width <= 0) {
             free.implicitHeight = 0
             return

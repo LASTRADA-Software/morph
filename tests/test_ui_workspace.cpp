@@ -939,7 +939,7 @@ TEST_CASE("workspace: headPartsForActive mounts the active tab's own head, separ
         morph::ui::HeadParts parts = shell.headPartsForActive();
         Mounted const lead{harness.runtime, harness.backend, std::move(parts.lead)};
         Mounted const trail{harness.runtime, harness.backend, std::move(parts.trail)};
-        CHECK(harness.backend.prop(harness.byTestId("Column", "head_lead"), "visible") == "false");
+        CHECK(harness.backend.prop(harness.byTestId("Row", "head_lead"), "visible") == "false");
         CHECK(harness.backend.prop(harness.byTestId("Row", "head_trail"), "visible") == "false");
     }
 
@@ -990,15 +990,15 @@ TEST_CASE("workspace: the in-page head is a wrapping line of a lead that stretch
     REQUIRE(shell.open("headed", {}) == 0U);
     harness.settle();
     int const head = harness.byTestId("Row", "head");
-    int const lead = harness.byTestId("Column", "head_lead");
+    int const lead = harness.byTestId("Row", "head_lead");
     int const trail = harness.byTestId("Row", "head_trail");
     CHECK(harness.backend.prop(head, "wrap") == "true");
     CHECK(harness.backend.prop(head, "justify") == "end");
     CHECK(harness.backend.prop(head, "align") == "start");
     CHECK(harness.backend.children(head) == std::vector<int>{lead, trail});
     CHECK(harness.backend.prop(lead, "layout") == "stretch(1) min=32/content");
-    CHECK_FALSE(harness.backend.hasProp(lead, "wrap"));
-    // The badges wrap under one another whatever the lead's width: their holder wraps too.
+    // The subtitle and the badges share one wrapping line, and the badges' holder wraps too.
+    CHECK(harness.backend.prop(lead, "wrap") == "true");
     REQUIRE(harness.backend.children(lead).size() == 2);
     CHECK(harness.backend.prop(harness.backend.children(lead).at(1), "wrap") == "true");
     CHECK_FALSE(harness.backend.hasProp(trail, "wrap"));

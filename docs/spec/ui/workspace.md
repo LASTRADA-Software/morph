@@ -118,10 +118,8 @@ open tab, which is when a host settles the navigation's call rather than leave i
 
 With `HeadPlacement::InPage`, the default, the shell mounts a row over the handle's `head()` above each tab's
 screen, in its page: one wrapping row (`head`, gap 2, `align: start`, `justify: end`) of a lead and a trail. The lead (`head_lead`) is a
-column of gap 1 that stretches from `kHeadLeadMinimum` (32) units: the subtitle (muted) over the badges, whose holder
-wraps, so they wrap under one another whatever the lead's width. (A wrapping row holding a wrapping row has no stable
-size, each one's height depending on the width the other gives it, so the lead is a column.) The trail (`head_trail`) is a row of gap 1:
-the tools, the actions as buttons and the head's own menu. Where the trail fits beside 32 units of lead, the lead takes
+row of gap 1 that wraps, `align: center`, and stretches from `kHeadLeadMinimum` (32) units: the subtitle (muted) and the badges, whose holder wraps too, so they sit beside one another while they fit and wrap under one another where they do not. (A wrapping row holding a wrapping row is sized from its children's one-line widths, so the width a row was last laid out at never feeds back into the width it asks for.) The trail (`head_trail`) is a row of gap 1:
+the tools, the actions as buttons and the head's own menu. Where the trail fits beside the lead (32 units, or its natural width where that is less), the lead takes
 the rest of the width; where it does not, the trail drops to a line of its own at the trailing edge. The test ids are
 `head`, `head_lead`, `head_trail`, `head_subtitle`, `head_status_<n>` (the badge's place among the visible
 ones), `head_tool_<id>`, `head_action_<id>` and `head_menu`. A tool is a `TextInput` (a search) or a dropdown

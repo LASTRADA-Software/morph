@@ -57,7 +57,9 @@ inline constexpr int kHeadLeadMinimum = 32;
 
 /// @brief The two parts of the active screen's head, for a host that lays them out itself.
 struct HeadParts {
-    /// @brief The subtitle, muted, then the badges, which wrap under one another.
+    /// @brief The subtitle, muted, then the badges, on one wrapping line: beside one another while they fit, and
+    /// wrapped
+    ///        under one another where they do not.
     Node lead;
     /// @brief The tools, the actions and the head's own menu, in one row.
     Node trail;
@@ -350,15 +352,15 @@ public:
     [[nodiscard]] HeadParts headPartsForActive() const {
         std::optional<WorkspaceTabId> const tab = _model->active().peek();
         if (tab) {
-            return HeadParts{.lead = ui::column(buildHeadLead(*tab)), .trail = ui::row(buildHeadTrail(*tab))};
+            return HeadParts{.lead = ui::row(buildHeadLead(*tab)), .trail = ui::row(buildHeadTrail(*tab))};
         }
-        Column lead{.children = {}, .gap = 0, .common = {}};
+        Row lead{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
         lead.common.testId = "head_lead";
         lead.common.visible = false;
         Row trail{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
         trail.common.testId = "head_trail";
         trail.common.visible = false;
-        return HeadParts{.lead = ui::column(std::move(lead)), .trail = ui::row(std::move(trail))};
+        return HeadParts{.lead = ui::row(std::move(lead)), .trail = ui::row(std::move(trail))};
     }
 
     /// @brief Whether the active tab's head shows anything: a subtitle, a badge, an action or a menu entry. A tracked
@@ -789,12 +791,11 @@ private:
         return ui::textInput(std::move(input));
     }
 
-    // The head's lead, built but not yet wrapped into an immutable Node: a column of the subtitle (muted) over the
-    // badges, whose holder wraps, so they wrap under one another whatever the lead's width. It is a column rather than
-    // a wrapping row because a wrapping row holding another wrapping row has no stable size: each one's height depends
-    // on the width the other gives it. It stretches from `kHeadLeadMinimum` units, so a trail beside it leaves it at
-    // least that much before the trail wraps to a line of its own.
-    [[nodiscard]] Column buildHeadLead(WorkspaceTabId tab) const {
+    // The head's lead, built but not yet wrapped into an immutable Node: the subtitle (muted) and the badges on one
+    // wrapping line, so they sit side by side while they fit and wrap under one another where they do not; the badges'
+    // holder wraps too. It stretches from `kHeadLeadMinimum` units, so a trail beside it leaves it at least that much
+    // before the trail wraps to a line of its own.
+    [[nodiscard]] Row buildHeadLead(WorkspaceTabId tab) const {
         auto const subtitle = [this, tab] {
             ScreenHead const* const head = headOf(tab);
             return head == nullptr ? std::string{} : head->subtitle().get();
@@ -803,7 +804,9 @@ private:
             ScreenHead const* const head = headOf(tab);
             return head == nullptr ? std::vector<HeadBadge>{} : head->status().get();
         };
-        Column row{.children = {}, .gap = 1, .common = {}};
+        Row row{.children = {}, .gap = 1, .common = {}, .tone = std::nullopt};
+        row.wrap = true;
+        row.align = Align::Center;
         row.common.testId = "head_lead";
         row.common.layout.width = Sizing::stretch();
         row.common.layout.minWidth = kHeadLeadMinimum;
@@ -902,7 +905,7 @@ private:
     // content, so a screen without a head looks as it would without the row.
     [[nodiscard]] Node headRow(WorkspaceTabId tab) const {
         Row row{.children = {}, .gap = 2, .common = {}, .tone = std::nullopt};
-        row.children.push_back(ui::column(buildHeadLead(tab)));
+        row.children.push_back(ui::row(buildHeadLead(tab)));
         row.children.push_back(ui::row(buildHeadTrail(tab)));
         row.common.testId = "head";
         row.common.layout.width = Sizing::stretch();

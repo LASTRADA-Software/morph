@@ -2510,7 +2510,8 @@ struct WrappingRow {
     return checks.result();
 }
 
-/// @brief Case: a stretch child of a wrapping row takes its line's spare width, and its minimum is its basis.
+/// @brief Case: a stretch child of a wrapping row takes its line's spare width, and its minimum, no more than its
+///        natural width, is its basis.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> wrappingRowStretchTakesLineSpare(ConformanceProbe& probe) {
@@ -2543,6 +2544,20 @@ struct WrappingRow {
             WidgetBounds const fixed = geometry.of(*narrow.measured.children.at(1));
             geometry.near("the stretch text's width, alone on its line", 20.0, stretch.width);
             checks.that(fixed.y >= stretch.y + stretch.height - 0.5, "the fixed text is on the next line");
+        }
+    }
+    {
+        // A stretch child's minimum is its basis only up to its natural width: a short one with a minimum wider than
+        // itself leaves the room it would not fill to the child beside it.
+        std::vector<Node> made;
+        made.push_back(sizedText("ab", {.width = Sizing::stretch(), .minWidth = 20}));
+        made.push_back(sizedText("fixed", {.width = Sizing::fixed(12)}));
+        WrappingRow const row = mountWrappingRow(probe, 30, std::move(made));
+        checks.that(row.measured.children.size() == 2, "the row of a short stretch text holds two texts");
+        if (row.measured.children.size() == 2) {
+            WidgetBounds const stretch = geometry.of(*row.measured.children.at(0));
+            WidgetBounds const fixed = geometry.of(*row.measured.children.at(1));
+            geometry.near("the fixed text's top, on a short stretch text's line", stretch.y, fixed.y);
         }
     }
     return checks.result();

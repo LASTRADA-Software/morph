@@ -903,7 +903,8 @@ TEST_CASE("qt_quick containers: a head row puts its actions at the trailing edge
 }
 
 // Mutation: put the head slots back on a line of their own below the title (at 1000 px the actions are then lower than
-// the title), or drop the lead block's minimum width (at 390 px the actions stay beside the badges).
+// the title), make the lead a column of the subtitle over the badges (the badges are then below the subtitle at
+// 1000 px), or drop the lead block's minimum width (at 390 px the actions stay beside the badges).
 TEST_CASE("qt_quick containers: the shell's head shares the title's line, and wraps under it only when out of room",
           "[qt_quick]") {
     Scene scene;
@@ -923,19 +924,20 @@ TEST_CASE("qt_quick containers: the shell's head shares the title's line, and wr
     }
     ui::Row badgeRow{.children = std::move(badgeNodes), .gap = 1};
     badgeRow.wrap = true;
-    ui::Column leadColumn{
-        .children = {ui::text({.text = "Paracetamol 500 mg, lot 24-117", .role = ui::TextRole::Muted}),
-                     ui::row(std::move(badgeRow))},
-        .gap = 1};
-    leadColumn.common.layout.width = ui::Sizing::stretch();
+    ui::Text subtitle{.text = "Paracetamol 500 mg, lot 24-117", .role = ui::TextRole::Muted};
+    subtitle.common.testId = "head_subtitle";
+    ui::Row leadRow{.children = {ui::text(std::move(subtitle)), ui::row(std::move(badgeRow))}, .gap = 1};
+    leadRow.wrap = true;
+    leadRow.align = ui::Align::Center;
+    leadRow.common.layout.width = ui::Sizing::stretch();
+    leadRow.common.layout.minWidth = ui::kShellHeadLeadMinimum;
     std::vector<ui::Node> trail;
     for (auto const* const action : {"Book", "Sign"}) {
         ui::Button button{.label = action};
         button.common.testId = std::string{"head_"} + action;
         trail.push_back(ui::button(std::move(button)));
     }
-    ui::Mounted const leadMount{scene.runtime(), scene.backend(), ui::column(std::move(leadColumn)),
-                                &frame.headLeadSlot()};
+    ui::Mounted const leadMount{scene.runtime(), scene.backend(), ui::row(std::move(leadRow)), &frame.headLeadSlot()};
     ui::Mounted const trailMount{scene.runtime(), scene.backend(),
                                  ui::row(ui::Row{.children = std::move(trail), .gap = 1}), &frame.headSlot()};
 
@@ -955,6 +957,13 @@ TEST_CASE("qt_quick containers: the shell's head shares the title's line, and wr
     CHECK(bookAt1000.y() <= titleAt1000.y() + 1.0);
     CHECK(rectOf("head_Sign").right() > 900.0);
     CHECK_FALSE(bookAt1000.intersects(rectOf("shell_signOut")));
+    // The subtitle and the badges share a line, below the title.
+    QRectF const subtitleAt1000 = rectOf("head_subtitle");
+    QRectF const badgeAt1000 = rectOf("head_badge_Due today");
+    INFO("the subtitle at " << subtitleAt1000.y() << ", the badge at " << badgeAt1000.y());
+    CHECK(badgeAt1000.y() < subtitleAt1000.bottom());
+    CHECK(badgeAt1000.x() > subtitleAt1000.right());
+    CHECK(subtitleAt1000.y() >= titleAt1000.bottom() - 1.0);
 
     scene.window().resize(390, 600);
     scene.settle();
@@ -964,6 +973,38 @@ TEST_CASE("qt_quick containers: the shell's head shares the title's line, and wr
     // Out of room: the actions drop to a line of their own, below the badges.
     CHECK(bookAt390.y() >= badges.bottom() - 1.0);
     CHECK(rectOf("head_Sign").right() <= 390.0);
+}
+
+// A head that fits stays on the title's line at any width: wrapping the trail under the title needs the line to be out
+// of room, not a lead minimum wider than the lead itself. Mutation: make a stretch child's basis its minimum width
+// whatever its natural width (the 100 px action drops under a 110 px title at 390 px).
+TEST_CASE("qt_quick containers: a head whose title and action fit in the compact bar stays on one line",
+          "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setCompact(true);
+    frame.setTitle("Audit trail");
+    frame.setHeadShown(true);
+    ui::Button action{.label = "Export PDF"};
+    action.common.testId = "fit_export";
+    ui::Mounted const trailMount{scene.runtime(), scene.backend(),
+                                 ui::row(ui::Row{.children = {ui::button(std::move(action))}, .gap = 1}),
+                                 &frame.headSlot()};
+    scene.window().resize(390, 600);
+    scene.settle();
+    auto const rectOf = [](char const* testId) {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        QQuickItem const* const item = widget->item();
+        REQUIRE(item != nullptr);
+        return QRectF{item->mapToScene(QPointF{0, 0}), QSizeF{item->width(), item->height()}};
+    };
+    QRectF const title = rectOf("shell_title");
+    QRectF const exportAt = rectOf("fit_export");
+    INFO("the title at " << title.y() << ", the action at " << exportAt.y());
+    CHECK(exportAt.y() < title.bottom());
+    CHECK(exportAt.right() <= 390.0);
 }
 
 // Mutation: draw the rules in the scheme's border colour, leave `divided` unread (no rules), or put the rule on the

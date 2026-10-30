@@ -28,9 +28,9 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 - `page()` is the content container, where the client places the workspace.
 - `navigator()` is the navigator, for its pins and search.
 - `headLeadSlot()` and `headSlot()` are the containers a client mounts the active head's two parts into —
-  `Workspace::headPartsForActive()` builds them: the lead (the subtitle over the badges, which wrap under one another) under the
+  `Workspace::headPartsForActive()` builds them: the lead (the subtitle and the badges on one wrapping line) under the
   title, and the trail (tools, actions and menu) at the line's trailing edge. Where the trail does not fit beside the
-  lead block's 32 units, it drops to a line of its own at the trailing edge.
+  lead block's 32 units (or its natural width where that is less), it drops to a line of its own at the trailing edge.
 - `setHeadShown(shown)` shows or hides the two slots. The frame builds widgets and never sees what is mounted in
   them, so it cannot tell when the head is empty: the client says, and a new frame starts with them hidden. An
   application that mounts something else into the slots calls it itself.
