@@ -504,10 +504,10 @@ ui::Node selectionBar(Plate const& plate) {
     auto const selection = selectionLine(plate);
     return ui::panel(
                {ui::row(
-                   {ui::text({.text = selection.text, .spans = selection.spans})
-                        .sizing(ui::stretch())
-                        .testId("selected"),
-                    layout::muted("Fill with"),
+                   {ui::text({.text = selection.text, .spans = selection.spans}).testId("selected"),
+                    // The count keeps its natural width, so a narrow bar wraps between its items, never inside the
+                    // range.
+                    ui::spacer().sizing(ui::stretch()), layout::muted("Fill with"),
                     ui::select({.options = ui::list({ui::obj({{"key", "order"}, {"label", "Samples, in order"}})}),
                                 .selected = plate.fill,
                                 .label = "Fill with",
@@ -520,7 +520,7 @@ ui::Node selectionBar(Plate const& plate) {
                     ui::button(
                         {.label = "Clear wells", .emphasis = ButtonEmphasis::Ghost, .onClick = clearWells(plate)})
                         .testId("clear-wells")},
-                   {.gap = 1, .align = Align::Center})},
+                   {.gap = 1, .align = Align::Center, .wrap = true})},
                {.padding = 1})
         .surface("selected")
         .visible(Count{ui::call("count", {plate.selection})} > 0)
@@ -703,7 +703,7 @@ ui::Node rowSection(Plate const& plate, std::size_t row) {
     auto const runs = ui::runs(rowWells(plate, row), "well", [](ui::AnyHandle const& well) { return well.at("run"); });
     auto const name = ui::AnyHandle{kRowNames.at(row)};
     return ui::collapsible(
-               {ui::forEach(runs, {.key = ui::row("first.name"), .gap = 1},
+               {ui::forEach(runs, {.key = ui::row("first.name"), .gap = 1, .divided = true},
                             [&plate](ui::DeclScope&) { return ui::Nodes{runLine(plate)}; })
                     .testId(std::string{"lines-"} + kRowNames.at(row))},
                {.title = rowTitle(plate, row),
