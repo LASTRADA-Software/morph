@@ -297,7 +297,9 @@ ui::Node startField(Study const& study) {
 
 ui::Node windowField(Study const& study) {
     return layout::captioned(ui::textInput({.value = study.window,
-                                            .label = "Pull window, ± days",
+                                            .label = "Pull window",
+                                            .unit = "days",
+                                            .prefix = "±",
                                             .onChange = ui::set(study.window, ui::event())}))
         .required(true)
         .testId("window");
@@ -310,7 +312,8 @@ ui::Node perPullField(Study const& study, bool compact) {
                              {study.pulls, study.perPull, study.needed, study.stock, study.lot});
     auto const errors = ui::cond(study.enough, ui::AnyHandle{std::vector<std::string>{}}, ui::list({message}));
     return layout::captioned(ui::textInput({.value = study.perPull,
-                                            .label = compact ? "Per pull, units" : "Containers per pull, units",
+                                            .label = compact ? "Per pull" : "Containers per pull",
+                                            .unit = "units",
                                             .onChange = ui::set(study.perPull, ui::event())}))
         .id(compact ? study.perPullCompact : study.perPullField)
         .required(true)
@@ -608,7 +611,8 @@ ui::Node compactConditions(Study const& study) {
                      [&study](ui::DeclScope&) { return ui::Nodes{conditionSection(study)}; })
              .testId("conditions"),
          addCondition(study),
-         ui::collapsible({summary(study)}, {.title = ui::format("Summary · first pull {0}", {study.firstDate})})
+         ui::collapsible({summary(study)},
+                         {.title = ui::format("Summary · first pull {0}", {study.firstDate}), .open = false})
              .testId("summary-section")},
         {.gap = 2});
 }
