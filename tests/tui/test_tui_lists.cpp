@@ -49,6 +49,7 @@ using morph::tui::detail::PanelImpl;
 using morph::tui::detail::RadioSelectImpl;
 using morph::tui::detail::ScrollImpl;
 using morph::tui::detail::SegmentedSelectImpl;
+using morph::tui::detail::SlotImpl;
 using morph::tui::detail::SpacerImpl;
 using morph::tui::detail::StackImpl;
 using morph::tui::detail::TabsImpl;
@@ -1118,7 +1119,9 @@ TEST_CASE("tui lists: a tabs node's inset starts its first tab and its pages in 
     auto const tabs = harness.make<TabsImpl>(nullptr);
     tabs->setTabs({"One", "Two"});
     tabs->setSelected(0);
-    auto const page = harness.make<TextImpl>(tabs.get());
+    auto const slot = harness.make<SlotImpl>(tabs.get());
+    slot->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    auto const page = harness.make<TextImpl>(slot.get());
     page->setText("first");
     CHECK(harness.draw() == Rows{"[One] Two", "first"});
     // Step 4: one row above and below, two columns either side; the strip's surface draws nothing new.

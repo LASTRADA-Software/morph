@@ -324,6 +324,10 @@ public:
     /// The terminal draws nothing for a surface: the strip's surface is not inverted.
     void setStripSurface(std::string_view surface) override { static_cast<void>(surface); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    /// Each page pads its own content by the page inset's columns and rows.
+    [[nodiscard]] ::core::tui::Size pageInsets() const override {
+        return {.width = _pageColumns, .height = _pageRows};
+    }
     [[nodiscard]] bool wantsFocus() const override { return _barShown; }
     [[nodiscard]] bool focusesOnPress() const override { return false; }
     /// The label of the highlighted tab; empty when none is.

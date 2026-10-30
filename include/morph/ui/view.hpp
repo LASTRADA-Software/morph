@@ -944,8 +944,8 @@ struct Tabs {
     ///        every side unless `pageInset` says otherwise.
     int inset = 0;
     /// @brief The padding of each page, a spacing step, 0 to `kMaxSpacingStep`; set once. Disengaged pads the pages
-    ///        by `inset`. A page that scrolls gives 0 and pads its own scrolled content, so a child of that content
-    ///        can bleed to the scroll's edges.
+    ///        by `inset`. Each page pads its own content inside its scroll, so a child of a page can bleed to the
+    ///        node's edges whether or not the page scrolls.
     std::optional<int> pageInset;
     /// @brief The surface the strip, and nothing else, is drawn on; empty draws it on the surface around it. Set once.
     std::string stripSurface;

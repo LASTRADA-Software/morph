@@ -4,27 +4,34 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// Where a switch case or a tabs page is shown: its children as they are. A scrollable slot shows a child that does
-// not stretch down at its natural height in a vertical viewport of its own height, which keeps the focused item in
-// view; a child that stretches down fills it, as in a slot that does not scroll, but is never shorter than its
-// `minHeight`: while the slot is shorter than that, the slot scrolls the child at that height.
+// Where a switch case or a tabs page is shown: its children as they are, inset by `contentInset` on every side. A
+// scrollable slot scrolls only while its content does not fit: a child that does not stretch down is shown at its
+// natural height, a child that stretches down fills the slot but is never shorter than its `minHeight`, and content
+// that cannot be narrower than the slot scrolls sideways. The inset lies inside the scroll, so a page that scrolls
+// clips at its own edges and its bar sits at them, and a bleeding child reaches them. The viewport keeps the focused
+// item in view.
 MorphWidget {
     id: root
 
     readonly property Item content: column
     property bool scrollable: false
-    // The width the content cannot be narrower than; a shortfall under 2 px is layout rounding, not content that
-    // does not fit.
-    readonly property real needX: column.Layout.minimumWidth
-    readonly property bool overX: scrollable && needX > root.width + 2
+    // The padding around the content, in pixels, which a tabs node gives each of its pages.
+    property real contentInset: 0
+    // The size the content needs, padding included: its minimum width and its natural height. A width shortfall
+    // under 2 px is layout rounding, and a height one under half a pixel is too, not content that does not fit.
+    readonly property real needX: column.Layout.minimumWidth + 2 * root.contentInset
+    readonly property real needY: column.implicitHeight + 2 * root.contentInset
     // A slot reports content that is wider than it, whether it scrolls sideways or cuts it off.
     needWidth: root.needX
     haveWidth: root.width
     overflowKind: "page"
-    // Whether the viewport scrolls down now: scrollable, and no shown child that stretches down fits.
-    readonly property bool scrollsDown: scrollable && (!stretchesDown || stretchFloor > root.height)
+    // Whether the content is wider, or taller, than the slot: a child that stretches down is as tall as the slot
+    // unless its `minHeight` is taller.
+    readonly property bool overX: scrollable && needX > root.width + 2
+    readonly property bool overY: scrollable && (stretchesDown ? stretchFloor + 2 * root.contentInset > root.height
+                                                               : needY > root.height + 0.5)
     // Whether the viewport scrolls now, in either direction.
-    readonly property bool scrolls: scrollsDown || overX
+    readonly property bool scrolls: overX || overY
     // The bars' part, `MorphScrollBar` or its restyle, which C++ passes at creation.
     property Component bar: null
     // The vertical bar made from `bar`, or null without one.
@@ -32,8 +39,8 @@ MorphWidget {
     // The horizontal bar made from `bar`, or null without one.
     property ScrollBar sideBarItem: null
 
-    implicitWidth: column.implicitWidth
-    implicitHeight: column.implicitHeight
+    implicitWidth: column.implicitWidth + 2 * root.contentInset
+    implicitHeight: column.implicitHeight + 2 * root.contentInset
     clip: scrolls
 
     // Whether a shown child stretches vertically. Without one, the column keeps its natural height and packs the
@@ -78,11 +85,9 @@ MorphWidget {
         }
     }
 
-    onScrollsChanged: {
-        if (!scrolls) {
+    onOverYChanged: {
+        if (!overY)
             flick.contentY = 0
-            flick.contentX = 0
-        }
     }
     onOverXChanged: {
         if (!overX)
@@ -95,18 +100,24 @@ MorphWidget {
         anchors.fill: parent
         interactive: root.scrolls
         contentWidth: root.overX ? root.needX : width
-        contentHeight: root.scrollsDown ? column.height : height
-        flickableDirection: root.overX && root.scrollsDown ? Flickable.HorizontalAndVerticalFlick
-                                                           : root.overX ? Flickable.HorizontalFlick
-                                                                        : Flickable.VerticalFlick
+        contentHeight: root.overY ? (root.stretchesDown ? root.stretchFloor + 2 * root.contentInset : root.needY)
+                                  : height
+        flickableDirection: root.overX && root.overY ? Flickable.HorizontalAndVerticalFlick
+                                                     : root.overX ? Flickable.HorizontalFlick
+                                                                  : Flickable.VerticalFlick
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: root.barItem
         ScrollBar.horizontal: root.sideBarItem
 
         ColumnLayout {
             id: column
-            width: root.overX ? root.needX : flick.width
-            height: root.stretchesDown ? Math.max(flick.height, root.stretchFloor) : implicitHeight
+            // What a bleeding child reaches past: the page's padding, so it ends at the slot's own edges.
+            readonly property real childBleedInset: root.contentInset
+            x: root.contentInset
+            y: root.contentInset
+            width: (root.overX ? root.needX : flick.width) - 2 * root.contentInset
+            height: root.stretchesDown ? Math.max(flick.height - 2 * root.contentInset, root.stretchFloor)
+                                       : implicitHeight
             spacing: 0
         }
     }
@@ -117,7 +128,7 @@ MorphWidget {
         if (root.bar)
             root.barItem = root.bar.createObject(flick, {
                 orientation: Qt.Vertical,
-                visible: Qt.binding(() => root.scrollsDown),
+                visible: Qt.binding(() => root.overY),
                 scheme: Qt.binding(() => root.scheme)
             }) as ScrollBar
         if (root.bar)

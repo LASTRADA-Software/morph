@@ -319,13 +319,16 @@ TEST_CASE("ui::tabs: pages mount on first selection and are kept, hidden, afterw
                                .selected = [&] { return selected.get(); },
                                .onSelect = [&](std::size_t index) { selected.set(index); },
                            })};
-    CHECK(backend.dump() == "Tabs#1 selected=0 tabs=[Dashboard,Stats]\n  Slot#2\n    Text#3 role=Normal text=dash\n");
+    CHECK(backend.dump() ==
+          "Tabs#1 selected=0 tabs=[Dashboard,Stats]\n  Slot#2 layout=stretch(1)/stretch(1) scrollable=true\n    "
+          "Text#3 role=Normal text=dash\n");
 
     backend.clearLog();
     backend.chooseIndex(1, 1);
     owner.runAll();
     // The new page is complete before the old one is hidden.
-    CHECK(backend.log() == Lines{"create Slot#4 in Tabs#1", "create Text#5 in Slot#4", "set Text#5 text=stats",
+    CHECK(backend.log() == Lines{"create Slot#4 in Tabs#1", "set Slot#4 layout=stretch(1)/stretch(1)",
+                                 "set Slot#4 scrollable=true", "create Text#5 in Slot#4", "set Text#5 text=stats",
                                  "set Text#5 role=Normal", "set Slot#2 visible=false", "set Tabs#1 selected=1"});
 
     backend.clearLog();
@@ -348,7 +351,7 @@ TEST_CASE("ui::tabs: an index past the last page shows none, and a null page is 
 
     selected.set(1);
     owner.runAll();
-    CHECK(backend.dump() == "Tabs#1 selected=1 tabs=[A,B]\n  Slot#2\n");
+    CHECK(backend.dump() == "Tabs#1 selected=1 tabs=[A,B]\n  Slot#2 layout=stretch(1)/stretch(1) scrollable=true\n");
 
     backend.clearLog();
     selected.set(7);
@@ -358,7 +361,8 @@ TEST_CASE("ui::tabs: an index past the last page shows none, and a null page is 
     backend.clearLog();
     selected.set(0);
     owner.runAll();
-    CHECK(backend.log() == Lines{"create Slot#3 in Tabs#1", "create Text#4 in Slot#3", "set Text#4 text=a",
+    CHECK(backend.log() == Lines{"create Slot#3 in Tabs#1", "set Slot#3 layout=stretch(1)/stretch(1)",
+                                 "set Slot#3 scrollable=true", "create Text#4 in Slot#3", "set Text#4 text=a",
                                  "set Text#4 role=Normal", "set Tabs#1 selected=0"});
 }
 
@@ -382,7 +386,9 @@ TEST_CASE("ui::tabs: a page that fails to mount leaves the previous page shown a
             .onSelect = [&](std::size_t index) { selected.set(index); },
         })};
     std::string const before = recording.dump();
-    REQUIRE(before == "Tabs#1 selected=0 tabs=[A,B]\n  Slot#2\n    Text#3 role=Normal text=a\n");
+    REQUIRE(before ==
+            "Tabs#1 selected=0 tabs=[A,B]\n  Slot#2 layout=stretch(1)/stretch(1) scrollable=true\n    Text#3 "
+            "role=Normal text=a\n");
     std::size_t const mountedNodes = runtime.core()->liveNodes();
 
     recording.clearLog();
@@ -393,7 +399,8 @@ TEST_CASE("ui::tabs: a page that fails to mount leaves the previous page shown a
     // The bar's highlight, which the user's pick moved, goes back to the page still shown, and the application hears
     // of it through onSelect, so its index matches what the widget shows. Its write lands inside the binding's own
     // run, so the binding does not run again for it.
-    CHECK(recording.log() == Lines{"create Slot#4 in Tabs#1", "create Column#5 in Slot#4", "set Column#5 gap=0",
+    CHECK(recording.log() == Lines{"create Slot#4 in Tabs#1", "set Slot#4 layout=stretch(1)/stretch(1)",
+                                   "set Slot#4 scrollable=true", "create Column#5 in Slot#4", "set Column#5 gap=0",
                                    "create Text#6 in Column#5", "set Text#6 text=b1", "set Text#6 role=Normal",
                                    "destroy Text#6", "destroy Column#5", "destroy Slot#4", "set Tabs#1 selected=0"});
     CHECK(selected.peek() == 0);
@@ -405,9 +412,9 @@ TEST_CASE("ui::tabs: a page that fails to mount leaves the previous page shown a
     owner.runAll();
     CHECK(recording.dump() ==
           "Tabs#1 selected=1 tabs=[A,B]\n"
-          "  Slot#2 visible=false\n"
+          "  Slot#2 layout=stretch(1)/stretch(1) scrollable=true visible=false\n"
           "    Text#3 role=Normal text=a\n"
-          "  Slot#7\n"
+          "  Slot#7 layout=stretch(1)/stretch(1) scrollable=true\n"
           "    Column#8 gap=0\n"
           "      Text#9 role=Normal text=b1\n"
           "      Text#10 role=Normal text=b2\n");
@@ -647,9 +654,9 @@ TEST_CASE("ui structure: unmounting tears content down before its host, the newe
     CHECK(backend.dump() ==
           "Column#1 gap=0\n"
           "  Tabs#2 selected=0 tabs=[A,B]\n"
-          "    Slot#3 visible=false\n"
+          "    Slot#3 layout=stretch(1)/stretch(1) scrollable=true visible=false\n"
           "      Text#4 role=Normal text=b\n"
-          "    Slot#9\n"
+          "    Slot#9 layout=stretch(1)/stretch(1) scrollable=true\n"
           "      Text#10 role=Normal text=a\n"
           "  Dialog#5 open=true title=D\n"
           "    Text#6 role=Normal text=body\n"

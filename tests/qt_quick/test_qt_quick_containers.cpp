@@ -1392,12 +1392,14 @@ TEST_CASE(
     auto root = scene.backend().createStack(nullptr, ui::Axis::Vertical);
     auto tabs = scene.backend().createTabs(root.get());
     tabs->setTabs({"One", "Two"});
-    auto page = scene.backend().createStack(tabs.get(), ui::Axis::Vertical);
+    auto slot = scene.backend().createSlot(tabs.get());
+    auto page = scene.backend().createStack(slot.get(), ui::Axis::Vertical);
     auto label = scene.backend().createText(page.get());
     label->setText("page");
     auto plainTabs = scene.backend().createTabs(root.get());
     plainTabs->setTabs({"One", "Two"});
-    auto plainPage = scene.backend().createStack(plainTabs.get(), ui::Axis::Vertical);
+    auto plainSlot = scene.backend().createSlot(plainTabs.get());
+    auto plainPage = scene.backend().createStack(plainSlot.get(), ui::Axis::Vertical);
     auto plainLabel = scene.backend().createText(plainPage.get());
     plainLabel->setText("page");
     scene.settle();
@@ -1749,7 +1751,8 @@ TEST_CASE("qt_quick containers: a tab is the control height and an inset strip p
     auto tabs = scene.backend().createTabs(nullptr);
     tabs->setTabs({"One", "Two"});
     tabs->setInset(4);
-    auto page = scene.backend().createStack(tabs.get(), ui::Axis::Vertical);
+    auto slot = scene.backend().createSlot(tabs.get());
+    auto page = scene.backend().createStack(slot.get(), ui::Axis::Vertical);
     auto label = scene.backend().createText(page.get());
     label->setText("page");
     scene.settle();
@@ -1821,7 +1824,8 @@ TEST_CASE("qt_quick containers: a tabs node's page inset pads the pages apart fr
     tabs->setTabs({"One", "Two"});
     tabs->setInset(4);
     tabs->setPageInset(0);
-    auto page = scene.backend().createStack(tabs.get(), ui::Axis::Vertical);
+    auto slot = scene.backend().createSlot(tabs.get());
+    auto page = scene.backend().createStack(slot.get(), ui::Axis::Vertical);
     auto label = scene.backend().createText(page.get());
     label->setText("page");
     scene.settle();
@@ -1833,7 +1837,7 @@ TEST_CASE("qt_quick containers: a tabs node's page inset pads the pages apart fr
 
     // Pages padded apart from the strip: a bleeding page reaches the node's edges, the others stay inside.
     tabs->setPageInset(2);
-    auto bleeding = scene.backend().createText(tabs.get());
+    auto bleeding = scene.backend().createText(slot.get());
     bleeding->setText("bleeds");
     bleeding->setLayout({.bleed = true});
     scene.settle();
@@ -2109,4 +2113,60 @@ TEST_CASE("qt_quick containers: a scrollable page whose content cannot be narrow
     auto const* const fitBar = qobject_cast<QQuickItem*>(fitItem.property("sideBarItem").value<QObject*>());
     REQUIRE(fitBar != nullptr);
     CHECK_FALSE(fitBar->isVisible());
+}
+
+// Mutation: leave the page slot content-sized (it is centred in the page area and the strip is spread from the top),
+// pad the pages from outside the scroll (the bar sits `pageInset` in from the node's edge), or leave the page
+// unscrollable.
+TEST_CASE("qt_quick containers: a tab page fills the page area, pads itself, and scrolls inside its own padding",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 364);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    double const step = theme->property("space").value<QList<qreal>>().at(4);
+    auto tabs = scene.backend().createTabs(nullptr);
+    tabs->setTabs({"One", "Two"});
+    tabs->setInset(4);
+    tabs->setPageInset(4);
+    tabs->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    auto slot = scene.backend().createSlot(tabs.get());
+    slot->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    slot->setScrollable(true);
+    auto column = scene.backend().createStack(slot.get(), ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::stretch()});
+    auto label = scene.backend().createText(column.get());
+    label->setText("short page");
+    scene.settle();
+
+    QQuickItem& item = Scene::itemOf(*tabs);
+    auto const* const strip = item.findChild<QQuickItem*>(QStringLiteral("stripSurface"));
+    REQUIRE(strip != nullptr);
+    // The strip sits at the node's top, the page's content one inset under the strip's rule.
+    CHECK(strip->mapToItem(&item, QPointF{0, 0}).y() == Catch::Approx(0.0).margin(0.5));
+    double const rule = strip->mapToItem(&item, QPointF{0, strip->height()}).y();
+    CHECK(Scene::itemOf(*column).mapToItem(&item, QPointF{0, 0}).y() == Catch::Approx(rule + step).margin(0.5));
+    CHECK(Scene::itemOf(*column).mapToItem(&item, QPointF{0, 0}).x() == Catch::Approx(step).margin(0.5));
+    // A page whose content fits neither clips nor takes input.
+    QQuickItem& slotItem = Scene::itemOf(*slot);
+    CHECK_FALSE(slotItem.property("scrolls").toBool());
+    CHECK_FALSE(slotItem.clip());
+
+    // Content taller than the page scrolls inside the page, whose bar sits at the node's right edge.
+    std::vector<std::unique_ptr<ui::TextWidget>> lines;
+    for (int line = 0; line < 60; ++line) {
+        lines.push_back(scene.backend().createText(column.get()));
+        lines.back()->setText("line " + std::to_string(line));
+    }
+    scene.settle();
+    CHECK(slotItem.property("scrolls").toBool());
+    CHECK(slotItem.clip());
+    auto const* const flick = slotItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    CHECK(flick->property("contentHeight").toDouble() ==
+          Catch::Approx(Scene::itemOf(*column).implicitHeight() + 2 * step).margin(1.0));
+    auto const* const bar = qobject_cast<QQuickItem*>(slotItem.property("barItem").value<QObject*>());
+    REQUIRE(bar != nullptr);
+    CHECK(bar->isVisible());
+    CHECK(bar->mapToItem(&item, QPointF{bar->width(), 0}).x() == Catch::Approx(item.width()).margin(0.5));
 }

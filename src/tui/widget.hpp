@@ -282,6 +282,12 @@ public:
     /// The columns of padding a bleeding child, or a holder's, reaches past: the padding this container's content is
     /// inset by. A container whose children are not inset returns 0.
     [[nodiscard]] virtual int bleedColumns() const { return 0; }
+    /// The columns (width) and rows (height) of padding each page slot among this container's children pads its own
+    /// content by; none for a container whose children are not pages.
+    [[nodiscard]] virtual ::core::tui::Size pageInsets() const { return {}; }
+    /// The columns (width) and rows (height) of padding this container pads its own content by, inside its scroll if
+    /// it has one.
+    [[nodiscard]] virtual ::core::tui::Size contentInsets() const { return {}; }
     /// Gives each of `children()` its area from @p areas, in order; a child past the end gets none.
     void placeChildren(std::span<::core::tui::Rect const> areas) const;
 

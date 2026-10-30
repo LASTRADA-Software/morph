@@ -19,7 +19,8 @@ MorphWidget {
     // it on every side unless `pageInset` says otherwise.
     property int inset: 0
     readonly property real insetPx: Theme.spaceOf(root.inset)
-    // The padding of each page: a spacing step, or -1 for `inset`'s. A page that scrolls pads its own content.
+    // The padding of each page: a spacing step, or -1 for `inset`'s. Each page pads its own content, inside its scroll:
+    // a page that scrolls clips at the node's edges, its bar sits at them, and a bleeding child reaches them.
     property int pageInset: -1
     readonly property real pageInsetPx: root.pageInset >= 0 ? Theme.spaceOf(root.pageInset) : root.insetPx
     // The surface the strip, and nothing else, is drawn on; empty draws it on the surface around it.
@@ -99,9 +100,8 @@ MorphWidget {
     focusTarget: bar.visible ? bar : pages
     implicitWidth: Math.max(bar.visible ? bar.implicitWidth + (more.visible ? more.implicitWidth : 0) + 2 * root.insetPx
                                         : 0,
-                            pages.implicitWidth + 2 * root.pageInsetPx)
+                            pages.implicitWidth)
     implicitHeight: (bar.visible ? bar.implicitHeight + layout.spacing : 0) + pages.implicitHeight
-                    + 2 * root.pageInsetPx
 
     FontMetrics {
         id: metrics
@@ -260,14 +260,19 @@ MorphWidget {
             }
         }
 
+        // The pages fill the area under the strip; each pads its own content by `pageInset`.
         ColumnLayout {
             id: pages
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: root.pageInsetPx
-            // What a bleeding child reaches past: the pages' padding.
-            readonly property real childBleedInset: root.pageInsetPx
             spacing: 0
+            onChildrenChanged: {
+                for (const child of children) {
+                    const page = child as MorphSlot
+                    if (page)
+                        page.contentInset = Qt.binding(() => root.pageInsetPx)
+                }
+            }
         }
     }
 

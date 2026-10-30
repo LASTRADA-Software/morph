@@ -216,12 +216,23 @@ bool ScrollImpl::wheel(int delta) { return _scroller.wheel(*this, delta); }
 
 ::core::tui::Size SlotImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Vertical, 0); }
 
+::core::tui::Size SlotImpl::contentInsets() const {
+    return container() != nullptr ? container()->pageInsets() : ::core::tui::Size{};
+}
+
 std::vector<::core::tui::Rect> SlotImpl::childAreas(::core::tui::Size size) const {
     if (scrolls(size.height)) {
         return _scroller.childAreas(*this, size);
     }
-    return stackAreas(children(), {.x = 0, .y = 0, .width = size.width, .height = size.height},
-                      StackSpec{.axis = ui::Axis::Vertical});
+    auto const inset = contentInsets();
+    auto areas = stackAreas(children(),
+                            {.x = inset.width,
+                             .y = inset.height,
+                             .width = std::max(0, size.width - (2 * inset.width)),
+                             .height = std::max(0, size.height - (2 * inset.height))},
+                            StackSpec{.axis = ui::Axis::Vertical});
+    bleedAreas(children(), areas, {.x = 0, .y = 0, .width = size.width, .height = 0});
+    return areas;
 }
 
 bool SlotImpl::wantsFocus() const { return scrolls(height()) && ScrollViewport::wantsFocus(*this); }
@@ -249,22 +260,24 @@ void SlotImpl::setScrollable(bool scrollable) {
 
 int SlotImpl::height() const { return view().area().height; }
 
-// A child that stretches down fills the slot, so only content-height children scroll; a stretching child whose
-// `minHeight` is more than the slot is tall keeps that height instead, and the slot scrolls it.
+// A child that stretches down fills the slot, so only content-height children scroll, and only once they are taller
+// than the slot; a stretching child whose `minHeight` is more than the slot is tall keeps that height instead, and
+// the slot scrolls it.
 bool SlotImpl::scrolls(int height) const {
     if (!_scrollable) {
         return false;
     }
+    int const padding = 2 * contentInsets().height;
     bool stretches = false;
     for (auto const* child : children()) {
         if (child->shown() && child->layout().height.kind == ui::Sizing::Kind::Stretch) {
-            if (child->layout().minHeight.value_or(0) > height) {
+            if (child->layout().minHeight.value_or(0) + padding > height) {
                 return true;
             }
             stretches = true;
         }
     }
-    return !stretches;
+    return !stretches && stackNaturalSize(children(), ui::Axis::Vertical, 0).height + padding > height;
 }
 
 void GridImpl::setColumns(int columns) {
@@ -573,13 +586,22 @@ void PanelImpl::click(::core::tui::Point cell) {
 std::vector<::core::tui::Rect> ScrollViewport::contentAreas(ContainerBase const& owner,
                                                             ::core::tui::Size viewport) const {
     auto const natural = stackNaturalSize(owner.children(), _axis, 0);
-    auto content = ::core::tui::Rect{.x = 0, .y = 0, .width = viewport.width, .height = viewport.height};
+    // The owner's padding lies inside the scroll, around the content.
+    auto const inset = owner.contentInsets();
+    auto content = ::core::tui::Rect{.x = inset.width,
+                                     .y = inset.height,
+                                     .width = std::max(0, viewport.width - (2 * inset.width)),
+                                     .height = std::max(0, viewport.height - (2 * inset.height))};
     if (_axis == ui::Axis::Vertical) {
-        content.height = std::max(viewport.height, natural.height);
+        content.height = std::max(content.height, natural.height);
     } else {
-        content.width = std::max(viewport.width, natural.width);
+        content.width = std::max(content.width, natural.width);
     }
-    return stackAreas(owner.children(), content, StackSpec{.axis = _axis});
+    auto areas = stackAreas(owner.children(), content, StackSpec{.axis = _axis});
+    if (_axis == ui::Axis::Vertical) {
+        bleedAreas(owner.children(), areas, {.x = 0, .y = 0, .width = viewport.width, .height = 0});
+    }
+    return areas;
 }
 
 std::vector<::core::tui::Rect> ScrollViewport::childAreas(ContainerBase const& owner, ::core::tui::Size size) const {
@@ -679,7 +701,8 @@ void ScrollViewport::paint(ContainerBase const& owner, ::core::tui::Canvas& canv
     bool const vertical = _axis == ui::Axis::Vertical;
     auto const natural = stackNaturalSize(owner.children(), _axis, 0);
     _viewport = vertical ? viewport.height : viewport.width;
-    _extent = std::max(_viewport, vertical ? natural.height : natural.width);
+    auto const inset = owner.contentInsets();
+    _extent = std::max(_viewport, vertical ? natural.height + (2 * inset.height) : natural.width + (2 * inset.width));
     followFocus(owner, viewport);
     _offset = std::clamp(_offset, 0, _extent - _viewport);
     owner.placeChildren(childAreas(owner, viewport));
