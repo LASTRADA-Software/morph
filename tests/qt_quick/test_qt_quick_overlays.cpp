@@ -298,6 +298,44 @@ QQuickItem* namedItem(QQuickItem* root, QString const& name) {
 
 }  // namespace
 
+// Mutation: draw the title in `strongFont`; draw no rule, or draw it while the footer holds nothing.
+TEMPLATE_TEST_CASE("qt_quick overlays: the title is heading-sized and a footer holding an action has a rule above it",
+                   "[qt_quick]", ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    std::unique_ptr<TestType> overlay;
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(nullptr);
+    } else {
+        overlay = scene.backend().createDrawer(nullptr, ui::Side::End);
+    }
+    overlay->setTitle("Sign the results");
+    auto const body = scene.backend().createText(overlay.get());
+    body->setText("Sure?");
+    overlay->setOpen(true);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QQuickItem const& contentRoot = *scene.window().contentItem();
+    QQuickItem const* const rule = namedIn(contentRoot, QStringLiteral("footerRule"));
+    REQUIRE(rule != nullptr);
+    CHECK_FALSE(rule->isVisible());
+    // The title is the visible label with the title's text.
+    QQuickItem const* title = nullptr;
+    for (QQuickItem const* const label : contentRoot.findChildren<QQuickItem*>()) {
+        if (label->property("text").toString() == QStringLiteral("Sign the results") && label->isVisible()) {
+            title = label;
+        }
+    }
+    REQUIRE(title != nullptr);
+    CHECK(title->property("font").value<QFont>() == theme->property("headingFont").value<QFont>());
+    auto const save = scene.backend().createButton(&overlay->footer());
+    save->setLabel("Done");
+    scene.settle();
+    CHECK(rule->isVisible());
+    CHECK(rule->height() == 1);
+    CHECK(rule->property("color").value<QColor>() == theme->property("divider").value<QColor>());
+}
+
 // Mutation: put the description inside the scroll's column (it then scrolls away); leave the scroll's cap without the
 // description's height (the footer is pushed past the window).
 TEMPLATE_TEST_CASE("qt_quick overlays: a description sits in the head under the title, ruled off and not scrolled",

@@ -5,6 +5,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // A message across the content in a tone, with an optional action button and, when dismissible, a close button.
+// The frame is rounded like a control, and the message is drawn in the tone's colour (the text colour for a neutral
+// banner), its strong runs strong in that colour. The action is a ghost button: unframed, its label in the accent.
 // A dismissal changes nothing it shows: the application hides it.
 MorphWidget {
     id: root
@@ -17,12 +19,14 @@ MorphWidget {
     property string actionLabel: ""
     property bool dismissible: false
 
-    implicitWidth: row.implicitWidth + 2 * Theme.unitWidth
-    implicitHeight: row.implicitHeight + Theme.unitHeight
+    implicitWidth: row.implicitWidth + 2 * Theme.spaceOf(3)
+    implicitHeight: row.implicitHeight + 2 * Theme.spaceOf(2)
     Layout.fillWidth: true
 
     Rectangle {
+        objectName: "frame"
         anchors.fill: parent
+        radius: Theme.radiusControl
         // Over the surface, so a translucent fill (neutral's) still hides what is behind.
         color: Qt.tint(root.scheme.surface, root.toneBgOf(root.tone))
         border.color: root.toneBorderOf(root.tone)
@@ -31,8 +35,10 @@ MorphWidget {
     RowLayout {
         id: row
         anchors.fill: parent
-        anchors.leftMargin: Theme.unitWidth
-        anchors.rightMargin: Theme.unitWidth
+        anchors.leftMargin: Theme.spaceOf(3)
+        anchors.rightMargin: Theme.spaceOf(3)
+        anchors.topMargin: Theme.spaceOf(2)
+        anchors.bottomMargin: Theme.spaceOf(2)
 
         // The tone's icon, when the theme's icon set names it.
         Image {
@@ -49,6 +55,7 @@ MorphWidget {
             objectName: "message"
             textFormat: root.runs.length > 0 ? Text.RichText : Text.PlainText
             font: Theme.bodyFont
+            color: root.tone === 0 ? root.scheme.text : root.toneOf(root.tone)
             Layout.fillWidth: true
             text: root.runs.length > 0 ? root.runsHtml(root.runs) : root.text
             wrapMode: Text.Wrap
@@ -60,8 +67,19 @@ MorphWidget {
             objectName: "action"
             visible: root.actionLabel !== ""
             text: root.actionLabel
+            leftPadding: Theme.spaceOf(1)
+            rightPadding: Theme.spaceOf(1)
+            palette.buttonText: root.scheme.accent
             contentItem: MorphPlainContent {
                 control: action
+                color: action.palette.buttonText
+            }
+            background: MorphButtonBackground {
+                scheme: root.scheme
+                ghost: true
+                hovered: action.hovered
+                pressed: action.down
+                focused: action.visualFocus
             }
             onClicked: root.fire("action", undefined)
         }

@@ -123,7 +123,7 @@ MorphWidget {
             Label {
                 textFormat: Text.PlainText
                 id: titleLabel
-                font: Theme.strongFont
+                font: Theme.headingFont
                 color: Theme.cardScheme.text
                 visible: root.title !== ""
                 text: root.title
@@ -163,6 +163,7 @@ MorphWidget {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.maximumHeight: Math.max(0, drawer.height - titleLabel.height - footerArea.height -
+                               (footerRule.visible ? footerRule.height + contentColumn.spacing : 0) -
                                                contentColumn.spacing * 2 -
                                                (root.description === "" ? 0 : descriptionLabel.height +
                                                                               headRule.height +
@@ -173,6 +174,16 @@ MorphWidget {
                     id: column
                     width: scroll.availableWidth
                 }
+            }
+
+            // A hairline above the footer while it holds an action, the divider the cards use between sections.
+            Rectangle {
+                id: footerRule
+                objectName: "footerRule"
+                visible: footerArea.visible
+                color: Theme.divider
+                implicitHeight: 1
+                Layout.fillWidth: true
             }
 
             // Shown while the footer holds something: a layout gives no size to what it hides, so its own

@@ -934,6 +934,35 @@ TEST_CASE("qt_quick widgets: a banner's action and dismissal reach their handler
     CHECK(item.isVisible());
 }
 
+// Mutation: put the frame's radius back to 0; leave the message without a colour (it draws in the palette's black);
+// draw the action as the Basic style's button (its background has no ghost flag).
+TEST_CASE(
+    "qt_quick widgets: a banner is a rounded frame, its message is in the tone's colour, its action is a ghost "
+    "button",
+    "[qt_quick]") {
+    Scene scene;
+    auto banner = scene.backend().createBanner(nullptr);
+    banner->setTone(ui::Tone::Err);
+    banner->setSpans({{.text = "Refused: ", .strong = true}, {.text = "the field is empty"}});
+    banner->setActionLabel("Go to the field");
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QQuickItem const& item = Scene::itemOf(*banner);
+    auto const* const frame = item.findChild<QQuickItem*>(QStringLiteral("frame"));
+    REQUIRE(frame != nullptr);
+    CHECK(frame->property("radius").toReal() == theme->property("radiusControl").toReal());
+    CHECK(frame->property("radius").toReal() > 0);
+    auto const* const message = item.findChild<QQuickItem*>(QStringLiteral("message"));
+    REQUIRE(message != nullptr);
+    CHECK(message->property("color").value<QColor>() == theme->property("error").value<QColor>());
+    auto const* const action = item.findChild<QQuickItem*>(QStringLiteral("action"));
+    REQUIRE(action != nullptr);
+    auto const* const background = action->property("background").value<QObject*>();
+    REQUIRE(background != nullptr);
+    CHECK(background->property("ghost").toBool());
+}
+
 TEST_CASE("qt_quick widgets: a menu reports the path of a choosable entry and nothing else", "[qt_quick]") {
     Scene scene;
     auto menu = scene.backend().createMenu(nullptr, ui::MenuStyle::Bar);
