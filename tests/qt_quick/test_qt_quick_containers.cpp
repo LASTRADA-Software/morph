@@ -519,15 +519,32 @@ TEST_CASE("qt_quick containers: a section header is a button that reports whethe
     REQUIRE(node != nullptr);
     CHECK(node->role() == QAccessible::Button);
     CHECK(node->text(QAccessible::Name) == QStringLiteral("Section"));
-    CHECK(node->state().expandable);
-    CHECK(node->state().expanded);
+    // Qt 6.8's Accessible has no expanded state to report; the toggle's attached Accessible says whether this Qt has.
+    bool reportsExpanded = false;
+    for (QObject const* const child : toggle.children()) {
+        if (std::string_view{child->metaObject()->className()} == "QQuickAccessibleAttached") {
+            reportsExpanded = child->metaObject()->indexOfProperty("expanded") >= 0;
+        }
+    }
+    // A Qt known to report it must, or the checks below would pass by checking nothing.
+    if (QT_VERSION >= QT_VERSION_CHECK(6, 12, 0)) {
+        CHECK(reportsExpanded);
+    }
+    if (reportsExpanded) {
+        CHECK(node->state().expandable);
+        CHECK(node->state().expanded);
+    }
     scene.click(toggle);
     CHECK(toggles == std::vector<bool>{false});
-    CHECK_FALSE(QAccessible::queryAccessibleInterface(&toggle)->state().expanded);
+    if (reportsExpanded) {
+        CHECK_FALSE(QAccessible::queryAccessibleInterface(&toggle)->state().expanded);
+    }
     toggle.forceActiveFocus();
     scene.key(Qt::Key_Space);
     CHECK(toggles == std::vector<bool>{false, true});
-    CHECK(QAccessible::queryAccessibleInterface(&toggle)->state().expanded);
+    if (reportsExpanded) {
+        CHECK(QAccessible::queryAccessibleInterface(&toggle)->state().expanded);
+    }
     QAccessible::setActive(wasActive);
 }
 

@@ -180,11 +180,11 @@ MorphWidget {
             return
         }
 
-        const lines = []
-        let line = null
+        const lines = cells.length > 0 ? [{"cells": [], "used": 0}] : []
         for (const placed of cells) {
-            const gap = line !== null && line.used > 0 && placed.basis > 0 ? space : 0
-            if (line === null || (placed.basis > 0 && line.used > 0 && line.used + gap + placed.basis > lineWidth)) {
+            let line = lines[lines.length - 1]
+            const gap = line.used > 0 && placed.basis > 0 ? space : 0
+            if (placed.basis > 0 && line.used > 0 && line.used + gap + placed.basis > lineWidth) {
                 line = {"cells": [], "used": 0}
                 lines.push(line)
             }

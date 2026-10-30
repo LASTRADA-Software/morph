@@ -37,8 +37,15 @@ Item {
         }
         Accessible.role: Accessible.Button
         Accessible.name: root.title
-        Accessible.expandable: true
-        Accessible.expanded: root.open
+        // Qt 6.8's Accessible has no `expandable` or `expanded`, so they are set where they exist rather than
+        // declared, which would stop the header loading there.
+        Component.onCompleted: {
+            const a11y = toggleButton.Accessible
+            if ("expanded" in a11y) {
+                a11y["expandable"] = true
+                a11y["expanded"] = Qt.binding(() => root.open)
+            }
+        }
         Keys.onReturnPressed: clicked()
         Keys.onEnterPressed: clicked()
         onClicked: root.toggled()

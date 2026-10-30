@@ -12,7 +12,9 @@ MorphWidget {
     // Whether anything is in the footer.
     readonly property bool holding: row.children.length > 0
     // Whether the footer fills its width and its actions share it equally: while the area it sits in says so.
-    readonly property bool stretching: parent !== null && parent["stretchesFooter"] === true
+    // Untyped, so the area may declare `stretchesFooter` or not.
+    readonly property var area: parent
+    readonly property bool stretching: area !== null && area !== undefined && area.stretchesFooter === true
     sharesWidth: stretching
 
     Layout.fillWidth: stretching

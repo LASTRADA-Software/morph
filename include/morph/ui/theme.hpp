@@ -1528,12 +1528,12 @@ namespace detail {
 /// @return One sentence per text colour and fill that fall short, such as `color.hover: color.text is 1.50:1 on it,
 ///         below 4.5:1`; empty when every pair holds.
 [[nodiscard]] inline std::vector<std::string> themeContrastProblems(ThemeValues const& values) {
-    struct Text {
+    struct TextRule {
         std::string_view path;
         double minimum;
         std::string_view label;
     };
-    static constexpr std::array<Text, 2> kTexts = {{{"color.text", 4.5, "4.5"}, {"color.muted", 3.0, "3"}}};
+    static constexpr std::array<TextRule, 2> kTexts = {{{"color.text", 4.5, "4.5"}, {"color.muted", 3.0, "3"}}};
     static constexpr std::array<std::string_view, 4> kFills = {"color.hover", "color.selection", "color.track",
                                                                "color.controlSurface"};
     std::vector<std::string> problems;
@@ -1548,7 +1548,7 @@ namespace detail {
             continue;
         }
         Rgba const under = detail::over(*fill, detail::over(surface, Rgba{}));
-        for (Text const& text : kTexts) {
+        for (TextRule const& text : kTexts) {
             auto const color = colorAt(text.path);
             if (!color) {
                 continue;
