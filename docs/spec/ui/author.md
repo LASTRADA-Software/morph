@@ -105,7 +105,8 @@ case, the rows of a `forEach` or `table` — takes a builder function that recei
 | `mutation<A>(name, model, {.body, .concurrency, .serialKey, .optimistic, .onSuccess, .onError, .offlineQueue})` | `mutations.name`; `.optimistic` is an `Optimistic{.query, .at, .key, .with}`, read against the run's body bound as `body` |
 | `watch(on, commands, Source::User)`, `check({.name, .assertion, .message, .targets, .blocking})` | `watch`, `checks` |
 | `title`, `identity`, `dirty`, `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange`, `key(chord, commands)`, `showErrors`, `prefetch(query)` | The screen's own keys |
-| `subtitle(expr)`, `status(HeadBadgeOptions)`, `action(ActionButtonOptions)`, `menu(MenuItem)`, `menuLabel(expr)`, `tool(HeadSearchOptions)`, `tool(HeadSelectOptions)` | The screen's head: its subtitle, and a status badge, an action, an entry of its own menu or a tool appended in order; the menu trigger's accessible name. `HeadSearchOptions{id, label, value, placeholder, onChange, onSubmit, width, visible, enabled}` and `HeadSelectOptions{id, label, options, selected, onChoose, width, visible, enabled}` write a `headTool` of their kind; a `width` of 0 writes none |
+| `leadPlacement(expr)`, `headSurface(expr)` | Where the head's lead sits (`"below"`, `"inline"` or `"end"`; a literal is checked at load) and the surface the shell draws its top bar on while the screen is shown (a surface name, `null` for none) |
+| `subtitle(expr)`, `status(HeadBadgeOptions)`, `action(ActionButtonOptions)`, `menu(MenuItem)`, `menuLabel(expr)`, `tool(HeadSearchOptions)`, `tool(HeadSelectOptions)` | The screen's head: its subtitle, and a status badge, an action, an entry of its own menu or a tool appended in order; the menu trigger's accessible name. `ActionButtonOptions{id, label, icon, iconOnly, emphasis, enabled, visible, onClick}` draws `icon` alone while its `iconOnly` condition holds (it needs an `icon`), `HeadSearchOptions{id, label, value, placeholder, onChange, onSubmit, width, visible, enabled}` and `HeadSelectOptions{id, label, options, selected, onChoose, width, visible, enabled}` write a `headTool` of their kind; a `width` of 0 writes none |
 | `component(name, {.qml \| .host + .version, .props, .events, .fallback})` | `components.name`, returning the `ComponentRef` `custom` names |
 | `columnsPoint`, `arrangePoint`, `choicePoint`, `valuePoint<T>`, `point(name, "layout" \| "saved")` | `customize.name`, returning the `Point` `customize`, `resetPrefs` and `pref` name |
 
@@ -352,7 +353,8 @@ is reviewed like code.
 ## Out of scope
 
 - **The app document** (spec 6 §5): `Scope` writes a screen with a view; a builder for the app
-  document, which has none, follows the app shell's work.
+  document, which has none, follows the app shell's work; until then it is written as JSON, whose `principalPlacement`
+  (`"sidebar"`, the default, or `"head"`) puts the principal in the top bar.
 - **Bundles**: the `restyle` map, the manifest and message catalogues are the UI service's.
 - **Spec 6 §11's reference screen** (`lims.sample`): the lims example does not carry it or the
   model additions it needs, so its golden waits for that example work. The `results` golden is

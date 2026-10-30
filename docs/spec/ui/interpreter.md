@@ -371,6 +371,16 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   node is a `switch`, moves to the case shown now (the default when none matches) when that case holds exactly one node
   and declares no scope of its own; it answers that node's `pageEdge`, and `false` for any other node or a case of
   several nodes. A `byWidth` switch and a nested one are seen through, and the answer follows a width or state change.
+- **The shown root.** `pageEdge()` and `headJoined()` share one walk, `shownRoot()`: the node the screen shows as its
+  root, seen through `switch`es as above. `Screen::headJoined()` answers that node's `headJoined`.
+- **The head's placement.** `Screen::leadPlacement()` is a tracked read of the document's `leadPlacement` as a
+  `LeadPlacement` (`Below`, `Inline`, `End`); absent is `Below`, and a value that names none of the places is reported
+  once at its path and taken as `Below`. `Screen::headSurface()` is a tracked read of `headSurface` as a name, empty for
+  none. `AppRoot::principalPlacement()` answers the app document's `principalPlacement` as a `PrincipalPlacement`
+  (`Sidebar`, `Head`), `Sidebar` when the document gives none.
+- **A footer action.** `actionBarOf` draws each `actions` part of a dialog or drawer as a button with the part's `icon`;
+  with `iconOnly` the button's label is empty while the condition holds and the part's label is its accessible name and
+  tooltip. A head action carries `iconOnly` in `HeadAction`.
 - **The head.** A screen's `status`, `tools`, `actions` and `menu` are lowered once, at mount, in the screen scope;
   `Screen::status()`, `tools()`, `actions()` and `menu()` read the visible ones (a tracked read), `Screen::subtitle()`,
   `eyebrow()`, `titleSpans()`, `eyebrowSpans()`, `subtitleSpans()` and `menuLabel()` evaluate `subtitle`, `eyebrow`, `titleSpans`, `eyebrowSpans` and `subtitleSpans` (into runs, with a run it cannot read

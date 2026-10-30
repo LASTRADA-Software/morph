@@ -63,8 +63,12 @@ struct HeadParts {
     /// wrapped
     ///        under one another where they do not.
     Node lead;
-    /// @brief The tools, the actions and the head's own menu, in one row.
+    /// @brief The tools, the actions and the head's own menu, in one row. While the lead's placement is `end`, the
+    ///        lead sits in it between the tools and the actions.
     Node trail;
+    /// @brief The lead as the host draws it on the title's line, content-sized; shown only while the lead's
+    ///        placement is `inline`. The host mounts it right after the title.
+    Node inlineLead;
 };
 
 /// @brief Tabs over screens: a tab bar over a `WorkspaceModel`, one screen instance per tab, mounted into the tab's
@@ -356,11 +360,12 @@ public:
         if (tab) {
             // A host places the lead beside the title and gives it the minimum width it wants, so the lead has none
             // of its own: with one, a lead's natural width would never be less than it.
-            Row lead = buildHeadLead(*tab);
+            Row lead = buildHeadLead(*tab, LeadPlacement::Below);
             lead.common.layout.minWidth.reset();
             return HeadParts{.eyebrow = ui::text(buildHeadEyebrow(*tab)),
                              .lead = ui::row(std::move(lead)),
-                             .trail = ui::row(buildHeadTrail(*tab))};
+                             .trail = ui::row(buildHeadTrail(*tab)),
+                             .inlineLead = ui::row(buildHeadLead(*tab, LeadPlacement::Inline))};
         }
         Text eyebrow{.text = std::string{}, .role = TextRole::Muted, .field = {}, .common = {}};
         eyebrow.common.testId = "head_eyebrow";
@@ -371,9 +376,55 @@ public:
         Row trail{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
         trail.common.testId = "head_trail";
         trail.common.visible = false;
+        Row inlineLead{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
+        inlineLead.common.testId = "head_lead_inline";
+        inlineLead.common.visible = false;
         return HeadParts{.eyebrow = ui::text(std::move(eyebrow)),
                          .lead = ui::row(std::move(lead)),
-                         .trail = ui::row(std::move(trail))};
+                         .trail = ui::row(std::move(trail)),
+                         .inlineLead = ui::row(std::move(inlineLead))};
+    }
+
+    /// @brief Where the active tab's head puts its lead. A tracked read.
+    /// @return The place; `Below` with no active tab. With the head in the page (`HeadPlacement::InPage`) the tab
+    ///         bar carries the title, so `Inline` reads as `Below` there.
+    [[nodiscard]] LeadPlacement activeLeadPlacement() const {
+        std::optional<WorkspaceTabId> const tab = _model->active().get();
+        return tab ? leadPlacementOf(*tab) : LeadPlacement::Below;
+    }
+
+    /// @brief Whether the active tab's head is a single line: it has no eyebrow, and its lead is not drawn under the
+    ///        title (it has none, or it sits inline or at the end). A tracked read.
+    /// @return Whether the head is one line; `true` with no active tab.
+    [[nodiscard]] bool activeHeadOneLine() const {
+        std::optional<WorkspaceTabId> const tab = _model->active().get();
+        if (!tab) {
+            return true;
+        }
+        bool const leadUnderTitle = leadHasContent(*tab) && leadPlacementOf(*tab) == LeadPlacement::Below;
+        return !(eyebrowHasContent(*tab) || leadUnderTitle);
+    }
+
+    /// @brief Whether the active tab's page continues the head's block: the screen's shown root says so
+    ///        (`ScreenHead::headJoined`) and the page is not inset, which two tabs or more force. A tracked read.
+    /// @return Whether the head is joined to the page.
+    [[nodiscard]] bool activeHeadJoined() const {
+        std::optional<WorkspaceTabId> const tab = _model->active().get();
+        if (!tab || activePageInset()) {
+            return false;
+        }
+        ScreenHead const* const head = headOf(*tab);
+        reactive::Computed<bool> const* const joined = head == nullptr ? nullptr : head->headJoined();
+        return joined != nullptr && joined->get();
+    }
+
+    /// @brief The surface the active screen asks the shell to draw its top bar on. A tracked read.
+    /// @return The surface's name; empty with no active tab and while the screen names none.
+    [[nodiscard]] std::string activeHeadSurface() const {
+        std::optional<WorkspaceTabId> const tab = _model->active().get();
+        ScreenHead const* const head = tab ? headOf(*tab) : nullptr;
+        reactive::Computed<std::string> const* const surface = head == nullptr ? nullptr : head->headSurface();
+        return surface == nullptr ? std::string{} : surface->get();
     }
 
     /// @brief The active tab's title as runs, which a shell that knows them draws in place of the tab's caption. A
@@ -824,10 +875,22 @@ private:
     }
 
     // Whether the head has a tool, an action or a menu entry.
+    // An `end` lead counts: it sits in the trail.
     [[nodiscard]] bool trailHasContent(WorkspaceTabId tab) const {
         ScreenHead const* const head = headOf(tab);
         return head != nullptr &&
-               (!headToolsOf(tab).empty() || !head->actions().get().empty() || !headMenuOf(tab).empty());
+               (!headToolsOf(tab).empty() || !head->actions().get().empty() || !headMenuOf(tab).empty() ||
+                (leadPlacementOf(tab) == LeadPlacement::End && leadHasContent(tab)));
+    }
+
+    // Where a tab's head puts its lead; a tracked read. In the page there is no title line to follow, so `Inline`
+    // draws as `Below`.
+    [[nodiscard]] LeadPlacement leadPlacementOf(WorkspaceTabId tab) const {
+        ScreenHead const* const head = headOf(tab);
+        reactive::Computed<LeadPlacement> const* const placement = head == nullptr ? nullptr : head->leadPlacement();
+        LeadPlacement const place = placement == nullptr ? LeadPlacement::Below : placement->get();
+        return place == LeadPlacement::Inline && _headPlacement == HeadPlacement::InPage ? LeadPlacement::Below
+                                                                                         : place;
     }
 
     // A tool of the head row: a search field or a select bound to the tool's value, its label the accessible name and
@@ -878,11 +941,23 @@ private:
         return ui::textInput(std::move(input));
     }
 
+    // The test-id suffix of the lead built for @p place: none for the copy under the title.
+    [[nodiscard]] static std::string idSuffix(LeadPlacement place) {
+        if (place == LeadPlacement::Inline) {
+            return "_inline";
+        }
+        return place == LeadPlacement::End ? "_end" : "";
+    }
+
     // The head's lead, built but not yet wrapped into an immutable Node: the subtitle (muted) and the badges on one
     // wrapping line, so they sit side by side while they fit and wrap under one another where they do not; the badges'
     // holder wraps too. It stretches from `kHeadLeadMinimum` units, so a trail beside it leaves it at least that much
     // before the trail wraps to a line of its own.
-    [[nodiscard]] Row buildHeadLead(WorkspaceTabId tab) const {
+    //
+    // It is built once per place and shown only while the head's placement is that place. The `Below` copy stretches;
+    // the others are content-sized, so the frame's slot, not the lead, holds the spare width.
+    [[nodiscard]] Row buildHeadLead(WorkspaceTabId tab, LeadPlacement place) const {
+        std::string const suffix = idSuffix(place);
         auto const subtitle = [this, tab] {
             ScreenHead const* const head = headOf(tab);
             return head == nullptr ? std::string{} : head->subtitle().get();
@@ -894,10 +969,13 @@ private:
         Row row{.children = {}, .gap = 1, .common = {}, .tone = std::nullopt};
         row.wrap = true;
         row.align = Align::Center;
-        row.common.testId = "head_lead";
-        row.common.layout.width = Sizing::stretch();
-        row.common.layout.minWidth = kHeadLeadMinimum;
-        row.common.visible = Prop<bool>{[this, tab] { return leadHasContent(tab); }};
+        row.common.testId = "head_lead" + suffix;
+        if (place == LeadPlacement::Below) {
+            row.common.layout.width = Sizing::stretch();
+            row.common.layout.minWidth = kHeadLeadMinimum;
+        }
+        row.common.visible =
+            Prop<bool>{[this, tab, place] { return leadHasContent(tab) && leadPlacementOf(tab) == place; }};
         // The runs when the screen gives them, else its plain subtitle as one run, so the text is bound to one thing.
         auto const spans = [this, tab, subtitle] {
             std::vector<TextSpan> runs = subtitleSpansOf(headOf(tab));
@@ -911,7 +989,7 @@ private:
         };
         Text text{.text = Prop<std::string>{subtitle}, .role = TextRole::Muted, .field = {}, .common = {}};
         text.spans = Prop<std::vector<TextSpan>>{spans};
-        text.common.testId = "head_subtitle";
+        text.common.testId = "head_subtitle" + suffix;
         text.common.visible = Prop<bool>{[spans] { return !spans().empty(); }};
         row.children.push_back(ui::text(std::move(text)));
         row.children.push_back(ui::forEach<PlacedBadge>(
@@ -923,12 +1001,12 @@ private:
                 return placed;
             },
             [](PlacedBadge const& placed) { return Key{static_cast<std::int64_t>(placed.index)}; },
-            [](reactive::Signal<PlacedBadge> const& placed) {
+            [suffix](reactive::Signal<PlacedBadge> const& placed) {
                 Badge badge{.tone = Prop<Tone>{[&placed] { return placed.get().badge.tone; }},
                             .text = Prop<std::string>{[&placed] { return placed.get().badge.text; }},
                             .icon = placed.peek().badge.icon,
                             .common = {}};
-                badge.common.testId = "head_status_" + std::to_string(placed.peek().index);
+                badge.common.testId = "head_status" + suffix + "_" + std::to_string(placed.peek().index);
                 return ui::badge(std::move(badge));
             },
             Axis::Horizontal, 1, {}, true));
@@ -949,10 +1027,14 @@ private:
         row.children.push_back(ui::forEach<HeadTool>(
             [this, tab] { return headToolsOf(tab); }, [](HeadTool const& tool) { return Key{tool.id}; },
             [this, tab](reactive::Signal<HeadTool> const& tool) { return headTool(tab, tool); }, Axis::Horizontal, 1));
+        row.children.push_back(ui::row(buildHeadLead(tab, LeadPlacement::End)));
         row.children.push_back(ui::forEach<HeadAction>(
             actions, [](HeadAction const& action) { return Key{action.id}; },
             [this, tab](reactive::Signal<HeadAction> const& action) {
-                Button button{.label = Prop<std::string>{[&action] { return action.get().label; }},
+                Button button{.label = Prop<std::string>{[&action] {
+                                  HeadAction const& current = action.get();
+                                  return current.iconOnly ? std::string{} : current.label;
+                              }},
                               .emphasis = action.peek().emphasis,
                               .onClick =
                                   [this, tab, actionId = action.peek().id] {
@@ -964,6 +1046,13 @@ private:
                               .common = {},
                               .icon = action.peek().icon};
                 button.common.testId = "head_action_" + action.peek().id;
+                // An icon-only button is named and titled by its label, which it does not draw.
+                auto const labelWhenIconOnly = [&action] {
+                    HeadAction const& current = action.get();
+                    return current.iconOnly ? current.label : std::string{};
+                };
+                button.common.a11y.name = Prop<std::string>{labelWhenIconOnly};
+                button.common.tooltip = Prop<std::string>{labelWhenIconOnly};
                 button.common.enabled = Prop<bool>{[&action] { return action.get().enabled; }};
                 return ui::button(std::move(button));
             },
@@ -1005,7 +1094,7 @@ private:
     // Hidden while the head has no content, so a screen without a head looks as it would without it.
     [[nodiscard]] Node headRow(WorkspaceTabId tab) const {
         Row row{.children = {}, .gap = 2, .common = {}, .tone = std::nullopt};
-        row.children.push_back(ui::row(buildHeadLead(tab)));
+        row.children.push_back(ui::row(buildHeadLead(tab, LeadPlacement::Below)));
         row.children.push_back(ui::row(buildHeadTrail(tab)));
         row.common.testId = "head";
         row.common.layout.width = Sizing::stretch();

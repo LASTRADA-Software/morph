@@ -418,11 +418,16 @@ ui::Commands findSample(Console const& console) {
 // The lab and the sample search are head tools on the expanded layout, the one that draws them, and the connection
 // is a head badge; the user is the shell's principal.
 void declareHead(ui::Scope& screen, Console const& console) {
-    screen.status({.text = "Connected", .tone = "ok"});
-    // Compact has no room for the head's tools, so scanning a sample is its one head action.
+    // The connection and the tools close the title's line; the compact head is dark, as the design draws it.
+    screen.leadPlacement("end");
+    screen.headSurface(ui::cond(ui::eq(console.width, "compact"), ui::AnyHandle{"darkHead"}, ui::AnyHandle{nullptr}));
+    screen.status({.text = "Connected", .tone = "ok", .visible = !Flag{ui::eq(console.width, "compact")}});
+    // Compact has no room for the head's tools, so scanning a sample is its one head action, an icon alone.
     screen.action({.id = "scan",
                    .label = "Scan",
                    .icon = "scan",
+                   .iconOnly = true,
+                   .emphasis = ButtonEmphasis::Ghost,
                    .visible = ui::eq(console.width, "compact"),
                    .onClick = open("lims-gallery.receipt")});
     auto const labs = ui::list({ui::obj({{"key", "qc-chem-a"}, {"label", "QC chemistry, site A"}}),
@@ -606,9 +611,7 @@ ui::Node reviewList() {
 }
 
 ui::Node worklistTabs(Console const& console) {
-    return ui::tabs({{.label = "Worklist 38",
-                      .children = {worklistTable(console, console.samples, "worklist"),
-                                   layout::muted("The 6 most urgent of 38.")}},
+    return ui::tabs({{.label = "Worklist 38", .children = {worklistTable(console, console.samples, "worklist")}},
                      {.label = "On hold 18",
                       .children = {worklistTable(console, heldSamples(console), "on-hold"),
                                    layout::muted("The 2 on hold from today's worklist, of 18.")}},
@@ -737,13 +740,13 @@ ui::Node samplePane(Console const& console) {
     return ui::column(
                {ui::row(
                     {ui::text({.text = console.selected, .role = "section"}).sizing(ui::stretch()).testId("pane-id"),
-                     ui::button({.label = "‹",
+                     ui::button({.icon = "nav.back",
                                  .onClick = ui::set(console.current, console.current - 1),
                                  .shape = ControlShape::Square})
                          .a11y("Previous sample")
                          .enabled(console.current > 0)
                          .testId("previous"),
-                     ui::button({.label = "›",
+                     ui::button({.icon = "nav.forward",
                                  .onClick = ui::set(console.current, console.current + 1),
                                  .shape = ControlShape::Square})
                          .a11y("Next sample")
@@ -794,15 +797,19 @@ ui::Node expandedLayout(Console const& console) {
                 ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
                          ui::panel({instruments()}, {.padding = 2}).sizing(ui::stretch(10))},
                         {.gap = 1, .align = Align::Start}),
-                ui::splitter({ui::panel({worklistTabs(console)}, {.padding = 1}),
-                              // The pane scrolls on its own: its results and chain of custody may be taller than
-                              // what the window leaves the splitter.
-                              ui::panel({ui::scroll({samplePane(console)}).sizing(ui::stretch(), ui::stretch())},
-                                        {.padding = 2})},
-                             ui::AnyHandle{"horizontal"}, sizes)
-                    .sizing(ui::stretch(), ui::stretch())
-                    .a11y("Worklist and sample")
-                    .testId("work-split")},
+                // The two panes are one card: the splitter fills a panel with no padding, and each pane pads itself.
+                ui::panel(
+                    {ui::splitter({ui::column({worklistTabs(console)}, {.padding = 2}),
+                                   // The pane scrolls on its own: its results and chain of custody may be
+                                   // taller than what the window leaves the splitter.
+                                   ui::column({ui::scroll({samplePane(console)}).sizing(ui::stretch(), ui::stretch())},
+                                              {.padding = 2})},
+                                  ui::AnyHandle{"horizontal"}, sizes)
+                         .sizing(ui::stretch(), ui::stretch())
+                         .a11y("Worklist and sample")
+                         .testId("work-split")},
+                    {.padding = 0})
+                    .sizing(ui::stretch(), ui::stretch())},
                {.gap = 2})
         .sizing(ui::stretch(), ui::stretch())
         .minHeight(kExpandedMinHeight);

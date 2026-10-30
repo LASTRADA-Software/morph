@@ -659,6 +659,32 @@ TEST_CASE("interpreter commands: a dialog's actions are buttons in its footer, r
     CHECK(h.text("saved") == "by enter");
 }
 
+// Mutation: drop `ActionModel::icon` in `actionBarOf` (the button has no icon), or ignore `iconOnly` (the label
+// stays).
+TEST_CASE("interpreter commands: a dialog's footer action keeps its icon, and draws it alone while iconOnly",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "overlay.icons",
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "open", "label": "open", "onClick": { "open": "dlg" } },
+        { "kind": "dialog", "id": "dlg",
+          "actions": [
+            { "id": "scan", "label": "Scan", "icon": "scan" },
+            { "id": "only", "label": "Only", "icon": "scan", "iconOnly": true } ],
+          "children": [ { "kind": "text", "text": "Body" } ] } ] } })");
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    int const scan = h.byTestId("Button", "action_scan");
+    CHECK(h.backend.prop(scan, "icon") == "scan");
+    CHECK(h.backend.prop(scan, "label") == "Scan");
+    int const only = h.byTestId("Button", "action_only");
+    CHECK(h.backend.prop(only, "icon") == "scan");
+    CHECK(h.backend.prop(only, "label").empty());
+    CHECK(h.backend.prop(only, "a11yName") == "Only");
+    CHECK(h.backend.prop(only, "tooltip") == "Only");
+}
+
 // Mutation: let an action bar mount wherever it is (it would show in the column, under no overlay).
 TEST_CASE("mount: an action bar outside a dialog's or drawer's content is refused", "[ui][interpreter]") {
     Harness h;

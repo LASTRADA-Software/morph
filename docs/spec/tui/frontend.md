@@ -130,7 +130,7 @@ to the rows below the caption.
 A terminal has no icon map and no assistive technology: icons, accessible names and roles are kept and not drawn,
 and a widget draws on its surface, its own or else its nearest container's: `sidebar` and `toolbar` draw every cell
 of the widget inverse, set after it paints so a child painting over its container stays inverse, and any other
-surface draws as no surface does. A surface changes no size. The test id is kept for the probe. The tooltip shows on hover.
+surface draws as no surface does. A surface changes no size. A surface a screen asks the shell's top bar for (`headSurface`) is drawn as any other: `darkHead` is not inverted, so the console's compact top bar is plain cells. The test id is kept for the probe. The tooltip shows on hover.
 
 **Files dropped on a terminal.** A terminal reports a file dragged onto it as its path pasted. A drop zone takes the
 focus, and a paste while it has it is a drop: the text read as paths, separated by whitespace, each quoted with `'`

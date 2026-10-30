@@ -64,6 +64,8 @@ refused: a lab writes dates one way everywhere, so the pattern is the applicatio
 | `id` | `id` | Non-empty |
 | `title`, `identity`, `dirty` | same | Expressions; `dirty` is a condition |
 | `titleSpans`, `eyebrow`, `eyebrowSpans`, `subtitle`, `subtitleSpans`, `status`, `tools`, `actions`, `menu`, `menuLabel` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
+| `leadPlacement`, `headSurface` | same | Where the head's lead sits and the surface the shell draws its top bar on while the screen is shown, in the screen scope ([The head](#the-head)); a screen's only |
+| `principalPlacement` | `principalPlacement` | Where the shell shows who is signed in: `sidebar` (the default, at the sidebar's foot) or `head` (at the top bar's trailing end); a literal name, the app document's only, and any other name is refused at load |
 | `navigation` | `navigation` | The counts on the navigator's entries, in the app scope ([The app document's navigation](#the-app-documents-navigation)); the app document's only |
 | `params` | `params` | Name to type, in declaration order |
 | `scope` | `models`, `state`, `let`, `queries`, `mutations`, `watch`, `checks` | The screen scope's declarations |
@@ -99,6 +101,25 @@ beside it is what an older shell draws), `status` (parts
 actions`). All are evaluated in the screen scope, and the app document, which has no view, refuses them. A shell
 draws them in that order on one line: the eyebrow above the title, the subtitle, the badges, then at the trailing edge the tools, the actions and
 the menu.
+
+`leadPlacement` (an expression of a name) says where the lead, the subtitle and the badges together, sits:
+
+- `below`, the default: under the title.
+- `inline`: on the title's line, right after the title; where it does not fit it wraps to a line of its own before the
+  trail does. In the workspace's own head, which carries the title in the tab bar, it draws as `below`.
+- `end`: at the trailing edge of the head's first line, after the tools and before the actions and the menu.
+
+A literal other than these three is refused at load (`` `leadPlacement` is `below`, `inline` or `end` ``); a computed value
+that names none is reported once at its path and taken as `below`. The placement may change at run time, so a width
+class can pick one.
+
+`headSurface` (an expression of a surface's name, `null` or absent for none) is the surface the shell draws its top bar
+on while the screen is shown; a name that is no surface draws as none does. The built-in `toolbarJoined` surface wins
+over it while the page continues the head's block.
+
+An `actionButton` part also takes `iconOnly` (a condition): while it holds, the button draws its `icon` alone and its
+label is its accessible name and its tooltip. A part with `iconOnly` and no `icon` is refused (`` an icon-only action
+names its `icon` ``). The same part in a dialog's or drawer's `actions` draws its `icon` too, and takes `iconOnly` alike.
 
 ### The app document's navigation
 

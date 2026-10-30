@@ -466,10 +466,14 @@ ui::Node sources(Plate const& plate) {
     // The first five, then how many more: the design lists a few and counts the rest.
     auto const more = Count{plate.toPlaceCount} - kListed;
     return ui::panel(
-               {ui::forEach(ui::slice(plate.toPlace, std::int64_t{0}, kListed), {.key = ui::row("n"), .gap = 1},
+               {ui::forEach(ui::slice(plate.toPlace, std::int64_t{0}, kListed),
+                            {.key = ui::row("n"), .gap = 1, .divided = true},
                             [&plate](ui::DeclScope&) { return ui::Nodes{sourceRow(plate)}; })
                     .testId("sources"),
-                ui::text({.text = ui::format("+ {0} more", {more}), .role = "muted"}).visible(more > 0).testId("more"),
+                // The count sits at the panel's middle, as the design sets it.
+                ui::column({ui::text({.text = ui::format("+ {0} more", {more}), .role = "muted"}).testId("more")},
+                           {.align = Align::Center})
+                    .visible(more > 0),
                 ui::text({.text = "All samples are placed.", .role = "muted"})
                     .visible(ui::eq(plate.toPlaceCount, std::int64_t{0}))},
                {.title = ui::format("To place · {0}", {plate.toPlaceCount}), .padding = 1})
@@ -479,19 +483,28 @@ ui::Node sources(Plate const& plate) {
 
 // ── The selection bar ────────────────────────────────────────────────────────────────────────────────────────────
 
-ui::AnyHandle selectionText(Plate const& plate) {
+// "6 wells selected" and the range it spans; the count is the strong part of the runs.
+struct SelectionLine {
+    ui::AnyHandle text;
+    ui::AnyHandle spans;
+};
+
+SelectionLine selectionLine(Plate const& plate) {
     auto const count = Count{ui::call("count", {plate.selected})};
     auto const first = ui::call("first", {plate.selected});
     auto const range = ui::cond(ui::eq(count, std::int64_t{1}), Text{first},
                                 Text{ui::format("{0}–{1}", {first, lastOf(plate.selected)})});
-    return ui::format("{0} {1} selected · {2}",
-                      {count, ui::cond(ui::eq(count, std::int64_t{1}), Text{"well"}, Text{"wells"}), range});
+    auto const counted =
+        ui::format("{0} {1} selected", {count, ui::cond(ui::eq(count, std::int64_t{1}), Text{"well"}, Text{"wells"})});
+    return SelectionLine{.text = ui::format("{0} · {1}", {counted, range}),
+                         .spans = ui::spans({ui::strong(counted), " · ", ui::coalesce({range, ui::AnyHandle{""}})})};
 }
 
 ui::Node selectionBar(Plate const& plate) {
+    auto const selection = selectionLine(plate);
     return ui::panel(
                {ui::row(
-                   {ui::text({.text = selectionText(plate), .role = "section"})
+                   {ui::text({.text = selection.text, .spans = selection.spans})
                         .sizing(ui::stretch())
                         .testId("selected"),
                     layout::muted("Fill with"),
@@ -636,17 +649,17 @@ ui::Node runLine(Plate const& plate) {
     auto const count = Count{ui::row("count")};
     Flag const empty = ui::eq(ui::row("key"), "empty");
     Flag const several = count > 1;
+    // The well's name, or the run's range, strong, then the line: one text, as the design sets it.
+    auto const name = ui::cond(several, Text{ui::format("{0}–{1}", {first, ui::row("last.name")})}, Text{first});
+    auto const line =
+        ui::cond(empty && several, Text{ui::format("Empty, {0} wells", {count})}, Text{ui::row("first.text")});
     // The run's first well, as the grid draws it: a tap on a sample well selects it.
     auto marker = wellOptions(ui::row("first.label"));
     marker.onClick = ui::Commands{ui::ifThen(ui::includes(plate.sampleWells, first), toggleWell(plate, first))};
     marker.selected = ui::includes(plate.selection, first);
     return ui::row(
         {ui::button(marker).surface(ui::row("first.surface")).a11y(ui::format("Select {0}", {first})).testId("marker"),
-         ui::text({.text = ui::cond(several, Text{ui::format("{0}–{1}", {first, ui::row("last.name")})}, Text{first}),
-                   .role = "section"})
-             .sizing(ui::fixed(8)),
-         ui::text({.text = ui::cond(empty && several, Text{ui::format("Empty, {0} wells", {count})},
-                                    Text{ui::row("first.text")})})
+         ui::text({.text = ui::format("{0} · {1}", {name, line}), .spans = ui::spans({ui::strong(name), " · ", line})})
              .sizing(ui::stretch())
              .testId("line"),
          ui::button({.label = "Assign…", .onClick = openAssign(plate, first, firstToPlace(plate))})
@@ -705,11 +718,16 @@ ui::Node compactLayout(Plate const& plate) {
     for (std::size_t row = 0; row < kRowNames.size(); ++row) {
         rows.push_back(rowSection(plate, row));
     }
-    return ui::column(
-        {layout::muted(ui::format("{0} samples to place", {plate.toPlaceCount})).testId("to-place-count"),
-         ui::row({autoFill(plate).sizing(ui::stretch()), saveLayout(plate).sizing(ui::stretch())}, {.gap = 1}),
-         ui::column(rows, {.divided = true}), assignDialog(plate)},
-        {.gap = 2});
+    // The buttons sit in the head's white block, and the root's rule draws the line under it.
+    auto const buttons =
+        ui::column(
+            {ui::row({autoFill(plate).sizing(ui::stretch()), saveLayout(plate).sizing(ui::stretch())}, {.gap = 1})},
+            {.padding = ui::padding(2, 4)})
+            .surface("bar");
+    return ui::column({buttons, ui::column({ui::column(rows, {.divided = true}), assignDialog(plate)},
+                                           {.gap = 2, .padding = 4})},
+                      {.divided = true, .pageEdge = true})
+        .sizing(ui::stretch(), ui::stretch());
 }
 
 }  // namespace
@@ -719,9 +737,12 @@ ui::Screen plateScreen() {
         Plate const plate = declare(screen);
         screen.title("Plate PL-0193");
         screen.titleSpans(ui::spans({"Plate ", ui::mono("PL-0193")}));
-        screen.subtitle(ui::cond(plate.compact, Text{"ELISA, host cell protein"},
-                                 Text{"ELISA, host cell protein · worksheet WS-2026-0415"}));
-        screen.subtitleSpans(ui::cond(plate.compact, ui::spans({"ELISA, host cell protein"}),
+        // The subtitle follows the title on expanded, and sits under it on compact.
+        screen.leadPlacement(ui::cond(plate.compact, Text{"below"}, Text{"inline"}));
+        auto const toPlace = ui::format("ELISA, host cell protein · {0} samples to place", {plate.toPlaceCount});
+        screen.subtitle(
+            ui::cond(plate.compact, Text{toPlace}, Text{"ELISA, host cell protein · worksheet WS-2026-0415"}));
+        screen.subtitleSpans(ui::cond(plate.compact, ui::spans({toPlace}),
                                       ui::spans({"ELISA, host cell protein · worksheet ", ui::mono("WS-2026-0415")})));
         declareHead(screen, plate);
         return layout::byWidth(plate.width, compactLayout(plate), expandedLayout(plate));

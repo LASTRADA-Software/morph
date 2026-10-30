@@ -74,6 +74,32 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> headBundle()
     return served.build();
 }
 
+/// A screen whose lead sits inline beside the title, and an app document that puts the principal in the head.
+constexpr std::string_view kInline = R"({
+  "vocab": "ui/1", "id": "probe.inline", "leadPlacement": "inline", "subtitle": "Sub",
+  "view": { "kind": "text", "testId": "inline", "text": "inline" } })";
+constexpr std::string_view kHeadPrincipalApp = R"({"vocab":"ui/1","id":"app","principalPlacement":"head"})";
+
+/// The inline screen and the plain one, with the app document, neither public.
+/// @return It, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> placementBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    for (auto const& [screenId, text] : {std::pair{"probe.inline", kInline}, std::pair{"probe.plain", kPlain}}) {
+        ui::CatalogEntry entry;
+        entry.id = screenId;
+        entry.title = screenId;
+        if (auto added = served.addScreen(std::move(entry), std::string{text}); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    if (auto added = served.addFile(
+            ui::BundleFile{.kind = "app", .id = "app", .bytes = std::string{kHeadPrincipalApp}, .isPublic = true});
+        !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
 /// A screen that asks the callee for an answer, in a dialog or as a tab, and shows what it got.
 constexpr std::string_view kAsker = R"({
   "vocab": "ui/1", "id": "probe.asker", "title": "Asker",
@@ -485,6 +511,46 @@ TEST_CASE(
         REQUIRE(
             pumpUntil(context.owner(), [&backend] { return backend.find("Text", "testId", "plain").has_value(); }));
         CHECK(pumpUntil(context.owner(), [&insetShown] { return insetShown() == "true"; }));
+    }
+    source.close();
+}
+
+// Control: a client that never mounts `_headInline` (the lead stays in no slot), or never reads `principalPlacement`
+// (the sidebar keeps the name).
+TEST_CASE("Client shell: an inline lead mounts beside the title, and the app document can move the principal",
+          "[client][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &placementBundle},
+                               client::LocalSetup{.db = {}, .user = "Dr. A. Meyer"}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "probe.inline"});
+        REQUIRE(pumpUntil(context.owner(),
+                          [&backend] { return backend.find("Row", "testId", "head_lead_inline").has_value(); }));
+        int const slot = backend.find("Row", "testId", "shell_head_inline").value();
+        int const lead = backend.find("Row", "testId", "head_lead_inline").value();
+        CHECK(pumpUntil(context.owner(), [&] { return backend.children(slot) == std::vector<int>{lead}; }));
+        CHECK(propOf(backend, "Row", "shell_head_inline", "visible") == "true");
+        CHECK(propOf(backend, "Row", "head_lead_inline", "visible") == "true");
+        CHECK(propOf(backend, "Row", "head_lead", "visible") == "false");
+        // One line: the top line's items are centred.
+        CHECK(propOf(backend, "Row", "shell_topbar_main", "align") == "center");
+        // The principal is the top bar's.
+        CHECK(propOf(backend, "Text", "shell_head_principal", "text") == "Dr. A. Meyer");
+        CHECK(propOf(backend, "Text", "shell_head_principal", "visible") == "true");
+        CHECK(propOf(backend, "Text", "shell_principal", "visible") == "false");
+
+        auto const plain = backend.find("Button", "testId", "nav_probe.plain");
+        REQUIRE(plain.has_value());
+        backend.click(*plain);
+        CHECK(pumpUntil(context.owner(),
+                        [&backend] { return propOf(backend, "Row", "shell_head_inline", "visible") == "false"; }));
     }
     source.close();
 }

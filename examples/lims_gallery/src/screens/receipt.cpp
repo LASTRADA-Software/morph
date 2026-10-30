@@ -346,7 +346,7 @@ ui::Node sampleCard(Receipt const& receipt) {
                         {.gap = 1, .align = Align::Center}),
                 ui::grid({type, temperatureField(receipt), receivedAtField(receipt), locationField(receipt),
                           containersField(receipt), courierField(receipt)},
-                         {.gap = 2, .columns = 3}),
+                         {.gap = 2, .columns = 3, .align = Align::Start}),
                 conditions(receipt, false), noteField(receipt),
                 ui::row({rejectButton(receipt, "Reject sample…"), receiveButton(receipt, "Receive and scan next")},
                         {.gap = 1, .justify = Justify::Between})},
@@ -417,7 +417,7 @@ ui::Node expandedLayout(Receipt const& receipt) {
     auto const session = ui::panel({sessionTable(receipt), rejectionLine(receipt).testId("last-rejection")},
                                    {.title = "This session", .padding = 2})
                              // The design's 300 px column, in the frontend's character widths.
-                             .sizing(ui::fixed(40))
+                             .sizing(ui::fixed(36))
                              .testId("session-panel");
     return ui::pinned(
         ui::column({ui::row({left, session}, {.gap = 2, .align = Align::Start}), rejectDialog(receipt)}));
@@ -448,9 +448,9 @@ ui::Node compactLayout(Receipt const& receipt) {
                  .testId("session-panel"),
              rejectDialog(receipt)},
             {.gap = 2}),
-        {.bottom =
-             ui::row({rejectButton(receipt, "Reject…"), receiveButton(receipt, "Receive, next").sizing(ui::stretch())},
-                     {.gap = 1})});
+        {.bottom = ui::row({rejectButton(receipt, "Reject…").sizing(ui::fixed(14)),
+                            receiveButton(receipt, "Receive, next").sizing(ui::stretch())},
+                           {.gap = 1})});
 }
 
 }  // namespace
@@ -459,6 +459,8 @@ ui::Screen receiptScreen() {
     return ui::screen("lims-gallery.receipt", [](ui::Scope& screen) {
         Receipt const receipt = declare(screen);
         screen.title("Receive samples");
+        // The session line and the counts close the title's line, as the design puts them.
+        screen.leadPlacement("end");
         screen.subtitle(
             ui::cond(receipt.compact, ui::Handle<std::string>{""}, ui::Handle<std::string>{"Session since 08:30"}));
         screen.status({.text = ui::cond(receipt.compact, ui::format("{0}", {receipt.received}),

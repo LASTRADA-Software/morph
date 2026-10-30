@@ -72,6 +72,22 @@ public:
     ///         shell insets. It keeps its last value once the screen is closed.
     [[nodiscard]] virtual reactive::Computed<bool> const* pageEdge() const { return nullptr; }
 
+    /// @brief Whether the screen's shown root continues the head's block (the document's `headJoined` on the root,
+    ///        seen through `switch` cases), so a shell leaves no rule between the head and what follows.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
+    ///         its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<bool> const* headJoined() const { return nullptr; }
+
+    /// @brief Where the head's lead (the subtitle and the badges) sits.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default, which is
+    ///         `below`. It keeps its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<LeadPlacement> const* leadPlacement() const { return nullptr; }
+
+    /// @brief The name of the surface a shell draws its top bar on while the screen is shown.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
+    ///         its last value once the screen is closed. An empty name is none.
+    [[nodiscard]] virtual reactive::Computed<std::string> const* headSurface() const { return nullptr; }
+
     /// @brief The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none.
     /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
     ///         its last value once the screen is closed.
@@ -763,6 +779,13 @@ private:
             return &_state->titleSpans;
         }
         [[nodiscard]] reactive::Computed<bool> const* pageEdge() const override { return &_state->pageEdge; }
+        [[nodiscard]] reactive::Computed<bool> const* headJoined() const override { return &_state->headJoined; }
+        [[nodiscard]] reactive::Computed<LeadPlacement> const* leadPlacement() const override {
+            return &_state->leadPlacement;
+        }
+        [[nodiscard]] reactive::Computed<std::string> const* headSurface() const override {
+            return &_state->headSurface;
+        }
         [[nodiscard]] reactive::Computed<std::string> const* eyebrow() const override { return &_state->eyebrow; }
         [[nodiscard]] reactive::Computed<std::vector<TextSpan>> const* eyebrowSpans() const override {
             return &_state->eyebrowSpans;
@@ -903,6 +926,27 @@ private:
                                }
                                return lastPageEdge;
                            }},
+                  headJoined{*runtime,
+                             [this] {
+                                 if (!closed.get() && generation.get() >= 0) {
+                                     lastHeadJoined = screen->headJoined();
+                                 }
+                                 return lastHeadJoined;
+                             }},
+                  leadPlacement{*runtime,
+                                [this] {
+                                    if (!closed.get() && generation.get() >= 0) {
+                                        lastLeadPlacement = screen->leadPlacement();
+                                    }
+                                    return lastLeadPlacement;
+                                }},
+                  headSurface{*runtime,
+                              [this] {
+                                  if (!closed.get() && generation.get() >= 0) {
+                                      lastHeadSurface = screen->headSurface();
+                                  }
+                                  return lastHeadSurface;
+                              }},
                   eyebrow{*runtime,
                           [this] {
                               if (!closed.get() && generation.get() >= 0) {
@@ -1112,6 +1156,9 @@ private:
                     lastIdentity = screen->identity();
                     lastTitleSpans = screen->titleSpans();
                     lastPageEdge = screen->pageEdge();
+                    lastHeadJoined = screen->headJoined();
+                    lastLeadPlacement = screen->leadPlacement();
+                    lastHeadSurface = screen->headSurface();
                     lastEyebrow = detail::host::titleText(screen->eyebrow());
                     lastEyebrowSpans = screen->eyebrowSpans();
                     lastSubtitle = detail::host::titleText(screen->subtitle());
@@ -1152,6 +1199,9 @@ private:
             Value lastIdentity;
             std::vector<TextSpan> lastTitleSpans;
             bool lastPageEdge = false;
+            bool lastHeadJoined = false;
+            LeadPlacement lastLeadPlacement = LeadPlacement::Below;
+            std::string lastHeadSurface;
             std::string lastEyebrow;
             std::vector<TextSpan> lastEyebrowSpans;
             std::string lastSubtitle;
@@ -1168,6 +1218,9 @@ private:
             reactive::Computed<Value> identity;
             reactive::Computed<std::vector<TextSpan>> titleSpans;
             reactive::Computed<bool> pageEdge;
+            reactive::Computed<bool> headJoined;
+            reactive::Computed<LeadPlacement> leadPlacement;
+            reactive::Computed<std::string> headSurface;
             reactive::Computed<std::string> eyebrow;
             reactive::Computed<std::vector<TextSpan>> eyebrowSpans;
             reactive::Computed<std::string> subtitle;

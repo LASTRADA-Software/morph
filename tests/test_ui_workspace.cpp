@@ -114,6 +114,22 @@ constexpr std::string_view kEdgeRoot = R"({
   "view": { "kind": "column", "pageEdge": true, "children": [
     { "kind": "text", "testId": "body", "text": "x" } ] } })";
 
+/// A screen whose head places its lead by `place`, asks the shell for the surface `surface`, and has a tool and an
+/// action that shows its icon alone while `compact`.
+constexpr std::string_view kLeadPlaced = R"({
+  "vocab": "ui/1", "id": "leadplaced", "title": "Plate",
+  "subtitle": "ELISA", "leadPlacement": { "ref": "place" }, "headSurface": { "ref": "surface" },
+  "status": [ { "text": "Draft", "tone": "warn" } ],
+  "tools": [ { "id": "q", "kind": "search", "label": "Search", "value": "" } ],
+  "actions": [ { "id": "scan", "label": "Scan", "icon": "scan", "iconOnly": { "ref": "compact" }, "onClick": [] } ],
+  "state": { "place": { "init": "end" }, "surface": { "init": "" }, "compact": { "init": true } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "below", "label": "below", "onClick": [ { "set": "place", "value": "below" } ] },
+    { "kind": "button", "testId": "inline", "label": "inline", "onClick": [ { "set": "place", "value": "inline" } ] },
+    { "kind": "button", "testId": "dark", "label": "dark", "onClick": [ { "set": "surface", "value": "darkHead" } ] },
+    { "kind": "button", "testId": "wide", "label": "wide", "onClick": [ { "set": "compact", "value": false } ] }
+  ] } })";
+
 /// A screen whose head has only a menu: an entry, a separator, an entry shown while `retireShown`, and a submenu.
 constexpr std::string_view kMenued = R"({
   "vocab": "ui/1", "id": "menued", "title": "Instrument", "menuLabel": "More instrument actions",
@@ -261,6 +277,7 @@ private:
             {"eyebrowruns", loadOrFail(kEyebrowRuns, morph::ui::testing::corpusCatalog())},
             {"eyebrowonly", loadOrFail(kEyebrowOnly, morph::ui::testing::corpusCatalog())},
             {"edgeroot", loadOrFail(kEdgeRoot, morph::ui::testing::corpusCatalog())},
+            {"leadplaced", loadOrFail(kLeadPlaced, morph::ui::testing::corpusCatalog())},
             {"menued", loadOrFail(kMenued, morph::ui::testing::corpusCatalog())},
             {"tooled", loadOrFail(kTooled, morph::ui::testing::corpusCatalog())},
             {"asker", loadOrFail(kAsker, morph::ui::testing::corpusCatalog())},
@@ -1020,11 +1037,9 @@ TEST_CASE("workspace: headPartsForActive mounts the active tab's own head, separ
     harness.settle();
     // Two renderings of the same tab's head, both present -- confirming headPartsForActive() reads the live active
     // tab's own data, the same way the in-page headRow() does, not a stale snapshot.
-    std::string const dump = harness.backend.dump();
     std::size_t rows = 0;
-    for (std::size_t at = dump.find("head_subtitle"); at != std::string::npos;
-         at = dump.find("head_subtitle", at + 1)) {
-        ++rows;
+    for (int const text : harness.backend.all("Text")) {
+        rows += harness.backend.prop(text, "testId") == "head_subtitle" ? 1U : 0U;
     }
     CHECK(rows == 2);
 }
@@ -1347,4 +1362,112 @@ TEST_CASE("workspace: the page is uninset around a lone screen that insets itsel
     shell.activate(0);
     harness.settle();
     CHECK(shell.activePageInset());
+}
+
+// Mutation: build the lead in one place whatever the placement (the `end` copy or the `inline` copy is never the
+// shown one), or leave the `end` copy out of the trail's content.
+TEST_CASE("workspace: the lead is built once per place and shown only in the place the head asks for",
+          "[ui][workspace]") {
+    using morph::ui::LeadPlacement;
+    using morph::ui::Mounted;
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog(), nullptr, morph::ui::HeadPlacement::External};
+    CHECK(shell.activeLeadPlacement() == LeadPlacement::Below);
+    REQUIRE(shell.open("leadplaced", {}) == 0U);
+    harness.settle();
+    morph::ui::HeadParts parts = shell.headPartsForActive();
+    Mounted const lead{harness.runtime, harness.backend, std::move(parts.lead)};
+    Mounted const inlineLead{harness.runtime, harness.backend, std::move(parts.inlineLead)};
+    Mounted const trail{harness.runtime, harness.backend, std::move(parts.trail)};
+    harness.settle();
+    auto& backend = harness.backend;
+    int const below = harness.byTestId("Row", "head_lead");
+    int const inlined = harness.byTestId("Row", "head_lead_inline");
+    int const end = harness.byTestId("Row", "head_lead_end");
+    int const trailRow = harness.byTestId("Row", "head_trail");
+
+    CHECK(shell.activeLeadPlacement() == LeadPlacement::End);
+    CHECK(backend.prop(end, "visible") == "true");
+    CHECK(backend.prop(below, "visible") == "false");
+    CHECK(backend.prop(inlined, "visible") == "false");
+    // Between the tools and the actions, content-sized: no stretch and no minimum.
+    std::vector<int> const parts_ = backend.children(trailRow);
+    REQUIRE(parts_.size() == 4);
+    CHECK(parts_.at(1) == end);
+    for (int const copy : {end, inlined}) {
+        CHECK_FALSE(backend.prop(copy, "layout").contains("stretch"));
+        CHECK_FALSE(backend.prop(copy, "layout").contains("min"));
+    }
+    CHECK(backend.prop(harness.byTestId("Text", "head_subtitle_end"), "visible") == "true");
+    CHECK(backend.prop(harness.byTestId("Badge", "head_status_end_0"), "text") == "Draft");
+    CHECK(backend.prop(below, "layout") == "stretch(1)/content");
+
+    // A change of placement swaps the copies, and the shell's read follows.
+    backend.click(harness.byTestId("Button", "inline"));
+    harness.settle();
+    CHECK(shell.activeLeadPlacement() == LeadPlacement::Inline);
+    CHECK(backend.prop(inlined, "visible") == "true");
+    CHECK(backend.prop(end, "visible") == "false");
+    CHECK(backend.prop(below, "visible") == "false");
+    backend.click(harness.byTestId("Button", "below"));
+    harness.settle();
+    CHECK(shell.activeLeadPlacement() == LeadPlacement::Below);
+    CHECK(backend.prop(below, "visible") == "true");
+    CHECK(backend.prop(inlined, "visible") == "false");
+}
+
+// Mutation: ignore the eyebrow (the second check fails), or treat an inline or end lead as one under the title (the
+// first fails).
+TEST_CASE("workspace: the head is one line while it has no eyebrow and nothing under the title", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog(), nullptr, morph::ui::HeadPlacement::External};
+    REQUIRE(shell.open("leadplaced", {}) == 0U);
+    harness.settle();
+    CHECK(shell.activeHeadOneLine());
+    harness.backend.click(harness.byTestId("Button", "below"));
+    harness.settle();
+    CHECK_FALSE(shell.activeHeadOneLine());
+    REQUIRE(shell.open("eyebrowonly", {}) == 1U);
+    harness.settle();
+    CHECK_FALSE(shell.activeHeadOneLine());
+}
+
+// Mutation: ignore either key (the button keeps its label, or has no name and tooltip).
+TEST_CASE("workspace: an icon-only head action draws no label and is named and titled by it", "[ui][workspace]") {
+    using morph::ui::Mounted;
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog(), nullptr, morph::ui::HeadPlacement::External};
+    REQUIRE(shell.open("leadplaced", {}) == 0U);
+    harness.settle();
+    morph::ui::HeadParts parts = shell.headPartsForActive();
+    Mounted const trail{harness.runtime, harness.backend, std::move(parts.trail)};
+    harness.settle();
+    int const scan = harness.byTestId("Button", "head_action_scan");
+    CHECK(harness.backend.prop(scan, "label").empty());
+    CHECK(harness.backend.prop(scan, "icon") == "scan");
+    CHECK(harness.backend.prop(scan, "a11yName") == "Scan");
+    CHECK(harness.backend.prop(scan, "tooltip") == "Scan");
+    harness.backend.click(harness.byTestId("Button", "wide"));
+    harness.settle();
+    CHECK(harness.backend.prop(scan, "label") == "Scan");
+}
+
+// Mutation: read the surface untracked (the second check fails), or answer none.
+TEST_CASE("workspace: activeHeadSurface follows the active screen's headSurface", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog(), nullptr, morph::ui::HeadPlacement::External};
+    CHECK(shell.activeHeadSurface().empty());
+    REQUIRE(shell.open("leadplaced", {}) == 0U);
+    harness.settle();
+    CHECK(shell.activeHeadSurface().empty());
+    harness.backend.click(harness.byTestId("Button", "dark"));
+    harness.settle();
+    CHECK(shell.activeHeadSurface() == "darkHead");
+    REQUIRE(shell.open("headed", {}) == 1U);
+    harness.settle();
+    CHECK(shell.activeHeadSurface().empty());
 }

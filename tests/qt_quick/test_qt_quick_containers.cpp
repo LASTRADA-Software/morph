@@ -1614,3 +1614,26 @@ TEST_CASE("qt_quick containers: the compact top line starts its menu square a st
     CHECK(menuItem.height() == target);
     CHECK(title.mapToScene(QPointF{0, 0}).x() == stepOne + target + stepTwo);
 }
+
+// Control: keep `Align::Start` (the title sits 11 px above the button's centre).
+TEST_CASE("qt_quick containers: a title alone on a one-line head is centred on the trail's button", "[qt_quick]") {
+    Scene scene;
+    CompactFrame compact{scene};
+    auto button = scene.backend().createButton(&compact.frame->headSlot());
+    button->setLabel("Export PDF");
+    button->setTestId("probe_export");
+    compact.frame->setHeadShown(true);
+    compact.frame->setHeadOneLine(true);
+    scene.settle();
+    QQuickItem const& title = *textItemOf("shell_title", QStringLiteral("Review"));
+    QQuickItem const& export_ = Scene::itemOf(*button);
+    qreal const titleMiddle = title.mapToScene(QPointF{0, title.height() / 2}).y();
+    qreal const buttonMiddle = export_.mapToScene(QPointF{0, export_.height() / 2}).y();
+    INFO("title middle " << titleMiddle << ", button middle " << buttonMiddle);
+    CHECK(std::abs(titleMiddle - buttonMiddle) <= 1.0);
+
+    compact.frame->setHeadOneLine(false);
+    scene.settle();
+    CHECK(std::abs(title.mapToScene(QPointF{0, title.height() / 2}).y() -
+                   export_.mapToScene(QPointF{0, export_.height() / 2}).y()) > 3.0);
+}

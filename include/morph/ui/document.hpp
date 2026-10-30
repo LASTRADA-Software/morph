@@ -584,6 +584,14 @@ struct Document {
     /// @brief The subtitle as runs, drawn in place of `subtitle` by a client that knows it; `nullptr` when none is
     ///        declared.
     ExprPtr subtitleSpans;
+    /// @brief Where the head's lead (subtitle and badges) sits: an expression of `below`, `inline` or `end`;
+    ///        `nullptr` when none is declared, which is `below`.
+    ExprPtr leadPlacement;
+    /// @brief The surface the shell draws the top bar on while the screen is shown: an expression of a surface's
+    ///        name; `nullptr` when none is declared.
+    ExprPtr headSurface;
+    /// @brief The app document's principal placement, `sidebar` or `head`; empty for the default, `sidebar`.
+    std::string principalPlacement;
     /// @brief The head's status badges: `headBadge` parts, in order.
     std::vector<DocNodePtr> status;
     /// @brief The head's actions: `actionButton` parts, in order.
@@ -1012,9 +1020,10 @@ inline constexpr std::array<KeySpec, 6> kBannerKeys = {{{"tone", Shape::Expr},
 /// @brief The keys of an `action` part.
 inline constexpr std::array<KeySpec, 2> kActionKeys = {{{"label", Shape::Expr}, {"onClick", Shape::Commands}}};
 /// @brief The keys of an `actionButton` part: a button a screen's head or an overlay's footer shows.
-inline constexpr std::array<KeySpec, 7> kActionButtonKeys = {{{"id", Shape::Name, {}, kRequired},
+inline constexpr std::array<KeySpec, 8> kActionButtonKeys = {{{"id", Shape::Name, {}, kRequired},
                                                               {"label", Shape::Expr, {}, kRequired},
                                                               {"icon", Shape::Expr},
+                                                              {"iconOnly", Shape::Condition},
                                                               {"emphasis", Shape::Text},
                                                               {"enabled", Shape::Condition},
                                                               {"visible", Shape::Condition},
@@ -1289,6 +1298,9 @@ public:
         doc.eyebrowSpans = optionalExpr(*object, "eyebrowSpans", "");
         doc.subtitle = optionalExpr(*object, "subtitle", "");
         doc.subtitleSpans = optionalExpr(*object, "subtitleSpans", "");
+        doc.leadPlacement = optionalExpr(*object, "leadPlacement", "");
+        checkLeadPlacementLiteral(doc.leadPlacement);
+        doc.headSurface = optionalExpr(*object, "headSurface", "");
         doc.status = topParts(*object, "status", "headBadge");
         doc.actions = topParts(*object, "actions", "actionButton");
         doc.menu = topParts(*object, "menu", "headMenuItem");
@@ -1297,13 +1309,19 @@ public:
         doc.navigation = navigation(*object, doc.id);
         if (doc.id == "app") {
             // The head belongs to a screen's tab; the app document has no view and so no head.
-            for (std::string_view const key : {"titleSpans", "eyebrow", "eyebrowSpans", "subtitle", "subtitleSpans",
-                                               "status", "actions", "menu", "menuLabel", "tools"}) {
+            for (std::string_view const key :
+                 {"titleSpans", "eyebrow", "eyebrowSpans", "subtitle", "subtitleSpans", "leadPlacement", "headSurface",
+                  "status", "actions", "menu", "menuLabel", "tools"}) {
                 if (member(*object, key) != nullptr) {
                     refuse(pointerAppend("", key),
                            "`" + std::string{key} + "` is a screen's; the app document has none");
                 }
             }
+        }
+        static constexpr std::array<std::string_view, 2> kPrincipalPlacements = {"sidebar", "head"};
+        doc.principalPlacement = choiceOf(*object, "principalPlacement", "", kPrincipalPlacements);
+        if (doc.id != "app" && member(*object, "principalPlacement") != nullptr) {
+            refuse("/principalPlacement", "`principalPlacement` is the app document's; a screen has none");
         }
         doc.showErrors = showErrors(*object, "");
         datePatterns(*object, doc);
@@ -1485,6 +1503,17 @@ private:
                                               std::string const& path) {
         Json const* const value = member(object, key);
         return value == nullptr ? nullptr : expr(*value, pointerAppend(path, key));
+    }
+
+    // A `leadPlacement` written as a literal is one of the three places; a computed one is read at run time.
+    static void checkLeadPlacementLiteral(ExprPtr const& placement) {
+        if (placement == nullptr || placement->kind != ExprKind::Literal) {
+            return;
+        }
+        std::string const* const name = placement->literal.asString();
+        if (name == nullptr || (*name != "below" && *name != "inline" && *name != "end")) {
+            refuse(placement->path, "`leadPlacement` is `below`, `inline` or `end`");
+        }
     }
 
     // The app document's `navigation` badges, each naming its screen; a screen declares none.
@@ -2259,6 +2288,9 @@ private:
         made->kind = std::string{kind};
         made->path = path;
         fill(*made, object, *spec, path);
+        if (kind == "actionButton" && made->prop("iconOnly") != nullptr && made->prop("icon") == nullptr) {
+            refuse(pointerAppend(path, "iconOnly"), "an icon-only action names its `icon`");
+        }
         return made;
     }
 
@@ -2572,6 +2604,12 @@ public:
         if (_doc->subtitleSpans) {
             checkExpr(*_doc->subtitleSpans, root);
             checkSpans(_doc->subtitleSpans);
+        }
+        if (_doc->leadPlacement) {
+            checkExpr(*_doc->leadPlacement, root);
+        }
+        if (_doc->headSurface) {
+            checkExpr(*_doc->headSurface, root);
         }
         if (_doc->menuLabel) {
             checkExpr(*_doc->menuLabel, root);

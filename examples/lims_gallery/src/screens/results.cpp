@@ -449,7 +449,9 @@ ui::Node evaluationCell(Worksheet const& sheet, Evaluation const& evaluation) {
 ui::Node resultTable(Worksheet const& sheet) {
     Field const field = rowField();
     Evaluation const evaluation = evaluate(sheet, field);
+    // The sample's own column is empty in a result's row: the sample is named by the heading above its results.
     std::vector<ui::TableColumn> const columns{
+        {.name = "sample", .label = "Sample", .width = ui::fixed(11), .cell = ui::text({.text = ""})},
         {.name = "analyte", .label = "Analyte", .width = ui::stretch(), .cell = analyteCell(evaluation)},
         {.name = "area", .label = "Peak area", .width = ui::fixed(10), .align = Align::End},
         {.name = "result",
@@ -474,9 +476,12 @@ ui::Node resultTable(Worksheet const& sheet) {
                 .group =
                     ui::TableGroup{
                         .by = ui::row("sample"),
-                        .heading = {ui::row({ui::text({.text = ui::row("key"), .role = "mono"}),
-                                             ui::text({.text = ui::format("· lot {0}", {ui::row("first.lot")})})},
-                                            {.gap = 1})
+                        .heading = {ui::text({.text =
+                                                  ui::format("{0} · lot {1}", {ui::row("key"), ui::row("first.lot")}),
+                                              .spans = ui::spans({ui::styled(ui::row("key"),
+                                                                             {.strong = true, .mono = true}),
+                                                                  ui::strong(ui::format(" · lot {0}",
+                                                                                        {ui::row("first.lot")}))})})
                                         .testId("group")}},
                 .rowTone = ui::cond(evaluation.outOfSpec, ui::AnyHandle{"err"}, ui::AnyHandle{nullptr})})
         .a11y("Results of worksheet WS-2026-0412")
@@ -614,29 +619,26 @@ ui::Node compactLayout(Worksheet const& sheet) {
     });
     auto const last = static_cast<std::int64_t>(kSamples.size()) - 1;
     // Save and Submit stay at the bottom of the phone screen while the sample's results scroll above them.
+    // The sample is stepped in the top bar, which always shows and so joins the head; the out-of-specification line
+    // sits above Save and Submit in the bottom bar.
     return ui::pinned(
-        ui::column(
-            {ui::text({.text = ui::format("Sample {0} of {1} · {2}",
-                                          {sheet.current + 1, static_cast<std::int64_t>(kSamples.size()), sample}),
-                       .role = "heading"})
-                 .testId("sample"),
-             ui::row({ui::button({.label = "‹ Previous", .onClick = ui::set(sheet.current, sheet.current - 1)})
-                          .enabled(sheet.current > 0)
-                          .sizing(ui::stretch())
-                          .testId("previous"),
-                      ui::button({.label = "Next ›", .onClick = ui::set(sheet.current, sheet.current + 1)})
-                          .enabled(sheet.current < last)
-                          .sizing(ui::stretch())
-                          .testId("next")},
-                     {.gap = 1}),
-             layout::tag("System suitability passed", "ok").testId("suitability"),
-             ui::forEach(shown, {.key = ui::row("id"), .gap = 3},
-                         [&sheet](ui::DeclScope&) { return ui::Nodes{resultField(sheet)}; })
-                 .testId("fields"),
-             ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).testId("oos")},
-            {.gap = 3}),
-        {.bottom =
-             ui::row({saveButton().sizing(ui::stretch()), submitButton(sheet).sizing(ui::stretch())}, {.gap = 1})});
+        ui::column({layout::tag("System suitability passed", "ok").testId("suitability"),
+                    ui::forEach(shown, {.key = ui::row("id"), .gap = 3},
+                                [&sheet](ui::DeclScope&) { return ui::Nodes{resultField(sheet)}; })
+                        .testId("fields")},
+                   {.gap = 3}),
+        {.top = {ui::row({ui::button({.label = "‹ Previous", .onClick = ui::set(sheet.current, sheet.current - 1)})
+                              .enabled(sheet.current > 0)
+                              .sizing(ui::stretch())
+                              .testId("previous"),
+                          ui::button({.label = "Next ›", .onClick = ui::set(sheet.current, sheet.current + 1)})
+                              .enabled(sheet.current < last)
+                              .sizing(ui::stretch())
+                              .testId("next")},
+                         {.gap = 1})},
+         .bottom = {
+             ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).testId("oos"),
+             ui::row({saveButton().sizing(ui::stretch()), submitButton(sheet).sizing(ui::stretch())}, {.gap = 1})}});
 }
 
 }  // namespace
@@ -652,7 +654,16 @@ ui::Screen resultsScreen() {
             ui::cond(compact, ui::AnyHandle{ui::spans({ui::mono("WS-2026-0412"), " · HPLC-02"})},
                      ui::AnyHandle{ui::spans({"Worksheet ", ui::mono("WS-2026-0412"), " · HPLC-02 · method ",
                                               ui::mono("TM-ASSAY-07"), " v3"})}));
-        screen.status({.text = "In progress", .tone = "info"});
+        // The worksheet's state closes the eyebrow's line; the compact head draws none.
+        screen.leadPlacement("end");
+        screen.status({.text = "In progress", .tone = "info", .visible = !compact});
+        auto const sample = currentSample(sheet);
+        screen.titleSpans(ui::cond(
+            compact,
+            ui::AnyHandle{ui::spans(
+                {ui::format("Sample {0} of {1} · ", {sheet.current + 1, static_cast<std::int64_t>(kSamples.size())}),
+                 ui::mono(sample)})},
+            ui::AnyHandle{std::vector<std::string>{}}));
         screen.showErrors(ui::ShowErrors::Always);
         return layout::byWidth(sheet.width, compactLayout(sheet), expandedLayout(sheet))
             .sizing(ui::stretch(), ui::stretch());

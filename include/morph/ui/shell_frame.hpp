@@ -81,7 +81,9 @@ public:
           _eyebrow{backend.createStack(_leadBlock.get(), Axis::Vertical)},
           _title{backend.createText(_leadBlock.get())},
           _headLead{backend.createStack(_leadBlock.get(), Axis::Vertical)},
+          _headInline{backend.createStack(_topMain.get(), Axis::Horizontal)},
           _headSlot{backend.createStack(_topMain.get(), Axis::Horizontal)},
+          _topPrincipal{backend.createText(_topLine.get())},
           _topEnd{backend.createSpacer(_topLine.get())},
           _page{backend.createStack(_main.get(), Axis::Vertical)},
           _top{backend.createSpacer(_page.get())},
@@ -165,8 +167,13 @@ public:
         _headLead->setLayout({.width = Sizing::stretch(), .height = {}});
         _headLead->setTestId("shell_head_lead");
         _headLead->setVisible(false);
+        _headInline->setTestId("shell_head_inline");
+        _headInline->setVisible(false);
         _headSlot->setTestId("shell_head");
         _headSlot->setVisible(false);
+        _topPrincipal->setRole(TextRole::Muted);
+        _topPrincipal->setTestId("shell_head_principal");
+        _topPrincipal->setVisible(false);
 
         // The page is padded by spacing step 4: zero-sized spacers above and either side, each a gap away.
         _page->setSurface("page");
@@ -205,6 +212,12 @@ public:
     /// @return It.
     [[nodiscard]] ContainerWidget& headLeadSlot() noexcept { return *_headLead; }
 
+    /// @brief The container a client mounts the active head's inline lead into: in the top bar's wrapping line,
+    ///        right after the lead block and before the trail, shown only while `setLeadInline(true)` and
+    ///        `setHeadShown(true)`.
+    /// @return It.
+    [[nodiscard]] ContainerWidget& headInlineSlot() noexcept { return *_headInline; }
+
     /// @brief The container a client mounts the active head's trail into: at the trailing edge of the top bar's
     ///        line, which wraps under the title where the trail does not fit beside it, shown only while
     ///        `setHeadShown(true)`.
@@ -215,9 +228,52 @@ public:
     ///        so the client says; a new frame starts with them hidden.
     /// @param shown Whether the slots are shown.
     void setHeadShown(bool shown) {
+        _headShown = shown;
         _eyebrow->setVisible(shown);
         _headLead->setVisible(shown);
         _headSlot->setVisible(shown);
+        showLeadPlace();
+    }
+
+    /// @brief Puts the head's lead on the title's line (`headInlineSlot()`), or back under the title. Inline, the
+    ///        lead block is content-sized with no minimum and the inline slot stretches from
+    ///        `kShellHeadLeadMinimum` units, so the lead follows the title and the spare width lies after it, before
+    ///        the trail; otherwise the lead block stretches from the minimum and the slot is hidden, since a shown
+    ///        empty slot would still take its minimum.
+    /// @param inlineLead Whether the lead sits inline. A new frame has it under the title.
+    void setLeadInline(bool inlineLead) {
+        _leadInline = inlineLead;
+        showLeadPlace();
+    }
+
+    /// @brief Aligns the top line's items across it while the head is a single line (no eyebrow, nothing under the
+    ///        title), so a title alone is level with the trail's buttons; a taller head aligns the items' tops, so
+    ///        the trail's top is the eyebrow's.
+    /// @param oneLine Whether the head is one line. A new frame aligns tops.
+    void setHeadOneLine(bool oneLine) { _topMain->setAlign(oneLine ? Align::Center : Align::Start); }
+
+    /// @brief Tells the frame that the shown page continues the head's block, so the top bar is drawn on the
+    ///        `toolbarJoined` surface, whatever surface the screen asks for.
+    /// @param joined Whether the page continues the head. A new frame is not joined.
+    void setHeadJoined(bool joined) {
+        _headJoined = joined;
+        showTopBarSurface();
+    }
+
+    /// @brief Sets the surface the shown screen asks the top bar to be drawn on.
+    /// @param surface The surface's name; empty for none, which is `toolbar`. A name no surface answers to draws as
+    ///        none does.
+    void setHeadSurface(std::string_view surface) {
+        _headSurface = std::string{surface};
+        showTopBarSurface();
+    }
+
+    /// @brief Moves the principal from the sidebar's foot to the top bar's trailing end. Compact, the head draws
+    ///        none and the navigation menu's sign-out entry stays described by the principal.
+    /// @param inHead Whether the principal sits in the top bar. A new frame has it in the sidebar.
+    void setPrincipalInHead(bool inHead) {
+        _principalInHead = inHead;
+        showChrome();
     }
 
     /// @brief Shows the shown screen's title in the top bar.
@@ -249,6 +305,7 @@ public:
     /// @param principal The principal's name; empty shows none.
     void setPrincipal(std::string_view principal) {
         _principal->setText(principal);
+        _topPrincipal->setText(principal);
         _principalName = std::string{principal};
         showNavEntries();
     }
@@ -327,6 +384,30 @@ private:
         _sidebar->setVisible(_signedIn && !_compact);
         _topBar->setVisible(_signedIn);
         _navMenu->setVisible(_compact);
+        _principal->setVisible(!_principalInHead);
+        _topPrincipal->setVisible(_principalInHead && !_compact && !_principalName.empty());
+    }
+
+    // Where the lead sits: see setLeadInline.
+    void showLeadPlace() {
+        if (_leadInline) {
+            _leadBlock->setLayout({.width = {}, .height = {}});
+            _headInline->setLayout({.width = Sizing::stretch(), .height = {}, .minWidth = kShellHeadLeadMinimum});
+        } else {
+            _leadBlock->setLayout({.width = Sizing::stretch(), .height = {}, .minWidth = kShellHeadLeadMinimum});
+            _headInline->setLayout({.width = {}, .height = {}});
+        }
+        _headInline->setVisible(_headShown && _leadInline);
+    }
+
+    // The top bar's surface: the joined one while the page continues the head, else the one the screen asks for, else
+    // the plain toolbar.
+    void showTopBarSurface() {
+        if (_headJoined) {
+            _topBar->setSurface("toolbarJoined");
+        } else {
+            _topBar->setSurface(_headSurface.empty() ? "toolbar" : _headSurface);
+        }
     }
 
     // Declared parent before child, so destruction takes the children first.
@@ -357,7 +438,11 @@ private:
     std::unique_ptr<StackWidget> _eyebrow;
     std::unique_ptr<TextWidget> _title;
     std::unique_ptr<StackWidget> _headLead;
+    // Declared between the lead and the trail: members are made in declaration order, so the slot follows the lead
+    // block in the line.
+    std::unique_ptr<StackWidget> _headInline;
     std::unique_ptr<StackWidget> _headSlot;
+    std::unique_ptr<TextWidget> _topPrincipal;
     std::unique_ptr<SpacerWidget> _topEnd;
     std::unique_ptr<StackWidget> _page;
     std::unique_ptr<SpacerWidget> _top;
@@ -369,9 +454,14 @@ private:
     std::string _principalName;
     std::string _titleText;
     std::vector<TextSpan> _titleSpans;
+    std::string _headSurface;
     std::size_t _navEntryCount = 0;
     bool _signedIn = true;
     bool _compact = false;
+    bool _headShown = false;
+    bool _leadInline = false;
+    bool _headJoined = false;
+    bool _principalInHead = false;
 };
 
 }  // namespace morph::ui

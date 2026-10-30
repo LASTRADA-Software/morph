@@ -21,6 +21,7 @@ namespace {
 namespace ui = layout::ui;
 using layout::Align;
 using layout::ButtonEmphasis;
+using layout::Justify;
 using Text = ui::Handle<std::string>;
 using Flag = ui::Handle<bool>;
 using Count = ui::Handle<std::int64_t>;
@@ -430,7 +431,7 @@ Review declare(ui::Scope& screen) {
 }
 
 ui::Node tagRow(ui::AnyHandle const& tags, std::string const& testId) {
-    return ui::forEach(tags, {.key = ui::row("text"), .axis = "horizontal", .gap = 1},
+    return ui::forEach(tags, {.key = ui::row("text"), .axis = "horizontal", .gap = 1, .wrap = true},
                        [](ui::DeclScope&) { return ui::Nodes{layout::tag(ui::row("text"), ui::row("tone"))}; })
         .testId(testId);
 }
@@ -445,13 +446,14 @@ ui::Commands choose(Review const& review) {
 // One entry of the queue: the whole card takes the click and the current mark; its label names it.
 ui::Node queueEntry(Review const& review) {
     auto const content = ui::column(
-        {ui::text(
-             {.text = ui::format("{0} · {1}", {ui::row("id"), ui::row("age")}),
-              .spans = ui::spans({ui::styled(ui::row("id"), {.strong = true, .mono = true}), " · ", ui::row("age")})}),
+        {ui::row({ui::text({.text = ui::row("id"),
+                            .spans = ui::spans({ui::styled(ui::row("id"), {.strong = true, .mono = true})})}),
+                  ui::text({.text = ui::row("age"), .role = "muted"})},
+                 {.gap = 1, .justify = Justify::Between}),
          ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("analyst")}), .role = "muted"}),
          tagRow(ui::row("tags"), "queue-tags"),
          layout::muted(kSelfReview).visible(Flag{ui::row("self")}).testId("queue-self")},
-        {.gap = 1});
+        {.gap = 1, .padding = ui::padding(1, 0)});
     return ui::button({.label = ui::format("{0} · {1}", {ui::row("id"), ui::row("age")}),
                        .onClick = choose(review),
                        .style = morph::ui::ButtonStyle::Item,
@@ -518,7 +520,12 @@ ui::Node resultTable(Review const& review) {
     std::vector<ui::TableColumn> const columns{
         {.name = "sample", .label = "Sample", .width = ui::fixed(11), .role = "mono"},
         {.name = "analyte", .label = "Analyte", .width = ui::content(), .wrap = false},
-        {.name = "value", .label = "Result", .width = ui::fixed(10), .align = Align::End, .wrap = false},
+        {.name = "value",
+         .label = "Result",
+         .width = ui::fixed(10),
+         .align = Align::End,
+         .cell = ui::text({.text = ui::row("value"), .spans = ui::spans({ui::strong(ui::row("value"))})}),
+         .wrap = false},
         {.name = "spec", .label = "Specification", .width = ui::content(), .wrap = false},
         {.name = "previous", .label = "Previous lot", .width = ui::content(), .align = Align::End, .wrap = false},
         {.name = "evaluation",
@@ -638,10 +645,18 @@ ui::Node sheetHead(Review const& review, bool compact) {
             ? ui::format("{0} · {1} · {2}", {pick(review, "id"), pick(review, "analyst"), pick(review, "submitted")})
             : ui::format("{0} · submitted {1} by {2} · {3}", {pick(review, "id"), pick(review, "submitted"),
                                                               pick(review, "analyst"), pick(review, "instrument")});
+    // The worksheet's ID is a mono run.
+    auto const lineRuns =
+        compact
+            ? ui::spans({ui::mono(pick(review, "id")),
+                         ui::format(" · {0} · {1}", {pick(review, "analyst"), pick(review, "submitted")})})
+            : ui::spans({ui::mono(pick(review, "id")), ui::format(" · submitted {0} by {1} · {2}",
+                                                                  {pick(review, "submitted"), pick(review, "analyst"),
+                                                                   pick(review, "instrument")})});
     auto const summary = ui::concatLists(
         {ui::list({ui::obj({{"text", ui::format("{0} results", {review.resultCount})}, {"tone", "neutral"}})}),
          pick(review, compact ? "compactSummary" : "summary")});
-    return ui::column({layout::muted(line).testId("sheet-line"),
+    return ui::column({ui::text({.text = line, .spans = lineRuns, .role = "muted"}).testId("sheet-line"),
                        ui::text({.text = ui::format("{0} · {1}", {pick(review, "test"), pick(review, "product")}),
                                  .role = "heading"})
                            .testId("sheet-title"),

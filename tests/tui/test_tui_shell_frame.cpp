@@ -154,3 +154,34 @@ TEST_CASE("tui shell frame: without the page's inset the content starts at the p
     CHECK(page.pageColumn() < inset);
     CHECK(rowOf(page.screen, "PAGE") < insetRow);
 }
+
+// Control: put the trail's lead under the title (the badge is then on the next row), or leave the inline slot hidden
+// (the inline lead is not drawn).
+TEST_CASE("tui shell frame: a lead at the end and an inline lead are drawn on the title's row", "[tui][shell]") {
+    FramedPage page{120};
+    // The trail as the workspace builds it for an `end` lead: the tool, the lead, the action, in one row.
+    ui::Text tool{.text = std::string{"TOOL"}};
+    ui::Text badge{.text = std::string{"BADGE"}};
+    ui::Text action{.text = std::string{"ACTION"}};
+    ui::Mounted const trailMount{page.runtime, page.backend,
+                                 ui::row(ui::Row{.children = {ui::text(std::move(tool)), ui::text(std::move(badge)),
+                                                              ui::text(std::move(action))},
+                                                 .gap = 1}),
+                                 &page.frame->headSlot()};
+    ui::Text subtitle{.text = std::string{"SUBTITLE"}};
+    ui::Mounted const inlineMount{page.runtime, page.backend, ui::text(std::move(subtitle)),
+                                  &page.frame->headInlineSlot()};
+    page.frame->setLeadInline(true);
+    page.frame->setHeadShown(true);
+    static_cast<void>(page.loop.runUntilIdle());
+    page.backend.fit();
+    page.screen.draw();
+    std::size_t const title = rowOf(page.screen, "Review");
+    REQUIRE(title != std::string::npos);
+    CHECK(rowOf(page.screen, "BADGE") == title);
+    CHECK(rowOf(page.screen, "SUBTITLE") == title);
+    std::string const row = rowsOf(page.screen).at(title);
+    CHECK(row.find("TOOL") < row.find("BADGE"));
+    CHECK(row.find("BADGE") < row.find("ACTION"));
+    CHECK(row.find("Review") < row.find("SUBTITLE"));
+}

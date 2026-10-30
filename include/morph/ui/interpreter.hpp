@@ -2228,6 +2228,8 @@ struct ActionModel {
     Prop<std::string> label;
     /// @brief The name of an icon; empty for none.
     Prop<std::string> icon;
+    /// @brief Whether the button draws its icon alone, the label being its accessible name and tooltip.
+    Prop<bool> iconOnly = false;
     /// @brief How much it stands out.
     ButtonEmphasis emphasis = ButtonEmphasis::Normal;
     /// @brief Whether it can be run.
@@ -2937,6 +2939,24 @@ struct HeadBadge {
     bool operator==(HeadBadge const&) const = default;
 };
 
+/// @brief Where a screen's head puts its lead, the subtitle and the badges.
+enum class LeadPlacement : std::uint8_t {
+    /// @brief Under the title.
+    Below,
+    /// @brief On the title's line, right after the title.
+    Inline,
+    /// @brief At the trailing edge of the head's first line, after the tools and before the actions.
+    End,
+};
+
+/// @brief Where a shell shows who is signed in.
+enum class PrincipalPlacement : std::uint8_t {
+    /// @brief At the sidebar's foot.
+    Sidebar,
+    /// @brief In the top bar, at its trailing end.
+    Head,
+};
+
 /// @brief A count the app document puts on a navigator entry (its `navigation`), as `AppRoot::navigationBadges`
 ///        answers it.
 struct NavigationBadge {
@@ -2960,6 +2980,8 @@ struct HeadAction {
     std::string label;
     /// @brief The name of an icon; empty for none.
     std::string icon;
+    /// @brief Whether the button draws its icon alone, its label being its accessible name and tooltip.
+    bool iconOnly = false;
     /// @brief How much it stands out.
     ButtonEmphasis emphasis = ButtonEmphasis::Normal;
     /// @brief Whether it can be run now.
@@ -3091,6 +3113,21 @@ public:
     /// @return The shown root's flag; `false` for a root of any other shape.
     [[nodiscard]] bool pageEdge() const;
 
+    /// @brief Whether the shown root's first child continues the head's block (`headJoined`). A tracked read that
+    ///        sees through `switch`es as `pageEdge` does.
+    /// @return The shown root's flag; `false` for a root of any other shape.
+    [[nodiscard]] bool headJoined() const;
+
+    /// @brief Where the head's lead sits: the document's `leadPlacement`, read now. A tracked read. A value that
+    ///        names none of the three places is reported once at its path and taken as `below`.
+    /// @return The place; `Below` when the document declares none.
+    [[nodiscard]] LeadPlacement leadPlacement() const;
+
+    /// @brief The name of the surface the shell draws the top bar on while this screen is shown: the document's
+    ///        `headSurface`, read now. A tracked read.
+    /// @return The name; empty for none.
+    [[nodiscard]] std::string headSurface() const;
+
     /// @brief Evaluates the document's `titleSpans` into runs; a run the head cannot read is dropped and reported.
     /// @return The runs; none when the document declares none.
     [[nodiscard]] std::vector<TextSpan> titleSpans() const;
@@ -3133,6 +3170,7 @@ public:
                 shown.push_back(HeadAction{.id = action.id,
                                            .label = action.label.evaluate(),
                                            .icon = action.icon.evaluate(),
+                                           .iconOnly = action.iconOnly.evaluate(),
                                            .emphasis = action.emphasis,
                                            .enabled = action.enabled.evaluate()});
             }
@@ -3347,6 +3385,11 @@ private:
     /// Evaluates a head expression of runs; a run the head cannot read is dropped and reported.
     [[nodiscard]] std::vector<TextSpan> headSpans(ExprPtr const& expr) const;
 
+    /// The view node the screen shows as its root: the view's root, or, while it is a `switch`, the case shown now
+    /// (the default when none matches) if that holds exactly one node. Null for a case that declares a scope of its
+    /// own, whose names are not the screen's, and for a shape that is no single node. A tracked read.
+    [[nodiscard]] DocNode const* shownRoot() const;
+
     /// The states of the screen's own scope that have a value, by name: what a screen that replaces it keeps.
     [[nodiscard]] std::map<std::string, detail::ScreenCore::KeptState, std::less<>> ownState() const {
         std::map<std::string, detail::ScreenCore::KeptState, std::less<>> states;
@@ -3508,6 +3551,12 @@ public:
     /// @return They, valid as long as the root; empty when the document declares no `navigation`.
     [[nodiscard]] reactive::Computed<std::vector<NavigationBadge>> const& navigationBadges() const {
         return *_navigationBadges;
+    }
+
+    /// @brief Where a shell shows who is signed in: the document's `principalPlacement`.
+    /// @return The place; `Sidebar` when the document declares none.
+    [[nodiscard]] PrincipalPlacement principalPlacement() const noexcept {
+        return _core->doc().principalPlacement == "head" ? PrincipalPlacement::Head : PrincipalPlacement::Sidebar;
     }
 
     /// @brief Evaluates an expression in the app document's scope.
@@ -7306,6 +7355,7 @@ inline ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> par
                           .path = part->path,
                           .label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf),
                           .icon = bindProp<std::string>(ctx, part->prop("icon"), std::string{}, stringOf),
+                          .iconOnly = bindProp<bool>(ctx, part->prop("iconOnly"), false, boolOf),
                           .emphasis = ButtonEmphasis::Normal,
                           .enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf),
                           .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
@@ -7322,10 +7372,19 @@ inline ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> par
 inline Node ScreenCore::actionBarOf(ActionModels actions) {
     ActionBar bar;
     for (ActionModel& action : actions) {
-        Button button{.label = std::move(action.label),
+        Button button{.label = action.label,
                       .emphasis = action.emphasis,
                       .onClick = std::move(action.run),
-                      .common = {}};
+                      .common = {},
+                      .icon = action.icon.evaluate()};
+        if (action.iconOnly.isBound() || action.iconOnly.constant()) {
+            // The label is the button's name and tooltip; the caption is empty while the icon stands alone.
+            button.label = Prop<std::string>{[label = action.label, iconOnly = action.iconOnly] {
+                return iconOnly.evaluate() ? std::string{} : label.evaluate();
+            }};
+            button.common.a11y.name = action.label;
+            button.common.tooltip = action.label;
+        }
         button.common.visible = std::move(action.visible);
         button.common.enabled = std::move(action.enabled);
         button.common.testId = "action_" + action.id;
@@ -9858,7 +9917,7 @@ inline std::vector<TextSpan> Screen::headSpans(ExprPtr const& expr) const {
     return spans;
 }
 
-inline bool Screen::pageEdge() const {
+inline DocNode const* Screen::shownRoot() const {
     DocNode const* node = _core->doc().view.get();
     while (node != nullptr && node->kind == "switch") {
         Value const value = detail::evalIn(*_scope, nullptr, node->prop("on"));
@@ -9868,14 +9927,53 @@ inline bool Screen::pageEdge() const {
                 continue;
             }
             if (part->scope.has_value() && detail::declaresNames(*part->scope)) {
-                return false;
+                return nullptr;
             }
             shown = part->nodes("children");
             break;
         }
         node = shown.size() == 1 ? shown.front().get() : nullptr;
     }
+    return node;
+}
+
+inline bool Screen::pageEdge() const {
+    DocNode const* const node = shownRoot();
     return node != nullptr && node->flag("pageEdge");
+}
+
+inline bool Screen::headJoined() const {
+    DocNode const* const node = shownRoot();
+    return node != nullptr && node->flag("headJoined");
+}
+
+inline LeadPlacement Screen::leadPlacement() const {
+    ExprPtr const& placement = _core->doc().leadPlacement;
+    if (placement == nullptr) {
+        return LeadPlacement::Below;
+    }
+    Value const value = detail::evalIn(*_scope, nullptr, placement);
+    if (std::string const* const name = value.asString()) {
+        if (*name == "inline") {
+            return LeadPlacement::Inline;
+        }
+        if (*name == "end") {
+            return LeadPlacement::End;
+        }
+        if (*name == "below") {
+            return LeadPlacement::Below;
+        }
+    }
+    if (!value.isNull()) {
+        _core->report(placement->path, "`leadPlacement` is `below`, `inline` or `end`");
+    }
+    return LeadPlacement::Below;
+}
+
+inline std::string Screen::headSurface() const {
+    Value const value = detail::evalIn(*_scope, nullptr, _core->doc().headSurface);
+    std::string const* const name = value.asString();
+    return name == nullptr ? std::string{} : *name;
 }
 
 inline std::vector<TextSpan> Screen::subtitleSpans() const { return headSpans(_core->doc().subtitleSpans); }

@@ -143,15 +143,16 @@ TEST_CASE("shell frame: the head shares the title's wrapping line, its slots sho
     // The second line and its scroll are gone.
     CHECK_FALSE(backend.find("Row", "testId", "shell_head_line").has_value());
     CHECK_FALSE(backend.find("Scroll", "testId", "shell_head_scroll").has_value());
-    // The wrapping row holds the menu, the lead block (the title over the lead slot) and the trail slot.
+    // The wrapping row holds the menu, the lead block (the title over the lead slot), the inline lead slot and the
+    // trail slot.
     CHECK(backend.prop(main, "wrap") == "true");
     CHECK(backend.prop(main, "justify") == "end");
-    REQUIRE(backend.children(main).size() == 3);
+    REQUIRE(backend.children(main).size() == 4);
     CHECK(backend.children(main).at(0) == menu);
     int const block = backend.children(main).at(1);
     CHECK(backend.prop(block, "layout") == "stretch(1) min=32/content");
     CHECK(backend.children(block) == std::vector<int>{eyebrow, title, lead});
-    CHECK(backend.children(main).at(2) == slot);
+    CHECK(backend.children(main).at(3) == slot);
     // The pad spacers are outside the wrapping row, so every line of it is padded at both ends.
     CHECK(within(backend, backend.find("Row", "testId", "shell_topbar_line").value(), main));
     CHECK_FALSE(backend.hasProp(backend.find("Row", "testId", "shell_topbar_line").value(), "wrap"));
@@ -314,4 +315,100 @@ TEST_CASE("shell frame: the compact top line pads its ends by step 1 and spaces 
     frame.setCompact(false);
     CHECK(backend.prop(line, "gap") == "3");
     CHECK(backend.prop(main, "gap") == "3");
+}
+
+// Mutation: a no-op `setLeadInline`.
+TEST_CASE("shell frame: an inline lead moves the title block's minimum to the inline slot", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const main = backend.find("Row", "testId", "shell_topbar_main").value();
+    int const inlineSlot = backend.find("Row", "testId", "shell_head_inline").value();
+    int const block = backend.children(main).at(1);
+    int const trailSlot = backend.find("Row", "testId", "shell_head").value();
+    CHECK(backend.children(main) == std::vector<int>{backend.children(main).at(0), block, inlineSlot, trailSlot});
+
+    frame.setHeadShown(true);
+    CHECK(backend.prop(inlineSlot, "visible") == "false");
+    CHECK(backend.prop(block, "layout") == "stretch(1) min=32/content");
+
+    frame.setLeadInline(true);
+    CHECK(backend.prop(block, "layout") == "content/content");
+    CHECK(backend.prop(inlineSlot, "layout") == "stretch(1) min=32/content");
+    CHECK(backend.prop(inlineSlot, "visible") == "true");
+
+    frame.setHeadShown(false);
+    CHECK(backend.prop(inlineSlot, "visible") == "false");
+    frame.setHeadShown(true);
+    frame.setLeadInline(false);
+    CHECK(backend.prop(block, "layout") == "stretch(1) min=32/content");
+    CHECK(backend.prop(inlineSlot, "visible") == "false");
+}
+
+// Mutation: a no-op `setHeadOneLine`.
+TEST_CASE("shell frame: a one-line head centres the top line's items, a taller one aligns their tops", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const main = backend.find("Row", "testId", "shell_topbar_main").value();
+    CHECK(backend.prop(main, "align") == "start");
+    frame.setHeadOneLine(true);
+    CHECK(backend.prop(main, "align") == "center");
+    frame.setHeadOneLine(false);
+    CHECK(backend.prop(main, "align") == "start");
+}
+
+// Mutation: set the surface once, in the constructor.
+TEST_CASE("shell frame: the top bar's surface is the joined one, else the screen's, else the toolbar", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const bar = backend.find("Column", "testId", "shell_topbar").value();
+    CHECK(backend.prop(bar, "surface") == "toolbar");
+    frame.setHeadSurface("darkHead");
+    CHECK(backend.prop(bar, "surface") == "darkHead");
+    frame.setHeadSurface("");
+    CHECK(backend.prop(bar, "surface") == "toolbar");
+
+    frame.setHeadJoined(true);
+    CHECK(backend.prop(bar, "surface") == "toolbarJoined");
+    frame.setHeadSurface("darkHead");
+    CHECK(backend.prop(bar, "surface") == "toolbarJoined");
+    frame.setCompact(true);
+    CHECK(backend.prop(bar, "surface") == "toolbarJoined");
+    frame.setHeadJoined(false);
+    CHECK(backend.prop(bar, "surface") == "darkHead");
+}
+
+// Mutation: a no-op `setPrincipalInHead`.
+TEST_CASE("shell frame: the principal can sit in the top bar instead of the sidebar, and compact shows it in neither",
+          "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    frame.setPrincipal("Dr. A. Meyer");
+    int const sidebarPrincipal = backend.find("Text", "testId", "shell_principal").value();
+    int const headPrincipal = backend.find("Text", "testId", "shell_head_principal").value();
+    CHECK(backend.prop(sidebarPrincipal, "visible") != "false");
+    CHECK(backend.prop(headPrincipal, "visible") == "false");
+
+    frame.setPrincipalInHead(true);
+    CHECK(backend.prop(headPrincipal, "text") == "Dr. A. Meyer");
+    CHECK(backend.prop(headPrincipal, "visible") == "true");
+    CHECK(backend.prop(sidebarPrincipal, "visible") == "false");
+    int const line = backend.find("Row", "testId", "shell_topbar_line").value();
+    int const main = backend.find("Row", "testId", "shell_topbar_main").value();
+    std::vector<int> const lineChildren = backend.children(line);
+    auto const at = [&lineChildren](int widget) {
+        return std::ranges::find(lineChildren, widget) - lineChildren.begin();
+    };
+    CHECK(at(headPrincipal) == at(main) + 1);
+
+    frame.setCompact(true);
+    CHECK(backend.prop(headPrincipal, "visible") == "false");
+    CHECK(backend.prop(sidebarPrincipal, "visible") == "false");
 }

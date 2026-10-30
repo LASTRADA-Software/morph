@@ -461,6 +461,7 @@ private:
             return;
         }
         _appRoot = std::move(*root);
+        _frame->setPrincipalInHead(_appRoot->principalPlacement() == ui::PrincipalPlacement::Head);
     }
 
     // The sidebar and the top bar, with the principal, while the shell is signed in; the page alone otherwise.
@@ -497,14 +498,25 @@ private:
         _pageInset.reset();
         _titleSpans.reset();
         _headShown.reset();
+        _headLayout.reset();
         ui::HeadParts parts = _workspace->headPartsForActive();
         _headEyebrow.emplace(_context->runtime(), *_backend, std::move(parts.eyebrow), &_frame->headEyebrowSlot());
         _headLead.emplace(_context->runtime(), *_backend, std::move(parts.lead), &_frame->headLeadSlot());
+        _headInline.emplace(_context->runtime(), *_backend, std::move(parts.inlineLead), &_frame->headInlineSlot());
         _head.emplace(_context->runtime(), *_backend, std::move(parts.trail), &_frame->headSlot());
         // The head's slots show while the active tab's head shows anything; the frame cannot tell from the rows
         // they hold.
         _headShown = std::make_unique<reactive::Effect>(
             _context->runtime(), [this] { _frame->setHeadShown(_workspace->activeHeadShown()); });
+        // How the head lays out follows the screen's own state, which a width change can flip: where the lead sits,
+        // whether the head is one line to centre, whether the page continues the head's block, and the surface the
+        // screen asks for.
+        _headLayout = std::make_unique<reactive::Effect>(_context->runtime(), [this] {
+            _frame->setLeadInline(_workspace->activeLeadPlacement() == ui::LeadPlacement::Inline);
+            _frame->setHeadOneLine(_workspace->activeHeadOneLine());
+            _frame->setHeadJoined(_workspace->activeHeadJoined());
+            _frame->setHeadSurface(_workspace->activeHeadSurface());
+        });
         // The page is inset unless the shown screen insets itself, and follows a width change or a state change of
         // the screen.
         _pageInset = std::make_unique<reactive::Effect>(
@@ -520,7 +532,9 @@ private:
         _pageInset.reset();
         _titleSpans.reset();
         _headShown.reset();
+        _headLayout.reset();
         _head.reset();
+        _headInline.reset();
         _headLead.reset();
         _headEyebrow.reset();
         _headTab.reset();
@@ -865,8 +879,12 @@ private:
     std::optional<ui::Mounted> _headEyebrow;
     // The lead of the head, mounted beside `_head`, the trail.
     std::optional<ui::Mounted> _headLead;
+    // The lead of the head while it sits on the title's line, mounted beside `_head`.
+    std::optional<ui::Mounted> _headInline;
     // Shows the frame's head slots while the active tab's head has content; goes with `_head`.
     std::unique_ptr<reactive::Effect> _headShown;
+    // Lays the frame's head out for the active screen (lead place, one line, joined, surface); goes with `_head`.
+    std::unique_ptr<reactive::Effect> _headLayout;
     // Insets the frame's page unless the active screen does; goes with `_head`.
     std::unique_ptr<reactive::Effect> _pageInset;
     // Shows the frame's title as the active tab's runs; goes with `_head`.

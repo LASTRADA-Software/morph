@@ -153,7 +153,7 @@ std::vector<std::string> runLines(GalleryScreen& screen, std::string const& row)
         int const node = pending.front();
         pending.erase(pending.begin());
         if (screen.backend().kindOf(node) == "Text" && screen.backend().prop(node, "testId") == "line") {
-            texts.push_back(screen.backend().prop(node, "text"));
+            texts.push_back(screen.backend().prop(node, "spans"));
         }
         std::vector<int> const children = screen.backend().children(node);
         pending.insert(pending.begin(), children.begin(), children.end());
@@ -170,9 +170,12 @@ TEST_CASE("plate, compact: the wells listed by row, empty wells as one line a ru
     CHECK(screen.prop("Collapsible", "row-A", "title") == "Row A · 1 standard, 2 controls, 9 empty");
     CHECK(screen.prop("Collapsible", "row-B", "title") == "Row B · 1 standard, 1 blank, 10 samples");
     CHECK(screen.prop("Collapsible", "row-D", "title") == "Row D · 1 standard, 10 samples, 1 empty");
-    CHECK(runLines(screen, "A") == std::vector<std::string>{"Standard 1, 100 ng/mL", "Control, low", "Empty, 6 wells",
-                                                            "Control, high", "Empty, 3 wells"});
-    CHECK(runLines(screen, "B").at(2) == "Sample S-26-104234");
+    // A run is one text: the well's name or range strong, then " · " and its line.
+    CHECK(runLines(screen, "A") ==
+          std::vector<std::string>{"[A1;strong, · ,Standard 1\\, 100 ng/mL]", "[A2;strong, · ,Control\\, low]",
+                                   "[A3–A8;strong, · ,Empty\\, 6 wells]", "[A9;strong, · ,Control\\, high]",
+                                   "[A10–A12;strong, · ,Empty\\, 3 wells]"});
+    CHECK(runLines(screen, "B").at(2) == "[B3;strong, · ,Sample S-26-104234]");
     // The run's one Assign places a sample in its first well, which leaves the rest a shorter run.
     // Every run line has an Assign, shown for an empty run alone; the first shown is row A's first empty run's.
     std::optional<int> assign;
@@ -187,9 +190,10 @@ TEST_CASE("plate, compact: the wells listed by row, empty wells as one line a ru
     REQUIRE(screen.waitFor([&screen] { return screen.find("Select", "assign-well").has_value(); }));
     CHECK(screen.prop("Select", "assign-well", "selected") == "\"A3\"");
     screen.click("action_assign");
-    CHECK(screen.waitFor([&screen] { return runLines(screen, "A").at(2) == "Sample S-26-104301"; }));
-    CHECK(runLines(screen, "A").at(3) == "Empty, 5 wells");
+    CHECK(screen.waitFor([&screen] { return runLines(screen, "A").at(2) == "[A3;strong, · ,Sample S-26-104301]"; }));
+    CHECK(runLines(screen, "A").at(3) == "[A4–A8;strong, · ,Empty\\, 5 wells]");
     CHECK(screen.prop("Collapsible", "row-A", "title") == "Row A · 1 standard, 2 controls, 1 sample, 8 empty");
-    CHECK(screen.text("to-place-count") == "13 samples to place");
+    // The count of samples left is the compact head's subtitle.
+    CHECK(screen.prop("Text", "head_subtitle", "spans") == "[ELISA\\, host cell protein · 13 samples to place]");
     screen.requireNoProblems();
 }

@@ -147,7 +147,24 @@ tab is active, as public `Node`s a host can mount somewhere else entirely (a cli
 while `activeHeadShown()` holds, so the head shows once. The lead built for a shell has no minimum width of its own:
 the host places it, and the shell's lead block keeps the one 32-unit minimum, capped at its natural width. A minimum on
 the lead row too would raise the block's natural width to 32 units whenever the lead shows, and a trail that fits
-beside a short lead would wrap to a line of its own. The in-page head's lead keeps its minimum, which is the rule there. The head's eyebrow (`HeadParts::eyebrow`, `head_eyebrow`) is the screen's `eyebrowSpans` as the muted text's runs when
+beside a short lead would wrap to a line of its own. The in-page head's lead keeps its minimum, which is the rule there.
+
+The lead is built once per place, each copy shown only while the head's `leadPlacement` is that place (`leadHasContent`
+and the placement), so a hidden copy is in neither the layout nor the accessibility tree:
+
+| Place | Part | Test ids | Size |
+|---|---|---|---|
+| `below` | `HeadParts::lead` | `head_lead`, `head_subtitle`, `head_status_<n>` | stretches from the 32-unit minimum (in the page); no minimum for a shell |
+| `inline` | `HeadParts::inlineLead` | `head_lead_inline`, `head_subtitle_inline`, `head_status_inline_<n>` | content-sized: no stretch, no minimum |
+| `end` | inside `HeadParts::trail`, between the tools and the actions | `head_lead_end`, `head_subtitle_end`, `head_status_end_<n>` | content-sized |
+
+A lead at the `end` counts as trail content. In the page (`HeadPlacement::InPage`) the tab bar carries the title, so
+`inline` draws as `below` there, and `end` sits in the trail. `activeLeadPlacement()` is a tracked read of the active
+head's place (`Below` with no active tab), `activeHeadOneLine()` of whether the head has no eyebrow and nothing under the
+title (`true` with no active tab), `activeHeadJoined()` of whether the page continues the head's block (the screen's
+`headJoined`, and the page not inset: two tabs inset it), and `activeHeadSurface()` of the surface the screen asks the
+top bar to be drawn on (empty with none). A trail button of an `actionButton` with `iconOnly` has an empty label, and the
+action's label as its accessible name and tooltip. The head's eyebrow (`HeadParts::eyebrow`, `head_eyebrow`) is the screen's `eyebrowSpans` as the muted text's runs when
 it gives them, else its plain `eyebrow` as one run, hidden while there is none; a shell draws it above the title, and
 the in-page head draws it as a line above the head row (`head_block`, a column of the eyebrow and `head`). A head with
 only an eyebrow has content. `activePageInset()` is a tracked read of whether the shell insets the page: true with no active tab, true while the

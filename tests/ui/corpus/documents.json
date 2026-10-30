@@ -286,7 +286,11 @@
     { "name": "a head search and a head select", "doc": { "vocab": "ui/1", "id": "t", "state": { "q": { "init": "" }, "lab": { "init": "North" }, "compact": { "init": false } }, "tools": [ { "id": "q", "kind": "search", "label": "Search", "value": { "ref": "q" }, "placeholder": "Sample ID", "width": 24, "onChange": [ { "set": "q", "value": { "ref": "event" } } ], "onSubmit": [ { "set": "q", "value": "" } ], "visible": { "fn": "not", "args": [ { "ref": "compact" } ] } }, { "id": "lab", "kind": "select", "label": "Lab", "style": "dropdown", "options": { "lit": ["North", "South"] }, "selected": { "ref": "lab" }, "onChoose": [ { "set": "lab", "value": { "ref": "event" } } ], "enabled": true } ], "view": { "kind": "text", "text": "x" } } },
     { "name": "a dialog that is a sheet on compact", "doc": { "vocab": "ui/1", "id": "t", "view": { "kind": "dialog", "id": "d", "title": "Sign", "dismissLabel": "Cancel", "sheet": { "fn": "eq", "args": [ { "env": "widthClass" }, "compact" ] }, "children": [] } } },
     { "name": "a title as runs beside the plain title", "doc": { "vocab": "ui/1", "id": "t", "title": "Plate PL-0193", "titleSpans": { "list": [ "Plate ", { "obj": { "text": "PL-0193", "mono": true } } ] }, "view": { "kind": "text", "text": "x" } } },
-    { "name": "an eyebrow beside its runs", "doc": { "vocab": "ui/1", "id": "t", "eyebrow": "Worksheet WS-1", "eyebrowSpans": { "list": [ "Worksheet ", { "obj": { "text": "WS-1", "mono": true } } ] }, "view": { "kind": "text", "text": "x" } } }
+    { "name": "an eyebrow beside its runs", "doc": { "vocab": "ui/1", "id": "t", "eyebrow": "Worksheet WS-1", "eyebrowSpans": { "list": [ "Worksheet ", { "obj": { "text": "WS-1", "mono": true } } ] }, "view": { "kind": "text", "text": "x" } } },
+    { "name": "a lead placed at the end and a head surface", "doc": { "vocab": "ui/1", "id": "t", "leadPlacement": "end", "headSurface": { "if": [ { "fn": "eq", "args": [ { "env": "widthClass" }, "compact" ] }, "darkHead", null ] }, "subtitle": "x", "view": { "kind": "text", "text": "x" } } },
+    { "name": "a computed lead placement", "doc": { "vocab": "ui/1", "id": "t", "leadPlacement": { "if": [ { "fn": "eq", "args": [ { "env": "widthClass" }, "compact" ] }, "below", "inline" ] }, "view": { "kind": "text", "text": "x" } } },
+    { "name": "an icon-only head action", "doc": { "vocab": "ui/1", "id": "t", "actions": [ { "id": "scan", "label": "Scan", "icon": "scan", "iconOnly": true, "onClick": [] } ], "view": { "kind": "text", "text": "x" } } },
+    { "name": "the app document places the principal in the head", "doc": { "vocab": "ui/1", "id": "app", "principalPlacement": "head" } }
   ],
   "invalid": [
     { "name": "not an object", "raw": [1], "at": "", "reason": "a document is a JSON object" },
@@ -705,5 +709,12 @@
     { "name": "head tools on the app document", "doc": { "id": "app", "tools": [] }, "at": "/tools", "reason": "is a screen's; the app document has none" },
     { "name": "a sheet on a drawer", "doc": { "view": { "kind": "drawer", "id": "d", "sheet": true, "children": [] } }, "at": "/view/sheet", "reason": "is a dialog's; a drawer already fills the height" },
     { "name": "a dismiss label without a sheet", "doc": { "view": { "kind": "dialog", "id": "d", "dismissLabel": "Cancel", "children": [] } }, "at": "/view/dismissLabel", "reason": "labels a sheet's dismiss control" }
+  ,
+    { "name": "a lead placed at the top", "doc": { "leadPlacement": "top" }, "at": "/leadPlacement", "reason": "`leadPlacement` is `below`, `inline` or `end`" },
+    { "name": "a lead placement on the app document", "doc": { "id": "app", "leadPlacement": "end" }, "at": "/leadPlacement", "reason": "is a screen's; the app document has none" },
+    { "name": "a head surface on the app document", "doc": { "id": "app", "headSurface": "darkHead" }, "at": "/headSurface", "reason": "is a screen's; the app document has none" },
+    { "name": "a principal placement on a screen", "doc": { "principalPlacement": "head" }, "at": "/principalPlacement", "reason": "is the app document's; a screen has none" },
+    { "name": "an unknown principal placement", "doc": { "id": "app", "principalPlacement": "side" }, "at": "/principalPlacement", "reason": "is not one of the values of `principalPlacement`" },
+    { "name": "an icon-only action without an icon", "doc": { "actions": [ { "id": "scan", "label": "Scan", "iconOnly": true, "onClick": [] } ] }, "at": "/actions/0/iconOnly", "reason": "an icon-only action names its `icon`" }
   ]
 }

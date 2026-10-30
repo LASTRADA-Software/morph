@@ -2655,6 +2655,9 @@ struct ActionButtonOptions {
     AnyHandle label;
     /// @brief The name of an icon.
     AnyHandle icon;
+    /// @brief A condition: while true the button draws its icon alone and its label is its accessible name and
+    ///        tooltip. Needs an `icon`; absent draws the label.
+    AnyHandle iconOnly;
     /// @brief How much it stands out; `Normal` writes no key.
     ButtonEmphasis emphasis = ButtonEmphasis::Normal;
     /// @brief Whether it can be run; absent enables it.
@@ -2762,6 +2765,7 @@ inline void putPresent(Json& json, char const* key, AnyHandle const& value) {
     detail::put(json, "id", action.id);
     putPresent(json, "label", action.label);
     putPresent(json, "icon", action.icon);
+    putPresent(json, "iconOnly", action.iconOnly);
     if (action.emphasis != ButtonEmphasis::Normal) {
         detail::put(json, "emphasis", std::string{emphasisName(action.emphasis)});
     }
@@ -2836,6 +2840,17 @@ public:
     ///        `subtitle` beside it: an identifier in the monospace face, a bold word.
     /// @param runs The runs.
     void subtitleSpans(AnyHandle const& runs) { detail::put(_head, "subtitleSpans", runs.json()); }
+
+    /// @brief Where the head's lead (the subtitle and the badges) sits: an expression of `"below"` (the default, under
+    ///        the title), `"inline"` (on the title's line, after it) or `"end"` (at the trailing edge of the head's
+    ///        first line, after the tools and before the actions). A literal is checked at load.
+    /// @param placement The expression.
+    void leadPlacement(AnyHandle const& placement) { detail::put(_head, "leadPlacement", placement.json()); }
+
+    /// @brief The surface the shell draws its top bar on while the screen is shown: an expression of a surface's
+    ///        name, `null` for none.
+    /// @param surface The expression.
+    void headSurface(AnyHandle const& surface) { detail::put(_head, "headSurface", surface.json()); }
 
     /// @brief Appends a status badge to the head.
     /// @param badge The badge.

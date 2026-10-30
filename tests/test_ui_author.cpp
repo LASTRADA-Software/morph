@@ -1740,3 +1740,21 @@ TEST_CASE("tabs writes its inset as a literal step and its strip surface as a na
     CHECK_FALSE(text(plain).contains("inset"));
     CHECK_FALSE(text(plain).contains("stripSurface"));
 }
+
+// Mutation: leave the lead placement, the head surface or `iconOnly` out of the JSON.
+TEST_CASE("a screen's head writes its lead placement, its surface and an icon-only action", "[ui][author]") {
+    auto const emitted = ui::screen("author.head.placed", [](ui::Scope& screen) {
+                             screen.title(ui::AnyHandle{"Console"});
+                             screen.leadPlacement(ui::AnyHandle{"end"});
+                             screen.headSurface(ui::AnyHandle{"darkHead"});
+                             screen.action({.id = "scan",
+                                            .label = ui::AnyHandle{"Scan"},
+                                            .icon = ui::AnyHandle{"scan"},
+                                            .iconOnly = ui::AnyHandle{true}});
+                             return ui::spacer();
+                         }).write();
+    REQUIRE(emitted.has_value());
+    CHECK(emitted->text.contains(R"("leadPlacement":"end")"));
+    CHECK(emitted->text.contains(R"("headSurface":"darkHead")"));
+    CHECK(emitted->text.contains(R"("actions":[{"id":"scan","label":"Scan","icon":"scan","iconOnly":true}])"));
+}

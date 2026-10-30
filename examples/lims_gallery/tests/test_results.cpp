@@ -44,7 +44,9 @@ TEST_CASE("results, expanded: the worksheet grid, its calculations and the chang
         headings += screen.backend().prop(row, "heading") == "true" ? 1U : 0U;
     }
     CHECK(headings == 2);
-    CHECK(screen.backend().find("Text", "text", "· lot L-26-0381").has_value());
+    // The heading is strong, its key a strong mono run.
+    CHECK(screen.prop("Text", "group", "spans").value_or("").contains("L-26-0381"));
+    CHECK(screen.prop("Text", "group", "spans").value_or("").contains("S-26-104176;strong;mono"));
     CHECK(screen.backend().prop(resultInput(screen, "Assay, mean result, S-26-104176"), "text") == "99.4");
     CHECK(screen.backend().prop(resultInput(screen, "Assay, mean result, S-26-104176"), "readonly") == "true");
     CHECK(screen.backend().prop(resultInput(screen, "Total impurities result, S-26-104170"), "text") == "0.24");
@@ -141,7 +143,8 @@ TEST_CASE("results, compact: one sample at a time, the reason asked inline", "[l
     GalleryScreen screen{kScreen, "compact"};
     screen.requireNoProblems();
     CHECK_FALSE(screen.find("Table", "results").has_value());
-    CHECK(screen.text("sample") == "Sample 2 of 2 · S-26-104170");
+    // The sample is the head's title, in runs, with its ID in the mono face.
+    CHECK(screen.prop("Text", "shell_title", "spans") == "[Sample 2 of 2 · ,S-26-104170;mono]");
     CHECK(screen.shows("Column", "inline-reason"));
     CHECK(screen.backend().find("Text", "text", "was 0.12 %").has_value());
     // The evaluation is a tag under the field, not a description.
@@ -150,10 +153,12 @@ TEST_CASE("results, compact: one sample at a time, the reason asked inline", "[l
     CHECK(screen.backend().dump().contains("[WS-2026-0412;mono, · HPLC-02]"));
     CHECK(screen.prop("Button", "next", "enabled") == "false");
     screen.click("previous");
-    CHECK(screen.waitForText("sample", "Sample 1 of 2 · S-26-104176"));
+    CHECK(screen.waitFor(
+        [&screen] { return screen.prop("Text", "shell_title", "spans") == "[Sample 1 of 2 · ,S-26-104176;mono]"; }));
     CHECK(screen.backend().prop(resultInput(screen, "Assay, mean result, S-26-104176"), "text") == "99.4");
     screen.click("next");
-    CHECK(screen.waitForText("sample", "Sample 2 of 2 · S-26-104170"));
+    CHECK(screen.waitFor(
+        [&screen] { return screen.prop("Text", "shell_title", "spans") == "[Sample 2 of 2 · ,S-26-104170;mono]"; }));
     screen.click("confirm");
     CHECK(screen.waitFor([&screen] { return !screen.shows("Column", "inline-reason"); }));
     CHECK(screen.prop("Button", "submit", "enabled") == "true");

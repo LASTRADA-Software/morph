@@ -26,7 +26,8 @@ constexpr char const* kThemeIndex = R"({
   "surfaces": { "selected": "theme/selected.tokens.json", "outOfSpec": "theme/out-of-spec.tokens.json",
                 "standard": "theme/standard.tokens.json", "control": "theme/control.tokens.json",
                 "blank": "theme/blank.tokens.json", "sample": "theme/sample.tokens.json",
-                "empty": "theme/empty.tokens.json", "pane": "theme/pane.tokens.json" },
+                "empty": "theme/empty.tokens.json", "pane": "theme/pane.tokens.json",
+                "darkHead": "theme/dark-head.tokens.json" },
   "icons": { "scan": "icon/scan.svg" }
 })";
 
@@ -119,6 +120,13 @@ constexpr char const* kPaneSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#FFFFFF" }, "border": { "$value": "#DDE1E6" } }
 })";
 
+// The console's compact head: a dark bar with white text and icons, the design's `#1C1E21`.
+constexpr char const* kDarkHeadSurface = R"({
+  "color": { "$type": "color", "surface": { "$value": "#1C1E21" }, "text": { "$value": "#FFFFFF" },
+             "accent": { "$value": "#FFFFFF" }, "muted": { "$value": "#C3C9D2" }, "hover": { "$value": "#FFFFFF1F" },
+             "controlSurface": { "$value": "#1C1E21" }, "controlBorder": { "$value": "#4D5461" } }
+})";
+
 // The barcode glyph of the receipt screen's scan field, as the design draws it.
 constexpr char const* kScanIcon =
     R"(<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none" )"
@@ -137,7 +145,7 @@ struct Registered {
 // The navigation counts are app state, which the navigator's badges follow.
 std::string appDocument() {
     return R"({
-  "vocab": "ui/1", "id": "app",
+  "vocab": "ui/1", "id": "app", "principalPlacement": "head",
   "formatting": { "date": ")" +
            std::string{kDatePattern} + R"(", "dateTime": ")" + std::string{kDateTimePattern} + R"(" },
   "state": { "awaitingReview": { "init": 4 }, "instrumentsOnHold": { "init": 1 } },
@@ -195,6 +203,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
                                        std::tuple{"theme", "theme/sample.tokens.json", kSampleSurface},
                                        std::tuple{"theme", "theme/empty.tokens.json", kEmptySurface},
                                        std::tuple{"theme", "theme/pane.tokens.json", kPaneSurface},
+                                       std::tuple{"theme", "theme/dark-head.tokens.json", kDarkHeadSurface},
                                        std::tuple{"icon", "icon/scan.svg", kScanIcon}}) {
         if (auto added = served.addFile(morph::ui::BundleFile{.kind = kind, .id = fileId, .bytes = bytes}); !added) {
             return std::unexpected(std::move(added.error()));
