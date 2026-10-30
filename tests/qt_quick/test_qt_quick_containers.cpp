@@ -1152,14 +1152,15 @@ TEST_CASE("qt_quick containers: the shell's head shares the title's line, and wr
     CHECK(badgeAt1000.x() > subtitleAt1000.right());
     CHECK(subtitleAt1000.y() >= titleAt1000.bottom() - 1.0);
 
-    scene.window().resize(390, 600);
+    // Narrow enough that the trail does not fit beside the lead, wide enough for the sidebar and the lead's minimum.
+    scene.window().resize(560, 600);
     scene.settle();
     QRectF const badges = rectOf("head_badge_Due today");
     QRectF const bookAt390 = rectOf("head_Book");
     INFO("the badges end at " << badges.bottom() << ", the actions start at " << bookAt390.y());
     // Out of room: the actions drop to a line of their own, below the badges.
     CHECK(bookAt390.y() >= badges.bottom() - 1.0);
-    CHECK(rectOf("head_Sign").right() <= 390.0);
+    CHECK(rectOf("head_Sign").right() <= 560.0);
 }
 
 // A head that fits stays on the title's line at any width: wrapping the trail under the title needs the line to be out
@@ -1886,4 +1887,37 @@ TEST_CASE("qt_quick containers: an inline lead drops under the title before the 
         CHECK(first.y() <= title.y() + 1.0);
     }
     CHECK(dropped);
+}
+
+// Mutation: leave `passesBleed` out of the stack's `childBleedInset` (the bleeding child of a holder reaches past
+// nothing), or pass the inset on for a stack that is not a holder.
+TEST_CASE("qt_quick containers: a bleeding child of a holder column reaches its panel's inner edges", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 400);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    double const step = theme->property("space").value<QList<qreal>>().at(2);
+
+    auto panel = scene.backend().createPanel(nullptr);
+    panel->setPadding(2);
+    panel->setLayout({.width = ui::Sizing::fixed(40)});
+    auto holder = scene.backend().createStack(panel.get(), ui::Axis::Vertical);
+    holder->setPassesBleed(true);
+    auto inside = scene.backend().createText(holder.get());
+    inside->setText("inside");
+    auto bleeding = scene.backend().createText(holder.get());
+    bleeding->setText("bleeds");
+    bleeding->setLayout({.bleed = true});
+    // A column the document wrote, padded by nothing, passes nothing on.
+    auto written = scene.backend().createStack(panel.get(), ui::Axis::Vertical);
+    auto writtenBleeding = scene.backend().createText(written.get());
+    writtenBleeding->setText("bleeds");
+    writtenBleeding->setLayout({.bleed = true});
+    scene.settle();
+
+    QQuickItem const& panelItem = Scene::itemOf(*panel);
+    CHECK(Scene::itemOf(*inside).mapToItem(&panelItem, QPointF{0, 0}).x() == Catch::Approx(1.0 + step));
+    CHECK(Scene::itemOf(*bleeding).mapToItem(&panelItem, QPointF{0, 0}).x() == Catch::Approx(1.0));
+    CHECK(Scene::itemOf(*bleeding).width() == Catch::Approx(panelItem.width() - 2.0).margin(0.5));
+    CHECK(Scene::itemOf(*writtenBleeding).mapToItem(&panelItem, QPointF{0, 0}).x() == Catch::Approx(1.0 + step));
 }

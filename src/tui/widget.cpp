@@ -788,7 +788,7 @@ int alignedExtent(ui::Align align, ui::Sizing sizing, int requested, int space, 
 
 void bleedAreas(std::span<WidgetBase* const> children, std::vector<::core::tui::Rect>& areas, ::core::tui::Rect span) {
     for (auto const [child, area] : std::views::zip(children, areas)) {
-        if (child->shown() && child->layout().bleed && area.width > 0 && area.height > 0) {
+        if (child->shown() && (child->layout().bleed || child->passesBleed()) && area.width > 0 && area.height > 0) {
             area.x = span.x;
             area.width = span.width;
         }

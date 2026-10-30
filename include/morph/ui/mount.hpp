@@ -632,8 +632,11 @@ private:
     Widget& mountStack(reactive::Scope& scope, Axis axis, std::vector<Node> const& children, int gap,
                        Common const& common, ContainerWidget* parent, Align align = Align::Stretch,
                        Justify justify = Justify::Start, bool wrap = false, bool divided = false, Padding padding = {},
-                       std::optional<Prop<bool>> const& selected = std::nullopt) {
+                       std::optional<Prop<bool>> const& selected = std::nullopt, bool holder = false) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, axis));
+        if (holder) {
+            widget.setPassesBleed(true);
+        }
         if (wrap) {
             widget.setWrap(true);
         }
@@ -958,7 +961,7 @@ private:
 
     Widget& mountKind(reactive::Scope& scope, Column const& spec, ContainerWidget* parent) {
         return mountStack(scope, Axis::Vertical, spec.children, spec.gap, spec.common, parent, spec.align,
-                          spec.justify, false, spec.divided, spec.padding, spec.selected);
+                          spec.justify, false, spec.divided, spec.padding, spec.selected, spec.holder);
     }
 
     Widget& mountKind(reactive::Scope& scope, Row const& spec, ContainerWidget* parent) {

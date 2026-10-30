@@ -448,6 +448,13 @@ public:
     ///        for the bar reserves it from then on whether or not the stack is selected.
     /// @param selected Whether the stack is the chosen entry.
     virtual void setSelected(bool selected) = 0;
+
+    /// @brief Makes the stack transparent to `bleed`: a child of it that bleeds reaches past the padding of the
+    ///        stack's own container (a panel's padding, a tab page's), not past the stack's, as if the child were
+    ///        that container's. The mount calls it once, before the stack's first child, and only with true, for the
+    ///        column the interpreter inserts around a list of nodes. A table's row view ignores it.
+    /// @param passes Always true: a stack that is not a holder is never told.
+    virtual void setPassesBleed(bool passes) = 0;
 };
 
 /// @brief Children laid out row-major in columns.

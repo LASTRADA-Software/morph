@@ -37,6 +37,11 @@ void StackImpl::setPadding(ui::Padding padding) {
     refresh();
 }
 
+void StackImpl::setPassesBleed(bool passes) {
+    _passesBleed = passes;
+    refresh();
+}
+
 void StackImpl::setSelected(bool selected) {
     _selectable = true;
     _selected = selected;
@@ -122,8 +127,10 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
 }
 
 std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) const {
-    auto const inside =
-        layout::pad({.x = 0, .y = 0, .width = size.width, .height = size.height}, _paddingRows, _paddingColumns);
+    // A holder lies over its container's whole span, so it pads its children by the container's padding itself.
+    int const passed = _passesBleed && container() != nullptr ? container()->bleedColumns() : 0;
+    auto const inside = layout::pad({.x = 0, .y = 0, .width = size.width, .height = size.height}, _paddingRows,
+                                    _paddingColumns + passed);
     // The selection's column, when the padding has none, comes off the leading side only.
     int const extra = leadingColumns() - _paddingColumns;
     auto areas = innerAreas({.width = std::max(inside.width - extra, 0), .height = inside.height});

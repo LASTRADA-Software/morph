@@ -6919,7 +6919,11 @@ inline Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx con
     for (DocNodePtr const& child : nodes) {
         children.push_back(lower(*child, ctx));
     }
-    return ui::column(listColumn(std::move(children), gap));
+    Column holder = listColumn(std::move(children), gap);
+    // The column is the mount's, not the document's: a child that bleeds reaches past the padding of the container
+    // the document names, so the column passes that padding on instead of hiding it.
+    holder.holder = true;
+    return ui::column(std::move(holder));
 }
 
 inline LayoutHints ScreenCore::nodeHints(DocNode const& node, std::set<std::string, std::less<>> const& own,

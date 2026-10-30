@@ -27,6 +27,9 @@ MorphWidget {
     // Whether the row's children continue on the next line when they do not fit; C++ sets it before it adopts any
     // child, so every child lands in the content the stack lays out with.
     property bool wrap: false
+    // Whether the stack is the column the interpreter inserts around a list of nodes: a child that bleeds then reaches
+    // past the padding of the stack's own container, so the stack passes that padding on besides its own.
+    property bool passesBleed: false
     // Whether a 1 px rule in the scheme's divider colour is drawn between each two shown children of a column; the
     // rule takes 1 px of its own, so the children are `gap` plus that apart.
     property bool divided: false
@@ -325,8 +328,8 @@ MorphWidget {
 
     GridLayout {
         id: layout
-        // What a bleeding child reaches past: the stack's horizontal padding.
-        readonly property real childBleedInset: root.insetX
+        // What a bleeding child reaches past: the stack's horizontal padding, and the container's it passes on.
+        readonly property real childBleedInset: root.insetX + (root.passesBleed ? root.bleedInset : 0)
         visible: !root.wrap
         x: root.insetX + (root.axis === 1 && root.packed ? root.leadOf(root.width - 2 * root.insetX - width) : 0)
         y: root.insetY + (root.axis === 0 && root.packed ? root.leadOf(root.height - 2 * root.insetY - height) : 0)

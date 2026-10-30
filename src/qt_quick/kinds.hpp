@@ -320,6 +320,7 @@ public:
     void setDivided(bool divided) override;
     void setPadding(ui::Padding padding) override;
     void setSelected(bool selected) override;
+    void setPassesBleed(bool passes) override;
 
 protected:
     /// A wrapping row places its children itself, again whenever one's size or visibility changes.
@@ -620,6 +621,8 @@ public:
     void setPadding(ui::Padding padding) override { static_cast<void>(padding); }
     /// As `setAlign`: the table draws the selection.
     void setSelected(bool selected) override { static_cast<void>(selected); }
+    /// As `setAlign`: a table row is never a holder.
+    void setPassesBleed(bool passes) override { static_cast<void>(passes); }
     /// Its key, once the table was told it.
     [[nodiscard]] std::optional<ui::Key> const& key() const noexcept { return _key; }
     void setKey(ui::Key key);

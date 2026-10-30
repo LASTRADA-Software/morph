@@ -1230,6 +1230,7 @@ public:
                            : std::to_string(padding.vertical) + "/" + std::to_string(padding.horizontal));
     }
     void setSelected(bool selected) override { set("selected", selected ? "true" : "false"); }
+    void setPassesBleed(bool passes) override { set("passesBleed", passes ? "true" : "false"); }
 };
 
 /// @brief A fake `GridWidget`: properties `columns`, `tracks`, `gap`, `align`, and `span` on a child.

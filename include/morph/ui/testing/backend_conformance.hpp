@@ -1927,6 +1927,40 @@ struct Measured {
     return checks.result();
 }
 
+/// @brief Case: a panel padded by 5 steps whose content is a holder column, the column the interpreter makes for two
+///        or more nodes, lays a bleeding child from the frame's inner left edge to its inner right edge while its
+///        sibling stays inside the padding.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> bleedingChildOfHeldPanelReachesFrame(ConformanceProbe& probe) {
+    Column holder{.children = {sizedText("bleeds", {.bleed = true}), sizedText("inside", {})}, .holder = true};
+    Panel panel{.padding = 5, .child = ui::column(std::move(holder))};
+    panel.common.layout = {.width = Sizing::fixed(40)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::panel(std::move(panel)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const found = measured(probe, view);
+    ContainerWidget const* const held = found.children.size() == 1 ? asContainer(*found.children.at(0)) : nullptr;
+    checks.that(found.container != nullptr && held != nullptr && probe.childCount(*held) == 2,
+                "the panel holds a column of two children");
+    if (found.container != nullptr && held != nullptr && probe.childCount(*held) == 2) {
+        WidgetBounds const frame = geometry.of(*found.container);
+        WidgetBounds const bleeding = geometry.of(*probe.childAt(*held, 0));
+        WidgetBounds const inside = geometry.of(*probe.childAt(*held, 1));
+        // The frame's border is a cell or a pixel or two; the padding is several cells.
+        checks.that(bleeding.x >= frame.x && bleeding.x - frame.x <= 1.0,
+                    "the bleeding child starts at the frame's inner left edge, not past the padding: it is " +
+                        std::to_string(bleeding.x - frame.x) + " in");
+        checks.that(frame.width - bleeding.width <= 2.0 + 1e-6 && bleeding.width <= frame.width,
+                    "the bleeding child spans the frame's inner width: " + std::to_string(bleeding.width) + " of " +
+                        std::to_string(frame.width));
+        checks.that(inside.x - frame.x >= 1.5,
+                    "the sibling stays inside the padding: it is " + std::to_string(inside.x - frame.x) + " in");
+    }
+    return checks.result();
+}
+
 /// @brief Case: along a row, a content child is at least its minimum wide.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -3147,7 +3181,7 @@ struct WrappingRow {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 28> const cases{{
+    static std::array<ConformanceCase, 29> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3192,6 +3226,8 @@ struct WrappingRow {
          .run = detail::squareButtonIsNarrower},
         {.name = "a bleeding child spans its padded column's width while a sibling stays inset",
          .run = detail::bleedingChildSpansPaddedColumn},
+        {.name = "a bleeding child of a panel with two children reaches the frame's inner edges",
+         .run = detail::bleedingChildOfHeldPanelReachesFrame},
     }};
     return cases;
 }
