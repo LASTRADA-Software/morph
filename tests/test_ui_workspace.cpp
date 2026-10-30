@@ -1392,9 +1392,9 @@ TEST_CASE("workspace: the lead is built once per place and shown only in the pla
     CHECK(backend.prop(below, "visible") == "false");
     CHECK(backend.prop(inlined, "visible") == "false");
     // Between the tools and the actions, content-sized: no stretch and no minimum.
-    std::vector<int> const parts_ = backend.children(trailRow);
-    REQUIRE(parts_.size() == 4);
-    CHECK(parts_.at(1) == end);
+    std::vector<int> const trailParts = backend.children(trailRow);
+    REQUIRE(trailParts.size() == 4);
+    CHECK(trailParts.at(1) == end);
     for (int const copy : {end, inlined}) {
         CHECK_FALSE(backend.prop(copy, "layout").contains("stretch"));
         CHECK_FALSE(backend.prop(copy, "layout").contains("min"));

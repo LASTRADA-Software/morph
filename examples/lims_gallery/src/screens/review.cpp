@@ -845,11 +845,9 @@ ui::Node compactLayout(Review const& review) {
         .sizing(ui::stretch(), ui::stretch());
 }
 
-}  // namespace
-
 // The phone's worksheet page carries the sheet line, the worksheet's title and its summary tags in the head, as the
 // design's header does; the queue page and the expanded layout carry none.
-static void declareHead(ui::Scope& screen, Review const& review) {
+void declareHead(ui::Scope& screen, Review const& review) {
     Flag const onSheet = ui::eq(review.width, "compact") && !review.showQueue;
     auto const none = ui::AnyHandle{std::vector<std::string>{}};
     auto const line =
@@ -872,6 +870,8 @@ static void declareHead(ui::Scope& screen, Review const& review) {
         screen.status({.text = tag.at("text"), .tone = tag.at("tone"), .visible = onSheet && ui::engaged(tag)});
     }
 }
+
+}  // namespace
 
 ui::Screen reviewScreen() {
     return ui::screen("lims-gallery.review", [](ui::Scope& screen) {

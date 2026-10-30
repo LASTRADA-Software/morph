@@ -1596,7 +1596,7 @@ struct CompactFrame {
 TEST_CASE("qt_quick containers: the compact top line starts its menu square a step 1 in and the title a step 2 after",
           "[qt_quick]") {
     Scene scene;
-    CompactFrame compact{scene};
+    CompactFrame const compact{scene};
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
     qreal stepOne = 0.0;
@@ -1627,16 +1627,16 @@ TEST_CASE("qt_quick containers: a title alone on a one-line head is centred on t
     compact.frame->setHeadOneLine(true);
     scene.settle();
     QQuickItem const& title = *textItemOf("shell_title", QStringLiteral("Review"));
-    QQuickItem const& export_ = Scene::itemOf(*button);
+    QQuickItem const& exportButton = Scene::itemOf(*button);
     qreal const titleMiddle = title.mapToScene(QPointF{0, title.height() / 2}).y();
-    qreal const buttonMiddle = export_.mapToScene(QPointF{0, export_.height() / 2}).y();
+    qreal const buttonMiddle = exportButton.mapToScene(QPointF{0, exportButton.height() / 2}).y();
     INFO("title middle " << titleMiddle << ", button middle " << buttonMiddle);
     CHECK(std::abs(titleMiddle - buttonMiddle) <= 1.0);
 
     compact.frame->setHeadOneLine(false);
     scene.settle();
     CHECK(std::abs(title.mapToScene(QPointF{0, title.height() / 2}).y() -
-                   export_.mapToScene(QPointF{0, export_.height() / 2}).y()) > 3.0);
+                   exportButton.mapToScene(QPointF{0, exportButton.height() / 2}).y()) > 3.0);
 }
 
 // Mutation: ignore `collapsible.marker` in the section header (the chevron stays), or let `none` also drop the toggle.
@@ -1675,7 +1675,7 @@ TEST_CASE("qt_quick containers: a splitter's handle is the scheme's border colou
     left->setText("left");
     right->setText("right");
     scene.settle();
-    QQuickItem& item = Scene::itemOf(*splitter);
+    QQuickItem const& item = Scene::itemOf(*splitter);
     auto* const handle = item.property("handleItem").value<QQuickItem*>();
     REQUIRE(handle != nullptr);
     auto* const scheme = item.property("scheme").value<QObject*>();
@@ -1793,16 +1793,16 @@ TEST_CASE("qt_quick containers: a bleeding child reaches its padded column's and
     panelBleeding->setLayout({.bleed = true});
     scene.settle();
 
-    QQuickItem& columnItem = Scene::itemOf(*column);
-    QQuickItem& insideItem = Scene::itemOf(*inside);
-    QQuickItem& bleedItem = Scene::itemOf(*bleeding);
+    QQuickItem const& columnItem = Scene::itemOf(*column);
+    QQuickItem const& insideItem = Scene::itemOf(*inside);
+    QQuickItem const& bleedItem = Scene::itemOf(*bleeding);
     CHECK(insideItem.mapToItem(&columnItem, QPointF{0, 0}).x() == Catch::Approx(step));
     CHECK(bleedItem.mapToItem(&columnItem, QPointF{0, 0}).x() == Catch::Approx(0.0));
     CHECK(bleedItem.width() == Catch::Approx(columnItem.width()).margin(0.5));
 
-    QQuickItem& panelItem = Scene::itemOf(*panel);
-    QQuickItem& panelInsideItem = Scene::itemOf(*panelInside);
-    QQuickItem& panelBleedItem = Scene::itemOf(*panelBleeding);
+    QQuickItem const& panelItem = Scene::itemOf(*panel);
+    QQuickItem const& panelInsideItem = Scene::itemOf(*panelInside);
+    QQuickItem const& panelBleedItem = Scene::itemOf(*panelBleeding);
     // The frame's border is 1 px: a child reaches the inner edge, not over the border.
     CHECK(panelInsideItem.mapToItem(&panelItem, QPointF{0, 0}).x() == Catch::Approx(1.0 + step));
     CHECK(panelBleedItem.mapToItem(&panelItem, QPointF{0, 0}).x() == Catch::Approx(1.0));

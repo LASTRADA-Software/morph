@@ -4085,12 +4085,9 @@ namespace detail {
 /// @param nodes The nodes.
 /// @return Whether one can hide.
 [[nodiscard]] inline bool anyConditioned(Nodes const& nodes) {
-    for (Json const& item : std::get<Json::array_t>(nodes.json().data)) {
-        if (std::get<Json::object_t>(item.data).contains("visible")) {
-            return true;
-        }
-    }
-    return false;
+    return std::ranges::any_of(std::get<Json::array_t>(nodes.json().data), [](Json const& item) {
+        return std::get<Json::object_t>(item.data).contains("visible");
+    });
 }
 
 }  // namespace detail
