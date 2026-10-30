@@ -1841,3 +1841,49 @@ TEST_CASE("qt_quick containers: a tabs node's page inset pads the pages apart fr
     CHECK(Scene::itemOf(*bleeding).mapToItem(&item, QPointF{0, 0}).x() == Catch::Approx(0.0));
     CHECK(Scene::itemOf(*bleeding).width() == Catch::Approx(item.width()).margin(0.5));
 }
+
+// The inline lead wraps inside the lead block, under the title, before the head's trail wraps. Mutation: put the
+// inline slot back in the top line beside the lead block (the trail is then the item that drops, and its top is below
+// the title's at the first width where the lead has dropped).
+TEST_CASE("qt_quick containers: an inline lead drops under the title before the trail drops", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setTitle("Plate PL-0193");
+    frame.setHeadShown(true);
+    frame.setLeadInline(true);
+    ui::Text lead{.text = "ELISA, host cell protein · worksheet WS-2026-0415", .role = ui::TextRole::Muted};
+    lead.common.testId = "inline_lead";
+    ui::Mounted const leadMount{scene.runtime(), scene.backend(), ui::text(std::move(lead)), &frame.headInlineSlot()};
+    std::vector<ui::Node> trail;
+    for (auto const* const action : {"Template", "Auto-fill", "Save layout"}) {
+        ui::Button button{.label = action};
+        button.common.testId = std::string{"inline_trail_"} + action;
+        trail.push_back(ui::button(std::move(button)));
+    }
+    ui::Mounted const trailMount{scene.runtime(), scene.backend(),
+                                 ui::row(ui::Row{.children = std::move(trail), .gap = 1}), &frame.headSlot()};
+    auto const rectOf = [](char const* testId) {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        QQuickItem const* const item = widget->item();
+        REQUIRE(item != nullptr);
+        return QRectF{item->mapToScene(QPointF{0, 0}), QSizeF{item->width(), item->height()}};
+    };
+    bool dropped = false;
+    for (int width = 1000; width >= 400 && !dropped; width -= 2) {
+        scene.window().resize(width, 600);
+        scene.settle();
+        QRectF const title = rectOf("shell_title");
+        QRectF const inlineLead = rectOf("inline_lead");
+        if (inlineLead.y() < title.bottom() - 1.0) {
+            continue;
+        }
+        dropped = true;
+        QRectF const first = rectOf("inline_trail_Template");
+        INFO("at " << width << " px the title is at " << title.y() << ", the lead at " << inlineLead.y()
+                   << ", the trail at " << first.y());
+        CHECK(first.y() <= title.y() + 1.0);
+    }
+    CHECK(dropped);
+}

@@ -79,9 +79,10 @@ public:
           _navMenu{backend.createMenu(_topMain.get(), MenuStyle::Button)},
           _leadBlock{backend.createStack(_topMain.get(), Axis::Vertical)},
           _eyebrow{backend.createStack(_leadBlock.get(), Axis::Vertical)},
-          _title{backend.createText(_leadBlock.get())},
+          _titleLine{wrappingRow(backend, _leadBlock.get())},
+          _title{backend.createText(_titleLine.get())},
+          _headInline{backend.createStack(_titleLine.get(), Axis::Horizontal)},
           _headLead{backend.createStack(_leadBlock.get(), Axis::Vertical)},
-          _headInline{backend.createStack(_topMain.get(), Axis::Horizontal)},
           _headSlot{backend.createStack(_topMain.get(), Axis::Horizontal)},
           _topPrincipal{backend.createText(_topLine.get())},
           _topEnd{backend.createSpacer(_topLine.get())},
@@ -162,6 +163,11 @@ public:
         _leadBlock->setLayout({.width = Sizing::stretch(), .height = {}, .minWidth = kShellHeadLeadMinimum});
         _eyebrow->setTestId("shell_head_eyebrow");
         _eyebrow->setVisible(false);
+        // The title and the inline lead share a line that wraps inside the lead block: where both do not fit, the
+        // lead goes under the title, and the head's trail keeps the title's line until the block's minimum is gone.
+        _titleLine->setGap(2);
+        _titleLine->setAlign(Align::Center);
+        _titleLine->setTestId("shell_title_line");
         _title->setRole(TextRole::Heading);
         _title->setTestId("shell_title");
         _headLead->setLayout({.width = Sizing::stretch(), .height = {}});
@@ -212,9 +218,8 @@ public:
     /// @return It.
     [[nodiscard]] ContainerWidget& headLeadSlot() noexcept { return *_headLead; }
 
-    /// @brief The container a client mounts the active head's inline lead into: in the top bar's wrapping line,
-    ///        right after the lead block and before the trail, shown only while `setLeadInline(true)` and
-    ///        `setHeadShown(true)`.
+    /// @brief The container a client mounts the active head's inline lead into: on the title's line, right after the
+    ///        title, shown only while `setLeadInline(true)` and `setHeadShown(true)`.
     /// @return It.
     [[nodiscard]] ContainerWidget& headInlineSlot() noexcept { return *_headInline; }
 
@@ -235,11 +240,11 @@ public:
         showLeadPlace();
     }
 
-    /// @brief Puts the head's lead on the title's line (`headInlineSlot()`), or back under the title. Inline, the
-    ///        lead block is content-sized with no minimum and the inline slot stretches from
-    ///        `kShellHeadLeadMinimum` units, so the lead follows the title and the spare width lies after it, before
-    ///        the trail; otherwise the lead block stretches from the minimum and the slot is hidden, since a shown
-    ///        empty slot would still take its minimum.
+    /// @brief Shows the head's lead on the title's line (`headInlineSlot()`), or hides that slot. The slot is a
+    ///        content-sized item of a wrapping line inside the lead block, which always stretches from
+    ///        `kShellHeadLeadMinimum` units: the lead follows the title while both fit the block, and wraps to a line
+    ///        under the title when they do not, before the head's trail wraps. The spare width lies after the lead,
+    ///        before the trail.
     /// @param inlineLead Whether the lead sits inline. A new frame has it under the title.
     void setLeadInline(bool inlineLead) {
         _leadInline = inlineLead;
@@ -388,17 +393,8 @@ private:
         _topPrincipal->setVisible(_principalInHead && !_compact && !_principalName.empty());
     }
 
-    // Where the lead sits: see setLeadInline.
-    void showLeadPlace() {
-        if (_leadInline) {
-            _leadBlock->setLayout({.width = {}, .height = {}});
-            _headInline->setLayout({.width = Sizing::stretch(), .height = {}, .minWidth = kShellHeadLeadMinimum});
-        } else {
-            _leadBlock->setLayout({.width = Sizing::stretch(), .height = {}, .minWidth = kShellHeadLeadMinimum});
-            _headInline->setLayout({.width = {}, .height = {}});
-        }
-        _headInline->setVisible(_headShown && _leadInline);
-    }
+    // Whether the inline lead shows: see setLeadInline.
+    void showLeadPlace() { _headInline->setVisible(_headShown && _leadInline); }
 
     // The top bar's surface: the joined one while the page continues the head, else the one the screen asks for, else
     // the plain toolbar.
@@ -436,11 +432,12 @@ private:
     // Declared between the lead block and the title: members are made in declaration order, so the slot is the first
     // child of the block.
     std::unique_ptr<StackWidget> _eyebrow;
+    // The title and the inline lead, a wrapping line of the lead block: declared after the eyebrow and before the
+    // lead slot, so it sits between them.
+    std::unique_ptr<StackWidget> _titleLine;
     std::unique_ptr<TextWidget> _title;
-    std::unique_ptr<StackWidget> _headLead;
-    // Declared between the lead and the trail: members are made in declaration order, so the slot follows the lead
-    // block in the line.
     std::unique_ptr<StackWidget> _headInline;
+    std::unique_ptr<StackWidget> _headLead;
     std::unique_ptr<StackWidget> _headSlot;
     std::unique_ptr<TextWidget> _topPrincipal;
     std::unique_ptr<SpacerWidget> _topEnd;
