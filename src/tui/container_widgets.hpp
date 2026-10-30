@@ -54,7 +54,7 @@ public:
 private:
     /// The shown children's places along their lines when the row is @p width cells wide, and each line's height.
     struct WrappedLines {
-        std::vector<WidgetBase*> shown;
+        std::vector<WidgetBase const*> shown;
         layout::WrapPlan plan;
         std::vector<int> lineHeights;
     };

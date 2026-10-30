@@ -144,9 +144,13 @@ void TextInputImpl::setAlign(ui::Align align) {
     if (_multiline) {
         throw std::logic_error{"morph::qt_quick: a multiline text input's text starts at the leading edge"};
     }
-    write("textAlign", static_cast<int>(align == ui::Align::End      ? Qt::AlignRight
-                                        : align == ui::Align::Center ? Qt::AlignHCenter
-                                                                     : Qt::AlignLeft));
+    Qt::AlignmentFlag textAlign = Qt::AlignLeft;
+    if (align == ui::Align::End) {
+        textAlign = Qt::AlignRight;
+    } else if (align == ui::Align::Center) {
+        textAlign = Qt::AlignHCenter;
+    }
+    write("textAlign", static_cast<int>(textAlign));
     write("tabularFigures", align == ui::Align::End);
 }
 

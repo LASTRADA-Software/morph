@@ -51,7 +51,7 @@ void StackImpl::setWrap(bool wrap) {
 StackImpl::WrappedLines StackImpl::wrappedLines(int width) const {
     WrappedLines lines;
     std::vector<layout::Item> items;
-    for (WidgetBase* const child : children()) {
+    for (WidgetBase const* const child : children()) {
         if (!child->shown()) {
             continue;
         }
