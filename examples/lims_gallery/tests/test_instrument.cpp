@@ -101,16 +101,24 @@ TEST_CASE("instrument, compact: stacked sections, actions in the page, the secti
     CHECK(screen.prop("KeyValue", "details", "items")
               .value_or(std::string{})
               .contains("Serial number:[DEAB-902114;mono]"));
-    CHECK(screen.prop("Collapsible", "booking-section", "open") == "true");
-    CHECK(screen.prop("Collapsible", "qualification-section", "open") == "false");
-    CHECK(screen.prop("Collapsible", "events-section", "title") == "Recent events · 3");
+    CHECK(screen.prop("Panel", "booking-section", "collapsed") == "false");
+    CHECK(screen.prop("Panel", "qualification-section", "collapsed") == "true");
+    CHECK(screen.prop("Panel", "events-section", "title") == "Recent events · 3");
+
+    // A panel reports that it is collapsed, so opening the closed section turns the open flag on.
+    auto const qualification = screen.find("Panel", "qualification-section");
+    REQUIRE(qualification.has_value());
+    screen.backend().togglePanel(qualification.value_or(0));
+    CHECK(screen.waitFor([&screen] { return screen.prop("Panel", "qualification-section", "collapsed") == "false"; }));
+    screen.backend().togglePanel(qualification.value_or(0));
+    CHECK(screen.waitFor([&screen] { return screen.prop("Panel", "qualification-section", "collapsed") == "true"; }));
 
     screen.click("maintenance");
     REQUIRE(screen.waitFor([&screen] { return screen.find("TextInput", "log-note").has_value(); }));
     screen.edit("log-note", "Seals replaced");
     REQUIRE(screen.waitFor([&screen] { return screen.prop("Button", "action_log", "enabled") != "false"; }));
     screen.click("action_log");
-    CHECK(screen.waitFor(
-        [&screen] { return screen.prop("Collapsible", "events-section", "title") == "Recent events · 4"; }));
+    CHECK(
+        screen.waitFor([&screen] { return screen.prop("Panel", "events-section", "title") == "Recent events · 4"; }));
     screen.requireNoProblems();
 }

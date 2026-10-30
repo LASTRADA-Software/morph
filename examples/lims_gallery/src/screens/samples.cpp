@@ -598,10 +598,10 @@ ui::Node cardContent(Samples const& list) {
                    {.gap = 2, .align = Align::Start});
 }
 
-// A card is tinted while its sample is out of specification.
+// A card is a padded entry of the one divided list, tinted while its sample is out of specification.
 ui::Node sampleCard(Samples const& list) {
     Flag const outOfSpec = ui::eq(ui::row("specTone"), "err");
-    return ui::panel({cardContent(list)}, {.padding = 2}).surface(ui::cond(outOfSpec, Text{"outOfSpec"}, Text{""}));
+    return ui::column({cardContent(list)}, {.padding = 2}).surface(ui::cond(outOfSpec, Text{"outOfSpec"}, Text{""}));
 }
 
 ui::Node compactFilters(Samples const& list) {
@@ -675,24 +675,25 @@ ui::Node compactLayout(Samples const& list) {
         ui::cond(ui::eq(list.priority, "any"), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1});
     // The bulk bar stays at the bottom of the phone screen while the cards scroll above it.
     return ui::pinned(
-        ui::column(
-            {searchField(list),
-             ui::row(
-                 {ui::button({.label = ui::format("Filters · {0}", {active}), .onClick = ui::open(list.filtersDrawer)})
-                      .sizing(ui::stretch())
-                      .testId("open-filters"),
-                  sortChoice(list).sizing(ui::stretch())},
-                 {.gap = 1}),
-             ui::forEach(ui::slice(cardOrder(list), std::int64_t{0}, list.cardCount), {.key = ui::row("id"), .gap = 1},
-                         [&list](ui::DeclScope&) { return ui::Nodes{sampleCard(list)}; })
-                 .testId("cards"),
-             ui::column(noSamples(list)).visible(ui::Handle<bool>{ui::isEmpty(list.shown)}),
-             ui::button({.label = ui::format("Load more · {0} of {1}", {list.cardCount, shownCount}),
-                         .onClick = ui::set(list.cardCount, list.cardCount + 25)})
-                 .visible(list.cardCount < shownCount)
-                 .testId("load-more"),
-             compactFilters(list), assignDialog(list), priorityDialog(list)},
-            {.gap = 2}),
+        ui::column({searchField(list),
+                    ui::row({ui::button({.label = ui::format("Filters · {0}", {active}),
+                                         .onClick = ui::open(list.filtersDrawer)})
+                                 .sizing(ui::stretch())
+                                 .testId("open-filters"),
+                             sortChoice(list).sizing(ui::stretch())},
+                            {.gap = 1}),
+                    ui::panel({ui::forEach(ui::slice(cardOrder(list), std::int64_t{0}, list.cardCount),
+                                           {.key = ui::row("id"), .gap = 0, .divided = true},
+                                           [&list](ui::DeclScope&) { return ui::Nodes{sampleCard(list)}; })
+                                   .testId("cards")},
+                              {.padding = 0}),
+                    ui::column(noSamples(list)).visible(ui::Handle<bool>{ui::isEmpty(list.shown)}),
+                    ui::button({.label = ui::format("Load more · {0} of {1}", {list.cardCount, shownCount}),
+                                .onClick = ui::set(list.cardCount, list.cardCount + 25)})
+                        .visible(list.cardCount < shownCount)
+                        .testId("load-more"),
+                    compactFilters(list), assignDialog(list), priorityDialog(list)},
+                   {.gap = 2}),
         {.bottom = compactBulkBar(list)});
 }
 

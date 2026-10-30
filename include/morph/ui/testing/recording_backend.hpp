@@ -2426,6 +2426,18 @@ public:
         }
     }
 
+    /// @brief Collapses or expands a collapsible panel as a click on its header does: it flips its own `collapsed`,
+    ///        then `onToggle` gets the new collapsed state.
+    /// @param widgetId The panel.
+    /// @throws std::logic_error when the widget is not a panel.
+    void togglePanel(int widgetId) {
+        if (detail::Record const* const record = editable(widgetId, "togglePanel", {"Panel"}); record != nullptr) {
+            bool const collapsed = prop(widgetId, "collapsed") != "true";
+            _store->setByUser(widgetId, "collapsed", detail::formatBool(collapsed));
+            invoke(record->callbacks.toggle, collapsed);
+        }
+    }
+
     /// @brief Opens a dropdown select, as a user would, whether or not it has options: `onOpen` runs. Nothing is
     ///        marked or logged.
     /// @param widgetId The select.

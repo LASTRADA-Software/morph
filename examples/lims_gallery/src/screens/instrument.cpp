@@ -343,6 +343,16 @@ ui::Node compactDetails() {
         .testId("details");
 }
 
+// A compact section: a card whose header folds it. A panel reports whether it is collapsed, so the open flag takes
+// the event's opposite.
+ui::Node section(ui::AnyHandle const& title, ui::Node const& content, ui::Handle<bool> const& open) {
+    return ui::panel({content}, {.title = title,
+                                 .padding = 2,
+                                 .collapsible = true,
+                                 .collapsed = !open,
+                                 .onToggle = ui::set(open, !ui::Handle<bool>{ui::event()})});
+}
+
 ui::Node compactLayout(Instrument const& instrument) {
     auto const actions = ui::row(
         {ui::button({.label = "Book", .emphasis = ButtonEmphasis::Primary, .onClick = book(instrument)})
@@ -356,22 +366,15 @@ ui::Node compactLayout(Instrument const& instrument) {
              .testId("maintenance"),
          moreMenu(instrument)},
         {.gap = 1, .align = Align::Center});
-    auto const overview = ui::column(
-        {compactDetails(),
-         ui::collapsible({currentBooking()}, {.title = "Current booking",
-                                              .open = instrument.bookingOpen,
-                                              .onToggle = ui::set(instrument.bookingOpen, ui::event())})
-             .testId("booking-section"),
-         ui::collapsible({qualificationList()}, {.title = "Qualification · all passed",
-                                                 .open = instrument.qualificationOpen,
-                                                 .onToggle = ui::set(instrument.qualificationOpen, ui::event())})
-             .testId("qualification-section"),
-         ui::collapsible({eventList(instrument)},
-                         {.title = ui::format("Recent events · {0}", {ui::count(instrument.events)}),
-                          .open = instrument.eventsOpen,
-                          .onToggle = ui::set(instrument.eventsOpen, ui::event())})
-             .testId("events-section")},
-        {.gap = 2});
+    auto const overview =
+        ui::column({compactDetails(),
+                    section("Current booking", currentBooking(), instrument.bookingOpen).testId("booking-section"),
+                    section("Qualification · all passed", qualificationList(), instrument.qualificationOpen)
+                        .testId("qualification-section"),
+                    section(ui::format("Recent events · {0}", {ui::count(instrument.events)}), eventList(instrument),
+                            instrument.eventsOpen)
+                        .testId("events-section")},
+                   {.gap = 2});
     return ui::column({actions, recordTabs(instrument, overview), dialogs(instrument)}, {.gap = 2});
 }
 

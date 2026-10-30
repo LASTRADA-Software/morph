@@ -88,7 +88,7 @@ TEST_CASE("console, compact: menu navigation, stacked sections, a sample opens r
     CHECK_FALSE(screen.shows("Row", "shell_sidebar"));
     CHECK(screen.shows("Menu", "shell_nav_menu"));
     CHECK(screen.prop("Menu", "shell_nav_menu", "items").value_or("").contains("Review and approval · 4"));
-    CHECK(screen.prop("Collapsible", "chart-section", "title") == "Assay control, HPLC-02 · latest run +3.4 SD");
+    CHECK(screen.prop("Panel", "chart-section", "title") == "Assay control, HPLC-02 · latest run +3.4 SD");
     CHECK(screen.find("Column", "worklist").has_value());
     CHECK(screen.prop("Grid", "kpis", "tracks") == "[stretch(1),stretch(1)]");
     screen.click("open-sample");

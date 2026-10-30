@@ -823,9 +823,15 @@ ui::Node compactWorklist(Console const& console, ui::AnyHandle const& rows, std:
 ui::Node compactLayout(Console const& console) {
     return ui::column(
         {alert(true), kpis(true),
-         ui::collapsible({controlChart()}, {.title = "Assay control, HPLC-02 · latest run +3.4 SD", .open = false})
+         ui::panel({controlChart()}, {.title = "Assay control, HPLC-02 · latest run +3.4 SD",
+                                      .padding = 2,
+                                      .collapsible = true,
+                                      .collapsed = true})
              .testId("chart-section"),
-         ui::collapsible({instruments()}, {.title = "Instruments · 1 on hold, 1 calibration due", .open = false})
+         ui::panel({instruments()}, {.title = "Instruments · 1 on hold, 1 calibration due",
+                                     .padding = 2,
+                                     .collapsible = true,
+                                     .collapsed = true})
              .testId("instruments-section"),
          ui::tabs({{.label = "Worklist 38", .children = {compactWorklist(console, console.samples, "worklist")}},
                    {.label = "On hold 18", .children = {compactWorklist(console, heldSamples(console), "on-hold")}},
