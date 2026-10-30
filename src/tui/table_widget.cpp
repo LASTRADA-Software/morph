@@ -411,29 +411,8 @@ std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
     return mark;
 }
 
-void TableImpl::paint(::core::tui::Canvas& canvas) {
-    auto const& theme = canvas.theme();
-    _size = canvas.size();
-    auto const widths = columnWidths(canvas.width());
-
-    if (_showHeader) {
-        paintHeader(canvas, widths);
-    }
-
-    auto const rows = shownChildren();
-    int const room = std::max(0, canvas.height() - (_showHeader ? 1 : 0));
-    if (room != _rowRoom) {
-        _rowRoom = room;
-        _follow = true;
-    }
-    followFocus(rows);
-    if (_follow) {
-        _follow = false;
-        showCursor(rows);
-    }
-    _top = std::min(_top, lastTop(rows));
-    _cursorPlace = cursorPlace(rows);
-
+// Hands each row the table's column layout; a heading's one cell takes every column's width and the gaps between them.
+void TableImpl::arrangeRows(std::vector<int> const& widths) {
     std::vector<CellPlace> places;
     places.reserve(_columns.size());
     for (auto const& column : _columns) {
@@ -457,6 +436,32 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
             }
         }
     }
+}
+
+void TableImpl::paint(::core::tui::Canvas& canvas) {
+    auto const& theme = canvas.theme();
+    _size = canvas.size();
+    auto const widths = columnWidths(canvas.width());
+
+    if (_showHeader) {
+        paintHeader(canvas, widths);
+    }
+
+    auto const rows = shownChildren();
+    int const room = std::max(0, canvas.height() - (_showHeader ? 1 : 0));
+    if (room != _rowRoom) {
+        _rowRoom = room;
+        _follow = true;
+    }
+    followFocus(rows);
+    if (_follow) {
+        _follow = false;
+        showCursor(rows);
+    }
+    _top = std::min(_top, lastTop(rows));
+    _cursorPlace = cursorPlace(rows);
+
+    arrangeRows(widths);
     auto const areas = childAreas(_size);
     placeChildren(areas);
 

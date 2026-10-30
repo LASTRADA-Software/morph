@@ -104,6 +104,8 @@ private:
     void clickHeader(int x);
     /// Draws the header line: the header box, then each column's label at its alignment.
     void paintHeader(::core::tui::Canvas& canvas, std::vector<int> const& widths) const;
+    /// Gives each row its column layout.
+    void arrangeRows(std::vector<int> const& widths);
     /// The gutter of @p row: its selection mark, or its box, then the cursor mark when @p cursor.
     [[nodiscard]] std::string rowMark(WidgetBase const* row, bool cursor) const;
     /// Each column's content width: its label's, or its widest cell's, hidden cells included.

@@ -231,6 +231,37 @@ int basisOf(Item const& item, int length) noexcept {
     return std::min(requestOf(item), std::max(0, length));
 }
 
+/// The value at `index`, checked.
+int valueAt(std::span<int const> values, std::size_t index) {
+    if (index >= values.size()) {
+        throw std::out_of_range{"morph::tui::layout: value " + std::to_string(index) + " past " +
+                                std::to_string(values.size())};
+    }
+    return *std::next(values.begin(), static_cast<std::ptrdiff_t>(index));
+}
+
+/// How a line's spare room is spread: before the first item, between each pair, and how many gaps get one more cell.
+struct Spread {
+    Wide lead = 0;
+    Wide extra = 0;
+    Wide remainder = 0;
+};
+
+/// The spread of @p spare cells over @p count placed items under @p justify.
+Spread spreadOf(ui::Justify justify, Wide spare, std::size_t count) {
+    Spread spread;
+    if (justify == ui::Justify::Center) {
+        spread.lead = spare / 2;
+    } else if (justify == ui::Justify::End) {
+        spread.lead = spare;
+    } else if (justify == ui::Justify::Between && count > 1) {
+        auto const gaps = static_cast<Wide>(count) - 1;
+        spread.extra = spare / gaps;
+        spread.remainder = spare % gaps;
+    }
+    return spread;
+}
+
 /// Places one line's @p members (indices into @p items, in order) in @p length cells.
 void placeLine(std::span<Item const> items, std::span<std::size_t const> members, std::span<int const> bases,
                Track width, ui::Justify justify, int line, std::vector<WrapPlaced>& placed) {
@@ -238,14 +269,15 @@ void placeLine(std::span<Item const> items, std::span<std::size_t const> members
     std::vector<Item> sharing;
     std::vector<std::size_t> sharers;
     for (std::size_t const member : members) {
-        if (bases.data()[member] > 0) {
+        int const basis = valueAt(bases, member);
+        if (basis > 0) {
             Item item = itemAt(items, member);
             if (isStretch(item.sizing)) {
                 // The line was filled by the item's basis, which is capped at its natural extent. Raising its share to
                 // the uncapped minimum would take the room from the items after it.
-                item.minimum = std::min(item.minimum, bases.data()[member]);
+                item.minimum = std::min(item.minimum, basis);
             } else {
-                item.sizing = ui::Sizing::fixed(bases.data()[member]);
+                item.sizing = ui::Sizing::fixed(basis);
                 item.minimum = 0;
                 item.maximum = std::numeric_limits<int>::max();
             }
@@ -258,20 +290,9 @@ void placeLine(std::span<Item const> items, std::span<std::size_t const> members
         std::accumulate(extents.begin(), extents.end(), Wide{0}) + gapsBetween(extents.size(), width.gap);
     Wide const spare = std::max<Wide>(0, Wide{width.length} - used);
     bool const stretches = std::ranges::any_of(sharing, [](Item const& item) { return isStretch(item.sizing); });
-    Wide lead = 0;
-    Wide extra = 0;
-    Wide remainder = 0;
-    if (!stretches && spare > 0) {
-        if (justify == ui::Justify::Center) {
-            lead = spare / 2;
-        } else if (justify == ui::Justify::End) {
-            lead = spare;
-        } else if (justify == ui::Justify::Between && extents.size() > 1) {
-            auto const gaps = static_cast<Wide>(extents.size()) - 1;
-            extra = spare / gaps;
-            remainder = spare % gaps;
-        }
-    }
+    auto const [lead, extra, startRemainder] =
+        !stretches && spare > 0 ? spreadOf(justify, spare, extents.size()) : Spread{};
+    Wide remainder = startRemainder;
     Wide cursor = lead;
     std::size_t next = 0;
     bool first = true;

@@ -334,7 +334,7 @@ std::string_view stepMark(ui::StepState state) {
     if (!_labelled) {
         // Three cells per mark and at least two of connector between neighbours.
         auto const count = static_cast<int>(_steps.size());
-        return {.width = count == 0 ? 0 : count * 3 + (count - 1) * 2, .height = count == 0 ? 0 : 1};
+        return {.width = count == 0 ? 0 : (count * 3) + ((count - 1) * 2), .height = count == 0 ? 0 : 1};
     }
     int widest = 0;
     for (auto const& step : _steps) {
@@ -347,38 +347,42 @@ std::string StepsImpl::probeText() const {
     return _current && *_current < _steps.size() ? _steps.at(*_current).label : std::string{};
 }
 
-void StepsImpl::paint(::core::tui::Canvas& canvas) {
+namespace {
+
+// The marks in one row, the spare width shared among the connectors; a connector after a done step is accented.
+void paintMarkRow(::core::tui::Canvas& canvas, std::vector<ui::Step> const& steps,
+                  std::optional<std::size_t> current) {
     auto const& theme = canvas.theme();
-    if (!_labelled) {
-        // The marks in one row, the spare width shared among the connectors; a connector after a done step is
-        // accented.
-        auto const count = static_cast<int>(_steps.size());
-        if (count == 0 || canvas.height() < 1) {
-            return;
-        }
-        int const spare = std::max(canvas.width() - count * 3, 0);
-        int const gaps = std::max(count - 1, 1);
-        int column = 0;
-        for (int index = 0; index < count; ++index) {
-            auto const& step = _steps.at(static_cast<std::size_t>(index));
-            canvas.putString(0, column, std::string{stepMark(step.state)},
-                             stepStyle(theme, step.state, _current == static_cast<std::size_t>(index)));
-            column += 3;
-            if (index + 1 < count) {
-                int const length = spare / gaps + (index < spare % gaps ? 1 : 0);
-                std::string line;
-                for (int cell = 0; cell < length; ++cell) {
-                    line += "─";
-                }
-                canvas.putString(0, column, line,
-                                 step.state == ui::StepState::Done ? theme.textAccent : theme.textMuted);
-                column += length;
-            }
-        }
+    auto const count = static_cast<int>(steps.size());
+    if (count == 0 || canvas.height() < 1) {
         return;
     }
-    for (std::size_t index = 0; index < _steps.size() && static_cast<int>(index) < canvas.height(); ++index) {
-        auto const& step = _steps.at(index);
+    int const spare = std::max(canvas.width() - (count * 3), 0);
+    int const gaps = std::max(count - 1, 1);
+    int column = 0;
+    for (int index = 0; index < count; ++index) {
+        auto const& step = steps.at(static_cast<std::size_t>(index));
+        canvas.putString(0, column, std::string{stepMark(step.state)},
+                         stepStyle(theme, step.state, current == static_cast<std::size_t>(index)));
+        column += 3;
+        if (index + 1 < count) {
+            int const length = (spare / gaps) + (index < spare % gaps ? 1 : 0);
+            std::string line;
+            for (int cell = 0; cell < length; ++cell) {
+                line += "─";
+            }
+            canvas.putString(0, column, line, step.state == ui::StepState::Done ? theme.textAccent : theme.textMuted);
+            column += length;
+        }
+    }
+}
+
+// The steps one to a row, each with its mark before the label.
+void paintLabelledSteps(::core::tui::Canvas& canvas, std::vector<ui::Step> const& steps,
+                        std::optional<std::size_t> current) {
+    auto const& theme = canvas.theme();
+    for (std::size_t index = 0; index < steps.size() && static_cast<int>(index) < canvas.height(); ++index) {
+        auto const& step = steps.at(index);
         std::string_view mark = "[ ] ";
         if (step.state == ui::StepState::Active) {
             mark = "[>] ";
@@ -387,8 +391,18 @@ void StepsImpl::paint(::core::tui::Canvas& canvas) {
         } else if (step.state == ui::StepState::Failed) {
             mark = "[!] ";
         }
-        auto const& style = stepStyle(theme, step.state, _current == index);
+        auto const& style = stepStyle(theme, step.state, current == index);
         canvas.putString(static_cast<int>(index), 0, std::string{mark} + step.label, style);
+    }
+}
+
+}  // namespace
+
+void StepsImpl::paint(::core::tui::Canvas& canvas) {
+    if (_labelled) {
+        paintLabelledSteps(canvas, _steps, _current);
+    } else {
+        paintMarkRow(canvas, _steps, _current);
     }
 }
 

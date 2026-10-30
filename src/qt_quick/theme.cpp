@@ -137,6 +137,7 @@ bool dashed(ui::ThemeValues const& values) {
 }
 
 // Whether the keyword at @p path names @p name.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the keyword's path, then a name; swapped, no keyword is found.
 bool keywordIs(ui::ThemeValues const& values, std::string_view path, std::string_view name) {
     auto const found = values.keywords.find(path);
     return found != values.keywords.end() && found->second == name;
@@ -216,6 +217,7 @@ void setFamilies(QObject& theme, ui::ThemeValues const& values, std::string_view
 }
 
 // A shadow token onto the five `Theme` properties that begin with @p prefix.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the token's path, then the property prefix; swapped, no token is found.
 void setShadow(QObject& theme, ui::ThemeValues const& values, std::string_view path, std::string_view prefix,
                std::vector<std::string>& unset) {
     auto const found = values.shadows.find(path);
