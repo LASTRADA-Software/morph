@@ -250,10 +250,11 @@ order) — and each of those is one operation on the Qt side. Nothing re-creates
 
 **Tables.** A horizontal stack the mount makes inside a table is one of its rows (`MorphTableRow`). A row places its
 cells by column index at the table's column widths — fixed units, the widest of the header and the column's shown cells
-for content (as the terminal backend sizes it), a share of the rest for stretch but never less than its header (the
-header's width and a unit a side, at least 8 units, as an empty content column's), the share a floored column gives up
+for content (as the terminal backend sizes it), each plus `table.cellPaddingX` a side so the padding never takes room
+from the content, a share of the rest for stretch but never less than its header (the header's width and the padding a
+side, at least 8 units, as an empty content column's), the share a floored column gives up
 taken from the others — so a hidden cell keeps its column and the cells after it stay under their headers. A cell is
-its column's width less `Theme.spaceOf(2)` a side, except one whose `fillsAcross` is false (a badge, a check box, a
+its column's width less `table.cellPaddingX` a side, except one whose `fillsAcross` is false (a badge, a check box, a
 button), which is its implicit width at the column's start, centre or end, by the column's `align`. A cell that
 declares `textAlign` (`MorphText`, `MorphTextInput`) is given the column's `align` as `Qt.AlignLeft`,
 `Qt.AlignHCenter` or `Qt.AlignRight`, its label's or field's `horizontalAlignment`, which a right-to-left layout

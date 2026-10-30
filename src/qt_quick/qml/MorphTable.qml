@@ -70,12 +70,15 @@ MorphWidget {
     property int rowScans: 0
     readonly property var widths: root.columnWidths(width - root.lead)
 
-    // No column is narrower than its header: a content column is at least its header and its widest cell, a stretch
-    // column at least its header (its cells are meant to take what is left, so they do not raise it), each with a
-    // unit of padding a side and never under 8 units. A stretch column takes its share of what the others leave, and
+    // A column's declared width describes its content, with `table.cellPaddingX` added on both sides, so the padding
+    // never takes room from the content: a fixed column is its units plus the padding, a content column its widest
+    // cell plus the padding. No column is narrower than its header: a content column is at least its header and its
+    // widest cell, a stretch column at least its header (its cells are meant to take what is left, so they do not
+    // raise it), each with the padding a side and never under 8 units. A stretch column takes its share of what the others leave, and
     // a share under its floor is the floor, the rest shared among the others. Columns wider in sum than the table
     // scroll sideways (`hflick`).
     function columnWidths(total: real): var {
+        const pad = 2 * Theme.tableCellPaddingX
         const out = []
         const floors = []
         let used = 0
@@ -83,13 +86,13 @@ MorphWidget {
         for (let i = 0; i < root.columns.length; ++i) {
             const column = root.columns[i]
             const mark = column.sortable ? headerMetrics.advanceWidth(root.ascendingMark) : 0
-            const header = Math.max(headerMetrics.advanceWidth(column.label) + mark + 2 * Theme.unitWidth,
+            const header = Math.max(headerMetrics.advanceWidth(column.label) + mark + pad,
                                     8 * Theme.unitWidth)
             let w = 0
             if (column.kind === 1)
-                w = column.amount * Theme.unitWidth
+                w = column.amount * Theme.unitWidth + pad
             else if (column.kind === 0)
-                w = Math.max(root.cachedWidth(i) + 2 * Theme.unitWidth, header)
+                w = Math.max(root.cachedWidth(i) + pad, header)
             else
                 pending.push(i)
             out.push(w)

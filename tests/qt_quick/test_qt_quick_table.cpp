@@ -67,12 +67,11 @@ Rows makeTable(Scene& scene, std::vector<ui::Key> const& keys, ui::SelectionMode
     return made;
 }
 
-// What a content column adds to its widest cell: a unit of padding on each side. A unit is the theme font's average
-// character width, so it differs between platforms and fonts.
+// What a column adds to its content: the table cell padding on each side.
 qreal columnPadding(Scene& scene) {
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
-    return 2 * theme->property("unitWidth").toReal();
+    return 2 * theme->property("tableCellPaddingX").toReal();
 }
 
 }  // namespace
@@ -481,6 +480,27 @@ constexpr qreal kCellInset = 8;
 
 }  // namespace
 
+// Mutation: take the padding out of the column's declared width in MorphTable.columnWidths (the column is then n units
+// wide and its cell n units less twice the inset).
+TEST_CASE("qt_quick table: a fixed column's width is its units plus the cell padding on both sides", "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "Age", .width = ui::Sizing::fixed(14)}, {.label = "Name"}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    auto age = scene.backend().createText(row.get());
+    age->setText("22 min overdue");
+    auto name = scene.backend().createText(row.get());
+    name->setText("pH");
+    scene.settle();
+
+    qreal const content = 14 * units(scene).width();
+    qreal const column = Scene::itemOf(*table).property("widths").toList().at(0).toReal();
+    CHECK(column == content + columnPadding(scene));
+    // The cell is exactly the declared content width, so text that is that wide stays on its line.
+    CHECK(Scene::itemOf(*age).width() == content);
+}
+
 // Mutation: give every cell its column's width in MorphTableRow.place (the badge stretches across its column).
 TEST_CASE("qt_quick table: a badge keeps its own width at its column's start", "[qt_quick]") {
     Scene scene;
@@ -593,7 +613,8 @@ TEST_CASE("qt_quick table: a table wider than its area keeps every column and sc
     REQUIRE(widths.size() == 3);
     qreal const unit = units(scene).width();
     CHECK(widths.at(2).toReal() >= 8 * unit);
-    CHECK(widths.at(2).toReal() >= tableItem.property("columnsWidth").toReal() - (80 * unit) - 1);
+    CHECK(widths.at(2).toReal() >=
+          tableItem.property("columnsWidth").toReal() - (80 * unit) - (2 * columnPadding(scene)) - 1);
     for (std::size_t index = 1; index < wide.cells.size(); ++index) {
         QQuickItem const& before = Scene::itemOf(*wide.cells.at(index - 1));
         QQuickItem const& after = Scene::itemOf(*wide.cells.at(index));

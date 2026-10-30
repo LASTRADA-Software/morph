@@ -232,7 +232,7 @@ spare height, and a stretching scroll above a bar keeps the bar at the column's 
 size until the user drags. A splitter's panes are sized by the splitter, not by this rule. A panel's or a collapsible's content starts under its
 header whatever the panel's height; only a stretching child takes the spare height.
 
-**Table cells.** A table draws a 1 px rule under each row in `color.divider` on Qt Quick. A table sizes and places its cells itself. On Qt Quick a cell is inset by `table.cellPaddingX` and `table.cellPaddingY`, and the header's labels with it; the terminal keeps one column between cells and no vertical padding. A cell fills its column's width, except a kind whose
+**Table cells.** A table draws a 1 px rule under each row in `color.divider` on Qt Quick. A table sizes and places its cells itself. On Qt Quick a cell is inset by `table.cellPaddingX` and `table.cellPaddingY`, and the header's labels with it; the padding is added to a column's declared width on both sides (a `fixed(n)` column is `n` units plus twice the inset, a content column its widest cell plus twice the inset), so it never takes room from the content; the terminal keeps one column between cells, no vertical padding and no inset in a column's width. A cell fills its column's width, except a kind whose
 width is its label (a badge, a check box, a push button), which draws at its natural width at the column's start,
 centre or end, as `TableColumn::align` says. The column's `align` also places the text of a text cell and of a text
 input cell (where the frontend can align an input's text), and the header's label; a container cell fills its
