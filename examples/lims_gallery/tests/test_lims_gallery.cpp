@@ -4,7 +4,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <cstddef>
+#include <expected>
+#include <map>
 #include <morph/ui/document.hpp>
+#include <morph/ui/service.hpp>
+#include <morph/ui/theme.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -74,4 +78,46 @@ TEST_CASE("lims gallery: the app document gives every screen the gallery's date 
     REQUIRE(app.has_value());
     CHECK(app->datePattern == lims_gallery::kDatePattern);
     CHECK(app->dateTimePattern == lims_gallery::kDateTimePattern);
+}
+
+// Mutation: drop the `sidebar` surface from the theme index (the rail marks its current entry in the accent again), or
+// leave `list.selection` out of its file.
+TEST_CASE("lims gallery: the sidebar surface fills the current entry and the base keeps the accent bar",
+          "[lims-gallery]") {
+    auto const built = lims_gallery::bundle();
+    REQUIRE(built.has_value());
+    std::map<std::string, morph::ui::TokenSet, std::less<>> tokens;
+    std::string indexText;
+    for (auto const& [hash, file] : (*built)->files) {
+        for (auto const& holder : file.holders) {
+            if (holder.kind != "theme") {
+                continue;
+            }
+            if (holder.id == "theme/index.json") {
+                indexText = file.bytes;
+            } else {
+                auto parsed = morph::ui::parseTokens(file.bytes);
+                REQUIRE(parsed.has_value());
+                tokens.emplace(holder.id, std::move(*parsed));
+            }
+        }
+    }
+    auto const index = morph::ui::parseThemeIndex(indexText);
+    REQUIRE(index.has_value());
+    morph::ui::TokenFileLookup const files = [&tokens](std::string_view id) -> morph::ui::TokenSet const* {
+        auto const found = tokens.find(id);
+        return found == tokens.end() ? nullptr : &found->second;
+    };
+    CHECK_FALSE(morph::ui::checkTheme(*index, files).has_value());
+    for (std::string const& problem : morph::ui::themeProblems(*index, files)) {
+        CHECK_FALSE(problem.contains("sidebar"));
+    }
+    auto const base = morph::ui::resolveTheme(*index, files, {}, {}, {});
+    auto const sidebar = morph::ui::resolveTheme(*index, files, {}, {}, "sidebar");
+    REQUIRE((base.has_value() && sidebar.has_value()));
+    auto const baseValues = morph::ui::themeValues(*base);
+    auto const sidebarValues = morph::ui::themeValues(*sidebar);
+    CHECK(baseValues.keywords.at("list.selection") == "accent");
+    CHECK(sidebarValues.keywords.at("list.selection") == "fill");
+    CHECK(sidebarValues.colors.at("color.selection").hex() == "#2b3038");
 }

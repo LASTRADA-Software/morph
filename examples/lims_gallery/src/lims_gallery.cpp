@@ -27,7 +27,7 @@ constexpr char const* kThemeIndex = R"({
                 "standard": "theme/standard.tokens.json", "control": "theme/control.tokens.json",
                 "blank": "theme/blank.tokens.json", "sample": "theme/sample.tokens.json",
                 "empty": "theme/empty.tokens.json", "pane": "theme/pane.tokens.json",
-                "darkHead": "theme/dark-head.tokens.json" },
+                "darkHead": "theme/dark-head.tokens.json", "sidebar": "theme/sidebar.tokens.json" },
   "icons": { "scan": "icon/scan.svg" }
 })";
 
@@ -129,6 +129,21 @@ constexpr char const* kDarkHeadSurface = R"({
              "controlSurface": { "$value": "#1C1E21" }, "controlBorder": { "$value": "#4D5461" } }
 })";
 
+// The shell's navigator: the dark rail with its entries' labels in pale grey. A theme's own surface replaces the
+// built-in one, so every colour the rail draws is restated. The current entry is a fill the rail's `#2B3038`, with no
+// accent bar, as the design draws it.
+constexpr char const* kSidebarSurface = R"({
+  "color": { "$type": "color", "surface": { "$value": "#1F2430" }, "text": { "$value": "#C9CCD6" },
+             "muted": { "$value": "#7D8396" }, "accent": { "$value": "#4C8DFF" },
+             "selection": { "$value": "#2B3038" }, "border": { "$value": "#2F3646" },
+             "neutral": { "$root": { "$value": "#7D8396" }, "bg": { "$value": "#7D839626" },
+                          "border": { "$value": "#7D8396" }, "dot": { "$value": "#7D8396" } },
+             "hover": { "$value": "#FFFFFF14" }, "track": { "$value": "#2F3646" },
+             "controlSurface": { "$value": "#2A3040" }, "controlBorder": { "$value": "#3A4152" },
+             "divider": { "$value": "#2F3646" } },
+  "list": { "selection": { "$type": "keyword", "$value": "fill" } }
+})";
+
 // The barcode glyph of the receipt screen's scan field, as the design draws it.
 constexpr char const* kScanIcon =
     R"(<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none" )"
@@ -206,6 +221,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
                                        std::tuple{"theme", "theme/empty.tokens.json", kEmptySurface},
                                        std::tuple{"theme", "theme/pane.tokens.json", kPaneSurface},
                                        std::tuple{"theme", "theme/dark-head.tokens.json", kDarkHeadSurface},
+                                       std::tuple{"theme", "theme/sidebar.tokens.json", kSidebarSurface},
                                        std::tuple{"icon", "icon/scan.svg", kScanIcon}}) {
         if (auto added = served.addFile(morph::ui::BundleFile{.kind = kind, .id = fileId, .bytes = bytes}); !added) {
             return std::unexpected(std::move(added.error()));
