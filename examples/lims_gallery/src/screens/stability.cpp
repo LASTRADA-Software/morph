@@ -260,14 +260,14 @@ ui::Node matrix(Study const& study) {
     for (Timepoint const& point : kTimepoints) {
         columns.push_back(ui::TableColumn{.name = std::string{"m"} + point.header,
                                           .label = point.header,
-                                          .width = ui::fixed(4),
+                                          .width = ui::fixed(3),
                                           .align = Align::Center,
                                           .cell = monthBox(study, point, false)});
     }
     columns.push_back(ui::TableColumn{
         .name = "pulls",
         .label = "Pulls",
-        .width = ui::fixed(6),
+        .width = ui::fixed(5),
         .cell = ui::text({.text = ui::format("{0}", {ui::call("count", {ui::row("points")})})}).testId("row-pulls")});
     return ui::table(study.conditions, {.key = ui::row("id"), .columns = columns})
         .a11y("Storage conditions and timepoints")
@@ -564,7 +564,7 @@ ui::StepperParts wizard(Study const& study, bool compact, ui::Node const& condit
                     .canContinue = study.enough,
                     .blocking = compact ? study.perPullCompact : study.perPullField,
                     .onBlocked = ui::set(study.attempted, true),
-                    .continueLabel = "Continue to tests"},
+                    .continueLabel = compact ? "Continue" : "Continue to tests"},
                    {.label = kSteps.at(2), .children = testsStep(study, compact), .canContinue = hasTests},
                    {.label = kSteps.at(3), .children = reviewStep(study), .canContinue = study.confirmed}},
          .continueLabel = "Continue",
@@ -593,8 +593,9 @@ ui::Node expandedConditions(Study const& study) {
                    matrix(study), layout::muted("T0 is tested once, from the long-term condition.")},
                   {.padding = 2});
     auto const aside = ui::panel({summary(study)}, {.title = "Summary", .padding = 2})
-                           // The design's 250 px summary.
-                           .sizing(ui::fixed(33))
+                           // The design's summary is 25% of its 1000 px page; 27 units is that share of the 785 px
+                           // page the sidebar leaves.
+                           .sizing(ui::fixed(27))
                            .a11y("Summary");
     return ui::row(
         {ui::column({attention(study, false), fields, conditions}, {.gap = 2}).sizing(ui::stretch()), aside},
