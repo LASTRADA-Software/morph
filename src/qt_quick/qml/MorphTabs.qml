@@ -6,8 +6,9 @@ import QtQuick.Layouts
 
 // A tab bar over page slots. The mount keeps exactly the selected page's slot visible; the bar's highlight follows
 // `select` and the user's clicks. A hidden bar (`barShown` false) gives its height to the pages; a shown one sits a
-// spacing step above them. Tabs that do not fit beside a trailing "More" button are left out of the bar and listed
-// in the button's menu; choosing one there chooses that tab, as a click on its button would.
+// spacing step above them, or directly over them while the strip is inset. Tabs that do not fit beside a trailing
+// "More" button are left out of the bar and listed in the button's menu; choosing one there chooses that tab, as a
+// click on its button would.
 MorphWidget {
     id: root
 
@@ -106,7 +107,8 @@ MorphWidget {
     ColumnLayout {
         id: layout
         anchors.fill: parent
-        spacing: Theme.spaceOf(3)
+        // An inset strip sits directly over its pages, whose own inset is the gap.
+        spacing: root.inset > 0 ? 0 : Theme.spaceOf(3)
 
         Item {
             id: tabArea
@@ -165,9 +167,10 @@ MorphWidget {
                             visible: index < root.shownCount
                             width: visible ? implicitWidth : 0
                             onImplicitWidthChanged: root.scheduleFit()
-                            // A touch target while the window is compact; its label keeps its own size.
+                            // A tab is a control: at least the control height, and a touch target while the window is
+                            // compact; its label keeps its own size.
                             implicitHeight: Math.max(implicitContentHeight + topPadding + bottomPadding,
-                                                     Theme.touchTargets ? Theme.targetHeight : 0)
+                                                     Theme.targetHeight)
                             leftPadding: Theme.spaceOf(3)
                             rightPadding: Theme.spaceOf(3)
                             Keys.onRightPressed: event => {

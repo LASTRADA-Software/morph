@@ -1417,9 +1417,10 @@ TEST_CASE(
     CHECK(firstButton(item).x() == plainButton.x() + step);
     QPointF const child = Scene::itemOf(*label).mapToItem(&item, QPointF{0, 0});
     CHECK(child.x() == plainChild.x() + step);
-    CHECK(child.y() == plainChild.y() + step);
     auto* const strip = item.findChild<QQuickItem*>(QStringLiteral("stripSurface"));
     REQUIRE(strip != nullptr);
+    // An inset strip puts no spacing of its own over its page: the page's inset is the gap under the rule.
+    CHECK(child.y() == strip->mapToItem(&item, QPointF{0, strip->height()}).y() + step);
     CHECK(strip->isVisible());
     CHECK(strip->mapToItem(&item, QPointF{0, 0}).x() == 0.0);
     CHECK(strip->width() == item.width());
@@ -1732,4 +1733,32 @@ TEST_CASE("qt_quick containers: a divided row draws a vertical rule centred in e
     CHECK(rules.at(0)->x() + 1 <= second.x() + 0.5);
     CHECK(rules.at(0)->x() - firstEnd == Catch::Approx(gap / 2).margin(0.5));
     CHECK(rules.at(0)->height() > 1);
+}
+
+// Mutation: size a tab by its label and the style's padding (about 20 px), or keep the strip's step-3 spacing over an
+// inset page.
+TEST_CASE("qt_quick containers: a tab is the control height and an inset strip puts no spacing over its page",
+          "[qt_quick]") {
+    Scene scene;
+    // Wide enough to be expanded, so the control height is the whole of the rule rather than the touch height.
+    scene.window().resize(1000, 300);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto tabs = scene.backend().createTabs(nullptr);
+    tabs->setTabs({"One", "Two"});
+    tabs->setInset(4);
+    auto page = scene.backend().createStack(tabs.get(), ui::Axis::Vertical);
+    auto label = scene.backend().createText(page.get());
+    label->setText("page");
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*tabs);
+    QList<QQuickItem*> const buttons = Scene::itemsOf(item, "QQuickTabButton");
+    REQUIRE_FALSE(buttons.isEmpty());
+    double const control = theme->property("controlHeight").toDouble();
+    CHECK(buttons.front()->height() == Catch::Approx(control));
+    double const step = theme->property("space").value<QList<qreal>>().at(4);
+    auto* const strip = item.findChild<QQuickItem*>(QStringLiteral("stripSurface"));
+    REQUIRE(strip != nullptr);
+    double const rule = strip->mapToItem(&item, QPointF{0, strip->height()}).y();
+    CHECK(Scene::itemOf(*page).mapToItem(&item, QPointF{0, 0}).y() == Catch::Approx(rule + step));
 }
