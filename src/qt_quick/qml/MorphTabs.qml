@@ -40,7 +40,7 @@ MorphWidget {
 
     // The More button's width for a label: the label and the chevron, in the padding a tab has.
     function moreWidthFor(label: string): real {
-        return metrics.advanceWidth(label + " ▾") + 2 * Theme.spaceOf(4)
+        return metrics.advanceWidth(label + " ▾") + 2 * Theme.spaceOf(3)
     }
 
     // Shows the leading tabs that fit beside More when the tabs together are wider than the row. More is measured at
@@ -101,131 +101,136 @@ MorphWidget {
         anchors.fill: parent
         spacing: Theme.spaceOf(3)
 
-        RowLayout {
-            id: tabRow
+        Item {
+            id: tabArea
             visible: root.barShown
             Layout.fillWidth: true
-            spacing: 0
-            onWidthChanged: root.scheduleFit()
+            implicitHeight: tabRow.implicitHeight
 
-            TabBar {
-                id: bar
-                visible: root.barShown
-                Layout.fillWidth: true
-                currentIndex: -1
-                onWidthChanged: root.keepChosenInView()
-                background: Rectangle {
-                    color: "transparent"
-
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        width: parent.width
-                        height: 1
-                        color: root.scheme.border
-                    }
-                }
-
-                // The model is the count, not the list: a relabel with the same count keeps every button, and with it
-                // the highlight and the keyboard focus; a list model would rebuild them all.
-                Repeater {
-                    id: tabs
-                    model: root.labels.length
-
-                    TabButton {
-                        font: Theme.bodyFont
-                        id: tab
-                        required property int index
-                        text: index < root.labels.length ? root.labels[index] : ""
-                        // A tab past the fit leaves the bar, the focus chain and the accessibility tree, and takes no
-                        // width; its implicit width still counts towards the fit.
-                        visible: index < root.shownCount
-                        width: visible ? implicitWidth : 0
-                        onImplicitWidthChanged: root.scheduleFit()
-                        // A touch target while the window is compact; its label keeps its own size.
-                        implicitHeight: Math.max(implicitContentHeight + topPadding + bottomPadding,
-                                                 Theme.touchTargets ? Theme.targetHeight : 0)
-                        leftPadding: Theme.spaceOf(4)
-                        rightPadding: Theme.spaceOf(4)
-                        Keys.onRightPressed: event => {
-                            if (index === root.shownCount - 1 && more.visible) {
-                                more.forceActiveFocus()
-                                event.accepted = true
-                            }
-                        }
-                        contentItem: Text {
-                            textFormat: Text.PlainText
-                            text: tab.text
-                            font: tab.font
-                            color: tab.checked ? root.scheme.text : root.scheme.muted
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            elide: Text.ElideRight
-                        }
-                        background: Rectangle {
-                            color: "transparent"
-
-                            Rectangle {
-                                anchors.bottom: parent.bottom
-                                width: parent.width
-                                height: 2
-                                visible: tab.checked
-                                color: root.scheme.accent
-                            }
-                        }
-                        onClicked: root.fire("select", index)
-                    }
-                }
+            // The rule under the tabs runs the row's width, past the last tab and More.
+            Rectangle {
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: 1
+                color: root.scheme.border
             }
 
-            // A sibling of the bar, not one of its buttons, so the bar's count and current index stay the tabs'.
-            AbstractButton {
-                id: more
-                objectName: "more"
-                visible: root.barShown && root.overflowing
-                // The hidden tab that is chosen, whose label More then shows.
-                readonly property int chosenHidden: bar.currentIndex >= root.shownCount ? bar.currentIndex : -1
-                text: (chosenHidden >= 0 ? root.labels[chosenHidden] : root.moreLabel) + " ▾"
-                font: Theme.bodyFont
-                implicitHeight: bar.implicitHeight
-                implicitWidth: contentItem.implicitWidth + leftPadding + rightPadding
-                leftPadding: Theme.spaceOf(4)
-                rightPadding: Theme.spaceOf(4)
-                Layout.alignment: Qt.AlignBottom
-                Accessible.role: Accessible.Button
-                Accessible.name: text
-                contentItem: Text {
-                    textFormat: Text.PlainText
-                    text: more.text
-                    font: more.font
-                    color: more.chosenHidden >= 0 ? root.scheme.text : root.scheme.muted
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-                background: Rectangle {
-                    color: "transparent"
+            RowLayout {
+                id: tabRow
+                anchors.fill: parent
+                spacing: 0
+                onWidthChanged: root.scheduleFit()
 
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        width: parent.width
-                        height: 1
-                        color: root.scheme.border
+                // As wide as its shown tabs, so More follows the last one.
+                TabBar {
+                    id: bar
+                    visible: root.barShown
+                    currentIndex: -1
+                    spacing: 0
+                    onWidthChanged: root.keepChosenInView()
+                    background: Item {
                     }
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        width: parent.width
-                        height: 2
-                        visible: more.chosenHidden >= 0
-                        color: root.scheme.accent
+
+                    // The model is the count, not the list: a relabel with the same count keeps every button, and with it
+                    // the highlight and the keyboard focus; a list model would rebuild them all.
+                    Repeater {
+                        id: tabs
+                        model: root.labels.length
+
+                        TabButton {
+                            font: Theme.bodyFont
+                            id: tab
+                            required property int index
+                            text: index < root.labels.length ? root.labels[index] : ""
+                            // A tab past the fit leaves the bar, the focus chain and the accessibility tree, and takes no
+                            // width; its implicit width still counts towards the fit.
+                            visible: index < root.shownCount
+                            width: visible ? implicitWidth : 0
+                            onImplicitWidthChanged: root.scheduleFit()
+                            // A touch target while the window is compact; its label keeps its own size.
+                            implicitHeight: Math.max(implicitContentHeight + topPadding + bottomPadding,
+                                                     Theme.touchTargets ? Theme.targetHeight : 0)
+                            leftPadding: Theme.spaceOf(3)
+                            rightPadding: Theme.spaceOf(3)
+                            Keys.onRightPressed: event => {
+                                if (index === root.shownCount - 1 && more.visible) {
+                                    more.forceActiveFocus()
+                                    event.accepted = true
+                                }
+                            }
+                            contentItem: Text {
+                                textFormat: Text.PlainText
+                                text: tab.text
+                                font: tab.font
+                                color: tab.checked ? root.scheme.text : root.scheme.muted
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                            }
+                            background: Rectangle {
+                                color: "transparent"
+
+                                Rectangle {
+                                    anchors.bottom: parent.bottom
+                                    width: parent.width
+                                    height: 2
+                                    visible: tab.checked
+                                    color: root.scheme.accent
+                                }
+                            }
+                            onClicked: root.fire("select", index)
+                        }
                     }
                 }
-                onClicked: popup.open()
-                Keys.onReturnPressed: clicked()
-                Keys.onEnterPressed: clicked()
-                Keys.onDownPressed: clicked()
-                Keys.onLeftPressed: {
-                    const last = tabs.itemAt(root.shownCount - 1) as TabButton
-                    if (last)
-                        last.forceActiveFocus()
+
+                // A sibling of the bar, not one of its buttons, so the bar's count and current index stay the tabs'.
+                AbstractButton {
+                    id: more
+                    objectName: "more"
+                    visible: root.barShown && root.overflowing
+                    // The hidden tab that is chosen, whose label More then shows.
+                    readonly property int chosenHidden: bar.currentIndex >= root.shownCount ? bar.currentIndex : -1
+                    text: (chosenHidden >= 0 ? root.labels[chosenHidden] : root.moreLabel) + " ▾"
+                    font: Theme.bodyFont
+                    implicitHeight: bar.implicitHeight
+                    implicitWidth: contentItem.implicitWidth + leftPadding + rightPadding
+                    leftPadding: Theme.spaceOf(3)
+                    rightPadding: Theme.spaceOf(3)
+                    Layout.alignment: Qt.AlignBottom
+                    Accessible.role: Accessible.Button
+                    Accessible.name: text
+                    contentItem: Text {
+                        textFormat: Text.PlainText
+                        text: more.text
+                        font: more.font
+                        color: more.chosenHidden >= 0 ? root.scheme.text : root.scheme.muted
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        color: "transparent"
+
+                        Rectangle {
+                            anchors.bottom: parent.bottom
+                            width: parent.width
+                            height: 2
+                            visible: more.chosenHidden >= 0
+                            color: root.scheme.accent
+                        }
+                    }
+                    onClicked: popup.open()
+                    Keys.onReturnPressed: clicked()
+                    Keys.onEnterPressed: clicked()
+                    Keys.onDownPressed: clicked()
+                    Keys.onLeftPressed: {
+                        const last = tabs.itemAt(root.shownCount - 1) as TabButton
+                        if (last)
+                            last.forceActiveFocus()
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
                 }
             }
         }
@@ -241,7 +246,7 @@ MorphWidget {
     Popup {
         id: popup
         objectName: "moreMenu"
-        y: tabRow.y + tabRow.height
+        y: tabArea.y + tabArea.height
         padding: 2
         onAboutToShow: placement.place(popup, more)
 

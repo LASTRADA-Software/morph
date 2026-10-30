@@ -1312,11 +1312,21 @@ TEST_CASE("qt_quick containers: tabs that do not fit go into a More menu that ch
         ++shown;
         CHECK(button->mapToItem(bar, QPointF{button->width(), 0}).x() <= bar->width() + 0.5);
     }
-    CHECK(shown < 5);
     CHECK(shown > 0);
+    CHECK(shown < 5);
+    // A tab is a step of 3 in from its label on each side, as the design's tabs are.
+    CHECK(buttons.at(0)->property("leftPadding").toReal() == Catch::Approx(12));
     auto* const more = root.findChild<QQuickItem*>(QStringLiteral("more"));
     REQUIRE(more != nullptr);
     CHECK(more->isVisible());
+    // More follows the last shown tab, not the row's end.
+    QQuickItem const* lastShown = nullptr;
+    for (QQuickItem const* const button : buttons) {
+        lastShown = button->isVisible() ? button : lastShown;
+    }
+    REQUIRE(lastShown != nullptr);
+    CHECK(more->mapToScene(QPointF{0, 0}).x() ==
+          Catch::Approx(lastShown->mapToScene(QPointF{lastShown->width(), 0}).x()).margin(1));
     CHECK(more->property("text").toString() == QStringLiteral("More \u25be"));
     CHECK(bar->property("currentIndex").toInt() == 0);
 
