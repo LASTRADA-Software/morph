@@ -509,29 +509,29 @@ ui::Node samplesTable(Samples const& list) {
                     {{.name = "id", .label = "Sample", .width = ui::fixed(11), .role = "mono", .sortable = true},
                      {.name = "product",
                       .label = "Product · lot",
-                      .width = ui::stretch(),
+                      .width = ui::stretch(2),
                       .cell = ui::text(
                           {.text = lotLine,
                            .spans = ui::cond(
                                ui::isEmpty(ui::row("lot")), ui::AnyHandle{ui::spans({ui::row("product")})},
                                ui::AnyHandle{ui::spans({ui::row("product"), " · ", ui::mono(ui::row("lot"))})})})},
-                     {.name = "tests", .label = "Tests", .width = ui::fixed(16)},
+                     {.name = "tests", .label = "Tests", .width = ui::stretch(2)},
                      {.name = "priority",
                       .label = "Priority",
-                      .width = ui::fixed(8),
+                      .width = ui::fixed(7),
                       .cell = layout::outlineTag(ui::row("priority"), priorityTone(ui::row("priority")))},
                      {.name = "status",
                       .label = "Status",
-                      .width = ui::fixed(12),
+                      .width = ui::fixed(10),
                       .cell = layout::tag(ui::row("status"), ui::row("statusTone"))},
                      {.name = "due",
                       .label = "Due",
-                      .width = ui::fixed(14),
+                      .width = ui::fixed(12),
                       .cell = dueText(),
                       .sortable = true,
                       .sortBy = ui::row("dueAt"),
                       .wrap = false},
-                     {.name = "spec", .label = "Specification", .width = ui::fixed(14), .cell = specCell()}},
+                     {.name = "spec", .label = "Specification", .width = ui::fixed(10), .cell = specCell()}},
                 // The table draws the selection the cards share: its own boxes, and a header box for the page.
                 .selectionMode = ui::Selection::Multiple,
                 .selection = list.selected,
@@ -607,7 +607,7 @@ ui::Node cardContent(Samples const& list) {
                                          layout::tag(ui::row("status"), ui::row("statusTone")),
                                          layout::tag(spec, ui::row("specTone")).visible(!ui::isEmpty(spec))},
                                         {.gap = 1, .wrap = true})},
-                               {.gap = 0})
+                               {.gap = 1})
                         .sizing(ui::stretch())},
                    {.gap = 2, .align = Align::Start});
 }
