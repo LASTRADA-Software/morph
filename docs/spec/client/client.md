@@ -136,7 +136,7 @@ signed-out catalog lists the screens, so neither tells signed in from signed out
 screens either way. The top bar's title and the navigator's current entry follow the active tab: each change of the
 workspace sets the title to the tab's caption and `Navigator::setCurrent` to its screen. The shell builds its
 `Workspace` with `HeadPlacement::External`, so a page holds only its screen and the head is shown once, in the top
-bar's head slots (`headPartsForActive()`: the lead under the title, the inline lead right after it, the trail at the
+bar's head slots (`headPartsForActive()`: the lead under the title, the inline lead on the title line, the trail at the
 line's trailing edge, with an `end` lead inside it), which the shell shows through an effect beside those mounts
 (`ShellFrame::setHeadShown(Workspace::activeHeadShown())`). A second effect lays the head out for the active screen:
 `setLeadInline` from `activeLeadPlacement()`, `setHeadOneLine` from `activeHeadOneLine()`, `setHeadJoined` from

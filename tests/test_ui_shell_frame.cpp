@@ -143,16 +143,20 @@ TEST_CASE("shell frame: the head shares the title's wrapping line, its slots sho
     // The second line and its scroll are gone.
     CHECK_FALSE(backend.find("Row", "testId", "shell_head_line").has_value());
     CHECK_FALSE(backend.find("Scroll", "testId", "shell_head_scroll").has_value());
-    // The wrapping row holds the menu, the lead block (the title over the lead slot), the inline lead slot and the
-    // trail slot.
+    // The wrapping row holds the menu, the lead block (the eyebrow, the title line and the lead slot) and the trail
+    // slot; the inline lead shares the title's line.
     CHECK(backend.prop(main, "wrap") == "true");
     CHECK(backend.prop(main, "justify") == "end");
-    REQUIRE(backend.children(main).size() == 4);
+    REQUIRE(backend.children(main).size() == 3);
     CHECK(backend.children(main).at(0) == menu);
     int const block = backend.children(main).at(1);
     CHECK(backend.prop(block, "layout") == "stretch(1) min=32/content");
-    CHECK(backend.children(block) == std::vector<int>{eyebrow, title, lead});
-    CHECK(backend.children(main).at(3) == slot);
+    int const titleLine = backend.find("Row", "testId", "shell_title_line").value();
+    int const inlineSlot = backend.find("Row", "testId", "shell_head_inline").value();
+    CHECK(backend.children(block) == std::vector<int>{eyebrow, titleLine, lead});
+    CHECK(backend.prop(titleLine, "wrap") == "true");
+    CHECK(backend.children(titleLine) == std::vector<int>{title, inlineSlot});
+    CHECK(backend.children(main).at(2) == slot);
     // The pad spacers are outside the wrapping row, so every line of it is padded at both ends.
     CHECK(within(backend, backend.find("Row", "testId", "shell_topbar_line").value(), main));
     CHECK_FALSE(backend.hasProp(backend.find("Row", "testId", "shell_topbar_line").value(), "wrap"));
@@ -317,8 +321,8 @@ TEST_CASE("shell frame: the compact top line pads its ends by step 1 and spaces 
     CHECK(backend.prop(main, "gap") == "3");
 }
 
-// Mutation: a no-op `setLeadInline`.
-TEST_CASE("shell frame: an inline lead moves the title block's minimum to the inline slot", "[ui][shell]") {
+// Mutation: a no-op `setLeadInline`, or size the lead block or the slot by the placement.
+TEST_CASE("shell frame: an inline lead shows its slot on the title's line and changes no sizing", "[ui][shell]") {
     RecordingBackend backend;
     std::vector<std::string> opened;
     int signOuts = 0;
@@ -326,16 +330,16 @@ TEST_CASE("shell frame: an inline lead moves the title block's minimum to the in
     int const main = backend.find("Row", "testId", "shell_topbar_main").value();
     int const inlineSlot = backend.find("Row", "testId", "shell_head_inline").value();
     int const block = backend.children(main).at(1);
-    int const trailSlot = backend.find("Row", "testId", "shell_head").value();
-    CHECK(backend.children(main) == std::vector<int>{backend.children(main).at(0), block, inlineSlot, trailSlot});
+    std::string const blockLayout = backend.prop(block, "layout");
+    std::string const slotLayout = backend.prop(inlineSlot, "layout");
 
     frame.setHeadShown(true);
     CHECK(backend.prop(inlineSlot, "visible") == "false");
     CHECK(backend.prop(block, "layout") == "stretch(1) min=32/content");
 
     frame.setLeadInline(true);
-    CHECK(backend.prop(block, "layout") == "content/content");
-    CHECK(backend.prop(inlineSlot, "layout") == "stretch(1) min=32/content");
+    CHECK(backend.prop(block, "layout") == blockLayout);
+    CHECK(backend.prop(inlineSlot, "layout") == slotLayout);
     CHECK(backend.prop(inlineSlot, "visible") == "true");
 
     frame.setHeadShown(false);

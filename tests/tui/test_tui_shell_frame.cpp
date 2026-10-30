@@ -185,3 +185,25 @@ TEST_CASE("tui shell frame: a lead at the end and an inline lead are drawn on th
     CHECK(row.find("BADGE") < row.find("ACTION"));
     CHECK(row.find("Review") < row.find("SUBTITLE"));
 }
+
+// Control: the old tree, with the inline slot beside the lead block in the top line (the trail is then the item that
+// drops, and ACTION is below the title's row).
+TEST_CASE("tui shell frame: an inline lead too wide for the title's row wraps under the title, the trail stays",
+          "[tui][shell]") {
+    FramedPage page{80};
+    page.frame->setTitle("Review of a long plate title");
+    ui::Text action{.text = std::string{"ACTION"}};
+    ui::Mounted const trailMount{page.runtime, page.backend, ui::text(std::move(action)), &page.frame->headSlot()};
+    ui::Text subtitle{.text = std::string{"SUBTITLE that is long enough not to fit beside the title"}};
+    ui::Mounted const inlineMount{page.runtime, page.backend, ui::text(std::move(subtitle)),
+                                  &page.frame->headInlineSlot()};
+    page.frame->setLeadInline(true);
+    page.frame->setHeadShown(true);
+    static_cast<void>(page.loop.runUntilIdle());
+    page.backend.fit();
+    page.screen.draw();
+    std::size_t const title = rowOf(page.screen, "Review of a long");
+    REQUIRE(title != std::string::npos);
+    CHECK(rowOf(page.screen, "ACTION") == title);
+    CHECK(rowOf(page.screen, "SUBTITLE") > title);
+}
