@@ -309,9 +309,9 @@ ui::AnyHandle whileSampled(Receipt const& receipt, ui::AnyHandle const& runs) {
 }
 
 ui::Node sampleHeading(Receipt const& receipt) {
-    auto const id = receipt.sample.at("id");
-    auto const heading = ui::text({.text = ui::format("Sample {0}", {id}),
-                                   .spans = whileSampled(receipt, ui::spans({"Sample ", ui::mono(id)})),
+    auto const sampleId = receipt.sample.at("id");
+    auto const heading = ui::text({.text = ui::format("Sample {0}", {sampleId}),
+                                   .spans = whileSampled(receipt, ui::spans({"Sample ", ui::mono(sampleId)})),
                                    .role = "section"})
                              .testId("sample-id");
     return ui::row({heading, layout::tag(receipt.sample.at("status"), "neutral")},

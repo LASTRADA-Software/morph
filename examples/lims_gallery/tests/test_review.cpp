@@ -25,7 +25,7 @@ std::string workspaceTabs(GalleryScreen& screen) {
 
 // Whether the shell insets the page: the first of its three inset spacers shows.
 bool pageInset(GalleryScreen& screen) {
-    int const page = screen.find("Column", "shell_page").value();
+    int const page = screen.find("Column", "shell_page").value_or(-1);
     return screen.backend().prop(screen.backend().children(page).at(0), "visible") != "false";
 }
 
@@ -137,7 +137,7 @@ TEST_CASE("review, expanded: the splitter fills the page, with the queue's entri
     screen.requireNoProblems();
     CHECK(screen.waitFor([&screen] { return !pageInset(screen); }));
     // The queue pane's head is padded by step 3, and its entries are a divided list with no padding of their own.
-    int const queue = screen.find("Column", "queue").value();
+    int const queue = screen.find("Column", "queue").value_or(-1);
     CHECK(screen.backend().prop(queue, "divided") == "true");
     CHECK_FALSE(screen.backend().hasProp(queue, "padding"));
     CHECK(screen.backend().find("Column", "padding", "3").has_value());

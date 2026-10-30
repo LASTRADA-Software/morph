@@ -595,10 +595,10 @@ ui::Node expandedLayout(Samples const& list) {
 ui::Node cardContent(Samples const& list) {
     auto const spec = ui::row("spec");
     // The id is an identifier: a strong run in the mono face.
-    auto const id = ui::text(
+    auto const idText = ui::text(
         {.text = ui::row("id"), .spans = ui::spans({ui::styled(ui::row("id"), {.strong = true, .mono = true})})});
     return ui::row({selectBox(list),
-                    ui::column({ui::row({id, dueText()}, {.gap = 1, .justify = Justify::Between}),
+                    ui::column({ui::row({idText, dueText()}, {.gap = 1, .justify = Justify::Between}),
                                 ui::text({.text = ui::format("{0} · {1}", {ui::row("short"), ui::row("tests")})}),
                                 ui::row({layout::outlineTag(ui::row("priority"), priorityTone(ui::row("priority"))),
                                          layout::tag(ui::row("status"), ui::row("statusTone")),

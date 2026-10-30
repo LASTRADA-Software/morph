@@ -13,11 +13,11 @@ namespace {
 constexpr char const* kScreen = "lims-gallery.receipt";
 
 // The runs of the sample heading: "Sample " and the sample's ID in the mono face.
-std::string heading(std::string const& id) { return "[Sample ," + id + ";mono]"; }
+std::string heading(std::string const& sampleId) { return "[Sample ," + sampleId + ";mono]"; }
 
 // The runs of the last rejection: the ID in the mono face, then the rest.
-std::string rejection(std::string const& id, std::string const& reason) {
-    return "[" + id + ";mono, rejected: " + reason + ".]";
+std::string rejection(std::string const& sampleId, std::string const& reason) {
+    return "[" + sampleId + ";mono, rejected: " + reason + ".]";
 }
 
 // Whether the text with @p testId comes to show @p runs.

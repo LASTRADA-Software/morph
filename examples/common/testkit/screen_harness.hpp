@@ -204,7 +204,7 @@ public:
         if (!found) {
             return std::nullopt;
         }
-        std::string plain = _backend.prop(*found, "text");
+        std::string const plain = _backend.prop(*found, "text");
         // A text with runs is recorded as its runs; its text is their characters, joined.
         return plain.empty() ? morph::ui::testing::detail::spansCharacters(_backend.prop(*found, "spans")) : plain;
     }
