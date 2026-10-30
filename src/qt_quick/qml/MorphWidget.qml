@@ -36,6 +36,12 @@ Item {
         const inset = holder ? holder["childBleedInset"] : undefined
         return inset !== undefined ? inset : 0
     }
+    // The width this widget's content cannot be narrower than, in pixels; -1 for none. A container binds it to its
+    // padding and its content's minimum, so an ancestor sees content that does not fit. A document's `minWidth` wins.
+    property real contentMinimumWidth: -1
+    // False for a widget whose container places it at a width of its own choosing (a table's cell, at its column's),
+    // which must not be pushed wider by its content.
+    property bool honoursContentMinimum: true
     property int minWidthUnits: -1
     property int maxWidthUnits: -1
     property int minHeightUnits: -1
@@ -234,7 +240,8 @@ Item {
     Layout.verticalStretchFactor: heightKind === 2 ? heightAmount : -1
     Layout.preferredWidth: widthKind === 1 ? widthAmount * Theme.unitWidth : -1
     Layout.preferredHeight: heightKind === 1 ? heightAmount * Theme.unitHeight : -1
-    Layout.minimumWidth: minWidthUnits >= 0 ? minWidthUnits * Theme.unitWidth : -1
+    Layout.minimumWidth: minWidthUnits >= 0 ? minWidthUnits * Theme.unitWidth
+                                            : honoursContentMinimum ? contentMinimumWidth : -1
     Layout.maximumWidth: maxWidthUnits >= 0 ? maxWidthUnits * Theme.unitWidth : -1
     Layout.minimumHeight: minHeightUnits >= 0 ? minHeightUnits * Theme.unitHeight : -1
     Layout.maximumHeight: maxHeightUnits >= 0 ? maxHeightUnits * Theme.unitHeight : -1
@@ -272,6 +279,77 @@ Item {
                 wrapMode: Text.Wrap
                 color: tipPopup.palette.toolTipText
             }
+        }
+    }
+
+    // What a container's content needs across its width and the width it has inside its padding, both in pixels; a
+    // container that checks binds them, and the others leave `needWidth` at -1.
+    property real needWidth: -1
+    property real haveWidth: 0
+    // The kind the report names the container by: `row`, `column`, `panel` or `table`.
+    property string overflowKind: ""
+    // Whether the container has reported its overflow; it reports once while it is mounted.
+    property bool overflowReported: false
+    // Whether the content is wider than the container by 2 px or more: layouts round each child's width, so a
+    // smaller shortfall is not one anybody sees.
+    readonly property bool overflowing: needWidth > 0 && needWidth >= haveWidth + 2
+
+    // The name of the child the report singles out, or empty; a container that can name one declares its own.
+    function overflowChild(): string {
+        return ""
+    }
+
+    // Where the container is, as the report names it: its test id, else the nearest ancestor that has one.
+    function whereAmI(): string {
+        if (root.objectName !== "")
+            return root.overflowKind + " `" + root.objectName + "`"
+        for (let up = root.parent as Item; up; up = up.parent) {
+            if ((up as MorphWidget) && up.objectName !== "")
+                return "a " + root.overflowKind + " inside `" + up.objectName + "`"
+        }
+        return "a " + root.overflowKind
+    }
+
+    // Whether the content is wider than the container, and the container is shown, sized and in a window: a hidden tab
+    // page, a folded section, a closed overlay and a start-up before the window has its size are not.
+    readonly property bool overflowCheckable: root.overflowing && root.visible && root.width > 0 &&
+                                              root.Window.window !== null
+
+    // Reports the overflow once. It is checked again after the layout has settled, since the width and the content's
+    // minimum settle over several passes.
+    function checkOverflow() {
+        if (root.overflowReported || !root.overflowCheckable)
+            return
+        root.overflowReported = true
+        root.fire("overflow", {
+            "where": root.whereAmI(),
+            "need": Math.ceil(root.needWidth),
+            "have": Math.floor(root.haveWidth),
+            "child": root.overflowChild(),
+            "table": root.overflowKind === "table"
+        })
+    }
+
+    // The check waits for the layout to settle: a window resize polishes the items after the events already queued, so
+    // a check posted at once would read the widths the old size left. The timer is made the first time a container
+    // overflows, so a widget that never does carries none.
+    property Timer overflowTimer: null
+    Component {
+        id: overflowTimerComponent
+
+        Timer {
+            interval: 60
+            onTriggered: root.checkOverflow()
+        }
+    }
+
+    onOverflowCheckableChanged: {
+        if (root.overflowCheckable) {
+            if (root.overflowTimer === null)
+                root.overflowTimer = overflowTimerComponent.createObject(root) as Timer
+            root.overflowTimer.restart()
+        } else if (root.overflowTimer !== null) {
+            root.overflowTimer.stop()
         }
     }
 

@@ -27,6 +27,53 @@ Item {
         return false
     }
 
+    // The width the roots cannot be narrower than: a column never lays a root out narrower than its minimum, so a root
+    // is as wide as its content and the window cuts the rest off. The window reports that, once, as a container does.
+    readonly property real needWidth: column.Layout.minimumWidth
+    readonly property bool overflowing: needWidth > 0 && needWidth >= width + 2 && width > 0 && Window.window !== null
+    property bool overflowReported: false
+
+    // The root whose minimum alone exceeds the window's width, or empty.
+    function overflowChild(): string {
+        let found = ""
+        let widest = root.width
+        for (const object of column.children) {
+            const child = object as MorphWidget
+            if (child && child.visible && child.Layout.minimumWidth > widest) {
+                widest = child.Layout.minimumWidth
+                found = child.objectName
+            }
+        }
+        return found
+    }
+
+    function checkOverflow() {
+        if (root.overflowReported || !root.overflowing || !root.host)
+            return
+        root.overflowReported = true
+        root.host.fire("overflow", {
+            "where": "the window",
+            "need": Math.ceil(root.needWidth),
+            "have": Math.floor(root.width),
+            "child": root.overflowChild(),
+            "table": false
+        })
+    }
+
+    // Checked once the layout has settled, as a container's is.
+    Timer {
+        id: overflowTimer
+        interval: 60
+        onTriggered: root.checkOverflow()
+    }
+
+    onOverflowingChanged: {
+        if (root.overflowing)
+            overflowTimer.restart()
+        else
+            overflowTimer.stop()
+    }
+
     anchors.fill: parent
 
     // The window behind every surface.

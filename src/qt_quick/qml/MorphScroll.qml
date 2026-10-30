@@ -15,6 +15,15 @@ MorphWidget {
     property Component bar: null
     // The bar made from `bar`, or null without one.
     property ScrollBar barItem: null
+    // The horizontal bar of a vertical scroll, shown while its content cannot be narrower than the viewport.
+    property ScrollBar sideBarItem: null
+    // The width the content cannot be narrower than; a shortfall under 2 px is layout rounding. Only a vertical scroll
+    // scrolls sideways this way: a horizontal one is as wide as its content already.
+    readonly property real needX: column.Layout.minimumWidth
+    readonly property bool overX: root.axis === 0 && needX > flick.width + 2
+    needWidth: root.axis === 0 ? root.needX : -1
+    haveWidth: flick.width
+    overflowKind: "scroll"
 
     // Scrolls so that `item`, somewhere inside the content, is in view.
     function reveal(item: Item) {
@@ -45,19 +54,22 @@ MorphWidget {
 
     Flickable {
         id: flick
+        objectName: "flick"
         anchors.fill: parent
-        contentWidth: root.axis === 0 ? width : column.width
+        contentWidth: root.axis === 0 ? (root.overX ? root.needX : width) : column.width
         contentHeight: root.axis === 0 ? column.implicitHeight : height
-        flickableDirection: root.axis === 0 ? Flickable.VerticalFlick : Flickable.HorizontalFlick
+        flickableDirection: root.axis === 1 ? Flickable.HorizontalFlick
+                                            : root.overX ? Flickable.HorizontalAndVerticalFlick
+                                                         : Flickable.VerticalFlick
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: root.axis === 0 ? root.barItem : null
-        ScrollBar.horizontal: root.axis === 1 ? root.barItem : null
+        ScrollBar.horizontal: root.axis === 1 ? root.barItem : root.sideBarItem
 
         // Along a horizontal axis the content is at least the viewport's width, so a child that stretches fills the
         // viewport while it is narrower, and scrolls once it is wider; the terminal sizes it the same way.
         ColumnLayout {
             id: column
-            width: root.axis === 0 ? flick.width : Math.max(implicitWidth, flick.width)
+            width: root.axis === 0 ? (root.overX ? root.needX : flick.width) : Math.max(implicitWidth, flick.width)
         }
     }
 
@@ -67,6 +79,13 @@ MorphWidget {
         if (root.bar)
             root.barItem = root.bar.createObject(flick, {
                 orientation: root.axis === 0 ? Qt.Vertical : Qt.Horizontal,
+                scheme: Qt.binding(() => root.scheme)
+            }) as ScrollBar
+        if (root.bar && root.axis === 0)
+            root.sideBarItem = root.bar.createObject(flick, {
+                orientation: Qt.Horizontal,
+                policy: ScrollBar.AlwaysOn,
+                visible: Qt.binding(() => root.overX),
                 scheme: Qt.binding(() => root.scheme)
             }) as ScrollBar
     }

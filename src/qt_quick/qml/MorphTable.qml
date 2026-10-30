@@ -56,6 +56,12 @@ MorphWidget {
     // imprecise scrollbar thumb position until enough real rows have been measured to average.
     property real estimatedRowHeight: Theme.unitHeight + 2 * Theme.tableCellPaddingY
     readonly property Item content: body
+    // The sideways scroll's bar, made from the `scrollBar` part (`MorphScrollBar` or its restyle), which C++ passes at
+    // creation; null without one.
+    property Component bar: null
+    property ScrollBar barItem: null
+    // The bar takes the height it needs along the table's foot while it shows, so the rows end above it.
+    readonly property real barHeight: hflick.interactive && root.barItem ? root.barItem.implicitHeight : 0
     // What draws under the header's column labels: MorphTableHeaderBackground, or the `tableHeader` restyle. C++
     // sets it when it makes the table.
     property Component headerBackground: null
@@ -314,7 +320,12 @@ MorphWidget {
     // dewindows, which is the "table visually collapses" symptom this design exists to avoid, not just the
     // underlying widget cost.
     implicitHeight: (root.showHeader ? header.implicitHeight : 0) + body.implicitHeight +
-                    (root.virtualized ? (root.totalRows - root.realizedCount) * root.estimatedRowHeight : 0)
+                    (root.virtualized ? (root.totalRows - root.realizedCount) * root.estimatedRowHeight : 0) +
+                    root.barHeight
+    // A table whose columns are wider than it scrolls sideways, and says so once.
+    needWidth: root.columnsWidth
+    haveWidth: root.width
+    overflowKind: "table"
 
     FontMetrics {
         id: headerMetrics
@@ -334,10 +345,7 @@ MorphWidget {
         interactive: root.columnsWidth > width
         clip: interactive
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.horizontal: MorphScrollBar {
-            scheme: root.scheme
-            visible: hflick.interactive
-        }
+        ScrollBar.horizontal: root.barItem
 
         Item {
             id: headerArea
@@ -452,7 +460,8 @@ MorphWidget {
             objectName: "flick"
             y: headerArea.height
             width: hflick.contentWidth
-            height: root.virtualized ? Math.max(0, hflick.height - headerArea.height) : body.implicitHeight
+            height: root.virtualized ? Math.max(0, hflick.height - headerArea.height - root.barHeight)
+                                     : body.implicitHeight
             clip: root.virtualized
             interactive: root.virtualized
             flickableDirection: Flickable.VerticalFlick
@@ -526,4 +535,17 @@ MorphWidget {
 
     onRealizedFirstChanged: root.remeasureRowHeight()
     onRealizedCountChanged: root.remeasureRowHeight()
+
+    // The bar is a child of the flickable itself, not of its content: the attached ScrollBar lays out only a bar whose
+    // parent is the flickable. It is always on while the table scrolls, so a table at rest does not look cut off.
+    Component.onCompleted: {
+        if (root.bar) {
+            root.barItem = root.bar.createObject(hflick, {
+                orientation: Qt.Horizontal,
+                visible: Qt.binding(() => hflick.interactive),
+                scheme: Qt.binding(() => root.scheme)
+            }) as ScrollBar
+            root.barItem.policy = Qt.binding(() => hflick.interactive ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded)
+        }
+    }
 }

@@ -163,6 +163,8 @@ of a panel, slot or scroll area, fills its width the same way, and a grid row is
 requested height clamped into that cell's bounds. A widget's requested size, which a container's natural size sums,
 is its natural size clamped into its bounds.
 
+**Content that does not fit.** The terminal cuts content at its container's edge. It neither reports it nor scrolls a page sideways: it has no diagnostics channel that does not draw over the screen, and a table's columns past its edge cannot be reached.
+
 **Bleed.** A shown child whose layout says `bleed` takes the whole width of its container past the padding (`bleedAreas`): a column's, the inner edges of a panel's frame, a tabs node's, whatever the page inset; its place down the container is unchanged. The terminal clips a child to its parent's area, so a holder stack (`setPassesBleed`) is laid out by its container over the container's whole span, past the padding (`bleedAreas` widens it as it does a bleeding child), and pads its own children by the container's `bleedColumns` instead; its bleeding children then take the holder's whole width.
 
 **Alignment.** Across the axis a child's `alignSelf`, else its stack's `align`, places it (`slotOf`): under `start`,

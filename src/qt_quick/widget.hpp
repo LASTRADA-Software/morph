@@ -13,6 +13,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "qt_quick/context.hpp"
@@ -256,11 +257,21 @@ void FieldItemWidget<Interface>::setErrors(std::vector<std::string> const& error
     this->write("errors", toStringList(errors));
 }
 
+/// Writes what a container reports when its content does not fit its width as a warning of the `morph.layout`
+/// category: where it is, how much it needs and has, and the child that is wider than it, when one is. @p payload is
+/// the map the container's QML fires: `where`, `need`, `have`, `child` and `table`.
+void reportOverflow(QVariant const& payload);
+
 /// A container whose children go in the item its `content` property names.
 template <class Interface>
 class ContainerItemWidget : public ItemWidget<Interface>, public ContainerCore {
 public:
-    using ItemWidget<Interface>::ItemWidget;
+    /// Makes the item as @p arguments say, and hears the container's report that its content does not fit.
+    template <class... Arguments>
+    explicit ContainerItemWidget(Arguments&&... arguments)
+        : ItemWidget<Interface>{std::forward<Arguments>(arguments)...} {
+        this->relay().on(QStringLiteral("overflow"), &reportOverflow);
+    }
     ~ContainerItemWidget() override = default;
     ContainerItemWidget(ContainerItemWidget const&) = delete;
     ContainerItemWidget& operator=(ContainerItemWidget const&) = delete;

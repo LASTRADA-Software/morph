@@ -13,12 +13,24 @@ MorphWidget {
 
     readonly property Item content: column
     property bool scrollable: false
-    // Whether the viewport scrolls now: scrollable, and no shown child that stretches down fits.
-    readonly property bool scrolls: scrollable && (!stretchesDown || stretchFloor > root.height)
-    // The bar's part, `MorphScrollBar` or its restyle, which C++ passes at creation.
+    // The width the content cannot be narrower than; a shortfall under 2 px is layout rounding, not content that
+    // does not fit.
+    readonly property real needX: column.Layout.minimumWidth
+    readonly property bool overX: scrollable && needX > root.width + 2
+    // A slot reports content that is wider than it, whether it scrolls sideways or cuts it off.
+    needWidth: root.needX
+    haveWidth: root.width
+    overflowKind: "page"
+    // Whether the viewport scrolls down now: scrollable, and no shown child that stretches down fits.
+    readonly property bool scrollsDown: scrollable && (!stretchesDown || stretchFloor > root.height)
+    // Whether the viewport scrolls now, in either direction.
+    readonly property bool scrolls: scrollsDown || overX
+    // The bars' part, `MorphScrollBar` or its restyle, which C++ passes at creation.
     property Component bar: null
-    // The bar made from `bar`, or null without one.
+    // The vertical bar made from `bar`, or null without one.
     property ScrollBar barItem: null
+    // The horizontal bar made from `bar`, or null without one.
+    property ScrollBar sideBarItem: null
 
     implicitWidth: column.implicitWidth
     implicitHeight: column.implicitHeight
@@ -55,29 +67,45 @@ MorphWidget {
                     flick.contentY = at.y
                 else if (at.y + item.height > flick.contentY + flick.height)
                     flick.contentY = at.y + item.height - flick.height
+                if (root.overX) {
+                    if (at.x < flick.contentX)
+                        flick.contentX = at.x
+                    else if (at.x + item.width > flick.contentX + flick.width)
+                        flick.contentX = at.x + item.width - flick.width
+                }
                 return
             }
         }
     }
 
     onScrollsChanged: {
-        if (!scrolls)
+        if (!scrolls) {
             flick.contentY = 0
+            flick.contentX = 0
+        }
+    }
+    onOverXChanged: {
+        if (!overX)
+            flick.contentX = 0
     }
 
     Flickable {
         id: flick
+        objectName: "flick"
         anchors.fill: parent
         interactive: root.scrolls
-        contentWidth: width
-        contentHeight: root.scrolls ? column.height : height
-        flickableDirection: Flickable.VerticalFlick
+        contentWidth: root.overX ? root.needX : width
+        contentHeight: root.scrollsDown ? column.height : height
+        flickableDirection: root.overX && root.scrollsDown ? Flickable.HorizontalAndVerticalFlick
+                                                           : root.overX ? Flickable.HorizontalFlick
+                                                                        : Flickable.VerticalFlick
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: root.barItem
+        ScrollBar.horizontal: root.sideBarItem
 
         ColumnLayout {
             id: column
-            width: flick.width
+            width: root.overX ? root.needX : flick.width
             height: root.stretchesDown ? Math.max(flick.height, root.stretchFloor) : implicitHeight
             spacing: 0
         }
@@ -89,7 +117,14 @@ MorphWidget {
         if (root.bar)
             root.barItem = root.bar.createObject(flick, {
                 orientation: Qt.Vertical,
-                visible: Qt.binding(() => root.scrolls),
+                visible: Qt.binding(() => root.scrollsDown),
+                scheme: Qt.binding(() => root.scheme)
+            }) as ScrollBar
+        if (root.bar)
+            root.sideBarItem = root.bar.createObject(flick, {
+                orientation: Qt.Horizontal,
+                policy: ScrollBar.AlwaysOn,
+                visible: Qt.binding(() => root.overX),
                 scheme: Qt.binding(() => root.scheme)
             }) as ScrollBar
     }

@@ -20,8 +20,10 @@ namespace morph::qt_quick::detail {
 TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
     : ContainerItemWidget{
           context, QStringLiteral("MorphTable"), parent,
-          QVariantMap{{QStringLiteral("headerBackground"),
-                       QVariant::fromValue(&context.component(QStringLiteral("MorphTableHeaderBackground")))}}} {
+          QVariantMap{
+              {QStringLiteral("headerBackground"),
+               QVariant::fromValue(&context.component(QStringLiteral("MorphTableHeaderBackground")))},
+              {QStringLiteral("bar"), QVariant::fromValue(&context.component(QStringLiteral("MorphScrollBar")))}}} {
     relay().on(QStringLiteral("scroll"), [this](QVariant const& payload) {
         QVariantMap const map = payload.toMap();
         scrolled(static_cast<std::size_t>(std::max<qlonglong>(0, map.value(QStringLiteral("first")).toLongLong())),
@@ -336,6 +338,9 @@ void TableRowImpl::adopted(ItemBase& child) {
     if (cell == nullptr || item() == nullptr) {
         return;
     }
+    // The table places each cell at its column's width, so a cell whose content is wider keeps its column and is cut
+    // there, rather than pushing its row out of line with the header.
+    child.offer("honoursContentMinimum", false);
     // The row places its cells by column and sizes itself to the tallest; a cell whose content arrives later, or
     // changes, places them again. The row's item is the connection's context, and the call goes through it, not
     // through this widget, which may be gone while Qt still holds the item.

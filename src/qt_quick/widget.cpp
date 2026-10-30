@@ -3,6 +3,7 @@
 #include "qt_quick/widget.hpp"
 
 #include <QAccessible>
+#include <QLoggingCategory>
 #include <QMetaObject>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -17,6 +18,28 @@
 #include "qt_quick/keys.hpp"
 
 namespace morph::qt_quick::detail {
+
+namespace {
+
+Q_LOGGING_CATEGORY(lcLayout, "morph.layout")
+
+}  // namespace
+
+void reportOverflow(QVariant const& payload) {
+    QVariantMap const map = payload.toMap();
+    QString const where = map.value(QStringLiteral("where")).toString();
+    int const need = map.value(QStringLiteral("need")).toInt();
+    int const have = map.value(QStringLiteral("have")).toInt();
+    QString const child = map.value(QStringLiteral("child")).toString();
+    if (map.value(QStringLiteral("table")).toBool()) {
+        qCWarning(lcLayout).noquote() << where << "scrolls sideways: its columns need" << need << "px and it has"
+                                      << have << "px";
+        return;
+    }
+    QString const cause = child.isEmpty() ? QStringLiteral("its children neither wrap nor shrink")
+                                          : QStringLiteral("`%1` and its siblings neither wrap nor shrink").arg(child);
+    qCWarning(lcLayout).noquote() << where << "needs" << need << "px and has" << have << "px:" << cause;
+}
 
 QStringList toStringList(std::vector<std::string> const& texts) {
     QStringList list;

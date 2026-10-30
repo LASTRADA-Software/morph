@@ -59,7 +59,7 @@ answers them by index over its order.
   slot is scrollable (`SlotWidget::setScrollable(true)`): a screen whose root keeps its content height is shown at
   that height and scrolls inside the page, so no screen is cut off at the window's edge. Scrolling every page
   instead would leave a stretching root no height to stretch to. A stretching root is never shorter than its
-  `minHeight`: while the page is shorter than that, the page scrolls it at that height.
+  `minHeight`: while the page is shorter than that, the page scrolls it at that height. A page whose content cannot be narrower than the page (a row of content-sized children wider than the window, say) scrolls sideways on Qt Quick and shows a horizontal bar; one that fits is laid out at the page's width.
 - `WorkspaceOptions::screens` gives a screen id's catalog facts, `WorkspaceScreen{singleton, reuseEmpty, host,
   available}`; empty treats every screen as a plain, available document screen.
 - Tabs keep the order they were opened in, so a page slot's index is its tab's. `tabs()` lists them as

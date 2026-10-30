@@ -12,8 +12,11 @@
 #include <QPointF>
 #include <QQuickItem>
 #include <QSizeF>
+#include <QStringList>
+#include <QTest>
 #include <QVariantList>
 #include <algorithm>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <cstddef>
@@ -30,6 +33,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -1002,4 +1006,109 @@ TEST_CASE("qt_quick table: an overline cell keeps its capitals and letter spacin
     CHECK(font.featureValue(QFont::Tag{"tnum"}) == 1);
     CHECK(font.capitalization() == QFont::AllUppercase);
     CHECK(font.letterSpacing() > 0.0);
+}
+
+namespace {
+
+// The warnings of the `morph.layout` category, collected while a `TableWatch` lives.
+QStringList& tableWarnings() {
+    static QStringList warnings;
+    return warnings;
+}
+
+QtMessageHandler& previousTableHandler() {
+    static QtMessageHandler previous = nullptr;
+    return previous;
+}
+
+void collectTableWarnings(QtMsgType type, QMessageLogContext const& context, QString const& message) {
+    if (type == QtWarningMsg && context.category != nullptr && std::string_view{context.category} == "morph.layout") {
+        tableWarnings().append(message);
+    } else if (previousTableHandler() != nullptr) {
+        previousTableHandler()(type, context, message);
+    }
+}
+
+class TableWatch {
+public:
+    TableWatch() : _previous{qInstallMessageHandler(collectTableWarnings)} {
+        previousTableHandler() = _previous;
+        tableWarnings().clear();
+    }
+    ~TableWatch() { qInstallMessageHandler(_previous); }
+    TableWatch(TableWatch const&) = delete;
+    TableWatch& operator=(TableWatch const&) = delete;
+    TableWatch(TableWatch&&) = delete;
+    TableWatch& operator=(TableWatch&&) = delete;
+
+private:
+    QtMessageHandler _previous;
+};
+
+}  // namespace
+
+// Mutation: leave the bar to the Basic style's own (hidden at rest), draw it over the last row, or report nothing.
+TEST_CASE("qt_quick table: a table that scrolls sideways shows its bar at rest, above the rows, and says so once",
+          "[qt_quick]") {
+    TableWatch const watch;
+    Scene scene;
+    WideTable const wide{scene, 60};
+    wide.table->setTestId("conditions");
+    scene.settle();
+    QTest::qWait(150);
+    QQuickItem const& tableItem = Scene::itemOf(*wide.table);
+    auto const* const hflick = tableItem.findChild<QQuickItem*>(QStringLiteral("hflick"));
+    REQUIRE(hflick != nullptr);
+    REQUIRE(hflick->property("interactive").toBool());
+    auto const* const bar = qobject_cast<QQuickItem*>(tableItem.property("barItem").value<QObject*>());
+    REQUIRE(bar != nullptr);
+    CHECK(bar->isVisible());
+    // The scrollBar part's instance: a restyle replaces it, and the plain bar carries the scroll area's scheme.
+    CHECK(bar->property("scheme").isValid());
+    CHECK(bar->property("policy").toInt() == 2);
+    // The rows end above the bar.
+    QQuickItem const& rowItem = Scene::itemOf(*wide.row);
+    CHECK(rowItem.mapToItem(hflick, QPointF{0, rowItem.height()}).y() <= bar->y() + 0.5);
+    REQUIRE(tableWarnings().size() == 1);
+    CHECK(tableWarnings().front().contains(QStringLiteral("table")));
+    CHECK(tableWarnings().front().contains(QStringLiteral("scrolls sideways: its columns need")));
+
+    // A table that fits has no bar and says nothing.
+    tableWarnings().clear();
+    Scene roomy;
+    roomy.window().resize(2000, 600);
+    WideTable const fits{roomy, 200};
+    auto const* const fitBar =
+        qobject_cast<QQuickItem*>(Scene::itemOf(*fits.table).property("barItem").value<QObject*>());
+    REQUIRE(fitBar != nullptr);
+    CHECK_FALSE(fitBar->isVisible());
+    QTest::qWait(150);
+    CHECK(tableWarnings().isEmpty());
+}
+
+// Mutation: leave `honoursContentMinimum` on for a table row's cells (the cell is as wide as its content, and the row
+// is out of line with the header).
+TEST_CASE("qt_quick table: a cell whose content is wider than its column keeps its column", "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns(
+        {{.label = "Sample", .width = ui::Sizing::fixed(10)}, {.label = "Lot", .width = ui::Sizing::fixed(10)}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    auto packed = scene.backend().createStack(row.get(), ui::Axis::Horizontal);
+    auto first = scene.backend().createText(packed.get());
+    first->setText("a long sample identifier");
+    auto second = scene.backend().createText(packed.get());
+    second->setText("and a second long identifier");
+    auto lot = scene.backend().createText(row.get());
+    lot->setText("L-1");
+    scene.settle();
+    QQuickItem const& tableItem = Scene::itemOf(*table);
+    QVariantList const widths = tableItem.property("widths").toList();
+    REQUIRE(widths.size() == 2);
+    QQuickItem const& packedItem = Scene::itemOf(*packed);
+    QQuickItem const& lotItem = Scene::itemOf(*lot);
+    CHECK(packedItem.width() <= widths.at(0).toReal() + 0.5);
+    CHECK(lotItem.mapToItem(&tableItem, QPointF{0, 0}).x() - packedItem.mapToItem(&tableItem, QPointF{0, 0}).x() ==
+          Catch::Approx(widths.at(0).toReal()).margin(1.0));
 }
