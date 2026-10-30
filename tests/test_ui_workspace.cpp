@@ -108,6 +108,12 @@ constexpr std::string_view kEyebrowOnly = R"({
     { "kind": "button", "testId": "clear", "label": "clear", "onClick": [ { "set": "lineShown", "value": false } ] }
   ] } })";
 
+/// A screen whose root lays itself at the page's edges.
+constexpr std::string_view kEdgeRoot = R"({
+  "vocab": "ui/1", "id": "edgeroot", "title": "Pinned",
+  "view": { "kind": "column", "pageEdge": true, "children": [
+    { "kind": "text", "testId": "body", "text": "x" } ] } })";
+
 /// A screen whose head has only a menu: an entry, a separator, an entry shown while `retireShown`, and a submenu.
 constexpr std::string_view kMenued = R"({
   "vocab": "ui/1", "id": "menued", "title": "Instrument", "menuLabel": "More instrument actions",
@@ -254,6 +260,7 @@ private:
             {"badtitle", loadOrFail(kBadTitle, morph::ui::testing::corpusCatalog())},
             {"eyebrowruns", loadOrFail(kEyebrowRuns, morph::ui::testing::corpusCatalog())},
             {"eyebrowonly", loadOrFail(kEyebrowOnly, morph::ui::testing::corpusCatalog())},
+            {"edgeroot", loadOrFail(kEdgeRoot, morph::ui::testing::corpusCatalog())},
             {"menued", loadOrFail(kMenued, morph::ui::testing::corpusCatalog())},
             {"tooled", loadOrFail(kTooled, morph::ui::testing::corpusCatalog())},
             {"asker", loadOrFail(kAsker, morph::ui::testing::corpusCatalog())},
@@ -1322,4 +1329,22 @@ TEST_CASE("workspace: the in-page head shows its eyebrow above the head row", "[
     int const block = harness.byTestId("Column", "head_block");
     CHECK(harness.backend.children(block) == std::vector<int>{eyebrow, head});
     CHECK(harness.backend.prop(eyebrow, "spans") == "[Worksheet ,WS-1;mono]");
+}
+
+// Mutation: ignore the tab strip (the second check fails), or ignore the screen's flag (the first fails).
+TEST_CASE("workspace: the page is uninset around a lone screen that insets itself, and inset again with a second tab",
+          "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    CHECK(shell.activePageInset());
+    REQUIRE(shell.open("edgeroot", {}) == 0U);
+    harness.settle();
+    CHECK_FALSE(shell.activePageInset());
+    REQUIRE(shell.open("headed", {}) == 1U);
+    harness.settle();
+    CHECK(shell.activePageInset());
+    shell.activate(0);
+    harness.settle();
+    CHECK(shell.activePageInset());
 }

@@ -260,3 +260,28 @@ TEST_CASE("shell frame: the title draws a screen's runs in place of its plain ti
     frame.setTitleSpans({});
     CHECK(backend.prop(title, "text") == "Plate PL-0200");
 }
+
+// Control: make `setPageInset` a no-op (the spacers stay shown).
+TEST_CASE("shell frame: a frame insets its page until it is told the screen insets itself", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const page = backend.find("Column", "testId", "shell_page").value();
+    REQUIRE(backend.children(page).size() == 2);
+    int const top = backend.children(page).at(0);
+    int const padded = backend.children(page).at(1);
+    REQUIRE(backend.children(padded).size() == 3);
+    int const left = backend.children(padded).at(0);
+    int const right = backend.children(padded).at(2);
+
+    CHECK_FALSE(backend.hasProp(top, "visible"));
+    frame.setPageInset(false);
+    for (int const spacer : {top, left, right}) {
+        CHECK(backend.prop(spacer, "visible") == "false");
+    }
+    frame.setPageInset(true);
+    for (int const spacer : {top, left, right}) {
+        CHECK(backend.prop(spacer, "visible") == "true");
+    }
+}

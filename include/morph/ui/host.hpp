@@ -66,6 +66,12 @@ public:
     ///         its last value once the screen is closed.
     [[nodiscard]] virtual reactive::Computed<std::vector<TextSpan>> const* titleSpans() const { return nullptr; }
 
+    /// @brief Whether the screen's shown root lays itself at the page's edges, so a shell leaves the page uninset
+    ///        around it (the document's `pageEdge` on the root, seen through `switch` cases).
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default, which a
+    ///         shell insets. It keeps its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<bool> const* pageEdge() const { return nullptr; }
+
     /// @brief The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none.
     /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
     ///         its last value once the screen is closed.
@@ -756,6 +762,7 @@ private:
         [[nodiscard]] reactive::Computed<std::vector<TextSpan>> const* titleSpans() const override {
             return &_state->titleSpans;
         }
+        [[nodiscard]] reactive::Computed<bool> const* pageEdge() const override { return &_state->pageEdge; }
         [[nodiscard]] reactive::Computed<std::string> const* eyebrow() const override { return &_state->eyebrow; }
         [[nodiscard]] reactive::Computed<std::vector<TextSpan>> const* eyebrowSpans() const override {
             return &_state->eyebrowSpans;
@@ -889,6 +896,13 @@ private:
                                  }
                                  return lastTitleSpans;
                              }},
+                  pageEdge{*runtime,
+                           [this] {
+                               if (!closed.get() && generation.get() >= 0) {
+                                   lastPageEdge = screen->pageEdge();
+                               }
+                               return lastPageEdge;
+                           }},
                   eyebrow{*runtime,
                           [this] {
                               if (!closed.get() && generation.get() >= 0) {
@@ -1097,6 +1111,7 @@ private:
                     lastTitle = detail::host::titleText(screen->title());
                     lastIdentity = screen->identity();
                     lastTitleSpans = screen->titleSpans();
+                    lastPageEdge = screen->pageEdge();
                     lastEyebrow = detail::host::titleText(screen->eyebrow());
                     lastEyebrowSpans = screen->eyebrowSpans();
                     lastSubtitle = detail::host::titleText(screen->subtitle());
@@ -1136,6 +1151,7 @@ private:
             std::string lastTitle;
             Value lastIdentity;
             std::vector<TextSpan> lastTitleSpans;
+            bool lastPageEdge = false;
             std::string lastEyebrow;
             std::vector<TextSpan> lastEyebrowSpans;
             std::string lastSubtitle;
@@ -1151,6 +1167,7 @@ private:
             reactive::Computed<bool> dirty;
             reactive::Computed<Value> identity;
             reactive::Computed<std::vector<TextSpan>> titleSpans;
+            reactive::Computed<bool> pageEdge;
             reactive::Computed<std::string> eyebrow;
             reactive::Computed<std::vector<TextSpan>> eyebrowSpans;
             reactive::Computed<std::string> subtitle;

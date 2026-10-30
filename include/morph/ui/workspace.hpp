@@ -384,6 +384,21 @@ public:
         return tab ? titleSpansOf(headOf(*tab)) : std::vector<TextSpan>{};
     }
 
+    /// @brief Whether the shell insets the page around the active tab's screen. A tracked read. The page is inset with
+    ///        no active tab and while the workspace's tab strip shows (two tabs or more), since the strip is a child
+    ///        of the page and would otherwise touch the window's edges; with one tab it is inset unless the screen's
+    ///        shown root lays itself at the page's edges (`ScreenHead::pageEdge`).
+    /// @return Whether the page is inset.
+    [[nodiscard]] bool activePageInset() const {
+        std::optional<WorkspaceTabId> const tab = _model->active().get();
+        if (!tab || _model->tabs().get().size() > 1) {
+            return true;
+        }
+        ScreenHead const* const head = headOf(*tab);
+        reactive::Computed<bool> const* const edge = head == nullptr ? nullptr : head->pageEdge();
+        return edge == nullptr || !edge->get();
+    }
+
     /// @brief Whether the active tab's head shows anything: an eyebrow, a subtitle, a badge, a tool, an action or a
     ///        menu entry. A tracked read, so a
     ///        shell that shows the head on a line of its own follows a tab switch and a head's own changes; the head

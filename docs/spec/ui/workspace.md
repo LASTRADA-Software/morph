@@ -150,7 +150,10 @@ the lead row too would raise the block's natural width to 32 units whenever the 
 beside a short lead would wrap to a line of its own. The in-page head's lead keeps its minimum, which is the rule there. The head's eyebrow (`HeadParts::eyebrow`, `head_eyebrow`) is the screen's `eyebrowSpans` as the muted text's runs when
 it gives them, else its plain `eyebrow` as one run, hidden while there is none; a shell draws it above the title, and
 the in-page head draws it as a line above the head row (`head_block`, a column of the eyebrow and `head`). A head with
-only an eyebrow has content. `activeTitleSpans()` is a tracked read of the active tab's title runs, empty while the screen gives none: a shell
+only an eyebrow has content. `activePageInset()` is a tracked read of whether the shell insets the page: true with no active tab, true while the
+tab strip shows (two tabs or more: the strip is a child of the page and would touch the window's edges), and
+otherwise false exactly when the active screen's head reports `pageEdge` (a host screen's head reports none, so its
+page is inset). `activeTitleSpans()` is a tracked read of the active tab's title runs, empty while the screen gives none: a shell
 draws them in its top bar in place of the tab's caption, and follows them as the screen's state changes, which the
 `onChanged` callback on a caption does not report. `activeHeadShown()` is a tracked read: true while the active
 tab's head has a subtitle, a badge, a tool, an action or a menu entry. It and the parts' own visibility share one rule,

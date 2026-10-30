@@ -1378,60 +1378,6 @@ TEST_CASE("qt_quick containers: tabs that do not fit go into a More menu that ch
     }
 }
 
-// Mutation: a stack that ignores `selected` draws no bar and keeps the Client role.
-TEST_CASE("qt_quick containers: a selected stack draws the accent bar at its leading edge and is a selected group",
-          "[qt_quick]") {
-    Scene scene;
-    scene.window().resize(400, 300);
-    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
-    REQUIRE(theme != nullptr);
-    theme->setProperty("surface", QColor{"#fafad2"});
-    theme->setProperty("accent", QColor{"#17784a"});
-    auto root = scene.backend().createStack(nullptr, ui::Axis::Vertical);
-    auto card = scene.backend().createStack(root.get(), ui::Axis::Vertical);
-    card->setSurface("bar");
-    card->setPadding(2);
-    card->setSelected(true);
-    auto label = scene.backend().createText(card.get());
-    label->setText("card");
-    auto plain = scene.backend().createStack(root.get(), ui::Axis::Vertical);
-    plain->setPadding(2);
-    auto other = scene.backend().createText(plain.get());
-    other->setText("plain");
-    scene.settle();
-
-    QQuickItem& item = Scene::itemOf(*card);
-    auto* const bar = item.findChild<QQuickItem*>(QStringLiteral("selectionBar"));
-    REQUIRE(bar != nullptr);
-    CHECK(bar->isVisible());
-    CHECK(bar->width() == 3.0);
-    CHECK(bar->x() == 0.0);
-    CHECK(bar->height() == item.height());
-    CHECK(bar->property("color").value<QColor>() == QColor{"#17784a"});
-    QImage const image = scene.window().grabWindow();
-    QPointF const origin = item.mapToScene(QPointF{});
-    int const y = static_cast<int>(origin.y() + item.height() / 2);
-    CHECK(image.pixelColor(static_cast<int>(origin.x()) + 1, y) == QColor{"#17784a"});
-    CHECK(image.pixelColor(static_cast<int>(origin.x()) + 5, y) == QColor{"#fafad2"});
-
-    bool const wasActive = QAccessible::isActive();
-    QAccessible::setActive(true);
-    QAccessibleInterface* const node = QAccessible::queryAccessibleInterface(&item);
-    REQUIRE(node != nullptr);
-    CHECK(node->role() == QAccessible::Grouping);
-    CHECK(node->state().selected);
-    QAccessibleInterface* const unmarked = QAccessible::queryAccessibleInterface(&Scene::itemOf(*plain));
-    REQUIRE(unmarked != nullptr);
-    CHECK(unmarked->role() == QAccessible::Client);
-
-    card->setSelected(false);
-    scene.settle();
-    CHECK_FALSE(bar->isVisible());
-    CHECK_FALSE(QAccessible::queryAccessibleInterface(&item)->state().selected);
-    CHECK(QAccessible::queryAccessibleInterface(&item)->role() == QAccessible::Grouping);
-    QAccessible::setActive(wasActive);
-}
-
 // Mutation: ignore `inset` (the first tab's button starts at x = 0, and the page keeps its edge).
 TEST_CASE(
     "qt_quick containers: a tabs node's inset insets its first tab and its pages, and its strip surface spans it",
@@ -1519,4 +1465,101 @@ TEST_CASE("qt_quick containers: a compact shell head with a short lead keeps its
     INFO("the title at " << title.y() << ", Scan at " << scanAt.y());
     CHECK(scanAt.y() < title.bottom());
     CHECK(scanAt.right() <= 330.0);
+}
+
+// Mutation: a stack that ignores `selected` draws no bar and keeps the Client role.
+TEST_CASE("qt_quick containers: a selected stack draws the accent bar at its leading edge and is a selected group",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 300);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    theme->setProperty("surface", QColor{"#fafad2"});
+    theme->setProperty("accent", QColor{"#17784a"});
+    auto root = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto card = scene.backend().createStack(root.get(), ui::Axis::Vertical);
+    card->setSurface("bar");
+    card->setPadding(2);
+    card->setSelected(true);
+    auto label = scene.backend().createText(card.get());
+    label->setText("card");
+    auto plain = scene.backend().createStack(root.get(), ui::Axis::Vertical);
+    plain->setPadding(2);
+    auto other = scene.backend().createText(plain.get());
+    other->setText("plain");
+    scene.settle();
+
+    QQuickItem& item = Scene::itemOf(*card);
+    auto* const bar = item.findChild<QQuickItem*>(QStringLiteral("selectionBar"));
+    REQUIRE(bar != nullptr);
+    CHECK(bar->isVisible());
+    CHECK(bar->width() == 3.0);
+    CHECK(bar->x() == 0.0);
+    CHECK(bar->height() == item.height());
+    CHECK(bar->property("color").value<QColor>() == QColor{"#17784a"});
+    QImage const image = scene.window().grabWindow();
+    QPointF const origin = item.mapToScene(QPointF{});
+    int const y = static_cast<int>(origin.y() + item.height() / 2);
+    CHECK(image.pixelColor(static_cast<int>(origin.x()) + 1, y) == QColor{"#17784a"});
+    CHECK(image.pixelColor(static_cast<int>(origin.x()) + 5, y) == QColor{"#fafad2"});
+
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface* const node = QAccessible::queryAccessibleInterface(&item);
+    REQUIRE(node != nullptr);
+    CHECK(node->role() == QAccessible::Grouping);
+    CHECK(node->state().selected);
+    QAccessibleInterface* const unmarked = QAccessible::queryAccessibleInterface(&Scene::itemOf(*plain));
+    REQUIRE(unmarked != nullptr);
+    CHECK(unmarked->role() == QAccessible::Client);
+
+    card->setSelected(false);
+    scene.settle();
+    CHECK_FALSE(bar->isVisible());
+    CHECK_FALSE(QAccessible::queryAccessibleInterface(&item)->state().selected);
+    CHECK(QAccessible::queryAccessibleInterface(&item)->role() == QAccessible::Grouping);
+    QAccessible::setActive(wasActive);
+}
+
+// A pinned page inside a frame whose page inset is hidden: the bar's surface reaches the window's edges, with its
+// content one page step in. Mutation: keep the frame's inset (the bar starts 16 px in, and is 32 px narrower).
+TEST_CASE("qt_quick containers: a pinned bar spans the page when the shell leaves the page uninset", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setCompact(true);
+    frame.setPageInset(false);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal step = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, step), Q_ARG(int, 4)));
+
+    ui::Button reject{.label = "Reject"};
+    reject.common.testId = "pin_reject";
+    ui::Column bar{.children = {ui::button(std::move(reject))}, .padding = ui::Padding{2, 4}};
+    bar.common.surface = "bar";
+    bar.common.testId = "pin_bar";
+    ui::Text body{.text = "body"};
+    ui::Column bodyColumn{.children = {ui::text(std::move(body))}, .padding = 4};
+    ui::Scroll scrolled{.child = ui::column(std::move(bodyColumn))};
+    scrolled.common.layout = ui::LayoutHints{.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()};
+    ui::Column page{.children = {ui::scroll(std::move(scrolled)), ui::column(std::move(bar))}, .divided = true};
+    page.common.layout = ui::LayoutHints{.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()};
+    ui::Mounted const pageMount{scene.runtime(), scene.backend(), ui::column(std::move(page)), &frame.page()};
+
+    scene.window().resize(390, 600);
+    scene.settle();
+    auto const rectOf = [](char const* testId) {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        QQuickItem const* const item = widget->item();
+        REQUIRE(item != nullptr);
+        return QRectF{item->mapToScene(QPointF{0, 0}), QSizeF{item->width(), item->height()}};
+    };
+    QRectF const barAt = rectOf("pin_bar");
+    QRectF const buttonAt = rectOf("pin_reject");
+    INFO("the bar at " << barAt.x() << " wide " << barAt.width() << ", its button at " << buttonAt.x());
+    CHECK(barAt.x() == 0.0);
+    CHECK(barAt.width() == 390.0);
+    CHECK(buttonAt.x() - barAt.x() == step);
 }

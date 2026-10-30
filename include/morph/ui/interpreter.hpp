@@ -3084,6 +3084,13 @@ public:
     /// @return It, or `null`.
     [[nodiscard]] Value identity() const { return detail::evalIn(*_scope, nullptr, _core->doc().identity); }
 
+    /// @brief Whether the screen's shown root lays itself at the page's edges (`pageEdge`). A tracked read: it starts
+    ///        at the view's root, and while the node is a `switch` it moves to the case shown now (the default when
+    ///        none matches) if that holds exactly one node, so a width- or state-dependent root is seen through.
+    ///        A case that declares a scope of its own is not entered, since its names are not the screen's.
+    /// @return The shown root's flag; `false` for a root of any other shape.
+    [[nodiscard]] bool pageEdge() const;
+
     /// @brief Evaluates the document's `titleSpans` into runs; a run the head cannot read is dropped and reported.
     /// @return The runs; none when the document declares none.
     [[nodiscard]] std::vector<TextSpan> titleSpans() const;
@@ -6569,6 +6576,12 @@ inline constexpr std::string_view kRoleNames =
     return spans;
 }
 
+/// Whether a scope declares any name, so a node in it reads names the screen's own scope lacks.
+[[nodiscard]] inline bool declaresNames(ScopeDecl const& scope) noexcept {
+    return !(scope.models.empty() && scope.state.empty() && scope.lets.empty() && scope.queries.empty() &&
+             scope.mutations.empty() && scope.watches.empty() && scope.checks.empty());
+}
+
 /// @brief What a span list with a run it drops is told.
 inline constexpr std::string_view kSpansReason =
     "spans is a list of runs, each a value or a record with `text`; a list, a null or a record without `text` is "
@@ -9843,6 +9856,26 @@ inline std::vector<TextSpan> Screen::headSpans(ExprPtr const& expr) const {
         _core->report(expr->path, detail::kSpanToneReason);
     }
     return spans;
+}
+
+inline bool Screen::pageEdge() const {
+    DocNode const* node = _core->doc().view.get();
+    while (node != nullptr && node->kind == "switch") {
+        Value const value = detail::evalIn(*_scope, nullptr, node->prop("on"));
+        std::span<DocNodePtr const> shown = node->nodes("default");
+        for (DocNodePtr const& part : node->partList("cases")) {
+            if (!(detail::evalIn(*_scope, nullptr, part->prop("when")) == value)) {
+                continue;
+            }
+            if (part->scope.has_value() && detail::declaresNames(*part->scope)) {
+                return false;
+            }
+            shown = part->nodes("children");
+            break;
+        }
+        node = shown.size() == 1 ? shown.front().get() : nullptr;
+    }
+    return node != nullptr && node->flag("pageEdge");
 }
 
 inline std::vector<TextSpan> Screen::subtitleSpans() const { return headSpans(_core->doc().subtitleSpans); }

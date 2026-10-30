@@ -492,3 +492,22 @@ TEST_CASE("navigator: a count sits at the end of its entry, named with it, and t
     CHECK(harness.backend.prop(button, "a11yName") == "Results");
     CHECK(navigator.menuEntries().at(2).items.at(1).label == "Results");
 }
+
+// Mutation: answer the head's flag for a screen without a head (a null dereference), or answer false.
+TEST_CASE("host screens: a host screen's page stays inset", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness};
+    ScreenHostRegistry hosts;
+    hosts.add("DatabaseSync",
+              [&harness](ParamMap const&,
+                         ContainerWidget& page) -> std::expected<std::unique_ptr<ScreenHandle>, MountError> {
+                  auto text = harness.backend.createText(&page);
+                  return std::make_unique<NativeScreen>(harness.runtime, "Sync", std::move(text));
+              });
+    Workspace shell{
+        harness.runtime, harness.backend, host,
+        WorkspaceOptions{.screens = [](std::string_view) { return WorkspaceScreen{.host = "DatabaseSync"}; },
+                         .hosts = &hosts}};
+    REQUIRE(shell.open("sync", {}).has_value());
+    CHECK(shell.activePageInset());
+}

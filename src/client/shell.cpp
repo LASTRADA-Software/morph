@@ -494,6 +494,7 @@ private:
             return;
         }
         _headTab = active;
+        _pageInset.reset();
         _titleSpans.reset();
         _headShown.reset();
         ui::HeadParts parts = _workspace->headPartsForActive();
@@ -504,6 +505,10 @@ private:
         // they hold.
         _headShown = std::make_unique<reactive::Effect>(
             _context->runtime(), [this] { _frame->setHeadShown(_workspace->activeHeadShown()); });
+        // The page is inset unless the shown screen insets itself, and follows a width change or a state change of
+        // the screen.
+        _pageInset = std::make_unique<reactive::Effect>(
+            _context->runtime(), [this] { _frame->setPageInset(_workspace->activePageInset()); });
         // The title's runs follow the screen's state, which a callback on the tab's caption does not hear.
         _titleSpans = std::make_unique<reactive::Effect>(
             _context->runtime(), [this] { _frame->setTitleSpans(_workspace->activeTitleSpans()); });
@@ -512,6 +517,7 @@ private:
     // The head row's own mount and its comparison key, always reset together: resetting one without the other would
     // leave the guard above comparing against a tab id from a Workspace instance that no longer exists.
     void resetHead() {
+        _pageInset.reset();
         _titleSpans.reset();
         _headShown.reset();
         _head.reset();
@@ -861,6 +867,8 @@ private:
     std::optional<ui::Mounted> _headLead;
     // Shows the frame's head slots while the active tab's head has content; goes with `_head`.
     std::unique_ptr<reactive::Effect> _headShown;
+    // Insets the frame's page unless the active screen does; goes with `_head`.
+    std::unique_ptr<reactive::Effect> _pageInset;
     // Shows the frame's title as the active tab's runs; goes with `_head`.
     std::unique_ptr<reactive::Effect> _titleSpans;
     std::optional<ui::WorkspaceTabId> _headTab;

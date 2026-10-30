@@ -225,6 +225,16 @@ public:
         showTitle();
     }
 
+    /// @brief Insets the page's content by the page's step, or lets it fill the page to its edges. A hidden spacer
+    ///        takes no gap, so hiding the three inset spacers leaves the content at the page's own edges: for a
+    ///        screen that insets itself. A new frame insets.
+    /// @param inset Whether the content is inset.
+    void setPageInset(bool inset) {
+        _top->setVisible(inset);
+        _left->setVisible(inset);
+        _right->setVisible(inset);
+    }
+
     /// @brief Shows the shown screen's title as runs in the top bar, in place of the plain title: an identifier in the
     ///        monospace face beside plain words. The heading role gives every run its size and weight.
     /// @param spans The runs; empty draws `setTitle`'s text.

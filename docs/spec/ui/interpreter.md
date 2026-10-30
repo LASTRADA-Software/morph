@@ -367,6 +367,10 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   and `cancel` keep their Enter and Escape bindings, chords of the content column. So the `default` runs for Enter
   that no focused widget inside took: a button, a text input with `onSubmit` or that commits on Enter, and a table
   take it first.
+- **The shown root's `pageEdge`.** `Screen::pageEdge()` is a tracked read that starts at the view's root and, while the
+  node is a `switch`, moves to the case shown now (the default when none matches) when that case holds exactly one node
+  and declares no scope of its own; it answers that node's `pageEdge`, and `false` for any other node or a case of
+  several nodes. A `byWidth` switch and a nested one are seen through, and the answer follows a width or state change.
 - **The head.** A screen's `status`, `tools`, `actions` and `menu` are lowered once, at mount, in the screen scope;
   `Screen::status()`, `tools()`, `actions()` and `menu()` read the visible ones (a tracked read), `Screen::subtitle()`,
   `eyebrow()`, `titleSpans()`, `eyebrowSpans()`, `subtitleSpans()` and `menuLabel()` evaluate `subtitle`, `eyebrow`, `titleSpans`, `eyebrowSpans` and `subtitleSpans` (into runs, with a run it cannot read

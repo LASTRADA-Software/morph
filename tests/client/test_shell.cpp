@@ -183,6 +183,27 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> eyebrowBundl
     return served.build();
 }
 
+/// A screen whose root lays itself at the page's edges, and the plain screen.
+constexpr std::string_view kEdgeScreen = R"({
+  "vocab": "ui/1", "id": "probe.edge",
+  "view": { "kind": "column", "pageEdge": true, "children": [
+    { "kind": "text", "testId": "edge", "text": "edge" } ] } })";
+
+/// The bundle of those two screens, neither public, so the shell starts signed in with its navigator.
+/// @return It, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> edgeBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    for (auto const& [screenId, text] : {std::pair{"probe.edge", kEdgeScreen}, std::pair{"probe.plain", kPlain}}) {
+        ui::CatalogEntry entry;
+        entry.id = screenId;
+        entry.title = screenId;
+        if (auto added = served.addScreen(std::move(entry), std::string{text}); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    return served.build();
+}
+
 /// A widget's property, or nothing while no widget of that kind has that test id.
 // NOLINTBEGIN(bugprone-easily-swappable-parameters): a kind, a test id and a property name, as the backend reads them.
 std::optional<std::string> propOf(ui::testing::RecordingBackend const& backend, std::string_view kind,
@@ -435,6 +456,35 @@ TEST_CASE("Client shell: a screen's eyebrow is mounted in the frame's eyebrow sl
         CHECK(pumpUntil(context.owner(), [&] { return backend.children(slot) == std::vector<int>{eyebrow}; }));
         CHECK(backend.prop(eyebrow, "spans") == "[Step 2 of 4]");
         CHECK(propOf(backend, "Column", "shell_head_eyebrow", "visible") == "true");
+    }
+    source.close();
+}
+
+// Control: drop the shell's effect over the page inset (the spacers stay shown for the pinned screen).
+TEST_CASE(
+    "Client shell: the page is uninset around a screen that insets itself, and inset again for one that does not",
+    "[client][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &edgeBundle}, client::LocalSetup{}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "probe.edge"});
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return backend.find("Text", "testId", "edge").has_value(); }));
+        int const page = backend.find("Column", "testId", "shell_page").value();
+        auto const insetShown = [&backend, page] { return backend.prop(backend.children(page).at(0), "visible"); };
+        CHECK(pumpUntil(context.owner(), [&insetShown] { return insetShown() == "false"; }));
+        auto const plain = backend.find("Button", "testId", "nav_probe.plain");
+        REQUIRE(plain.has_value());
+        backend.click(*plain);
+        REQUIRE(
+            pumpUntil(context.owner(), [&backend] { return backend.find("Text", "testId", "plain").has_value(); }));
+        CHECK(pumpUntil(context.owner(), [&insetShown] { return insetShown() == "true"; }));
     }
     source.close();
 }

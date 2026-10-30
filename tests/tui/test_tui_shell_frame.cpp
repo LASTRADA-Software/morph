@@ -140,3 +140,17 @@ TEST_CASE("tui shell frame: a short lead and a short trail stay on the title's l
     REQUIRE(scanRow != std::string::npos);
     CHECK(scanRow == title);
 }
+
+// Control: make `setPageInset` a no-op (the page's text keeps its row and column of inset).
+TEST_CASE("tui shell frame: without the page's inset the content starts at the page's first row and column",
+          "[tui][shell]") {
+    FramedPage page{60};
+    std::size_t const inset = page.pageColumn();
+    std::size_t const insetRow = rowOf(page.screen, "PAGE");
+    page.frame->setPageInset(false);
+    static_cast<void>(page.loop.runUntilIdle());
+    page.backend.fit();
+    page.screen.draw();
+    CHECK(page.pageColumn() < inset);
+    CHECK(rowOf(page.screen, "PAGE") < insetRow);
+}

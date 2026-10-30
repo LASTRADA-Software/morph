@@ -23,7 +23,7 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 | a column, surface `toolbar`, gap 2, padded above and below by zero-height spacers | `shell_topbar` | the top bar: one line, below, a gap of step 2 from the bar's top and bottom edge |
 | a row, gap 3, `align: center`, padded by a zero-width spacer at both ends | `shell_topbar_line` | the top line: the two pad spacers around the wrapping row, so its content starts a gap of step 3 from the bar's left edge and ends as far from the right, and sits centred across the bar's line |
 | a row that wraps, gap 3, `align: start`, `justify: end`, stretch | `shell_topbar_main` | the navigation menu (`shell_nav_menu`, shown only in [the compact form](#the-compact-form)); a lead block, a column that stretches from `kShellHeadLeadMinimum` (32) units, holding the eyebrow slot (`shell_head_eyebrow`), the shown screen's title (`shell_title`, a heading) and the lead slot (`shell_head_lead`), in that order; then the trail slot (`shell_head`). Every line of it is padded at both ends by the pad spacers |
-| a column, surface `page`, stretch × stretch | `shell_page` | the page: zero-sized spacers above and either side of the content, each a gap of step 4 away, so the content is padded by step 4 |
+| a column, surface `page`, stretch × stretch | `shell_page` | the page: zero-sized spacers above and either side of the content, each a gap of step 4 away, so the content is padded by step 4; the spacers hide while `setPageInset(false)`, and a hidden spacer takes no gap, so the content then fills the page |
 
 - `page()` is the content container, where the client places the workspace.
 - `navigator()` is the navigator, for its pins and search.
@@ -35,6 +35,9 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 - `setHeadShown(shown)` shows or hides the three slots. The frame builds widgets and never sees what is mounted in
   them, so it cannot tell when the head is empty: the client says, and a new frame starts with them hidden. An
   application that mounts something else into the slots calls it itself.
+- `setPageInset(inset)` insets the page's content by step 4, or lets it fill the page. The generic client sets it from
+  `Workspace::activePageInset()`. With the head in the page (`HeadPlacement::InPage`) there is no shell inset and the
+  flag changes nothing.
 - `setTitle` sets the top bar's title and `setTitleSpans` its runs (an identifier in the mono face beside plain words,
   each run in the heading role's size and weight), which draw in place of the plain title until they are cleared with an
   empty list; `setPrincipal` the sidebar's principal text; compact, the principal is the
@@ -78,7 +81,7 @@ toast is non-modal, dims nothing, and never takes keyboard focus.
 | Decision | Choice | Why |
 |---|---|---|
 | Built from widgets | Backend widgets, not a document | The frame is the client's, not an application's, and every frontend has the widgets. |
-| The padding | Zero-sized spacers a gap away | A stack has a gap and no padding; spacers say it in the vocabulary that exists, and step 4 is 16 px on Qt Quick and a row and two columns on the terminal. |
+| The padding | Zero-sized spacers a gap away, hidden by `setPageInset(false)` | A stack has a gap and no padding; spacers say it in the vocabulary that exists, and step 4 is 16 px on Qt Quick and a row and two columns on the terminal. A screen whose root insets itself (a `pinned` page, which pads its body and its bars' sides so its bars reach the page's edges) asks for the frame's inset to go, so the inset is drawn once, where the bars can span the page. |
 | A head wider than its share of the bar | One wrapping line: the title and the lead stretch from 32 units, the trail wraps under them only when it does not fit; the principal and sign-out sit in the sidebar or the navigation menu, so the line has one owner's controls at its end | Wrapping to a further line is what every backend can draw with the widgets it has. Eliding loses the badges and actions, which are why the head exists; an overflow menu needs a menu node and a measuring pass the vocabulary does not have. A head costs no line of its own where there is room for it, and the sign-out button no longer competes with the screen's actions for the trailing edge. |
 | The width of the sidebar | 28 units, fixed | Wide enough for a navigator entry's title, and a unit on the terminal is a column. |
 | A window too narrow for the sidebar | A compact form: the navigator's entries as one menu in the top bar | On a 60-column terminal the sidebar took half the screen and left a `compact` document about 30 units. A menu holds every entry in the space of one button, and is the navigator's own list, so the two never differ. Collapsing the sidebar to icons would need an icon per catalog entry, which the catalog does not carry. |
