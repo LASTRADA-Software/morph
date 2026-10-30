@@ -373,7 +373,7 @@ ui::Node sessionTable(Receipt const& receipt) {
                                                     .cell = ui::text({.text = ui::row("time")})},
                                                    {.name = "sample",
                                                     .label = "Sample",
-                                                    .width = ui::fixed(14),
+                                                    .width = ui::fixed(11),
                                                     .role = "mono",
                                                     .cell = ui::text({.text = ui::row("sample"), .role = "mono"})},
                                                    {.name = "outcome",
