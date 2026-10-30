@@ -8604,6 +8604,10 @@ inline Node ScreenCore::lowerTabs(DocNode const& node, LowerCtx const& ctx, Elem
                                 .node = nodes.empty() ? Node{} : lowerAll(nodes, ctx)});
     }
     spec.moreLabel = bindProp<std::string>(ctx, node.prop("moreLabel"), std::string{"More"}, stringOf);
+    if (ExprPtr const inset = node.prop("inset")) {
+        spec.inset = static_cast<int>(intOf(once(ctx, inset), 0));
+    }
+    spec.stripSurface = std::string{node.name("stripSurface")};
     ExprPtr const selected = node.prop("selected");
     Commands const* const onChoose = node.event("onChoose");
     bool const controlled = selected && (selected->kind != ExprKind::Literal || !selected->literal.isNull());

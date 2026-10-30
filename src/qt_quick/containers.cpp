@@ -193,6 +193,10 @@ void TabsImpl::setBarShown(bool shown) { write("barShown", shown); }
 
 void TabsImpl::setMoreLabel(std::string_view label) { write("moreLabel", toQString(label)); }
 
+void TabsImpl::setInset(int inset) { write("inset", inset); }
+
+void TabsImpl::setStripSurface(std::string_view surface) { write("stripSurface", toQString(surface)); }
+
 void SlotImpl::setScrollable(bool scrollable) { write("scrollable", scrollable); }
 
 int TabsImpl::highlighted() const { return read("highlighted").toInt(); }

@@ -889,10 +889,12 @@ inline constexpr std::array<KeySpec, 3> kSwitchKeys = {
 inline constexpr std::array<KeySpec, 2> kCaseKeys = {
     {{"when", Shape::Expr, {}, kRequired}, {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `tabs`.
-inline constexpr std::array<KeySpec, 4> kTabsKeys = {{{"tabs", Shape::Parts, "tab"},
+inline constexpr std::array<KeySpec, 6> kTabsKeys = {{{"tabs", Shape::Parts, "tab"},
                                                       {"selected", Shape::Expr},
                                                       {"onChoose", Shape::Commands},
-                                                      {"moreLabel", Shape::Expr}}};
+                                                      {"moreLabel", Shape::Expr},
+                                                      {"inset", Shape::Expr},
+                                                      {"stripSurface", Shape::Text}}};
 /// @brief The keys of a `tabs` page part.
 inline constexpr std::array<KeySpec, 3> kTabKeys = {
     {{"id", Shape::Name}, {"label", Shape::Expr}, {"children", Shape::Nodes}}};
@@ -3396,6 +3398,7 @@ private:
             checkCustomProps(node);
         } else if (node.kind == "tabs") {
             checkTabIds(node);
+            checkTabsInset(node);
         } else if (node.kind == "chart") {
             checkChart(node);
         } else if (node.kind == "customize" && !_doc->customize.contains(node.name("point"))) {
@@ -3611,6 +3614,18 @@ private:
             if (named == nullptr || !ids.contains(*named)) {
                 refuse(pointerAppend(node.path, "selected"), "`selected` names no tab of this node");
             }
+        }
+    }
+
+    // A tabs node's `inset` is a literal spacing step, 0 to 5: the strip is laid out once.
+    static void checkTabsInset(DocNode const& node) {
+        ExprPtr const inset = node.prop("inset");
+        if (inset == nullptr) {
+            return;
+        }
+        std::int64_t const* const step = inset->kind == ExprKind::Literal ? inset->literal.asInt() : nullptr;
+        if (step == nullptr || *step < 0 || *step > 5) {
+            refuse(pointerAppend(node.path, "inset"), "`inset` is a literal spacing step from 0 to 5");
         }
     }
 

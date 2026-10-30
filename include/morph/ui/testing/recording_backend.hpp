@@ -1340,6 +1340,8 @@ public:
     void setOnSelect(std::function<void(std::size_t)> onSelect) override { callbacks().index = std::move(onSelect); }
     void setBarShown(bool shown) override { set("barShown", shown ? "true" : "false"); }
     void setMoreLabel(std::string_view label) override { set("moreLabel", formatText(label)); }
+    void setInset(int inset) override { set("inset", std::to_string(inset)); }
+    void setStripSurface(std::string_view surface) override { set("stripSurface", formatText(surface)); }
 };
 
 /// @brief A fake overlay's footer: a `Footer` child, made when it is first asked for, so an overlay that never shows

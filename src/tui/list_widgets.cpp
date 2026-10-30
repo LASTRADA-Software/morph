@@ -1201,6 +1201,12 @@ void TabsImpl::setBarShown(bool shown) {
     }
 }
 
+void TabsImpl::setInset(int inset) {
+    _insetRows = layout::stepCells(inset, ui::Axis::Vertical);
+    _insetColumns = layout::stepCells(inset, ui::Axis::Horizontal);
+    refresh();
+}
+
 std::string TabsImpl::labelText(std::size_t index) const {
     auto const& label = _labels.at(index);
     return index == _selected ? "[" + label + "]" : " " + label + " ";
@@ -1211,11 +1217,13 @@ std::string TabsImpl::labelText(std::size_t index) const {
     for (std::size_t index = 0; index < _labels.size(); ++index) {
         bar += displayWidth(labelText(index));
     }
-    auto const body = stackNaturalSize(children(), ui::Axis::Vertical, 0);
+    auto body = stackNaturalSize(children(), ui::Axis::Vertical, 0);
+    body.width += 2 * _insetColumns;
+    body.height += 2 * _insetRows;
     if (!_barShown) {
         return body;
     }
-    return {.width = std::max(bar, body.width), .height = 1 + body.height};
+    return {.width = std::max(bar + _insetColumns, body.width), .height = 1 + body.height};
 }
 
 std::string TabsImpl::probeText() const { return _selected < _labels.size() ? _labels.at(_selected) : std::string{}; }
@@ -1224,7 +1232,10 @@ std::string TabsImpl::probeText() const { return _selected < _labels.size() ? _l
 std::vector<::core::tui::Rect> TabsImpl::childAreas(::core::tui::Size size) const {
     int const barRows = _barShown ? 1 : 0;
     return stackAreas(children(),
-                      {.x = 0, .y = barRows, .width = size.width, .height = std::max(0, size.height - barRows)},
+                      {.x = _insetColumns,
+                       .y = barRows + _insetRows,
+                       .width = std::max(0, size.width - (2 * _insetColumns)),
+                       .height = std::max(0, size.height - barRows - (2 * _insetRows))},
                       StackSpec{.axis = ui::Axis::Vertical});
 }
 
@@ -1261,11 +1272,11 @@ void TabsImpl::paint(::core::tui::Canvas& canvas) {
     _spans.clear();
     if (_barShown) {
         int const width = canvas.size().width;
-        scrollToSelected(width);
-        int column = 0;
+        scrollToSelected(width - _insetColumns);
+        int column = _insetColumns;
         if (_first > 0) {
-            column += canvas.putString(0, 0, "\u2039", theme.textMuted);
-            _spans.push_back(Span{.start = 0, .end = column, .index = 0, .step = -1});
+            column += canvas.putString(0, column, "\u2039", theme.textMuted);
+            _spans.push_back(Span{.start = _insetColumns, .end = column, .index = 0, .step = -1});
         }
         for (std::size_t index = _first; index < _labels.size(); ++index) {
             std::string const text = labelText(index);

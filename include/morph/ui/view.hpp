@@ -922,6 +922,12 @@ struct Tabs {
     Prop<std::string> moreLabel = std::string{"More"};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief The strip's inset, a spacing step, 0 to `kMaxSpacingStep`; set once. The strip and its rule span the
+    ///        node's width, the first tab starts this far in from the leading edge, and each page is padded by it on
+    ///        every side.
+    int inset = 0;
+    /// @brief The surface the strip, and nothing else, is drawn on; empty draws it on the surface around it. Set once.
+    std::string stripSurface;
 };
 
 /// @brief A modal overlay; its content is mounted only while it is open.

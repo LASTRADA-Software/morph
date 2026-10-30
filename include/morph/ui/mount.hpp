@@ -1071,6 +1071,12 @@ private:
     Widget& mountKind(reactive::Scope& scope, Tabs const& spec, ContainerWidget* parent) {
         TabsWidget& widget = scope.adopt(_backend->createTabs(parent));
         applyCommon(scope, widget, spec.common);
+        if (spacingStep(spec.inset) != 0) {
+            widget.setInset(spacingStep(spec.inset));
+        }
+        if (!spec.stripSurface.empty()) {
+            widget.setStripSurface(spec.stripSurface);
+        }
         // One prop over every caption, as a menu's entries: a bound caption re-sends them all. The count never
         // changes, so the widget keeps its highlight, the shown page and the focus across a relabel.
         std::vector<Prop<std::string>> captions;

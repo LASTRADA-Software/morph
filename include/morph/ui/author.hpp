@@ -4141,6 +4141,13 @@ struct TabsOptions {
     Commands onChoose;
     /// @brief The label of the menu that holds the tabs that do not fit in the bar; absent: `More`.
     AnyHandle moreLabel;
+    /// @brief A spacing step, 0 to `kMaxSpacingStep`, written as a literal: the strip and its rule span the node's
+    ///        width, the first tab starts this far in, and each page is padded by it on every side. A tabs node with
+    ///        it can be a page's edge-to-edge root. 0 writes none.
+    int inset = 0;
+    /// @brief The surface the strip, and nothing else, is drawn on, such as `"bar"`; empty draws it on the surface
+    ///        around it.
+    std::string stripSurface;
 };
 
 /// @brief A `tabs` node.
@@ -4165,6 +4172,8 @@ struct TabsOptions {
         .put("selected", options.selected)
         .put("onChoose", options.onChoose)
         .put("moreLabel", options.moreLabel)
+        .put("inset", options.inset != 0 ? AnyHandle{options.inset} : AnyHandle{})
+        .text("stripSurface", options.stripSurface)
         .done();
 }
 

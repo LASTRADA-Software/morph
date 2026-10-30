@@ -1431,3 +1431,53 @@ TEST_CASE("qt_quick containers: a selected stack draws the accent bar at its lea
     CHECK(QAccessible::queryAccessibleInterface(&item)->role() == QAccessible::Grouping);
     QAccessible::setActive(wasActive);
 }
+
+// Mutation: ignore `inset` (the first tab's button starts at x = 0, and the page keeps its edge).
+TEST_CASE(
+    "qt_quick containers: a tabs node's inset insets its first tab and its pages, and its strip surface spans it",
+    "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 300);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    theme->setProperty("surface", QColor{"#fafad2"});
+    auto root = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto tabs = scene.backend().createTabs(root.get());
+    tabs->setTabs({"One", "Two"});
+    auto page = scene.backend().createStack(tabs.get(), ui::Axis::Vertical);
+    auto label = scene.backend().createText(page.get());
+    label->setText("page");
+    auto plainTabs = scene.backend().createTabs(root.get());
+    plainTabs->setTabs({"One", "Two"});
+    auto plainPage = scene.backend().createStack(plainTabs.get(), ui::Axis::Vertical);
+    auto plainLabel = scene.backend().createText(plainPage.get());
+    plainLabel->setText("page");
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*tabs);
+    QQuickItem& plainItem = Scene::itemOf(*plainTabs);
+    auto const firstButton = [](QQuickItem& node) {
+        QList<QQuickItem*> const buttons = Scene::itemsOf(node, "QQuickTabButton");
+        REQUIRE_FALSE(buttons.isEmpty());
+        return buttons.front()->mapToItem(&node, QPointF{0, 0});
+    };
+    QPointF const plainButton = firstButton(plainItem);
+    QPointF const plainChild = Scene::itemOf(*plainLabel).mapToItem(&plainItem, QPointF{0, 0});
+    tabs->setInset(4);
+    tabs->setStripSurface("bar");
+    scene.settle();
+    double const step = theme->property("space").value<QList<qreal>>().at(4);
+    REQUIRE(step > 0.0);
+    CHECK(firstButton(item).x() == plainButton.x() + step);
+    QPointF const child = Scene::itemOf(*label).mapToItem(&item, QPointF{0, 0});
+    CHECK(child.x() == plainChild.x() + step);
+    CHECK(child.y() == plainChild.y() + step);
+    auto* const strip = item.findChild<QQuickItem*>(QStringLiteral("stripSurface"));
+    REQUIRE(strip != nullptr);
+    CHECK(strip->isVisible());
+    CHECK(strip->mapToItem(&item, QPointF{0, 0}).x() == 0.0);
+    CHECK(strip->width() == item.width());
+    CHECK(strip->property("color").value<QColor>() == QColor{"#fafad2"});
+    auto* const none = plainItem.findChild<QQuickItem*>(QStringLiteral("stripSurface"));
+    REQUIRE(none != nullptr);
+    CHECK_FALSE(none->isVisible());
+}

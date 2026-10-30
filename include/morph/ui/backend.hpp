@@ -558,6 +558,17 @@ public:
     ///        marks its tabs instead stores it and draws nothing from it.
     /// @param label The label, UTF-8.
     virtual void setMoreLabel(std::string_view label) = 0;
+
+    /// @brief Insets the strip and the pages: the strip and its rule span the widget's width, the first tab starts
+    ///        this far in from the leading edge, and each page is padded by it on every side. The mount calls it once,
+    ///        only for a nonzero step.
+    /// @param inset A spacing step, 1 to `kMaxSpacingStep`; the mount never passes another value.
+    virtual void setInset(int inset) = 0;
+
+    /// @brief Draws the strip, and nothing else, on a surface across the widget's width. The mount calls it once,
+    ///        only for a nonempty name.
+    /// @param surface The surface's name, as `Widget::setSurface` takes it.
+    virtual void setStripSurface(std::string_view surface) = 0;
 };
 
 /// @brief A modal overlay around its children, with a focus trap while open. A new dialog is closed.

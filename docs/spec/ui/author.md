@@ -147,7 +147,7 @@ Every kind of the kind table has a builder whose options struct holds the kind's
 takes its series as `ChartSeries{label, points, y, x, xLabel, tone, note, joined}`, where each per-point key is a
 `PointExpression`, a function from the point's element (`row()`) to an expression, and its lines as
 `ReferenceLine{value, label, tone, style}` with a `LineStyle`. Children come first, as a `Nodes` list (`{a, b}`, or one node),
-options second. `tabs(tabs, TabsOptions{.selected, .onChoose})` takes `Tab{id, label, children}` pages.
+options second. `tabs(tabs, TabsOptions{.selected, .onChoose, .moreLabel, .inset, .stripSurface})` takes `Tab{id, label, children}` pages; `inset` (a spacing step, written as a literal) and `stripSurface` (a surface name) let a tabs node be a page's edge-to-edge root, its strip on that surface across the width.
 `pinned(content, PinnedOptions{.top, .bottom, .surface, .inset})` writes the bar-that-stays-in-view idiom: a `divided`
 column with `pageEdge: true`, sized to stretch both ways, holding the top bar, a vertical `scroll` sized to stretch both
 ways around `content`, and the bottom bar. `inset` is a spacing step, default 4 (the shell's page inset): `content`

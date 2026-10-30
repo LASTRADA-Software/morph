@@ -316,6 +316,11 @@ public:
     void setBarShown(bool shown) override;
     /// Stored, not drawn: the markers reach every tab.
     void setMoreLabel(std::string_view label) override { _moreLabel = label; }
+    /// The tabs start the step's columns in from the leading edge, and the pages are padded by the step's rows and
+    /// columns.
+    void setInset(int inset) override;
+    /// The terminal draws nothing for a surface: the strip's surface is not inverted.
+    void setStripSurface(std::string_view surface) override { static_cast<void>(surface); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return _barShown; }
     [[nodiscard]] bool focusesOnPress() const override { return false; }
@@ -333,6 +338,8 @@ private:
     void select(std::size_t index);
 
     std::string _moreLabel = "More";
+    int _insetRows = 0;
+    int _insetColumns = 0;
 
     // The columns a painted label or marker covers, and what a click there chooses: a label its own tab, a marker
     // the tab before or after the highlighted one (`step` -1 or 1).

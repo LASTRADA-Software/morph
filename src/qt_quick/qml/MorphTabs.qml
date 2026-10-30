@@ -14,6 +14,12 @@ MorphWidget {
     property list<string> labels: []
     property bool barShown: true
     property string moreLabel: "More"
+    // A spacing step: the strip and its rule span the width, the first tab starts this far in, and each page is padded
+    // by it on every side.
+    property int inset: 0
+    readonly property real insetPx: Theme.spaceOf(root.inset)
+    // The surface the strip, and nothing else, is drawn on; empty draws it on the surface around it.
+    property string stripSurface: ""
     // How many leading tabs the bar shows; the rest are the More menu's.
     property int shownCount: labels.length
     readonly property bool overflowing: shownCount < labels.length
@@ -87,9 +93,10 @@ MorphWidget {
 
     // A hidden bar never holds the focus: the workspace's chords must reach a page when a second tab arrives.
     focusTarget: bar.visible ? bar : pages
-    implicitWidth: Math.max(bar.visible ? bar.implicitWidth + (more.visible ? more.implicitWidth : 0) : 0,
-                            pages.implicitWidth)
-    implicitHeight: (bar.visible ? bar.implicitHeight + layout.spacing : 0) + pages.implicitHeight
+    implicitWidth: Math.max(bar.visible ? bar.implicitWidth + (more.visible ? more.implicitWidth : 0) + 2 * root.insetPx
+                                        : 0,
+                            pages.implicitWidth + 2 * root.insetPx)
+    implicitHeight: (bar.visible ? bar.implicitHeight + layout.spacing : 0) + pages.implicitHeight + 2 * root.insetPx
 
     FontMetrics {
         id: metrics
@@ -107,6 +114,15 @@ MorphWidget {
             Layout.fillWidth: true
             implicitHeight: tabRow.implicitHeight
 
+            // The strip's own surface, across the whole width.
+            Rectangle {
+                objectName: "stripSurface"
+                anchors.fill: parent
+                z: -1
+                visible: root.stripSurface !== "" && Theme.draws(root.stripSurface)
+                color: Theme.scheme(root.stripSurface).surface
+            }
+
             // The rule under the tabs runs the row's width, past the last tab and More.
             Rectangle {
                 anchors.bottom: parent.bottom
@@ -118,6 +134,8 @@ MorphWidget {
             RowLayout {
                 id: tabRow
                 anchors.fill: parent
+                anchors.leftMargin: root.insetPx
+                anchors.rightMargin: root.insetPx
                 spacing: 0
                 onWidthChanged: root.scheduleFit()
 
@@ -239,6 +257,7 @@ MorphWidget {
             id: pages
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.margins: root.insetPx
             spacing: 0
         }
     }

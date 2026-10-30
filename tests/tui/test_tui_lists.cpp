@@ -1111,3 +1111,18 @@ TEST_CASE("tui lists: a segmented select draws its options in one row and choose
     static_cast<void>(harness.click({.x = 2, .y = 0}));
     CHECK(chosen.back() == ui::Key{std::int64_t{1}});
 }
+
+// Mutation: ignore `inset` (the first tab's label starts at column 0).
+TEST_CASE("tui lists: a tabs node's inset starts its first tab and its pages in from the edge", "[tui][lists]") {
+    Harness harness{20, 5};
+    auto const tabs = harness.make<TabsImpl>(nullptr);
+    tabs->setTabs({"One", "Two"});
+    tabs->setSelected(0);
+    auto const page = harness.make<TextImpl>(tabs.get());
+    page->setText("first");
+    CHECK(harness.draw() == Rows{"[One] Two", "first"});
+    // Step 4: one row above and below, two columns either side; the strip's surface draws nothing new.
+    tabs->setInset(4);
+    tabs->setStripSurface("bar");
+    CHECK(harness.draw() == Rows{"  [One] Two", "", "  first"});
+}

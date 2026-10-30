@@ -1730,3 +1730,13 @@ TEST_CASE("pinned shows a bar while any of its nodes shows, when every node has 
                    {.bottom = ui::Nodes{ui::text({.text = "x"}).visible(a), ui::text({.text = "y"})}});
     CHECK_FALSE(text(mixed).contains(R"("visible":{"ref":"a"},"surface")"));
 }
+
+// Mutation: drop `inset` and `stripSurface` from the tabs node.
+TEST_CASE("tabs writes its inset as a literal step and its strip surface as a name", "[ui][author]") {
+    ui::Node const node = ui::tabs({{.id = "a", .label = "A", .children = ui::text({.text = "x"})}},
+                                   {.inset = 4, .stripSurface = "bar"});
+    CHECK(text(node).contains(R"("inset":4,"stripSurface":"bar")"));
+    ui::Node const plain = ui::tabs({{.id = "a", .label = "A", .children = ui::text({.text = "x"})}});
+    CHECK_FALSE(text(plain).contains("inset"));
+    CHECK_FALSE(text(plain).contains("stripSurface"));
+}
