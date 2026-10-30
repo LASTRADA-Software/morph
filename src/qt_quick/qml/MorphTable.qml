@@ -368,8 +368,21 @@ MorphWidget {
                     height: parent.height
 
                     CheckBox {
+                        id: selectAllBox
                         objectName: "selectAll"
                         anchors.centerIn: parent
+                        padding: 0
+                        indicator: MorphCheckIndicator {
+                            objectName: "boxIndicator"
+                            x: selectAllBox.leftPadding
+                            y: (selectAllBox.height - height) / 2
+                            scheme: root.scheme
+                            checked: selectAllBox.checkState === Qt.Checked
+                            partial: selectAllBox.checkState === Qt.PartiallyChecked
+                            focused: selectAllBox.visualFocus
+                        }
+                        implicitWidth: indicator.implicitWidth + leftPadding + rightPadding
+                        implicitHeight: indicator.implicitHeight + topPadding + bottomPadding
                         tristate: true
                         enabled: root.shownRows().length > 0
                         checkState: root.selectedShown === 0 ? Qt.Unchecked

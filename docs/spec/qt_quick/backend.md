@@ -308,11 +308,16 @@ Qt's accessibility has no sort state, so the header (a `ColumnHeader` named by i
 A row draws its background part (`background`, the `tableRow` part restyle) under its cells and hands it its state:
 `selected`, `hovered` (the pointer over the row), `current` (keyboard focus within the row), `alternate` (an odd
 position, which C++ writes on every row after each append, destroy and move), `tone` (`setRowTone`: −1 for none,
-else the `ui::Tone` index) and its `scheme`. The row's
-height is the larger of its cells' and the background's `implicitHeight`; the stock background draws the selection
-fill and the hairline between rows, and its implicit height is a dense row's, `Theme.targetHeight - 8`. A toned
-row fills with the tone's `bg` colour and draws a 3 px leading bar in its `dot` colour; a selected toned row shows
-the selection colour and keeps the bar.
+else the `ui::Tone` index), `selectColumn` (whether the table's select column shows the selection) and its `scheme`.
+The row's height is the larger of its cells' and the background's `implicitHeight`; the stock background draws
+three marks that compose, then the hairline between rows, and its implicit height is a dense row's,
+`Theme.targetHeight - 8`. A toned row is tinted (`tint`: the tone's `bg` colour at half strength over `scheme.surface`)
+and draws no bar. A selected row has the accent's 3 px bar at its leading edge (`selectionBar`) and, unless the table
+has a select column, whose box already shows the state, the selection colour as its fill (`fill`) over the tint. The
+select column's boxes, the row's and the select-all box over the table, draw their indicator with
+`MorphCheckIndicator`, which `MorphCheckbox` draws as well: a rounded square outlined in `scheme.controlBorder`
+while unchecked, filled with the accent and marked with a check while checked, and marked with a dash while the
+select-all box is partly checked.
 
 The header row draws its own background part (`headerBackground`, the `tableHeader` part restyle) behind the column
 labels, and hands it only `scheme`: the header has no selection, hover, focus or tone of its own. The stock

@@ -35,28 +35,16 @@ MorphField {
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
         }
-        indicator: Rectangle {
+        indicator: MorphCheckIndicator {
             objectName: "boxIndicator"
             x: box.leftPadding
             y: (box.height - height) / 2
-            implicitWidth: Theme.unitHeight
-            implicitHeight: Theme.unitHeight
-            radius: Theme.radiusControl / 2
-            color: box.checked ? root.scheme.accent : root.scheme.controlSurface
-            border.width: box.visualFocus ? 2 : 1
+            scheme: root.scheme
+            checked: box.checked
+            focused: box.visualFocus
             // A toned box keeps its tone's border while focused; focus shows as the border's width.
-            border.color: root.shownTone !== 0 ? root.toneOf(root.shownTone)
-                                               : box.visualFocus ? root.scheme.focus
-                                                                 : box.checked ? root.scheme.accent : root.scheme.controlBorder
-
-            Text {
-                textFormat: Text.PlainText
-                anchors.centerIn: parent
-                visible: box.checked
-                text: "✓"
-                color: "white"
-                font.pixelSize: parent.height * 0.75
-            }
+            toned: root.shownTone !== 0
+            toneColor: root.toneOf(root.shownTone)
         }
         // The widget's own chords come before the control's handling of the key.
         Keys.priority: Keys.BeforeItem

@@ -380,9 +380,40 @@ TEST_CASE("qt_quick table: a hidden cell does not count toward the column width,
     CHECK(widthShown == widthBefore);
 }
 
-// Mutation: write no tone on the row (the backgrounds stay clear).
-TEST_CASE("qt_quick table: a toned row's background fills with the tone's bg and keeps its bar when selected",
-          "[qt_quick]") {
+namespace {
+
+// The colour a tone's fill gives at half strength over a surface: what a toned row is tinted with.
+QColor halfOver(QColor const& surface, QColor const& fill) {
+    float const alpha = fill.alphaF() / 2.0F;
+    auto const mix = [alpha](float below, float above) { return (below * (1.0F - alpha)) + (above * alpha); };
+    return QColor::fromRgbF(mix(surface.redF(), fill.redF()), mix(surface.greenF(), fill.greenF()),
+                            mix(surface.blueF(), fill.blueF()));
+}
+
+bool sameColour(QColor const& left, QColor const& right) {
+    constexpr float kTolerance = 0.01F;
+    return std::abs(left.redF() - right.redF()) < kTolerance &&
+           std::abs(left.greenF() - right.greenF()) < kTolerance &&
+           std::abs(left.blueF() - right.blueF()) < kTolerance &&
+           std::abs(left.alphaF() - right.alphaF()) < kTolerance;
+}
+
+QQuickItem& partOf(ui::StackWidget const& row, char const* name) {
+    auto* const background = Scene::itemOf(row).property("backgroundItem").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    auto* const found = background->findChild<QQuickItem*>(QString::fromLatin1(name));
+    REQUIRE(found != nullptr);
+    return *found;
+}
+
+}  // namespace
+
+// Mutation: write no tone on the row (no tint); draw the tone's bar again (a `toneBar` is found); draw the selection
+// fill whatever the select column (the second table's selected row is filled); leave out the selection bar.
+TEST_CASE(
+    "qt_quick table: a toned row is tinted with no bar, a selected row has the accent's bar and, without a "
+    "select column, the selection fill",
+    "[qt_quick]") {
     Scene scene;
     Rows table = makeTable(scene, {ui::Key{std::string{"a"}}, ui::Key{std::string{"b"}}, ui::Key{std::string{"c"}}},
                            ui::SelectionMode::Single);
@@ -391,31 +422,34 @@ TEST_CASE("qt_quick table: a toned row's background fills with the tone's bg and
     scene.settle();
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
-    auto const part = [](ui::StackWidget const& row, char const* name) -> QQuickItem& {
-        auto* const background = Scene::itemOf(row).property("backgroundItem").value<QQuickItem*>();
-        REQUIRE(background != nullptr);
-        auto* const found = background->findChild<QQuickItem*>(QString::fromLatin1(name));
-        REQUIRE(found != nullptr);
-        return *found;
-    };
-    CHECK(part(*table.rows.at(0), "fill").property("color").value<QColor>() ==
-          theme->property("successBg").value<QColor>());
-    CHECK(part(*table.rows.at(1), "fill").property("color").value<QColor>() ==
-          theme->property("errorBg").value<QColor>());
-    CHECK(part(*table.rows.at(0), "toneBar").isVisible());
-    CHECK(part(*table.rows.at(0), "toneBar").property("color").value<QColor>() ==
-          theme->property("successDot").value<QColor>());
-    CHECK_FALSE(part(*table.rows.at(2), "toneBar").isVisible());
-    // Selected, the row shows the selection and keeps its bar.
+    auto const colorOf = [](QQuickItem const& item) { return item.property("color").value<QColor>(); };
+    QColor const surface = theme->property("surface").value<QColor>();
+    CHECK(sameColour(colorOf(partOf(*table.rows.at(0), "tint")),
+                     halfOver(surface, theme->property("successBg").value<QColor>())));
+    CHECK(sameColour(colorOf(partOf(*table.rows.at(1), "tint")),
+                     halfOver(surface, theme->property("errorBg").value<QColor>())));
+    CHECK(partOf(*table.rows.at(0), "tint").isVisible());
+    CHECK_FALSE(partOf(*table.rows.at(2), "tint").isVisible());
+    // A tone alone draws no bar.
+    for (auto const& row : table.rows) {
+        CHECK_FALSE(partOf(*row, "selectionBar").isVisible());
+        CHECK(Scene::itemOf(*row)
+                  .property("backgroundItem")
+                  .value<QQuickItem*>()
+                  ->findChild<QQuickItem*>(QStringLiteral("toneBar")) == nullptr);
+    }
+    // Selected, the row has the accent's bar and the selection fill over its tint.
     table.table->setSelection({ui::Key{std::string{"a"}}});
     scene.settle();
-    CHECK(part(*table.rows.at(0), "fill").property("color").value<QColor>() ==
-          theme->property("selection").value<QColor>());
-    CHECK(part(*table.rows.at(0), "toneBar").isVisible());
+    CHECK(partOf(*table.rows.at(0), "selectionBar").isVisible());
+    CHECK(partOf(*table.rows.at(0), "selectionBar").property("width").toReal() == 3);
+    CHECK(sameColour(colorOf(partOf(*table.rows.at(0), "selectionBar")), theme->property("accent").value<QColor>()));
+    CHECK(sameColour(colorOf(partOf(*table.rows.at(0), "fill")), theme->property("selection").value<QColor>()));
+    CHECK(partOf(*table.rows.at(0), "tint").isVisible());
     // No tone again.
     table.table->setRowTone(*table.rows.at(1), std::nullopt);
     scene.settle();
-    CHECK_FALSE(part(*table.rows.at(1), "toneBar").isVisible());
+    CHECK_FALSE(partOf(*table.rows.at(1), "tint").isVisible());
 }
 
 namespace {
@@ -761,6 +795,36 @@ Rows selectTable(Scene& scene) {
 }
 
 }  // namespace
+
+// Mutation: draw the selection fill under a select column too (the selected row is filled), or leave the Basic
+// style's indicator on the boxes (their unchecked border is not the control border).
+TEST_CASE("qt_quick table: with a select column a selected row has the bar and no fill, and the boxes are themed",
+          "[qt_quick]") {
+    Scene scene;
+    Rows table = selectTable(scene);
+    table.table->setSelection({ui::Key{std::int64_t{2}}});
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(partOf(*table.rows.at(1), "selectionBar").isVisible());
+    CHECK(partOf(*table.rows.at(1), "fill").property("color").value<QColor>().alpha() == 0);
+    for (QQuickItem* const box : {&selectBoxOf(*table.rows.at(0)), &selectAllOf(*table.table)}) {
+        auto const* const indicator = box->property("indicator").value<QQuickItem*>();
+        REQUIRE(indicator != nullptr);
+        CHECK(indicator->objectName() == QStringLiteral("boxIndicator"));
+        CHECK(indicator->property("scheme").isValid());
+    }
+    // An unchecked row's box is outlined in the control border; the checked one is filled.
+    auto const* const unchecked = selectBoxOf(*table.rows.at(0)).property("indicator").value<QQuickItem*>();
+    CHECK(unchecked->property("border").value<QObject*>()->property("color").value<QColor>() ==
+          theme->property("controlBorder").value<QColor>());
+    auto const* const checked = selectBoxOf(*table.rows.at(1)).property("indicator").value<QQuickItem*>();
+    CHECK(checked->property("color").value<QColor>() == theme->property("accent").value<QColor>());
+    // The select-all box shows a partial selection as a dash.
+    auto const* const all = selectAllOf(*table.table).property("indicator").value<QQuickItem*>();
+    CHECK(all->property("partial").toBool());
+    CHECK(all->findChild<QQuickItem*>(QStringLiteral("mark"))->property("text").toString() == QStringLiteral("–"));
+}
 
 // Mutation: drop setSelectColumn's write (the select-all box is not shown, nor a row's box).
 TEST_CASE("qt_quick table: the select column's boxes show and change the selection", "[qt_quick]") {

@@ -197,6 +197,13 @@ MorphWidget {
         property: "scheme"
         value: root.scheme
     }
+    // Whether the table's select column already shows the selection, so the row takes no fill for it.
+    Binding {
+        target: backgroundLoader.item
+        property: "selectColumn"
+        value: root.table ? root.table.selectColumn : false
+        when: backgroundLoader.item !== null && ("selectColumn" in backgroundLoader.item)
+    }
 
     HoverHandler {
         id: rowHover
@@ -216,6 +223,17 @@ MorphWidget {
         visible: root.table && !root.heading ? root.table.selectColumn : false
         x: Math.floor(((root.table ? root.table.lead : 0) - width) / 2)
         anchors.verticalCenter: parent.verticalCenter
+        padding: 0
+        indicator: MorphCheckIndicator {
+            objectName: "boxIndicator"
+            x: selectBox.leftPadding
+            y: (selectBox.height - height) / 2
+            scheme: root.scheme
+            checked: selectBox.checked
+            focused: selectBox.visualFocus
+        }
+        implicitWidth: indicator.implicitWidth + leftPadding + rightPadding
+        implicitHeight: indicator.implicitHeight + topPadding + bottomPadding
         checked: root.selected
         nextCheckState: function() {
             return checkState

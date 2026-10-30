@@ -80,6 +80,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphSplitterHandle.qml
         qml/MorphCollapsible.qml
         qml/MorphDropZone.qml
+        qml/MorphCheckIndicator.qml
     OUTPUT_TARGETS morph_qt_quick_qml_output_targets
 )
 set(MORPH_QT_QUICK_QML_OUTPUT_TARGETS ${morph_qt_quick_qml_output_targets} PARENT_SCOPE)
