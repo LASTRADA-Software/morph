@@ -23,6 +23,12 @@ std::string workspaceTabs(GalleryScreen& screen) {
     return bars.empty() ? std::string{} : screen.backend().prop(bars.front(), "tabs");
 }
 
+// Whether the shell insets the page: the first of its three inset spacers shows.
+bool pageInset(GalleryScreen& screen) {
+    int const page = screen.find("Column", "shell_page").value();
+    return screen.backend().prop(screen.backend().children(page).at(0), "visible") != "false";
+}
+
 }  // namespace
 
 TEST_CASE("review, expanded: the queue beside the worksheet, its flagged results", "[lims-gallery]") {
@@ -122,4 +128,27 @@ TEST_CASE("review, compact: the worksheet as its own page, the queue behind it",
     screen.backend().click(queueEntry(screen, "WS-2026-0405 · 48 min"));
     CHECK(screen.waitForText("sheet-title", "Dissolution · Ibuprofen 400 mg"));
     screen.requireNoProblems();
+}
+
+// Mutation: drop `pageEdge` from the expanded root (the shell insets the page again, and the panes stop short of the
+// window's edges), or the queue's divided entries (they are padded back from the pane's edges).
+TEST_CASE("review, expanded: the splitter fills the page, with the queue's entries edge to edge", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    screen.requireNoProblems();
+    CHECK(screen.waitFor([&screen] { return !pageInset(screen); }));
+    // The queue pane's head is padded by step 3, and its entries are a divided list with no padding of their own.
+    int const queue = screen.find("Column", "queue").value();
+    CHECK(screen.backend().prop(queue, "divided") == "true");
+    CHECK_FALSE(screen.backend().hasProp(queue, "padding"));
+    CHECK(screen.backend().find("Column", "padding", "3").has_value());
+}
+
+// Mutation: leave the compact roots without `pageEdge` (the shell keeps its inset around the pinned worksheet).
+TEST_CASE("review, compact: the pinned worksheet and queue pages take the page's edges", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "compact"};
+    screen.requireNoProblems();
+    CHECK(screen.waitFor([&screen] { return !pageInset(screen); }));
+    screen.click("back");
+    REQUIRE(screen.waitFor([&screen] { return screen.find("Column", "queue").has_value(); }));
+    CHECK_FALSE(pageInset(screen));
 }

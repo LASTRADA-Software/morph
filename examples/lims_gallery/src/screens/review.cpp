@@ -467,14 +467,32 @@ ui::AnyHandle filteredQueue(Review const& review) {
     });
 }
 
+ui::Node queueTitle(Review const& review) {
+    return ui::text({.text = ui::format("Awaiting review · {0}", {review.waiting}), .role = "heading"})
+        .testId("queue-title");
+}
+
+ui::Node queueSearch(Review const& review) {
+    return ui::textInput({.value = review.search,
+                          .label = "Search the queue",
+                          .placeholder = "Worksheet, lot or analyst",
+                          .onChange = ui::set(review.search, ui::event())})
+        .testId("queue-search");
+}
+
+// The queue beside the worksheet: its head is padded, and its entries span the pane edge to edge, divided, so an
+// entry's tint and selection bar reach the pane's edges.
 ui::Node queuePane(Review const& review) {
-    return ui::column({ui::text({.text = ui::format("Awaiting review · {0}", {review.waiting}), .role = "heading"})
-                           .testId("queue-title"),
-                       ui::textInput({.value = review.search,
-                                      .label = "Search the queue",
-                                      .placeholder = "Worksheet, lot or analyst",
-                                      .onChange = ui::set(review.search, ui::event())})
-                           .testId("queue-search"),
+    return ui::column({ui::column({queueTitle(review), queueSearch(review)}, {.gap = 2, .padding = 3}),
+                       ui::forEach(filteredQueue(review), {.key = ui::row("id"), .gap = 0, .divided = true},
+                                   [&review](ui::DeclScope&) { return ui::Nodes{queueEntry(review)}; })
+                           .testId("queue")},
+                      {.gap = 0});
+}
+
+// The phone's queue, a page of its own: its entries sit inside the page's inset.
+ui::Node compactQueue(Review const& review) {
+    return ui::column({queueTitle(review), queueSearch(review),
                        ui::forEach(filteredQueue(review), {.key = ui::row("id"), .gap = 3},
                                    [&review](ui::DeclScope&) { return ui::Nodes{queueEntry(review)}; })
                            .testId("queue")},
@@ -730,7 +748,7 @@ ui::Node approveButton(Review const& review, char const* label) {
 ui::Node worksheetPane(Review const& review) {
     return ui::pinned(
         {ui::column({sheetHead(review, false), selfBanner(review), signedBanner(review), recordTabs(review, false)},
-                    {.gap = 2, .padding = 4})},
+                    {.gap = 2})},
         {.bottom = ui::row({returnButton(review, "Return to analyst…"), rejectButton(review, "Reject…"),
                             ui::spacer().sizing(ui::stretch()),
                             layout::muted(ui::cond(review.self, Text{"Another reviewer must approve"},
@@ -749,7 +767,8 @@ ui::Node expandedLayout(Review const& review) {
                            .sizing(ui::stretch(), ui::stretch())
                            .a11y("Queue and worksheet")
                            .testId("split"),
-                       decisionDialog(review)})
+                       decisionDialog(review)},
+                      {.pageEdge = true})
         .sizing(ui::stretch(), ui::stretch());
 }
 
@@ -769,7 +788,7 @@ ui::Node compactWorksheet(Review const& review) {
 }
 
 ui::Node compactLayout(Review const& review) {
-    return ui::switchOn(review.showQueue, {ui::Case{true, {ui::pinned(queuePane(review))}}},
+    return ui::switchOn(review.showQueue, {ui::Case{true, {ui::pinned(compactQueue(review))}}},
                         {compactWorksheet(review)})
         .sizing(ui::stretch(), ui::stretch());
 }
