@@ -1747,6 +1747,7 @@ TEST_CASE("a screen's head writes its lead placement, its surface and an icon-on
                              screen.title(ui::AnyHandle{"Console"});
                              screen.leadPlacement(ui::AnyHandle{"end"});
                              screen.headSurface(ui::AnyHandle{"darkHead"});
+                             screen.pageSurface(ui::AnyHandle{"plainPage"});
                              screen.action({.id = "scan",
                                             .label = ui::AnyHandle{"Scan"},
                                             .icon = ui::AnyHandle{"scan"},
@@ -1756,6 +1757,7 @@ TEST_CASE("a screen's head writes its lead placement, its surface and an icon-on
     REQUIRE(emitted.has_value());
     CHECK(emitted->text.contains(R"("leadPlacement":"end")"));
     CHECK(emitted->text.contains(R"("headSurface":"darkHead")"));
+    CHECK(emitted->text.contains(R"("pageSurface":"plainPage")"));
     CHECK(emitted->text.contains(R"("actions":[{"id":"scan","label":"Scan","icon":"scan","iconOnly":true}])"));
 }
 

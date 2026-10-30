@@ -2863,6 +2863,11 @@ public:
     /// @param surface The expression.
     void headSurface(AnyHandle const& surface) { detail::put(_head, "headSurface", surface.json()); }
 
+    /// @brief The surface the shell draws the page area on while the screen is shown: an expression of a surface's
+    ///        name, `null` for the built-in `page` surface.
+    /// @param surface The expression.
+    void pageSurface(AnyHandle const& surface) { detail::put(_head, "pageSurface", surface.json()); }
+
     /// @brief Appends a status badge to the head.
     /// @param badge The badge.
     void status(HeadBadgeOptions const& badge) { detail::append(_head, "status", detail::headBadge(badge)); }

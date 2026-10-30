@@ -427,6 +427,15 @@ public:
         return surface == nullptr ? std::string{} : surface->get();
     }
 
+    /// @brief The surface the active screen asks the shell to draw the page area on. A tracked read.
+    /// @return The surface's name; empty with no active tab and while the screen names none.
+    [[nodiscard]] std::string activePageSurface() const {
+        std::optional<WorkspaceTabId> const tab = _model->active().get();
+        ScreenHead const* const head = tab ? headOf(*tab) : nullptr;
+        reactive::Computed<std::string> const* const surface = head == nullptr ? nullptr : head->pageSurface();
+        return surface == nullptr ? std::string{} : surface->get();
+    }
+
     /// @brief The active tab's title as runs, which a shell that knows them draws in place of the tab's caption. A
     ///        tracked read.
     /// @return The runs; empty with no active tab, or while the active screen gives none.

@@ -24,7 +24,7 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 | a row, gap 3 (compact: 1), `align: center`, padded by a zero-width spacer at both ends | `shell_topbar_line` | the top line: the two pad spacers around the wrapping row, so its content starts a gap of step 3 (compact: step 1) from the bar's left edge and ends as far from the right, and sits centred across the bar's line |
 | a row that wraps, gap 3 (compact: 2), `align: start` (`center` while the head is one line), `justify: end`, stretch | `shell_topbar_main` | the navigation menu (`shell_nav_menu`, shown only in [the compact form](#the-compact-form)); a lead block, a column that stretches from `kShellHeadLeadMinimum` (32) units, holding the eyebrow slot (`shell_head_eyebrow`), the title line (`shell_title_line`, a row that wraps, gap 2, centred) and the lead slot (`shell_head_lead`), in that order; the title line holds the shown screen's title (`shell_title`, a heading) and the inline lead slot (`shell_head_inline`, hidden unless the lead is inline); then the trail slot (`shell_head`). Every line of it is padded at both ends by the pad spacers |
 | a text, muted, hidden unless the principal sits in the head | `shell_head_principal` | the principal in the top line, after the wrapping row (`setPrincipalInHead`) |
-| a column, surface `page`, stretch × stretch | `shell_page` | the page: zero-sized spacers above and either side of the content, each a gap of step 4 away, so the content is padded by step 4; the spacers hide while `setPageInset(false)`, and a hidden spacer takes no gap, so the content then fills the page |
+| a column, surface `page` (or the one `setPageSurface` names), stretch × stretch | `shell_page` | the page: zero-sized spacers above and either side of the content, each a gap of step 4 away, so the content is padded by step 4; the spacers hide while `setPageInset(false)`, and a hidden spacer takes no gap, so the content then fills the page |
 
 - `page()` is the content container, where the client places the workspace.
 - `navigator()` is the navigator, for its pins and search.
@@ -39,6 +39,8 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
   the block and wraps to a line under the title when they do not, so the trail wraps only when the block's minimum and
   the trail do not fit together; the spare width lies after the lead, before the trail. `setLeadInline(false)` hides
   the slot.
+- `setPageSurface(name)` draws the page area on the named surface; empty is `page`, and a name no surface answers to
+  draws as `page` does. The generic client sets it from `Workspace::activePageSurface()`.
 - `setHeadOneLine(oneLine)` aligns the wrapping line's items across it (`Center`) while the head is a single line, so a
   title alone is level with the trail's buttons, and by their tops (`Start`) while it has an eyebrow or a lead under the
   title, so the trail's top is the eyebrow's. A wrapping row aligns per line, so a trail that wrapped to a line of its

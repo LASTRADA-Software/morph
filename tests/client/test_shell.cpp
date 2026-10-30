@@ -100,6 +100,26 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> placementBun
     return served.build();
 }
 
+/// A screen that asks for the white page surface.
+constexpr std::string_view kPlainPage = R"({
+  "vocab": "ui/1", "id": "probe.plainpage", "pageSurface": "plainPage",
+  "view": { "kind": "text", "testId": "plainpage", "text": "plainpage" } })";
+
+/// The plain-page screen and the plain one, neither public.
+/// @return It, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> pageSurfaceBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    for (auto const& [screenId, text] : {std::pair{"probe.plainpage", kPlainPage}, std::pair{"probe.plain", kPlain}}) {
+        ui::CatalogEntry entry;
+        entry.id = screenId;
+        entry.title = screenId;
+        if (auto added = served.addScreen(std::move(entry), std::string{text}); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    return served.build();
+}
+
 /// A screen that asks the callee for an answer, in a dialog or as a tab, and shows what it got.
 constexpr std::string_view kAsker = R"({
   "vocab": "ui/1", "id": "probe.asker", "title": "Asker",
@@ -551,6 +571,32 @@ TEST_CASE("Client shell: an inline lead mounts beside the title, and the app doc
         backend.click(*plain);
         CHECK(pumpUntil(context.owner(),
                         [&backend] { return propOf(backend, "Row", "shell_head_inline", "visible") == "false"; }));
+    }
+    source.close();
+}
+
+// Control: a client that never calls `setPageSurface`.
+TEST_CASE("Client shell: a screen's page surface is the page area's, and the next screen restores page",
+          "[client][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &pageSurfaceBundle},
+                               client::LocalSetup{.db = {}, .user = "Dr. A. Meyer"}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "probe.plainpage"});
+        REQUIRE(pumpUntil(context.owner(),
+                          [&backend] { return propOf(backend, "Column", "shell_page", "surface") == "plainPage"; }));
+        auto const plain = backend.find("Button", "testId", "nav_probe.plain");
+        REQUIRE(plain.has_value());
+        backend.click(*plain);
+        CHECK(pumpUntil(context.owner(),
+                        [&backend] { return propOf(backend, "Column", "shell_page", "surface") == "page"; }));
     }
     source.close();
 }
