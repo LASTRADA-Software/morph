@@ -91,9 +91,8 @@ ui::Node summary(Signature const& sign, bool compact) {
     return ui::panel({body}, {.padding = 2}).surface("page").testId("record");
 }
 
-// The refusal: "Password incorrect." in a strong run, then the attempts that are left. The field under it carries the
-// same words as its own error, so on a phone, where both are on one screen, the banner leaves them out and says only
-// what the field does not.
+// The refusal: "Password incorrect." in a strong run, then the attempts that are left. On a phone the field under it
+// carries the same words as its own error, so the banner leaves them out and says only what the field does not.
 ui::Node refusedBanner(Signature const& sign, ui::Handle<bool> const& compact) {
     auto const attempts = ui::format("{0} of 5 attempts left before the account locks.", {sign.attempts});
     auto const full =
@@ -129,16 +128,18 @@ ui::Node reasonField(Signature const& sign) {
         .testId("reason");
 }
 
-// Typing a new password takes the refusal away until the next attempt.
-ui::Node passwordField(Signature const& sign) {
+// Typing a new password takes the refusal away until the next attempt. While it is refused the field is marked: with
+// its own error on a phone, and only outlined where the banner above it already says "Password incorrect."
+ui::Node passwordField(Signature const& sign, ui::Handle<bool> const& compact) {
     return layout::captioned(
                ui::textInput({.value = sign.password,
                               .label = "Password",
                               .mode = "password",
                               .onChange = {ui::set(sign.password, ui::event()), ui::set(sign.refused, false)}}))
         .required(true)
-        .errors(ui::cond(sign.refused, ui::AnyHandle{std::vector<std::string>{"Password incorrect."}},
+        .errors(ui::cond(sign.refused && compact, ui::AnyHandle{std::vector<std::string>{"Password incorrect."}},
                          ui::AnyHandle{std::vector<std::string>{}}))
+        .tone(ui::cond(sign.refused && !compact, Text{"err"}, Text{"neutral"}))
         .testId("password");
 }
 
@@ -178,7 +179,7 @@ ui::Nodes signatureFields(ui::AnyHandle const& width, Signature const& sign, boo
         layout::byWidth(width, {signerField(), meaningField(sign)},
                         {ui::grid({signerField(), meaningField(sign)}, {.gap = 2, .columns = 2})}),
         reasonField(sign),
-        passwordField(sign),
+        passwordField(sign, ui::Handle<bool>{ui::eq(width, "compact")}),
         signingAt(sign)};
     if (withNote) {
         fields.insert(fields.begin(),

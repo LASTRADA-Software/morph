@@ -30,7 +30,9 @@ TEST_CASE("e-signature, expanded: a dialog over the worksheet, opened on the ref
     CHECK(screen.backend().all("KeyValue").size() == 1);
     CHECK(screen.shows("Panel", "record"));
     CHECK(screen.prop("TextInput", "signer", "readonly") == "true");
-    CHECK(screen.prop("TextInput", "password", "errors") == "[Password incorrect.]");
+    // The refusal is said once: the banner has the words, so the field is only marked.
+    CHECK(screen.prop("TextInput", "password", "errors") == "[]");
+    CHECK(screen.prop("TextInput", "password", "tone") == "Err");
     CHECK(screen.find("Select", "meaning").has_value());
     CHECK(screen.find("TextInput", "reason").has_value());
     // The footer's sign button waits for a password.
