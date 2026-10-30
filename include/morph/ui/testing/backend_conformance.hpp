@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -118,8 +119,9 @@ public:
     /// @param target The widget it is dropped on.
     virtual void drag(Widget& source, Widget& target) = 0;
 
-    /// @brief Dismisses a dialog or drawer as a user would (Esc on the TUI), or a dismissible banner.
-    /// @param dialog The dialog, drawer or banner.
+    /// @brief Dismisses a dialog or drawer as a user would (Esc on the TUI), or a dismissible banner, or removes a
+    ///        removable badge with its remove control.
+    /// @param dialog The dialog, drawer, banner or badge.
     virtual void dismiss(Widget& dialog) = 0;
 
     /// @brief Selects rows of a table as a user would, so that the user's selection is exactly these rows.
@@ -127,6 +129,17 @@ public:
     /// @param rows Positions among the table's current rows, in the order the user picks them: at least one, and
     ///        one only for a `Single` table.
     virtual void selectRows(Widget& table, std::vector<std::size_t> const& rows) = 0;
+
+    /// @brief Clicks a row of a table as a user would, with the modifiers @p click stands for: none, Ctrl, or Shift.
+    /// @param table The table.
+    /// @param row   A position among the table's current rows.
+    /// @param click How the click is modified.
+    virtual void clickRow(Widget& table, std::size_t row, RowClick click) = 0;
+
+    /// @brief Clicks a column's header of a table as a user would.
+    /// @param table  The table.
+    /// @param column The column's index among the table's columns.
+    virtual void clickHeader(Widget& table, std::size_t column) = 0;
 
     /// @brief The rows a table shows as selected.
     /// @param table The table.
@@ -167,6 +180,16 @@ public:
     /// @param zone The drop zone.
     /// @param paths The files' paths, in the order dropped; not empty.
     virtual void dropFiles(Widget& zone, std::vector<std::string> const& paths) = 0;
+
+    /// @brief What assistive technology reads as a widget's description: a field's messages and then its
+    ///        description, joined by line feeds; an overlay's description. A probe that reads none keeps the
+    ///        default, and the cases that read one fail on it.
+    /// @param widget The widget.
+    /// @return The description; `nullopt` when the probe reads none.
+    [[nodiscard]] virtual std::optional<std::string> descriptionOf(Widget const& widget) {
+        static_cast<void>(widget);
+        return std::nullopt;
+    }
 
     /// @brief Where a widget is drawn, for the layout cases (`layoutConformanceCases`). A backend that lays nothing
     ///        out, such as `RecordingBackend`, answers none and runs only `conformanceCases`; a layout case run on
@@ -255,10 +278,13 @@ struct Entry {
 /// @brief A one-column Table of entries, keyed by id, whose cell is a Text of the label.
 /// @param rows The entries; must outlive the node's mounts.
 /// @param options Selection, activation and `Common`.
+/// @param sortable Whether the column is sortable.
 /// @return The node.
-[[nodiscard]] inline Node entryTable(reactive::Signal<std::vector<Entry>> const& rows, TableOptions options) {
+[[nodiscard]] inline Node entryTable(reactive::Signal<std::vector<Entry>> const& rows, TableOptions options,
+                                     bool sortable = false) {
     return ui::table<Entry>(
-        {{.label = "Name"}}, [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+        {{.label = "Name", .sortable = sortable}}, [&rows] { return rows.get(); },
+        [](Entry const& entry) { return Key{entry.id}; },
         [](reactive::Signal<Entry> const& entry) {
             return std::vector<Node>{ui::text({.text = [&entry] { return entry.get().label; }})};
         },
@@ -502,6 +528,39 @@ struct Entry {
     return checks.result();
 }
 
+/// @brief Case: relabelled tabs keep the highlighted tab and its page. With B highlighted and its page shown, a new
+///        caption for B leaves B highlighted under the new caption, and B's page the one visible.
+///
+/// The tab count stays the same, so a backend must replace the captions in place: one that rebuilds its tab buttons
+/// loses the highlight, and one that ignores a second `setTabs` keeps the old caption.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> relabelledTabsKeepHighlight(ConformanceProbe& probe) {
+    reactive::Signal<std::size_t> selected{probe.runtime(), 0};
+    reactive::Signal<std::string> caption{probe.runtime(), "B"};
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::tabs({.tabs = {{.label = "A", .node = ui::text({.text = "first"})},
+                           {.label = [&caption] { return caption.get(); }, .node = ui::text({.text = "second"})}},
+                  .selected = [&selected] { return selected.get(); },
+                  .onSelect = [&selected](std::size_t index) { selected.set(index); }})};
+    probe.settle();
+    selected.set(1);
+    probe.settle();
+    ContainerWidget const& bar = rootContainer(view);
+    Checks checks;
+    checks.text("the highlighted tab before the relabel", "B", probe.textOf(bar));
+    caption.set("B \u00b7 3");
+    probe.settle();
+    checks.text("the highlighted tab after the relabel", "B \u00b7 3", probe.textOf(bar));
+    checks.that(probe.childCount(bar) == 2, "a relabel mounted or dropped a page");
+    Widget const* const first = probe.childAt(bar, 0);
+    Widget const* const second = probe.childAt(bar, 1);
+    checks.that(first != nullptr && !probe.visibleOf(*first), "a relabel showed the page of a tab not highlighted");
+    checks.that(second != nullptr && probe.visibleOf(*second), "a relabel hid the highlighted tab's page");
+    return checks.result();
+}
+
 /// @brief Case: a ForEach updates a row whose key stays in place, keeping its widget and not building its view
 ///        again.
 ///
@@ -660,12 +719,13 @@ struct Entry {
     // direct parent fails: an outer Column hides or disables, a Panel inside it collapses, and an inner Column
     // holds the widgets.
     Node const widgets = ui::column(
-        {.children = {
-             ui::button({.label = "Go", .onClick = [&clicks] { ++clicks; }}),
-             ui::textInput({.onChange = [&edits](std::string const&) { ++edits; }}),
-             ui::text({.text = "card", .common = {.dragKey = std::optional<Key>{Key{std::int64_t{7}}}}}),
-             entryTable(rows, {.selectionMode = SelectionMode::Single,
-                               .onSelectionChange = [&selections](std::vector<Key> const&) { ++selections; }})}});
+        {.children = {ui::button({.label = "Go", .onClick = [&clicks] { ++clicks; }}),
+                      ui::textInput({.onChange = [&edits](std::string const&) { ++edits; }}),
+                      ui::text({.text = "card", .common = {.dragKey = std::optional<Key>{Key{std::int64_t{7}}}}}),
+                      entryTable(rows, {.selectionMode = SelectionMode::Single,
+                                        .onSelectionChange = [&selections](std::vector<Key> const&, SelectionChange) {
+                                            ++selections;
+                                        }})}});
     Mounted const gated{runtime, probe.backend(),
                         ui::column({.children = {ui::panel({.title = "Outer",
                                                             .child = widgets,
@@ -870,15 +930,31 @@ struct Entry {
                            .selected = [odd] { return odd() ? std::size_t{1} : std::size_t{0}; },
                            .onSelect = note("Tabs onSelect")}),
                  ui::dialog({.open = odd, .title = "d", .onDismiss = note("Dialog onDismiss")}),
-                 entryTable(rows, {.selectionMode = SelectionMode::Multiple,
-                                   .selection =
-                                       [&phase] {
-                                           return phase.get() < 2
-                                                      ? std::vector<Key>{Key{std::int64_t{3}}}
-                                                      : std::vector<Key>{Key{std::int64_t{1}}, Key{std::int64_t{2}}};
-                                       },
-                                   .onSelectionChange = note("Table onSelectionChange"),
-                                   .onActivate = note("Table onActivate")}),
+                 ui::chart({.data =
+                                [&phase] {
+                                    ChartData data;
+                                    data.yMax = 4.0;
+                                    data.summary = "c" + std::to_string(phase.get());
+                                    return data;
+                                }}),
+                 entryTable(rows,
+                            {.selectionMode = SelectionMode::Multiple,
+                             .selection =
+                                 [&phase] {
+                                     return phase.get() < 2
+                                                ? std::vector<Key>{Key{std::int64_t{3}}}
+                                                : std::vector<Key>{Key{std::int64_t{1}}, Key{std::int64_t{2}}};
+                                 },
+                             .onSelectionChange = note("Table onSelectionChange"),
+                             .sort =
+                                 [odd] {
+                                     return odd() ? std::optional<TableSort>{TableSort{
+                                                        .column = 0, .direction = SortDirection::Descending}}
+                                                  : std::nullopt;
+                                 },
+                             .onSort = note("Table onSort"),
+                             .onActivate = note("Table onActivate")},
+                            true),
              }})};
     probe.settle();
     for (int next = 1; next <= 3; ++next) {
@@ -950,7 +1026,7 @@ struct Entry {
                        entryTable(rows, {.selectionMode = SelectionMode::Multiple,
                                          .selection = [&selection] { return selection.get(); },
                                          .onSelectionChange =
-                                             [&reports, &selection](std::vector<Key> keys) {
+                                             [&reports, &selection](std::vector<Key> keys, SelectionChange) {
                                                  reports.push_back(keys);
                                                  selection.set(std::move(keys));
                                              }})};
@@ -999,9 +1075,10 @@ struct Entry {
 [[nodiscard]] inline std::optional<std::string> tableShowsUnboundUserSelection(ConformanceProbe& probe) {
     reactive::Signal<std::vector<Entry>> rows{probe.runtime(), {{.id = 1, .label = "a"}, {.id = 2, .label = "b"}}};
     int reports = 0;
-    Mounted const view{probe.runtime(), probe.backend(),
-                       entryTable(rows, {.selectionMode = SelectionMode::Single,
-                                         .onSelectionChange = [&reports](std::vector<Key> const&) { ++reports; }})};
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        entryTable(rows, {.selectionMode = SelectionMode::Single,
+                          .onSelectionChange = [&reports](std::vector<Key> const&, SelectionChange) { ++reports; }})};
     probe.settle();
     probe.selectRows(view.root(), {1});
     probe.settle();
@@ -1253,6 +1330,188 @@ private:
     return checks.result();
 }
 
+/// @brief Case: Enter on a focused button that declares an Enter chord runs the chord, not the click. A chord the
+///        focused widget declares comes before the widget's own handling of the key.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> ownChordBeforeOwnKey(ConformanceProbe& probe) {
+    std::vector<std::string> ran;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {
+                        ui::column({.children = {ui::button({.label = "Go",
+                                                             .onClick = [&ran] { ran.emplace_back("click"); },
+                                                             .common = {.keys = {{.chord = "Enter", .onPress = [&ran] {
+                                                                                      ran.emplace_back("chord");
+                                                                                  }}}}})}})}})};
+    probe.settle();
+    Widget* const button = childOf(probe, childOf(probe, &view.root(), 0), 0);
+    if (button == nullptr) {
+        return "a Button in a Column in a Column is not shown";
+    }
+    probe.press(*button, "Enter");
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"chord"}, "Enter on a button that declares an Enter chord ran " +
+                                                              std::to_string(ran.size()) +
+                                                              " handlers, not the chord alone");
+    return checks.result();
+}
+
+/// @brief Case: Enter on a focused button inside a column that declares an Enter chord clicks the button, and the
+///        column's chord does not run. A button takes Enter for itself before its ancestors' chords.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> ownKeyBeforeAncestorChord(ConformanceProbe& probe) {
+    std::vector<std::string> ran;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {ui::button({.label = "Go", .onClick = [&ran] { ran.emplace_back("click"); }})},
+                    .common = {.keys = {{.chord = "Enter", .onPress = [&ran] { ran.emplace_back("chord"); }}}}})};
+    probe.settle();
+    Widget* const button = childOf(probe, &view.root(), 0);
+    if (button == nullptr) {
+        return "a Button in a Column is not shown";
+    }
+    probe.press(*button, "Enter");
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"click"},
+                "Enter on a button inside a column that declares an Enter chord ran " + std::to_string(ran.size()) +
+                    " handlers, not the click alone");
+    return checks.result();
+}
+
+/// @brief A dialog, open, whose content column declares an Enter chord standing in for a document's `default`, and
+///        holds @p field.
+/// @param ran Where the chord records `default`.
+/// @param field The node inside the content column.
+/// @return The dialog.
+[[nodiscard]] inline Node dialogWithDefault(std::vector<std::string>& ran, Node field) {
+    return ui::dialog(
+        {.open = true,
+         .title = "Confirm",
+         .child = ui::column(
+             {.children = {std::move(field)},
+              .common = {.keys = {{.chord = "Enter", .onPress = [&ran] { ran.emplace_back("default"); }}}}})});
+}
+
+/// @brief The widget inside the content column of the dialog `dialogWithDefault` makes.
+/// @param probe The backend under test.
+/// @param view The mounted dialog.
+/// @return The widget, or null while it is not shown.
+[[nodiscard]] inline Widget* insideDialog(ConformanceProbe& probe, Mounted const& view) {
+    return childOf(probe, childOf(probe, &view.root(), 0), 0);
+}
+
+/// @brief Case: in a dialog, Enter on a single-line text input with a submit handler commits and submits it, and the
+///        dialog's Enter chord does not run.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> submittingFieldTakesEnter(ConformanceProbe& probe) {
+    std::vector<std::string> ran;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        dialogWithDefault(
+            ran, ui::textInput({.onSubmit = [&ran](std::string const& text) { ran.push_back("submit " + text); },
+                                .onCommit = [&ran](std::string const& text) { ran.push_back("commit " + text); }}))};
+    probe.settle();
+    Widget* const field = insideDialog(probe, view);
+    if (field == nullptr) {
+        return "a TextInput in an open Dialog's Column is not shown";
+    }
+    probe.type(*field, "ok");
+    probe.settle();
+    probe.press(*field, "Enter");
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"commit ok", "submit ok"},
+                "Enter on a submitting field in a dialog ran " + std::to_string(ran.size()) +
+                    " handlers, not its commit and its submit alone");
+    return checks.result();
+}
+
+/// @brief Case: in a dialog, Enter on a single-line text input without a submit handler commits it, and the dialog's
+///        Enter chord runs once.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> fieldWithoutSubmitPassesEnterOn(ConformanceProbe& probe) {
+    std::vector<std::string> ran;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        dialogWithDefault(
+            ran, ui::textInput({.onCommit = [&ran](std::string const& text) { ran.push_back("commit " + text); }}))};
+    probe.settle();
+    Widget* const field = insideDialog(probe, view);
+    if (field == nullptr) {
+        return "a TextInput in an open Dialog's Column is not shown";
+    }
+    probe.type(*field, "ok");
+    probe.settle();
+    probe.press(*field, "Enter");
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"commit ok", "default"},
+                "Enter on a field without a submit handler in a dialog ran " + std::to_string(ran.size()) +
+                    " handlers, not its commit and then the dialog's chord");
+    return checks.result();
+}
+
+/// @brief Case: in a dialog, Enter on a focused check box leaves it unchanged and runs the dialog's Enter chord;
+///        Space toggles it and runs no chord.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> checkboxTakesSpaceNotEnter(ConformanceProbe& probe) {
+    std::vector<std::string> ran;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       dialogWithDefault(ran, ui::checkbox({.label = "Agree", .onToggle = [&ran](bool checked) {
+                                                                ran.emplace_back(checked ? "checked" : "unchecked");
+                                                            }}))};
+    probe.settle();
+    Widget* const box = insideDialog(probe, view);
+    if (box == nullptr) {
+        return "a Checkbox in an open Dialog's Column is not shown";
+    }
+    probe.press(*box, "Enter");
+    probe.settle();
+    probe.press(*box, "Space");
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"default", "checked"},
+                "Enter then Space on a check box in a dialog ran " + std::to_string(ran.size()) +
+                    " handlers, not the dialog's chord and then one toggle");
+    return checks.result();
+}
+
+/// @brief Case: Enter on a single-line text input that declares an Enter chord itself runs the chord, and neither
+///        submits nor commits through Enter.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> fieldChordBeforeSubmit(ConformanceProbe& probe) {
+    std::vector<std::string> ran;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column(
+            {.children = {ui::textInput(
+                 {.onSubmit = [&ran](std::string const& text) { ran.push_back("submit " + text); },
+                  .onCommit = [&ran](std::string const& text) { ran.push_back("commit " + text); },
+                  .common = {.keys = {{.chord = "Enter", .onPress = [&ran] { ran.emplace_back("chord"); }}}}})}})};
+    probe.settle();
+    Widget* const field = childOf(probe, &view.root(), 0);
+    if (field == nullptr) {
+        return "a TextInput in a Column is not shown";
+    }
+    probe.type(*field, "ok");
+    probe.settle();
+    probe.press(*field, "Enter");
+    probe.settle();
+    Checks checks;
+    checks.that(ran == std::vector<std::string>{"chord"}, "Enter on a field that declares an Enter chord ran " +
+                                                              std::to_string(ran.size()) +
+                                                              " handlers, not the chord alone");
+    return checks.result();
+}
+
 /// @brief Case: the first `autofocus` widget in document order has focus once the mount completes.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -1302,6 +1561,51 @@ private:
     checks.that(chosen == std::vector<std::string>{"a.txt", "Delete"},
                 "choosing a submenu, its entry, a disabled entry and then that entry enabled ran " +
                     std::to_string(chosen.size()) + " handlers, not the submenu's entry and the enabled one");
+    return checks.result();
+}
+
+/// @brief Case: a button-style menu labelled `More` over `[A, separator, B, C]` shows `More`, reports the entry past
+///        the separator by its path `[2]`, and never reports the separator. A backend that leaves the separator out of
+///        its rows runs C and then B.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> buttonMenuSkipsSeparator(ConformanceProbe& probe) {
+    std::vector<std::string> chosen;
+    auto const choose = [&chosen](std::string name) {
+        return [&chosen, name = std::move(name)] { chosen.push_back(name); };
+    };
+    Menu menu{.items = {{.label = "A", .onSelect = choose("A")},
+                        {.separator = true},
+                        {.label = "B", .onSelect = choose("B")},
+                        {.label = "C", .onSelect = choose("C")}},
+              .style = MenuStyle::Button,
+              .label = std::string{"More"}};
+    Mounted const view{probe.runtime(), probe.backend(), ui::menu(std::move(menu))};
+    probe.settle();
+    Checks checks;
+    checks.text("a button-style menu's trigger", "More", probe.textOf(view.root()));
+    probe.chooseMenuEntry(view.root(), {2});
+    probe.settle();
+    probe.chooseMenuEntry(view.root(), {1});  // the separator
+    probe.settle();
+    checks.that(
+        chosen == std::vector<std::string>{"B"},
+        "choosing [2] and then the separator [1] ran " + std::to_string(chosen.size()) + " handlers, not B's alone");
+    return checks.result();
+}
+
+/// @brief Case: dismissing a removable badge, the user removing it, runs its `onRemove` once.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> removableBadgeReportsRemoval(ConformanceProbe& probe) {
+    int removals = 0;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::badge({.text = std::string{"Result"}, .onRemove = [&removals] { ++removals; }})};
+    probe.settle();
+    probe.dismiss(view.root());
+    probe.settle();
+    Checks checks;
+    checks.that(removals == 1, "removing the badge ran onRemove " + std::to_string(removals) + " times, not once");
     return checks.result();
 }
 
@@ -1405,6 +1709,44 @@ private:
     return checks.result();
 }
 
+/// @brief Case: a chart shows the summary of the data it was last given, not the first.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> chartShowsCurrentSummary(ConformanceProbe& probe) {
+    reactive::Signal<std::string> summary{probe.runtime(), std::string{"A"}};
+    Mounted const view{probe.runtime(), probe.backend(), ui::chart({.data = [&summary] {
+                           ChartData data;
+                           data.yMax = 1.0;
+                           data.xMax = 1.0;
+                           data.series.push_back(
+                               ChartSeries{.label = {}, .joined = true, .points = {ChartPoint{.x = 0.5, .y = 0.5}}});
+                           data.summary = summary.get();
+                           return data;
+                       }})};
+    probe.settle();
+    Checks checks;
+    checks.text("a chart's summary", "A", probe.textOf(view.root()));
+    summary.set("B");
+    probe.settle();
+    checks.text("a chart's summary once the data changed", "B", probe.textOf(view.root()));
+    return checks.result();
+}
+
+/// @brief Case: an unlabelled steps indicator still names its current step.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> unlabelledStepsNameTheirCurrentStep(ConformanceProbe& probe) {
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::steps({.items = std::vector<Step>{{.label = "Product", .state = StepState::Done},
+                                                             {.label = "Conditions", .state = StepState::Active}},
+                                  .current = std::optional<std::size_t>{1},
+                                  .labelled = false})};
+    probe.settle();
+    Checks checks;
+    checks.text("an unlabelled steps indicator", "Conditions", probe.textOf(view.root()));
+    return checks.result();
+}
+
 /// @brief Reads where the layout cases' widgets are drawn, and fails a case whose probe reads no geometry.
 class Geometry {
 public:
@@ -1496,6 +1838,165 @@ struct Measured {
     if (children.size() == 2) {
         geometry.near("the capped stretch child's width", 20, geometry.of(*children.at(0)).width);
         geometry.near("its stretch sibling's width", 40, geometry.of(*children.at(1)).width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a column's padding insets its children from every edge.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> paddingInsetsChildren(ConformanceProbe& probe) {
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        insideColumn(ui::column(Column{.children = {sizedText("a", {}), sizedText("b", {})}, .padding = 3}))};
+    Mounted const bare{probe.runtime(), probe.backend(),
+                       insideColumn(ui::column(Column{.children = {sizedText("a", {}), sizedText("b", {})}}))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const padded = measured(probe, view);
+    Measured const plain = measured(probe, bare);
+    checks.that(padded.children.size() == 2 && plain.children.size() == 2 && padded.container != nullptr &&
+                    plain.container != nullptr,
+                "both columns hold two children");
+    if (padded.children.size() == 2 && plain.children.size() == 2 && padded.container != nullptr &&
+        plain.container != nullptr) {
+        WidgetBounds const box = geometry.of(*padded.container);
+        WidgetBounds const first = geometry.of(*padded.children.at(0));
+        WidgetBounds const bareBox = geometry.of(*plain.container);
+        WidgetBounds const bareFirst = geometry.of(*plain.children.at(0));
+        checks.that(first.x > box.x, "a padded column's child starts inside its left edge");
+        checks.that(bareFirst.x == bareBox.x, "an unpadded column's child starts at its left edge");
+        checks.that(bareFirst.y == bareBox.y, "an unpadded column's child starts at its top edge");
+        checks.that(first.x + first.width < box.x + box.width, "a padded column's child ends inside its right edge");
+        checks.that(box.height > bareBox.height, "a padded column is taller than the same column unpadded");
+    }
+    return checks.result();
+}
+
+/// @brief Case: a two-step padding insets a column's ends and its sides apart.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> twoStepPaddingInsetsEndsAndSidesApart(ConformanceProbe& probe) {
+    Mounted const sides{probe.runtime(), probe.backend(),
+                        insideColumn(ui::column(Column{.children = {sizedText("a", {})}, .padding = Padding{0, 4}}))};
+    Mounted const ends{probe.runtime(), probe.backend(),
+                       insideColumn(ui::column(Column{.children = {sizedText("a", {})}, .padding = Padding{4, 0}}))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const atSides = measured(probe, sides);
+    Measured const atEnds = measured(probe, ends);
+    bool const found = atSides.children.size() == 1 && atEnds.children.size() == 1 && atSides.container != nullptr &&
+                       atEnds.container != nullptr;
+    checks.that(found, "both columns hold one child");
+    if (found) {
+        WidgetBounds const sideBox = geometry.of(*atSides.container);
+        WidgetBounds const sideChild = geometry.of(*atSides.children.at(0));
+        WidgetBounds const endBox = geometry.of(*atEnds.container);
+        WidgetBounds const endChild = geometry.of(*atEnds.children.at(0));
+        checks.that(sideChild.y == sideBox.y, "a column padded [0, 4] starts its child at its top edge");
+        checks.that(sideChild.x > sideBox.x, "a column padded [0, 4] starts its child inside its left edge");
+        checks.that(endChild.x == endBox.x, "a column padded [4, 0] starts its child at its left edge");
+        checks.that(endChild.y > endBox.y, "a column padded [4, 0] starts its child below its top edge");
+    }
+    return checks.result();
+}
+
+/// @brief Case: a bleeding child of a padded column spans the column's width while a sibling stays inset.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> bleedingChildSpansPaddedColumn(ConformanceProbe& probe) {
+    Column column{.children = {sizedText("inside", {}), sizedText("bleeds", {.bleed = true})},
+                  .padding = Padding{0, 4}};
+    column.common.layout = {.width = Sizing::fixed(40)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::column(std::move(column)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const found = measured(probe, view);
+    checks.that(found.container != nullptr && found.children.size() == 2, "the column holds two children");
+    if (found.container != nullptr && found.children.size() == 2) {
+        WidgetBounds const box = geometry.of(*found.container);
+        WidgetBounds const inset = geometry.of(*found.children.at(0));
+        WidgetBounds const bleeding = geometry.of(*found.children.at(1));
+        checks.that(inset.x > box.x, "the sibling stays inside the column's padding");
+        geometry.near("the bleeding child's left edge, against the column's", box.x, bleeding.x);
+        geometry.near("the bleeding child's width, against the column's", box.width, bleeding.width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a panel padded by 5 steps whose content is a holder column, the column the interpreter makes for two
+///        or more nodes, lays a bleeding child from the frame's inner left edge to its inner right edge while its
+///        sibling stays inside the padding.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> bleedingChildOfHeldPanelReachesFrame(ConformanceProbe& probe) {
+    Column holder{.children = {sizedText("bleeds", {.bleed = true}), sizedText("inside", {})}, .holder = true};
+    Panel panel{.padding = 5, .child = ui::column(std::move(holder))};
+    panel.common.layout = {.width = Sizing::fixed(40)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::panel(std::move(panel)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const found = measured(probe, view);
+    ContainerWidget const* const held = found.children.size() == 1 ? asContainer(*found.children.at(0)) : nullptr;
+    checks.that(found.container != nullptr && held != nullptr && probe.childCount(*held) == 2,
+                "the panel holds a column of two children");
+    if (found.container != nullptr && held != nullptr && probe.childCount(*held) == 2) {
+        WidgetBounds const frame = geometry.of(*found.container);
+        WidgetBounds const bleeding = geometry.of(*probe.childAt(*held, 0));
+        WidgetBounds const inside = geometry.of(*probe.childAt(*held, 1));
+        // The frame's border is a cell or a pixel or two; the padding is several cells.
+        checks.that(bleeding.x >= frame.x && bleeding.x - frame.x <= 1.0,
+                    "the bleeding child starts at the frame's inner left edge, not past the padding: it is " +
+                        std::to_string(bleeding.x - frame.x) + " in");
+        checks.that(frame.width - bleeding.width <= 2.0 + 1e-6 && bleeding.width <= frame.width,
+                    "the bleeding child spans the frame's inner width: " + std::to_string(bleeding.width) + " of " +
+                        std::to_string(frame.width));
+        checks.that(inside.x - frame.x >= 1.5,
+                    "the sibling stays inside the padding: it is " + std::to_string(inside.x - frame.x) + " in");
+    }
+    return checks.result();
+}
+
+/// @brief Case: a tabs node with a page inset of 5 steps whose one page holds a holder column of a bleeding child and
+///        a sibling lays the bleeding child from the node's left edge to its right edge while the sibling stays
+///        inside the inset; with the page taller than the tabs node, so that it scrolls, it still does.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> bleedingChildOfTabPageReachesNodeEdges(ConformanceProbe& probe) {
+    Checks checks;
+    for (bool const scrolls : {false, true}) {
+        std::vector<Node> lines;
+        lines.push_back(sizedText("bleeds", {.bleed = true}));
+        for (int line = 0; line < (scrolls ? 12 : 1); ++line) {
+            lines.push_back(sizedText("inside " + std::to_string(line), {}));
+        }
+        Tabs tabs{.tabs = {{.label = "A", .node = ui::column(Column{.children = std::move(lines), .holder = true})}},
+                  .inset = 5,
+                  .pageInset = 5};
+        tabs.common.layout = {.width = Sizing::fixed(40), .height = scrolls ? Sizing::fixed(8) : Sizing::content()};
+        Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::tabs(std::move(tabs)))};
+        probe.settle();
+        Geometry geometry{probe, checks};
+        Measured const found = measured(probe, view);
+        ContainerWidget const* const page = found.children.empty() ? nullptr : asContainer(*found.children.at(0));
+        ContainerWidget const* const held =
+            page != nullptr && probe.childCount(*page) == 1 ? asContainer(*probe.childAt(*page, 0)) : nullptr;
+        std::string const where = scrolls ? " (a page that scrolls)" : "";
+        checks.that(found.container != nullptr && held != nullptr && probe.childCount(*held) >= 2,
+                    "the tabs node holds a page with a column of children" + where);
+        if (found.container != nullptr && held != nullptr && probe.childCount(*held) >= 2) {
+            WidgetBounds const node = geometry.of(*found.container);
+            WidgetBounds const bleeding = geometry.of(*probe.childAt(*held, 0));
+            WidgetBounds const inside = geometry.of(*probe.childAt(*held, 1));
+            geometry.near("the bleeding child's left edge, against the tabs node's" + where, node.x, bleeding.x);
+            geometry.near("the bleeding child's width, against the tabs node's" + where, node.width, bleeding.width);
+            checks.that(inside.x - node.x >= 1.5, "the sibling stays inside the page inset" + where + ": it is " +
+                                                      std::to_string(inside.x - node.x) + " in");
+        }
     }
     return checks.result();
 }
@@ -1648,13 +2149,1079 @@ struct Measured {
     return checks.result();
 }
 
+/// @brief The cells of a table's row, in column order.
+/// @param probe The backend under test.
+/// @param table The table.
+/// @param row   The row's position among the table's rows.
+/// @return Its cells; empty when the table has no such row.
+[[nodiscard]] inline std::vector<Widget*> rowCells(ConformanceProbe& probe, Widget const& table, std::size_t row) {
+    std::vector<Widget*> cells;
+    ContainerWidget const* const rows = asContainer(table);
+    Widget const* const found = rows == nullptr ? nullptr : probe.childAt(*rows, row);
+    ContainerWidget const* const inside = found == nullptr ? nullptr : asContainer(*found);
+    for (std::size_t index = 0; inside != nullptr && index < probe.childCount(*inside); ++index) {
+        cells.push_back(probe.childAt(*inside, index));
+    }
+    return cells;
+}
+
+/// @brief Case: in a 30-unit column with `align: End`, a badge cell ends where the column's text ends: at the
+///        column's right edge, less the inset a backend gives every cell.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> endColumnPlacesBadge(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(),
+                                                    {{.id = 1, .label = "ok"}, {.id = 2, .label = "x"}}};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       insideColumn(ui::table<Entry>(
+                           {{.label = "State", .width = Sizing::fixed(30), .align = Align::End}},
+                           [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+                           [](reactive::Signal<Entry> const& entry) {
+                               // Row 1 holds a badge, row 2 a text; both are drawn at the column's end.
+                               Node cell = entry.peek().id == 1
+                                               ? ui::badge({.text = [&entry] { return entry.get().label; }})
+                                               : ui::text({.text = [&entry] { return entry.get().label; }});
+                               return std::vector<Node>{std::move(cell)};
+                           }))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Widget const* const table = probe.childAt(rootContainer(view), 0);
+    std::vector<Widget*> const badgeRow = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 0);
+    std::vector<Widget*> const textRow = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 1);
+    checks.that(badgeRow.size() == 1 && textRow.size() == 1, "the table holds two rows of one cell");
+    if (badgeRow.size() == 1 && textRow.size() == 1) {
+        WidgetBounds const outer = geometry.of(*table);
+        WidgetBounds const badge = geometry.of(*badgeRow.front());
+        WidgetBounds const text = geometry.of(*textRow.front());
+        geometry.near("the badge's right edge, against the column's text's", text.x + text.width,
+                      badge.x + badge.width);
+        checks.that(badge.x - outer.x > 15, "the badge is not at the end of its 30-unit column: it starts " +
+                                                std::to_string(badge.x - outer.x) + " units into the table");
+    }
+    return checks.result();
+}
+
+/// @brief Case: a heading row's one cell spans both columns of a table: it starts where the first column's cell does
+///        and ends where the second's does, within a unit. Every cell is a container, which fills its column.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> headingSpansColumns(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(),
+                                                    {{.id = 0, .label = "group"}, {.id = 1, .label = "x"}}};
+    auto const filled = [](std::string text) {
+        return ui::column({.children = {ui::text({.text = std::move(text)})}});
+    };
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        insideColumn(ui::table<Entry>(
+            {{.label = "First", .width = Sizing::fixed(10)}, {.label = "Second", .width = Sizing::fixed(20)}},
+            [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+            std::function<TableRowView(reactive::Signal<Entry> const&)>{
+                [filled](reactive::Signal<Entry> const& entry) {
+                    if (entry.peek().id == 0) {
+                        return TableRowView{.cells = {filled("group")}, .heading = true};
+                    }
+                    return TableRowView{.cells = {filled("a"), filled("b")}};
+                }}))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Widget const* const table = probe.childAt(rootContainer(view), 0);
+    std::vector<Widget*> const heading = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 0);
+    std::vector<Widget*> const data = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 1);
+    checks.that(heading.size() == 1 && data.size() == 2, "the table holds a heading of one cell and a row of two");
+    if (heading.size() == 1 && data.size() == 2) {
+        WidgetBounds const across = geometry.of(*heading.front());
+        WidgetBounds const first = geometry.of(*data.front());
+        WidgetBounds const second = geometry.of(*data.back());
+        geometry.near("the heading cell's left edge, against the first column's cell's", first.x, across.x);
+        geometry.near("the heading cell's right edge, against the second column's cell's", second.x + second.width,
+                      across.x + across.width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: in a row where one cell is five lines tall, a one-line cell of a `valign: Start` column has its
+///        top at the row's top, and one of a `valign: End` column its bottom at the row's bottom. Five lines, so a
+///        centred cell is two lines from either, more than the unit a measure may be off by.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> columnPlacesCellsDownRow(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), {{.id = 1, .label = "x"}}};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       insideColumn(ui::table<Entry>(
+                           {{.label = "Tall", .width = Sizing::fixed(10)},
+                            {.label = "Top", .width = Sizing::fixed(10), .valign = Align::Start},
+                            {.label = "Bottom", .width = Sizing::fixed(10), .valign = Align::End}},
+                           [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+                           [](reactive::Signal<Entry> const& entry) {
+                               return std::vector<Node>{ui::text({.text = "one\ntwo\nthree\nfour\nfive"}),
+                                                        ui::text({.text = [&entry] { return entry.get().label; }}),
+                                                        ui::text({.text = [&entry] { return entry.get().label; }})};
+                           }))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Widget const* const table = probe.childAt(rootContainer(view), 0);
+    std::vector<Widget*> const cells = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 0);
+    checks.that(cells.size() == 3, "the row holds three cells");
+    if (cells.size() == 3) {
+        WidgetBounds const tall = geometry.of(*cells.at(0));
+        WidgetBounds const top = geometry.of(*cells.at(1));
+        WidgetBounds const bottom = geometry.of(*cells.at(2));
+        checks.that(tall.height >= 4.5, "the five-line cell is " + std::to_string(tall.height) + " units tall");
+        geometry.near("a valign Start cell's top, against the row's", tall.y, top.y);
+        geometry.near("a valign End cell's bottom, against the row's", tall.y + tall.height, bottom.y + bottom.height);
+    }
+    return checks.result();
+}
+
+/// @brief Case: in a 5-unit column with `wrap: false`, a text longer than the column is as tall as a text of one
+///        character: it is kept to one line, not broken across several.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> noWrapColumnKeepsCellsToOneLine(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(),
+                                                    {{.id = 1, .label = "99.4 % LC"}, {.id = 2, .label = "x"}}};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       insideColumn(ui::table<Entry>(
+                           {{.label = "Assay", .width = Sizing::fixed(5), .wrap = false}},
+                           [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+                           [](reactive::Signal<Entry> const& entry) {
+                               return std::vector<Node>{ui::text({.text = [&entry] { return entry.get().label; }})};
+                           }))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Widget const* const table = probe.childAt(rootContainer(view), 0);
+    std::vector<Widget*> const longer = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 0);
+    std::vector<Widget*> const shorter = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 1);
+    checks.that(longer.size() == 1 && shorter.size() == 1, "the table holds two rows of one cell");
+    if (longer.size() == 1 && shorter.size() == 1) {
+        geometry.near("the long text's height, against the short text's", geometry.of(*shorter.front()).height,
+                      geometry.of(*longer.front()).height);
+    }
+    return checks.result();
+}
+
+/// @brief One report of a table's selection: the keys, sorted, and the kind of change.
+struct SelectionReport {
+    /// @brief The keys reported, sorted.
+    std::vector<Key> keys;
+    /// @brief The kind of change.
+    SelectionChange change = SelectionChange::Replace;
+};
+
+/// @brief A table over @p rows whose user's selection is recorded in @p reports and shown without a binding.
+/// @param rows    The rows.
+/// @param mode    The selection mode.
+/// @param reports Where each report goes.
+/// @param common  The table's common properties.
+/// @return The node.
+[[nodiscard]] inline Node reportingTable(reactive::Signal<std::vector<Entry>> const& rows, SelectionMode mode,
+                                         std::vector<SelectionReport>& reports, Common common = {}) {
+    return entryTable(rows, {.selectionMode = mode,
+                             .onSelectionChange =
+                                 [&reports](std::vector<Key> keys, SelectionChange change) {
+                                     std::ranges::sort(keys);
+                                     reports.push_back({.keys = std::move(keys), .change = change});
+                                 },
+                             .common = std::move(common)});
+}
+
+/// @brief The last report as text: its keys, then `/replace` or `/extend`; `none` when there is none.
+/// @param reports The reports.
+/// @return The text.
+[[nodiscard]] inline std::string lastReport(std::vector<SelectionReport> const& reports) {
+    if (reports.empty()) {
+        return "none";
+    }
+    return keyTexts(reports.back().keys) +
+           (reports.back().change == SelectionChange::Replace ? "/replace" : "/extend");
+}
+
+/// @brief Positions as text, comma-separated.
+/// @param rows The positions.
+/// @return The text.
+[[nodiscard]] inline std::string rowTexts(std::vector<std::size_t> const& rows) {
+    std::string text;
+    for (std::size_t const row : rows) {
+        text += (text.empty() ? "" : ",") + std::to_string(row);
+    }
+    return text;
+}
+
+/// @brief Rows a, b, c and d, keyed 1 to 4.
+/// @return The rows.
+[[nodiscard]] inline std::vector<Entry> fourEntries() {
+    return {{.id = 1, .label = "a"}, {.id = 2, .label = "b"}, {.id = 3, .label = "c"}, {.id = 4, .label = "d"}};
+}
+
+/// @brief Case: in a `Multiple` table a plain click selects only its row, and a Ctrl-click adds a row and then
+///        removes it, keeping the first. The click reports `Replace`, each Ctrl-click `Extend`.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> clickSelectsCtrlClickToggles(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<SelectionReport> reports;
+    Mounted const view{probe.runtime(), probe.backend(), reportingTable(rows, SelectionMode::Multiple, reports)};
+    probe.settle();
+    Checks checks;
+    probe.clickRow(view.root(), 2, RowClick::Toggle);
+    probe.settle();
+    probe.clickRow(view.root(), 0, RowClick::Only);
+    probe.settle();
+    checks.text("the rows selected after a Ctrl-click on c and a click on a", "0",
+                rowTexts(probe.selectedRows(view.root())));
+    checks.text("a click's report", "1/replace", lastReport(reports));
+    probe.clickRow(view.root(), 1, RowClick::Toggle);
+    probe.settle();
+    checks.text("the rows selected after a Ctrl-click on b", "0,1", rowTexts(probe.selectedRows(view.root())));
+    checks.text("a Ctrl-click's report", "1,2/extend", lastReport(reports));
+    probe.clickRow(view.root(), 1, RowClick::Toggle);
+    probe.settle();
+    checks.text("the rows selected after a second Ctrl-click on b", "0", rowTexts(probe.selectedRows(view.root())));
+    checks.text("the second Ctrl-click's report", "1/extend", lastReport(reports));
+    return checks.result();
+}
+
+/// @brief Case: a click on row 1, then a Shift-click on row 3, selects rows 1 to 3; a Shift-click on row 0 then
+///        selects rows 0 and 1, the range from the same anchor in place of the rest. Each Shift-click reports
+///        `Replace`.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> shiftClickSelectsRange(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<SelectionReport> reports;
+    Mounted const view{probe.runtime(), probe.backend(), reportingTable(rows, SelectionMode::Multiple, reports)};
+    probe.settle();
+    Checks checks;
+    probe.clickRow(view.root(), 1, RowClick::Only);
+    probe.settle();
+    probe.clickRow(view.root(), 3, RowClick::Range);
+    probe.settle();
+    checks.text("the rows selected by a click on b and a Shift-click on d", "1,2,3",
+                rowTexts(probe.selectedRows(view.root())));
+    checks.text("the Shift-click's report", "2,3,4/replace", lastReport(reports));
+    probe.clickRow(view.root(), 0, RowClick::Range);
+    probe.settle();
+    checks.text("the rows selected by a further Shift-click on a", "0,1", rowTexts(probe.selectedRows(view.root())));
+    checks.text("the second Shift-click's report", "1,2/replace", lastReport(reports));
+    return checks.result();
+}
+
+/// @brief Case: the keyboard on a focused table of text cells. Ctrl+A on a `Multiple` table selects every row, and
+///        pressed again clears them, each reported as `Extend`. On a `Single` table Ctrl+A selects nothing and
+///        reaches the enclosing column's chord, and after a click on row 1, Enter activates row 1.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> tableTakesItsKeys(ConformanceProbe& probe) {
+    Checks checks;
+    {
+        reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+        std::vector<SelectionReport> reports;
+        Mounted const view{probe.runtime(), probe.backend(), reportingTable(rows, SelectionMode::Multiple, reports)};
+        probe.settle();
+        probe.press(view.root(), "Ctrl+A");
+        probe.settle();
+        checks.text("the rows selected by Ctrl+A on a multiple table", "0,1,2,3",
+                    rowTexts(probe.selectedRows(view.root())));
+        checks.text("Ctrl+A's report", "1,2,3,4/extend", lastReport(reports));
+        probe.press(view.root(), "Ctrl+A");
+        probe.settle();
+        checks.text("the rows selected by a second Ctrl+A", "", rowTexts(probe.selectedRows(view.root())));
+        checks.text("the second Ctrl+A's report", "/extend", lastReport(reports));
+    }
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<SelectionReport> reports;
+    std::vector<Key> activated;
+    int chords = 0;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {entryTable(
+                        rows, {.selectionMode = SelectionMode::Single,
+                               .onSelectionChange =
+                                   [&reports](std::vector<Key> keys, SelectionChange change) {
+                                       reports.push_back({.keys = std::move(keys), .change = change});
+                                   },
+                               .onActivate = [&activated](Key const& key) { activated.push_back(key); }})},
+                    .common = {.keys = {{.chord = "Ctrl+A", .onPress = [&chords] { ++chords; }}}}})};
+    probe.settle();
+    Widget* const table = childOf(probe, &view.root(), 0);
+    if (table == nullptr) {
+        return "a Table in a Column is not shown";
+    }
+    probe.press(*table, "Ctrl+A");
+    probe.settle();
+    checks.text("the rows selected by Ctrl+A on a single table", "", rowTexts(probe.selectedRows(*table)));
+    checks.that(chords == 1, "Ctrl+A on a single table ran the column's chord " + std::to_string(chords) + " times");
+    probe.clickRow(*table, 1, RowClick::Only);
+    probe.settle();
+    probe.press(*table, "Enter");
+    probe.settle();
+    checks.text("the rows activated by Enter after a click on b", "2", keyTexts(activated));
+    return checks.result();
+}
+
+/// @brief Case: a table of a heading row and three data rows. Ctrl+A selects the three data rows and not the
+///        heading, and a click on the heading row changes nothing and reports nothing.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> headingIsNeverSelected(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{
+        probe.runtime(),
+        {{.id = 0, .label = "group"}, {.id = 1, .label = "a"}, {.id = 2, .label = "b"}, {.id = 3, .label = "c"}}};
+    std::vector<SelectionReport> reports;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::table<Entry>(
+            {{.label = "Name"}}, [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+            std::function<TableRowView(reactive::Signal<Entry> const&)>{[](reactive::Signal<Entry> const& entry) {
+                return TableRowView{.cells = {ui::text({.text = [&entry] { return entry.get().label; }})},
+                                    .heading = entry.peek().id == 0};
+            }},
+            TableOptions{.selectionMode = SelectionMode::Multiple,
+                         .onSelectionChange = [&reports](std::vector<Key> keys, SelectionChange change) {
+                             std::ranges::sort(keys);
+                             reports.push_back({.keys = std::move(keys), .change = change});
+                         }})};
+    probe.settle();
+    Checks checks;
+    probe.press(view.root(), "Ctrl+A");
+    probe.settle();
+    checks.text("the rows Ctrl+A selects beside a heading", "1,2,3", rowTexts(probe.selectedRows(view.root())));
+    checks.text("Ctrl+A's report", "1,2,3/extend", lastReport(reports));
+    std::size_t const before = reports.size();
+    probe.clickRow(view.root(), 0, RowClick::Only);
+    probe.settle();
+    checks.text("the rows selected after a click on the heading", "1,2,3", rowTexts(probe.selectedRows(view.root())));
+    checks.that(reports.size() == before, "a click on the heading row reported a selection");
+    return checks.result();
+}
+
+/// @brief Case: a click on a sortable column's header reports its index once, a click on another column's header
+///        reports nothing, and showing a sort reports nothing.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> headerClickAsksToSort(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    reactive::Signal<std::optional<TableSort>> shown{probe.runtime(), std::nullopt};
+    std::vector<std::size_t> asked;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::table<Entry>(
+                           {{.label = "Name", .sortable = true}, {.label = "Id"}}, [&rows] { return rows.get(); },
+                           [](Entry const& entry) { return Key{entry.id}; },
+                           [](reactive::Signal<Entry> const& entry) {
+                               return std::vector<Node>{
+                                   ui::text({.text = [&entry] { return entry.get().label; }}),
+                                   ui::text({.text = [&entry] { return std::to_string(entry.get().id); }})};
+                           },
+                           TableOptions{.sort = [&shown] { return shown.get(); },
+                                        .onSort = [&asked](std::size_t column) { asked.push_back(column); }})};
+    probe.settle();
+    Checks checks;
+    shown.set(TableSort{.column = 0, .direction = SortDirection::Descending});
+    probe.settle();
+    checks.that(asked.empty(), "showing a sort asked to sort");
+    probe.clickHeader(view.root(), 0);
+    probe.settle();
+    checks.that(asked == std::vector<std::size_t>{0},
+                "a click on the sortable header asked " + std::to_string(asked.size()) + " times");
+    probe.clickHeader(view.root(), 1);
+    probe.settle();
+    checks.that(asked.size() == 1, "a click on a header that is not sortable asked to sort");
+    return checks.result();
+}
+
+/// @brief Case: in a column of fixed height, a scroll that stretches in height above a text keeps the text at the
+///        column's end, however long the scroll's content: the scroll takes the column's spare height, not its
+///        content's.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> stretchingScrollKeepsBarAtEnd(ConformanceProbe& probe) {
+    std::vector<Node> lines;
+    lines.reserve(40);
+    for (int line = 1; line <= 40; ++line) {
+        lines.push_back(sizedText("line " + std::to_string(line), {}));
+    }
+    Scroll scroll{.child = ui::column(Column{.children = std::move(lines)}), .axis = Axis::Vertical};
+    scroll.common.layout = {.width = Sizing::stretch(), .height = Sizing::stretch()};
+    Column column{.children = {ui::scroll(std::move(scroll)), sizedText("bar", {})}};
+    column.common.layout = {.width = Sizing::fixed(30), .height = Sizing::fixed(20)};
+    Mounted const view{probe.runtime(), probe.backend(), insideRow(ui::column(std::move(column)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const inside = measured(probe, view);
+    checks.that(inside.children.size() == 2, "the column holds a scroll and a bar");
+    if (inside.children.size() == 2) {
+        WidgetBounds const outer = geometry.of(*inside.container);
+        WidgetBounds const bar = geometry.of(*inside.children.at(1));
+        geometry.near("the bar's bottom, at the column's", outer.y + outer.height, bar.y + bar.height);
+        checks.that(geometry.of(*inside.children.at(0)).height < 20,
+                    "the scroll is as tall as the column or taller, so the bar is pushed out of it");
+    }
+    return checks.result();
+}
+
+/// @brief Whether @p inner lies wholly inside @p outer, within half a unit, and is drawn at all.
+/// @param outer The outer bounds.
+/// @param inner The inner bounds.
+/// @return True when it does.
+[[nodiscard]] inline bool within(WidgetBounds const& outer, WidgetBounds const& inner) {
+    return inner.height > 0 && inner.y >= outer.y - 0.5 && inner.y + inner.height <= outer.y + outer.height + 0.5;
+}
+
+/// @brief Case: a slot showing a one-row `ForEach`, which is how a switch case is mounted, fills the slot when that
+///        `ForEach` is sized as the content it holds, a column of a stretching scroll above a bar.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> slotShowingStretchingForEachFills(ConformanceProbe& probe) {
+    auto const row = [](reactive::Signal<int> const&) -> Node {
+        std::vector<Node> lines;
+        lines.reserve(40);
+        for (int line = 1; line <= 40; ++line) {
+            lines.push_back(sizedText("line " + std::to_string(line), {}));
+        }
+        Scroll scroll{.child = ui::column(Column{.children = std::move(lines)}), .axis = Axis::Vertical};
+        scroll.common.layout = {.width = Sizing::stretch(), .height = Sizing::stretch()};
+        Column held{.children = {ui::scroll(std::move(scroll)), sizedText("bar", {})}};
+        held.common.layout = {.width = Sizing::content(), .height = Sizing::stretch()};
+        return ui::column(std::move(held));
+    };
+    Common held;
+    held.layout = {.width = Sizing::content(), .height = Sizing::stretch()};
+    Switch shown{.selector = [] { return Key{std::int64_t{0}}; },
+                 .cases = {{.key = Key{std::int64_t{0}},
+                            .node = ui::forEach<int>([] { return std::vector<int>{0}; },
+                                                     [](int const&) { return Key{std::int64_t{0}}; }, row,
+                                                     Axis::Vertical, 0, held)}}};
+    shown.common.layout = {.width = Sizing::stretch(), .height = Sizing::stretch()};
+    Column column{.children = {ui::switchOf(std::move(shown))}};
+    column.common.layout = {.width = Sizing::fixed(30), .height = Sizing::fixed(20)};
+    Mounted const view{probe.runtime(), probe.backend(), insideRow(ui::column(std::move(column)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const inside = measured(probe, view);
+    checks.that(inside.children.size() == 1, "the column holds the switch's slot");
+    if (inside.children.size() != 1 || inside.children.front() == nullptr) {
+        return checks.result();
+    }
+    // The slot, then the one-row ForEach it shows, then the row it builds, then that row's bar.
+    Widget const* current = inside.children.front();
+    for (std::string_view const level : {"the slot", "the one-row ForEach"}) {
+        ContainerWidget const* const container = current == nullptr ? nullptr : asContainer(*current);
+        current = container != nullptr && probe.childCount(*container) == 1 ? probe.childAt(*container, 0) : nullptr;
+        checks.that(current != nullptr, std::string{level} + " holds one child");
+    }
+    ContainerWidget const* const content = current == nullptr ? nullptr : asContainer(*current);
+    if (content == nullptr || probe.childCount(*content) != 2) {
+        checks.that(false, "the row is a column of a scroll and a bar");
+        return checks.result();
+    }
+    WidgetBounds const outer = geometry.of(*inside.container);
+    WidgetBounds const bar = geometry.of(*probe.childAt(*content, 1));
+    geometry.near("the bar's bottom, at the column's", outer.y + outer.height, bar.y + bar.height);
+    return checks.result();
+}
+
+/// @brief A mounted wrapping row and what it holds.
+struct WrappingRow {
+    /// @brief The mounted view.
+    std::unique_ptr<Mounted> view;
+    /// @brief The row and its children.
+    Measured measured;
+};
+
+/// @brief Mounts a wrapping row of gap 1 @p width units wide.
+/// @param probe    The backend under test.
+/// @param width    The row's width, in units.
+/// @param children The row's children.
+/// @return The row.
+[[nodiscard]] inline WrappingRow mountWrappingRow(ConformanceProbe& probe, int width, std::vector<Node> children) {
+    Row row{.children = std::move(children), .gap = 1, .wrap = true};
+    row.common.layout = {.width = Sizing::fixed(width)};
+    WrappingRow made;
+    // In a column, which gives a row its natural height; a row would stretch it to the window's.
+    made.view = std::make_unique<Mounted>(probe.runtime(), probe.backend(),
+                                          ui::column(Column{.children = {ui::row(std::move(row))}}));
+    probe.settle();
+    made.measured = measured(probe, *made.view);
+    return made;
+}
+
+/// @brief The distance between two fixed(12) texts of a row of gap 1: the backend's own step 1.
+/// @param probe The backend under test.
+/// @param geometry Reads bounds.
+/// @return The distance in units.
+[[nodiscard]] inline double stepOneDistance(ConformanceProbe& probe, Geometry& geometry) {
+    Row row{.children = {sizedText("a", {.width = Sizing::fixed(12)}), sizedText("b", {.width = Sizing::fixed(12)})},
+            .gap = 1};
+    row.common.layout = {.width = Sizing::fixed(40)};
+    Mounted const view{probe.runtime(), probe.backend(), insideRow(ui::row(std::move(row)))};
+    probe.settle();
+    Measured const found = measured(probe, view);
+    if (found.children.size() != 2) {
+        return 1.0;
+    }
+    return geometry.of(*found.children.at(1)).x - geometry.of(*found.children.at(0)).x - 12.0;
+}
+
+/// @brief Case: a wrapping row starts a line only when its next child does not fit.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> wrappingRowStartsLineWhenOutOfRoom(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    double const step = stepOneDistance(probe, geometry);
+    auto const texts = [] {
+        std::vector<Node> children;
+        for (char const* const label : {"one", "two", "three"}) {
+            children.push_back(sizedText(label, {.width = Sizing::fixed(12)}));
+        }
+        return children;
+    };
+    {
+        // Wide enough for all three on a line.
+        WrappingRow const wide =
+            mountWrappingRow(probe, static_cast<int>(std::ceil(36.0 + (2.0 * step))) + 1, texts());
+        checks.that(wide.measured.children.size() == 3, "the wrapping row holds three texts");
+        if (wide.measured.children.size() == 3) {
+            double const top = geometry.of(*wide.measured.children.at(0)).y;
+            geometry.near("the second text's top, on the first's line", top,
+                          geometry.of(*wide.measured.children.at(1)).y);
+            geometry.near("the third text's top, on the first's line", top,
+                          geometry.of(*wide.measured.children.at(2)).y);
+        }
+    }
+    {
+        // Room for two: the third starts the next line, under the first.
+        WrappingRow const narrow = mountWrappingRow(probe, 30, texts());
+        checks.that(narrow.measured.children.size() == 3, "the narrow wrapping row holds three texts");
+        if (narrow.measured.children.size() == 3) {
+            WidgetBounds const row = geometry.of(*narrow.measured.container);
+            WidgetBounds const first = geometry.of(*narrow.measured.children.at(0));
+            WidgetBounds const third = geometry.of(*narrow.measured.children.at(2));
+            geometry.near("the third text's left, at the row's", row.x, third.x);
+            checks.that(third.y >= first.y + first.height - 0.5, "the third text is below the first line");
+            geometry.near("the row's height, the two lines'", third.y + third.height - row.y, row.height);
+        }
+    }
+    return checks.result();
+}
+
+/// @brief Case: a stretch child of a wrapping row takes its line's spare width, and its minimum, no more than its
+///        natural width, is its basis.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> wrappingRowStretchTakesLineSpare(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    double const step = stepOneDistance(probe, geometry);
+    auto const children = [] {
+        std::vector<Node> made;
+        made.push_back(sizedText("a stretch text of well over thirty characters, wider than the row",
+                                 {.width = Sizing::stretch(), .minWidth = 10}));
+        made.push_back(sizedText("fixed", {.width = Sizing::fixed(12)}));
+        return made;
+    };
+    {
+        WrappingRow const wide = mountWrappingRow(probe, 40, children());
+        checks.that(wide.measured.children.size() == 2, "the wrapping row holds two texts");
+        if (wide.measured.children.size() == 2) {
+            WidgetBounds const stretch = geometry.of(*wide.measured.children.at(0));
+            WidgetBounds const fixed = geometry.of(*wide.measured.children.at(1));
+            geometry.near("the stretch text's width, the line less the fixed text and a step", 28.0 - step,
+                          stretch.width);
+            geometry.near("the fixed text's top, on the stretch text's line", stretch.y, fixed.y);
+        }
+    }
+    {
+        WrappingRow const narrow = mountWrappingRow(probe, 20, children());
+        checks.that(narrow.measured.children.size() == 2, "the narrow wrapping row holds two texts");
+        if (narrow.measured.children.size() == 2) {
+            WidgetBounds const stretch = geometry.of(*narrow.measured.children.at(0));
+            WidgetBounds const fixed = geometry.of(*narrow.measured.children.at(1));
+            geometry.near("the stretch text's width, alone on its line", 20.0, stretch.width);
+            checks.that(fixed.y >= stretch.y + stretch.height - 0.5, "the fixed text is on the next line");
+        }
+    }
+    {
+        // A stretch child's minimum is its basis only up to its natural width: a short one with a minimum wider than
+        // itself leaves the room it would not fill to the child beside it.
+        std::vector<Node> made;
+        made.push_back(sizedText("ab", {.width = Sizing::stretch(), .minWidth = 20}));
+        made.push_back(sizedText("fixed", {.width = Sizing::fixed(12)}));
+        WrappingRow const row = mountWrappingRow(probe, 30, std::move(made));
+        checks.that(row.measured.children.size() == 2, "the row of a short stretch text holds two texts");
+        if (row.measured.children.size() == 2) {
+            WidgetBounds const stretch = geometry.of(*row.measured.children.at(0));
+            WidgetBounds const fixed = geometry.of(*row.measured.children.at(1));
+            geometry.near("the fixed text's top, on a short stretch text's line", stretch.y, fixed.y);
+        }
+    }
+    return checks.result();
+}
+
+/// @brief Case: a scrollable slot of fixed height shows a column of 40 lines inside its own height and brings the
+///        focused last one into view; holding a column that stretches in height, the column fills it exactly.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> scrollableSlotScrolls(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    IViewBackend& backend = probe.backend();
+    for (bool const stretching : {false, true}) {
+        auto const root = backend.createStack(nullptr, Axis::Vertical);
+        auto const slot = backend.createSlot(root.get());
+        slot->setLayout({.width = Sizing::fixed(30), .height = Sizing::fixed(20)});
+        slot->setScrollable(true);
+        auto const column = backend.createStack(slot.get(), Axis::Vertical);
+        if (stretching) {
+            column->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+        }
+        // A button first, so a backend that focuses the first focusable widget on its own focuses the top line, not
+        // the last.
+        auto const first = backend.createButton(column.get());
+        first->setLabel("first");
+        std::vector<std::unique_ptr<TextWidget>> lines;
+        for (int line = 2; line < (stretching ? 3 : 40); ++line) {
+            lines.push_back(backend.createText(column.get()));
+            lines.back()->setText("line " + std::to_string(line));
+        }
+        auto const last = backend.createButton(column.get());
+        last->setLabel("last");
+        probe.settle();
+        WidgetBounds const box = geometry.of(*slot);
+        geometry.near(stretching ? "the slot's height around a stretching column" : "the slot's height", 20,
+                      box.height);
+        if (stretching) {
+            geometry.near("a stretching column's height in the slot", 20, geometry.of(*column).height);
+            geometry.near("the first line, at the slot's top", box.y, geometry.of(*first).y);
+            continue;
+        }
+        checks.that(!within(box, geometry.of(*last)), "the 40th line lies inside a 20-unit slot before any scroll");
+        last->focus();
+        probe.settle();
+        checks.that(within(box, geometry.of(*last)), "the focused 40th line stays outside the slot");
+    }
+    return checks.result();
+}
+
+/// @brief Case: a titled panel of fixed height 20 holding one text keeps the text under its header, not centred; a
+///        panel holding a column that stretches in height gives the column the height left under its header.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> panelContentStartsAtTop(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    IViewBackend& backend = probe.backend();
+    auto const root = backend.createStack(nullptr, Axis::Vertical);
+    auto const plain = backend.createPanel(root.get());
+    plain->setTitle("panel");
+    plain->setLayout({.width = Sizing::fixed(30), .height = Sizing::fixed(20)});
+    auto const text = backend.createText(plain.get());
+    text->setText("text");
+    auto const stretched = backend.createPanel(root.get());
+    stretched->setTitle("panel");
+    stretched->setLayout({.width = Sizing::fixed(30), .height = Sizing::fixed(20)});
+    auto const column = backend.createStack(stretched.get(), Axis::Vertical);
+    column->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+    auto const inColumn = backend.createText(column.get());
+    inColumn->setText("text");
+    probe.settle();
+    WidgetBounds const box = geometry.of(*plain);
+    geometry.near("the plain panel's height", 20, box.height);
+    double const gap = geometry.of(*text).y - box.y;
+    checks.that(gap <= 3.0,
+                "the text sits " + std::to_string(gap) + " units below the panel's top, not under its header");
+    WidgetBounds const big = geometry.of(*stretched);
+    WidgetBounds const fill = geometry.of(*column);
+    checks.that(big.y + big.height - (fill.y + fill.height) <= 1.5,
+                "a stretching column ends " + std::to_string(big.y + big.height - (fill.y + fill.height)) +
+                    " units above the panel's bottom");
+    return checks.result();
+}
+
+/// @brief Case: a splitter that stretches in a column of fixed height 20 gives each pane the whole 20; a pane that is
+///        a `pinned` page (a stretching scroll above a bar) keeps its bar at the pane's bottom.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> splitterPanesFillIt(ConformanceProbe& probe) {
+    std::vector<Node> lines;
+    lines.reserve(40);
+    for (int line = 1; line <= 40; ++line) {
+        lines.push_back(sizedText("line " + std::to_string(line), {}));
+    }
+    Scroll scroll{.child = ui::column(Column{.children = std::move(lines)}), .axis = Axis::Vertical};
+    scroll.common.layout = {.width = Sizing::stretch(), .height = Sizing::stretch()};
+    Column page{.children = {ui::scroll(std::move(scroll)), sizedText("bar", {})}};
+    page.common.layout = {.width = Sizing::stretch(), .height = Sizing::stretch()};
+    Splitter split{.children = {ui::column(Column{.children = {sizedText("first", {})}}), ui::column(std::move(page))},
+                   .orientation = Axis::Horizontal};
+    split.common.layout = {.width = Sizing::stretch(), .height = Sizing::stretch()};
+    Column outer{.children = {ui::splitter(std::move(split))}};
+    outer.common.layout = {.width = Sizing::fixed(40), .height = Sizing::fixed(20)};
+    Mounted const view{probe.runtime(), probe.backend(), insideRow(ui::column(std::move(outer)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const inside = measured(probe, view);
+    checks.that(inside.children.size() == 1, "the column holds the splitter");
+    ContainerWidget const* const panes = inside.children.size() == 1 ? asContainer(*inside.children.at(0)) : nullptr;
+    checks.that(panes != nullptr && probe.childCount(*panes) == 2, "the splitter holds two panes");
+    if (panes != nullptr && probe.childCount(*panes) == 2) {
+        WidgetBounds const outerBox = geometry.of(*inside.container);
+        for (std::size_t index = 0; index < 2; ++index) {
+            geometry.near("a pane's height", 20, geometry.of(*probe.childAt(*panes, index)).height);
+        }
+        ContainerWidget const* const pinnedPane = asContainer(*probe.childAt(*panes, 1));
+        checks.that(pinnedPane != nullptr && probe.childCount(*pinnedPane) == 2,
+                    "the second pane holds a scroll and a bar");
+        if (pinnedPane != nullptr && probe.childCount(*pinnedPane) == 2) {
+            WidgetBounds const bar = geometry.of(*probe.childAt(*pinnedPane, 1));
+            geometry.near("the bar's bottom, at the column's", outerBox.y + outerBox.height, bar.y + bar.height);
+        }
+    }
+    return checks.result();
+}
+
+/// @brief Case: a scrollable slot of height 20 holding a column that stretches in height with `minHeight` 30 keeps
+///        the column 30 tall and scrolls it, bringing the focused last button into view; with `minHeight` 10 the
+///        column is exactly 20 tall. A backend that clips what it reads shows the 30 only by the scroll.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> stretchingChildBelowMinimumScrolls(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    IViewBackend& backend = probe.backend();
+    for (int const minimum : {30, 10}) {
+        auto const root = backend.createStack(nullptr, Axis::Vertical);
+        auto const slot = backend.createSlot(root.get());
+        slot->setLayout({.width = Sizing::fixed(30), .height = Sizing::fixed(20)});
+        slot->setScrollable(true);
+        auto const column = backend.createStack(slot.get(), Axis::Vertical);
+        column->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch(), .minHeight = minimum});
+        auto const first = backend.createButton(column.get());
+        first->setLabel("first");
+        auto const filler = backend.createText(column.get());
+        filler->setText("filler");
+        filler->setLayout({.height = Sizing::fixed(24)});
+        auto const last = backend.createButton(column.get());
+        last->setLabel("last");
+        probe.settle();
+        WidgetBounds const box = geometry.of(*slot);
+        geometry.near("the slot's height", 20, box.height);
+        if (minimum == 10) {
+            geometry.near("the column's height above its minimum", 20, geometry.of(*column).height);
+        }
+        if (minimum == 30) {
+            checks.that(!within(box, geometry.of(*last)), "the last button lies inside the slot before any scroll");
+            last->focus();
+            probe.settle();
+            checks.that(within(box, geometry.of(*last)), "the focused last button stays outside the slot");
+        }
+    }
+    return checks.result();
+}
+
+/// @brief Case: in a 40-unit grid with no gap, a `fixed(10)` track and a stretch track give their texts cells 10 and
+///        30 units wide.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> gridTracksSizeColumns(ConformanceProbe& probe) {
+    Grid grid{.tracks = {GridTrack{.width = Sizing::fixed(10)}, GridTrack{.width = Sizing::stretch()}}};
+    grid.cells = {GridCell{.node = sizedText("a", {})}, GridCell{.node = sizedText("b", {})}};
+    grid.common.layout = {.width = Sizing::fixed(40)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::grid(std::move(grid)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the grid holds two cells");
+    if (children.size() == 2) {
+        geometry.near("the fixed(10) track's cell width", 10, geometry.of(*children.at(0)).width);
+        geometry.near("the stretch track's cell width", 30, geometry.of(*children.at(1)).width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a badge in a `fixed(12)` track with `align: Center` has as much space before it as after it, within
+///        a unit.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> centredTrackCentresBadge(ConformanceProbe& probe) {
+    Grid grid{.tracks = {GridTrack{.width = Sizing::fixed(12), .align = Align::Center}}};
+    grid.cells = {GridCell{.node = ui::badge({.text = std::string{"ok"}})}};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::grid(std::move(grid)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const found = measured(probe, view);
+    checks.that(found.container != nullptr && found.children.size() == 1, "the grid holds one cell");
+    if (found.container != nullptr && found.children.size() == 1) {
+        WidgetBounds const outer = geometry.of(*found.container);
+        WidgetBounds const badge = geometry.of(*found.children.front());
+        double const before = badge.x - outer.x;
+        double const after = outer.x + 12 - (badge.x + badge.width);
+        checks.that(badge.width < 10, "the badge fills its track: it is " + std::to_string(badge.width) +
+                                          " units wide, so its track's alignment cannot place it");
+        geometry.near("the space after the badge, against the space before it", before, after);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a content-sized chart in a 60-unit column is 40 units wide and 8 tall.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> chartHasContentSize(ConformanceProbe& probe) {
+    Chart made{.data = ChartData{.xMin = 0.0, .xMax = 1.0, .yMin = 0.0, .yMax = 1.0, .summary = "chart"}};
+    Column column{.children = {ui::chart(std::move(made))}, .align = Align::Start};
+    column.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::column(std::move(column)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 1, "the column holds one child");
+    if (children.size() == 1) {
+        WidgetBounds const bounds = geometry.of(*children.at(0));
+        geometry.near("a content-sized chart's width", 40, bounds.width);
+        geometry.near("a content-sized chart's height", 8, bounds.height);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a Text given spans reads as its runs' characters, joined in order: a run's markup is characters, and
+///        a run's tone changes its colour and nothing it reads.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> textSpansReadAsCharacters(ConformanceProbe& probe) {
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::text({.spans = std::vector<TextSpan>{{.text = "Lot "},
+                                                                {.text = "L-26-0381", .mono = true},
+                                                                {.text = " <b>x</b>", .strong = true},
+                                                                {.text = " 7 left", .tone = Tone::Err}}})};
+    probe.settle();
+    Checks checks;
+    checks.text("a Text with spans", "Lot L-26-0381 <b>x</b> 7 left", probe.textOf(view.root()));
+    return checks.result();
+}
+
+/// @brief Case: a text input's description is its accessible description, after its messages, and follows its
+///        binding.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> fieldDescriptionFollowsErrors(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<std::string>> errors{probe.runtime(), std::vector<std::string>{}};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::textInput({.field = {.errors = [&errors] { return errors.get(); },
+                                                .description = "Required range 2–8 °C"}})};
+    probe.settle();
+    Checks checks;
+    auto const read = [&probe, &view] { return probe.descriptionOf(view.root()).value_or("(none read)"); };
+    checks.text("the description", "Required range 2–8 °C", read());
+    errors.set({"Outside 2–8 °C"});
+    probe.settle();
+    checks.text("the description after an error", "Outside 2–8 °C\nRequired range 2–8 °C", read());
+    errors.set({});
+    probe.settle();
+    checks.text("the description once the error cleared", "Required range 2–8 °C", read());
+    return checks.result();
+}
+
+/// @brief Case: an open dialog's description is its accessible description, and follows its binding.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> dialogDescriptionFollowsBinding(ConformanceProbe& probe) {
+    reactive::Signal<std::string> description{probe.runtime(), std::string{"Enter your password to sign."}};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::dialog({.open = true,
+                                   .title = "Sign",
+                                   .description = [&description] { return description.get(); },
+                                   .child = ui::text({.text = "body"})})};
+    probe.settle();
+    Checks checks;
+    auto const read = [&probe, &view] { return probe.descriptionOf(view.root()).value_or("(none read)"); };
+    checks.text("the dialog's description", "Enter your password to sign.", read());
+    description.set("Signing as Approved.");
+    probe.settle();
+    checks.text("the dialog's description after a change", "Signing as Approved.", read());
+    return checks.result();
+}
+
+/// @brief Case: a segmented select shows its marked option; Right chooses the next one and reports it once, and stops
+///        at the end; Enter goes on to the enclosing column's chord.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> segmentedSelectTakesArrows(ConformanceProbe& probe) {
+    std::vector<Key> chosen;
+    int chords = 0;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {ui::select(
+                        {.options = std::vector<SelectOption>{{.key = Key{std::int64_t{1}}, .label = "A"},
+                                                              {.key = Key{std::int64_t{2}}, .label = "B"},
+                                                              {.key = Key{std::int64_t{3}}, .label = "C"}},
+                         .selected = std::optional<Key>{Key{std::int64_t{2}}},
+                         .onSelect = [&chosen](Key const& key) { chosen.push_back(key); },
+                         .style = SelectStyle::Segmented})},
+                    .common = {.keys = {{.chord = "Enter", .onPress = [&chords] { ++chords; }}}}})};
+    probe.settle();
+    Widget* const select = childOf(probe, &view.root(), 0);
+    if (select == nullptr) {
+        return "a segmented Select in a Column is not shown";
+    }
+    Checks checks;
+    checks.text("the marked option", "B", probe.textOf(*select));
+    probe.press(*select, "Right");
+    probe.settle();
+    checks.text("the options chosen by Right", "3", keyTexts(chosen));
+    probe.press(*select, "Right");
+    probe.settle();
+    checks.text("the options chosen by a Right at the end", "3", keyTexts(chosen));
+    probe.press(*select, "Enter");
+    probe.settle();
+    checks.that(chords == 1,
+                "Enter on a segmented select ran the column's chord " + std::to_string(chords) + " times");
+    return checks.result();
+}
+
+/// @brief Case: a list entry with content holds it, and a click on the entry or anywhere on its content runs the
+///        entry's action once; inside a hidden container neither does.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> entryContentIsTheEntrys(ConformanceProbe& probe) {
+    reactive::Signal<bool> shown{probe.runtime(), true};
+    int clicks = 0;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        ui::column({.children = {ui::button({.label = "WS-2026-0412, 2 h",
+                                             .onClick = [&clicks] { ++clicks; },
+                                             .style = ButtonStyle::Item,
+                                             .child = ui::column({.children = {ui::text({.text = "WS-2026-0412"}),
+                                                                               ui::text({.text = "Assay"})}}),
+                                             .selected = true})},
+                    .common = {.visible = [&shown] { return shown.get(); }}})};
+    probe.settle();
+    auto* const item = dynamic_cast<ButtonWidget*>(childOf(probe, &view.root(), 0));
+    if (item == nullptr) {
+        return "an item button in a Column is not shown";
+    }
+    Checks checks;
+    ContainerWidget const& content = item->content();
+    checks.that(probe.childCount(content) == 1, "the entry's content holds one column");
+    auto* const column = dynamic_cast<ContainerWidget*>(probe.childAt(content, 0));
+    Widget* const first = column != nullptr ? probe.childAt(*column, 0) : nullptr;
+    if (first == nullptr) {
+        return "the entry's content shows no text";
+    }
+    checks.text("the content's first text", "WS-2026-0412", probe.textOf(*first));
+    probe.click(*item);
+    probe.settle();
+    checks.that(clicks == 1, "a click on the entry ran its action " + std::to_string(clicks) + " times");
+    probe.click(*first);
+    probe.settle();
+    checks.that(clicks == 2, "a click on its content ran the entry's action " + std::to_string(clicks - 1) + " times");
+    shown.set(false);
+    probe.settle();
+    probe.click(*item);
+    probe.click(*first);
+    probe.settle();
+    checks.that(clicks == 2, "a hidden entry took a click");
+    return checks.result();
+}
+
+/// @brief Case: an open dialog drawn as a sheet fills the surface: a stretching text inside it is as wide as a
+///        stretching text beside it, less the sheet's own padding, where a centred dialog would be its content's
+///        width.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> sheetFillsSurface(ConformanceProbe& probe) {
+    // What a sheet's border and padding may take off its width, in units; far less than the root is wide.
+    static constexpr double kSheetPadding = 10;
+    Column column{.children = {sizedText("beside", {.width = Sizing::stretch()}),
+                               ui::dialog({.open = true,
+                                           .title = "Sign",
+                                           .child = sizedText("inside", {.width = Sizing::stretch()}),
+                                           .onDismiss = {},
+                                           .common = {},
+                                           .sheet = true})}};
+    column.common.layout = {.width = Sizing::stretch()};
+    Mounted const view{probe.runtime(), probe.backend(), ui::column(std::move(column))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    ContainerWidget const& root = rootContainer(view);
+    Widget const* const beside = probe.childCount(root) == 2 ? probe.childAt(root, 0) : nullptr;
+    Widget const* const sheet = probe.childCount(root) == 2 ? probe.childAt(root, 1) : nullptr;
+    ContainerWidget const* const overlay = sheet == nullptr ? nullptr : asContainer(*sheet);
+    Widget const* const inside =
+        overlay != nullptr && probe.childCount(*overlay) > 0 ? probe.childAt(*overlay, 0) : nullptr;
+    checks.that(beside != nullptr && inside != nullptr, "the root holds a text, and the open sheet holds one");
+    if (beside != nullptr && inside != nullptr) {
+        double const full = geometry.of(*beside).width;
+        double const within = geometry.of(*inside).width;
+        checks.that(within >= full - kSheetPadding, "a sheet's stretching text is " + std::to_string(within) +
+                                                        " wide, beside a root " + std::to_string(full) + " wide");
+    }
+    return checks.result();
+}
+
+/// @brief Case: a small push button is narrower than a normal one with the same label.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> smallButtonIsNarrower(ConformanceProbe& probe) {
+    Row row{.children = {ui::button(Button{.label = "STD1", .size = ButtonSize::Small}),
+                         ui::button(Button{.label = "STD1"})}};
+    row.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the row holds two buttons");
+    if (children.size() == 2) {
+        double const small = geometry.of(*children.at(0)).width;
+        double const normal = geometry.of(*children.at(1)).width;
+        checks.that(small > 0 && small < normal, "a small button is " + std::to_string(small) +
+                                                     " wide, beside a normal one " + std::to_string(normal) + " wide");
+    }
+    return checks.result();
+}
+
+/// @brief Case: a square push button is narrower than a normal one with the same label.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> squareButtonIsNarrower(ConformanceProbe& probe) {
+    Row row{.children = {ui::button(Button{.label = "\xE2\x80\xB9", .shape = ControlShape::Square}),
+                         ui::button(Button{.label = "\xE2\x80\xB9"})}};
+    row.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the row holds two buttons");
+    if (children.size() == 2) {
+        double const square = geometry.of(*children.at(0)).width;
+        double const normal = geometry.of(*children.at(1)).width;
+        checks.that(square > 0 && square < normal, "a square button is " + std::to_string(square) +
+                                                       " wide, beside a normal one " + std::to_string(normal) +
+                                                       " wide");
+    }
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 7> const cases{{
+    static std::array<ConformanceCase, 30> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -1664,6 +3231,45 @@ struct Measured {
         {.name = "a row centres a child across it", .run = detail::rowCentresAcross},
         {.name = "a column's justify places its spare height", .run = detail::columnJustifies},
         {.name = "a capped child is centred by its own alignment or its column's", .run = detail::cappedChildCentres},
+        {.name = "a table column's end alignment places a badge cell at its end", .run = detail::endColumnPlacesBadge},
+        {.name = "a table column's valign places a cell at its row's top or bottom",
+         .run = detail::columnPlacesCellsDownRow},
+        {.name = "a table's heading row spans every column", .run = detail::headingSpansColumns},
+        {.name = "a stretching scroll above a bar keeps the bar at its column's end",
+         .run = detail::stretchingScrollKeepsBarAtEnd},
+        {.name = "a scrollable slot scrolls a content-height child and fills with a stretching one",
+         .run = detail::scrollableSlotScrolls},
+        {.name = "grid tracks of fixed and stretch width", .run = detail::gridTracksSizeColumns},
+        {.name = "a centred track centres a label-width cell", .run = detail::centredTrackCentresBadge},
+        {.name = "a chart's content size is 40 by 8 units", .run = detail::chartHasContentSize},
+        {.name = "a sheet fills the surface", .run = detail::sheetFillsSurface},
+        {.name = "a panel taller than its content keeps the content under its header",
+         .run = detail::panelContentStartsAtTop},
+        {.name = "a stretching splitter's panes fill it, and a pinned pane keeps its bar at its bottom",
+         .run = detail::splitterPanesFillIt},
+        {.name = "a stretching child of a scrollable slot below its minimum height scrolls",
+         .run = detail::stretchingChildBelowMinimumScrolls},
+        {.name = "a slot showing a one-row ForEach whose holder stretches fills the slot",
+         .run = detail::slotShowingStretchingForEachFills},
+        {.name = "a wrapping row starts a line only when out of room",
+         .run = detail::wrappingRowStartsLineWhenOutOfRoom},
+        {.name = "a stretch child of a wrapping row takes its line's spare width",
+         .run = detail::wrappingRowStretchTakesLineSpare},
+        {.name = "a small push button is narrower than a normal one with the same label",
+         .run = detail::smallButtonIsNarrower},
+        {.name = "a column with wrap: false keeps its cells to one line",
+         .run = detail::noWrapColumnKeepsCellsToOneLine},
+        {.name = "a column's padding insets its children", .run = detail::paddingInsetsChildren},
+        {.name = "a stack's two-step padding insets its ends and its sides apart",
+         .run = detail::twoStepPaddingInsetsEndsAndSidesApart},
+        {.name = "a square push button is narrower than a normal one with the same label",
+         .run = detail::squareButtonIsNarrower},
+        {.name = "a bleeding child spans its padded column's width while a sibling stays inset",
+         .run = detail::bleedingChildSpansPaddedColumn},
+        {.name = "a bleeding child of a panel with two children reaches the frame's inner edges",
+         .run = detail::bleedingChildOfHeldPanelReachesFrame},
+        {.name = "a bleeding child of a tab page reaches the tabs node's edges, also while the page scrolls",
+         .run = detail::bleedingChildOfTabPageReachesNodeEdges},
     }};
     return cases;
 }
@@ -1674,7 +3280,7 @@ struct Measured {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 34> const cases{{
+    static std::array<ConformanceCase, 55> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -1712,6 +3318,17 @@ struct Measured {
         {.name = "a drop target without accepts takes every key", .run = detail::dropTargetWithoutAcceptsTakesAll},
         {.name = "a chord goes to the innermost widget that declares it", .run = detail::innermostChordWins},
         {.name = "a chord pressed inside a hidden container runs nothing", .run = detail::hiddenChordRunsNothing},
+        {.name = "a chord the focused widget declares comes before its own key", .run = detail::ownChordBeforeOwnKey},
+        {.name = "a focused button takes Enter before its ancestors' chords",
+         .run = detail::ownKeyBeforeAncestorChord},
+        {.name = "a submitting field in a dialog takes Enter from the dialog",
+         .run = detail::submittingFieldTakesEnter},
+        {.name = "a field without a submit commits on Enter and lets the dialog have it",
+         .run = detail::fieldWithoutSubmitPassesEnterOn},
+        {.name = "a check box toggles on Space and lets the dialog have Enter",
+         .run = detail::checkboxTakesSpaceNotEnter},
+        {.name = "a field's own Enter chord comes before its commit and submit",
+         .run = detail::fieldChordBeforeSubmit},
         {.name = "the first autofocus widget in document order has focus", .run = detail::firstAutofocusWins},
         {.name = "a menu reports only an enabled entry without a submenu",
          .run = detail::onlyEnabledMenuLeavesAreChosen},
@@ -1720,6 +3337,31 @@ struct Measured {
         {.name = "a closed collapsible's content takes no input, its header does",
          .run = detail::closedCollapsibleKeepsItsHeader},
         {.name = "a drop zone takes a drop whole or refuses it whole", .run = detail::dropZoneTakesWholeDrops},
+        {.name = "a click selects only its row, and a Ctrl-click toggles one and keeps the rest",
+         .run = detail::clickSelectsCtrlClickToggles},
+        {.name = "a Shift-click selects the rows from the anchor, in place of the rest",
+         .run = detail::shiftClickSelectsRange},
+        {.name = "a focused table takes Ctrl+A in multiple mode, passes it on in single mode, and Enter activates",
+         .run = detail::tableTakesItsKeys},
+        {.name = "a click on a sortable header asks to sort by it, and no other header or setter does",
+         .run = detail::headerClickAsksToSort},
+        {.name = "a heading row is never selected, by Ctrl+A or a click", .run = detail::headingIsNeverSelected},
+        {.name = "relabelled tabs keep the highlighted tab and its page", .run = detail::relabelledTabsKeepHighlight},
+        {.name = "a button-style menu reports the entry past a separator, and never the separator",
+         .run = detail::buttonMenuSkipsSeparator},
+        {.name = "a removable badge reports its removal once", .run = detail::removableBadgeReportsRemoval},
+        {.name = "a chart shows its current summary", .run = detail::chartShowsCurrentSummary},
+        {.name = "a Text with spans reads as its runs' characters", .run = detail::textSpansReadAsCharacters},
+        {.name = "a field's description is its accessible description, after its messages",
+         .run = detail::fieldDescriptionFollowsErrors},
+        {.name = "an open dialog's description is its accessible description",
+         .run = detail::dialogDescriptionFollowsBinding},
+        {.name = "a segmented select chooses with the arrows and lets Enter go on",
+         .run = detail::segmentedSelectTakesArrows},
+        {.name = "a list entry's content is the entry's: one click, wherever it lands",
+         .run = detail::entryContentIsTheEntrys},
+        {.name = "an unlabelled steps indicator still names its current step",
+         .run = detail::unlabelledStepsNameTheirCurrentStep},
     }};
     return cases;
 }

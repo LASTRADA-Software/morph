@@ -507,7 +507,12 @@ target_sources(morph
         include/morph/ui/author_forms.hpp
         include/morph/ui/bundle.hpp
         include/morph/ui/alignment.hpp
+        include/morph/ui/date_pattern.hpp
+        include/morph/ui/input_emphasis.hpp
         include/morph/ui/button_emphasis.hpp
+        include/morph/ui/control_shape.hpp
+        include/morph/ui/banner_action_style.hpp
+        include/morph/ui/badge_style.hpp
         include/morph/ui/button_style.hpp
         include/morph/ui/service.hpp
         include/morph/ui/file_store.hpp
@@ -528,6 +533,7 @@ target_sources(morph
         include/morph/ui/preference_sync.hpp
         include/morph/ui/host_vocabulary.hpp
         include/morph/ui/catalogue.hpp
+        include/morph/ui/chart_scale.hpp
         include/morph/ui/theme.hpp
         include/morph/ui/testing/memory_history.hpp
         include/morph/ui/testing/recording_backend.hpp
@@ -1175,6 +1181,7 @@ endif()
 # Quick or the terminal).
 if(MORPH_BUILD_EXAMPLES)
     add_subdirectory(examples/gallery)
+    add_subdirectory(examples/lims_gallery)
     add_subdirectory(examples/forms/screens)
     if(TARGET bank_lib OR TARGET bank_memory_lib)
         add_subdirectory(examples/bank/screens)

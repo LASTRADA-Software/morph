@@ -3,9 +3,12 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <morph/ui/backend.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "tui/widget.hpp"
 
@@ -17,28 +20,66 @@ public:
     explicit TextImpl(Context& context) : TuiField{context} { adopt(makeView(*this)); }
     void setText(std::string_view text) override;
     void setRole(ui::TextRole role) override;
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    void setSpans(std::vector<ui::TextSpan> const& spans) override;
+    /// A text is not described; the mount never asks.
+    void setDescription(std::string_view description) override;
+    /// The tone is the text's colour; the role keeps its weight.
+    void setTone(ui::Tone tone) override;
     [[nodiscard]] std::string probeText() const override { return _text; }
-    void paint(::core::tui::Canvas& canvas) override;
+    [[nodiscard]] bool placedAcrossColumn() const override { return true; }
+    /// Whether a line wider than the text is drawn cut with an ellipsis in its last cell, as a table sets it for a
+    /// column that does not wrap. A mono text is always drawn so: an identifier is never broken across rows.
+    void setElided(bool elided);
+
+protected:
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
+    void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
+    // The characters shown: the text, or the runs joined.
     std::string _text;
+    // The runs, while the text has spans; empty for a plain text.
+    std::vector<ui::TextSpan> _runs;
     ui::TextRole _role = ui::TextRole::Normal;
+    ui::Tone _tone = ui::Tone::Neutral;
+    bool _elided = false;
 };
 
-/// Button: `[ label ]`, activated by Enter, Space or a click; a list item draws ` label` across its whole slot.
-class ButtonImpl final : public TuiWidget<ui::ButtonWidget> {
+/// Button: `[ label ]`, activated by Enter, Space or a click; a list item draws ` label` across its whole slot. A list
+/// item with content draws it in place of the label, a column across every row of its slot over the line style the
+/// label would have, which the content's cells keep, and a click on any row activates it.
+class ButtonImpl final : public TuiWidget<ui::ButtonWidget, ContainerBase> {
 public:
     explicit ButtonImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
+    ~ButtonImpl() override;
+    ButtonImpl(ButtonImpl const&) = delete;
+    ButtonImpl& operator=(ButtonImpl const&) = delete;
+    ButtonImpl(ButtonImpl&&) = delete;
+    ButtonImpl& operator=(ButtonImpl&&) = delete;
+    /// The content, a vertical stack, made and attached the first time it is asked for.
+    ui::ContainerWidget& content() override;
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
+    void click(::core::tui::Point cell) override;
     void setLabel(std::string_view label) override;
     void setOnClick(ui::Action onClick) override;
     void setEmphasis(ui::ButtonEmphasis emphasis) override;
     void setIcon(std::string_view icon) override;
+    /// Keeps the name, which an icon-only button with no glyph draws as its caption.
+    void setAccessibleName(std::string_view name) override;
     void setStyle(ui::ButtonStyle style) override;
     void setSelected(bool selected) override;
+    /// A cell has no corners, so only `square` draws anything: a square push button drops the spaces inside its
+    /// brackets, as a small one does.
+    void setShape(ui::ControlShape shape) override;
+    /// A small push button drops the spaces inside its brackets.
+    void setSize(ui::ButtonSize size) override;
+    /// Every face of a terminal is monospace, so a mono caption draws nothing new.
+    void setMono(bool mono) override { static_cast<void>(mono); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override { return _label; }
+    /// A push button keeps its label's width; a list item fills its slot.
+    [[nodiscard]] bool placedAcrossColumn() const override { return _style == ui::ButtonStyle::Push; }
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void activate() override;
@@ -51,7 +92,10 @@ private:
     ui::Action _onClick;
     ui::ButtonEmphasis _emphasis = ui::ButtonEmphasis::Normal;
     ui::ButtonStyle _style = ui::ButtonStyle::Push;
+    ui::ButtonSize _size = ui::ButtonSize::Normal;
+    bool _square = false;
     bool _selected = false;
+    std::unique_ptr<ContainerBase> _content;
 };
 
 /// Checkbox: `[x] label`; Enter, Space or a click flips it and reports the new state.
@@ -61,12 +105,15 @@ public:
     void setLabel(std::string_view label) override;
     void setChecked(bool checked) override;
     void setOnToggle(std::function<void(bool)> onToggle) override;
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override { return _label; }
-    void paint(::core::tui::Canvas& canvas) override;
+    [[nodiscard]] bool placedAcrossColumn() const override { return true; }
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void activate() override;
+
+protected:
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
+    void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
     std::string _label;
@@ -118,14 +165,16 @@ public:
     void setValue(std::int64_t value) override;
     void setOnChange(std::function<void(std::int64_t)> onChange) override;
     void setOnCommit(std::function<void(std::int64_t)> onCommit) override;
-    [[nodiscard]] ::core::tui::Size naturalSize() const override { return {.width = 24, .height = 1}; }
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override;
-    void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void pressAt(::core::tui::Point cell) override;
     void dragTo(::core::tui::Point cell) override;
     [[nodiscard]] bool pressEnded() override;
+
+protected:
+    [[nodiscard]] ::core::tui::Size controlSize() const override { return {.width = 24, .height = 1}; }
+    void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
     /// The value at track cell @p position (0-based, held to the track), to the nearest step from the minimum.

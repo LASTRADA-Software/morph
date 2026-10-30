@@ -25,6 +25,7 @@ MorphWidget {
         }
 
         Label {
+            textFormat: Text.PlainText
             font: Theme.bodyFont
             objectName: "label"
             anchors.verticalCenter: parent.verticalCenter

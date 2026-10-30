@@ -77,7 +77,8 @@ public:
     /// @param text The tooltip; empty shows none.
     virtual void setTooltip(std::string_view text) = 0;
 
-    /// @brief Styles the widget and everything inside it with a named token set of the theme.
+    /// @brief Styles the widget and everything inside it with a named token set of the theme. May be called again:
+    ///        each call restyles the widget and everything inside it.
     /// @param surface The surface's name; empty is the theme's default.
     virtual void setSurface(std::string_view surface) = 0;
 
@@ -131,6 +132,18 @@ public:
     /// @brief Shows or clears the mark of a value that is being recomputed.
     /// @param stale Whether the value shown is the last known one.
     virtual void setStale(bool stale) = 0;
+
+    /// @brief Shows a line that describes the field under its control, after its messages, and makes it the
+    ///        control's accessible description, after the messages. A text takes none: the mount never calls it on
+    ///        one, and a backend refuses it there.
+    /// @param description The line, UTF-8; empty shows none.
+    virtual void setDescription(std::string_view description) = 0;
+
+    /// @brief Evaluates the value without making it invalid: outlines the control in the tone and draws the
+    ///        description in the tone's colour. A field with errors is drawn as `Err` whatever its tone. A text
+    ///        takes it as its colour, whatever its role.
+    /// @param tone The tone; `Neutral` is none.
+    virtual void setTone(Tone tone) = 0;
 };
 
 /// @brief Read-only text.
@@ -143,6 +156,12 @@ public:
     /// @brief Sets the style.
     /// @param role The role, mapped to the backend's theme.
     virtual void setRole(TextRole role) = 0;
+
+    /// @brief Replaces what the text shows with runs, in order, in the text's role: a strong run in the backend's
+    ///        bold weight, a mono run in its monospace face, a toned run in the tone's colour, and every run's text as
+    ///        its characters. The mount calls it in place of `setText` for a text that has spans.
+    /// @param spans The runs.
+    virtual void setSpans(std::vector<TextSpan> const& spans) = 0;
 };
 
 /// @brief A push button.
@@ -168,10 +187,31 @@ public:
     /// @param style The style.
     virtual void setStyle(ButtonStyle style) = 0;
 
-    /// @brief Marks a list entry as the current one, or clears the mark. A new button is not selected; the mount
-    ///        calls it only for an `Item`, when bound or `true`.
-    /// @param selected Whether it is the current one.
+    /// @brief Marks the button selected, or clears the mark: an `Item` is the current entry of its list, a push
+    ///        button is pressed in (a well picked on a plate). A new button is not selected; the mount calls it for
+    ///        either style, only when `selected` is bound or `true`.
+    /// @param selected Whether it is selected.
     virtual void setSelected(bool selected) = 0;
+
+    /// @brief Sets the button's outline. A new button has the theme's corners; the mount calls it once, only for
+    ///        `Round`.
+    /// @param shape The shape.
+    virtual void setShape(ControlShape shape) = 0;
+
+    /// @brief Sets the button's density. A new button is normal; the mount calls it once, only for `Small`.
+    /// @param size The size.
+    virtual void setSize(ButtonSize size) = 0;
+
+    /// @brief Draws the caption in the `mono` text role's face. A new button uses the body face; the mount calls it
+    ///        once, only for `true`.
+    /// @param mono Whether to.
+    virtual void setMono(bool mono) = 0;
+
+    /// @brief The entry's content: a container the button owns and draws as the entry in place of its label, which
+    ///        then names it without being drawn. The mount asks for it only for an `Item` that has content. The entry
+    ///        stays one button: one focus stop, and a click anywhere on its content is the button's.
+    /// @return It, owned by the button and valid as long as the button.
+    virtual ContainerWidget& content() = 0;
 };
 
 /// @brief An editable text field.
@@ -204,6 +244,22 @@ public:
     /// @param unit The unit's display text, UTF-8.
     virtual void setUnit(std::string_view unit) = 0;
 
+    /// @brief Sets the text drawn muted at the field's leading edge, inside it, and announced before the value; empty
+    ///        shows none. Called only on a single-line or password input.
+    /// @param prefix The prefix's display text, UTF-8.
+    virtual void setPrefix(std::string_view prefix) = 0;
+
+    /// @brief Draws the text and the placeholder in the `mono` text role's face. A new field uses the body face; the
+    ///        mount calls it once, only for `true`.
+    /// @param mono Whether to.
+    virtual void setMono(bool mono) = 0;
+
+    /// @brief Places the text in the field. A new field's text starts at the leading edge; the mount calls it once,
+    ///        only for `Center` or `End`, and only on a single-line or password input. An `End` field draws its
+    ///        digits at one width each, so a column of values lines up.
+    /// @param align `Start`, `Center` or `End`; `Stretch` reads as `Start`.
+    virtual void setAlign(Align align) = 0;
+
     /// @brief Sets the fraction digits a number is entered with: what a backend or a kit may use to align or
     ///        format the text. Nothing is required of a backend that draws nothing from it. Called only on a
     ///        single-line or password input.
@@ -220,6 +276,12 @@ public:
     /// @param label The label, UTF-8.
     /// @param shown Whether the input shows it.
     virtual void setCaption(std::string_view label, bool shown) = 0;
+
+    /// @brief Sets how much the input stands out: a prominent one is drawn as the screen's focal control, on Qt
+    ///        Quick larger and outlined in the accent, on the terminal in bold. The mount calls it once, only for
+    ///        `Prominent`, and never on a multiline input.
+    /// @param emphasis The emphasis.
+    virtual void setEmphasis(InputEmphasis emphasis) = 0;
 };
 
 /// @brief A labelled check box.
@@ -286,10 +348,28 @@ struct MenuEntry {
     bool enabled = true;
     /// @brief The submenu; empty for an entry that is chosen.
     std::vector<MenuEntry> items;
+    /// @brief Whether the entry is a line between entries: never chosen, never opened, and its other fields empty.
+    bool separator = false;
+    /// @brief A muted line of help shown with the entry; empty shows none.
+    std::string description;
 
     /// @brief Memberwise equality, submenus included.
     /// @return Whether every field matches.
     bool operator==(MenuEntry const&) const = default;
+};
+
+/// @brief The trigger of a button-style menu.
+struct MenuTrigger {
+    /// @brief The trigger's text and accessible name; empty for an icon-only trigger.
+    std::string label;
+    /// @brief The trigger's icon name in the theme's icon map; empty for none.
+    std::string icon;
+    /// @brief The trigger's emphasis, as a button's.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every field matches.
+    bool operator==(MenuTrigger const&) const = default;
 };
 
 /// @brief A menu of commands, with nested submenus.
@@ -299,9 +379,20 @@ public:
     /// @param entries The entries, in order, each with its submenu.
     virtual void setItems(std::vector<MenuEntry> const& entries) = 0;
 
+    /// @brief Sets a button-style menu's trigger; the mount calls it only for a menu created with
+    ///        `MenuStyle::Button`, at mount and whenever the label changes.
+    ///
+    /// The label, when not empty, is the trigger's text and its accessible name. An icon-only trigger draws its icon
+    /// from the theme's set; `more` and `nav.menu`, framework names, draw `⋯` and `☰` when the set does not name
+    /// them, and another icon the set does not name draws the widget's accessible name as the label, so the trigger is
+    /// never blank.
+    /// @param trigger The trigger's label, icon and emphasis.
+    virtual void setTrigger(MenuTrigger const& trigger) = 0;
+
     /// @brief Sets what choosing an entry calls, with its path.
     ///
-    /// Only an enabled entry without a submenu, inside enabled entries, can be chosen.
+    /// Only an enabled entry without a submenu, inside enabled entries, can be chosen; a separator never can. A path
+    /// counts separators, so it names the same entry whichever backend reports it.
     /// @param onActivate The handler, given the entry's index at each level from the top; empty does nothing.
     virtual void setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) = 0;
 };
@@ -320,14 +411,68 @@ public:
     /// @brief Places the spare length along the axis while no shown child stretches. A new stack packs at the start.
     /// @param justify Where it goes.
     virtual void setJustify(Justify justify) = 0;
+
+    /// @brief Makes a horizontal stack wrap: its children fill lines in order, and a child that does not fit after
+    ///        the ones already on a line starts the next. The mount calls it once, before the stack's first child,
+    ///        and only for a stack that wraps.
+    ///
+    /// Each shown child has a basis along the row: a content child its natural width, a fixed child its amount, and
+    /// a stretch child its minimum width, else its natural width; each clamped into the child's bounds and at most
+    /// the row's width. A line always holds one child; a child whose basis is 0 takes no gap and never starts a
+    /// line. On a line, the stretch children share the spare width by weight, each stopping at its maximum; a line
+    /// with none places it by the stack's `justify`. A line is as tall as its tallest child, the stack's `align`
+    /// places a child down its line, and lines are `gap` apart, the step children are apart along a line. A child
+    /// wider than the stack sits alone on its line at the stack's width. The stack's natural width is its children's
+    /// on one line, and its natural height the height of its lines at the width it is given.
+    /// @param wrap Always true: a stack that does not wrap is never told.
+    virtual void setWrap(bool wrap) = 0;
+
+    /// @brief Draws a 1 px rule in the theme's divider colour between each two shown children of a stack that does not
+    ///        wrap, centred in the gap: horizontal in a vertical stack, vertical in a row. The rule takes 1 px of its
+    ///        own, so a gap of 0 still separates the children. The mount calls it once, before the stack's first
+    ///        child, and only for a stack that is divided. A backend that cannot spare a row for a rule draws none:
+    ///        the terminal's lines are already apart.
+    /// @param divided Always true: a stack that is not divided is never told.
+    virtual void setDivided(bool divided) = 0;
+
+    /// @brief Insets the children from the stack's edges: the vertical step above and below, the horizontal step at
+    ///        the sides. The mount calls it once, before the stack's first child, and only for a stack that has
+    ///        padding. The stack's natural size includes the inset.
+    /// @param padding The steps, each 0 to `kMaxSpacingStep`.
+    virtual void setPadding(Padding padding) = 0;
+
+    /// @brief Marks the stack as the chosen entry of a list, or not: while selected it draws the accent's 3 px bar at
+    ///        its leading edge, down its whole height, over its surface and under its children, inside its leading
+    ///        padding. The mount calls it for a stack that gives the key, at mount (possibly with false) and on every
+    ///        change; that first call is what tells a backend the stack can be selected, so one that reserves room
+    ///        for the bar reserves it from then on whether or not the stack is selected.
+    /// @param selected Whether the stack is the chosen entry.
+    virtual void setSelected(bool selected) = 0;
+
+    /// @brief Makes the stack transparent to `bleed`: a child of it that bleeds reaches past the padding of the
+    ///        stack's own container (a panel's padding, a tab page's), not past the stack's, as if the child were
+    ///        that container's. The mount calls it once, before the stack's first child, and only with true, for the
+    ///        column the interpreter inserts around a list of nodes. A table's row view ignores it.
+    /// @param passes Always true: a stack that is not a holder is never told.
+    virtual void setPassesBleed(bool passes) = 0;
 };
 
 /// @brief Children laid out row-major in columns.
 class GridWidget : public ContainerWidget {
 public:
-    /// @brief Sets the column count.
+    /// @brief Sets the column count; the columns share the width.
     /// @param columns At least one.
     virtual void setColumns(int columns) = 0;
+
+    /// @brief Sets the column tracks in place of a column count; the mount calls it once, before any child, and then
+    ///        never calls `setColumns`.
+    ///
+    /// Fixed tracks take their amount, content tracks their widest cell that spans only them, and stretch tracks
+    /// share what is left by weight. A spanning cell covers its tracks and the gaps between them, and sizes none.
+    /// Across its track, a text cell's text and a label-width cell sit where the track's `align` says (the first
+    /// track's, for a spanning cell); a container cell fills the track.
+    /// @param tracks At least one.
+    virtual void setTracks(std::vector<GridTrack> const& tracks) = 0;
 
     /// @brief Sets the space between cells.
     /// @param gap A spacing step, 0 to `kMaxSpacingStep`; the mount never passes another value.
@@ -382,7 +527,19 @@ public:
 class ScrollWidget : public ContainerWidget {};
 
 /// @brief A container that shows its children and nothing else: the host of a Switch's case and of a Tabs page.
-class SlotWidget : public ContainerWidget {};
+class SlotWidget : public ContainerWidget {
+public:
+    /// @brief Whether the slot scrolls a child that does not stretch in height. A scrollable slot shows such a
+    ///        child at its natural height inside a vertical viewport of the slot's own height, which keeps the
+    ///        focused widget in view, and scrolls only while the child is taller than the slot (a slot whose content
+    ///        fits takes no input and no focus); a child that stretches in height is laid out as in a slot that does
+    ///        not scroll, filling it, but is never shorter than its `minHeight`, and the slot scrolls it while it is
+    ///        shorter than that. Where the frontend can, a slot whose content cannot be narrower than it scrolls
+    ///        sideways too. The slot reads its shown child's height sizing itself, so a new child follows without
+    ///        another call. A new slot does not scroll.
+    /// @param scrollable Whether it scrolls.
+    virtual void setScrollable(bool scrollable) = 0;
+};
 
 /// @brief A tab bar over page slots.
 ///
@@ -390,7 +547,8 @@ class SlotWidget : public ContainerWidget {};
 /// slot visible. `setSelected` moves the bar's highlight only.
 class TabsWidget : public ContainerWidget {
 public:
-    /// @brief Replaces the tab captions.
+    /// @brief Replaces the tab captions. A call with as many captions as the last one replaces them in place and keeps
+    ///        the highlight, the shown page and the keyboard focus.
     /// @param labels One caption per tab, in order.
     virtual void setTabs(std::vector<std::string> const& labels) = 0;
 
@@ -406,6 +564,29 @@ public:
     ///        its strip.
     /// @param shown Whether the strip is drawn.
     virtual void setBarShown(bool shown) = 0;
+
+    /// @brief Sets the label of the menu that holds the tabs that do not fit in the bar. A frontend that scrolls or
+    ///        marks its tabs instead stores it and draws nothing from it.
+    /// @param label The label, UTF-8.
+    virtual void setMoreLabel(std::string_view label) = 0;
+
+    /// @brief Insets the strip and, unless `setPageInset` is called, the pages: the strip and its rule span the
+    ///        widget's width, the first tab starts this far in from the leading edge, and each page is padded by it on
+    ///        every side, with nothing else between the strip's rule and the page. The mount calls it once, only for a
+    ///        nonzero step.
+    /// @param inset A spacing step, 1 to `kMaxSpacingStep`; the mount never passes another value.
+    virtual void setInset(int inset) = 0;
+
+    /// @brief Pads each page by its own step in place of `setInset`'s. Each page pads its own content, inside its
+    ///        scroll, so a page that scrolls clips at the widget's edges, shows its bar there, and lets a bleeding
+    ///        child reach them. The mount calls it once, only when the view gives a page inset, which may be 0.
+    /// @param inset A spacing step, 0 to `kMaxSpacingStep`.
+    virtual void setPageInset(int inset) = 0;
+
+    /// @brief Draws the strip, and nothing else, on a surface across the widget's width. The mount calls it once,
+    ///        only for a nonempty name.
+    /// @param surface The surface's name, as `Widget::setSurface` takes it.
+    virtual void setStripSurface(std::string_view surface) = 0;
 };
 
 /// @brief A modal overlay around its children, with a focus trap while open. A new dialog is closed.
@@ -422,6 +603,17 @@ public:
     /// @param title The title, UTF-8.
     virtual void setTitle(std::string_view title) = 0;
 
+    /// @brief Shows a line under the title, in the head, which does not scroll with the content, and makes it the
+    ///        overlay's accessible description. The mount calls it only when bound or not empty.
+    /// @param description The line, UTF-8; empty shows none.
+    virtual void setDescription(std::string_view description) = 0;
+
+    /// @brief Shows the description as runs, as `TextWidget::setSpans` shows a text, and makes their joined
+    ///        characters the overlay's accessible description. The mount calls it in place of `setDescription` for a
+    ///        dialog whose document gives runs.
+    /// @param spans The runs.
+    virtual void setDescriptionSpans(std::vector<TextSpan> const& spans) = 0;
+
     /// @brief Sets what a user dismissal (Esc on the TUI) of the open dialog calls.
     /// @param onDismiss The handler; empty does nothing.
     virtual void setOnDismiss(Action onDismiss) = 0;
@@ -430,6 +622,21 @@ public:
     ///        The mount puts the dialog's actions here.
     /// @return It, owned by the dialog and valid as long as the dialog.
     virtual ContainerWidget& footer() = 0;
+
+    /// @brief Draws the dialog as a sheet, or as a centred overlay again.
+    ///
+    /// A sheet fills the window, with no margin and no rounding, and keeps every rule of the dialog: the focus trap,
+    /// the footer, Escape as a dismissal. A press outside is not possible, so its head holds a dismiss control
+    /// (labelled by `setDismissLabel`) before the title, which dismisses exactly as Escape does. Changing it while
+    /// the dialog is open keeps the content and its state. A new dialog is not a sheet; the mount calls this only
+    /// when the document binds `sheet` or sets it.
+    /// @param sheet Whether it is a sheet.
+    virtual void setSheet(bool sheet) = 0;
+
+    /// @brief Sets the label of a sheet's dismiss control; a new dialog's is "Close". The mount calls this only when
+    ///        the label is bound or not the default.
+    /// @param label The label, UTF-8.
+    virtual void setDismissLabel(std::string_view label) = 0;
 };
 
 /// @brief A progress indicator.
@@ -442,6 +649,13 @@ public:
     /// @brief Replaces the caption.
     /// @param label The caption, UTF-8.
     virtual void setLabel(std::string_view label) = 0;
+};
+
+/// @brief How a click on a table row is modified, which decides what it does to the selection.
+enum class RowClick : std::uint8_t {
+    Only,    ///< A plain click: only the row is selected, and it becomes the anchor.
+    Toggle,  ///< Ctrl+click: the row is toggled, the rest kept, and it becomes the anchor.
+    Range,   ///< Shift+click: the rows from the anchor to this one are selected, in place of the rest.
 };
 
 /// @brief Keyed rows under column headers, with selection and activation by key.
@@ -459,6 +673,15 @@ public:
 /// selection. `onSelectionChange` then gets exactly the keys of the existing rows now selected, in any mode: a key
 /// still waiting for its row is dropped by a user's change, while `setSelection` keeps it waiting. It reports the
 /// user's selections only: no setter, and no row arriving or going, calls it.
+///
+/// Every backend selects with the same inputs. In `Multiple` mode a click selects only its row and makes it the
+/// anchor, Ctrl+click toggles its row and makes it the anchor, Shift+click selects the rows from the anchor to it in
+/// place of the rest; Space toggles the current row, Shift+Up and Shift+Down move the current row and select from the
+/// anchor to it, and Ctrl+A selects every row, or clears them all when every row is selected already. In `Single`
+/// mode each of them selects the one row, and Ctrl+A goes on outwards. The arrows, Home, End, PageUp and PageDown
+/// move the current row without selecting, and Enter activates it. A report says which kind of change it was: a
+/// click, a Shift-click, a Shift+arrow and every `Single` change `Replace`; a Ctrl-click, Space and Ctrl+A `Extend`.
+/// A range runs over the keys in row order, rows the backend has not realized included.
 class TableWidget : public ContainerWidget {
 public:
     /// @brief Sets the column headers and widths.
@@ -484,17 +707,56 @@ public:
     /// @param tone The tone, or none.
     virtual void setRowTone(Widget& row, std::optional<Tone> tone) = 0;
 
+    /// @brief Draws the selection as a leading column of check boxes, one per row, under a header box; called once,
+    ///        before any row, and only to turn it on: a new table has none. A row's box is checked while the row is
+    ///        selected, and toggling it is a Ctrl-click on the row. The header box is checked while every row shown
+    ///        is selected, partly checked while some are, clear while none are, and disabled while there are no
+    ///        rows; toggling it is Ctrl+A. Neither box changes its own state: each shows the selection.
+    /// @param shown Whether the column is drawn.
+    virtual void setSelectColumn(bool shown) = 0;
+
+    /// @brief Sets the accessible name of the select column's header box.
+    /// @param label The name, UTF-8.
+    virtual void setSelectAllLabel(std::string_view label) = 0;
+
+    /// @brief Sets a row's accessible name, which its select box carries too; called after `setRowKey` for a row
+    ///        given a label, and on every change. A row with none is named by its key.
+    /// @param row   One of this table's rows.
+    /// @param label The name, UTF-8.
+    virtual void setRowLabel(Widget& row, std::string_view label) = 0;
+
+    /// @brief Makes a row a heading; called once, right after `setRowKey`, for a heading row. Its one cell spans every
+    ///        column and the select column. It is never selected (`setSelection` with its key marks nothing), never
+    ///        reported, and never activated: a click on it does nothing, the current row skips it, and Ctrl+A, a
+    ///        range and the select-all box pass over it.
+    /// @param row One of this table's rows.
+    virtual void setRowHeading(Widget& row) = 0;
+
     /// @brief Requests the rows with these keys, and marks those it has. Never calls the `onSelectionChange` handler.
     /// @param keys The selected keys.
     virtual void setSelection(std::vector<Key> const& keys) = 0;
 
-    /// @brief Sets what a user's selection change calls, with the keys of every row then selected.
+    /// @brief Sets what a user's selection change calls, with the keys of every row then selected and the kind of
+    ///        change the input made.
     /// @param onSelectionChange The handler; empty does nothing.
-    virtual void setOnSelectionChange(std::function<void(std::vector<Key>)> onSelectionChange) = 0;
+    virtual void setOnSelectionChange(std::function<void(std::vector<Key>, SelectionChange)> onSelectionChange) = 0;
 
     /// @brief Sets what activating a row (Enter or a double click) calls, with its key.
     /// @param onActivate The handler; empty does nothing.
     virtual void setOnActivate(std::function<void(Key)> onActivate) = 0;
+
+    /// @brief Marks a column's header with the direction the rows are sorted by it, or marks none. The table never
+    ///        reorders its rows: they arrive sorted. Never calls the `onSort` handler; the mount calls it only for a
+    ///        table with a sortable column.
+    /// @param sort The column and direction, or none.
+    virtual void setSort(std::optional<TableSort> sort) = 0;
+
+    /// @brief Sets what a user's request to sort calls: a click on a sortable column's header (or Enter or Space on
+    ///        it, where the header takes focus) calls it with the column's index among the columns `setColumns` gave,
+    ///        which the select column is not one of. A header that is not sortable reports nothing. What the request
+    ///        means is the caller's to decide; the backend only shows `setSort`.
+    /// @param onSort The handler; empty does nothing.
+    virtual void setOnSort(std::function<void(std::size_t)> onSort) = 0;
 
     /// @brief Tells the backend how many of the table's rows are realized, where, and how many exist in total, so
     ///        it can size a scrollbar and place leading/trailing space for the rows that are not realized. A
@@ -525,7 +787,8 @@ public:
     ///        silently drop a selected key's membership the moment its row scrolls out of view. A backend that
     ///        never virtualizes may ignore this -- every key it cares about already has a realized row, by
     ///        definition, so `setRowKey` alone already tells it everything this call would add.
-    /// @param keys Every key currently in the table's data, in no particular order.
+    /// @param keys Every key currently in the table's data, in row order, so a range or Ctrl+A covers the rows the
+    ///        backend has not realized.
     virtual void setExistingKeys(std::vector<Key> const& keys) { static_cast<void>(keys); }
 };
 
@@ -539,6 +802,12 @@ public:
     /// @brief Sets what a user edit calls, with the instant entered or `nullopt` for a cleared field.
     /// @param onChange The handler; empty does nothing.
     virtual void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) = 0;
+
+    /// @brief Sets the pattern the field shows its value in and reads typed text in (`formatDate`, `parseDate`), ISO
+    ///        being always read too. The mount calls it once, before the value, and only for a pattern that is not
+    ///        empty; a new field shows ISO.
+    /// @param pattern The pattern, such as `dd-MMM-yyyy HH:mm`.
+    virtual void setPattern(std::string_view pattern) = 0;
 
     /// @brief Sets the field's label, and whether the input draws it as a visible caption above its control.
     ///        Without `shown`, the caption is drawn elsewhere (a form's cell), or not at all.
@@ -593,6 +862,11 @@ public:
     /// @param text The message, UTF-8.
     virtual void setText(std::string_view text) = 0;
 
+    /// @brief Replaces the message with runs, as `TextWidget::setSpans` does. The mount calls it in place of
+    ///        `setText` for a banner that has spans.
+    /// @param spans The runs.
+    virtual void setSpans(std::vector<TextSpan> const& spans) = 0;
+
     /// @brief Replaces the action button's caption.
     /// @param label The caption, UTF-8; empty shows no button.
     virtual void setActionLabel(std::string_view label) = 0;
@@ -608,6 +882,14 @@ public:
     /// @brief Sets what a dismissal calls. A dismissal leaves the banner shown: the application hides it.
     /// @param onDismiss The handler; empty does nothing.
     virtual void setOnDismiss(Action onDismiss) = 0;
+
+    /// @brief Sets how the action is drawn. The mount calls it once, only for a banner whose style is not `Ghost`
+    ///        or that stretches its action. A `Link` draws the action inside the message, at the span marked
+    ///        `action` or else after the message, and stays a button to assistive technology.
+    /// @param style   How the action is drawn.
+    /// @param stretch Whether the action takes a line of its own under the message, as wide as the banner; never
+    ///                true with `Link`.
+    virtual void setActionStyle(BannerActionStyle style, bool stretch) = 0;
 };
 
 /// @brief A passive, transient message outside the normal flow: non-modal, dims nothing, and never takes keyboard
@@ -636,6 +918,30 @@ public:
     /// @brief Sets the icon; called once.
     /// @param icon The name of an icon in the theme's icon map; empty shows none.
     virtual void setIcon(std::string_view icon) = 0;
+
+    /// @brief Makes the badge removable: it draws a remove control after its text, drawn as the framework icon
+    ///        `close`, and takes the focus. Delete, Backspace, Enter or Space on it, or a click on its control, calls
+    ///        @p onRemove. The mount calls it only for a badge with a remove handler, at mount and whenever the
+    ///        label changes; a badge it is never called on takes no focus.
+    /// @param onRemove The handler.
+    /// @param label    The remove control's accessible name.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): a sink every override moves from.
+    virtual void setOnRemove(Action onRemove, std::string_view label) = 0;
+
+    /// @brief Sets how the badge is drawn. A new badge is filled; the mount calls it once, only for `Outline`, which
+    ///        draws the surface's fill with the tone's colour as border and text.
+    /// @param style The style.
+    virtual void setStyle(BadgeStyle style) = 0;
+
+    /// @brief Sets the badge's outline. A new badge has the theme's corners; the mount calls it once, only for
+    ///        `Round`.
+    /// @param shape The shape.
+    virtual void setShape(ControlShape shape) = 0;
+
+    /// @brief Draws the label in the `mono` text role's face. A new badge uses its own face; the mount calls it once,
+    ///        only for `true`.
+    /// @param mono Whether to.
+    virtual void setMono(bool mono) = 0;
 };
 
 /// @brief A progress bar.
@@ -660,14 +966,34 @@ public:
     /// @brief Highlights one step.
     /// @param index The step's position; `nullopt` or a position past the last highlights none.
     virtual void setCurrent(std::optional<std::size_t> index) = 0;
+
+    /// @brief Chooses whether the labels are drawn; unlabelled, only the marks are, and the labels still name the
+    ///        steps and the indicator.
+    /// @param labelled Whether the labels are drawn.
+    virtual void setLabelled(bool labelled) = 0;
 };
 
-/// @brief Captions beside their values.
+/// @brief Captions beside, or above, their values. A toned value is drawn in the tone's colour and the strong weight;
+///        a value with spans draws them as a text does.
 class KeyValueWidget : public Widget {
 public:
     /// @brief Replaces the pairs.
     /// @param items The pairs, in order.
     virtual void setItems(std::vector<KeyValueItem> const& items) = 0;
+
+    /// @brief Sets where each caption sits. A new list draws them beside their values; the mount calls it once, only
+    ///        for `Above`.
+    /// @param placement Where the captions sit.
+    virtual void setCaptionPlacement(CaptionPlacement placement) = 0;
+};
+
+/// @brief Points against a numeric axis, with reference lines. It takes no focus and calls no handler.
+class ChartWidget : public Widget {
+public:
+    /// @brief Replaces what the chart draws. Called at mount and whenever the data changes; an unchanged chart is
+    ///        not set again.
+    /// @param data The range, the ticks, the lines, the series and the summary, every text already formatted.
+    virtual void setData(ChartData const& data) = 0;
 };
 
 /// @brief What a region shows when it has nothing to show.
@@ -705,6 +1031,14 @@ public:
     /// @brief Replaces the title.
     /// @param title The title, UTF-8.
     virtual void setTitle(std::string_view title) = 0;
+
+    /// @brief Shows a line under the title, as `DialogWidget::setDescription` does.
+    /// @param description The line, UTF-8; empty shows none.
+    virtual void setDescription(std::string_view description) = 0;
+
+    /// @brief Shows the description as runs, as `DialogWidget::setDescriptionSpans` does.
+    /// @param spans The runs.
+    virtual void setDescriptionSpans(std::vector<TextSpan> const& spans) = 0;
 
     /// @brief Sets what a user dismissal (Esc on the TUI) calls.
     /// @param onDismiss The handler; empty does nothing.
@@ -840,14 +1174,15 @@ public:
 
     /// @brief Makes a choice of one option.
     /// @param parent The container to append to, or null for a root.
-    /// @param style Dropdown or radio.
+    /// @param style Dropdown, radio or segmented.
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<SelectWidget> createSelect(ContainerWidget* parent, SelectStyle style) = 0;
 
     /// @brief Makes a command list.
     /// @param parent The container to append to, or null for a root.
+    /// @param style A bar of top-level entries, or one button that opens them.
     /// @return The widget.
-    [[nodiscard]] virtual std::unique_ptr<MenuWidget> createMenu(ContainerWidget* parent) = 0;
+    [[nodiscard]] virtual std::unique_ptr<MenuWidget> createMenu(ContainerWidget* parent, MenuStyle style) = 0;
 
     /// @brief Makes a stack.
     /// @param parent The container to append to, or null for a root.
@@ -952,6 +1287,11 @@ public:
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<KeyValueWidget> createKeyValue(ContainerWidget* parent) = 0;
 
+    /// @brief Makes a chart.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<ChartWidget> createChart(ContainerWidget* parent) = 0;
+
     /// @brief Makes an empty state.
     /// @param parent The container to append to, or null for a root.
     /// @return The widget.
@@ -991,6 +1331,36 @@ public:
         static_cast<void>(request);
         return nullptr;
     }
+
+    /// @brief The width class of the surface this backend draws on, now: `compact`, `medium` or `expanded`
+    ///        (`widthClassOf`), what `{"env": "widthClass"}` reads.
+    /// @return The class.
+    [[nodiscard]] virtual std::string widthClass() const = 0;
+
+    /// @brief Registers the one listener told of each later change of `widthClass()`, on the owner and outside any
+    ///        layout pass; a backend reports to the shell mounted on it. It is not called at once: the caller reads
+    ///        `widthClass()` for the current class.
+    /// @param onWidthClass The listener, given the new class; empty clears it.
+    virtual void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) = 0;
 };
+
+/// @brief The width, in units, from which a surface is `expanded`: the compact bound, 80, plus the shell's sidebar
+///        (28), the narrowest window whose page beside that sidebar is not itself compact.
+inline constexpr int kExpandedWidthUnits = 108;
+
+/// @brief A width in the vocabulary's units (what `fixed(n)` counts) as a width class: `compact` below 80 units,
+///        `medium` below `kExpandedWidthUnits` (108), `expanded` otherwise. Every backend classes its surface with
+///        it, so a document's breakpoints sit at the same number of its own units on every frontend.
+/// @param units The width, in units: a terminal's columns, or a window's width over its unit width.
+/// @return The class: `compact`, `medium` or `expanded`.
+[[nodiscard]] inline std::string widthClassOf(double units) {
+    if (units < 80.0) {
+        return "compact";
+    }
+    if (units < static_cast<double>(kExpandedWidthUnits)) {
+        return "medium";
+    }
+    return "expanded";
+}
 
 }  // namespace morph::ui

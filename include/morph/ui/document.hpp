@@ -281,7 +281,8 @@ struct Command {
     /// @brief The main expression: `set`'s value, `run`'s body, `navigate`'s params, `return`'s value, `host`'s
     ///        args, `notify`'s message, `if`'s condition, the file of `upload` and `download`.
     ExprPtr value;
-    /// @brief The second expression: `run`'s `each`, `navigate`'s `route`, `download`'s suggested `name`.
+    /// @brief The second expression: `run`'s `each`, `navigate`'s `route`, `download`'s suggested `name`,
+    ///        `focus`'s `row`.
     ExprPtr extra;
     /// @brief A binding name: `run`'s and `upload`'s `as`.
     std::string binding;
@@ -464,6 +465,15 @@ struct DocNode {
         auto const found = flags.find(key);
         return found != flags.end() && found->second;
     }
+
+    /// @brief A literal flag whose absence means something other than `false`.
+    /// @param key    The key.
+    /// @param absent The value when the key is absent.
+    /// @return Its value; @p absent when the key is absent.
+    [[nodiscard]] bool flag(std::string_view key, bool absent) const {
+        auto const found = flags.find(key);
+        return found == flags.end() ? absent : found->second;
+    }
 };
 
 /// @brief A custom component declaration (spec 5 §10).
@@ -532,6 +542,23 @@ struct LoadWarning {
     }
 };
 
+/// @brief A declaration a `focus` command may reach: an element's node, and how many row keys key it.
+struct FocusCandidate {
+    /// @brief The declaring node's JSON Pointer.
+    std::string path;
+    /// @brief How many row scopes enclose the declaration (within its document or component fallback).
+    std::size_t rows = 0;
+};
+
+/// @brief Where a `focus` command's target resolved: the declarations of that name it may reach. At most one of
+///        them is mounted at a time; the command focuses the one that is.
+struct FocusTarget {
+    /// @brief The declarations, in document order.
+    std::vector<FocusCandidate> candidates;
+    /// @brief Whether the command gives `row`, whose value replaces the innermost row key of each candidate.
+    bool row = false;
+};
+
 /// @brief A loaded and validated UI document: a screen, or the app document (id `app`, spec 6 §5).
 struct Document {
     /// @brief The vocabulary, `ui/1`.
@@ -544,12 +571,43 @@ struct Document {
     ExprPtr identity;
     /// @brief The unsaved-changes expression.
     ExprPtr dirty;
+    /// @brief The title as runs, drawn in place of `title` in a shell's top bar by a client that knows it; `nullptr`
+    ///        when none is declared.
+    ExprPtr titleSpans;
+    /// @brief The eyebrow expression of the screen's head, the line above the title; `nullptr` when none is declared.
+    ExprPtr eyebrow;
+    /// @brief The eyebrow as runs, drawn in place of `eyebrow` by a client that knows it; `nullptr` when none is
+    ///        declared.
+    ExprPtr eyebrowSpans;
     /// @brief The subtitle expression of the screen's head; `nullptr` when none is declared.
     ExprPtr subtitle;
+    /// @brief The subtitle as runs, drawn in place of `subtitle` by a client that knows it; `nullptr` when none is
+    ///        declared.
+    ExprPtr subtitleSpans;
+    /// @brief Where the head's lead (subtitle and badges) sits: an expression of `below`, `inline` or `end`;
+    ///        `nullptr` when none is declared, which is `below`.
+    ExprPtr leadPlacement;
+    /// @brief The surface the shell draws the top bar on while the screen is shown: an expression of a surface's
+    ///        name; `nullptr` when none is declared.
+    ExprPtr headSurface;
+    /// @brief The surface the shell draws the page area on while the screen is shown: an expression of a surface's
+    ///        name; `nullptr` when none is declared, which is the built-in `page` surface.
+    ExprPtr pageSurface;
+    /// @brief The app document's principal placement, `sidebar` or `head`; empty for the default, `sidebar`.
+    std::string principalPlacement;
     /// @brief The head's status badges: `headBadge` parts, in order.
     std::vector<DocNodePtr> status;
     /// @brief The head's actions: `actionButton` parts, in order.
     std::vector<DocNodePtr> actions;
+    /// @brief The head's own menu: `headMenuItem` parts, in order.
+    std::vector<DocNodePtr> menu;
+    /// @brief The accessible name of the head menu's trigger; `nullptr` for the default, "More actions".
+    ExprPtr menuLabel;
+    /// @brief The head's tools: `headTool` parts, a search field or a select each, in order.
+    std::vector<DocNodePtr> tools;
+    /// @brief The app document's counts on the navigator's entries: `navigationBadge` parts, in order; empty for a
+    ///        screen, which declares none.
+    std::vector<DocNodePtr> navigation;
     /// @brief The typed params, in declaration order.
     std::vector<std::pair<std::string, Type>> params;
     /// @brief The screen scope's declarations.
@@ -560,6 +618,11 @@ struct Document {
     std::map<std::string, Commands, std::less<>> keys;
     /// @brief When errors show: `touched`, `submit` or `always`; empty for the default.
     std::string showErrors;
+    /// @brief The app document's date pattern (`formatting.date`), which `mountApp` gives the session; empty keeps
+    ///        ISO, and a screen has none.
+    std::string datePattern;
+    /// @brief The app document's date-and-time pattern (`formatting.dateTime`), as `datePattern`.
+    std::string dateTimePattern;
     /// @brief Queries started before the screen mounts.
     std::vector<std::string> prefetch;
     /// @brief Custom components, by name.
@@ -571,6 +634,8 @@ struct Document {
     /// @brief The static type of each `dateTimeInput`'s `value` that the loader could decide: `String` or
     ///        `Timestamp`, keyed by the node. A node whose value type is `any` or `key` has no entry.
     std::map<DocNode const*, TypeKind> dateValueKinds;
+    /// @brief Each `focus` command's resolved target, keyed by the command's JSON Pointer.
+    std::map<std::string, FocusTarget, std::less<>> focusTargets;
     /// @brief What load-time validation found that does not refuse the document, in the order found. Empty when
     ///        the catalog answers no actions.
     std::vector<LoadWarning> warnings;
@@ -638,7 +703,8 @@ struct KeySpec {
 
 /// @brief The node or part creates a scope.
 inline constexpr std::uint8_t kScope = 1U;
-/// @brief The scope it creates is a row scope, where `row` is valid.
+/// @brief The scope it creates is a row scope, where `row` is valid. On a part without `kScope`, the part's inner keys
+///        are read in a row scope of their own that declares nothing: a chart series' per-point keys.
 inline constexpr std::uint8_t kRowScope = 2U;
 /// @brief It carries the input decorations `readonly`, `required`, `errors` and `stale`.
 inline constexpr std::uint8_t kField = 4U;
@@ -663,33 +729,24 @@ struct KindSpec {
 
 // NOLINTBEGIN(modernize-use-designated-initializers): the kind table reads as rows; names on every field would not.
 /// @brief The keys every node takes.
-inline constexpr std::array<KeySpec, 18> kCommonKeys = {{
-    {"id", Shape::Name},
-    {"visible", Shape::Condition},
-    {"enabled", Shape::Condition},
-    {"tooltip", Shape::Expr},
-    {"sizing", Shape::Expr},
-    {"minWidth", Shape::Expr},
-    {"maxWidth", Shape::Expr},
-    {"minHeight", Shape::Expr},
-    {"maxHeight", Shape::Expr},
-    {"alignSelf", Shape::Text},
-    {"span", Shape::Expr},
-    {"testId", Shape::Text},
-    {"surface", Shape::Text},
-    {"autofocus", Shape::Expr},
-    {"a11y", Shape::Part, "a11y"},
-    {"drag", Shape::Part, "drag"},
-    {"drop", Shape::Part, "drop"},
+inline constexpr std::array<KeySpec, 19> kCommonKeys = {{
+    {"id", Shape::Name},           {"visible", Shape::Condition}, {"enabled", Shape::Condition},
+    {"tooltip", Shape::Expr},      {"sizing", Shape::Expr},       {"minWidth", Shape::Expr},
+    {"maxWidth", Shape::Expr},     {"minHeight", Shape::Expr},    {"maxHeight", Shape::Expr},
+    {"alignSelf", Shape::Text},    {"bleed", Shape::Flag},        {"span", Shape::Expr},
+    {"testId", Shape::Text},       {"surface", Shape::Expr},      {"autofocus", Shape::Expr},
+    {"a11y", Shape::Part, "a11y"}, {"drag", Shape::Part, "drag"}, {"drop", Shape::Part, "drop"},
     {"keys", Shape::Keys},
 }};
 
-/// @brief The input decorations text and the inputs take.
-inline constexpr std::array<KeySpec, 4> kFieldKeys = {{
+/// @brief The input decorations text and the inputs take; a text refuses `description`.
+inline constexpr std::array<KeySpec, 6> kFieldKeys = {{
     {"readonly", Shape::Condition},
     {"required", Shape::Condition},
     {"errors", Shape::Expr},
     {"stale", Shape::Condition},
+    {"description", Shape::Expr},
+    {"tone", Shape::Expr},
 }};
 
 /// @brief The element values every element has.
@@ -700,10 +757,12 @@ inline constexpr std::array<std::string_view, 5> kInputValues = {"value", "draft
 inline constexpr std::array<std::string_view, 1> kCheckboxValues = {"checked"};
 /// @brief The element values of a select.
 inline constexpr std::array<std::string_view, 2> kSelectValues = {"selected", "selectedOption"};
+/// @brief The element values of a tabs node: the id of the tab shown.
+inline constexpr std::array<std::string_view, 1> kTabsValues = {"selected"};
 /// @brief The element values of a table.
-inline constexpr std::array<std::string_view, 10> kTableValues = {
-    "selection",   "activeKey",     "sort",    "filters", "viewCount",
-    "sourceCount", "selectedCount", "pending", "error",   "hoveredKey"};
+inline constexpr std::array<std::string_view, 14> kTableValues = {
+    "selection", "activeKey", "sort",       "filters", "viewCount", "sourceCount", "selectedCount",
+    "pending",   "error",     "hoveredKey", "page",    "pageCount", "pageFirst",   "pageLast"};
 /// @brief The element values of a dialog or drawer.
 inline constexpr std::array<std::string_view, 3> kDialogValues = {"open", "ready", "submitted"};
 /// @brief The element values of a form, beside its fields.
@@ -712,20 +771,30 @@ inline constexpr std::array<std::string_view, 3> kFormValues = {"ready", "body",
 inline constexpr std::array<std::string_view, 3> kTransferValues = {"progress", "pending", "error"};
 
 /// @brief The keys of `text`.
-inline constexpr std::array<KeySpec, 2> kTextKeys = {{{"text", Shape::Expr}, {"role", Shape::Expr}}};
+inline constexpr std::array<KeySpec, 3> kTextKeys = {
+    {{"text", Shape::Expr}, {"spans", Shape::Expr}, {"role", Shape::Expr}}};
 /// @brief The keys of `button`.
-inline constexpr std::array<KeySpec, 7> kButtonKeys = {{{"label", Shape::Expr},
-                                                        {"icon", Shape::Expr},
-                                                        {"emphasis", Shape::Text},
-                                                        {"style", Shape::Text},
-                                                        {"selected", Shape::Condition},
-                                                        {"onClick", Shape::Commands},
-                                                        {"onActivate", Shape::Commands}}};
+inline constexpr std::array<KeySpec, 11> kButtonKeys = {{{"label", Shape::Expr},
+                                                         {"icon", Shape::Expr},
+                                                         {"emphasis", Shape::Text},
+                                                         {"style", Shape::Text},
+                                                         {"selected", Shape::Condition},
+                                                         {"onClick", Shape::Commands},
+                                                         {"onActivate", Shape::Commands},
+                                                         {"children", Shape::Nodes},
+                                                         {"shape", Shape::Text},
+                                                         {"size", Shape::Text},
+                                                         {"mono", Shape::Flag}}};
 /// @brief The keys of `textInput`.
-inline constexpr std::array<KeySpec, 10> kTextInputKeys = {{{"value", Shape::Expr},
+inline constexpr std::array<KeySpec, 15> kTextInputKeys = {{{"value", Shape::Expr},
                                                             {"placeholder", Shape::Expr},
                                                             {"mode", Shape::Expr},
                                                             {"icon", Shape::Expr},
+                                                            {"unit", Shape::Expr},
+                                                            {"prefix", Shape::Expr},
+                                                            {"emphasis", Shape::Text},
+                                                            {"mono", Shape::Flag},
+                                                            {"align", Shape::Text},
                                                             {"commitOn", Shape::Text},
                                                             {"label", Shape::Expr},
                                                             {"showLabel", Shape::Flag},
@@ -744,27 +813,76 @@ inline constexpr std::array<KeySpec, 8> kSelectKeys = {{{"options", Shape::Expr}
                                                         {"onStale", Shape::Text},
                                                         {"onChoose", Shape::Commands},
                                                         {"onChange", Shape::Commands}}};
-/// @brief The keys of `menu`.
-inline constexpr std::array<KeySpec, 1> kMenuKeys = {{{"items", Shape::Parts, "menuItem"}}};
+/// @brief The keys of `menu`; `label`, `icon` and `emphasis` are a button-style menu's trigger.
+inline constexpr std::array<KeySpec, 5> kMenuKeys = {{{"items", Shape::Parts, "menuItem"},
+                                                      {"style", Shape::Text},
+                                                      {"label", Shape::Expr},
+                                                      {"icon", Shape::Expr},
+                                                      {"emphasis", Shape::Text}}};
 /// @brief The keys of a menu item part.
-inline constexpr std::array<KeySpec, 7> kMenuItemKeys = {{{"label", Shape::Expr},
-                                                          {"icon", Shape::Expr},
-                                                          {"keys", Shape::Text},
-                                                          {"checked", Shape::Expr},
-                                                          {"enabled", Shape::Condition},
-                                                          {"onClick", Shape::Commands},
-                                                          {"items", Shape::Parts, "menuItem"}}};
-/// @brief The keys of `column` and `row`.
-inline constexpr std::array<KeySpec, 4> kContainerKeys = {
-    {{"children", Shape::Nodes}, {"gap", Shape::Expr}, {"align", Shape::Text}, {"justify", Shape::Text}}};
-/// @brief The keys of `grid`; `justify` is read only to refuse it.
-inline constexpr std::array<KeySpec, 5> kGridKeys = {{{"children", Shape::Nodes},
+inline constexpr std::array<KeySpec, 10> kMenuItemKeys = {{{"label", Shape::Expr},
+                                                           {"icon", Shape::Expr},
+                                                           {"keys", Shape::Text},
+                                                           {"checked", Shape::Expr},
+                                                           {"enabled", Shape::Condition},
+                                                           {"onClick", Shape::Commands},
+                                                           {"items", Shape::Parts, "menuItem"},
+                                                           {"separator", Shape::Flag},
+                                                           {"description", Shape::Expr},
+                                                           {"visible", Shape::Condition}}};
+/// @brief The keys of a `headMenuItem` part: an entry of a screen head's own menu, a menu item with the `id` that
+///        `ScreenHead::choose` takes; its submenu's entries are head menu items too.
+inline constexpr std::array<KeySpec, 11> kHeadMenuItemKeys = {{{"id", Shape::Name},
+                                                               {"label", Shape::Expr},
+                                                               {"icon", Shape::Expr},
+                                                               {"keys", Shape::Text},
+                                                               {"checked", Shape::Expr},
+                                                               {"enabled", Shape::Condition},
+                                                               {"onClick", Shape::Commands},
+                                                               {"items", Shape::Parts, "headMenuItem"},
+                                                               {"separator", Shape::Flag},
+                                                               {"description", Shape::Expr},
+                                                               {"visible", Shape::Condition}}};
+/// @brief The keys of a `headTool` part: a search field or a select of a screen's head.
+inline constexpr std::array<KeySpec, 14> kHeadToolKeys = {{{"id", Shape::Name, {}, kRequired},
+                                                           {"kind", Shape::Text, {}, kRequired},
+                                                           {"label", Shape::Expr, {}, kRequired},
+                                                           {"value", Shape::Expr},
+                                                           {"placeholder", Shape::Expr},
+                                                           {"onChange", Shape::Commands},
+                                                           {"onSubmit", Shape::Commands},
+                                                           {"options", Shape::Expr},
+                                                           {"selected", Shape::Expr},
+                                                           {"style", Shape::Text},
+                                                           {"onChoose", Shape::Commands},
+                                                           {"width", Shape::Expr},
+                                                           {"visible", Shape::Condition},
+                                                           {"enabled", Shape::Condition}}};
+/// @brief The keys of `column` and `row`; `wrap` is a row's, read on a column only to refuse it, and `divided` a
+///        column's or a row's that does not wrap.
+inline constexpr std::array<KeySpec, 10> kContainerKeys = {{{"children", Shape::Nodes},
+                                                            {"gap", Shape::Expr},
+                                                            {"padding", Shape::Expr},
+                                                            {"align", Shape::Text},
+                                                            {"justify", Shape::Text},
+                                                            {"wrap", Shape::Flag},
+                                                            {"divided", Shape::Flag},
+                                                            {"pageEdge", Shape::Flag},
+                                                            {"headJoined", Shape::Flag},
+                                                            {"selected", Shape::Condition}}};
+/// @brief The keys of `grid`; `justify` and `selected` are read only to refuse them.
+inline constexpr std::array<KeySpec, 7> kGridKeys = {{{"children", Shape::Nodes},
                                                       {"gap", Shape::Expr},
                                                       {"columns", Shape::Expr},
+                                                      {"tracks", Shape::Parts, "track"},
                                                       {"align", Shape::Text},
-                                                      {"justify", Shape::Text}}};
+                                                      {"justify", Shape::Text},
+                                                      {"selected", Shape::Condition}}};
+/// @brief The keys of a `grid` track part.
+inline constexpr std::array<KeySpec, 2> kTrackKeys = {{{"width", Shape::Expr}, {"align", Shape::Text}}};
 /// @brief The keys of `panel`.
-inline constexpr std::array<KeySpec, 7> kPanelKeys = {{{"title", Shape::Expr},
+inline constexpr std::array<KeySpec, 8> kPanelKeys = {{{"title", Shape::Expr},
+                                                       {"gap", Shape::Expr},
                                                        {"header", Shape::Nodes},
                                                        {"padding", Shape::Expr},
                                                        {"collapsible", Shape::Expr},
@@ -780,29 +898,50 @@ inline constexpr std::array<KeySpec, 3> kSwitchKeys = {
 inline constexpr std::array<KeySpec, 2> kCaseKeys = {
     {{"when", Shape::Expr, {}, kRequired}, {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `tabs`.
-inline constexpr std::array<KeySpec, 1> kTabsKeys = {{{"tabs", Shape::Parts, "tab"}}};
+inline constexpr std::array<KeySpec, 7> kTabsKeys = {{{"tabs", Shape::Parts, "tab"},
+                                                      {"selected", Shape::Expr},
+                                                      {"onChoose", Shape::Commands},
+                                                      {"moreLabel", Shape::Expr},
+                                                      {"inset", Shape::Expr},
+                                                      {"pageInset", Shape::Expr},
+                                                      {"stripSurface", Shape::Text}}};
 /// @brief The keys of a `tabs` page part.
-inline constexpr std::array<KeySpec, 2> kTabKeys = {{{"label", Shape::Expr}, {"children", Shape::Nodes}}};
+inline constexpr std::array<KeySpec, 3> kTabKeys = {
+    {{"id", Shape::Name}, {"label", Shape::Expr}, {"children", Shape::Nodes}}};
 /// @brief The keys of `dialog` and `drawer`.
-inline constexpr std::array<KeySpec, 9> kDialogKeys = {{{"open", Shape::Condition},
-                                                        {"title", Shape::Expr},
-                                                        {"showErrors", Shape::Text},
-                                                        {"children", Shape::Nodes, {}, kInner},
-                                                        {"onDismiss", Shape::Commands},
-                                                        {"default", Shape::Commands, {}, kInner},
-                                                        {"cancel", Shape::Commands, {}, kInner},
-                                                        {"actions", Shape::Parts, "actionButton", kInner},
-                                                        {"side", Shape::Expr}}};
+inline constexpr std::array<KeySpec, 14> kDialogKeys = {{{"open", Shape::Condition},
+                                                         {"gap", Shape::Expr},
+                                                         {"title", Shape::Expr},
+                                                         {"description", Shape::Expr},
+                                                         {"showErrors", Shape::Text},
+                                                         {"children", Shape::Nodes, {}, kInner},
+                                                         {"onDismiss", Shape::Commands},
+                                                         {"default", Shape::Commands, {}, kInner},
+                                                         {"cancel", Shape::Commands, {}, kInner},
+                                                         {"actions", Shape::Parts, "actionButton", kInner},
+                                                         {"side", Shape::Expr},
+                                                         {"sheet", Shape::Condition},
+                                                         {"dismissLabel", Shape::Expr},
+                                                         {"descriptionSpans", Shape::Expr}}};
+/// @brief The keys of `group`: a labelled set of inputs, lowered to a column of existing kinds.
+inline constexpr std::array<KeySpec, 6> kGroupKeys = {{{"label", Shape::Expr},
+                                                       {"required", Shape::Condition},
+                                                       {"description", Shape::Expr},
+                                                       {"errors", Shape::Expr},
+                                                       {"gap", Shape::Expr},
+                                                       {"children", Shape::Nodes}}};
 /// @brief The keys of `busy`.
 inline constexpr std::array<KeySpec, 2> kBusyKeys = {{{"active", Shape::Condition}, {"label", Shape::Expr}}};
 /// @brief The keys of `forEach`.
-inline constexpr std::array<KeySpec, 5> kForEachKeys = {{{"rows", Shape::Expr, {}, kRequired},
+inline constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {}, kRequired},
                                                          {"key", Shape::Expr, {}, kInner},
                                                          {"axis", Shape::Expr},
                                                          {"gap", Shape::Expr},
+                                                         {"wrap", Shape::Flag},
+                                                         {"divided", Shape::Flag},
                                                          {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-inline constexpr std::array<KeySpec, 18> kTableKeys = {{{"rows", Shape::Expr},
+inline constexpr std::array<KeySpec, 27> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"key", Shape::Expr, {}, kInner},
                                                         {"model", Shape::Name},
                                                         {"action", Shape::Text},
@@ -814,18 +953,36 @@ inline constexpr std::array<KeySpec, 18> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"virtualizeOverscan", Shape::Expr},
                                                         {"selectionMode", Shape::Expr},
                                                         {"selection", Shape::Expr},
+                                                        {"onSelectionChange", Shape::Commands},
+                                                        {"selectColumn", Shape::Flag},
+                                                        {"selectAllLabel", Shape::Expr},
+                                                        {"rowLabel", Shape::Expr, {}, kInner},
                                                         {"sort", Shape::Expr},
+                                                        {"onSortChange", Shape::Commands},
+                                                        {"pageSize", Shape::Expr},
+                                                        {"page", Shape::Expr},
+                                                        {"group", Shape::Part, "group"},
                                                         {"filters", Shape::Expr},
                                                         {"rowTone", Shape::Expr, {}, kInner},
                                                         {"highlightKey", Shape::Expr},
                                                         {"onActivate", Shape::Commands, {}, kInner},
+                                                        {"valign", Shape::Text},
                                                         {"empty", Shape::Nodes}}};
 /// @brief The keys of a `table` column part.
-inline constexpr std::array<KeySpec, 5> kColumnKeys = {{{"id", Shape::Name},
-                                                        {"label", Shape::Expr},
-                                                        {"width", Shape::Expr},
-                                                        {"role", Shape::Expr},
-                                                        {"cell", Shape::Nodes, {}, kInner}}};
+inline constexpr std::array<KeySpec, 10> kColumnKeys = {{{"id", Shape::Name},
+                                                         {"label", Shape::Expr},
+                                                         {"width", Shape::Expr},
+                                                         {"role", Shape::Expr},
+                                                         {"align", Shape::Text},
+                                                         {"valign", Shape::Text},
+                                                         {"sortable", Shape::Flag},
+                                                         {"wrap", Shape::Flag},
+                                                         {"sortBy", Shape::Expr, {}, kInner},
+                                                         {"cell", Shape::Nodes, {}, kInner}}};
+/// @brief The keys of a `table` group part: the value its rows are grouped by, and the heading drawn before each
+///        group, both read in the row scope.
+inline constexpr std::array<KeySpec, 2> kTableGroupKeys = {
+    {{"by", Shape::Expr, {}, kInner | kRequired}, {"heading", Shape::Nodes, {}, kInner | kRequired}}};
 /// @brief The keys of `dateTimeInput`.
 inline constexpr std::array<KeySpec, 6> kDateTimeKeys = {{{"value", Shape::Expr},
                                                           {"mode", Shape::Expr},
@@ -848,17 +1005,21 @@ inline constexpr std::array<KeySpec, 5> kFilePickerKeys = {{{"accept", Shape::Ex
                                                             {"label", Shape::Expr},
                                                             {"onPick", Shape::Commands}}};
 /// @brief The keys of `banner`.
-inline constexpr std::array<KeySpec, 5> kBannerKeys = {{{"tone", Shape::Expr},
+inline constexpr std::array<KeySpec, 8> kBannerKeys = {{{"tone", Shape::Expr},
                                                         {"text", Shape::Expr},
+                                                        {"spans", Shape::Expr},
                                                         {"dismissible", Shape::Expr},
                                                         {"action", Shape::Part, "action"},
+                                                        {"actionStyle", Shape::Text},
+                                                        {"actionStretch", Shape::Flag},
                                                         {"onDismiss", Shape::Commands}}};
 /// @brief The keys of an `action` part.
 inline constexpr std::array<KeySpec, 2> kActionKeys = {{{"label", Shape::Expr}, {"onClick", Shape::Commands}}};
 /// @brief The keys of an `actionButton` part: a button a screen's head or an overlay's footer shows.
-inline constexpr std::array<KeySpec, 7> kActionButtonKeys = {{{"id", Shape::Name, {}, kRequired},
+inline constexpr std::array<KeySpec, 8> kActionButtonKeys = {{{"id", Shape::Name, {}, kRequired},
                                                               {"label", Shape::Expr, {}, kRequired},
                                                               {"icon", Shape::Expr},
+                                                              {"iconOnly", Shape::Condition},
                                                               {"emphasis", Shape::Text},
                                                               {"enabled", Shape::Condition},
                                                               {"visible", Shape::Condition},
@@ -866,23 +1027,58 @@ inline constexpr std::array<KeySpec, 7> kActionButtonKeys = {{{"id", Shape::Name
 /// @brief The keys of a `headBadge` part: a status badge of a screen's head.
 inline constexpr std::array<KeySpec, 4> kHeadBadgeKeys = {
     {{"tone", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}, {"visible", Shape::Condition}}};
+/// @brief The keys of a `navigationBadge` part: a count the app document puts on a navigator entry. `screen` is the
+///        screen id the entry opens, a literal; the rest are read in the app scope.
+inline constexpr std::array<KeySpec, 4> kNavigationBadgeKeys = {{{"screen", Shape::Text, {}, kRequired},
+                                                                 {"text", Shape::Expr},
+                                                                 {"tone", Shape::Expr},
+                                                                 {"visible", Shape::Condition}}};
 /// @brief The keys of `badge`.
-inline constexpr std::array<KeySpec, 3> kBadgeKeys = {
-    {{"tone", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}}};
+inline constexpr std::array<KeySpec, 8> kBadgeKeys = {{{"tone", Shape::Expr},
+                                                       {"text", Shape::Expr},
+                                                       {"icon", Shape::Expr},
+                                                       {"style", Shape::Text},
+                                                       {"onRemove", Shape::Commands},
+                                                       {"removeLabel", Shape::Expr},
+                                                       {"shape", Shape::Text},
+                                                       {"mono", Shape::Flag}}};
 /// @brief The keys of `progress`.
 inline constexpr std::array<KeySpec, 2> kProgressKeys = {{{"value", Shape::Expr}, {"label", Shape::Expr}}};
 /// @brief The keys of `steps`.
-inline constexpr std::array<KeySpec, 2> kStepsKeys = {{{"items", Shape::Expr}, {"current", Shape::Expr}}};
+inline constexpr std::array<KeySpec, 3> kStepsKeys = {
+    {{"items", Shape::Expr}, {"current", Shape::Expr}, {"labelled", Shape::Condition}}};
 /// @brief The keys of `keyValue`.
-inline constexpr std::array<KeySpec, 1> kKeyValueKeys = {{{"items", Shape::Expr}}};
+inline constexpr std::array<KeySpec, 2> kKeyValueKeys = {{{"items", Shape::Expr}, {"fieldLayout", Shape::Text}}};
 /// @brief The keys of `emptyState`.
 inline constexpr std::array<KeySpec, 4> kEmptyStateKeys = {
     {{"title", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}, {"action", Shape::Part, "action"}}};
+/// @brief The keys of `chart`.
+inline constexpr std::array<KeySpec, 7> kChartKeys = {{{"summary", Shape::Expr, {}, kRequired},
+                                                       {"series", Shape::Parts, "series", kRequired},
+                                                       {"lines", Shape::Parts, "line"},
+                                                       {"yMin", Shape::Expr},
+                                                       {"yMax", Shape::Expr},
+                                                       {"yPlaces", Shape::Expr},
+                                                       {"yLabel", Shape::Expr}}};
+/// @brief The keys of a chart's `series` part. The keys read per point are evaluated in the part's row scope, with
+///        `row` the point's element.
+inline constexpr std::array<KeySpec, 8> kSeriesKeys = {{{"points", Shape::Expr, {}, kRequired},
+                                                        {"y", Shape::Expr, {}, kRequired | kInner},
+                                                        {"x", Shape::Expr, {}, kInner},
+                                                        {"xLabel", Shape::Expr, {}, kInner},
+                                                        {"tone", Shape::Expr, {}, kInner},
+                                                        {"note", Shape::Expr, {}, kInner},
+                                                        {"label", Shape::Expr},
+                                                        {"joined", Shape::Flag}}};
+/// @brief The keys of a chart's reference `line` part.
+inline constexpr std::array<KeySpec, 4> kLineKeys = {
+    {{"value", Shape::Expr, {}, kRequired}, {"label", Shape::Expr}, {"tone", Shape::Expr}, {"style", Shape::Text}}};
 /// @brief The keys of `splitter`.
 inline constexpr std::array<KeySpec, 3> kSplitterKeys = {
     {{"orientation", Shape::Expr}, {"sizes", Shape::Expr}, {"children", Shape::Nodes}}};
 /// @brief The keys of `collapsible`.
-inline constexpr std::array<KeySpec, 5> kCollapsibleKeys = {{{"title", Shape::Expr},
+inline constexpr std::array<KeySpec, 6> kCollapsibleKeys = {{{"title", Shape::Expr},
+                                                             {"gap", Shape::Expr},
                                                              {"open", Shape::Condition},
                                                              {"header", Shape::Nodes},
                                                              {"children", Shape::Nodes},
@@ -931,7 +1127,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 48> kKinds = {{
+inline constexpr std::array<KindSpec, 57> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -940,12 +1136,13 @@ inline constexpr std::array<KindSpec, 48> kKinds = {{
     {"menu", kMenuKeys},
     {"column", kContainerKeys},
     {"row", kContainerKeys},
+    {"group", kGroupKeys},
     {"grid", kGridKeys},
     {"spacer", {}},
     {"panel", kPanelKeys},
     {"scroll", kScrollKeys},
     {"switch", kSwitchKeys},
-    {"tabs", kTabsKeys},
+    {"tabs", kTabsKeys, 0, kTabsValues},
     {"dialog", kDialogKeys, kScope, kDialogValues},
     {"drawer", kDialogKeys, kScope, kDialogValues},
     {"busy", kBusyKeys},
@@ -960,6 +1157,7 @@ inline constexpr std::array<KindSpec, 48> kKinds = {{
     {"steps", kStepsKeys},
     {"keyValue", kKeyValueKeys},
     {"emptyState", kEmptyStateKeys},
+    {"chart", kChartKeys},
     {"splitter", kSplitterKeys},
     {"collapsible", kCollapsibleKeys},
     {"dropZone", kDropZoneKeys},
@@ -973,13 +1171,20 @@ inline constexpr std::array<KindSpec, 48> kKinds = {{
     {"case", kCaseKeys, kPart | kScope},
     {"tab", kTabKeys, kPart},
     {"column", kColumnKeys, kPart},
+    {"group", kTableGroupKeys, kPart},
+    {"track", kTrackKeys, kPart},
     {"action", kActionKeys, kPart},
     {"a11y", kA11yKeys, kPart},
     {"drag", kDragKeys, kPart},
     {"drop", kDropKeys, kPart},
     {"actionButton", kActionButtonKeys, kPart},
     {"headBadge", kHeadBadgeKeys, kPart},
+    {"headMenuItem", kHeadMenuItemKeys, kPart},
+    {"headTool", kHeadToolKeys, kPart},
+    {"navigationBadge", kNavigationBadgeKeys, kPart},
     {"fields", {}, kPart},
+    {"series", kSeriesKeys, kPart | kRowScope},
+    {"line", kLineKeys, kPart},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
 
@@ -1084,19 +1289,31 @@ public:
         doc.title = optionalExpr(*object, "title", "");
         doc.identity = optionalExpr(*object, "identity", "");
         doc.dirty = optionalExpr(*object, "dirty", "");
+        doc.titleSpans = optionalExpr(*object, "titleSpans", "");
+        doc.eyebrow = optionalExpr(*object, "eyebrow", "");
+        doc.eyebrowSpans = optionalExpr(*object, "eyebrowSpans", "");
         doc.subtitle = optionalExpr(*object, "subtitle", "");
+        doc.subtitleSpans = optionalExpr(*object, "subtitleSpans", "");
+        doc.leadPlacement = optionalExpr(*object, "leadPlacement", "");
+        checkLeadPlacementLiteral(doc.leadPlacement);
+        doc.headSurface = optionalExpr(*object, "headSurface", "");
+        doc.pageSurface = optionalExpr(*object, "pageSurface", "");
         doc.status = topParts(*object, "status", "headBadge");
         doc.actions = topParts(*object, "actions", "actionButton");
+        doc.menu = topParts(*object, "menu", "headMenuItem");
+        doc.menuLabel = optionalExpr(*object, "menuLabel", "");
+        doc.tools = topParts(*object, "tools", "headTool");
+        doc.navigation = navigation(*object, doc.id);
         if (doc.id == "app") {
-            // The head belongs to a screen's tab; the app document has no view and so no head.
-            for (std::string_view const key : {"subtitle", "status", "actions"}) {
-                if (member(*object, key) != nullptr) {
-                    refuse(pointerAppend("", key),
-                           "`" + std::string{key} + "` is a screen's; the app document has none");
-                }
-            }
+            refuseScreenHead(*object);
+        }
+        static constexpr std::array<std::string_view, 2> kPrincipalPlacements = {"sidebar", "head"};
+        doc.principalPlacement = choiceOf(*object, "principalPlacement", "", kPrincipalPlacements);
+        if (doc.id != "app" && member(*object, "principalPlacement") != nullptr) {
+            refuse("/principalPlacement", "`principalPlacement` is the app document's; a screen has none");
         }
         doc.showErrors = showErrors(*object, "");
+        datePatterns(*object, doc);
         if (Json const* const params = member(*object, "params")) {
             for (auto const& [name, type] : objectOf(*params, "/params", "`params` maps names to types")) {
                 std::string const path = pointerAppend("/params", name);
@@ -1135,6 +1352,31 @@ public:
     }
 
 private:
+    // The app document's `formatting`: a record of the date pattern and the date-and-time pattern, each checked.
+    static void datePatterns(Json::object_t const& object, Document& doc) {
+        Json const* const formatting = member(object, "formatting");
+        if (formatting == nullptr) {
+            return;
+        }
+        if (doc.id != "app") {
+            refuse("/formatting", "`formatting` is the application's; only the app document declares it");
+        }
+        for (auto const& [key, value] : objectOf(*formatting, "/formatting", "`formatting` is a record")) {
+            std::string const path = pointerAppend("/formatting", key);
+            if (key != "date" && key != "dateTime") {
+                refuse(path, "`formatting` takes `date` and `dateTime`");
+            }
+            std::string const* const pattern = std::get_if<std::string>(&value.data);
+            if (pattern == nullptr) {
+                refuse(path, "a date pattern is a string, such as `dd-MMM-yyyy`");
+            }
+            if (auto const checked = checkDatePattern(*pattern, key == "dateTime"); !checked) {
+                refuse(path, checked.error());
+            }
+            (key == "date" ? doc.datePattern : doc.dateTimePattern) = *pattern;
+        }
+    }
+
     [[nodiscard]] static Json const* member(Json::object_t const& object, std::string_view key) {
         auto const* const found = object.find(key);
         return found == object.end() ? nullptr : &found->second;
@@ -1250,6 +1492,42 @@ private:
                                               std::string const& path) {
         Json const* const value = member(object, key);
         return value == nullptr ? nullptr : expr(*value, pointerAppend(path, key));
+    }
+
+    // The head belongs to a screen's tab; the app document has no view and so no head.
+    static void refuseScreenHead(Json::object_t const& object) {
+        for (std::string_view const key :
+             {"titleSpans", "eyebrow", "eyebrowSpans", "subtitle", "subtitleSpans", "leadPlacement", "headSurface",
+              "pageSurface", "status", "actions", "menu", "menuLabel", "tools"}) {
+            if (member(object, key) != nullptr) {
+                refuse(pointerAppend("", key), "`" + std::string{key} + "` is a screen's; the app document has none");
+            }
+        }
+    }
+
+    // A `leadPlacement` written as a literal is one of the three places; a computed one is read at run time.
+    static void checkLeadPlacementLiteral(ExprPtr const& placement) {
+        if (placement == nullptr || placement->kind != ExprKind::Literal) {
+            return;
+        }
+        std::string const* const name = placement->literal.asString();
+        if (name == nullptr || (*name != "below" && *name != "inline" && *name != "end")) {
+            refuse(placement->path, "`leadPlacement` is `below`, `inline` or `end`");
+        }
+    }
+
+    // The app document's `navigation` badges, each naming its screen; a screen declares none.
+    [[nodiscard]] std::vector<DocNodePtr> navigation(Json::object_t const& object, std::string_view documentId) {
+        std::vector<DocNodePtr> badges = topParts(object, "navigation", "navigationBadge");
+        if (documentId != "app" && !badges.empty()) {
+            refuse("/navigation", "`navigation` is the app document's; a screen has none");
+        }
+        for (DocNodePtr const& badge : badges) {
+            if (badge->name("screen").empty()) {
+                refuse(pointerAppend(badge->path, "screen"), "a navigation badge names the screen of its entry");
+            }
+        }
+        return badges;
     }
 
     // A top-level list of parts: the screen head's `status` and `actions`.
@@ -1526,7 +1804,7 @@ private:
         {"close", CommandKind::Close, {}},
         {"navigate", CommandKind::Navigate, {"params", "as", "onResult", "onCancel"}},
         {"return", CommandKind::Return, {}},
-        {"focus", CommandKind::Focus, {}},
+        {"focus", CommandKind::Focus, {"row"}},
         {"host", CommandKind::Host, {"args"}},
         {"switchBackend", CommandKind::SwitchBackend, {}},
         {"resetPrefs", CommandKind::ResetPrefs, {}},
@@ -1633,8 +1911,11 @@ private:
             case CommandKind::Reset:
             case CommandKind::Refetch:
             case CommandKind::Open:
+                cmd.target = nameOf(primary, where, "the command names a declaration or an element");
+                break;
             case CommandKind::Focus:
                 cmd.target = nameOf(primary, where, "the command names a declaration or an element");
+                cmd.extra = optionalExpr(fields, "row", path);
                 break;
             case CommandKind::Close:
                 cmd.target = nameOf(primary, where, "`close` names a dialog, or `self`");
@@ -2007,6 +2288,9 @@ private:
         made->kind = std::string{kind};
         made->path = path;
         fill(*made, object, *spec, path);
+        if (kind == "actionButton" && made->prop("iconOnly") != nullptr && made->prop("icon") == nullptr) {
+            refuse(pointerAppend(path, "iconOnly"), "an icon-only action names its `icon`");
+        }
         return made;
     }
 
@@ -2144,8 +2428,12 @@ struct NameEntry {
 struct ScopeInfo {
     /// @brief The enclosing scope; `nullptr` for a screen or a component fallback.
     ScopeInfo* parent = nullptr;
+    /// @brief The scopes it encloses directly, in document order.
+    std::vector<ScopeInfo*> children;
     /// @brief Whether it is a `forEach` or `table` row scope.
     bool row = false;
+    /// @brief The `switch` whose case it is; `nullptr` for any other scope.
+    DocNode const* switchNode = nullptr;
     /// @brief Whether it is the screen's own scope.
     bool screen = false;
     /// @brief The names it declares.
@@ -2277,7 +2565,7 @@ public:
             collect(*_doc->view, screen);
         }
         for (DocNodePtr const& part : headParts()) {
-            collectPart(*part, screen, screen);
+            collectPart(*part, screen, screen, *part);
         }
         std::vector<ScopeInfo*> componentScopes;
         for (auto const& [name, component] : _doc->components) {
@@ -2299,13 +2587,43 @@ public:
         if (_doc->dirty) {
             checkCondition(*_doc->dirty, root, "`dirty`");
         }
+        if (_doc->titleSpans) {
+            checkExpr(*_doc->titleSpans, root);
+            checkSpans(_doc->titleSpans);
+        }
+        if (_doc->eyebrow) {
+            checkExpr(*_doc->eyebrow, root);
+        }
+        if (_doc->eyebrowSpans) {
+            checkExpr(*_doc->eyebrowSpans, root);
+            checkSpans(_doc->eyebrowSpans);
+        }
         if (_doc->subtitle) {
             checkExpr(*_doc->subtitle, root);
+        }
+        if (_doc->subtitleSpans) {
+            checkExpr(*_doc->subtitleSpans, root);
+            checkSpans(_doc->subtitleSpans);
+        }
+        if (_doc->leadPlacement) {
+            checkExpr(*_doc->leadPlacement, root);
+        }
+        if (_doc->headSurface) {
+            checkExpr(*_doc->headSurface, root);
+        }
+        if (_doc->pageSurface) {
+            checkExpr(*_doc->pageSurface, root);
+        }
+        if (_doc->menuLabel) {
+            checkExpr(*_doc->menuLabel, root);
         }
         for (DocNodePtr const& part : headParts()) {
             checkElement(*part, root, true);
         }
         checkActionButtons(_doc->actions, "/actions");
+        std::set<std::string_view> menuIds;
+        checkHeadMenu(_doc->menu, menuIds);
+        checkHeadTools(_doc->tools);
         for (auto const& [key, commands] : _doc->lifecycle) {
             CheckContext context = root;
             context.onClose = key == "onClose";
@@ -2343,6 +2661,12 @@ public:
     /// @return The table, keyed by node; the validator keeps none.
     [[nodiscard]] std::map<DocNode const*, TypeKind> takeDateValueKinds() noexcept {
         return std::move(_dateValueKinds);
+    }
+
+    /// @brief Where each `focus` command's target resolved, keyed by the command's JSON Pointer.
+    /// @return The table; the validator keeps none.
+    [[nodiscard]] std::map<std::string, FocusTarget, std::less<>> takeFocusTargets() noexcept {
+        return std::move(_focusTargets);
     }
 
     /// @brief Finds a name in a scope chain.
@@ -2397,6 +2721,9 @@ private:
         ScopeInfo& made = _scopes.emplace_back();
         made.parent = parent;
         made.row = row;
+        if (parent != nullptr) {
+            parent->children.push_back(&made);
+        }
         return made;
     }
 
@@ -2536,19 +2863,22 @@ private:
         }
         for (auto const& [key, parts] : node.parts) {
             for (DocNodePtr const& child : parts) {
-                collectPart(*child, isInner(spec, key) ? *inner : scope, *inner);
+                collectPart(*child, isInner(spec, key) ? *inner : scope, *inner, node);
             }
         }
     }
 
-    void collectPart(DocNode const& part, ScopeInfo& outer, ScopeInfo& ownerInner) {
+    void collectPart(DocNode const& part, ScopeInfo& outer, ScopeInfo& ownerInner, DocNode const& owner) {
         KindSpec const* const spec = findKind(part.kind, true);
         ScopeInfo* inner = &ownerInner;
         if (spec != nullptr && (spec->flags & kScope) != 0) {
             inner = &newScope(&outer, false);
+            inner->switchNode = owner.kind == "switch" ? &owner : nullptr;
             _scopeOf.emplace(&part, inner);
             // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the parser gives every switch case a scope.
             declare(*part.scope, *inner);
+        } else if (spec != nullptr && (spec->flags & kRowScope) != 0) {
+            inner = &newScope(&outer, true);
         }
         _innerOf.emplace(&part, inner);
         for (auto const& [key, commands] : part.events) {
@@ -2562,7 +2892,7 @@ private:
         for (auto const& [key, parts] : part.parts) {
             static_cast<void>(key);
             for (DocNodePtr const& child : parts) {
-                collectPart(*child, outer, ownerInner);
+                collectPart(*child, outer, ownerInner, part);
             }
         }
     }
@@ -2625,6 +2955,100 @@ private:
             refuse(path, "`" + name + "` is not " + std::string{what} + " of this scope");
         }
         return *entry;
+    }
+
+    // How many row scopes enclose @p scope, itself included, up to its screen or component fallback.
+    [[nodiscard]] static std::size_t rowDepth(ScopeInfo const* scope) {
+        std::size_t rows = 0;
+        for (; scope != nullptr; scope = scope->parent) {
+            rows += scope->row ? 1U : 0U;
+        }
+        return rows;
+    }
+
+    // The element @p name declares in @p scope itself, or nothing.
+    [[nodiscard]] static NameEntry const* elementIn(ScopeInfo const& scope, std::string_view name) {
+        auto const found = scope.names.find(name);
+        return found != scope.names.end() && found->second.category == NameCategory::Element ? &found->second
+                                                                                             : nullptr;
+    }
+
+    // The elements named @p name in the switch cases below @p scope, at any depth through cases only.
+    // NOLINTNEXTLINE(misc-no-recursion): the scope tree, walked down through switch cases.
+    static void elementsInCases(ScopeInfo const& scope, std::string_view name, std::vector<NameEntry const*>& out) {
+        for (ScopeInfo const* const child : scope.children) {
+            if (child->switchNode == nullptr) {
+                continue;
+            }
+            if (NameEntry const* const entry = elementIn(*child, name)) {
+                out.push_back(entry);
+            }
+            elementsInCases(*child, name, out);
+        }
+    }
+
+    // The row scopes directly below @p scope, or below it through switch cases, that declare the element @p name.
+    // NOLINTNEXTLINE(misc-no-recursion): the scope tree, walked down through switch cases.
+    static void rowScopesBelow(ScopeInfo const& scope, std::string_view name, std::vector<ScopeInfo const*>& out) {
+        for (ScopeInfo const* const child : scope.children) {
+            if (child->row) {
+                if (elementIn(*child, name) != nullptr && std::ranges::find(out, child) == out.end()) {
+                    out.push_back(child);
+                }
+            } else if (child->switchNode != nullptr) {
+                rowScopesBelow(*child, name, out);
+            }
+        }
+    }
+
+    // A `focus` target resolves to declarations. Without `row`: the element the scope chain names, else those in the
+    // switch cases below the chain, which must all be cases of one switch (at most one case is mounted). With `row`:
+    // the one row scope that declares it among the chain's and those below the chain through switch cases.
+    void checkFocus(Command const& cmd, CheckContext const& context) {
+        FocusTarget target{.candidates = {}, .row = cmd.extra != nullptr};
+        if (cmd.extra) {
+            checkExpr(*cmd.extra, context);
+            std::vector<ScopeInfo const*> found;
+            for (ScopeInfo const* scope = context.scope; scope != nullptr; scope = scope->parent) {
+                if (scope->row && elementIn(*scope, cmd.target) != nullptr &&
+                    std::ranges::find(found, scope) == found.end()) {
+                    found.push_back(scope);
+                }
+                rowScopesBelow(*scope, cmd.target, found);
+            }
+            if (found.empty()) {
+                refuse(pointerAppend(cmd.path, "row"), "`row` names a row of a `forEach` or table; `" + cmd.target +
+                                                           "` is not an element of a row scope this command reaches");
+            }
+            if (found.size() > 1) {
+                refuse(cmd.path, "`" + cmd.target + "` is declared in two row scopes this command reaches, at " +
+                                     elementIn(*found.at(0), cmd.target)->path + " and " +
+                                     elementIn(*found.at(1), cmd.target)->path);
+            }
+            target.candidates.push_back(FocusCandidate{.path = elementIn(*found.front(), cmd.target)->element->path,
+                                                       .rows = rowDepth(found.front())});
+        } else if (lookup(context.scope, cmd.target) != nullptr) {
+            NameEntry const& entry = require(context, cmd.target, cmd.path, {NameCategory::Element}, "an element");
+            target.candidates.push_back(FocusCandidate{.path = entry.element->path, .rows = rowDepth(entry.scope)});
+        } else {
+            std::vector<NameEntry const*> inCases;
+            for (ScopeInfo const* scope = context.scope; scope != nullptr; scope = scope->parent) {
+                elementsInCases(*scope, cmd.target, inCases);
+            }
+            if (inCases.empty()) {
+                static_cast<void>(require(context, cmd.target, cmd.path, {NameCategory::Element}, "an element"));
+            }
+            for (NameEntry const* const entry : inCases) {
+                if (entry->scope->switchNode != inCases.front()->scope->switchNode) {
+                    refuse(cmd.path, "`" + cmd.target + "` is declared in the cases of two switches, at " +
+                                         inCases.front()->path + " and " + entry->path +
+                                         "; both may be mounted, so a focus cannot choose");
+                }
+                target.candidates.push_back(
+                    FocusCandidate{.path = entry->element->path, .rows = rowDepth(entry->scope)});
+            }
+        }
+        _focusTargets.insert_or_assign(cmd.path, std::move(target));
     }
 
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the alias, then the action it runs, as a query reads.
@@ -2802,7 +3226,7 @@ private:
                    _doc->params.end();
         }
         if (expr.kind != ExprKind::Literal && expr.kind != ExprKind::Call && expr.kind != ExprKind::If &&
-            expr.kind != ExprKind::Object && expr.kind != ExprKind::List) {
+            expr.kind != ExprKind::Object && expr.kind != ExprKind::List && expr.kind != ExprKind::Get) {
             return false;
         }
         bool only = true;
@@ -2873,21 +3297,31 @@ private:
         if (!node.name("alignSelf").empty()) {
             refuse(pointerAppend(node.path, "alignSelf"), std::string{kAlignSelfPlaces});
         }
+        if (node.flag("bleed")) {
+            refuse(pointerAppend(node.path, "bleed"), std::string{kBleedPlaces});
+        }
         checkElement(node, context, false);
     }
 
     // What `alignSelf` places a node in.
     static constexpr std::string_view kAlignSelfPlaces = "`alignSelf` places a node in its row, column or grid";
 
+    // What `bleed` reaches past: the horizontal padding of the stack, panel or tab page that holds the node.
+    static constexpr std::string_view kBleedPlaces = "`bleed` is a child's of a column, a panel or a tab";
+
     // A child that places itself sits in a row, a column, a grid or a `forEach`; any other parent (a panel, a dialog,
     // a tab page) has no cross axis to place it on.
     static void checkPlacements(DocNode const& parent) {
         bool const places =
             parent.kind == "row" || parent.kind == "column" || parent.kind == "grid" || parent.kind == "forEach";
+        bool const bleeds = parent.kind == "column" || parent.kind == "panel" || parent.kind == "tab";
         for (auto const& [key, nodes] : parent.children) {
             for (DocNodePtr const& child : nodes) {
                 if (!child->name("alignSelf").empty() && (!places || key != "children")) {
                     refuse(pointerAppend(child->path, "alignSelf"), std::string{kAlignSelfPlaces});
+                }
+                if (child->flag("bleed") && (!bleeds || key != "children")) {
+                    refuse(pointerAppend(child->path, "bleed"), std::string{kBleedPlaces});
                 }
             }
         }
@@ -2925,6 +3359,13 @@ private:
             }
         }
         checkPlacements(node);
+        if (part && node.kind == "column") {
+            checkColumnPart(node);
+        } else if (part && node.kind == "track") {
+            checkCellPlace(node, "align");
+        } else if (part && isMenuEntry(node.kind)) {
+            checkMenuItem(node);
+        }
         if (!part) {
             checkFlags(node);
             checkLayoutKeys(node);
@@ -2957,6 +3398,67 @@ private:
         }
     }
 
+    // What a chart's literal keys may be, and the shape of its series and lines. A computed `tone` or `yMin` is
+    // checked when it is evaluated, and reported then.
+    static void checkChart(DocNode const& node) {
+        static constexpr std::size_t kMaxSeries = 4;
+        static constexpr std::size_t kMaxLines = 16;
+        std::span<DocNodePtr const> const series = node.partList("series");
+        std::string const seriesPath = pointerAppend(node.path, "series");
+        if (series.empty() || series.size() > kMaxSeries) {
+            refuse(seriesPath, "a chart draws 1 to 4 series");
+        }
+        if (node.partList("lines").size() > kMaxLines) {
+            refuse(pointerAppend(node.path, "lines"), "a chart draws at most 16 reference lines");
+        }
+        bool const positioned = series.front()->prop("x") != nullptr;
+        for (DocNodePtr const& part : series) {
+            DocNode const& one = *part;
+            if (series.size() > 1 && one.prop("label") == nullptr) {
+                refuse(one.path, "each of two or more series has a `label`, its name in the legend");
+            }
+            if ((one.prop("x") != nullptr) != positioned) {
+                refuse(one.path, "`x` is on every series of a chart or on none");
+            }
+            checkChartTone(one);
+        }
+        for (DocNodePtr const& line : node.partList("lines")) {
+            checkChartTone(*line);
+            std::string_view const style = line->name("style");
+            if (!style.empty() && style != "solid" && style != "dashed" && style != "dotted") {
+                refuse(pointerAppend(line->path, "style"), "`style` is `solid`, `dashed` or `dotted`");
+            }
+        }
+        if (ExprPtr const places = node.prop("yPlaces")) {
+            std::int64_t const* const literal = places->kind == ExprKind::Literal ? places->literal.asInt() : nullptr;
+            if (literal == nullptr || *literal < 0 || std::cmp_greater(*literal, math::kMaxDecimalPlaces)) {
+                refuse(places->path, "`yPlaces` is a literal integer from 0 to 18");
+            }
+        }
+        ExprPtr const low = node.prop("yMin");
+        ExprPtr const high = node.prop("yMax");
+        if (low && high && low->kind == ExprKind::Literal && high->kind == ExprKind::Literal) {
+            std::optional<Number> const lowNumber = numeric(low->literal);
+            std::optional<Number> const highNumber = numeric(high->literal);
+            if (lowNumber && highNumber && highNumber->value < lowNumber->value) {
+                refuse(low->path, "`yMin` is above `yMax`");
+            }
+        }
+    }
+
+    // A literal `tone` of a chart's series or line names one of the five tones; `null` marks nothing.
+    static void checkChartTone(DocNode const& part) {
+        ExprPtr const tone = part.prop("tone");
+        if (!tone || tone->kind != ExprKind::Literal || tone->literal.isNull()) {
+            return;
+        }
+        static constexpr std::array<std::string_view, 5> kTones = {"neutral", "info", "ok", "warn", "err"};
+        std::string const* const name = tone->literal.asString();
+        if (name == nullptr || !listed(kTones, *name)) {
+            refuse(tone->path, "`tone` is `neutral`, `info`, `ok`, `warn` or `err`");
+        }
+    }
+
     // A flag that needs a key beside it.
     static void checkFlags(DocNode const& node) {
         if (node.flag("showLabel") && node.prop("label") == nullptr) {
@@ -2967,11 +3469,17 @@ private:
     void checkKindRules(DocNode const& node, CheckContext const& context) {
         if (node.kind == "custom") {
             checkCustomProps(node);
+        } else if (node.kind == "tabs") {
+            checkTabIds(node);
+            checkTabsInset(node);
+        } else if (node.kind == "chart") {
+            checkChart(node);
         } else if (node.kind == "customize" && !_doc->customize.contains(node.name("point"))) {
             refuse(pointerAppend(node.path, "point"),
                    "`" + std::string{node.name("point")} + "` is not a customization point of this document");
         }
         checkKindValues(node);
+        checkSheet(node);
         std::string_view const model = node.name("model");
         if (!model.empty()) {
             if (node.name("action").empty()) {
@@ -2980,6 +3488,221 @@ private:
             checkModelAction(context, std::string{model}, std::string{node.name("action")}, node.path);
         } else if (node.kind == "table" && !node.prop("rows")) {
             refuse(node.path, "a table takes `rows`, or a `model` and `action`");
+        }
+        if (node.kind == "table") {
+            checkTableSelection(node);
+            checkSelectColumn(node);
+            checkTableSort(node);
+            checkTablePaging(node);
+            checkTableGroup(node);
+            checkRowsTableKeys(node);
+        }
+    }
+
+    // A dialog's `sheet` and the label of its dismiss control: a drawer already fills the height on a phone and takes
+    // neither, and a `dismissLabel` labels only a sheet's control.
+    static void checkSheet(DocNode const& node) {
+        if (node.kind == "drawer") {
+            for (std::string_view const key : {"sheet", "dismissLabel"}) {
+                if (node.prop(key)) {
+                    refuse(pointerAppend(node.path, key),
+                           "`" + std::string{key} + "` is a dialog's; a drawer already fills the height");
+                }
+            }
+        } else if (node.kind == "dialog" && node.prop("dismissLabel") && !node.prop("sheet")) {
+            refuse(pointerAppend(node.path, "dismissLabel"),
+                   "`dismissLabel` labels a sheet's dismiss control; give the dialog `sheet`");
+        }
+    }
+
+    // A sortable column is named by its id, which a sort key gives; `sortBy` says how a sortable column orders. A
+    // literal `sort` names sortable columns, each once, with a direction, and `onSortChange` needs a header that
+    // sorts. A model-backed table's engine sorts, so none of these belongs on one.
+    static void checkTableSort(DocNode const& node) {
+        bool const modelBacked = !node.name("model").empty();
+        std::set<std::string, std::less<>> sortable;
+        for (DocNodePtr const& column : node.partList("columns")) {
+            bool const sorts = column->flag("sortable");
+            if (sorts && modelBacked) {
+                refuse(pointerAppend(column->path, "sortable"),
+                       "a model-backed table's engine sorts; `sortable` is for a table over `rows`");
+            }
+            if (sorts && column->id.empty()) {
+                refuse(pointerAppend(column->path, "sortable"), "a sortable column needs an `id`, which a sort names");
+            }
+            if (column->prop("sortBy") != nullptr && !sorts) {
+                refuse(pointerAppend(column->path, "sortBy"),
+                       "`sortBy` says how a sortable column orders the rows; give the column `sortable`");
+            }
+            if (sorts) {
+                sortable.insert(column->id);
+            }
+        }
+        if (node.event("onSortChange") != nullptr && sortable.empty()) {
+            refuse(pointerAppend(node.path, "onSortChange"),
+                   "`onSortChange` runs when a header sorts the table; give a column `sortable`");
+        }
+        ExprPtr const sort = node.prop("sort");
+        if (sort != nullptr && sort->kind == ExprKind::Literal && !modelBacked && !sort->literal.isNull()) {
+            checkLiteralSort(sort->literal, pointerAppend(node.path, "sort"), sortable);
+        }
+    }
+
+    // A literal sort: a list of keys, each naming one of @p sortable once, with a direction.
+    static void checkLiteralSort(Value const& sort, std::string const& where,
+                                 std::set<std::string, std::less<>> const& sortable) {
+        ValueList const* const keys = sort.asList();
+        if (keys == nullptr) {
+            refuse(
+                where,
+                R"(a table's sort is a list of keys, each {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
+        }
+        std::set<std::string, std::less<>> named;
+        for (Value const& key : *keys) {
+            Value const* const column = key.field("column");
+            Value const* const direction = key.field("direction");
+            std::string const* const columnId = column == nullptr ? nullptr : column->asString();
+            std::string const* const way = direction == nullptr ? nullptr : direction->asString();
+            if (columnId == nullptr || way == nullptr || (*way != "asc" && *way != "desc")) {
+                refuse(where, R"(a sort key is {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
+            }
+            if (!sortable.contains(*columnId)) {
+                refuse(where, "the sort names `" + *columnId + "`, which is not a sortable column");
+            }
+            if (!named.insert(*columnId).second) {
+                refuse(where, "the sort names `" + *columnId + "` twice");
+            }
+        }
+    }
+
+    // A table over `rows` draws its own group headings; a model-backed table's engine shapes its rows.
+    static void checkTableGroup(DocNode const& node) {
+        if (!node.name("model").empty() && !node.partList("group").empty()) {
+            refuse(pointerAppend(node.path, "group"),
+                   "a model-backed table's engine shapes its rows; `group` is for a table over `rows`");
+        }
+    }
+
+    // A table over `rows` pages itself by `pageSize`, at `page`; a model-backed table's engine pages.
+    static void checkTablePaging(DocNode const& node) {
+        ExprPtr const size = node.prop("pageSize");
+        ExprPtr const page = node.prop("page");
+        if (!node.name("model").empty() && (size != nullptr || page != nullptr)) {
+            refuse(pointerAppend(node.path, size != nullptr ? "pageSize" : "page"),
+                   "a model-backed table's engine pages; `pageSize` and `page` are for a table over `rows`");
+        }
+        if (page != nullptr && size == nullptr) {
+            refuse(pointerAppend(node.path, "page"),
+                   "`page` picks a page of `pageSize` rows; give the table `pageSize`");
+        }
+        if (size != nullptr && size->kind == ExprKind::Literal && !size->literal.isNull()) {
+            std::int64_t const* const rows = size->literal.asInt();
+            if (rows == nullptr || *rows < 1) {
+                refuse(pointerAppend(node.path, "pageSize"), "a page holds a positive whole number of rows");
+            }
+        }
+    }
+
+    // The keys of a model-backed table that a table over `rows` would accept and ignore.
+    static void checkRowsTableKeys(DocNode const& node) {
+        if (!node.prop("rows")) {
+            return;
+        }
+        if (node.prop("filters") != nullptr) {
+            refuse(pointerAppend(node.path, "filters"),
+                   "`filters` belongs to a model-backed table; filter `rows` with `filter`");
+        }
+        if (node.prop("highlightKey") != nullptr) {
+            refuse(pointerAppend(node.path, "highlightKey"), "`highlightKey` links a model-backed table to a chart");
+        }
+    }
+
+    // The select column draws a `multiple` table's selection, so it needs a literal `multiple`; its header's name
+    // needs the column.
+    static void checkSelectColumn(DocNode const& node) {
+        bool const drawn = node.flag("selectColumn");
+        if (drawn) {
+            ExprPtr const mode = node.prop("selectionMode");
+            std::string const* const literal =
+                mode != nullptr && mode->kind == ExprKind::Literal ? mode->literal.asString() : nullptr;
+            if (literal == nullptr || *literal != "multiple") {
+                refuse(pointerAppend(node.path, "selectColumn"),
+                       "a select column draws a table's selection of several rows; give it `selectionMode` "
+                       "`multiple`");
+            }
+        }
+        if (!drawn && node.prop("selectAllLabel") != nullptr) {
+            refuse(pointerAppend(node.path, "selectAllLabel"),
+                   "`selectAllLabel` names the select column's header "
+                   "box; give the table `selectColumn`");
+        }
+    }
+
+    // A table's `selection` and `onSelectionChange` need rows the user can select, and rows the document holds: a
+    // model-backed table's engine owns its selection.
+    static void checkTableSelection(DocNode const& node) {
+        std::string_view key;
+        if (node.prop("selection") != nullptr) {
+            key = "selection";
+        } else if (node.event("onSelectionChange") != nullptr) {
+            key = "onSelectionChange";
+        } else {
+            return;
+        }
+        std::string const where = pointerAppend(node.path, key);
+        if (!node.name("model").empty()) {
+            refuse(where, "a model-backed table's engine owns its selection; `" + std::string{key} +
+                              "` is for a table over `rows`");
+        }
+        ExprPtr const mode = node.prop("selectionMode");
+        std::string const* const literal =
+            mode != nullptr && mode->kind == ExprKind::Literal ? mode->literal.asString() : nullptr;
+        if (mode == nullptr || (literal != nullptr && *literal == "none")) {
+            refuse(where, "a table with `" + std::string{key} +
+                              "` selects rows; give it `selectionMode` `single` or `multiple`");
+        }
+    }
+
+    // A tabs node that names its shown tab, or reports a pick, keys every tab by a unique id; a literal `selected`
+    // names one of them. A literal `null` is no binding.
+    static void checkTabIds(DocNode const& node) {
+        ExprPtr const selected = node.prop("selected");
+        bool const bound = selected != nullptr && (selected->kind != ExprKind::Literal || !selected->literal.isNull());
+        bool const keyed = bound || node.event("onChoose") != nullptr;
+        std::set<std::string, std::less<>> ids;
+        for (DocNodePtr const& tab : node.partList("tabs")) {
+            if (tab->id.empty()) {
+                if (keyed) {
+                    refuse(tab->path, "a tab of a tabs node with `selected` or `onChoose` has an `id`");
+                }
+                continue;
+            }
+            if (!ids.insert(tab->id).second) {
+                refuse(pointerAppend(tab->path, "id"),
+                       "the tab id `" + tab->id + "` is used twice; each tab has its own");
+            }
+        }
+        if (bound && selected->kind == ExprKind::Literal) {
+            std::string const* const named = selected->literal.asString();
+            if (named == nullptr || !ids.contains(*named)) {
+                refuse(pointerAppend(node.path, "selected"), "`selected` names no tab of this node");
+            }
+        }
+    }
+
+    // A tabs node's `inset` and `pageInset` are literal spacing steps, 0 to 5: the strip and the pages are laid out
+    // once.
+    static void checkTabsInset(DocNode const& node) {
+        for (std::string_view const key : {"inset", "pageInset"}) {
+            ExprPtr const inset = node.prop(key);
+            if (inset == nullptr) {
+                continue;
+            }
+            std::int64_t const* const step = inset->kind == ExprKind::Literal ? inset->literal.asInt() : nullptr;
+            if (step == nullptr || *step < 0 || *step > 5) {
+                refuse(pointerAppend(node.path, key),
+                       "`" + std::string{key} + "` is a literal spacing step from 0 to 5");
+            }
         }
     }
 
@@ -2999,34 +3722,102 @@ private:
         }
     }
 
+    // A stack's literal `padding` list is two spacing steps, vertical then horizontal, each 0 to 5; a panel's is one
+    // step. A computed padding is read at mount.
+    static void checkPadding(DocNode const& node) {
+        ExprPtr const padding = node.prop("padding");
+        if (padding == nullptr || padding->kind != ExprKind::Literal) {
+            return;
+        }
+        ValueList const* const list = padding->literal.asList();
+        if (list == nullptr) {
+            return;
+        }
+        if (node.kind == "panel") {
+            refuse(pointerAppend(node.path, "padding"), "a panel's `padding` is one spacing step, not a list");
+        }
+        // The largest spacing step, as `kMaxSpacingStep` (view.hpp) names it.
+        static constexpr std::int64_t kMostSteps = 5;
+        bool const steps = list->size() == 2 && std::ranges::all_of(*list, [](Value const& step) {
+                               std::int64_t const* const whole = step.asInt();
+                               return whole != nullptr && *whole >= 0 && *whole <= kMostSteps;
+                           });
+        if (!steps) {
+            refuse(pointerAppend(node.path, "padding"),
+                   "a `padding` list is two spacing steps, vertical then horizontal, each from 0 to 5");
+        }
+    }
+
+    // The closed-set keys of a button, and the shape and style pair that cannot go together.
+    static void checkButtonValues(DocNode const& node) {
+        static constexpr std::array<std::string_view, 5> kEmphasis = {"normal", "primary", "danger", "ghost",
+                                                                      "dangerOutline"};
+        checkChoice(node, "emphasis", kEmphasis);
+        static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
+        checkChoice(node, "style", kStyles);
+        static constexpr std::array<std::string_view, 3> kShapes = {"default", "round", "square"};
+        checkChoice(node, "shape", kShapes);
+        if (node.name("shape") == "square" && node.name("style") == "item") {
+            refuse(pointerAppend(node.path, "shape"),
+                   "an item fills its line, so it has no square outline; `square` is a push button's");
+        }
+        static constexpr std::array<std::string_view, 2> kSizes = {"normal", "small"};
+        checkChoice(node, "size", kSizes);
+        checkEntryContent(node);
+    }
+
     // The keys of a kind that take one of a closed set of values, and the pairs of keys that need each other.
     static void checkKindValues(DocNode const& node) {
+        if (node.kind == "column" || node.kind == "row" || node.kind == "panel") {
+            checkPadding(node);
+        }
+        if ((node.kind == "column" || node.kind == "row") && node.flag("headJoined") && !node.flag("pageEdge")) {
+            refuse(pointerAppend(node.path, "headJoined"),
+                   "`headJoined` needs `pageEdge`: an inset page has a margin between it and the head");
+        }
         if (node.kind == "button") {
-            static constexpr std::array<std::string_view, 4> kEmphasis = {"normal", "primary", "danger", "ghost"};
-            checkChoice(node, "emphasis", kEmphasis);
-            static constexpr std::array<std::string_view, 2> kStyles = {"push", "item"};
-            checkChoice(node, "style", kStyles);
-            if (node.prop("selected") != nullptr && node.name("style") != "item") {
-                refuse(pointerAppend(node.path, "selected"),
-                       "`selected` marks a list item; give the button `style: item`");
-            }
-        } else if (node.kind == "grid" && !node.name("justify").empty()) {
-            refuse(pointerAppend(node.path, "justify"),
-                   "a grid's columns share its width; there is no spare length to justify");
+            checkButtonValues(node);
+        } else if (node.kind == "grid") {
+            checkGrid(node);
+        } else if (node.kind == "column" && node.flags.contains("wrap")) {
+            refuse(pointerAppend(node.path, "wrap"), "only a row wraps; a column has no lines to continue on");
+        } else if (node.kind == "row" && node.flag("divided") && node.flag("wrap")) {
+            refuse(pointerAppend(node.path, "divided"),
+                   "a wrapping row has no single line to rule between; `divided` is for a row that does not `wrap`");
+        } else if (node.kind == "forEach") {
+            checkForEachWrap(node);
+        } else if (node.kind == "menu") {
+            checkMenu(node);
+        } else if (node.kind == "badge" && node.prop("removeLabel") != nullptr && node.event("onRemove") == nullptr) {
+            refuse(pointerAppend(node.path, "removeLabel"),
+                   "`removeLabel` names a removable badge's remove control; the badge gives no `onRemove`");
         } else if (node.kind == "textInput") {
             static constexpr std::array<std::string_view, 3> kCommit = {"change", "blur", "enter"};
             checkChoice(node, "commitOn", kCommit);
+            static constexpr std::array<std::string_view, 2> kInputEmphases = {"normal", "prominent"};
+            checkChoice(node, "emphasis", kInputEmphases);
+            static constexpr std::array<std::string_view, 3> kInputAligns = {"start", "center", "end"};
+            checkChoice(node, "align", kInputAligns);
+            checkMultilineExtras(node);
         } else if (node.kind == "select") {
             static constexpr std::array<std::string_view, 2> kStale = {"clear", "keep"};
             checkChoice(node, "onStale", kStale);
-        } else if (node.kind == "dialog" || node.kind == "drawer" || node.kind == "form") {
-            static constexpr std::array<std::string_view, 3> kPolicies = {"touched", "submit", "always"};
-            checkChoice(node, "showErrors", kPolicies);
-            // Absent keeps the schema's own mode, so a misspelt mode would silently do the same.
-            static constexpr std::array<std::string_view, 2> kSubmitModes = {"explicit", "auto"};
-            checkChoice(node, "submit", kSubmitModes);
+            checkSelectStyle(node);
         } else if (node.kind == "text") {
-            checkTextRole(node);
+            checkText(node);
+        } else if (node.kind == "banner") {
+            checkBanner(node);
+        } else if (node.kind == "badge") {
+            static constexpr std::array<std::string_view, 2> kBadgeStyles = {"filled", "outline"};
+            checkChoice(node, "style", kBadgeStyles);
+            static constexpr std::array<std::string_view, 2> kBadgeShapes = {"default", "round"};
+            checkChoice(node, "shape", kBadgeShapes);
+        } else if (node.kind == "keyValue") {
+            static constexpr std::array<std::string_view, 2> kCaptionPlaces = {"inline", "stacked"};
+            checkChoice(node, "fieldLayout", kCaptionPlaces);
+            checkItemSpans(node.prop("items"));
+        } else if (node.kind == "table") {
+            checkCellPlace(node, "valign");
         }
         if (node.kind == "form" || node.kind == "collection" || node.kind == "wizard") {
             checkFormColumns(node);
@@ -3038,6 +3829,7 @@ private:
         checkChoice(node, "align", kAlign);
         checkChoice(node, "justify", kJustify);
         checkChoice(node, "alignSelf", kAlign);
+        checkSurfaceValues(node);
     }
 
     // Each form field drawn by a host component.
@@ -3080,16 +3872,91 @@ private:
         }
     }
 
-    // The screen head's parts: its status badges, then its actions.
+    // The document's top-level parts: a screen head's status badges, actions, menu entries and tools, and the app
+    // document's navigation badges.
     [[nodiscard]] std::vector<DocNodePtr> headParts() const {
         std::vector<DocNodePtr> parts = _doc->status;
         parts.insert(parts.end(), _doc->actions.begin(), _doc->actions.end());
+        parts.insert(parts.end(), _doc->menu.begin(), _doc->menu.end());
+        parts.insert(parts.end(), _doc->tools.begin(), _doc->tools.end());
+        parts.insert(parts.end(), _doc->navigation.begin(), _doc->navigation.end());
         return parts;
+    }
+
+    // The head's tools: each id once, and each one its kind's.
+    static void checkHeadTools(std::span<DocNodePtr const> tools) {
+        std::set<std::string_view> ids;
+        for (DocNodePtr const& tool : tools) {
+            if (!ids.insert(tool->id).second) {
+                refuse(pointerAppend(tool->path, "id"),
+                       "the head tool id `" + tool->id + "` is used twice; each tool has its own");
+            }
+            checkHeadTool(*tool);
+        }
+    }
+
+    // One head tool: a kind of the two, only its kind's keys, a select's options in a dropdown, a literal width.
+    static void checkHeadTool(DocNode const& tool) {
+        static constexpr std::array<std::string_view, 4> kSearchOnly = {"value", "placeholder", "onChange",
+                                                                        "onSubmit"};
+        static constexpr std::array<std::string_view, 4> kSelectOnly = {"options", "selected", "style", "onChoose"};
+        std::string_view const kind = tool.name("kind");
+        if (kind != "search" && kind != "select") {
+            refuse(pointerAppend(tool.path, "kind"),
+                   "`" + std::string{kind} + "` is not one of the values of `kind`: search or select");
+        }
+        bool const search = kind == "search";
+        for (std::string_view const key : search ? kSelectOnly : kSearchOnly) {
+            if (tool.prop(key) || tool.event(key) != nullptr || !tool.name(key).empty()) {
+                refuse(pointerAppend(tool.path, key),
+                       "`" + std::string{key} + "` is a " + (search ? "select" : "search") + " tool's");
+            }
+        }
+        if (!search && !tool.prop("options")) {
+            refuse(tool.path, "a select tool has `options`");
+        }
+        if (std::string_view const style = tool.name("style"); !style.empty() && style != "dropdown") {
+            refuse(pointerAppend(tool.path, "style"),
+                   "`" + std::string{style} + "` is not one of the values of `style`: dropdown");
+        }
+        ExprPtr const width = tool.prop("width");
+        std::int64_t const* const units = width && width->kind == ExprKind::Literal
+                                              ? width->literal.asInt()
+                                              : static_cast<std::int64_t const*>(nullptr);
+        if (width && (units == nullptr || *units < 1)) {
+            refuse(pointerAppend(tool.path, "width"), "`width` is a literal whole number of units, 1 or more");
+        }
+    }
+
+    // The head menu's entries, at every level: an entry that is chosen has an id, unique across the whole menu, since
+    // `ScreenHead::choose` names it by that id; a separator or a submenu is never chosen and takes none.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    static void checkHeadMenu(std::span<DocNodePtr const> entries, std::set<std::string_view>& ids) {
+        for (DocNodePtr const& entry : entries) {
+            bool const submenu = !entry->partList("items").empty();
+            if (entry->flag("separator") || submenu) {
+                if (!entry->id.empty()) {
+                    refuse(pointerAppend(entry->path, "id"),
+                           submenu ? "a submenu is opened, not chosen, and takes no `id`"
+                                   : "a separator is a line between entries and takes no other key");
+                }
+                checkHeadMenu(entry->partList("items"), ids);
+                continue;
+            }
+            if (entry->id.empty()) {
+                refuse(entry->path, "a head menu entry has an `id`, which choosing it names");
+            }
+            if (!ids.insert(entry->id).second) {
+                refuse(pointerAppend(entry->path, "id"),
+                       "the head menu entry id `" + entry->id + "` is used twice; each entry has its own");
+            }
+        }
     }
 
     // A list of `actionButton` parts: each id once, and each emphasis one of a button's.
     static void checkActionButtons(std::span<DocNodePtr const> buttons, std::string const& path) {
-        static constexpr std::array<std::string_view, 4> kEmphasis = {"normal", "primary", "danger", "ghost"};
+        static constexpr std::array<std::string_view, 5> kEmphasis = {"normal", "primary", "danger", "ghost",
+                                                                      "dangerOutline"};
         std::set<std::string_view> ids;
         for (DocNodePtr const& button : buttons) {
             if (!ids.insert(button->id).second) {
@@ -3226,21 +4093,389 @@ private:
         }
     }
 
-    // A text's literal `role` is one of the roles (`title` is `heading`'s alias); a computed one is read at mount, and
-    // one of no known name is reported there.
+    // A text's or a table column's literal `role` is one of the roles (`title` is `heading`'s alias); a computed one
+    // is read at mount, and one of no known name is reported there.
     static void checkTextRole(DocNode const& node) {
         ExprPtr const role = node.prop("role");
         if (role == nullptr || role->kind != ExprKind::Literal) {
             return;
         }
-        static constexpr std::array<std::string_view, 7> kRoles = {"normal",  "muted", "heading", "title",
-                                                                   "section", "error", "success"};
+        static constexpr std::array<std::string_view, 11> kRoles = {"normal",  "muted", "heading", "title",
+                                                                    "section", "error", "success", "mono",
+                                                                    "display", "small", "overline"};
         std::string const* const name = role->literal.asString();
         if (name == nullptr) {
             refuse(pointerAppend(node.path, "role"), "`role` is a name");
         }
         if (!listed(kRoles, *name)) {
             refuse(pointerAppend(node.path, "role"), "`" + *name + "` is not one of the values of `role`");
+        }
+    }
+
+    // A dialog's, drawer's or form's error policy, submit mode and description spans.
+    static void checkSurfaceValues(DocNode const& node) {
+        if (node.kind != "dialog" && node.kind != "drawer" && node.kind != "form") {
+            return;
+        }
+        static constexpr std::array<std::string_view, 3> kPolicies = {"touched", "submit", "always"};
+        checkChoice(node, "showErrors", kPolicies);
+        // Absent keeps the schema's own mode, so a misspelt mode would silently do the same.
+        static constexpr std::array<std::string_view, 2> kSubmitModes = {"explicit", "auto"};
+        checkChoice(node, "submit", kSubmitModes);
+        checkSpans(node.prop("descriptionSpans"));
+    }
+
+    // A text's role and spans; a text carries no description, the line itself is the text.
+    static void checkText(DocNode const& node) {
+        checkTextRole(node);
+        checkSpans(node.prop("spans"));
+        if (node.prop("description") != nullptr) {
+            refuse(pointerAppend(node.path, "description"), "a text is not described; put the line in the text");
+        }
+    }
+
+    // A banner's action: its style is one of three; the link style places the action in the message's runs, and a
+    // stretched action is a button on a line of its own, so it needs an action and is no link.
+    static void checkBanner(DocNode const& node) {
+        static constexpr std::array<std::string_view, 3> kStyles = {"ghost", "button", "link"};
+        checkChoice(node, "actionStyle", kStyles);
+        bool const link = node.name("actionStyle") == "link";
+        checkSpans(node.prop("spans"), link);
+        if (node.flag("actionStretch")) {
+            if (link) {
+                refuse(pointerAppend(node.path, "actionStretch"),
+                       "`actionStretch` puts a button on a line of its own; a `link` action sits in the message");
+            }
+            if (!node.parts.contains("action")) {
+                refuse(pointerAppend(node.path, "actionStretch"), "`actionStretch` stretches the banner's `action`");
+            }
+        }
+    }
+
+    // What an `action` run is told where the loader refuses it.
+    static constexpr std::string_view kActionRunPlaces =
+        "an `action` run is the link of a banner whose `actionStyle` is "
+        "\"link\"; at most one run of its spans takes it";
+
+    // A span list written out: each literal run a string, each record run a `text` with at most the flags `strong`
+    // and `mono`, each literal flag a boolean. A computed list, or a computed element, is checked as it is drawn. A
+    // run may carry `action` where @p actionAllowed, once at most.
+    static void checkSpans(ExprPtr const& spans, bool actionAllowed = false) {
+        if (spans == nullptr) {
+            return;
+        }
+        int actions = 0;
+        if (spans->kind == ExprKind::Literal) {
+            ValueList const* const runs = spans->literal.asList();
+            if (runs == nullptr) {
+                refuse(spans->path, "`spans` is a list of runs");
+            }
+            for (Value const& run : *runs) {
+                checkLiteralRun(run, spans->path, actionAllowed, actions);
+            }
+            return;
+        }
+        if (spans->kind != ExprKind::List) {
+            return;
+        }
+        for (ExprPtr const& run : spans->args) {
+            if (run->kind == ExprKind::Literal) {
+                checkLiteralRun(run->literal, run->path, actionAllowed, actions);
+            } else if (run->kind == ExprKind::Object) {
+                checkRunRecord(*run, actionAllowed, actions);
+            }
+        }
+    }
+
+    // A button's `children`: only on a list entry, and display kinds only, at any depth, so the entry stays one
+    // control with one activation. A list of what is allowed keeps a kind added later out until it is judged.
+    static void checkEntryContent(DocNode const& button) {
+        auto const found = button.children.find("children");
+        if (found == button.children.end() || found->second.empty()) {
+            return;
+        }
+        if (button.name("style") != "item") {
+            refuse(pointerAppend(button.path, "children"),
+                   "only a list entry holds content; a push button has a label");
+        }
+        for (DocNodePtr const& child : found->second) {
+            checkReadOnlyContent(*child);
+        }
+    }
+
+    // NOLINTNEXTLINE(misc-no-recursion): an entry's content is a tree of nodes.
+    static void checkReadOnlyContent(DocNode const& node) {
+        static constexpr std::array<std::string_view, 12> kDisplay = {"text",  "badge", "keyValue", "progress",
+                                                                      "steps", "busy",  "spacer",   "column",
+                                                                      "row",   "grid",  "forEach",  "switch"};
+        static constexpr std::string_view kReason =
+            "an entry's content is read-only; put the control beside the entry";
+        if (!listed(kDisplay, node.kind)) {
+            refuse(node.path, std::string{kReason});
+        }
+        for (std::string_view const key : {std::string_view{"autofocus"}}) {
+            if (node.prop(key) != nullptr) {
+                refuse(pointerAppend(node.path, key), std::string{kReason});
+            }
+        }
+        if (!node.keys.empty()) {
+            refuse(pointerAppend(node.path, "keys"), std::string{kReason});
+        }
+        for (std::string_view const part : {std::string_view{"drag"}, std::string_view{"drop"}}) {
+            if (!node.partList(part).empty()) {
+                refuse(pointerAppend(node.path, part), std::string{kReason});
+            }
+        }
+        for (auto const& [key, nodes] : node.children) {
+            for (DocNodePtr const& child : nodes) {
+                checkReadOnlyContent(*child);
+            }
+        }
+        for (auto const& [key, parts] : node.parts) {
+            for (DocNodePtr const& part : parts) {
+                for (auto const& [childKey, nodes] : part->children) {
+                    for (DocNodePtr const& child : nodes) {
+                        checkReadOnlyContent(*child);
+                    }
+                }
+            }
+        }
+    }
+
+    // A select's style written as a constant: one of the three it may be. A computed one is read as it is drawn.
+    static void checkSelectStyle(DocNode const& node) {
+        ExprPtr const style = node.prop("style");
+        if (style == nullptr || style->kind != ExprKind::Literal) {
+            return;
+        }
+        static constexpr std::array<std::string_view, 3> kStyles = {"dropdown", "radio", "segmented"};
+        std::string const* const name = style->literal.asString();
+        if (name == nullptr) {
+            refuse(pointerAppend(node.path, "style"), "`style` is a name");
+        }
+        if (!listed(kStyles, *name)) {
+            refuse(pointerAppend(node.path, "style"), "`" + *name + "` is not one of the values of `style`");
+        }
+    }
+
+    // A literal multiline text input with a unit or an icon: a text area holds no number and draws no icon.
+    static void checkMultilineExtras(DocNode const& node) {
+        ExprPtr const mode = node.prop("mode");
+        std::string const* const name =
+            mode != nullptr && mode->kind == ExprKind::Literal ? mode->literal.asString() : nullptr;
+        if (name == nullptr || *name != "multiline") {
+            return;
+        }
+        for (std::string_view const key :
+             {std::string_view{"unit"}, std::string_view{"icon"}, std::string_view{"prefix"}}) {
+            if (node.prop(key) != nullptr) {
+                refuse(pointerAppend(node.path, key), "a multiline input shows no " + std::string{key});
+            }
+        }
+        if (!node.name("align").empty()) {
+            refuse(pointerAppend(node.path, "align"), "a multiline input's text starts at the leading edge");
+        }
+        if (!node.name("emphasis").empty() && node.name("emphasis") != "normal") {
+            refuse(pointerAppend(node.path, "emphasis"), "a multiline input's size is its own; it takes no emphasis");
+        }
+    }
+
+    // The spans of each key-value item written as an `obj` in a `list`.
+    static void checkItemSpans(ExprPtr const& items) {
+        if (items == nullptr || items->kind != ExprKind::List) {
+            return;
+        }
+        for (ExprPtr const& item : items->args) {
+            if (item->kind != ExprKind::Object) {
+                continue;
+            }
+            for (auto const& [key, value] : item->fields) {
+                if (key == "spans") {
+                    checkSpans(value);
+                }
+            }
+        }
+    }
+
+    // A literal run's tone: one of the tone names, or null for none.
+    static void checkLiteralRunTone(Value const& tone, std::string const& path) {
+        std::string const* const name = tone.asString();
+        if (tone.isNull()) {
+            return;
+        }
+        if (name == nullptr ||
+            (*name != "neutral" && *name != "info" && *name != "ok" && *name != "warn" && *name != "err")) {
+            refuse(path, "a run's `tone` is neutral, info, ok, warn or err");
+        }
+    }
+
+    // A run marked `action`: allowed in a link banner's spans, once.
+    static void checkActionRun(std::string const& path, bool actionAllowed, int& actions) {
+        if (!actionAllowed || ++actions > 1) {
+            refuse(path, std::string{kActionRunPlaces});
+        }
+    }
+
+    // A literal run: a string, or a record of a string `text` and boolean flags.
+    static void checkLiteralRun(Value const& run, std::string const& path, bool actionAllowed, int& actions) {
+        if (run.asString() != nullptr) {
+            return;
+        }
+        ValueRecord const* const record = run.asRecord();
+        if (record == nullptr) {
+            refuse(path, "a run is a string or a record with `text`");
+        }
+        if (!record->contains("text")) {
+            refuse(path, "a run's record gives its `text`");
+        }
+        for (auto const& [key, value] : *record) {
+            if (key != "text" && key != "strong" && key != "mono" && key != "tone" && key != "action") {
+                refuse(path, "a run takes `text`, `strong`, `mono` and `tone`, not `" + key + "`");
+            }
+            if (key == "tone") {
+                checkLiteralRunTone(value, path);
+            } else if (key != "text" && value.asBool() == nullptr) {
+                refuse(path, "a run's `" + key + "` is true or false");
+            }
+            if (key == "action" && value.asBool() != nullptr && *value.asBool()) {
+                checkActionRun(path, actionAllowed, actions);
+            }
+        }
+    }
+
+    // A run written as an `obj`: a `text`, and flags that are booleans when written as constants.
+    static void checkRunRecord(Expr const& run, bool actionAllowed, int& actions) {
+        bool hasText = false;
+        for (auto const& [key, value] : run.fields) {
+            if (key == "text") {
+                hasText = true;
+            } else if (key == "tone") {
+                if (value->kind == ExprKind::Literal) {
+                    checkLiteralRunTone(value->literal, value->path);
+                }
+            } else if (key != "strong" && key != "mono" && key != "action") {
+                refuse(value->path, "a run takes `text`, `strong`, `mono` and `tone`, not `" + key + "`");
+            } else if (value->kind == ExprKind::Literal && value->literal.asBool() == nullptr) {
+                refuse(value->path, "a run's `" + key + "` is true or false");
+            } else if (key == "action" && value->kind == ExprKind::Literal && *value->literal.asBool()) {
+                checkActionRun(value->path, actionAllowed, actions);
+            }
+        }
+        if (!hasText) {
+            refuse(run.path, "a run's record gives its `text`");
+        }
+    }
+
+    // A table cell's place across its column and down its row: `stretch`, which a stack takes, is no place for a
+    // cell.
+    static constexpr std::array<std::string_view, 3> kCellPlaces = {"start", "center", "end"};
+
+    // A table column's closed sets: its default cell's text role, and its cells' places.
+    static void checkColumnPart(DocNode const& node) {
+        checkTextRole(node);
+        checkCellPlace(node, "align");
+        checkCellPlace(node, "valign");
+    }
+
+    // Only a horizontal `forEach` wraps and only a vertical one is divided; a literal `axis` that says otherwise is
+    // refused here, and a computed one is read when the screen lowers.
+    static void checkForEachWrap(DocNode const& node) {
+        ExprPtr const axis = node.prop("axis");
+        if (axis == nullptr || axis->kind != ExprKind::Literal) {
+            return;
+        }
+        std::string const* const named = axis->literal.asString();
+        bool const horizontal = named != nullptr && *named == "horizontal";
+        if (node.flag("wrap") && !horizontal) {
+            refuse(pointerAppend(node.path, "wrap"),
+                   "`wrap` fills lines along a row; this `forEach`'s `axis` is not \"horizontal\"");
+        }
+        if (node.flag("divided") && horizontal) {
+            refuse(pointerAppend(node.path, "divided"),
+                   "`divided` draws rules between rows of a column; this `forEach`'s `axis` is \"horizontal\"");
+        }
+    }
+
+    // A grid's columns come from a count or from tracks, never both, and their widths, not a justification, size
+    // them.
+    static void checkGrid(DocNode const& node) {
+        if (!node.name("justify").empty()) {
+            refuse(pointerAppend(node.path, "justify"),
+                   "a grid's columns are sized by their count or tracks; there is no spare length to justify");
+        }
+        if (node.prop("selected") != nullptr) {
+            refuse(pointerAppend(node.path, "selected"),
+                   "a grid is not an entry of a list; `selected` marks a column or a row");
+        }
+        auto const tracks = node.parts.find("tracks");
+        if (tracks == node.parts.end()) {
+            return;
+        }
+        if (node.prop("columns") != nullptr) {
+            refuse(pointerAppend(node.path, "tracks"),
+                   "a grid takes `columns` or `tracks`, not both; with `tracks`, the column count is their number");
+        }
+        if (tracks->second.empty()) {
+            refuse(pointerAppend(node.path, "tracks"), "`tracks` lists at least one track");
+        }
+    }
+
+    // A menu's style, and its trigger's keys, which only a button-style menu has. An icon-only trigger needs a name
+    // for assistive technology, so a button-style menu has a `label` or an `a11y` name.
+    static void checkMenu(DocNode const& node) {
+        static constexpr std::array<std::string_view, 2> kStyles = {"bar", "button"};
+        checkChoice(node, "style", kStyles);
+        static constexpr std::array<std::string_view, 4> kEmphasis = {"normal", "primary", "danger", "ghost"};
+        checkChoice(node, "emphasis", kEmphasis);
+        if (node.name("style") != "button") {
+            for (std::string_view const key : {"label", "icon"}) {
+                if (node.prop(key) != nullptr) {
+                    refuse(
+                        pointerAppend(node.path, key),
+                        "`" + std::string{key} + "` is a button-style menu's trigger; give the menu `style: button`");
+                }
+            }
+            if (!node.name("emphasis").empty()) {
+                refuse(pointerAppend(node.path, "emphasis"),
+                       "`emphasis` is a button-style menu's trigger; give the menu `style: button`");
+            }
+            return;
+        }
+        auto const a11y = node.partList("a11y");
+        bool const named = !a11y.empty() && a11y.front()->prop("name") != nullptr;
+        if (node.prop("label") == nullptr && !named) {
+            refuse(node.path,
+                   "a button-style menu has a `label` or an `a11y` name, so its trigger has a name for "
+                   "assistive technology");
+        }
+    }
+
+    // A separator is a line between entries: `true`, and nothing else beside it.
+    // Whether a part kind is a menu entry: a `menu` node's or a screen head's.
+    [[nodiscard]] static bool isMenuEntry(std::string_view kind) {
+        return kind == "menuItem" || kind == "headMenuItem";
+    }
+
+    static void checkMenuItem(DocNode const& node) {
+        if (!node.flags.contains("separator")) {
+            return;
+        }
+        if (!node.flag("separator")) {
+            refuse(pointerAppend(node.path, "separator"), "`separator` is `true`; leave it out for an entry");
+        }
+        bool const alone = node.props.empty() && node.events.empty() && node.parts.empty() && node.names.empty() &&
+                           node.keys.empty() && node.flags.size() == 1;
+        if (!alone) {
+            refuse(node.path, "a separator is a line between entries and takes no other key");
+        }
+    }
+
+    // A cell place, which names the three it may be.
+    static void checkCellPlace(DocNode const& node, std::string_view key) {
+        std::string_view const value = node.name(key);
+        if (!value.empty() && !listed(kCellPlaces, value)) {
+            refuse(pointerAppend(node.path, key), "`" + std::string{value} + "` is not one of the values of `" +
+                                                      std::string{key} + "`: start, center or end");
         }
     }
 
@@ -3321,7 +4556,7 @@ private:
                 checkDialog(cmd, context);
                 break;
             case CommandKind::Focus:
-                static_cast<void>(require(context, cmd.target, where, {NameCategory::Element}, "an element"));
+                checkFocus(cmd, context);
                 break;
             case CommandKind::ResetPrefs:
                 if (cmd.target != "all" && !_doc->customize.contains(cmd.target)) {
@@ -3409,7 +4644,13 @@ private:
         if (entry.category == NameCategory::Element) {
             KindSpec const* const spec = findKind(entry.element->kind, false);
             if ((spec->flags & kWritable) == 0) {
-                refuse(cmd.path, "`set` writes state or an input's draft; `" + head + "` is a " + entry.element->kind);
+                // A table's state is the document's: it binds its `selection`, `sort` or `page` to state, and the
+                // state is set.
+                std::string const hint = entry.element->kind == "table"
+                                             ? ": bind its `selection`, `sort` or `page` to state and set that"
+                                             : "";
+                refuse(cmd.path,
+                       "`set` writes state or an input's draft; `" + head + "` is a " + entry.element->kind + hint);
             }
             return;
         }
@@ -3432,7 +4673,7 @@ private:
                 reads(*entry->derivedFrom, entry->scope, out, inner, seenLets);
             }
         }
-        bool const binds = expr.kind == ExprKind::Map || expr.kind == ExprKind::Filter;
+        bool const binds = bindsElement(expr.kind);
         for (std::size_t index = 0; index < expr.args.size(); ++index) {
             if (binds && index == 1) {
                 locals.push_back(expr.name);
@@ -3605,7 +4846,7 @@ private:
                 }
             }
         }
-        bool const binds = expr.kind == ExprKind::Map || expr.kind == ExprKind::Filter;
+        bool const binds = bindsElement(expr.kind);
         for (std::size_t index = 0; index < expr.args.size(); ++index) {
             if (binds && index == 1) {
                 locals.push_back(expr.name);
@@ -3661,6 +4902,7 @@ private:
     std::vector<std::pair<QueryDecl const*, ScopeInfo*>> _queryScopes;
     std::vector<LoadWarning> _warnings;
     std::map<DocNode const*, TypeKind> _dateValueKinds;
+    std::map<std::string, FocusTarget, std::less<>> _focusTargets;
     std::vector<std::string> _deriving;
     // NOLINTEND(misc-no-recursion)
 };
@@ -3814,6 +5056,7 @@ inline std::expected<Type, std::string> ScopeResolver::pref(std::string_view poi
         validator.run();
         doc.warnings = validator.takeWarnings();
         doc.dateValueKinds = validator.takeDateValueKinds();
+        doc.focusTargets = validator.takeFocusTargets();
         return doc;
     } catch (detail::DocumentRefused const& refused) {
         Refusal refusal = refused.refusal();

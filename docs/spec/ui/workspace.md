@@ -13,6 +13,7 @@ tab logic with no widgets, for an application's own tab strip; `Workspace` is th
 - [Switching](#switching)
 - [Captions](#captions)
 - [Start and record](#start-and-record)
+- [Overlays](#overlays)
 - [Host screens](#host-screens)
 - [Navigator and pins](#navigator-and-pins)
 - [Design decisions](#design-decisions)
@@ -24,11 +25,11 @@ one is active, and how they open, close and are recorded. The rules of the secti
 answers them by index over its order.
 
 - **Options.** `WorkspaceModelOptions` is `WorkspaceOptions` (`screens`, `hosts`, `onRecord`, `scheduler`,
-  `recordDelay`, `onChanged`) and two callbacks. `mountPage(tab, screenId, params)` makes the tab's page and mounts
+  `recordDelay`, `onChanged`, `diagnostics`) and two callbacks. `mountPage(tab, screenId, params)` makes the tab's page and mounts
   the screen in it, a document screen or a host screen alike, and answers its handle, which the model owns.
   `unmountPage(tab)` is called after the tab's handle is destroyed, so the application destroys the page.
 - **Tabs.** A tab is a `WorkspaceTabId`, issued when it opens and never reused. `open` answers the tab it opened or
-  focused; `activate`, `close`, `closeOthers` take one; `closeAll`, `closeSaved`, `forceCloseAll`, `start`, `next`,
+  focused, and `openTab` the same as a `WorkspaceOpened{tab, mounted}`, `mounted` false when an open tab was focused; `activate`, `close`, `closeOthers` take one; `closeAll`, `closeSaved`, `forceCloseAll`, `start`, `next`,
   `previous`, `record` and `flushRecord` are as below.
 - **Observed values.** `tabs()` is a `reactive::Computed` of the open tabs in order, each a
   `WorkspaceTabState{id, screenId, identity, title, dirty}` that follows its handle; `active()` one of the active
@@ -40,7 +41,8 @@ answers them by index over its order.
 - **Misuse.** An empty `mountPage` is `std::invalid_argument` at construction; a `mountPage` that throws is answered
   as a `MountError` with the exception's text, and opens nothing; a `WorkspaceTabId` the model does not hold (never
   issued, or closed) is `std::out_of_range` from every member that takes one, except `handleOf`, which answers null.
-- The destructor unmounts every screen without asking, newest first, each followed by its `unmountPage`.
+- The destructor unmounts every screen without asking, newest first, each followed by its `unmountPage`, then
+  cancels every call no mount adopted (`DocumentScreenHost::cancelUnclaimedCalls`), as `forceCloseAll` does.
 
 ## Shape
 
@@ -53,19 +55,26 @@ answers them by index over its order.
   strip of tab buttons shows with two tabs or more and hides with one (`setBarShown(tabs > 1)`): one tab needs no
   strip to choose it by, and the chords work with it hidden. There is no option to show it for one tab; an
   application that wants a strip of its own builds it over `WorkspaceModel`. The bar
-  and every page stretch both ways, so a screen whose root stretches fills the page; a content-sized one keeps its
-  own size.
+  and every page stretch both ways, so a screen whose root stretches fills the page and lays itself out. Every page
+  slot is scrollable (`SlotWidget::setScrollable(true)`): a screen whose root keeps its content height is shown at
+  that height and scrolls inside the page, so no screen is cut off at the window's edge. Scrolling every page
+  instead would leave a stretching root no height to stretch to. A stretching root is never shorter than its
+  `minHeight`: while the page is shorter than that, the page scrolls it at that height. A page whose content cannot be narrower than the page (a row of content-sized children wider than the window, say) scrolls sideways on Qt Quick and shows a horizontal bar; one that fits is laid out at the page's width.
 - `WorkspaceOptions::screens` gives a screen id's catalog facts, `WorkspaceScreen{singleton, reuseEmpty, host,
   available}`; empty treats every screen as a plain, available document screen.
 - Tabs keep the order they were opened in, so a page slot's index is its tab's. `tabs()` lists them as
   `WorkspaceTab{screenId, identity, caption}`; `active()` is the shown tab's index, `std::nullopt` while none is open.
-- An application routes its host's `onNavigate` to `open`, so a document's `navigate` opens or focuses a tab.
-- The destructor unmounts every screen without asking, newest first.
+- An application routes its host's `onNavigate` to `openTab`, so a document's `navigate` opens or focuses a tab, or
+  to `openOverlay` when `as` asks for a dialog or a drawer ([Overlays](#overlays)), and settles the call of a
+  navigation that mounted nothing ([host.md](host.md#documentscreenhost)).
+- The destructor closes every overlay without asking, newest first, then unmounts every tab's screen the same way.
 
 - `handleOf(index)` is a tab's `ScreenHandle`, and `activeHandle()` the active tab's; null past the end or with no
   tab. A client remounts a tab's screen through it on a development reload and reaches its inspector.
-- `forceCloseAll()` closes every tab without running a close guard, newest first: what signing out does, since no
-  guard may keep a screen of the principal who is leaving.
+- `forceCloseAll()` closes every overlay, then every tab, without running a close guard, newest first: what signing
+  out does, since no guard may keep a screen of the principal who is leaving. A callee goes before the opener its
+  call answers, so the opener's `onCancel` runs in a live scope, as closing tabs newest first already does; then
+  every call no mount adopted is cancelled.
 - `WorkspaceOptions::onChanged` is called after the open tabs, their captions or the active tab changed, so a client's
   top bar can follow the active tab's title.
 
@@ -81,7 +90,9 @@ answers them by index over its order.
    holds nothing;
 4. otherwise a new tab is appended.
 
-A refused mount answers its `MountError` and opens nothing; its page is destroyed with it.
+A refused mount answers its `MountError` and opens nothing; its page is destroyed with it. `openTab(screenId,
+params)` opens the same way and answers `WorkspaceOpened{tab, mounted}`: `mounted` is false when step 2 focused an
+open tab, which is when a host settles the navigation's call rather than leave it for a later mount.
 
 ## Closing
 
@@ -106,25 +117,68 @@ A refused mount answers its `MountError` and opens nothing; its page is destroye
 ## The head row
 
 With `HeadPlacement::InPage`, the default, the shell mounts a row over the handle's `head()` above each tab's
-screen, in its page: the subtitle (muted), the badges, a spacer and the actions as buttons, with test ids `head`,
-`head_subtitle`, `head_spacer`, `head_status_<n>` (the badge's place among the visible ones) and `head_action_<id>`. A button is
-disabled while its action is, and a click runs the action through `ScreenHead::run`. The row is hidden while the head
-has no subtitle, badges or actions, so a screen without them looks as it would without the row; a handle without a
+screen, in its page: one wrapping row (`head`, gap 2, `align: start`, `justify: end`) of a lead and a trail. The lead (`head_lead`) is a
+row of gap 1 that wraps, `align: center`, and stretches from `kHeadLeadMinimum` (32) units: the subtitle (muted; the screen's `subtitleSpans` as the text's runs when it gives them, else its plain subtitle as one run) and the badges, whose holder wraps too, so they sit beside one another while they fit and wrap under one another where they do not. (A wrapping row holding a wrapping row is sized from its children's one-line widths, so the width a row was last laid out at never feeds back into the width it asks for.) The trail (`head_trail`) is a row of gap 1:
+the tools, the actions as buttons and the head's own menu. Where the trail fits beside the lead (32 units, or its natural width where that is less), the lead takes
+the rest of the width; where it does not, the trail drops to a line of its own at the trailing edge. The test ids are
+`head`, `head_lead`, `head_trail`, `head_subtitle`, `head_status_<n>` (the badge's place among the visible
+ones), `head_tool_<id>`, `head_action_<id>` and `head_menu`. A tool is a `TextInput` (a search) or a dropdown
+`Select`, keyed by its id: its value is bound to the tool's, it draws no caption, its label is its accessible name,
+its width is the tool's (none for 0), and it is disabled while the tool is; an edit or a choice goes to
+`ScreenHead::edit`, Enter in a search to `ScreenHead::submit`, and the field shows what the document binds. A button is disabled while its action is, and a click runs the action through
+`ScreenHead::run`. The menu is a button-style `menu` drawing the framework icon `more` alone, its accessible name and
+tooltip the head's `menuLabel()` (`More actions` for a head that has none); it is drawn again whenever the entries'
+shape (their ids, separators and submenus) changes, and each entry's label, description, check mark and enablement
+are bound to the head's. Choosing an entry calls `ScreenHead::choose` with the id of the entry that was drawn, so an
+entry the screen has hidden since is refused by name and never mistaken for its neighbour. The row is hidden while
+the head has no subtitle, badges, tools, actions or menu entries, so a screen without them looks as it would without the
+row; a handle without a
 head (a host screen) gets no row. The row is mounted after the screen, since it reads the handle, and moved above it.
 It reads the head through the model, a tracked read of `tabs()`, so a row mounted while the model is still opening
 the tab reads the head once the model holds it, and one whose handle has gone reads nothing.
 
 With `HeadPlacement::External`, `mountPage` mounts no head row and a page holds only its screen: the host mounts
-`headRowForActive()` where it chooses. The row stretches to the full width it is given and its spacer stretches with
-it, so the actions sit at the trailing edge in either placement.
+`headPartsForActive()` where it chooses.
 
-`Workspace::headRowForActive()` builds the same row for whichever tab is active, as a public `Node` a host can mount
-somewhere else entirely (a client's own shell chrome) — `morph::client::Shell` constructs its `Workspace` with
-`HeadPlacement::External` and mounts this row into `ShellFrame::headSlot()`, beside the title in the top bar, so the
-head shows once. It reads
+`Workspace::headPartsForActive()` builds the same head as three parts, the eyebrow, the lead and the trail (`HeadParts`), for whichever
+tab is active, as public `Node`s a host can mount somewhere else entirely (a client's own shell chrome) —
+`morph::client::Shell` constructs its `Workspace` with `HeadPlacement::External` and mounts the lead into
+`ShellFrame::headLeadSlot()` and the trail into `ShellFrame::headSlot()`, on the top bar's one line, and shows the slots
+while `activeHeadShown()` holds, so the head shows once. The lead built for a shell has no minimum width of its own:
+the host places it, and the shell's lead block keeps the one 32-unit minimum, capped at its natural width. A minimum on
+the lead row too would raise the block's natural width to 32 units whenever the lead shows, and a trail that fits
+beside a short lead would wrap to a line of its own. The in-page head's lead keeps its minimum, which is the rule there.
+
+The lead is built once per place, each copy shown only while the head's `leadPlacement` is that place (`leadHasContent`
+and the placement), so a hidden copy is in neither the layout nor the accessibility tree:
+
+| Place | Part | Test ids | Size |
+|---|---|---|---|
+| `below` | `HeadParts::lead` | `head_lead`, `head_subtitle`, `head_status_<n>` | stretches from the 32-unit minimum (in the page); no minimum for a shell |
+| `inline` | `HeadParts::inlineLead` | `head_lead_inline`, `head_subtitle_inline`, `head_status_inline_<n>` | content-sized: no stretch, no minimum |
+| `end` | inside `HeadParts::trail`, between the tools and the actions | `head_lead_end`, `head_subtitle_end`, `head_status_end_<n>` | content-sized |
+
+A lead at the `end` counts as trail content. In the page (`HeadPlacement::InPage`) the tab bar carries the title, so
+`inline` draws as `below` there, and `end` sits in the trail. `activeLeadPlacement()` is a tracked read of the active
+head's place (`Below` with no active tab), `activeHeadOneLine()` of whether the head has no eyebrow and nothing under the
+title (`true` with no active tab), `activeHeadJoined()` of whether the page continues the head's block (the screen's
+`headJoined`, and the page not inset: two tabs inset it), and `activeHeadSurface()` of the surface the screen asks the
+top bar to be drawn on (empty with none); `activePageSurface()` is the same read of the surface it asks the page area
+to be drawn on (empty with none or with no active tab). A trail button of an `actionButton` with `iconOnly` has an empty label, and the
+action's label as its accessible name and tooltip. The head's eyebrow (`HeadParts::eyebrow`, `head_eyebrow`) is the screen's `eyebrowSpans` as the muted text's runs when
+it gives them, else its plain `eyebrow` as one run, hidden while there is none; a shell draws it above the title, and
+the in-page head draws it as a line above the head row (`head_block`, a column of the eyebrow and `head`). A head with
+only an eyebrow has content. `activePageInset()` is a tracked read of whether the shell insets the page: true with no active tab, true while the
+tab strip shows (two tabs or more: the strip is a child of the page and would touch the window's edges), and
+otherwise false exactly when the active screen's head reports `pageEdge` (a host screen's head reports none, so its
+page is inset). `activeTitleSpans()` is a tracked read of the active tab's title runs, empty while the screen gives none: a shell
+draws them in its top bar in place of the tab's caption, and follows them as the screen's state changes, which the
+`onChanged` callback on a caption does not report. `activeHeadShown()` is a tracked read: true while the active
+tab's head has a subtitle, a badge, a tool, an action or a menu entry. It and the parts' own visibility share one rule,
+so the two cannot disagree. It reads
 `WorkspaceModel::active()` directly, not the public `Workspace::active()` index, since the index is a position in
-the tab bar, not an identity, and is unsafe to compare across a close. With no tab open it returns a defined,
-invisible row — never a null `Node` — so a caller mounting it need not handle a null case itself.
+the tab bar, not an identity, and is unsafe to compare across a close. With no tab open it returns two defined,
+invisible rows — never a null `Node` — so a caller mounting them need not handle a null case itself.
 
 ## Captions
 
@@ -149,6 +203,42 @@ re-keyed without any action: `open` reads each tab's identity from its handle wh
     opens when none did.
   - Any other `start` is the screen id to open.
 
+## Overlays
+
+`openOverlay(request)` shows a document screen over the tabs, as `NavigateRequest::as` asks: `dialog` a
+`DialogWidget`, `drawer` a `DrawerWidget` on the end side, made under the workspace's parent (a backend root when it
+has none). It is what a host's `onNavigate` calls for those two, and stays inside the call protocol of
+[host.md](host.md#documentscreenhost):
+
+- **The call.** The screen is mounted into the overlay with `DocumentScreenHost::mountInto`, so the mount adopts the
+  navigation's call. An overlay always mounts a new instance and never focuses an open tab, so a call is never left
+  unclaimed; a catalog `singleton` limits tabs, and a singleton screen open in a tab may be open in an overlay too.
+- **Documents only.** An `as` other than `dialog` or `drawer`, and a screen whose catalog entry names a `host`
+  screen, are refused with a `MountError` and show nothing, as is a refused mount. A host screen adopts no call, so a
+  host opens it as a tab and settles its call.
+- **What it shows.** The overlay's title follows the screen's `title()`. Its footer holds a button per visible head
+  action (`overlay_action_<id>` in a row `overlay_actions`, hidden while there is none), each running the action by
+  its id, as the head row's do. Its badges are not shown, nor its head menu or tools: the first time the head has
+  either, the workspace reports it once to `WorkspaceOptions::diagnostics` (`a dialog or drawer does not show the
+  head menu or tools of <screen>`).
+- **Sheets.** A dialog is a sheet (`DialogWidget::setSheet`) while the backend's `widthClass()` is `compact` when it
+  opens, and follows `setWidthClass(widthClass)`, which a host calls from its backend's width-class listener, while
+  it is open. A drawer has no sheet. This is the host's own chrome, so it follows the class directly; a dialog node in
+  a document is a sheet only where its `sheet` says.
+- **Closing.** A user's dismissal closes the widget first (`DialogWidget`'s contract). The workspace opens it again
+  at once, inside the dismissal, so the screen stays reachable, and calls `requestClose`; the overlay goes only when
+  that answers `true`. So a host never destroys a handle whose close is pending, a dirty screen without a guard stays,
+  and a close the screen refuses leaves the overlay as it was.
+- **Answers.** A screen that `return`s or runs `close: self` reaches the host's `onScreenClosed(handle)`, which a host
+  forwards to `screenClosed(handle)`: the overlay of that handle goes, or, for a tab's screen, its tab (the closed
+  screen answers its close at once).
+- **Lifetimes.** An overlay's handle is destroyed before its widget, as `mountInto` requires of any container. The
+  destructor and `forceCloseAll` close the overlays without asking, newest first, before the tabs, so a callee goes
+  before the opener its call answers. `closeAll`, `closeOthers` and `closeSaved` walk tabs only: a dialog is modal
+  over them, so no user reaches those walks while one is open.
+- **Not a tab.** An overlay adds no tab, no record entry and no route. `overlays()` lists the open overlays' screen
+  ids, oldest first. Overlays stack: a screen in an overlay may open another, and each closes on its own.
+
 ## Host screens
 
 A screen whose `WorkspaceScreen::host` names a host screen is mounted by the factory registered under that name
@@ -162,9 +252,25 @@ A name with no factory refuses the mount with `no host screen `<name>` is regist
 ## Navigator and pins
 
 `ui::Navigator` (`include/morph/ui/navigator.hpp`) lists the catalog for a person to open screens from.
-- **Grouping.** Entries are grouped by module, then group, in the order each first appears. Each group has a
-  heading in the `Section` text role, `navigator_group_<module>/<group>`, and each entry is a list item (`ButtonStyle::Item`) as wide as the
-  navigator, `nav_<id>`.
+- **Grouping.** Entries are grouped by module, then group, in the order each first appears. The navigator's root is
+  a column with a gap of step 3 holding the search, the pins and the groups, so a hidden pin row or group takes no
+  gap. Each group is a column of its own, `navigator_group_<module>/<group>_section`, gap step 1, holding a heading in
+  the `Overline` text role, `navigator_group_<module>/<group>`, and then its entries. Each entry is a row as wide as the
+  navigator, `nav_row_<id>`, holding one list item (`ButtonStyle::Item`) that stretches, `nav_<id>`. The item's content
+  is a row, `nav_content_<id>` (gap step 1, centred), of the title as a text that stretches and a badge,
+  `nav_badge_<id>`, hidden until the entry has a count; the item's background, and so its selection, spans both. The
+  search hides a row, and hides a group's column when no row of it shows.
+- **Counts.** `setBadge(id, NavigatorBadge{text, tone})` shows a count at the end of a screen's entry, inside the item, and
+  `setBadge(id, std::nullopt)` takes it away; `badgeOf(id)` answers it. The entry stays one button to assistive
+  technology: its accessible name carries the count, "Review, 4", and is its title again without one. A screen the
+  navigator does not list answers `false` and changes nothing. The client copies the app document's `navigation`
+  onto the entries ([client.md](../client/client.md#the-shell)).
+- **As a menu.** `menuEntries()` is the navigator as the entries of a menu, for a frame too narrow for it: the pins
+  first, a separator, then each group as a submenu labelled by its heading (a group with no heading puts its entries
+  at the top level). An entry's label is its title with its count after it, "Review · 4"; the current screen's entry
+  is checked, and an unavailable one is disabled. `choose(path)` opens the entry at that path, separators counted, as
+  choosing it in the navigator does, and answers whether it named an available entry. `setOnChanged(handler)` is
+  called after anything the menu lists changed: a count, the current entry, a pin.
 - **The current entry.** `setCurrent(id)` marks the entry of the screen that is open and clears the one marked
   before; an id the navigator does not list, or empty, leaves none marked, and a pin is never marked. `current()`
   answers the marked one. The client shell calls it whenever the active tab changes.

@@ -7,6 +7,10 @@
 #include <QJsonValue>
 #include <QVariantList>
 #include <QVariantMap>
+#include <algorithm>
+#include <morph/ui/theme.hpp>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include "qt_quick/kinds.hpp"
@@ -41,11 +45,20 @@ QVariantList menuEntries(std::vector<ui::MenuEntry> const& entries) {
             {QStringLiteral("checked"), checked},
             {QStringLiteral("enabled"), entry.enabled},
             {QStringLiteral("items"), menuEntries(entry.items)},
+            {QStringLiteral("separator"), entry.separator},
+            {QStringLiteral("description"), toQString(entry.description)},
         });
     }
     return list;
 }
 // NOLINTEND(misc-no-recursion)
+
+// A list entry's content: a slot that never scrolls, since the entry grows with what it holds.
+class EntryContent final : public ContainerItemWidget<ui::SlotWidget> {
+public:
+    using ContainerItemWidget<ui::SlotWidget>::ContainerItemWidget;
+    void setScrollable(bool scrollable) override { static_cast<void>(scrollable); }
+};
 
 }  // namespace
 
@@ -53,6 +66,22 @@ QVariantList menuEntries(std::vector<ui::MenuEntry> const& entries) {
 
 ButtonImpl::ButtonImpl(Context& context, ui::ContainerWidget* parent)
     : ItemWidget{context, QStringLiteral("MorphButton"), parent} {}
+
+ButtonImpl::~ButtonImpl() { _content.reset(); }
+
+ui::ContainerWidget& ButtonImpl::content() {
+    if (_content == nullptr) {
+        write("hasContent", true);
+        _content =
+            std::make_unique<EntryContent>(context(), QStringLiteral("MorphSlot"), static_cast<ContainerCore&>(*this));
+    }
+    return *_content;
+}
+
+QQuickItem* ButtonImpl::contentFor(ItemBase& child) {
+    static_cast<void>(child);
+    return qobject_cast<QQuickItem*>(part("content"));
+}
 
 void ButtonImpl::setLabel(std::string_view label) { write("label", toQString(label)); }
 
@@ -62,7 +91,7 @@ void ButtonImpl::setIcon(std::string_view icon) {
 }
 
 void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
-    // MorphButton's `emphasis`: 0 normal, 1 primary, 2 danger, 3 ghost.
+    // MorphButton's `emphasis`: 0 normal, 1 primary, 2 danger, 3 ghost, 4 danger outlined.
     int shown = 0;
     if (emphasis == ui::ButtonEmphasis::Primary) {
         shown = 1;
@@ -70,6 +99,8 @@ void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
         shown = 2;
     } else if (emphasis == ui::ButtonEmphasis::Ghost) {
         shown = 3;
+    } else if (emphasis == ui::ButtonEmphasis::DangerOutline) {
+        shown = 4;
     }
     write("emphasis", shown);
 }
@@ -77,7 +108,21 @@ void ButtonImpl::setEmphasis(ui::ButtonEmphasis emphasis) {
 // MorphButton's `style`: 0 push, 1 item.
 void ButtonImpl::setStyle(ui::ButtonStyle style) { write("style", style == ui::ButtonStyle::Item ? 1 : 0); }
 
-void ButtonImpl::setSelected(bool selected) { write("selected", selected); }
+// MorphButton's `round` and `square`.
+void ButtonImpl::setShape(ui::ControlShape shape) {
+    write("round", shape == ui::ControlShape::Round);
+    write("square", shape == ui::ControlShape::Square);
+}
+
+// MorphButton's `small`.
+void ButtonImpl::setSize(ui::ButtonSize size) { write("small", size == ui::ButtonSize::Small); }
+
+void ButtonImpl::setMono(bool mono) { write("mono", mono); }
+
+void ButtonImpl::setSelected(bool selected) {
+    write("selectable", true);
+    write("selected", selected);
+}
 
 void ButtonImpl::setOnClick(ui::Action onClick) {
     relay().on(QStringLiteral("click"), actionHandler(std::move(onClick)));
@@ -91,7 +136,7 @@ bool choosable(std::vector<ui::MenuEntry> const& entries, std::vector<std::size_
     std::vector<ui::MenuEntry> const* level = &entries;
     for (std::size_t depth = 0; depth < path.size(); ++depth) {
         std::size_t const index = path.at(depth);
-        if (index >= level->size() || !level->at(index).enabled) {
+        if (index >= level->size() || !level->at(index).enabled || level->at(index).separator) {
             return false;
         }
         ui::MenuEntry const& entry = level->at(index);
@@ -103,8 +148,32 @@ bool choosable(std::vector<ui::MenuEntry> const& entries, std::vector<std::size_
     return false;
 }
 
-MenuImpl::MenuImpl(Context& context, ui::ContainerWidget* parent)
-    : ItemWidget{context, QStringLiteral("MorphMenu"), parent} {}
+MenuImpl::MenuImpl(Context& context, ui::ContainerWidget* parent, ui::MenuStyle style)
+    : ItemWidget{context, QStringLiteral("MorphMenu"), parent} {
+    if (style == ui::MenuStyle::Button) {
+        write("buttonStyle", true);
+    }
+}
+
+void MenuImpl::setTrigger(ui::MenuTrigger const& trigger) {
+    context().checkIcon(trigger.icon);
+    write("triggerLabel", toQString(trigger.label));
+    write("triggerIcon", toQString(trigger.icon));
+    // MorphMenu's `triggerEmphasis`: 0 normal, 1 primary, 2 danger, 3 ghost.
+    int shown = 0;
+    if (trigger.emphasis == ui::ButtonEmphasis::Primary) {
+        shown = 1;
+    } else if (trigger.emphasis == ui::ButtonEmphasis::Danger) {
+        shown = 2;
+    } else if (trigger.emphasis == ui::ButtonEmphasis::Ghost) {
+        shown = 3;
+    }
+    write("triggerEmphasis", shown);
+}
+
+std::string MenuImpl::shownText() const {
+    return read("buttonStyle").toBool() ? toUtf8(read("triggerLabel").toString()) : std::string{};
+}
 
 void MenuImpl::setItems(std::vector<ui::MenuEntry> const& entries) {
     if (entries == _entries) {
@@ -175,7 +244,15 @@ BannerImpl::BannerImpl(Context& context, ui::ContainerWidget* parent)
 
 void BannerImpl::setTone(ui::Tone tone) { write("tone", static_cast<int>(tone)); }
 
-void BannerImpl::setText(std::string_view text) { write("text", toQString(text)); }
+void BannerImpl::setText(std::string_view text) {
+    write("runs", QVariantList{});
+    write("text", toQString(text));
+}
+
+void BannerImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
+    write("text", toQString(ui::spansText(spans)));
+    write("runs", runsOf(spans));
+}
 
 void BannerImpl::setActionLabel(std::string_view label) { write("actionLabel", toQString(label)); }
 
@@ -187,6 +264,11 @@ void BannerImpl::setDismissible(bool dismissible) { write("dismissible", dismiss
 
 void BannerImpl::setOnDismiss(ui::Action onDismiss) {
     relay().on(QStringLiteral("dismiss"), actionHandler(std::move(onDismiss)));
+}
+
+void BannerImpl::setActionStyle(ui::BannerActionStyle style, bool stretch) {
+    write("actionStyle", static_cast<int>(style));
+    write("actionStretch", stretch);
 }
 
 std::string BannerImpl::shownText() const { return toUtf8(read("text").toString()); }
@@ -204,6 +286,19 @@ void BadgeImpl::setIcon(std::string_view icon) {
     context().checkIcon(icon);
     write("icon", toQString(icon));
 }
+
+void BadgeImpl::setOnRemove(ui::Action onRemove, std::string_view label) {
+    write("removable", true);
+    write("removeLabel", toQString(label));
+    relay().on(QStringLiteral("remove"), actionHandler(std::move(onRemove)));
+}
+
+void BadgeImpl::setStyle(ui::BadgeStyle style) { write("outline", style == ui::BadgeStyle::Outline); }
+
+// MorphBadge's `round`.
+void BadgeImpl::setShape(ui::ControlShape shape) { write("round", shape == ui::ControlShape::Round); }
+
+void BadgeImpl::setMono(bool mono) { write("mono", mono); }
 
 std::string BadgeImpl::shownText() const { return toUtf8(read("text").toString()); }
 
@@ -230,16 +325,75 @@ void StepsImpl::setCurrent(std::optional<std::size_t> index) {
     write("current", index ? static_cast<int>(*index) : -1);
 }
 
+void StepsImpl::setLabelled(bool labelled) { write("labelled", labelled); }
+
+std::string StepsImpl::shownText() const { return toUtf8(read("currentLabel").toString()); }
+
+ChartImpl::ChartImpl(Context& context, ui::ContainerWidget* parent)
+    : ItemWidget{context, QStringLiteral("MorphChart"), parent} {}
+
+// The chart as one map of numbers and strings, which the item paints in one pass: a tone or a clip as its
+// enumerator's index, -1 for no tone, and a gap as `gap` rather than a missing value.
+void ChartImpl::setData(ui::ChartData const& data) {
+    QVariantList ticks;
+    for (ui::ChartTick const& tick : data.yTicks) {
+        ticks.append(
+            QVariantMap{{QStringLiteral("value"), tick.value}, {QStringLiteral("text"), toQString(tick.text)}});
+    }
+    QVariantList lines;
+    for (ui::ChartLine const& line : data.lines) {
+        lines.append(QVariantMap{{QStringLiteral("value"), line.value},
+                                 {QStringLiteral("label"), toQString(line.label)},
+                                 {QStringLiteral("tone"), static_cast<int>(line.tone)},
+                                 {QStringLiteral("style"), static_cast<int>(line.style)}});
+    }
+    QVariantList series;
+    for (ui::ChartSeries const& one : data.series) {
+        QVariantList points;
+        for (ui::ChartPoint const& point : one.points) {
+            points.append(QVariantMap{{QStringLiteral("x"), point.x},
+                                      {QStringLiteral("y"), point.y.value_or(0.0)},
+                                      {QStringLiteral("gap"), !point.y.has_value()},
+                                      {QStringLiteral("clip"), static_cast<int>(point.clip)},
+                                      {QStringLiteral("xLabel"), toQString(point.xLabel)},
+                                      {QStringLiteral("tone"), point.tone ? static_cast<int>(*point.tone) : -1},
+                                      {QStringLiteral("note"), toQString(point.note)}});
+        }
+        series.append(QVariantMap{{QStringLiteral("label"), toQString(one.label)},
+                                  {QStringLiteral("joined"), one.joined},
+                                  {QStringLiteral("points"), points}});
+    }
+    write("summary", toQString(data.summary));
+    write("chart", QVariantMap{{QStringLiteral("xMin"), data.xMin},
+                               {QStringLiteral("xMax"), data.xMax},
+                               {QStringLiteral("yMin"), data.yMin},
+                               {QStringLiteral("yMax"), data.yMax},
+                               {QStringLiteral("yLabel"), toQString(data.yLabel)},
+                               {QStringLiteral("ticks"), ticks},
+                               {QStringLiteral("lines"), lines},
+                               {QStringLiteral("series"), series}});
+}
+
+std::string ChartImpl::shownText() const { return toUtf8(read("summary").toString()); }
+
 KeyValueImpl::KeyValueImpl(Context& context, ui::ContainerWidget* parent)
     : ItemWidget{context, QStringLiteral("MorphKeyValue"), parent} {}
 
+// `value` is the characters shown, which the pair's accessible name reads; `runs` the runs of a value with spans.
 void KeyValueImpl::setItems(std::vector<ui::KeyValueItem> const& items) {
     QVariantList list;
     for (ui::KeyValueItem const& item : items) {
+        bool const runs = !item.spans.empty();
         list.append(QVariantMap{{QStringLiteral("label"), toQString(item.label)},
-                                {QStringLiteral("value"), toQString(item.value)}});
+                                {QStringLiteral("value"), toQString(runs ? ui::spansText(item.spans) : item.value)},
+                                {QStringLiteral("runs"), runs ? runsOf(item.spans) : QVariantList{}},
+                                {QStringLiteral("tone"), static_cast<int>(item.tone)}});
     }
     write("items", list);
+}
+
+void KeyValueImpl::setCaptionPlacement(ui::CaptionPlacement placement) {
+    write("captionsAbove", placement == ui::CaptionPlacement::Above);
 }
 
 // ── EmptyState ────────────────────────────────────────────────────────────

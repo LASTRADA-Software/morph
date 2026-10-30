@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <morph/reactive/runtime.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/testing/backend_conformance.hpp>
@@ -12,6 +14,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -78,6 +81,29 @@ ui::Key parseKey(std::string_view text) {
     return ui::Key{std::int64_t{std::stoll(std::string{text})}};
 }
 
+// The characters of runs as `formatSpans` records them: each run's text up to its first unescaped `;`, joined.
+std::string spansText(std::string_view recorded) {
+    std::string joined;
+    std::string_view const inner = recorded.substr(1, recorded.size() - 2);
+    bool flags = false;
+    for (std::size_t i = 0; i < inner.size(); ++i) {
+        char const character = inner.at(i);
+        if (character == '\\' && i + 1 < inner.size()) {
+            if (!flags) {
+                joined += unescape(inner.substr(i, 2));
+            }
+            ++i;
+        } else if (character == ',') {
+            flags = false;
+        } else if (character == ';') {
+            flags = true;
+        } else if (!flags) {
+            joined += character;
+        }
+    }
+    return joined;
+}
+
 // How a probe, or the backend behind it, breaks the contract on purpose. A suite that passes a correct backend
 // measures something only if it fails a broken one.
 enum class Fault : std::uint8_t {
@@ -86,6 +112,7 @@ enum class Fault : std::uint8_t {
     WrongText,      // every widget reads as showing other text
     DeadInput,      // user actions never reach the widgets
     EchoingSelect,  // the backend's Select reports a choice when its options are replaced
+    NoModifiers,    // a click on a table row arrives without its modifiers, as a plain click
 };
 
 // The reference probe: what a TUI or Qt Quick probe does with a rendered screen or a QQuickItem tree, this one does
@@ -109,7 +136,37 @@ public:
         if (kind == "Select") {
             return markedLabel(widgetId);
         }
-        return unescape(_backend.prop(widgetId, kind == "Button" || kind == "Checkbox" ? "label" : "text"));
+        if (std::string const spans = _backend.prop(widgetId, "spans"); !spans.empty()) {
+            return spansText(spans);
+        }
+        if (kind == "Tabs") {
+            return highlightedLabel(widgetId);
+        }
+        if (kind == "Chart") {
+            return unescape(_backend.prop(widgetId, "summary"));
+        }
+        if (kind == "Steps") {
+            return currentStepLabel(widgetId);
+        }
+        return unescape(
+            _backend.prop(widgetId, kind == "Button" || kind == "Checkbox" || kind == "Menu" ? "label" : "text"));
+    }
+    // A field's messages, then its description, as assistive technology would read them.
+    [[nodiscard]] std::optional<std::string> descriptionOf(ui::Widget const& widget) override {
+        int const widgetId = _backend.idOf(widget);
+        // A field's messages, then its description; an overlay has only its description.
+        std::vector<std::string> lines;
+        for (std::string const& error : listItems(_backend.prop(widgetId, "errors"))) {
+            lines.push_back(unescape(error));
+        }
+        if (std::string const description = unescape(_backend.prop(widgetId, "description")); !description.empty()) {
+            lines.push_back(description);
+        }
+        std::string joined;
+        for (std::string const& line : lines) {
+            joined += (joined.empty() ? "" : "\n") + line;
+        }
+        return joined;
     }
     [[nodiscard]] bool visibleOf(ui::Widget const& widget) override {
         return _backend.prop(_backend.idOf(widget), "visible") != "false";
@@ -166,6 +223,19 @@ public:
         }
         _backend.selectRows(tableId, std::move(keys));
     }
+    void clickRow(ui::Widget& table, std::size_t row, ui::RowClick click) override {
+        if (_fault == Fault::DeadInput) {
+            return;
+        }
+        int const tableId = _backend.idOf(table);
+        ui::Key const key = parseKey(_backend.prop(_backend.children(tableId).at(row), "rowKey"));
+        _backend.clickRow(tableId, key, _fault == Fault::NoModifiers ? ui::RowClick::Only : click);
+    }
+    void clickHeader(ui::Widget& table, std::size_t column) override {
+        if (_fault != Fault::DeadInput) {
+            _backend.clickHeader(_backend.idOf(table), column);
+        }
+    }
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         int const tableId = _backend.idOf(table);
         std::vector<std::string> const marked = listItems(_backend.prop(tableId, "selection"));
@@ -217,6 +287,34 @@ private:
         return {};
     }
 
+    // The label of the tab `selected` highlights, from `tabs`' elements; empty when it highlights none.
+    [[nodiscard]] std::string highlightedLabel(int tabsId) const {
+        std::string const selected = _backend.prop(tabsId, "selected");
+        std::size_t index = 0;
+        char const* const first = selected.data();
+        if (std::from_chars(first, std::next(first, std::ssize(selected)), index).ec != std::errc{}) {
+            return {};
+        }
+        std::vector<std::string> const labels = listItems(_backend.prop(tabsId, "tabs"));
+        return index < labels.size() ? unescape(labels.at(index)) : std::string{};
+    }
+
+    // The label of a steps indicator's current step: the entries read `label:State`.
+    [[nodiscard]] std::string currentStepLabel(int stepsId) const {
+        std::string const current = _backend.prop(stepsId, "current");
+        std::size_t index = 0;
+        char const* const first = current.data();
+        if (std::from_chars(first, std::next(first, std::ssize(current)), index).ec != std::errc{}) {
+            return {};
+        }
+        std::vector<std::string> const entries = listItems(_backend.prop(stepsId, "steps"));
+        if (index >= entries.size()) {
+            return {};
+        }
+        std::string const& entry = entries.at(index);
+        return unescape(entry.substr(0, entry.rfind(':')));
+    }
+
     Fault _fault;
     morph::testing::StepExecutor _owner;
     morph::testing::EchoingBackend _echoing;
@@ -241,6 +339,8 @@ public:
     void drag(ui::Widget&, ui::Widget&) override {}
     void dismiss(ui::Widget&) override {}
     void selectRows(ui::Widget&, std::vector<std::size_t> const&) override {}
+    void clickRow(ui::Widget&, std::size_t, ui::RowClick) override {}
+    void clickHeader(ui::Widget&, std::size_t) override {}
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const&) override { return {}; }
     void moveCursor(ui::Widget&, std::size_t) override {}
     [[nodiscard]] std::size_t cursorOf(ui::Widget const&) override { return 0; }
@@ -272,7 +372,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 34);
+    REQUIRE(cases.size() == 55);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -314,7 +414,9 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
     for (std::string_view const name :
          {"a Text shows its constant text", "a bound Text updates once per batch and not for an equal write",
           "a Switch shows the selected case and nothing for a key without one",
-          "a text field shows what the document makes of an edit"}) {
+          "a text field shows what the document makes of an edit",
+          "a button-style menu reports the entry past a separator, and never the separator",
+          "a chart shows its current summary"}) {
         INFO(name);
         CHECK(wrongText.contains(name));
     }
@@ -328,12 +430,30 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
           "a dismissal the document refuses leaves the dialog open",
           "a chord goes to the innermost widget that declares it",
           "a chord pressed inside a hidden container runs nothing",
-          "a menu reports only an enabled entry without a submenu", "a read-only input takes no edit",
+          "a chord the focused widget declares comes before its own key",
+          "a focused button takes Enter before its ancestors' chords",
+          "a submitting field in a dialog takes Enter from the dialog",
+          "a field without a submit commits on Enter and lets the dialog have it",
+          "a check box toggles on Space and lets the dialog have Enter",
+          "a field's own Enter chord comes before its commit and submit",
+          "a menu reports only an enabled entry without a submenu",
+          "a read-only input takes no edit",
           "a dismissed banner reports it and stays shown",
           "a closed collapsible's content takes no input, its header does",
-          "a drop zone takes a drop whole or refuses it whole"}) {
+          "a drop zone takes a drop whole or refuses it whole",
+          "a click on a sortable header asks to sort by it, and no other header or setter does",
+          "a button-style menu reports the entry past a separator, and never the separator",
+          "a removable badge reports its removal once"}) {
         INFO(name);
         CHECK(deadInput.contains(name));
+    }
+
+    std::set<std::string_view> const noModifiers = failingCases(Fault::NoModifiers);
+    for (std::string_view const name :
+         {"a click selects only its row, and a Ctrl-click toggles one and keeps the rest",
+          "a Shift-click selects the rows from the anchor, in place of the rest"}) {
+        INFO(name);
+        CHECK(noModifiers.contains(name));
     }
 
     // Only the setter case is run against the echoing backend: the probe reads widgets through the recording

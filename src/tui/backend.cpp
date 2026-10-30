@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <functional>
 #include <memory>
 #include <morph/tui/backend.hpp>
+#include <string>
 #include <utility>
 
 #include "tui/container_widgets.hpp"
@@ -24,6 +26,9 @@ struct Backend::Impl {
         }
     }
     detail::Context context;
+    std::function<void(std::string const&)> onWidthClass;
+    // The class last reported, or current when the listener was registered.
+    std::string reported;
 };
 
 namespace {
@@ -61,10 +66,16 @@ std::unique_ptr<ui::SelectWidget> Backend::createSelect(ui::ContainerWidget* par
     if (style == ui::SelectStyle::Radio) {
         return make<detail::RadioSelectImpl>(_impl->context, parent);
     }
+    if (style == ui::SelectStyle::Segmented) {
+        return make<detail::SegmentedSelectImpl>(_impl->context, parent);
+    }
     return make<detail::DropdownSelectImpl>(_impl->context, parent);
 }
 
-std::unique_ptr<ui::MenuWidget> Backend::createMenu(ui::ContainerWidget* parent) {
+std::unique_ptr<ui::MenuWidget> Backend::createMenu(ui::ContainerWidget* parent, ui::MenuStyle style) {
+    if (style == ui::MenuStyle::Button) {
+        return make<detail::MenuButtonImpl>(_impl->context, parent);
+    }
     return make<detail::MenuImpl>(_impl->context, parent);
 }
 
@@ -149,6 +160,10 @@ std::unique_ptr<ui::EmptyStateWidget> Backend::createEmptyState(ui::ContainerWid
     return make<detail::EmptyStateImpl>(_impl->context, parent);
 }
 
+std::unique_ptr<ui::ChartWidget> Backend::createChart(ui::ContainerWidget* parent) {
+    return make<detail::ChartImpl>(_impl->context, parent);
+}
+
 std::unique_ptr<ui::DrawerWidget> Backend::createDrawer(ui::ContainerWidget* parent, ui::Side side) {
     return make<detail::DrawerImpl>(_impl->context, parent, side);
 }
@@ -166,6 +181,26 @@ std::unique_ptr<ui::DropZoneWidget> Backend::createDropZone(ui::ContainerWidget*
 }
 
 void Backend::fit() { detail::fit(_impl->context); }
+
+std::string Backend::widthClass() const { return ui::widthClassOf(_impl->context.screen->viewportArea().width); }
+
+void Backend::setOnWidthClass(std::function<void(std::string const&)> onWidthClass) {
+    _impl->onWidthClass = std::move(onWidthClass);
+    _impl->reported = widthClass();
+}
+
+void Backend::refreshWidthClass() {
+    std::string current = widthClass();
+    if (current == _impl->reported) {
+        return;
+    }
+    _impl->reported = std::move(current);
+    if (_impl->onWidthClass) {
+        // A copy: the listener re-renders, which may replace it.
+        auto const listener = _impl->onWidthClass;
+        listener(_impl->reported);
+    }
+}
 
 void Backend::focusNext() { detail::moveFocus(_impl->context, detail::Direction::Forward); }
 

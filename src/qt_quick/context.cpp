@@ -7,33 +7,32 @@
 #include <QQmlContext>
 #include <QQmlError>
 #include <QUrl>
+#include <QVariant>
+#include <algorithm>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <morph/qt_quick/components.hpp>
+#include <morph/ui/backend.hpp>
+#include <morph/ui/theme.hpp>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 #include "qt_quick/keys.hpp"
 #include "qt_quick/relay.hpp"
 #include "qt_quick/widget.hpp"
 
-namespace morph::qt_quick {
-
-std::string widthClassOf(double logicalWidth) {
-    if (logicalWidth < 600.0) {
-        return "compact";
-    }
-    if (logicalWidth < 1200.0) {
-        return "medium";
-    }
-    return "expanded";
-}
-
-}  // namespace morph::qt_quick
-
 namespace morph::qt_quick::detail {
 
 namespace {
+
+/// The `Theme` singleton's object property @p name in @p engine, or null.
+QObject* themeObjectOf(QQmlEngine& engine, char const* name) {
+    QObject const* const theme =
+        engine.singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    return theme != nullptr ? theme->property(name).value<QObject*>() : nullptr;
+}
 
 /// The backend's roots, top to bottom in the column the `MorphRoots` item holds.
 class Roots final : public ContainerCore {
@@ -48,10 +47,7 @@ protected:
     // The roots draw with the theme's own scheme.
     [[nodiscard]] QObject* scheme() const override {
         QQmlEngine* const engine = _column != nullptr ? qmlEngine(_column) : nullptr;
-        QObject const* const theme =
-            engine != nullptr ? engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))
-                              : nullptr;
-        return theme != nullptr ? theme->property("themeScheme").value<QObject*>() : nullptr;
+        return engine != nullptr ? themeObjectOf(*engine, "themeScheme") : nullptr;
     }
 
 private:
@@ -71,7 +67,9 @@ QString errorsOf(QQmlComponent const& component) {
 Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
     : _engine{&engine}, _options{std::move(options)} {
     QQmlComponent& roots = component(QStringLiteral("MorphRoots"));
-    std::unique_ptr<QObject> made{roots.create()};
+    auto relay = std::make_unique<Relay>();
+    std::unique_ptr<QObject> made{
+        roots.createWithInitialProperties({{QStringLiteral("host"), QVariant::fromValue<QObject*>(relay.get())}})};
     auto* const holder = qobject_cast<QQuickItem*>(made.get());
     if (holder == nullptr) {
         throw std::runtime_error{"morph::qt_quick: the MorphRoots component did not make an item"};
@@ -81,29 +79,47 @@ Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
     QQmlEngine::setObjectOwnership(_holder, QQmlEngine::CppOwnership);
     _holder->setParentItem(&host);
     _holder->setParent(&host);
+    // The theme names a fixed-pitch family only when it sets `font.mono`; until then a mono text draws in the
+    // platform's.
+    if (auto* const theme = _engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))) {
+        static_cast<void>(writePlatformMonoFamily(*theme));
+        static_cast<void>(writeIconGlyphs(*theme));
+    }
     _roots = std::make_unique<Roots>(qobject_cast<QQuickItem*>(_holder->property("content").value<QObject*>()));
-    QObject::connect(&host, &QQuickItem::widthChanged, _holder, [this] { widthChanged(); });
-    widthChanged();
+    // The roots item reports its width in units, which follows both the host's width and the theme's font.
+    relay->setParent(_holder);
+    _rootsRelay = relay.release();
+    _rootsRelay->on(QStringLiteral("overflow"), &reportOverflow);
+    _rootsRelay->on(QStringLiteral("widthUnits"), [this](QVariant const& units) { widthChanged(units.toDouble()); });
+    widthChanged(_holder->property("widthUnits").toDouble());
 }
 
 Context::~Context() {
+    if (_rootsRelay != nullptr) {
+        _rootsRelay->kill();
+    }
     _roots.reset();
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the holder is the context's, made in its constructor.
     delete _holder.data();
 }
 
-void Context::widthChanged() {
-    QQuickItem const* const host = _holder != nullptr ? _holder->parentItem() : nullptr;
-    if (host == nullptr) {
-        return;
-    }
-    std::string next = widthClassOf(host->width());
+QObject* Context::themeObject(char const* name) const { return themeObjectOf(*_engine, name); }
+
+void Context::widthChanged(double units) {
+    std::string next = ui::widthClassOf(units);
     if (next == _widthClass) {
         return;
     }
     _widthClass = std::move(next);
-    if (_options.onWidthClass) {
-        _options.onWidthClass(_widthClass);
+    // Controls are touch targets while the window is compact. The theme is one per engine, so the last class
+    // written holds for every backend in it.
+    if (auto* const theme = _engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))) {
+        theme->setProperty("touchTargets", _widthClass == "compact");
+    }
+    if (_onWidthClass) {
+        // A copy: the listener re-renders, which may replace it.
+        auto const listener = _onWidthClass;
+        listener(_widthClass);
     }
 }
 
@@ -140,7 +156,9 @@ void Context::undeclared(QObject const& item, char const* name) {
 }
 
 void Context::checkIcon(std::string_view icon) {
-    if (icon.empty() || _missingIcons.contains(icon)) {
+    // A framework name is drawn from the set when it names it and by the control's own glyph or chevron otherwise, so
+    // only another name the set lacks is reported.
+    if (icon.empty() || _missingIcons.contains(icon) || std::ranges::contains(ui::kFrameworkIcons, icon)) {
         return;
     }
     QObject const* const theme =

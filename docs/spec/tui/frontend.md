@@ -66,40 +66,62 @@ are coalesced to one per turn. A frame fits the roots to the screen, gives the f
 when nothing holds it, and draws; while a visible `busy` spins, a timer advances it. Tab and Shift+Tab move the
 focus; Esc ends a drag wherever the focus is.
 
+The width class (`Backend::widthClass()`) is the viewport's columns, classed by `ui::widthClassOf`, read when asked:
+an 80-column terminal is `medium`. After dispatching a resize the session calls `Backend::refreshWidthClass()`, which
+compares the class with the one last reported and calls the `setOnWidthClass` listener on a change, outside the draw,
+so the re-render comes on the next turn; `fit()`, which runs inside the draw, never calls it.
+
 ## Widgets
 
 Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Component` it owns.
 
 | Widget | Shows | Input |
 |---|---|---|
-| Text | one row per line, styled by role: a heading bold, a section bold in the muted style, muted, error and success in their theme styles | — |
-| Button | `[ label ]`, a framework icon's glyph before the label; a list item ` label`, unbracketed and padded to its slot's width, in the list's selected-item style while selected and the focus style while focused | Enter, Space, click |
-| TextInput | `core::tui::InputField`; single-line, multiline or masked; a unit is drawn muted at the right edge before the field marks, and the editable width ends one cell before it | typing; Enter submits a single-line field after its commit; the focus leaving after an edit commits |
-| Checkbox | `[x] label` | Enter, Space, click |
-| Select | radio: a row per option, `(•)` marking; dropdown: `[label ▾]` opening a list overlay | Enter, Space, click; arrows in the list |
-| Menu | one level of entries as a list, `>` on an entry with a submenu, the mark of a checkable one, its chord | Right, Enter, Space or a click opens a submenu; Left or Backspace goes up; choosing a leaf shows the top again |
-| Stack, Slot | children along an axis, a spacing step apart | — |
-| Grid | equal columns, cells row-major, spans | — |
+| Text | one row per line, styled by role: a heading bold, a section and an overline bold in the muted style as written (the terminal reads no theme token), muted, error and success in their theme styles; mono as normal text, since every cell is drawn in one fixed-pitch font. Spans draw run after run in the role's style, a strong run bold, a mono run as the others and a toned run in the tone's foreground; a run's line feed starts the next row. A text's `tone` is the text's foreground, with its role's boldness | — |
+| Button | `[ label ]` (`[label]` while `small` or `square`), a framework icon's glyph before the label (an icon-only button whose icon has no glyph draws its accessible name, so it is never an empty bracket), the caption in the list's selected-item style while selected (the brackets keep the button's style, so a selected push button is as wide as another); a list item ` label`, unbracketed and padded to its slot's width, in the list's selected-item style while selected and the focus style while focused. An item with content holds it as a column, a cell in from its leading edge, paints its line style across every row and the content over it on that background, and takes Enter, Space and a click on any row | Enter, Space, click |
+| TextInput | `core::tui::InputField`; single-line, multiline or masked; a unit is drawn muted at the right edge before the field marks, and the editable width ends one cell before it; a prefix is drawn muted before the text, after the icon; an `end`-aligned field draws its text against the right edge while it fits; a prominent one draws its text bold | typing; Enter submits a single-line field after its commit, and a field without a submit handler commits and passes Enter on; the focus leaving after an edit commits |
+| Checkbox | `[x] label` | Space, click; Enter passes on |
+| Select | radio: a row per option, `(•)` marking; dropdown: `[label ▾]` opening a list overlay; segmented: one row of the options, each padded by a space and joined by `│`, the marked one in the list's selected-item style | Enter, Space, click; arrows in the list; Left and Right on a segmented one, and a click on a segment |
+| Menu | one level of entries as a list, `>` on an entry with a submenu, the mark of a checkable one, its chord, its description muted; a separator a `─` row the cursor skips. Button style: `[label ▾]`, or an icon-only trigger's glyph (`[⋯]` for `more`) or else its accessible name | Right, Enter, Space or a click opens a submenu; Left or Backspace goes up; choosing a leaf shows the top again. Button style: Enter, Space, Down or a click opens the entries as a list overlay, which drills into submenus the same way; a choice, Esc or the focus leaving closes it and gives the focus back to the trigger |
+| Stack, Slot | children along an axis, a spacing step apart, inset by the stack's padding mapped to cells as a panel's is, each axis by its own step (`[2, 4]` is 0 rows and 2 columns); from its first `setSelected` it reserves its first column for the selection's bar, inside its leading padding when that has a column and as one more column otherwise, and while selected draws `▌` down that column in the list's selected-item style; the column stays reserved while unselected so the content does not move; a scrollable slot whose content is taller than it (or whose stretching child's `minHeight` is) is a viewport over it that follows the focus, as Scroll is, and takes the focus itself while nothing inside can; a slot whose content fits is not a viewport and is no Tab stop. A tab page pads its own content inside the viewport by its tabs node's page inset (`contentInsets`), and the node lays each page over the whole area under its bar | a scrolling slot: arrows, PageUp/PageDown, Home/End, wheel |
+| Grid | equal columns, or columns sized by their tracks; cells row-major, spans | — |
 | Spacer | nothing; stretches in a stack | — |
 | Panel | a box with a title; a collapsible one folds to its title line | Enter, Space, click on the title |
 | Scroll | a viewport that follows the focus | arrows, PageUp/PageDown, Home/End, wheel |
-| Tabs | a one-row bar over the page slots, with no blank row under it (a terminal row costs more than the separation earns); a hidden bar gives its row to the pages and takes no focus | Left, Right, click on a label |
-| Dialog | a centred box over everything; its footer is the box's bottom row, its children against the right edge, one cell apart, and stays last when the content mounts again | Esc dismisses |
+| Tabs | with an inset, the tabs start the step's columns in (step 4: 2 columns) and the pages are padded by its rows and columns, or by a page inset's when the node gives one; the strip's surface draws nothing new, as `bar` is not inverted. A one-row bar over the page slots, with no blank row under it (a terminal row costs more than the separation earns); a bar narrower than its labels draws whole labels from a first visible one, which painting moves so the highlighted label fits, with `‹` at the start and `›` at the end while labels are cut there; a hidden bar gives its row to the pages and takes no focus; `moreLabel` is stored and not drawn, since the markers already reach every tab | Left, Right, click on a label; a click on `‹` or `›` selects the previous or next tab |
+| Dialog | a centred box over everything; a description given as runs draws them on the description's row, as a text draws runs; its footer is the box's bottom row, its children against the right edge, one cell apart, and stays last when the content mounts again. As a sheet the box fills the viewport, its top row draws `[dismissLabel]` before the title, and its footer takes the box's last rows under content that fills the rest | Esc dismisses; a press on a sheet's `[dismissLabel]` dismisses as Esc does |
 | Drawer | a box against its side, the screen's height; its footer as a dialog's | Esc dismisses |
 | Busy | a spinner and its label while active | — |
-| Table | a header and keyed rows, `*` on selected rows, `>` on the cursor; a toned row's cells draw in the tone's style, keeping any inverse | arrows, Space selects or toggles, Enter activates, click and double click |
-| DateTimeInput | `YYYY-MM-DD[ HH:MM]` in the display zone | typing; Up/Down step |
+| Table | a header and keyed rows, `*` on selected rows, `>` on the cursor; with a select column a five-cell gutter, `[x]` or `[ ]` per row in place of the `*`, under a header box `[x]`, `[-]` or `[ ]` — a click on a row's box toggles the row as Ctrl+click does, and on the header box is Ctrl+A; a toned row's cells draw in the tone's style, keeping any inverse; the layout solver never squeezes a column below its header's width (a fixed column below its own width), and the columns past the table's edge are cut; a row's cells keep their own height and sit at its top, centre (rounded down) or bottom by their column's `valign`; a text cell cut at its column's width draws an ellipsis in its last cell where the column does not wrap (`wrap: false`) or the text is mono; a text, a badge, a check box or a push button is drawn at its natural width at its column's start, centre or end by the column's `align`, and the header's label with it; a text input keeps its text at the start, since `core::tui::InputField` has no alignment; the sorted column's label is followed by ` ▲` or ` ▼`, and a sortable column's header keeps room for it; a heading row is one cell across every column and their gaps, with nothing in its gutter, and widens no column | arrows, Space selects or toggles, Shift+Up and Shift+Down select a range from the anchor, Ctrl+A selects every row or clears them (Multiple), Enter activates; a click selects only its row, Ctrl+click toggles it and Shift+click selects a range where the emulator passes the modifier on (`clickWith`), and a plain double click activates; a click on a sortable column's header asks to sort by it (the header takes no keyboard focus); the cursor passes over a heading row, a click on one does nothing, and Ctrl+A, a range and the header box leave it out |
+| DateTimeInput | `YYYY-MM-DD[ HH:MM]` in the display zone, or its pattern, as wide as the pattern writes; the stepping keys work on the parsed instant | typing; Up/Down step |
 | Slider | `[====\|----] value` | Left, Right, Home, End, press and drag on the track |
 | FilePicker | a path field, prompted `Open: ` or `Save: ` | typing; Enter |
-| Banner | its text in its tone, `[ action ]`, `[x]` when dismissible | Enter runs the action; Esc or Delete dismisses; a click on either |
-| Badge | `[text]` in its tone, a framework icon's glyph before the text | — |
+| Banner | its text in its tone (spans as a text's, on the one row, a strong run bold, a toned run in its tone's foreground), `[ action ]` (on a row of its own under the text for a stretched action), `[x]` when dismissible; under `actionStyle` `link` the action is drawn inside the sentence, underlined in the accent, at the run marked `action` or else after the text, and a click on those cells runs it | Enter runs the action; Esc or Delete dismisses; a click on either |
+| Badge | `[text]` in its tone, `(text)` when outlined, a framework icon's glyph before the text; a removable one `[text ×]`, inverse while focused | a removable one: Delete, Backspace, Enter or Space while focused, or a click on the `×`, removes it; a click elsewhere on it focuses it |
 | Progress | `[####......] 40%` and the label; `<=>` when indeterminate | — |
-| Steps | a row per step: `[ ]` pending, `[>]` active, `[x]` done, `[!]` failed; the current one accented | — |
-| KeyValue | captions, then the values lined up after the widest | — |
+| Steps | a row per step: `[ ]` pending, `[>]` active, `[x]` done, `[!]` failed; the current one accented; unlabelled, the marks in one row joined by `─` that fills the width | — |
+| KeyValue | captions, then the values lined up after the widest; stacked, each pair two rows, the caption muted over its value, with no rule, since a rule would cost a row per pair and the muted caption already separates them. A toned value draws in its tone's style, bold; a value with spans draws them as a text's | — |
 | EmptyState | the title, the explanation, `[ action ]` | Enter, click on the action |
+| Chart | points in cells, below; its summary, muted and wrapped, when smaller than 20 by 5 cells; content size 40 by 8 | — |
 | Splitter | the panes and a handle between each two | dragging a handle; the release reports every size |
-| Collapsible | `▾ title` with the header beside it, the body below while open | Enter, Space, click on the title; the header stays live while closed |
+| Collapsible | `▾ title` (the title bold) with the header beside it, the body below while open | Enter, Space, click on the title; the header stays live while closed |
 | DropZone | a dashed frame around its children | a paste while it has the focus is a drop (see below) |
+
+**A chart in cells.** The plot fills the widget below `yLabel` (its own row, when given) and above the points'
+labels and the legend. A gutter at the left, at most 8 columns, holds the lines' labels when three or more label
+the axis and the ticks' otherwise, right-aligned; with ticks, a line's label is written at the right end of its row,
+over the line. A value lands on row `round((yMax − y) / (yMax − yMin) × (rows − 1))` of the plot, a position on
+column `round((x − xMin) / (xMax − xMin) × (columns − 1))`. A line is a row of `─` (solid), `╌` (dashed) or `┄`
+(dotted) in its tone's style, muted for neutral; two lines on one row draw the one of the more severe tone, and its
+label. A point is its series' glyph, `●`, `■`, `▲` or `◆` in token order, in the series colour (`color.chart.<n>`'s
+default as a true colour, since the terminal theme has no chart colours); a marked point is `✕` in its tone's style
+with its note two cells after it when it fits; a clipped point is `△` on the top row or `▽` on the bottom one. A
+point is drawn over a line in the same cell, and of two points in one cell the marked one, else the later. Points
+are not joined: a cell is about twice as tall as it is wide, and box characters between cells would draw slopes
+that are not there. The points' labels take the row below the plot, each skipped when it would overlap the last one
+drawn and the newest always drawn; the legend row (two or more series) is each glyph beside its label. At the
+content height a value is placed to within a fraction of the range, so the summary carries what a reader must not
+miss, and a document that needs the values shows a table too.
 
 A text input, select or date-time input whose caption is shown (`setCaption(label, true)`) draws it on its own row
 above the control, one row taller; without it nothing changes. A radio select's rows, and a dropdown's list, keep
@@ -108,7 +130,7 @@ to the rows below the caption.
 A terminal has no icon map and no assistive technology: icons, accessible names and roles are kept and not drawn,
 and a widget draws on its surface, its own or else its nearest container's: `sidebar` and `toolbar` draw every cell
 of the widget inverse, set after it paints so a child painting over its container stays inverse, and any other
-surface draws as no surface does. A surface changes no size. The test id is kept for the probe. The tooltip shows on hover.
+surface draws as no surface does. A surface changes no size. A surface a screen asks the shell's top bar for (`headSurface`) is drawn as any other: `darkHead` is not inverted, so the console's compact top bar is plain cells. The test id is kept for the probe. The tooltip shows on hover.
 
 **Files dropped on a terminal.** A terminal reports a file dragged onto it as its path pasted. A drop zone takes the
 focus, and a paste while it has it is a drop: the text read as paths, separated by whitespace, each quoted with `'`
@@ -123,7 +145,15 @@ into its bounds, and shares what is left among Stretch children by weight (`layo
 its child's maximum, and what a capped child leaves goes to the Stretch children not capped, at most one pass per
 Stretch child; a share below its minimum is raised to it. An overflow is taken from the last child first, down to
 each child's minimum, and then the stack overflows and clips. A grid places cells
-row-major in equal columns. Several roots share the screen as a column, in the order they were made: each takes the
+row-major in equal columns, or in columns its tracks size: `layout::planGrid` gives each track to `distribute` as a
+stack item, a content track's natural width its widest cell that spans only it. A wrapping row
+(`setWrap`) fills lines with `layout::planWrap`: each child's basis is its natural extent, a Fixed child's amount, or a
+Stretch child's minimum (no more than its natural extent when it has one), and a child starts a new line when its basis
+and a gap do not fit after those on the line; each line is solved by `distribute`, a Stretch child's minimum there being
+its basis, and a line with no Stretch child places its spare length by `justify`. A line is as
+tall as its tallest child and lines are `stepCells(gap, Vertical)` apart, so step 1 is a column between children and no
+row between lines. The row's natural height is its lines' at the width it was last drawn at: a change of width asks for
+another frame. Several roots share the screen as a column, in the order they were made: each takes the
 height it asks for, and the last shown one what is left; a single root takes the whole screen.
 
 Across a stack's axis, a Content or Stretch child fills the stack's extent and a Fixed child gets its amount, clamped
@@ -133,6 +163,10 @@ of a panel, slot or scroll area, fills its width the same way, and a grid row is
 requested height clamped into that cell's bounds. A widget's requested size, which a container's natural size sums,
 is its natural size clamped into its bounds.
 
+**Content that does not fit.** The terminal cuts content at its container's edge. It neither reports it nor scrolls a page sideways: it has no diagnostics channel that does not draw over the screen, and a table's columns past its edge cannot be reached.
+
+**Bleed.** A shown child whose layout says `bleed` takes the whole width of its container past the padding (`bleedAreas`): a column's, the inner edges of a panel's frame, a tabs node's, whatever the page inset; its place down the container is unchanged. The terminal clips a child to its parent's area, so a holder stack (`setPassesBleed`) is laid out by its container over the container's whole span, past the padding (`bleedAreas` widens it as it does a bleeding child), and pads its own children by the container's `bleedColumns` instead; its bleeding children then take the holder's whole width.
+
 **Alignment.** Across the axis a child's `alignSelf`, else its stack's `align`, places it (`slotOf`): under `start`,
 `center` or `end` a Content child takes its requested extent instead of the stack's (`alignedExtent`), every other
 child its `crossExtent`, and one narrower than the space is offset to the start, the centre (rounded down) or the end
@@ -140,7 +174,8 @@ child its `crossExtent`, and one narrower than the space is offset to the start,
 `justify`: before the first child, half of it for `center` and all of it for `end`; for `between`, `spare / (shown −
 1)` cells added to every gap and the remainder one cell to each gap from the first. A grid places each cell in its row
 the same way by the cell's `alignSelf`, else the grid's `align`; across its column the cell fills the width as
-before.
+before, except that a track with `align` `center` or `end` places a cell drawn at its natural width
+(`placedAcrossColumn`: a text, a badge, a check box, a push button) there, as a table column does.
 
 **Spacing.** A `gap` or `padding` arrives as a spacing step, 0 to 5 (`ui::spacingStep`), and the container maps it to
 cells by axis with `layout::stepCells`. A cell is about twice as tall as it is wide, so a step is about half as many
@@ -159,13 +194,20 @@ its top and bottom and columns at its sides.
 A dialog's or a drawer's box is an overlay shown while it is open and the user could see it. The box on top is modal:
 Tab cycles inside it, and neither the pointer nor a key reaches anything behind it. Opening moves the focus inside;
 closing hands it back to the widget that had it. Esc inside the open box closes it, and then calls `onDismiss`, as a
-toolkit's dismissal does: an application that keeps it open opens it again.
+toolkit's dismissal does: an application that keeps it open opens it again. A description is drawn muted on the
+first row inside the frame, under the title in the border, then a `─` rule row, and the content is laid out below,
+two rows lower; it is one row, clipped at the frame's width like any terminal text, and the box's
+`accessibleDescription()`.
 
 ## Keys and chords
 
-A key goes to the focused view and bubbles to its ancestors until one handles it. A widget's own key handling comes
-first; a key it leaves goes to the widget's chords, and on to the next ancestor. The innermost widget declaring a
-chord therefore takes it, and a hidden or disabled widget, which takes no key, runs none.
+A key goes to the focused view and bubbles to its ancestors until one handles it, in the order every backend follows
+([`backend_contract.md`](../ui/backend_contract.md), Chords). A widget's own chords come first: `WidgetBase::dispatch`,
+a field's view and a list's view each try the widget's chords before its own handling of the key. Then the widget's
+own handling, and a key it leaves bubbles on to the next ancestor, which tries its chords the same way. The innermost
+widget declaring a chord therefore takes it, and a hidden or disabled widget, which takes no key, runs none. A handler
+may destroy the widget, so a handled key returns at once; a text input that commits on Enter without submitting lets
+the key bubble only while it is still alive.
 
 A chord is modifiers (`Ctrl` or `Control`, `Alt`, `Shift`, `Super`, `Meta` or `Cmd`) joined by `+` to one character
 or a named key (`Enter`, `Tab`, `Escape`, `Space`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`,
@@ -183,9 +225,16 @@ there. Esc ends a drag with no drop. A terminal without mouse reporting ignores 
 
 ## Field state
 
-A field shows its state as marks at the right edge of its first row: `*` required, `!` with errors, `~` stale. The
+A field shows its state as marks at the right edge of its control's first row: `*` required, `!` with errors, `~`
+stale; a field toned `err` or `warn` adds `!` too, since the terminal draws no outline. Its description takes the
+rows under the control, muted or in the tone's style, one per line and clipped at the field's width; the messages,
+the description and a text input's unit are its `accessibleDescription()`, and its hover text follows the tooltip with them. A
+captioned field draws its `*` after its caption instead, as ` *` in the error style, and its caption's width
+counts those two cells; a required text draws ` *` after its last line's end, and its natural width counts them, so
+in a row it is not drawn over the text's last characters (given less, it is drawn at the right edge). The
 messages show on hover, after the tooltip. A read-only field takes the focus and moves its cursor and selection, but
-any edit is undone and nothing is reported: no change, submit, commit, toggle or choice.
+any edit is undone and nothing is reported: no change, submit, commit, toggle or choice. A field draws no input
+fill, so a read-only one reads as its text in place, in the normal text colour where a disabled one is muted.
 
 ## The conformance probe
 

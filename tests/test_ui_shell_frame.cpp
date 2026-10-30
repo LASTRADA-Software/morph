@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The shell frame (docs/spec/ui/shell_frame.md): the sidebar with the application's name and the navigator, the top
-// bar with the title, the principal and sign-out, and the page; signed out, only the page.
+// The shell frame (docs/spec/ui/shell_frame.md): the sidebar with the application's name, the navigator, the
+// principal and sign-out, the top bar with the title and the head, and the page; signed out, only the page.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <iterator>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/shell_frame.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
@@ -39,7 +41,7 @@ TEST_CASE("shell frame: a sidebar with the navigator, a top bar and the page, on
     frame.setPrincipal("alice");
 
     int const sidebar = backend.find("Row", "testId", "shell_sidebar").value();
-    int const topBar = backend.find("Row", "testId", "shell_topbar").value();
+    int const topBar = backend.find("Column", "testId", "shell_topbar").value();
     int const page = backend.find("Column", "testId", "shell_page").value();
     CHECK(backend.prop(sidebar, "surface") == "sidebar");
     CHECK(backend.prop(sidebar, "layout") == "fixed(28)/stretch(1)");
@@ -49,10 +51,16 @@ TEST_CASE("shell frame: a sidebar with the navigator, a top bar and the page, on
     CHECK(backend.prop(backend.find("Text", "testId", "shell_principal").value(), "text") == "alice");
     CHECK(backend.prop(backend.find("Text", "testId", "shell_application").value(), "text") == "Morph Bookmarks");
 
-    // The head slot (#1027): its own stretch, independent of whatever is mounted inside it, so it keeps claiming
-    // room in the top bar even while an active tab's head row is hidden.
-    int const headSlot = backend.find("Row", "testId", "shell_head").value();
-    CHECK(backend.prop(headSlot, "layout") == "stretch(1)/content");
+    // The principal and the sign-out button sit at the sidebar's foot, below the navigator.
+    int const side = backend.children(sidebar).at(1);
+    int const navigator = backend.find("Column", "testId", "navigator").value();
+    int const principalText = backend.find("Text", "testId", "shell_principal").value();
+    int const signOutButton = backend.find("Button", "testId", "shell_signOut").value();
+    std::vector<int> const foot = backend.children(side);
+    auto const position = [&foot](int widget) { return std::ranges::find(foot, widget) - foot.begin(); };
+    CHECK(position(navigator) < position(principalText));
+    CHECK(position(principalText) + 1 == position(signOutButton));
+    CHECK(backend.prop(navigator, "layout") == "content/stretch(1)");
 
     backend.click(backend.find("Button", "testId", "nav_bookmarks.tags").value());
     CHECK(opened == std::vector<std::string>{"bookmarks.tags"});
@@ -93,8 +101,332 @@ TEST_CASE("shell frame: signed out, the sidebar and the top bar are hidden", "[u
     ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
     frame.showSignedIn(false);
     CHECK(backend.prop(backend.find("Row", "testId", "shell_sidebar").value(), "visible") == "false");
-    CHECK(backend.prop(backend.find("Row", "testId", "shell_topbar").value(), "visible") == "false");
+    CHECK(backend.prop(backend.find("Column", "testId", "shell_topbar").value(), "visible") == "false");
     CHECK_FALSE(backend.hasProp(backend.find("Column", "testId", "shell_page").value(), "visible"));
     frame.showSignedIn(true);
     CHECK(backend.prop(backend.find("Row", "testId", "shell_sidebar").value(), "visible") == "true");
+}
+
+namespace {
+
+/// Whether @p node is @p ancestor or one of its descendants.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the ancestor, then the node, as a containment reads.
+bool within(RecordingBackend const& backend, int ancestor, int node) {
+    std::vector<int> pending{ancestor};
+    while (!pending.empty()) {
+        int const at = pending.back();
+        pending.pop_back();
+        if (at == node) {
+            return true;
+        }
+        std::ranges::copy(backend.children(at), std::back_inserter(pending));
+    }
+    return false;
+}
+
+}  // namespace
+
+// Mutation: put the head slots back on a line of their own (outside `shell_topbar_main`), start them shown, start the
+// top line without the wrap before its children, or leave the lead block without its minimum.
+TEST_CASE("shell frame: the head shares the title's wrapping line, its slots shown only when the client says",
+          "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const main = backend.find("Row", "testId", "shell_topbar_main").value();
+    int const lead = backend.find("Column", "testId", "shell_head_lead").value();
+    int const eyebrow = backend.find("Column", "testId", "shell_head_eyebrow").value();
+    int const slot = backend.find("Row", "testId", "shell_head").value();
+    int const title = backend.find("Text", "testId", "shell_title").value();
+    int const menu = backend.find("Menu", "testId", "shell_nav_menu").value();
+    // The second line and its scroll are gone.
+    CHECK_FALSE(backend.find("Row", "testId", "shell_head_line").has_value());
+    CHECK_FALSE(backend.find("Scroll", "testId", "shell_head_scroll").has_value());
+    // The wrapping row holds the menu, the lead block (the eyebrow, the title line and the lead slot) and the trail
+    // slot; the inline lead shares the title's line.
+    CHECK(backend.prop(main, "wrap") == "true");
+    CHECK(backend.prop(main, "justify") == "end");
+    REQUIRE(backend.children(main).size() == 3);
+    CHECK(backend.children(main).at(0) == menu);
+    int const block = backend.children(main).at(1);
+    CHECK(backend.prop(block, "layout") == "stretch(1) min=32/content");
+    int const titleLine = backend.find("Row", "testId", "shell_title_line").value();
+    int const inlineSlot = backend.find("Row", "testId", "shell_head_inline").value();
+    CHECK(backend.children(block) == std::vector<int>{eyebrow, titleLine, lead});
+    CHECK(backend.prop(titleLine, "wrap") == "true");
+    CHECK(backend.children(titleLine) == std::vector<int>{title, inlineSlot});
+    CHECK(backend.children(main).at(2) == slot);
+    // The pad spacers are outside the wrapping row, so every line of it is padded at both ends.
+    CHECK(within(backend, backend.find("Row", "testId", "shell_topbar_line").value(), main));
+    CHECK_FALSE(backend.hasProp(backend.find("Row", "testId", "shell_topbar_line").value(), "wrap"));
+
+    CHECK(backend.prop(lead, "visible") == "false");
+    CHECK(backend.prop(slot, "visible") == "false");
+    CHECK(backend.prop(eyebrow, "visible") == "false");
+    frame.setHeadShown(true);
+    CHECK(backend.prop(lead, "visible") == "true");
+    CHECK(backend.prop(slot, "visible") == "true");
+    CHECK(backend.prop(eyebrow, "visible") == "true");
+    frame.setHeadShown(false);
+    CHECK(backend.prop(lead, "visible") == "false");
+    CHECK(backend.prop(slot, "visible") == "false");
+    CHECK(backend.prop(eyebrow, "visible") == "false");
+}
+
+// Control: route the last index to `Navigator::choose`, and sign-out is not called.
+TEST_CASE("shell frame: compact, the navigation menu ends with the principal's sign-out entry", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    frame.setPrincipal("alice");
+    frame.setCompact(true);
+    int const menu = backend.find("Menu", "testId", "shell_nav_menu").value();
+    std::string const items = backend.prop(menu, "items");
+    CHECK(items.contains("Sign out"));
+    CHECK(items.contains("alice"));
+    // Entries: the group, then a separator and the sign-out entry; the navigator's own path 0 is the group.
+    std::size_t const last = frame.navigator().menuEntries().size() + 1;
+    backend.chooseMenuEntry(menu, {last});
+    CHECK(signOuts == 1);
+    CHECK(opened.empty());
+    backend.chooseMenuEntry(menu, {0, 1});
+    CHECK(signOuts == 1);
+    CHECK(opened == std::vector<std::string>{"bookmarks.tags"});
+}
+
+// Control: a frame without a sign-out handler lists no sign-out entry and shows no principal button.
+TEST_CASE("shell frame: without a sign-out handler there is no sign-out button and no sign-out entry", "[ui][shell]") {
+    RecordingBackend backend;
+    ShellFrameOptions options;
+    options.applicationName = "App";
+    options.navigator.entries = {CatalogEntry{.id = "a.b", .title = "B", .group = "G"}};
+    ShellFrame frame{backend, nullptr, std::move(options)};
+    frame.setPrincipal("alice");
+    frame.setCompact(true);
+    CHECK(backend.prop(backend.find("Button", "testId", "shell_signOut").value(), "visible") == "false");
+    CHECK_FALSE(backend.prop(backend.find("Menu", "testId", "shell_nav_menu").value(), "items").contains("Sign out"));
+}
+
+// Control: a no-op setCompact (the sidebar stays shown and the navigation menu hidden); or leave the menu's items
+// stale after a count (its first entry keeps the label without it).
+TEST_CASE("shell frame: compact, the sidebar and the principal give way to a navigation menu", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    frame.showSignedIn(true);
+    int const sidebar = backend.find("Row", "testId", "shell_sidebar").value();
+    int const menu = backend.find("Menu", "testId", "shell_nav_menu").value();
+    CHECK(backend.prop(menu, "visible") == "false");
+    CHECK(backend.prop(menu, "icon") == "nav.menu");
+    CHECK(backend.prop(menu, "a11yName") == "Navigation");
+    // First in the top bar's wrapping line.
+    int const line = backend.find("Row", "testId", "shell_topbar_main").value();
+    CHECK(backend.children(line).at(0) == menu);
+
+    frame.setCompact(true);
+    CHECK(frame.compact());
+    CHECK(backend.prop(sidebar, "visible") == "false");
+    CHECK(backend.prop(menu, "visible") == "true");
+    frame.navigator().setBadge("bookmarks.tags", morph::ui::NavigatorBadge{.text = "2", .tone = {}});
+    CHECK(backend.prop(menu, "items").contains("Tags · 2"));
+    backend.chooseMenuEntry(menu, {0, 1});
+    CHECK(opened == std::vector<std::string>{"bookmarks.tags"});
+
+    // Signed out, the top bar goes, and the sidebar stays hidden when the frame is no longer compact.
+    frame.showSignedIn(false);
+    frame.setCompact(false);
+    CHECK(backend.prop(sidebar, "visible") == "false");
+    frame.showSignedIn(true);
+    CHECK(backend.prop(sidebar, "visible") == "true");
+    CHECK(backend.prop(menu, "visible") == "false");
+}
+
+// Control: ignore the runs (`shell_title` keeps the plain title), or keep them after they are cleared.
+TEST_CASE("shell frame: the title draws a screen's runs in place of its plain title, until they are cleared",
+          "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const title = backend.find("Text", "testId", "shell_title").value();
+    frame.setTitle("Plate PL-0193");
+    CHECK(backend.prop(title, "text") == "Plate PL-0193");
+    CHECK_FALSE(backend.hasProp(title, "spans"));
+
+    frame.setTitleSpans({{.text = "Plate "}, {.text = "PL-0193", .mono = true}});
+    CHECK(backend.prop(title, "spans") == "[Plate ,PL-0193;mono]");
+    // A new caption while the runs show does not replace them.
+    frame.setTitle("Plate PL-0200");
+    CHECK(backend.prop(title, "spans") == "[Plate ,PL-0193;mono]");
+
+    frame.setTitleSpans({});
+    CHECK(backend.prop(title, "text") == "Plate PL-0200");
+}
+
+// Control: make `setPageInset` a no-op (the spacers stay shown).
+TEST_CASE("shell frame: a frame insets its page until it is told the screen insets itself", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const page = backend.find("Column", "testId", "shell_page").value();
+    REQUIRE(backend.children(page).size() == 2);
+    int const top = backend.children(page).at(0);
+    int const padded = backend.children(page).at(1);
+    REQUIRE(backend.children(padded).size() == 3);
+    int const left = backend.children(padded).at(0);
+    int const right = backend.children(padded).at(2);
+
+    CHECK_FALSE(backend.hasProp(top, "visible"));
+    frame.setPageInset(false);
+    for (int const spacer : {top, left, right}) {
+        CHECK(backend.prop(spacer, "visible") == "false");
+    }
+    frame.setPageInset(true);
+    for (int const spacer : {top, left, right}) {
+        CHECK(backend.prop(spacer, "visible") == "true");
+    }
+}
+
+// Control: give the heading the `Section` role (the recording reads `Section`).
+TEST_CASE("shell frame: the navigator's group headings are overlines", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const heading = backend.find("Text", "testId", "navigator_group_/Library").value();
+    CHECK(backend.prop(heading, "role") == "Overline");
+}
+
+// Mutation: leave the gaps alone (the compact top line keeps steps 3 and 3).
+TEST_CASE("shell frame: the compact top line pads its ends by step 1 and spaces its items by step 2", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const line = backend.find("Row", "testId", "shell_topbar_line").value();
+    int const main = backend.find("Row", "testId", "shell_topbar_main").value();
+    CHECK(backend.prop(line, "gap") == "3");
+    CHECK(backend.prop(main, "gap") == "3");
+
+    frame.setCompact(true);
+    CHECK(backend.prop(line, "gap") == "1");
+    CHECK(backend.prop(main, "gap") == "2");
+
+    frame.setCompact(false);
+    CHECK(backend.prop(line, "gap") == "3");
+    CHECK(backend.prop(main, "gap") == "3");
+}
+
+// Mutation: a no-op `setLeadInline`, or size the lead block or the slot by the placement.
+TEST_CASE("shell frame: an inline lead shows its slot on the title's line and changes no sizing", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const main = backend.find("Row", "testId", "shell_topbar_main").value();
+    int const inlineSlot = backend.find("Row", "testId", "shell_head_inline").value();
+    int const block = backend.children(main).at(1);
+    std::string const blockLayout = backend.prop(block, "layout");
+    std::string const slotLayout = backend.prop(inlineSlot, "layout");
+
+    frame.setHeadShown(true);
+    CHECK(backend.prop(inlineSlot, "visible") == "false");
+    CHECK(backend.prop(block, "layout") == "stretch(1) min=32/content");
+
+    frame.setLeadInline(true);
+    CHECK(backend.prop(block, "layout") == blockLayout);
+    CHECK(backend.prop(inlineSlot, "layout") == slotLayout);
+    CHECK(backend.prop(inlineSlot, "visible") == "true");
+
+    frame.setHeadShown(false);
+    CHECK(backend.prop(inlineSlot, "visible") == "false");
+    frame.setHeadShown(true);
+    frame.setLeadInline(false);
+    CHECK(backend.prop(block, "layout") == "stretch(1) min=32/content");
+    CHECK(backend.prop(inlineSlot, "visible") == "false");
+}
+
+// Mutation: a no-op `setHeadOneLine`.
+TEST_CASE("shell frame: a one-line head centres the top line's items, a taller one aligns their tops", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const main = backend.find("Row", "testId", "shell_topbar_main").value();
+    CHECK(backend.prop(main, "align") == "start");
+    frame.setHeadOneLine(true);
+    CHECK(backend.prop(main, "align") == "center");
+    frame.setHeadOneLine(false);
+    CHECK(backend.prop(main, "align") == "start");
+}
+
+// Mutation: set the surface once, in the constructor.
+TEST_CASE("shell frame: the top bar's surface is the joined one, else the screen's, else the toolbar", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const bar = backend.find("Column", "testId", "shell_topbar").value();
+    CHECK(backend.prop(bar, "surface") == "toolbar");
+    frame.setHeadSurface("darkHead");
+    CHECK(backend.prop(bar, "surface") == "darkHead");
+    frame.setHeadSurface("");
+    CHECK(backend.prop(bar, "surface") == "toolbar");
+
+    frame.setHeadJoined(true);
+    CHECK(backend.prop(bar, "surface") == "toolbarJoined");
+    frame.setHeadSurface("darkHead");
+    CHECK(backend.prop(bar, "surface") == "toolbarJoined");
+    frame.setCompact(true);
+    CHECK(backend.prop(bar, "surface") == "toolbarJoined");
+    frame.setHeadJoined(false);
+    CHECK(backend.prop(bar, "surface") == "darkHead");
+}
+
+// Mutation: a no-op `setPrincipalInHead`.
+TEST_CASE("shell frame: the principal can sit in the top bar instead of the sidebar, and compact shows it in neither",
+          "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    frame.setPrincipal("Dr. A. Meyer");
+    int const sidebarPrincipal = backend.find("Text", "testId", "shell_principal").value();
+    int const headPrincipal = backend.find("Text", "testId", "shell_head_principal").value();
+    CHECK(backend.prop(sidebarPrincipal, "visible") != "false");
+    CHECK(backend.prop(headPrincipal, "visible") == "false");
+
+    frame.setPrincipalInHead(true);
+    CHECK(backend.prop(headPrincipal, "text") == "Dr. A. Meyer");
+    CHECK(backend.prop(headPrincipal, "visible") == "true");
+    CHECK(backend.prop(sidebarPrincipal, "visible") == "false");
+    int const line = backend.find("Row", "testId", "shell_topbar_line").value();
+    int const main = backend.find("Row", "testId", "shell_topbar_main").value();
+    std::vector<int> const lineChildren = backend.children(line);
+    auto const at = [&lineChildren](int widget) {
+        return std::ranges::find(lineChildren, widget) - lineChildren.begin();
+    };
+    CHECK(at(headPrincipal) == at(main) + 1);
+
+    frame.setCompact(true);
+    CHECK(backend.prop(headPrincipal, "visible") == "false");
+    CHECK(backend.prop(sidebarPrincipal, "visible") == "false");
+}
+
+// Mutation: ignore the name, or leave the empty name as the surface.
+TEST_CASE("shell frame: the page area is drawn on the surface the screen asks for, else page", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const page = backend.find("Column", "testId", "shell_page").value();
+    CHECK(backend.prop(page, "surface") == "page");
+    frame.setPageSurface("plainPage");
+    CHECK(backend.prop(page, "surface") == "plainPage");
+    frame.setPageSurface("");
+    CHECK(backend.prop(page, "surface") == "page");
 }

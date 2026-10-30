@@ -32,7 +32,7 @@ and is its `InterpreterHost` for `navigate`.
 | `ParamMap` | A screen's params by name: `ValueRecord`, what `Interpreter::mount` takes. |
 | `MountError` | `{screenId, reason}`: an unknown screen, a refused param, a refused mount. |
 | `ScreenHandle` | One mounted screen: `title()`, `dirty()` and `identity()` as `reactive::Computed`, `requestClose(done)`, `forceClose()`, the save seam `canSave()` and `save(done)`, and `head()`. |
-| `ScreenHead` | A screen's head beside its title: `subtitle()`, `status()` (the visible `HeadBadge{text, tone, icon}`s) and `actions()` (the visible `HeadAction{id, label, icon, emphasis, enabled}`s) as `reactive::Computed`, and `run(actionId)`. |
+| `ScreenHead` | A screen's head beside its title: `pageEdge()` (whether the shown root lays itself at the page's edges), `headJoined()` (whether the shown root continues the head's block), `leadPlacement()` (a nullable `reactive::Computed<LeadPlacement>`: where the lead sits), `headSurface()` and `pageSurface()` (nullable `reactive::Computed<std::string>`s: the surfaces the screen asks the top bar and the page area to be drawn on), `eyebrow()`, `eyebrowSpans()` and `titleSpans()`, nullable `reactive::Computed` pointers to the line above the title and the title's runs, `subtitle()`, `status()` (the visible `HeadBadge{text, tone, icon}`s) and `actions()` (the visible `HeadAction{id, label, icon, iconOnly, emphasis, enabled}`s) as `reactive::Computed`, and `run(actionId)`; the head's own menu, `menu()` (the visible `HeadMenuEntry`s) and `menuLabel()`, nullable `reactive::Computed` pointers, and `choose(entryId)`; `tools()` (the visible `HeadTool`s), a nullable `reactive::Computed` pointer, and `edit(toolId, value)` and `submit(toolId)`; the menu and tool members have defaults for a head without them. |
 | `ScreenHost` | `mount(screenId, params)`, `identityOf(screenId, params)`, and `onNavigate(screenId, params)`, which the host implements. |
 
 `identity()` is beside spec 6 §4's `title` and `dirty` because a host re-keys a tab when a screen's identity
@@ -62,6 +62,11 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
 - **`mountInto(screenId, params, parent)`** mounts as `mount` does, with the screen's root widget appended to the
   host's own container instead of made a backend root: a tab's page, a pane. The container outlives the handle. A
   refused mount leaves the container as it was.
+- **`mountApp(document)`** mounts the app document as the session's root scope (`Interpreter::mountApp`,
+  [interpreter.md](interpreter.md#the-app-root-scope)) through the host's own interpreter, so the app document's
+  commands reach the same hosts as the screens' (its `navigate` is this host's) and its diagnostics the same
+  `diagnostics` callback. A missing document, one whose id is not `app`, and a second root on the session are
+  `MountError`. The `AppRoot` is destroyed after the screens that read `app.*` and before the host.
 - **`remount(handle, document)`** mounts a changed document of a screen it mounted, with the same params in the
   same place, and replaces the screen behind the same handle (spec 5 §12, development reload;
   [`service.md`](service.md#development-reload)).
@@ -94,24 +99,57 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
   this host's documents.
 - **`navigate`.** A document's `navigate` to a screen reaches `onNavigate(NavigateRequest)`, which by default
   calls `onNavigate(screenId, params)`; a host that shows dialogs, drawers or windows overrides the first to read
-  `as`. A `navigate` that names no screen (a route) goes to the application's host.
-- **Call and return** (§16). A `navigate` with `onResult` or `onCancel` files a call. The next `mount` of that
-  screen with equal params adopts it, so the host decides how to show the callee and the framework still ties the
-  answer to the opener. The callee answers exactly once: `{"return": e}` runs `onResult` with `e`; `close: self` and
-  any other close (the platform's, `forceClose`, a destroyed handle) run `onCancel`. After `return` or `close: self`
-  the host closes the callee (posted, since the command is still running in it) and calls `onScreenClosed(handle)`,
-  so the host drops its tab or dialog. A `return` from a screen that answers no call goes to the application's
-  host.
+  `as`. The framework's workspace is such a host: `Workspace::openOverlay` shows a document screen as a dialog or a
+  drawer over the tabs ([workspace.md](workspace.md#overlays)), and the generic client routes `as: dialog` and
+  `as: drawer` there. A `navigate` that names no screen (a route) goes to the application's host.
+- **Call and return** (§16). A `navigate` with `onResult` or `onCancel` files a call, and its `NavigateRequest`
+  says so (`call`); one with neither files none, so the screen it opens answers nobody. The next `mount` of that
+  screen with equal params adopts the oldest such call, so the host decides how to show the callee and the framework
+  still ties the answer to the opener. The callee answers exactly once: `{"return": e}` runs `onResult` with `e`;
+  `close: self` outside any dialog or drawer, and any other close (the platform's, `forceClose`, a destroyed handle),
+  run `onCancel`. After `return` or such a `close: self` the host closes the callee (posted, since the command is
+  still running in it) and calls `onScreenClosed(handle)`, so the host drops its tab or dialog; the workspace does
+  this in `Workspace::screenClosed`. A `return` from a screen that answers no call goes to the application's host.
+- **A navigation that mounts nothing.** A host that handles a navigation whose `call` is set without mounting that
+  document screen (it focused an open tab, the mount was refused, the screen is a host screen, or it dropped the
+  navigation) calls the protected `settleCall(screenId, params)`: the oldest unclaimed call of that screen and params,
+  the one a mount would have adopted, is answered with `onCancel`, and the cancel is reported to `diagnostics`
+  (`navigate to <screen> mounted no screen; its call was cancelled`). One call per such navigation, oldest first as
+  adoption is, so a second navigation filed before the first was handled keeps its own call for its own mount. Left
+  unclaimed, the call would never be answered, and the next mount of that screen with those params, opened for any
+  reason, would answer an opener that never opened it, and close itself as a callee does. A focused tab never adopts
+  the call: a screen the user opened for their own purpose would otherwise answer, and close itself, for an opener
+  it never saw. `cancelUnclaimedCalls()` cancels every call no mount has adopted, oldest first; the workspace calls
+  it when it closes every tab, so no call outlives the screens it was filed among.
 - `title()` is the document's `title` as text: a string as is, `null` as empty, anything else as its canonical JSON.
   `dirty()` is whether `dirty` is `true`. `title()` and `identity()` keep their last values once the screen has
   closed, and `dirty()` is then `false`.
-- `head()` of a document screen is its head: the document's `subtitle` as text, its visible `status` badges and its
+- `head()` of a document screen is its head: the document's `eyebrow` and `eyebrowSpans`, its `titleSpans` as runs, its `subtitle` as text, its visible `status` badges and its
   visible `actions`, empty when the document declares none. A host screen's `head()` is null unless its handle
   overrides it. `run(id)` runs the action's `onClick` as a user event in the screen scope, in one batch, and answers
   `true`; for an id the head does not hold, or holds hidden or disabled, it answers `false` and reports a diagnostic
   (`head action <id> is unknown`, `… is hidden`, `… is disabled`). `subtitle()` keeps its last value once the screen
   has closed, `status()` and `actions()` are then empty, and after a `remount` the head follows the new screen.
   `HeadBadge` and `HeadAction` are declared in `interpreter.hpp`, since `Screen` answers them.
+- The head's own menu is data too. `menu()` of a document screen is never null: its visible entries, each a
+  `HeadMenuEntry{id, label, icon, keys, checked, enabled, items, separator, description}`, with a separator that
+  hidden entries leave first, last or beside another left out, as a `menu` node's mount leaves it out; empty when
+  the document declares no `menu`, and once the screen has closed. `menuLabel()` is the document's `menuLabel` as
+  text, `More actions` by default, and keeps its last value once the screen has closed. `choose(id)` runs the entry's
+  `onClick` as a user event in the screen scope, in one batch, and answers `true`; for an id the menu does not hold,
+  or holds hidden or disabled (itself or a submenu it is in), it answers `false` and reports `head menu entry <id> is
+  unknown`, `… is hidden` or `… is disabled`. Choosing by id rather than by place is what keeps an entry hidden
+  between drawing and choosing from running its neighbour. A host screen's head answers null for both, and `false`
+  from `choose`, unless it overrides them.
+- The head's tools are data as well. `tools()` of a document screen is never null: its visible tools, each a
+  `HeadTool{id, kind, label, value, placeholder, options, selected, width, enabled}` (`kind` a `HeadToolKind`,
+  `Search` or `Select`; `width` 0 for the content's), empty when the document declares none and once the screen has
+  closed. `edit(id, value)` reports a user's edit: a search's text runs its `onChange`, a select's key (as a value)
+  its `onChoose`, with `event` the edit, as a user event in the screen scope in one batch; `submit(id)` runs a
+  search's `onSubmit` with `event` its text. Both answer `true` when they ran; `false`, reporting `head tool <id> is
+  unknown`, `… is hidden` or `… is disabled`, for an id the head does not hold enabled and visible, and for a search
+  edited with anything but text or a select submitted. A tool's value changes only when the document's binding does.
+  A host screen's head answers null and `false` unless it overrides them.
 
 ## The close protocol
 

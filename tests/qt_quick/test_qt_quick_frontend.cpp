@@ -98,8 +98,7 @@ qt_quick::FrontendConfig configWith(std::vector<std::string>& log, std::function
             return shell;
         },
         .components = nullptr,
-        .title = "test",
-        .onWidthClass = {}};
+        .title = "test"};
 }
 
 }  // namespace
@@ -149,8 +148,7 @@ TEST_CASE("qt_quick frontend: a shell factory that throws ends the run after the
         .mountShell = [](ui::AppContext&, ui::IViewBackend&, std::expected<ui::Bundle, ui::ConnectError>)
             -> std::unique_ptr<ui::MountedShell> { throw std::runtime_error{"no shell"}; },
         .components = nullptr,
-        .title = "test",
-        .onWidthClass = {}};
+        .title = "test"};
     qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
     CHECK_THROWS_WITH(frontend.run(source), "no shell");
     CHECK(log.back() == "close");
@@ -370,4 +368,65 @@ TEST_CASE("qt_quick frontend: Ctrl+Shift+I opens the inspector only in developme
         // The application's window, and in development mode the inspector's window over it.
         CHECK(frontend.run(source) == (mode == ui::DevelopmentTools::On ? 2 : 1));
     }
+}
+
+namespace {
+
+/// A shell that records the backend's width class when it mounts and each change after.
+class WidthShell final : public ui::MountedShell {
+public:
+    WidthShell(ui::IViewBackend& backend, std::vector<std::string>& heard) : _backend{&backend} {
+        heard.push_back(backend.widthClass());
+        backend.setOnWidthClass([&heard](std::string const& widthClass) { heard.push_back(widthClass); });
+    }
+    ~WidthShell() override { _backend->setOnWidthClass({}); }
+    WidthShell(WidthShell const&) = delete;
+    WidthShell& operator=(WidthShell const&) = delete;
+    WidthShell(WidthShell&&) = delete;
+    WidthShell& operator=(WidthShell&&) = delete;
+
+private:
+    ui::IViewBackend* _backend;
+};
+
+// The window's width for @p units of the engine's Theme.
+int widthFor(QQmlEngine& engine, double units) {
+    auto* const theme = engine.singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    return static_cast<int>(units * theme->property("unitWidth").toDouble()) + 1;
+}
+
+}  // namespace
+
+// Mutation: class the window by its width in pixels (60 units, some 450 px, is then expanded), never tell the listener
+// (it hears the first class only), or leave the content item unsized until the window shows (the shell first reads
+// compact for a window that is not).
+TEST_CASE("qt_quick frontend: the shell reads the window's width class, and hears it change", "[qt_quick][frontend]") {
+    std::vector<std::string> log;
+    RecordingSource source{log};
+    std::vector<std::string> heard;
+    QQuickWindow* shown = nullptr;
+    QQmlEngine* engineOf = nullptr;
+    qt_quick::FrontendConfig config{
+        .mountShell = [&heard, &shown, &engineOf](ui::AppContext& context, ui::IViewBackend& backend,
+                                                  std::expected<ui::Bundle, ui::ConnectError> /*opened*/)
+            -> std::unique_ptr<ui::MountedShell> {
+            auto shell = std::make_unique<WidthShell>(backend, heard);
+            context.executor().post([&context, &shown, &engineOf] {
+                shown->resize(widthFor(*engineOf, 60), 900);
+                context.executor().post([&context] { context.quit(0); });
+            });
+            return shell;
+        },
+        .components = nullptr,
+        .title = "test",
+        .onEngine =
+            [&shown, &engineOf](QQmlEngine& engine, QQuickWindow& window) {
+                shown = &window;
+                engineOf = &engine;
+                window.resize(widthFor(engine, 100), 900);
+            }};
+    qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
+    CHECK(frontend.run(source) == 0);
+    CHECK(heard == std::vector<std::string>{"medium", "compact"});
 }

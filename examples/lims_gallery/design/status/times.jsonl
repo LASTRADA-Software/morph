@@ -1,0 +1,194 @@
+{"logged": "2026-10-25 12:08:03", "event": "group", "group": "A", "name": "Batch A: defects and responsive layout"}
+{"logged": "2026-10-25 12:08:03", "event": "group", "group": "B1", "name": "Batch B part 1: columns and the selection"}
+{"logged": "2026-10-25 12:08:03", "event": "group", "group": "B2", "name": "Batch B part 2: the row pipeline"}
+{"logged": "2026-10-25 12:08:03", "event": "group", "group": "C", "name": "Batch C: text, fields and small controls"}
+{"logged": "2026-10-25 12:08:03", "event": "group", "group": "D", "name": "Batch D: layout, overlays and navigation"}
+{"logged": "2026-10-25 12:08:03", "event": "group", "group": "E", "name": "Batch E: expressions and charts"}
+{"logged": "2026-10-25 12:12:03", "event": "start", "task": "D.1", "title": "Write the batch D design (resumed from its research)", "group": "D"}
+{"logged": "2026-10-25 12:16:53", "event": "report", "task": "D.1", "at": "2026-10-25 12:16:42"}
+{"logged": "2026-10-25 12:16:53", "event": "done", "task": "D.1", "fix_rounds": 0}
+{"logged": "2026-10-25 14:42:13", "event": "start", "task": "B1.1", "title": "Batch B part 1: finish G2, then G47, G29, G43, G30 and the gallery cleanup", "group": "B1"}
+{"logged": "2026-10-25 14:42:13", "event": "start", "task": "D.2", "title": "Review the batch D design", "group": "D"}
+{"logged": "2026-10-25 14:42:13", "event": "start", "task": "E.1", "title": "Write the batch E design", "group": "E"}
+{"logged": "2026-10-25 15:05:45", "event": "report", "task": "E.1"}
+{"logged": "2026-10-25 15:05:45", "event": "done", "task": "E.1", "fix_rounds": 0}
+{"logged": "2026-10-25 15:05:45", "event": "start", "task": "E.2", "title": "Review the batch E design", "group": "E"}
+{"logged": "2026-10-25 15:12:34", "event": "report", "task": "D.2"}
+{"logged": "2026-10-25 15:12:34", "event": "done", "task": "D.2", "fix_rounds": 1}
+{"logged": "2026-10-25 15:26:16", "event": "report", "task": "E.2"}
+{"logged": "2026-10-25 15:26:16", "event": "done", "task": "E.2", "fix_rounds": 1}
+{"logged": "2026-10-25 15:26:16", "event": "group", "group": "E1", "name": "Batch E1: expressions"}
+{"logged": "2026-10-25 15:26:16", "event": "start", "task": "E1.1", "title": "Batch E1: #1066, G36, #1065, half-up, G45, G37 and the gallery cleanup", "group": "E1"}
+{"logged": "2026-10-25 18:23:25", "event": "report", "task": "E1.1"}
+{"logged": "2026-10-25 18:24:41", "event": "done", "task": "E1.1", "fix_rounds": 0}
+{"logged": "2026-10-25 18:24:41", "event": "group", "group": "D1", "name": "Batch D part 1: following the data"}
+{"logged": "2026-10-25 18:24:42", "event": "start", "task": "D1.1", "title": "Batch D part 1: G51, G20, G32, G35, G16, G38, plus the app document's mount (#1063)", "group": "D1"}
+{"logged": "2026-10-25 18:24:42", "event": "group", "group": "E2", "name": "Batch E2: the chart"}
+{"logged": "2026-10-25 18:24:42", "event": "start", "task": "E2.1", "title": "Batch E2: G55 chart on Qt Quick and the terminal, and the gallery cleanup", "group": "E2"}
+{"logged": "2026-10-25 19:10:01", "event": "report", "task": "B1.1"}
+{"logged": "2026-10-25 19:10:01", "event": "done", "task": "B1.1", "fix_rounds": 0}
+{"logged": "2026-10-25 19:45:03", "event": "group", "group": "B2", "name": "Batch B part 2: the row pipeline"}
+{"logged": "2026-10-25 19:45:03", "event": "start", "task": "B2.1", "title": "Batch B part 2: G41, G31, G28, G44, G46, the showHeader flag and the gallery cleanup", "group": "B2"}
+{"logged": "2026-10-25 19:45:10", "event": "idle", "where": "D1.1", "since": "2026-10-25 19:10:01", "what": "session limit; resumed at the reset"}
+{"logged": "2026-10-25 19:45:10", "event": "idle", "where": "E2.1", "since": "2026-10-25 19:10:01", "what": "session limit; resumed at the reset"}
+{"logged": "2026-10-25 23:06:07", "event": "report", "task": "E2.1"}
+{"logged": "2026-10-25 23:06:07", "event": "done", "task": "E2.1", "fix_rounds": 0}
+{"logged": "2026-10-25 23:06:07", "event": "group", "group": "C", "name": "Batch C: text, fields and small controls"}
+{"logged": "2026-10-25 23:06:07", "event": "start", "task": "C.1", "title": "Batch C: plain text (#1058) first, then the design's order, and the gallery cleanup", "group": "C"}
+{"logged": "2026-10-26 07:10:50", "event": "idle", "where": "B2.1", "since": "2026-10-26 00:40:00", "what": "session limit, then waiting overnight to be resumed (counted from the 00:40 reset; the stop time before it is not recorded)"}
+{"logged": "2026-10-26 07:10:50", "event": "idle", "where": "C.1", "since": "2026-10-26 00:40:00", "what": "session limit, then waiting overnight to be resumed (counted from the 00:40 reset; the stop time before it is not recorded)"}
+{"logged": "2026-10-26 07:10:50", "event": "idle", "where": "D1.1", "since": "2026-10-26 00:40:00", "what": "session limit, then waiting overnight to be resumed (counted from the 00:40 reset; the stop time before it is not recorded)"}
+{"logged": "2026-10-26 09:37:10", "event": "report", "task": "D1.1"}
+{"logged": "2026-10-26 09:37:10", "event": "done", "task": "D1.1", "fix_rounds": 1}
+{"logged": "2026-10-26 09:37:10", "event": "group", "group": "D2", "name": "Batch D part 2: layout and controls"}
+{"logged": "2026-10-26 09:37:10", "event": "start", "task": "D2.1", "title": "Batch D part 2: G23, G18's menu node, G27 and the gallery cleanup", "group": "D2"}
+{"logged": "2026-10-26 12:18:06", "event": "idle", "where": "B2.1", "since": "2026-10-26 12:10:00", "what": "session limit; resumed after the 12:10 reset (the stop time before it is not recorded)"}
+{"logged": "2026-10-26 12:18:06", "event": "idle", "where": "C.1", "since": "2026-10-26 12:10:00", "what": "session limit; resumed after the 12:10 reset (the stop time before it is not recorded)"}
+{"logged": "2026-10-26 12:18:06", "event": "idle", "where": "D2.1", "since": "2026-10-26 12:10:00", "what": "session limit; resumed after the 12:10 reset (the stop time before it is not recorded)"}
+{"logged": "2026-10-26 12:34:54", "event": "report", "task": "B2.1"}
+{"logged": "2026-10-26 12:34:54", "event": "done", "task": "B2.1", "fix_rounds": 0}
+{"logged": "2026-10-26 15:51:29", "event": "report", "task": "D2.1"}
+{"logged": "2026-10-26 15:51:29", "event": "done", "task": "D2.1", "fix_rounds": 0}
+{"logged": "2026-10-26 15:51:29", "event": "group", "group": "FOLD", "name": "Folding the side branches"}
+{"logged": "2026-10-26 15:51:30", "event": "start", "task": "FOLD.1", "title": "Rebase E1 and D parts 1-2 onto batch B part 2, then the chart", "group": "FOLD"}
+{"logged": "2026-10-28 19:31:08", "event": "idle", "where": "C.1", "since": "2026-10-28 18:00:00", "what": "weekly usage limit; resumed after the Oct 28 18:00 reset (stopped on Oct 26 around 16:00; the exact stop time is not recorded)"}
+{"logged": "2026-10-28 19:31:08", "event": "idle", "where": "FOLD.1", "since": "2026-10-28 18:00:00", "what": "weekly usage limit; resumed after the Oct 28 18:00 reset (stopped on Oct 26 around 16:00; the exact stop time is not recorded)"}
+{"logged": "2026-10-28 20:19:09", "event": "report", "task": "FOLD.1"}
+{"logged": "2026-10-28 20:24:55", "event": "done", "task": "FOLD.1", "fix_rounds": 1}
+{"logged": "2026-10-28 20:25:04", "event": "group", "group": "D3", "name": "Batch D part 3: the head and overlays"}
+{"logged": "2026-10-28 20:25:05", "event": "start", "task": "D3.1", "title": "Batch D part 3: G18 head menu, G26, G4 and the gallery cleanup", "group": "D3"}
+{"logged": "2026-10-28 22:47:49", "event": "report", "task": "C.1"}
+{"logged": "2026-10-28 22:47:49", "event": "done", "task": "C.1", "fix_rounds": 0}
+{"logged": "2026-10-28 22:47:49", "event": "start", "task": "FOLD.2", "title": "Rebase batch C onto feat/lims-gallery", "group": "FOLD"}
+{"logged": "2026-10-28 23:07:04", "event": "report", "task": "D3.1"}
+{"logged": "2026-10-28 23:07:04", "event": "done", "task": "D3.1", "fix_rounds": 0}
+{"logged": "2026-10-28 23:07:04", "event": "group", "group": "D4", "name": "Batch D part 4: navigation"}
+{"logged": "2026-10-28 23:07:04", "event": "start", "task": "D4.1", "title": "Batch D part 4: G50 (#1064), G56 and the gallery cleanup", "group": "D4"}
+{"logged": "2026-10-29 01:24:28", "event": "report", "task": "D4.1"}
+{"logged": "2026-10-29 01:24:28", "event": "done", "task": "D4.1", "fix_rounds": 0}
+{"logged": "2026-10-29 07:39:11", "event": "report", "task": "FOLD.2"}
+{"logged": "2026-10-29 07:39:11", "event": "done", "task": "FOLD.2"}
+{"logged": "2026-10-29 07:39:12", "event": "start", "task": "FOLD.3", "title": "Rebase D parts 3-4 onto the C fold, verify everything once", "group": "FOLD"}
+{"logged": "2026-10-29 08:14:04", "event": "report", "task": "FOLD.3"}
+{"logged": "2026-10-29 08:14:04", "event": "done", "task": "FOLD.3", "fix_rounds": 3}
+{"logged": "2026-10-29 10:26:54", "event": "group", "group": "CI", "name": "Fixing PR #1045's first CI run"}
+{"logged": "2026-10-29 10:26:55", "event": "start", "task": "CI.1", "title": "Library: GCC shadow, WASM iota, tidy in include and src", "group": "CI"}
+{"logged": "2026-10-29 10:26:55", "event": "start", "task": "CI.2", "title": "Tests: MSVC narrowing and clang-tidy", "group": "CI"}
+{"logged": "2026-10-29 10:26:55", "event": "start", "task": "CI.3", "title": "Examples: the gallery's chart, a header name, clang-tidy", "group": "CI"}
+{"logged": "2026-10-29 11:23:30", "event": "done", "task": "CI.1"}
+{"logged": "2026-10-29 11:23:48", "event": "done", "task": "CI.2"}
+{"logged": "2026-10-29 11:38:31", "event": "done", "task": "CI.3"}
+{"logged": "2026-10-29 13:23:02", "event": "group", "group": "CI2", "name": "Fixing PR #1045's second CI run"}
+{"logged": "2026-10-29 13:23:02", "event": "start", "task": "CI2.1", "title": "Qt 6.8.1: qmllint and two qt_quick tests", "group": "CI2"}
+{"logged": "2026-10-29 13:23:02", "event": "start", "task": "CI2.2", "title": "Toolchain: clang-cl 128-bit division, GCC 15 maybe-uninitialized, coverage line hints", "group": "CI2"}
+{"logged": "2026-10-29 13:23:02", "event": "start", "task": "CI2.3", "title": "ui branch coverage back over its 92% floor", "group": "CI2"}
+{"logged": "2026-10-29 13:23:02", "event": "start", "task": "CI2.4", "title": "A test name ctest on Windows cannot select", "group": "CI2"}
+{"logged": "2026-10-29 13:23:02", "event": "done", "task": "CI2.4"}
+{"logged": "2026-10-29 14:38:21", "event": "done", "task": "CI2.1"}
+{"logged": "2026-10-29 14:39:15", "event": "done", "task": "CI2.2"}
+{"logged": "2026-10-29 15:29:30", "event": "done", "task": "CI2.3"}
+{"logged": "2026-10-29 17:23:25", "event": "group", "group": "CI3", "name": "Fixing PR #1045's third CI run"}
+{"logged": "2026-10-29 17:23:26", "event": "start", "task": "CI3.1", "title": "A dangling selection list in table rows (ASan, TSan, clang-cl)", "group": "CI3"}
+{"logged": "2026-10-29 17:23:35", "event": "start", "task": "CI3.2", "title": "DateTime wraps past year 6053 on MSVC", "group": "CI3"}
+{"logged": "2026-10-29 17:23:35", "event": "start", "task": "CI3.3", "title": "The gallery mount test's timeout under TSan", "group": "CI3"}
+{"logged": "2026-10-29 17:32:35", "event": "done", "task": "CI3.1"}
+{"logged": "2026-10-29 17:32:35", "event": "done", "task": "CI3.2"}
+{"logged": "2026-10-29 17:32:35", "event": "done", "task": "CI3.3"}
+{"logged": "2026-10-29 19:19:46", "event": "group", "group": "VC", "name": "Comparing every screen with its mockup"}
+{"logged": "2026-10-29 19:19:46", "event": "start", "task": "VC.1", "title": "Screens 1–4: e-signature, receipt, instrument, audit", "group": "VC"}
+{"logged": "2026-10-29 19:19:46", "event": "start", "task": "VC.2", "title": "Screens 5–7: samples, stability, plate", "group": "VC"}
+{"logged": "2026-10-29 19:19:46", "event": "start", "task": "VC.3", "title": "Screens 8–10: results, review, console", "group": "VC"}
+{"logged": "2026-10-29 19:27:23", "event": "done", "task": "VC.2"}
+{"logged": "2026-10-29 19:28:23", "event": "done", "task": "VC.3"}
+{"logged": "2026-10-29 19:33:33", "event": "done", "task": "VC.1"}
+{"logged": "2026-10-29 19:38:06", "event": "group", "group": "FG", "name": "Batches F and G: drawing the mockups in ui/1"}
+{"logged": "2026-10-29 19:38:06", "event": "start", "task": "FG.1", "title": "Batch F design: layout, theme and containers", "group": "FG"}
+{"logged": "2026-10-29 19:38:06", "event": "start", "task": "FG.2", "title": "Batch G design: component looks and text", "group": "FG"}
+{"logged": "2026-10-29 19:54:15", "event": "done", "task": "FG.1"}
+{"logged": "2026-10-29 19:54:15", "event": "start", "task": "FG.3", "title": "Batch F design review", "group": "FG"}
+{"logged": "2026-10-29 19:58:34", "event": "done", "task": "FG.2"}
+{"logged": "2026-10-29 19:58:34", "event": "start", "task": "FG.4", "title": "Batch G design review", "group": "FG"}
+{"logged": "2026-10-29 20:04:06", "event": "done", "task": "FG.3"}
+{"logged": "2026-10-29 20:04:06", "event": "start", "task": "FG.5", "title": "Batch F design revision", "group": "FG"}
+{"logged": "2026-10-29 20:07:39", "event": "done", "task": "FG.4"}
+{"logged": "2026-10-29 20:07:39", "event": "start", "task": "FG.6", "title": "Batch G design revision", "group": "FG"}
+{"logged": "2026-10-29 20:13:16", "event": "done", "task": "FG.5"}
+{"logged": "2026-10-29 20:13:16", "event": "group", "group": "F", "name": "Batch F: layout, theme and containers"}
+{"logged": "2026-10-29 20:13:16", "event": "start", "task": "F.L", "title": "F-L layout: F1, F4, F7", "group": "F"}
+{"logged": "2026-10-29 20:13:16", "event": "start", "task": "F.T", "title": "F-T theme: F8–F14, table padding", "group": "F"}
+{"logged": "2026-10-29 20:13:16", "event": "start", "task": "F.S", "title": "F-S shell and containers: F2, F6, F3, F10, F5", "group": "F"}
+{"logged": "2026-10-29 20:14:26", "event": "done", "task": "FG.6"}
+{"logged": "2026-10-29 21:55:55", "event": "done", "task": "F.T"}
+{"logged": "2026-10-29 23:14:47", "event": "done", "task": "F.L"}
+{"logged": "2026-10-30 00:17:38", "event": "done", "task": "F.S"}
+{"logged": "2026-10-30 00:17:38", "event": "start", "task": "F.I", "title": "Fold batch F onto the branch, verify, re-grab", "group": "F"}
+{"logged": "2026-10-30 00:28:45", "event": "done", "task": "F.I"}
+{"logged": "2026-10-30 00:28:45", "event": "start", "task": "F.X1", "title": "FX1: wrap row in a row, shell bar gutter, head wrapping, grab tooltip", "group": "F"}
+{"logged": "2026-10-30 00:28:45", "event": "start", "task": "F.X2", "title": "FX2: selected fill over content, padding narrowing columns, console fill", "group": "F"}
+{"logged": "2026-10-30 01:09:38", "event": "done", "task": "F.X2"}
+{"logged": "2026-10-30 01:25:15", "event": "done", "task": "F.X1"}
+{"logged": "2026-10-30 01:25:16", "event": "group", "group": "G", "name": "Batch G: component looks and text"}
+{"logged": "2026-10-30 01:25:16", "event": "start", "task": "G.C", "title": "G-C structure: G2, G3, G5, G10", "group": "G"}
+{"logged": "2026-10-30 01:25:16", "event": "start", "task": "G.B", "title": "G-B text and tables: G9, G4, G7, G6, screen fixes", "group": "G"}
+{"logged": "2026-10-30 01:25:16", "event": "start", "task": "G.A", "title": "G-A controls: G1, G8, G11, G12, screen fixes", "group": "G"}
+{"logged": "2026-10-30 04:44:50", "event": "done", "task": "G.C"}
+{"logged": "2026-10-30 05:24:17", "event": "done", "task": "G.B"}
+{"logged": "2026-10-30 05:25:02", "event": "done", "task": "G.A"}
+{"logged": "2026-10-30 05:25:02", "event": "start", "task": "G.I", "title": "Fold batch G, verify, re-grab", "group": "G"}
+{"logged": "2026-10-30 05:39:19", "event": "done", "task": "G.I"}
+{"logged": "2026-10-30 05:43:13", "event": "group", "group": "X", "name": "Final comparison and fixes"}
+{"logged": "2026-10-30 05:43:13", "event": "start", "task": "X.1", "title": "GX1 framework: dialog footer, row height, section cards, bar bleed, pager, tab overflow", "group": "X"}
+{"logged": "2026-10-30 05:43:13", "event": "start", "task": "X.2", "title": "GX2 screens: console, review, stability, samples, results, receipt, plate, e-signature, audit", "group": "X"}
+{"logged": "2026-10-30 06:15:15", "event": "done", "task": "X.2"}
+{"logged": "2026-10-30 06:15:16", "event": "start", "task": "X.3", "title": "CI fifth run: GCC shadow, Qt 6.8 qmllint and Accessible", "group": "X"}
+{"logged": "2026-10-30 06:38:58", "event": "done", "task": "X.1"}
+{"logged": "2026-10-30 06:38:58", "event": "done", "task": "X.3"}
+{"logged": "2026-10-30 06:43:15", "event": "group", "group": "H", "name": "Batch H: the gaps left after G"}
+{"logged": "2026-10-30 06:43:15", "event": "start", "task": "H.D", "title": "Batch H design", "group": "H"}
+{"logged": "2026-10-30 07:05:41", "event": "done", "task": "H.D"}
+{"logged": "2026-10-30 07:05:41", "event": "start", "task": "H.R", "title": "Batch H design review", "group": "H"}
+{"logged": "2026-10-30 07:10:04", "event": "done", "task": "H.R"}
+{"logged": "2026-10-30 07:10:04", "event": "start", "task": "H.V", "title": "Batch H design revision", "group": "H"}
+{"logged": "2026-10-30 07:17:14", "event": "done", "task": "H.V"}
+{"logged": "2026-10-30 07:17:14", "event": "start", "task": "H.C", "title": "H-C controls, stacks and theme", "group": "H"}
+{"logged": "2026-10-30 07:17:14", "event": "start", "task": "H.S", "title": "H-S shell and head", "group": "H"}
+{"logged": "2026-10-30 09:34:54", "event": "done", "task": "H.S"}
+{"logged": "2026-10-30 09:44:37", "event": "done", "task": "H.C"}
+{"logged": "2026-10-30 09:44:37", "event": "start", "task": "H.S2", "title": "H-S: instrument's tabs on H8", "group": "H"}
+{"logged": "2026-10-30 10:00:55", "event": "done", "task": "H.S2"}
+{"logged": "2026-10-30 10:00:55", "event": "start", "task": "H.F", "title": "Fold and verify batch H", "group": "H"}
+{"logged": "2026-10-30 10:00:55", "event": "start", "task": "H.T", "title": "Lane T: clang-tidy-diff to zero", "group": "H"}
+{"logged": "2026-10-30 10:31:07", "event": "done", "task": "H.F"}
+{"logged": "2026-10-30 10:31:08", "event": "group", "group": "I", "name": "Batch I: the gaps left after H"}
+{"logged": "2026-10-30 10:31:08", "event": "start", "task": "I.D", "title": "Batch I design", "group": "I"}
+{"logged": "2026-10-30 10:55:30", "event": "done", "task": "I.D"}
+{"logged": "2026-10-30 10:55:30", "event": "start", "task": "I.R", "title": "Batch I design review", "group": "I"}
+{"logged": "2026-10-30 11:05:10", "event": "done", "task": "I.R"}
+{"logged": "2026-10-30 11:05:10", "event": "start", "task": "I.V", "title": "Batch I design revision", "group": "I"}
+{"logged": "2026-10-30 11:13:17", "event": "done", "task": "I.V"}
+{"logged": "2026-10-30 11:13:17", "event": "start", "task": "I.QQ", "title": "Lane I-Q", "group": "I"}
+{"logged": "2026-10-30 11:13:17", "event": "start", "task": "I.VV", "title": "Lane I-V", "group": "I"}
+{"logged": "2026-10-30 11:13:17", "event": "start", "task": "I.SS", "title": "Lane I-S", "group": "I"}
+{"logged": "2026-10-30 11:59:38", "event": "done", "task": "H.T"}
+{"logged": "2026-10-30 13:05:29", "event": "done", "task": "I.QQ"}
+{"logged": "2026-10-30 13:49:54", "event": "done", "task": "I.VV"}
+{"logged": "2026-10-30 14:24:18", "event": "done", "task": "I.SS"}
+{"logged": "2026-10-30 14:24:24", "event": "start", "task": "I.W", "title": "Lane W: verify the fold", "group": "I"}
+{"logged": "2026-10-30 14:24:27", "event": "start", "task": "I.RR", "title": "Compare after batch I", "group": "I"}
+{"logged": "2026-10-30 14:29:09", "event": "done", "task": "I.RR"}
+{"logged": "2026-10-30 14:29:09", "event": "start", "task": "J.F", "title": "Lane J-F: fit 785 px", "group": "J"}
+{"logged": "2026-10-30 14:29:09", "event": "start", "task": "J.D", "title": "Batch J design", "group": "J"}
+{"logged": "2026-10-30 15:05:19", "event": "done", "task": "J.D"}
+{"logged": "2026-10-30 15:05:19", "event": "start", "task": "J.DR", "title": "Review batch J design", "group": "J"}
+{"logged": "2026-10-30 20:21:33", "event": "done", "task": "J.DR"}
+{"logged": "2026-10-30 20:21:33", "event": "start", "task": "J.DV", "title": "Revise batch J design", "group": "J"}
+{"logged": "2026-10-30 21:16:53", "event": "done", "task": "J.DV"}
+{"logged": "2026-10-30 21:23:40", "event": "done", "task": "J.F"}
+{"logged": "2026-10-30 21:23:40", "event": "start", "task": "J.C", "title": "Lane J-C", "group": "J"}
+{"logged": "2026-10-30 21:23:40", "event": "start", "task": "J.B", "title": "Lane J-B", "group": "J"}
+{"logged": "2026-10-30 22:00:08", "event": "done", "task": "I.W"}
+{"logged": "2026-10-30 22:00:08", "event": "start", "task": "J.A", "title": "Lane J-A", "group": "J"}
+{"logged": "2026-10-30 22:53:44", "event": "done", "task": "J.C"}
+{"logged": "2026-10-30 22:54:39", "event": "done", "task": "J.B"}
+{"logged": "2026-10-31 00:03:49", "event": "done", "task": "J.A"}
+{"logged": "2026-10-31 00:03:49", "event": "start", "task": "J.V", "title": "Lane V: verify the fold", "group": "J"}

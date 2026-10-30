@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -45,8 +46,13 @@ struct MountError {
     std::string reason;
 };
 
-/// @brief A screen's head beside its title: the subtitle, the status badges and the actions a shell shows above the
-///        screen (the document's `subtitle`, `status` and `actions`).
+/// @brief A screen's head beside its title: the eyebrow, the title's runs, the subtitle, the status badges, the tools,
+/// the actions and the head's own
+///        menu a shell shows above the screen (the document's `eyebrow`, `titleSpans`, `subtitle`, `status`, `tools`,
+///        `actions` and `menu`).
+///
+/// The head is data: the screen evaluates it and the shell draws it, so a host screen's handle can implement it too.
+/// The menu and tool members have defaults, for a head that has neither.
 class ScreenHead {
 public:
     ScreenHead() = default;
@@ -56,9 +62,56 @@ public:
     ScreenHead& operator=(ScreenHead&&) = delete;
     virtual ~ScreenHead() = default;
 
+    /// @brief The title as runs, which a shell that knows them draws in its top bar in place of `title`.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
+    ///         its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<std::vector<TextSpan>> const* titleSpans() const { return nullptr; }
+
+    /// @brief Whether the screen's shown root lays itself at the page's edges, so a shell leaves the page uninset
+    ///        around it (the document's `pageEdge` on the root, seen through `switch` cases).
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default, which a
+    ///         shell insets. It keeps its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<bool> const* pageEdge() const { return nullptr; }
+
+    /// @brief Whether the screen's shown root continues the head's block (the document's `headJoined` on the root,
+    ///        seen through `switch` cases), so a shell leaves no rule between the head and what follows.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
+    ///         its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<bool> const* headJoined() const { return nullptr; }
+
+    /// @brief Where the head's lead (the subtitle and the badges) sits.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default, which is
+    ///         `below`. It keeps its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<LeadPlacement> const* leadPlacement() const { return nullptr; }
+
+    /// @brief The name of the surface a shell draws its top bar on while the screen is shown.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
+    ///         its last value once the screen is closed. An empty name is none.
+    [[nodiscard]] virtual reactive::Computed<std::string> const* headSurface() const { return nullptr; }
+
+    /// @brief The name of the surface a shell draws the page area on while the screen is shown.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
+    ///         its last value once the screen is closed. An empty name is the built-in `page` surface.
+    [[nodiscard]] virtual reactive::Computed<std::string> const* pageSurface() const { return nullptr; }
+
+    /// @brief The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
+    ///         its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<std::string> const* eyebrow() const { return nullptr; }
+
+    /// @brief The eyebrow as runs, which a shell that knows them draws in place of `eyebrow`.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
+    ///         its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<std::vector<TextSpan>> const* eyebrowSpans() const { return nullptr; }
+
     /// @brief The subtitle, as text; empty when the screen declares none.
     /// @return It; it keeps its last value once the screen is closed.
     [[nodiscard]] virtual reactive::Computed<std::string> const& subtitle() const = 0;
+
+    /// @brief The subtitle as runs, which a shell that knows them draws in place of `subtitle`.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
+    ///         its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<std::vector<TextSpan>> const* subtitleSpans() const { return nullptr; }
 
     /// @brief The status badges that are visible, in order.
     /// @return They; empty once the screen is closed.
@@ -73,6 +126,50 @@ public:
     /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold enabled and visible, and
     ///         `false` for a closed screen.
     virtual bool run(std::string_view actionId) = 0;
+
+    /// @brief The head's own menu: its visible entries, in order, each one that is chosen with its id.
+    /// @return They, valid as long as the head; null for a head that has no menu, as a host screen's by default.
+    [[nodiscard]] virtual reactive::Computed<std::vector<HeadMenuEntry>> const* menu() const { return nullptr; }
+
+    /// @brief The accessible name of the head menu's trigger.
+    /// @return It, valid as long as the head; null for a head that has no menu, which a shell labels "More actions".
+    [[nodiscard]] virtual reactive::Computed<std::string> const* menuLabel() const { return nullptr; }
+
+    /// @brief Runs a head menu entry's `onClick` as a user event in the screen scope, in one batch.
+    /// @param entryId The entry's id.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the menu does not hold enabled and visible, and
+    ///         `false` for a closed screen or a head without a menu.
+    virtual bool choose(std::string_view entryId) {
+        static_cast<void>(entryId);
+        return false;
+    }
+
+    /// @brief The head's tools that are visible, in order: search fields and selects, each with its value.
+    /// @return They, valid as long as the head; null for a head that has no tools, as a host screen's by default.
+    [[nodiscard]] virtual reactive::Computed<std::vector<HeadTool>> const* tools() const { return nullptr; }
+
+    /// @brief Reports a user's edit of a tool: runs a search's `onChange` with `event` the text, or a select's
+    ///        `onChoose` with `event` the chosen key, as a user event in the screen scope, in one batch. The tool's
+    ///        value changes only when the document's binding does.
+    /// @param toolId The tool's id.
+    /// @param value  A search's text, or a select's key.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold enabled and visible, and
+    ///         `false` for a closed screen or a head without tools.
+    virtual bool edit(std::string_view toolId, Value const& value) {
+        static_cast<void>(toolId);
+        static_cast<void>(value);
+        return false;
+    }
+
+    /// @brief Reports a user's submit of a search tool: runs its `onSubmit` with `event` its text, as a user event in
+    ///        the screen scope, in one batch.
+    /// @param toolId The tool's id.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold enabled and visible, or
+    ///         holds as a select, and `false` for a closed screen or a head without tools.
+    virtual bool submit(std::string_view toolId) {
+        static_cast<void>(toolId);
+        return false;
+    }
 };
 
 /// @brief One mounted screen, as its host sees it.
@@ -381,6 +478,28 @@ public:
         return mountAt(screenId, params, &parent);
     }
 
+    /// @brief Mounts the app document as the session's root scope (spec 6 §5) through this host's own interpreter, so
+    ///        its commands reach the same hosts as the screens' commands do (its `navigate` is this host's) and its
+    ///        diagnostics reach the same `diagnostics` callback.
+    ///
+    /// Destroy the root after the screens that read `app.*` and before this host: destroying it runs its `onUnmount`
+    /// through this host.
+    /// @param document The app document, loaded.
+    /// @return The root, or why it was refused: no document, a document whose id is not `app`, or a second root on
+    ///         the session.
+    [[nodiscard]] std::expected<std::unique_ptr<AppRoot>, MountError> mountApp(
+        std::shared_ptr<Document const> document) {
+        if (!document) {
+            return std::unexpected(MountError{.screenId = "app", .reason = "no app document"});
+        }
+        std::string const documentId = document->id;
+        auto root = _interpreter.mountApp(std::move(document));
+        if (!root) {
+            return std::unexpected(mountErrorOf(documentId, root.error()));
+        }
+        return std::move(*root);
+    }
+
     /// @brief The identity a document screen would have with @p params: its `identity` evaluated over the params.
     /// @param screenId The screen id.
     /// @param params   The params.
@@ -508,12 +627,50 @@ public:
         return Inspector::over(*screen);
     }
 
+    /// @brief Cancels every call no mount has adopted: each one's `onCancel` runs, oldest first. What a shell does
+    ///        when it closes every screen, so no call outlives the screens it was filed among and a later mount never
+    ///        answers an opener that is gone.
+    void cancelUnclaimedCalls() {
+        for (std::shared_ptr<Call> const& call : std::exchange(_unclaimed, {})) {
+            call->answer(std::nullopt);
+        }
+    }
+
     /// @brief The root widget of a handle this host mounted, which a host places in its own layout.
     /// @param handle A handle this host mounted.
     /// @return Its root widget, or `nullptr` for a closed or foreign handle.
     [[nodiscard]] static Widget* rootOf(ScreenHandle const& handle) {
         auto const* const own = dynamic_cast<Handle const*>(&handle);
         return own == nullptr ? nullptr : own->root();
+    }
+
+protected:
+    /// @brief Answers with a cancel the call of a navigation this host handled without mounting a document screen:
+    ///        the oldest unclaimed call of that screen and params, the one a mount would have adopted. Its `onCancel`
+    ///        runs, and the cancel is reported to `diagnostics`.
+    ///
+    /// A host calls it once for each navigation whose `NavigateRequest::call` is set and that mounted no document
+    /// screen: one that focused an open tab, a refused mount, a host screen (which adopts no call) and a navigation
+    /// it dropped. A call left unclaimed would otherwise never be answered, and the next mount of that screen with
+    /// those params, opened for any reason, would answer an opener that never opened it.
+    /// @param screenId The screen the navigation named.
+    /// @param params   Its params.
+    void settleCall(std::string_view screenId, ParamMap const& params) {
+        auto const found = std::ranges::find_if(_unclaimed, [&](std::shared_ptr<Call> const& call) {
+            return call->screen == screenId && call->params == params;
+        });
+        if (found == _unclaimed.end()) {
+            return;
+        }
+        std::shared_ptr<Call> const call = std::move(*found);
+        _unclaimed.erase(found);
+        if (_options.diagnostics) {
+            _options.diagnostics(Refusal{
+                .document = std::string{screenId},
+                .path = {},
+                .reason = "navigate to " + std::string{screenId} + " mounted no screen; its call was cancelled"});
+        }
+        call->answer(std::nullopt);
     }
 
 private:
@@ -624,7 +781,28 @@ private:
         [[nodiscard]] reactive::Computed<Value> const& identity() const override { return _state->identity; }
 
         [[nodiscard]] ScreenHead* head() noexcept override { return this; }
+        [[nodiscard]] reactive::Computed<std::vector<TextSpan>> const* titleSpans() const override {
+            return &_state->titleSpans;
+        }
+        [[nodiscard]] reactive::Computed<bool> const* pageEdge() const override { return &_state->pageEdge; }
+        [[nodiscard]] reactive::Computed<bool> const* headJoined() const override { return &_state->headJoined; }
+        [[nodiscard]] reactive::Computed<LeadPlacement> const* leadPlacement() const override {
+            return &_state->leadPlacement;
+        }
+        [[nodiscard]] reactive::Computed<std::string> const* headSurface() const override {
+            return &_state->headSurface;
+        }
+        [[nodiscard]] reactive::Computed<std::string> const* pageSurface() const override {
+            return &_state->pageSurface;
+        }
+        [[nodiscard]] reactive::Computed<std::string> const* eyebrow() const override { return &_state->eyebrow; }
+        [[nodiscard]] reactive::Computed<std::vector<TextSpan>> const* eyebrowSpans() const override {
+            return &_state->eyebrowSpans;
+        }
         [[nodiscard]] reactive::Computed<std::string> const& subtitle() const override { return _state->subtitle; }
+        [[nodiscard]] reactive::Computed<std::vector<TextSpan>> const* subtitleSpans() const override {
+            return &_state->subtitleSpans;
+        }
         [[nodiscard]] reactive::Computed<std::vector<HeadBadge>> const& status() const override {
             return _state->status;
         }
@@ -633,6 +811,22 @@ private:
         }
         bool run(std::string_view actionId) override {
             return _state->screen != nullptr && _state->screen->runAction(actionId);
+        }
+        [[nodiscard]] reactive::Computed<std::vector<HeadMenuEntry>> const* menu() const override {
+            return &_state->menu;
+        }
+        [[nodiscard]] reactive::Computed<std::string> const* menuLabel() const override { return &_state->menuLabel; }
+        bool choose(std::string_view entryId) override {
+            return _state->screen != nullptr && _state->screen->chooseMenuEntry(entryId);
+        }
+        [[nodiscard]] reactive::Computed<std::vector<HeadTool>> const* tools() const override {
+            return &_state->tools;
+        }
+        bool edit(std::string_view toolId, Value const& value) override {
+            return _state->screen != nullptr && _state->screen->editTool(toolId, value);
+        }
+        bool submit(std::string_view toolId) override {
+            return _state->screen != nullptr && _state->screen->submitTool(toolId);
         }
 
         void requestClose(std::function<void(bool closed)> done) override { State::request(_state, std::move(done)); }
@@ -704,6 +898,30 @@ private:
 
     private:
         struct State {
+            /// Whether the screen is mounted and its reads are current.
+            [[nodiscard]] bool live() const { return !closed.get() && generation.get() >= 0; }
+
+            /// A read that follows @p read on the open screen and, once the screen is gone, answers the value it read
+            /// last, kept in @p last.
+            template <typename Last, typename Read>
+            [[nodiscard]] auto remembered(Last& last, Read read) {
+                return [this, &last, read] {
+                    if (live()) {
+                        last = read(*screen);
+                    }
+                    return last;
+                };
+            }
+
+            /// A read that follows @p read on the open screen and, once the screen is gone, answers an empty value.
+            template <typename Read>
+            [[nodiscard]] auto emptyOnceClosed(Read read) {
+                return [this, read] {
+                    using Result = std::invoke_result_t<Read, Screen&>;
+                    return live() ? read(*screen) : Result{};
+                };
+            }
+
             State(std::unique_ptr<Screen> mounted, CloseGuard closeGuard,
                   std::function<void(ScreenHandle&)> onSaveFailed)
                 : screen{std::move(mounted)},
@@ -713,36 +931,30 @@ private:
                   closed{*runtime, false},
                   generation{*runtime, 0},
                   title{*runtime,
-                        [this] {
-                            if (!closed.get() && generation.get() >= 0) {
-                                lastTitle = detail::host::titleText(screen->title());
-                            }
-                            return lastTitle;
-                        }},
-                  dirty{*runtime, [this] { return !closed.get() && generation.get() >= 0 && screen->dirty(); }},
-                  identity{*runtime,
-                           [this] {
-                               if (!closed.get() && generation.get() >= 0) {
-                                   lastIdentity = screen->identity();
-                               }
-                               return lastIdentity;
-                           }},
-                  subtitle{*runtime,
-                           [this] {
-                               if (!closed.get() && generation.get() >= 0) {
-                                   lastSubtitle = detail::host::titleText(screen->subtitle());
-                               }
-                               return lastSubtitle;
-                           }},
-                  status{*runtime,
-                         [this] {
-                             return !closed.get() && generation.get() >= 0 ? screen->status()
-                                                                           : std::vector<HeadBadge>{};
-                         }},
-                  actions{*runtime, [this] {
-                              return !closed.get() && generation.get() >= 0 ? screen->actions()
-                                                                            : std::vector<HeadAction>{};
-                          }} {}
+                        remembered(lastTitle, [](Screen& open) { return detail::host::titleText(open.title()); })},
+                  dirty{*runtime, [this] { return live() && screen->dirty(); }},
+                  identity{*runtime, remembered(lastIdentity, [](Screen& open) { return open.identity(); })},
+                  titleSpans{*runtime, remembered(lastTitleSpans, [](Screen& open) { return open.titleSpans(); })},
+                  pageEdge{*runtime, remembered(lastPageEdge, [](Screen& open) { return open.pageEdge(); })},
+                  headJoined{*runtime, remembered(lastHeadJoined, [](Screen& open) { return open.headJoined(); })},
+                  leadPlacement{*runtime,
+                                remembered(lastLeadPlacement, [](Screen& open) { return open.leadPlacement(); })},
+                  headSurface{*runtime, remembered(lastHeadSurface, [](Screen& open) { return open.headSurface(); })},
+                  pageSurface{*runtime, remembered(lastPageSurface, [](Screen& open) { return open.pageSurface(); })},
+                  eyebrow{*runtime, remembered(lastEyebrow,
+                                               [](Screen& open) { return detail::host::titleText(open.eyebrow()); })},
+                  eyebrowSpans{*runtime,
+                               remembered(lastEyebrowSpans, [](Screen& open) { return open.eyebrowSpans(); })},
+                  subtitle{
+                      *runtime,
+                      remembered(lastSubtitle, [](Screen& open) { return detail::host::titleText(open.subtitle()); })},
+                  subtitleSpans{*runtime,
+                                remembered(lastSubtitleSpans, [](Screen& open) { return open.subtitleSpans(); })},
+                  status{*runtime, emptyOnceClosed([](Screen& open) { return open.status(); })},
+                  actions{*runtime, emptyOnceClosed([](Screen& open) { return open.actions(); })},
+                  menu{*runtime, emptyOnceClosed([](Screen& open) { return open.menu(); })},
+                  menuLabel{*runtime, remembered(lastMenuLabel, [](Screen& open) { return open.menuLabel(); })},
+                  tools{*runtime, emptyOnceClosed([](Screen& open) { return open.tools(); })} {}
 
             State(State const&) = delete;
             State& operator=(State const&) = delete;
@@ -897,7 +1109,16 @@ private:
                     // The last values a host reads once the screen is gone, whether or not it read them before.
                     lastTitle = detail::host::titleText(screen->title());
                     lastIdentity = screen->identity();
+                    lastTitleSpans = screen->titleSpans();
+                    lastPageEdge = screen->pageEdge();
+                    lastHeadJoined = screen->headJoined();
+                    lastLeadPlacement = screen->leadPlacement();
+                    lastHeadSurface = screen->headSurface();
+                    lastPageSurface = screen->pageSurface();
+                    lastEyebrow = detail::host::titleText(screen->eyebrow());
+                    lastEyebrowSpans = screen->eyebrowSpans();
                     lastSubtitle = detail::host::titleText(screen->subtitle());
+                    lastSubtitleSpans = screen->subtitleSpans();
                     runtime->batch([this] { closed.set(true); });
                     screen.reset();
                 }
@@ -932,7 +1153,17 @@ private:
             std::uint64_t watches = 0;
             std::string lastTitle;
             Value lastIdentity;
+            std::vector<TextSpan> lastTitleSpans;
+            bool lastPageEdge = false;
+            bool lastHeadJoined = false;
+            LeadPlacement lastLeadPlacement = LeadPlacement::Below;
+            std::string lastHeadSurface;
+            std::string lastPageSurface;
+            std::string lastEyebrow;
+            std::vector<TextSpan> lastEyebrowSpans;
             std::string lastSubtitle;
+            std::vector<TextSpan> lastSubtitleSpans;
+            std::string lastMenuLabel = "More actions";
             // What the screen was mounted with, for a remount.
             ParamMap params;
             ContainerWidget* parent = nullptr;
@@ -942,9 +1173,21 @@ private:
             reactive::Computed<std::string> title;
             reactive::Computed<bool> dirty;
             reactive::Computed<Value> identity;
+            reactive::Computed<std::vector<TextSpan>> titleSpans;
+            reactive::Computed<bool> pageEdge;
+            reactive::Computed<bool> headJoined;
+            reactive::Computed<LeadPlacement> leadPlacement;
+            reactive::Computed<std::string> headSurface;
+            reactive::Computed<std::string> pageSurface;
+            reactive::Computed<std::string> eyebrow;
+            reactive::Computed<std::vector<TextSpan>> eyebrowSpans;
             reactive::Computed<std::string> subtitle;
+            reactive::Computed<std::vector<TextSpan>> subtitleSpans;
             reactive::Computed<std::vector<HeadBadge>> status;
             reactive::Computed<std::vector<HeadAction>> actions;
+            reactive::Computed<std::vector<HeadMenuEntry>> menu;
+            reactive::Computed<std::string> menuLabel;
+            reactive::Computed<std::vector<HeadTool>> tools;
         };
 
         std::shared_ptr<State> _state;
@@ -958,7 +1201,9 @@ private:
             return _options.application != nullptr &&
                    _options.application->navigate(request, std::move(onResult), std::move(onCancel));
         }
-        if (onResult || onCancel) {
+        NavigateRequest forwarded = request;
+        forwarded.call = onResult || onCancel;
+        if (forwarded.call) {
             ValueRecord const* const params = request.params.asRecord();
             _unclaimed.push_back(std::make_shared<Call>(Call{.screen = request.screen,
                                                              .params = params == nullptr ? ParamMap{} : *params,
@@ -966,7 +1211,7 @@ private:
                                                              .onCancel = std::move(onCancel),
                                                              .answered = false}));
         }
-        onNavigate(request);
+        onNavigate(forwarded);
         return true;
     }
 

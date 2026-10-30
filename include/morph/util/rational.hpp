@@ -107,6 +107,7 @@
 #include <morph/core/logger.hpp>
 #include <morph/core/payload_shape_tag.hpp>
 #include <numeric>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -329,39 +330,192 @@ namespace detail {
     return rhs > 0 ? lhs < minValue / rhs : lhs < maxValue / rhs;
 }
 
-/// @brief A 64x64 -> 128-bit unsigned product, comparable high-word-first.
+/// @brief An unsigned 128-bit integer as two 64-bit limbs.
+///
+/// The high limb comes first, so the defaulted comparison orders by value. Every operation on it is portable limb
+/// arithmetic, the same code on every compiler: a `__int128` branch would leave the limb code to the compilers that
+/// lack one, where a mistake would pass every Linux test and fail only on Windows. The checked operations return an
+/// empty optional rather than wrap.
 struct U128 {
+    /// @brief The high 64 bits.
     std::uint64_t hi{};
+    /// @brief The low 64 bits.
     std::uint64_t lo{};
+    /// @brief Orders by value.
+    /// @return The ordering.
     [[nodiscard]] constexpr auto operator<=>(const U128&) const noexcept = default;
 };
 
-/// @brief Multiplies two u64 exactly into 128 bits (for exact fraction comparison).
+/// @brief Multiplies two u64 exactly into 128 bits.
+/// @param lhs Left factor.
+/// @param rhs Right factor.
+/// @return The exact product.
 [[nodiscard]] constexpr U128 mulU64(std::uint64_t lhs, std::uint64_t rhs) noexcept {
-#ifdef __SIZEOF_INT128__
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
-#endif
-    auto const product = static_cast<unsigned __int128>(lhs) * rhs;
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
-    return U128{.hi = static_cast<std::uint64_t>(product >> 64), .lo = static_cast<std::uint64_t>(product)};
-#else
-    // Portable 32-bit limb multiplication (MSVC has no __int128).
     constexpr std::uint64_t mask = 0xffffffffULL;
     auto const lhsLow = lhs & mask;
-    auto const lhsHigh = lhs >> 32;
+    auto const lhsHigh = lhs >> 32U;
     auto const rhsLow = rhs & mask;
-    auto const rhsHigh = rhs >> 32;
+    auto const rhsHigh = rhs >> 32U;
     auto const lowLow = lhsLow * rhsLow;
     auto const lowHigh = lhsLow * rhsHigh;
     auto const highLow = lhsHigh * rhsLow;
     auto const highHigh = lhsHigh * rhsHigh;
-    auto const mid = (lowLow >> 32) + (lowHigh & mask) + (highLow & mask);
-    return U128{.hi = highHigh + (lowHigh >> 32) + (highLow >> 32) + (mid >> 32), .lo = (mid << 32) | (lowLow & mask)};
-#endif
+    auto const mid = (lowLow >> 32U) + (lowHigh & mask) + (highLow & mask);
+    return U128{.hi = highHigh + (lowHigh >> 32U) + (highLow >> 32U) + (mid >> 32U),
+                .lo = (mid << 32U) | (lowLow & mask)};
+}
+
+/// @brief The sum of two 128-bit integers.
+/// @param lhs Left addend.
+/// @param rhs Right addend.
+/// @return The sum, or empty when it does not fit 128 bits.
+[[nodiscard]] constexpr std::optional<U128> checkedAddU128(U128 lhs, U128 rhs) noexcept {
+    constexpr auto maxLimb = std::numeric_limits<std::uint64_t>::max();
+    std::uint64_t const low = lhs.lo + rhs.lo;
+    std::uint64_t const carry = low < lhs.lo ? 1U : 0U;
+    if (rhs.hi > maxLimb - lhs.hi) {
+        return std::nullopt;
+    }
+    std::uint64_t const high = lhs.hi + rhs.hi;
+    if (carry > maxLimb - high) {
+        return std::nullopt;
+    }
+    return U128{.hi = high + carry, .lo = low};
+}
+
+/// @brief The difference of two 128-bit integers, modulo 2^128.
+/// @param lhs Minuend.
+/// @param rhs Subtrahend.
+/// @return `lhs - rhs`, wrapped when @p rhs is the larger.
+[[nodiscard]] constexpr U128 wrappingSubU128(U128 lhs, U128 rhs) noexcept {
+    std::uint64_t const borrow = lhs.lo < rhs.lo ? 1U : 0U;
+    return U128{.hi = lhs.hi - rhs.hi - borrow, .lo = lhs.lo - rhs.lo};
+}
+
+/// @brief The difference of two 128-bit integers.
+/// @param lhs Minuend.
+/// @param rhs Subtrahend.
+/// @return The difference, or empty when @p rhs is the larger.
+[[nodiscard]] constexpr std::optional<U128> checkedSubU128(U128 lhs, U128 rhs) noexcept {
+    if (lhs < rhs) {
+        return std::nullopt;
+    }
+    return wrappingSubU128(lhs, rhs);
+}
+
+/// @brief The product of two 128-bit integers.
+/// @param lhs Left factor.
+/// @param rhs Right factor.
+/// @return The product, or empty when it does not fit 128 bits.
+[[nodiscard]] constexpr std::optional<U128> checkedMulU128(U128 lhs, U128 rhs) noexcept {
+    if (lhs.hi != 0 && rhs.hi != 0) {
+        return std::nullopt;
+    }
+    // At most one high limb is non-zero, so the cross term is one 64x64 product that must fit the high limb.
+    U128 const cross = lhs.hi != 0 ? mulU64(lhs.hi, rhs.lo) : mulU64(lhs.lo, rhs.hi);
+    if (cross.hi != 0) {
+        return std::nullopt;
+    }
+    return checkedAddU128(mulU64(lhs.lo, rhs.lo), U128{.hi = cross.lo, .lo = 0});
+}
+
+/// @brief A 128-bit integer shifted left by one bit, the top bit dropped.
+/// @param value The integer.
+/// @return `value * 2` modulo 2^128.
+[[nodiscard]] constexpr U128 shiftLeftOneU128(U128 value) noexcept {
+    return U128{.hi = (value.hi << 1U) | (value.lo >> 63U), .lo = value.lo << 1U};
+}
+
+/// @brief A quotient and a remainder.
+struct U128Division {
+    /// @brief The quotient, truncated.
+    U128 quotient;
+    /// @brief The remainder, below the divisor.
+    U128 remainder;
+};
+
+/// @brief Divides two 128-bit integers with remainder.
+/// @param dividend The dividend.
+/// @param divisor  The divisor.
+/// @return The quotient and remainder, or empty when @p divisor is zero.
+[[nodiscard]] constexpr std::optional<U128Division> divModU128(U128 dividend, U128 divisor) noexcept {
+    if (divisor == U128{}) {
+        return std::nullopt;
+    }
+    if (dividend.hi == 0 && divisor.hi == 0) {
+        return U128Division{.quotient = U128{.hi = 0, .lo = dividend.lo / divisor.lo},
+                            .remainder = U128{.hi = 0, .lo = dividend.lo % divisor.lo}};
+    }
+    // Restoring binary long division, one bit of the dividend at a time. After j bits the remainder is below both
+    // the divisor and 2^j, so shifting the next bit in never drops a set top bit.
+    U128 quotient{};
+    U128 remainder{};
+    for (std::uint32_t step = 0; step < 128U; ++step) {
+        std::uint32_t const bit = 127U - step;
+        std::uint64_t const limb = bit >= 64U ? dividend.hi : dividend.lo;
+        std::uint64_t const incoming = (limb >> (bit % 64U)) & 1U;
+        remainder = shiftLeftOneU128(remainder);
+        remainder.lo |= incoming;
+        quotient = shiftLeftOneU128(quotient);
+        if (remainder >= divisor) {
+            remainder = wrappingSubU128(remainder, divisor);
+            quotient.lo |= 1U;
+        }
+    }
+    return U128Division{.quotient = quotient, .remainder = remainder};
+}
+
+/// @brief A 128-bit integer shifted right.
+/// @param value The integer.
+/// @param count The bits to shift by, below 128.
+/// @return `value / 2^count`, truncated.
+[[nodiscard]] constexpr U128 shiftRightU128(U128 value, std::uint32_t count) noexcept {
+    if (count == 0) {
+        return value;
+    }
+    if (count >= 64U) {
+        return U128{.hi = 0, .lo = value.hi >> (count - 64U)};
+    }
+    return U128{.hi = value.hi >> count, .lo = (value.lo >> count) | (value.hi << (64U - count))};
+}
+
+/// @brief The integer square root of a 128-bit integer.
+///
+/// Digit by digit in base 4: each step decides one bit of the root from the remainder, with no division and no
+/// rounding, so the result is exactly the floor.
+/// @param value The integer.
+/// @return `floor(sqrt(value))`, which fits 64 bits.
+[[nodiscard]] constexpr std::uint64_t isqrtU128(U128 value) noexcept {
+    U128 remainder = value;
+    U128 root{};
+    U128 bit{.hi = std::uint64_t{1} << 62U, .lo = 0};
+    while (bit > remainder) {
+        bit = shiftRightU128(bit, 2);
+    }
+    while (bit != U128{}) {
+        // `root + bit` fits: `root` is the root found so far shifted left by one bit past `bit`'s half position,
+        // below 2^65, and `bit` is at most 2^126.
+        U128 const trial = checkedAddU128(root, bit).value_or(U128{});
+        if (remainder >= trial) {
+            remainder = wrappingSubU128(remainder, trial);
+            root = checkedAddU128(shiftRightU128(root, 1), bit).value_or(U128{});
+        } else {
+            root = shiftRightU128(root, 1);
+        }
+        bit = shiftRightU128(bit, 2);
+    }
+    return root.lo;
+}
+
+/// @brief `10^exponent` as a 128-bit integer.
+/// @param exponent The exponent.
+/// @return The power, or empty past 10^38, the largest that fits.
+[[nodiscard]] constexpr std::optional<U128> powerOfTenU128(std::uint32_t exponent) noexcept {
+    std::optional<U128> power = U128{.hi = 0, .lo = 1};
+    for (std::uint32_t digit = 0; digit < exponent && power; ++digit) {
+        power = checkedMulU128(*power, U128{.hi = 0, .lo = 10});
+    }
+    return power;
 }
 
 /// @brief Magnitude of a signed 64-bit value as u64; well-defined for INT64_MIN.
@@ -1024,8 +1178,9 @@ static_assert(std::is_standard_layout_v<Rational>);
 /// **Saturates rather than overflowing**, like every other `Rational`
 /// arithmetic path: rounding scales by `10^places`, so a value whose scaled form
 /// exceeds `int64` range clamps to `+/-INT64_MAX` and logs at `error` (see
-/// `operator*=`). A caller who must detect that has to range-check first --
-/// there is no `checkedRound`.
+/// `operator*=`). A caller who must not show a clamped value rounds with
+/// `checkedRoundToDecimalPlaces`, which computes the scale-up in 128 bits and
+/// reports a result that does not fit.
 ///
 /// @param value  Value to round.
 /// @param places Target decimal places; silently clamped to `[0, kMaxDecimalPlaces]`.
@@ -1416,6 +1571,146 @@ constexpr Rational roundToDecimalPlaces(const Rational& value, DecimalPlaces pla
     }
     return Rational{Numerator{stepped}, Denominator{scale}, DecimalPlaces{wanted}};
 }
+
+namespace detail {
+
+/// @brief A value times `10^places`, rounded to an integer: the magnitude in 128 bits and the sign.
+struct ScaledRounding {
+    /// @brief `|value| * 10^places`, rounded.
+    U128 magnitude;
+    /// @brief Whether the value is negative and does not round to zero.
+    bool negative = false;
+};
+
+/// @brief Rounds `value * 10^places` to an integer, computed in 128 bits so it never saturates.
+///
+/// `|numerator| * 10^places` is below 2^63 * 10^18 < 2^123, so the product and the quotient by the denominator fit.
+/// The quotient is raised by one when twice the remainder passes the denominator, or equals it and @p mode is half
+/// away from zero or the quotient is odd.
+/// @param value  The value.
+/// @param places The places, at most `kMaxDecimalPlaces`.
+/// @param mode   The tie-breaking rule.
+/// @return The rounded scaled magnitude and its sign.
+[[nodiscard]] constexpr ScaledRounding roundScaled(const Rational& value, std::uint32_t places,
+                                                   RoundingMode mode) noexcept {
+    auto const scale = static_cast<std::uint64_t>(powerOfTen(std::min(places, kMaxDecimalPlaces)));
+    auto const denominator = static_cast<std::uint64_t>(value.denominator);
+    U128 const product = mulU64(absU64(value.numerator), scale);
+    // The denominator is positive, so the division is defined.
+    U128Division const division =
+        divModU128(product, U128{.hi = 0, .lo = denominator}).value_or(U128Division{.quotient = product});
+    // The remainder is below the denominator, below 2^63, so twice it fits a limb.
+    std::uint64_t const twice = division.remainder.lo * 2U;
+    bool const odd = (division.quotient.lo & 1U) != 0;
+    bool const raise =
+        twice > denominator || (twice == denominator && (mode == RoundingMode::HalfAwayFromZero || odd));
+    U128 magnitude = division.quotient;
+    if (raise) {
+        // The quotient is below 2^123, so one more fits.
+        magnitude = checkedAddU128(magnitude, U128{.hi = 0, .lo = 1}).value_or(magnitude);
+    }
+    return ScaledRounding{.magnitude = magnitude, .negative = value.numerator < 0 && magnitude != U128{}};
+}
+
+}  // namespace detail
+
+/// @brief Rounds to a fixed number of decimal places exactly, or reports that the result does not fit.
+///
+/// The value nearest @p value among the multiples of `10^-places`, ties resolved by @p mode, tagged at @p places.
+/// The scale-up is computed in 128 bits, so unlike `roundToDecimalPlaces` it never saturates: `10/3` at 18 places is
+/// `3.333333333333333333`, whose scaled product passes `int64` on the way but whose result fits. The result is empty
+/// only when the rounded value's canonical numerator does not fit an `int64`, as for `28/3` at 18 places.
+/// @param value  The value to round.
+/// @param places The places; clamped to `[0, kMaxDecimalPlaces]`.
+/// @param mode   The tie-breaking rule.
+/// @return The rounded value, or empty when it is not representable.
+[[nodiscard]] constexpr std::optional<Rational> checkedRoundToDecimalPlaces(const Rational& value,
+                                                                            DecimalPlaces places,
+                                                                            RoundingMode mode) noexcept {
+    std::uint32_t const wanted = std::min(places.value, kMaxDecimalPlaces);
+    detail::ScaledRounding const rounded = detail::roundScaled(value, wanted, mode);
+    auto const scale = static_cast<std::uint64_t>(detail::powerOfTen(wanted));
+    // Reduce by gcd(magnitude, 10^places) = gcd(magnitude mod 10^places, 10^places) before asking whether it fits.
+    auto const byScale = detail::divModU128(rounded.magnitude, detail::U128{.hi = 0, .lo = scale});
+    if (!byScale) {
+        return std::nullopt;
+    }
+    std::uint64_t const divisor = std::gcd(byScale->remainder.lo, scale);
+    auto const reduced = detail::divModU128(rounded.magnitude, detail::U128{.hi = 0, .lo = divisor});
+    constexpr auto maxNumerator = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+    if (!reduced || reduced->quotient.hi != 0 || reduced->quotient.lo > maxNumerator) {
+        return std::nullopt;
+    }
+    std::uint64_t const magnitude = reduced->quotient.lo;
+    // Negated through unsigned arithmetic: the magnitude is at most INT64_MAX, so the result is in range.
+    auto const numerator =
+        rounded.negative ? static_cast<std::int64_t>(0ULL - magnitude) : static_cast<std::int64_t>(magnitude);
+    return Rational{Numerator{numerator}, Denominator{static_cast<std::int64_t>(scale / divisor)},
+                    DecimalPlaces{wanted}};
+}
+
+namespace detail {
+
+/// @brief The square root of a fraction, correctly rounded at a number of places.
+///
+/// The root is of `M = numerator / denominator`, where @p numerator is the fraction's numerator already scaled by
+/// `10^(2 * places)`; the result is `q / 10^places` with `q = floor(sqrt(floor(M)))`, which is `floor(sqrt(M))`,
+/// raised by one when `M > (q + 1/2)^2`, or when `M = (q + 1/2)^2` and @p mode is half away from zero or `q` is odd.
+/// The tie reads the remainder of `M`, not only its integer part: an integer part alone never equals
+/// `(q + 1/2)^2` and misses every value just above one (`sqrt(6.3)` at 0 places would be 2). With
+/// `M = F + R / B`, `M` passes `q^2 + q + 1/4` when `F - q^2 > q`, or when `F - q^2 = q` and `4R > B`, which reads
+/// as `R > floor(B / 4)`; it equals it when `F - q^2 = q`, `B` is a multiple of 4 and `R = B / 4`. Every step is an
+/// integer operation in 128 bits.
+/// @param numerator   The scaled numerator.
+/// @param denominator The denominator, not zero.
+/// @param places      The places of the result, at most `kMaxDecimalPlaces`.
+/// @param mode        The tie-breaking rule.
+/// @return The root at @p places, or empty when its numerator does not fit an `int64`.
+[[nodiscard]] constexpr std::optional<Rational> roundSqrtOfFraction(U128 numerator, U128 denominator,
+                                                                    std::uint32_t places, RoundingMode mode) noexcept {
+    auto const division = divModU128(numerator, denominator);
+    if (!division || places > kMaxDecimalPlaces) {
+        return std::nullopt;
+    }
+    std::uint64_t root = isqrtU128(division->quotient);
+    // F - q^2 >= 0, since q is the floor of F's root.
+    U128 const excess = wrappingSubU128(division->quotient, mulU64(root, root));
+    U128 const rootWide{.hi = 0, .lo = root};
+    U128 const quarter = shiftRightU128(denominator, 2);
+    bool const exactQuarter = (denominator.lo & 3U) == 0;
+    bool raise = excess > rootWide;
+    if (excess == rootWide) {
+        bool const tie = exactQuarter && division->remainder == quarter;
+        raise = division->remainder > quarter || (tie && (mode == RoundingMode::HalfAwayFromZero || (root & 1U) != 0));
+    }
+    constexpr auto maxNumerator = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+    if (root > maxNumerator || (raise && root == maxNumerator)) {
+        return std::nullopt;
+    }
+    if (raise) {
+        ++root;
+    }
+    return Rational{Numerator{static_cast<std::int64_t>(root)}, Denominator{powerOfTen(places)},
+                    DecimalPlaces{places}};
+}
+
+/// @brief The decimal digits of a 128-bit integer.
+/// @param value The integer.
+/// @return Its digits, without leading zeros; `"0"` for zero.
+[[nodiscard]] inline std::string decimalDigitsU128(U128 value) {
+    constexpr std::uint64_t chunk = 10'000'000'000'000'000'000ULL;
+    std::string out;
+    while (value.hi != 0) {
+        // A non-zero high limb makes the value at least 2^64 > 10^19, so the quotient is not zero.
+        U128Division const division = divModU128(value, U128{.hi = 0, .lo = chunk}).value_or(U128Division{});
+        std::string const digits = std::to_string(division.remainder.lo);
+        out.insert(0, std::string(19 - digits.size(), '0') + digits);
+        value = division.quotient;
+    }
+    return std::to_string(value.lo) + out;
+}
+
+}  // namespace detail
 
 inline std::expected<Rational, RationalError> Rational::fromFloat(double value,
                                                                   DecimalPlaces wantedPrecision) noexcept {

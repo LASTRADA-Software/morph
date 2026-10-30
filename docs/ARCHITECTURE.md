@@ -56,7 +56,7 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::testing` | The installed owner test kit | `StepExecutor`, `OwnerProbeRecorder` |
 | `morph::tui` | The terminal renderer and frontend (built only when `MORPH_BUILD_TUI=ON`; see `docs/spec/tui/`) | `Backend`, `Frontend`, `FrontendConfig`, `ShellFactory`, `frontendOption`, `kInterruptExitCode`, `LoopExecutor` |
 | `morph::qt` | Qt integration (built only when `MORPH_BUILD_QT=ON`) | `QtExecutor`, `QtWebSocketBackend`, `QtWebSocketServer` |
-| `morph::qt_quick` | The Qt Quick renderer and frontend (built only when `MORPH_BUILD_QT_QUICK=ON`; see `docs/spec/qt_quick/`) | `Backend`, `BackendOptions`, `CustomWidget`, `CustomRequest`, `widthClassOf`, `Components`, `ComponentFailure`, `Frontend`, `FrontendConfig`, `ShellFactory`, `frontendOption`, `usableHere`, `QtScheduler` |
+| `morph::qt_quick` | The Qt Quick renderer and frontend (built only when `MORPH_BUILD_QT_QUICK=ON`; see `docs/spec/qt_quick/`) | `Backend`, `BackendOptions`, `CustomWidget`, `CustomRequest`, `Components`, `ComponentFailure`, `Frontend`, `FrontendConfig`, `ShellFactory`, `frontendOption`, `usableHere`, `QtScheduler` |
 
 Every nested `detail` namespace under those topics holds implementation symbols. These do appear in some public signatures (e.g. `Bridge`'s constructor takes `unique_ptr<backend::detail::IBackend>`), but callers never type a detail name directly — `std::make_unique<morph::backend::LocalBackend>(...)` converts implicitly.
 
@@ -773,7 +773,7 @@ folder.
 | `ui/agent.hpp` | `McpAdapter`, `McpOptions`, `serveStdio` and the JSON-RPC error codes (`morph::ui::`) — an AI agent over MCP, as one more connection to the server. See `docs/spec/ui/agent.md`. |
 | `ui/author.hpp` | `Handle`, `AnyHandle`, `Body`, `ModelHandle`, `QueryHandle`, `MutationHandle`, `DeclScope`, `Scope`, `Command`, `Commands`, `Node`, `Nodes`, a builder per node kind and command, `Screen`, `screen`, `ScreenRegistry`, `screenRegistry`, `CatalogFacts`, `ModelFacts`, `ActionFacts`, `checkAccessibility`, `MORPH_REGISTER_SCREEN` (`morph::ui::author::`) — server-side authoring: typed builders that write a screen's document, and its registration with the load-time and accessibility rules. See `docs/spec/ui/author.md`. |
 | `ui/view.hpp` | `Node`, `NodeData`, `Prop<T>`, `SlotId`, `SlotBinding`, `slot()`, `Key`, `Common`, `Accessibility`, `KeyBinding`, `FieldState`, `MenuItem`, `Sizing`, `LayoutHints`, every node kind and its builder, `switchOn`, `forEach`, `table` (`morph::ui::`) — the immutable view tree whose properties are constants or slots. See `docs/spec/ui/view_tree.md`. |
-| `ui/backend.hpp` | `Widget`, `ContainerWidget`, `FieldWidget`, one widget interface per kind, `MenuEntry`, `IViewBackend` — the retained widgets a renderer implements. See `docs/spec/ui/backend_contract.md`. |
+| `ui/backend.hpp` | `Widget`, `ContainerWidget`, `FieldWidget`, one widget interface per kind, `MenuEntry`, `IViewBackend`, `widthClassOf` — the retained widgets a renderer implements. See `docs/spec/ui/backend_contract.md`. |
 | `ui/mount.hpp` | `Mounted` — builds a tree's widgets once, keeps them current through bindings, mounts content in child scopes, keeps keyed rows, controls inputs by their slots |
 | `ui/frontend.hpp` | `AppContext`, `AppSource`, `Bundle`, `ConnectError`, `Backend`, `Frontend`, `FrontendOption`, `FrontendError`, `selectFrontend`, `MountedShell`, `ShellFactory`, `runApp` — the seam `main` picks a frontend through. See `docs/spec/ui/frontend.md`. |
 | `ui/testing/recording_backend.hpp` | `testing::RecordingBackend` — the headless reference backend: operation log, golden dump, interaction helpers |
@@ -811,7 +811,7 @@ module `MorphUi`. The headers hold declarations only.
 
 | Header | Responsibility |
 |---|---|
-| `qt_quick/backend.hpp` | `Backend`, `BackendOptions`, `CustomWidget`, `CustomRequest`, `widthClassOf` (`morph::qt_quick::`) — `ui::IViewBackend` over Qt Quick: every widget kind as an item made from its `MorphUi` component. See `docs/spec/qt_quick/backend.md`. |
+| `qt_quick/backend.hpp` | `Backend`, `BackendOptions`, `CustomWidget`, `CustomRequest` (`morph::qt_quick::`) — `ui::IViewBackend` over Qt Quick: every widget kind as an item made from its `MorphUi` component. See `docs/spec/qt_quick/backend.md`. |
 | `qt_quick/components.hpp` | `Components`, `ComponentFailure` — bundle components verified by digest and compiled in a contained engine, host components by version, and the restyle map |
 | `qt_quick/frontend.hpp` | `Frontend`, `FrontendConfig`, `ShellFactory`, `frontendOption`, `usableHere` — runs an `AppSource` in a Qt Quick window on Qt's event loop. See `docs/spec/qt_quick/frontend.md`. |
 | `qt_quick/scheduler.hpp` | `QtScheduler` — `reactive::Scheduler` on `QTimer`s, with the owner current in every callback |

@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <QMetaObject>
+#include <QPointer>
+#include <QQuickItem>
+#include <QStringList>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 #include <algorithm>
 #include <cctype>
 #include <iterator>
+#include <string>
 #include <utility>
 
+#include "qt_quick/keys.hpp"
 #include "qt_quick/kinds.hpp"
 
 namespace morph::qt_quick::detail {
@@ -28,10 +34,80 @@ void StackImpl::setAlign(ui::Align align) {
 
 void StackImpl::setJustify(ui::Justify justify) { write("justify", static_cast<int>(justify)); }
 
+void StackImpl::setWrap(bool wrap) {
+    _wrap = wrap;
+    write("wrap", wrap);
+}
+
+void StackImpl::setDivided(bool divided) { write("divided", divided); }
+
+void StackImpl::setSelected(bool selected) {
+    write("selectable", true);
+    write("selected", selected);
+}
+
+void StackImpl::setPassesBleed(bool passes) { write("passesBleed", passes); }
+
+void StackImpl::setPadding(ui::Padding padding) {
+    write("paddingV", padding.vertical);
+    write("paddingH", padding.horizontal);
+}
+
+namespace {
+
+// Has the container's `place` run again whenever a cell's implicit size or visibility changes. The container's item is
+// the connection's context, and the call goes through it, not through the widget, which may be gone while Qt still
+// holds the item. The call is queued, not direct: `place` writes the cell's width, and a cell whose implicit size
+// follows from its own width (a wrapped text) is mid-way through updating bindings on that width when it reports the
+// change, so a direct write re-enters those bindings, which Qt then leaves at their stale values.
+void placeOnChange(QQuickItem* container, QQuickItem const* cell) {
+    auto const place = [target = QPointer<QQuickItem>{container}] {
+        if (target != nullptr) {
+            QMetaObject::invokeMethod(target, "place", Qt::QueuedConnection);
+        }
+    };
+    QObject::connect(cell, &QQuickItem::implicitWidthChanged, container, place);
+    QObject::connect(cell, &QQuickItem::implicitHeightChanged, container, place);
+    QObject::connect(cell, &QQuickItem::visibleChanged, container, place);
+}
+
+}  // namespace
+
+void StackImpl::adopted(ItemBase& child) {
+    QQuickItem const* const cell = child.item();
+    if (_wrap && cell != nullptr && item() != nullptr) {
+        placeOnChange(item(), cell);
+    }
+}
+
 GridImpl::GridImpl(Context& context, ui::ContainerWidget* parent)
     : ContainerItemWidget{context, QStringLiteral("MorphGrid"), parent} {}
 
 void GridImpl::setColumns(int columns) { write("columns", std::max(1, columns)); }
+
+void GridImpl::setTracks(std::vector<ui::GridTrack> const& tracks) {
+    QVariantList list;
+    for (ui::GridTrack const& track : tracks) {
+        list.append(QVariantMap{{QStringLiteral("kind"), static_cast<int>(track.width.kind)},
+                                {QStringLiteral("amount"), track.width.amount},
+                                {QStringLiteral("align"), static_cast<int>(track.align)}});
+    }
+    write("tracks", list);
+}
+
+void GridImpl::adopted(ItemBase& child) {
+    QQuickItem const* const cell = child.item();
+    if (cell == nullptr || item() == nullptr) {
+        return;
+    }
+    placeOnChange(item(), cell);
+}
+
+void GridImpl::place() const {
+    if (item() != nullptr) {
+        QMetaObject::invokeMethod(item(), "place", Qt::QueuedConnection);
+    }
+}
 
 void GridImpl::setGap(int gap) { write("gap", gap); }
 
@@ -43,6 +119,7 @@ void GridImpl::setAlign(ui::Align align) {
 void GridImpl::setSpan(ui::Widget& child, int span) {
     if (ItemBase const* const base = baseOf(child)) {
         base->write("columnSpan", std::max(1, span));
+        place();
     }
 }
 
@@ -50,6 +127,10 @@ void GridImpl::setSpan(ui::Widget& child, int span) {
 
 PanelImpl::PanelImpl(Context& context, ui::ContainerWidget* parent)
     : ContainerItemWidget{context, QStringLiteral("MorphPanel"), parent} {}
+
+QObject* PanelImpl::scheme() const {
+    return read("surface").toString().isEmpty() ? context().themeObject("cardScheme") : part("scheme");
+}
 
 void PanelImpl::setTitle(std::string_view title) { write("title", toQString(title)); }
 
@@ -82,7 +163,9 @@ ScrollImpl::ScrollImpl(Context& context, ui::ContainerWidget* parent, ui::Axis a
                                        QVariant::fromValue(&context.component(QStringLiteral("MorphScrollBar")))}}} {}
 
 SlotImpl::SlotImpl(Context& context, ui::ContainerWidget* parent)
-    : ContainerItemWidget{context, QStringLiteral("MorphSlot"), parent} {}
+    : ContainerItemWidget{context, QStringLiteral("MorphSlot"), parent,
+                          QVariantMap{{QStringLiteral("bar"),
+                                       QVariant::fromValue(&context.component(QStringLiteral("MorphScrollBar")))}}} {}
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
 
@@ -110,7 +193,23 @@ void TabsImpl::setOnSelect(std::function<void(std::size_t)> onSelect) {
 
 void TabsImpl::setBarShown(bool shown) { write("barShown", shown); }
 
+void TabsImpl::setMoreLabel(std::string_view label) { write("moreLabel", toQString(label)); }
+
+void TabsImpl::setInset(int inset) { write("inset", inset); }
+
+void TabsImpl::setPageInset(int inset) { write("pageInset", inset); }
+
+void TabsImpl::setStripSurface(std::string_view surface) { write("stripSurface", toQString(surface)); }
+
+void SlotImpl::setScrollable(bool scrollable) { write("scrollable", scrollable); }
+
 int TabsImpl::highlighted() const { return read("highlighted").toInt(); }
+
+std::string TabsImpl::shownText() const {
+    QStringList const labels = read("labels").toStringList();
+    int const index = highlighted();
+    return index >= 0 && index < labels.size() ? toUtf8(labels.at(index)) : std::string{};
+}
 
 // ── Splitter ──────────────────────────────────────────────────────────────
 

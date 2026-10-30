@@ -122,9 +122,12 @@ public:
     /// @param mode     The backend the models run behind.
     /// @param params   The screen's params.
     /// @param setup    Local mode's options, such as the user its calls run as; simulated mode ignores them.
+    /// @param widthClass The width class the backend reports from the first mount: `compact`, `medium` or
+    ///                   `expanded`.
     /// @throws std::runtime_error when the application does not open or the screen does not mount.
     ScreenHarness(::morph::client::LocalApp const& app, std::string screenId, RigMode mode, ui::ParamMap params = {},
-                  ::morph::client::LocalSetup setup = {}) {
+                  ::morph::client::LocalSetup setup = {}, std::string widthClass = "expanded") {
+        _backend.setWidthClass(std::move(widthClass));
         if (mode == RigMode::Local) {
             _source = std::make_unique<::morph::client::LocalSource>(app, std::move(setup));
         } else {
@@ -169,6 +172,10 @@ public:
     /// @return The backend.
     [[nodiscard]] ui::testing::RecordingBackend& backend() noexcept { return _backend; }
 
+    /// @brief Changes the width class the backend reports, as a resize would; the shell hands it to the screen.
+    /// @param widthClass `compact`, `medium` or `expanded`.
+    void setWidthClass(std::string widthClass) { _backend.setWidthClass(std::move(widthClass)); }
+
     /// @brief Where a screen's downloads are saved: a directory of this harness's own, removed with it.
     /// @return It.
     [[nodiscard]] std::filesystem::path const& downloads() const noexcept { return _downloads; }
@@ -197,7 +204,9 @@ public:
         if (!found) {
             return std::nullopt;
         }
-        return _backend.prop(*found, "text");
+        std::string const plain = _backend.prop(*found, "text");
+        // A text with runs is recorded as its runs; its text is their characters, joined.
+        return plain.empty() ? morph::ui::testing::detail::spansCharacters(_backend.prop(*found, "spans")) : plain;
     }
 
     /// @brief Clicks the button with @p testId.

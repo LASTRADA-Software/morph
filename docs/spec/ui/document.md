@@ -53,14 +53,20 @@ Read this before changing what a document may say. The expression language insid
 ## The document
 
 `ui::Document` is a screen, or the app document (id `app`, spec 6 §5), which has no view and may
-declare the app-only customization kinds.
+declare the app-only customization kinds and `formatting`: a literal record `{"date": "dd-MMM-yyyy", "dateTime":
+"dd-MMM-yyyy HH:mm"}` of the patterns every date the client shows is written and read in ([`expressions.md`, Date
+patterns](expressions.md)). Each pattern is checked where it is declared, and a screen that declares `formatting` is
+refused: a lab writes dates one way everywhere, so the pattern is the application's, not a node's.
 
 | Member | JSON key | Notes |
 |---|---|---|
 | `vocab` | `vocab` | `ui/1` (`kVocabulary`) |
 | `id` | `id` | Non-empty |
 | `title`, `identity`, `dirty` | same | Expressions; `dirty` is a condition |
-| `subtitle`, `status`, `actions` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
+| `titleSpans`, `eyebrow`, `eyebrowSpans`, `subtitle`, `subtitleSpans`, `status`, `tools`, `actions`, `menu`, `menuLabel` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
+| `leadPlacement`, `headSurface`, `pageSurface` | same | Where the head's lead sits, the surface the shell draws its top bar on while the screen is shown, and the surface it draws the page area on, in the screen scope ([The head](#the-head)); a screen's only |
+| `principalPlacement` | `principalPlacement` | Where the shell shows who is signed in: `sidebar` (the default, at the sidebar's foot) or `head` (at the top bar's trailing end); a literal name, the app document's only, and any other name is refused at load |
+| `navigation` | `navigation` | The counts on the navigator's entries, in the app scope ([The app document's navigation](#the-app-documents-navigation)); the app document's only |
 | `params` | `params` | Name to type, in declaration order |
 | `scope` | `models`, `state`, `let`, `queries`, `mutations`, `watch`, `checks` | The screen scope's declarations |
 | `lifecycle` | `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange` | Command lists |
@@ -84,9 +90,77 @@ rather than having it ignored: the author meant a refresh the client would silen
 
 ### The head
 
-A screen's head is what a shell shows above it beside the title: `subtitle` (an expression), `status` (parts
-`headBadge`: `{tone, text, icon, visible}`) and `actions` (parts `actionButton`). All are evaluated in the screen
-scope, and the app document, which has no view, refuses them.
+A screen's head is what a shell shows above it beside the title: `titleSpans` (an expression of runs, as a `text`'s
+`spans`: a shell draws them in its top bar in place of `title`, which stays the tab's caption, the navigator's entry,
+the window's title and what an older shell draws; the runs are not compared with `title`), `eyebrow` (an expression, the line above the title) with `eyebrowSpans` (runs, drawn in place of `eyebrow` by a shell
+that knows them; a head with only an eyebrow shows), `subtitle` (an expression), `subtitleSpans` (an
+expression of runs, as a `text`'s `spans`: a shell that knows it draws the runs in place of `subtitle`, and `subtitle`
+beside it is what an older shell draws), `status` (parts
+`headBadge`: `{tone, text, icon, visible}`), `tools` (parts `headTool`), `actions` (parts `actionButton`) and its own
+`menu` (parts `headMenuItem`), with `menuLabel` (an expression, the menu trigger's accessible name; default `More
+actions`). All are evaluated in the screen scope, and the app document, which has no view, refuses them. A shell
+draws them in that order on one line: the eyebrow above the title, the subtitle, the badges, then at the trailing edge the tools, the actions and
+the menu.
+
+`leadPlacement` (an expression of a name) says where the lead, the subtitle and the badges together, sits:
+
+- `below`, the default: under the title.
+- `inline`: on the title's line, right after the title; where it does not fit it wraps to a line of its own before the
+  trail does. In the workspace's own head, which carries the title in the tab bar, it draws as `below`.
+- `end`: at the trailing edge of the head's first line, after the tools and before the actions and the menu.
+
+A literal other than these three is refused at load (`` `leadPlacement` is `below`, `inline` or `end` ``); a computed value
+that names none is reported once at its path and taken as `below`. The placement may change at run time, so a width
+class can pick one.
+
+`headSurface` (an expression of a surface's name, `null` or absent for none) is the surface the shell draws its top bar
+on while the screen is shown; a name that is no surface draws as none does. The built-in `toolbarJoined` surface wins
+over it while the page continues the head's block.
+
+`pageSurface` (an expression of a surface's name, `null` or absent for the built-in `page` surface) is the surface the
+shell draws the page area on while the screen is shown, so a screen can sit on a white page at one width and on the
+grey one at another (`cond(compact, "plainPage", null)`); a name that is no surface draws as `page` does. It is a
+screen's member, as every head member is: the app document refuses it.
+
+An `actionButton` part also takes `iconOnly` (a condition): while it holds, the button draws its `icon` alone and its
+label is its accessible name and its tooltip. A part with `iconOnly` and no `icon` is refused (`` an icon-only action
+names its `icon` ``). The same part in a dialog's or drawer's `actions` draws its `icon` too, and takes `iconOnly` alike.
+
+### The app document's navigation
+
+The app document's `navigation` is a list of `navigationBadge` parts, `{screen, text, tone, visible}`: a count a
+shell puts on the navigator's entry of a screen, such as the worksheets waiting for review. `screen` is the screen id
+the entry opens, a non-empty literal (`a navigation badge names the screen of its entry`); `text` and `tone` are
+expressions and `visible` a condition, all evaluated in the app scope, so a count follows the app state and queries
+it reads. A screen that declares `navigation` is refused (`` `navigation` is the app document's; a screen has none
+``): the navigator lists the application's screens, and no screen owns its entries.
+`AppRoot::navigationBadges()` answers the visible ones ([interpreter.md](interpreter.md#the-app-root-scope)).
+
+A `headTool` part is a search field or a select the shell draws in the head, as data the screen evaluates: no node of
+the screen is mounted in the shell's widgets.
+
+| Key | Kinds | Shape | Notes |
+|---|---|---|---|
+| `id` | both | name, required | unique among the tools |
+| `kind` | both | text, required | `search` or `select` |
+| `label` | both | expression, required | the accessible name; the head draws no caption |
+| `value`, `placeholder` | search | expressions | the text it shows, and what shows while it is empty |
+| `onChange`, `onSubmit` | search | commands | after each user edit, and on Enter; `event` is the text |
+| `options`, `selected` | select | expressions | as a `select`'s; `options` is required |
+| `style` | select | text | `dropdown`, the default and the only one |
+| `onChoose` | select | commands | after the user chooses; `event` is the chosen key |
+| `width` | both | literal integer, 1 or more | in units; default 30 for a search, the content's for a select |
+| `visible`, `enabled` | both | conditions | default `true` |
+
+A tool is controlled: it shows `value` or `selected` and reports the user's edit through its commands, as a bound
+input does; it changes only when the document's binding does. A key of the other kind is refused.
+
+A `headMenuItem` part takes a `menu` entry's keys (`label`, `icon`, `keys`, `checked`, `enabled`, `onClick`,
+`items`, `separator`, `description`, `visible`; `items` are head menu items too) and `id`, a name. An entry that is
+chosen, neither a separator nor a submenu, has an `id`, unique across the whole menu, which the shell names it by
+(`ScreenHead::choose`); a separator or a submenu takes none. The shell draws the menu after the actions as one
+icon button (`more`) that opens the entries; the head's actions are never moved into it, so an author who wants an
+action there on `compact` writes it in both with opposite `visible` conditions.
 
 An `actionButton` part is one button of a list:
 
@@ -127,7 +201,7 @@ A command list is an array of commands, or one command object. `Command` carries
 |---|---|
 | `target` | The name acted on: `set`'s `name.path`; the state of `reset`; the mutation of `run`, `signIn`, `upload`; the query of `refetch`; the element of `open`, `close`, `focus`; the screen of `navigate`; the name of `host`, `switchBackend`, `setLocale`; the point of `resetPrefs`; the state a `download` to preview binds |
 | `value` | `set`'s value; `run`'s body; `navigate`'s params; `return`'s value; `host`'s args; `notify`'s message; `if`'s condition; the file of `upload` and `download` |
-| `extra` | `run`'s `each`; `navigate`'s `route`; `download`'s suggested `name` |
+| `extra` | `run`'s `each`; `navigate`'s `route`; `download`'s suggested `name`; `focus`'s `row` |
 | `binding` | `run`'s and `upload`'s `as` |
 | `option` | `navigate`'s `as`; `notify`'s `role`; `download`'s `dialog` or `preview` |
 | `transfer` | `upload`'s `id`, whose `progress`, `pending` and `error` are element values |
@@ -142,6 +216,16 @@ runs nothing.
 
 ## View nodes
 
+**A bar that stays in view.** ui/1 has no screen footer: a `column` sized to stretch in height, holding a `scroll`
+sized to stretch in height between its bars, keeps the bars at the column's ends while the content scrolls (the
+scroll takes the column's spare height, not its content's). The same column gives a bar at the top, or both. As a
+screen's root it fills the page; the author API writes it as `pinned`, which draws each bar as a `column` of its nodes
+padded by step 2 above and below and by the page's step (4) at its sides on the `bar` surface inside a `divided`
+column that is marked `pageEdge`, with the scrolling body in a column padded by that step; the bars' surfaces and rules
+span the column while their content lines up with the body's, and the shell, which follows the shown root's `pageEdge`,
+does not inset the page around it. When the top bar always shows (it has nodes and none has a `visible` condition) the column also says it is `headJoined`: the bar continues the head's block, and the divided column's rule under the bar is the block's. A hand-made column draws its bars as written. A splitter pane may be pinned: a stretching
+splitter gives each pane its height, and a pinned pane keeps its bars at the pane's ends.
+
 A `DocNode` is a node or a structured part of one. Its properties stay keyed by their document
 keys — `props` (expressions), `events` (command lists, a custom node's events as `on.<event>`),
 `children` (node lists), `parts` (records such as columns and tabs), `names` (plain strings) and
@@ -153,42 +237,54 @@ place a kind is described.
 `minWidth`, `maxWidth`, `minHeight`, `maxHeight` (literal integers of 0 or more, in backend units: the node's extent
 on that axis is clamped into them, whatever its sizing), `alignSelf` (`start`, `center`, `end`, `stretch`: where the
 node sits across its `row`'s, `column`'s, `grid` row's or `forEach`'s axis, in place of the container's `align`),
-`autofocus`, `testId`, `surface` (strings), `a11y`
+`bleed` (a literal boolean, default `false`: the node's sides lie at its parent's edges, past the parent's horizontal padding, while its siblings stay inside it; only across, so its place along the parent is its siblings'; it reaches the padding of the parent the document names: a column the interpreter inserts around several children of a panel or a tab page is transparent to it, while a column the document wrote reaches only its own padding, and its natural width adds nothing to the parent's. The loader refuses it on the view root and on a child of anything but a column, a panel or a tab page: a row's or a grid's child has neighbours at its sides),
+`autofocus`, `testId` (strings), `surface` (an expression of a surface's name, so it follows the data; a plain
+string is a literal one: a value that names no surface draws as no surface does, `null` is no surface, and any other
+value that is not a string is reported once at the node's `surface` path and drawn as no surface), `a11y`
 (`{name, role}`), `drag` (`{payload}`), `drop` (`{accepts, onDrop}`) and `keys`. `sizing` is the width's —
 `"content"`, `{"lit": {"fixed": n}}` or `{"lit": {"stretch": w}}` — or both dimensions as a record of them, one
-left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {"stretch": 1}}}`. **Text and the inputs** also take `readonly`, `required`, `stale`
-(conditions) and `errors`.
+left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {"stretch": 1}}}`. A node's sizing means the
+same inside a `switch` case, an overlay or a row as at the root: the content's stretch reaches the container it is
+mounted in. **Text and the inputs** also take `readonly`, `required`, `stale`
+(conditions) and `errors`. **The six inputs** also take `description`, a line drawn under the control and announced
+as its accessible description, and `tone` (`ok`, `warn`, `err`, `info`; `neutral` or `null` for none), an evaluation
+of the value that outlines the control and colours the description and, unlike `errors`, does not make the value
+invalid; a tone of no known name is reported once and drawn as none. A `text` refuses `description`: a text is not
+described, so the line goes in the text. A `text`'s `tone` is its colour, whatever its role: the role keeps the size,
+weight and face, so `{role: display, tone: err}` is a large red figure.
 
 | Kind | Keys (a ⓘ key is in the node's own scope) | Element values beyond `visible`, `enabled`, `valid`, `errors`, `shownErrors` |
 |---|---|---|
-| `text` | `text`, `role` (`normal`, the default, `muted`, `heading` (`title` is accepted as its alias), `section`, `error`, `success`) | |
-| `button` | `label`, `icon`, `emphasis` (`normal`, `primary`, `danger`, `ghost`), `style` (`push`, the default, or `item`: an entry of a list), `selected` (a condition, only with `style: item`: the entry is the current one), `onClick`, `onActivate` | |
-| `textInput` | `value`, `placeholder`, `mode`, `icon` (an icon of the theme's icon set, drawn at the leading edge; refused on a multiline input), `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
+| `text` | `text`, `spans` (runs of emphasis, below), `tone`, `role` (`normal`, the default, `muted`, `heading` (`title` is accepted as its alias), `section`, `error`, `success`, `mono`: an identifier, in the theme's fixed-pitch family at `font.size.mono`, always on one line and cut at its end with an ellipsis where it does not fit, its full text then the tooltip unless the node gives its own (a mono run inside `spans` is not a mono text: rich text wraps with its sentence); `display`: a figure that stands out, such as a KPI's number, at `font.size.display` and the strong weight; `small`: a footnote or timestamp, at `font.size.small`; `overline`: a short label over a group, drawn as `section` does (body size, strong, muted) unless the theme's `font.overline.case` is `uppercase`, which draws it at the small size, strong, muted, in letter-spaced capitals. Write the text as it reads, "Record type": the frontend draws the capitals and the accessible name stays as written. A table column's `role` takes it too) | |
+| `button` | `label`, `icon`, `emphasis` (`normal`, `primary`, `danger`, `ghost`, `dangerOutline`: a destructive action that is not the main one, outlined with its label in the error colour), `style` (`push`, the default, or `item`: an entry of a list), `selected` (a condition: an item is the current entry; a push button is pressed in), `shape` (`default`, `round`: corners of half the height, at least as wide as tall, or `square`: a button for a glyph, with the theme's corners, no least width and little side padding, at least as wide as tall, and a strong caption at the body size; `square` with `style: item` is refused, and a badge has no `square`), `size` (`normal`, or `small`: the least side padding and a strong label in the small type step; it keeps the control height), `mono` (a literal flag: the label in the `mono` text role's face; `shape`, `size` and `mono` are literal names and a literal flag), `onClick`, `onActivate`, `children` (only with `style: item`: the entry's content, drawn in place of its label, which still names it; display kinds only at any depth — `text`, `badge`, `keyValue`, `progress`, `steps`, `busy`, `spacer`, `column`, `row`, `grid`, `forEach`, `switch` — and no `keys`, `drag`, `drop` or `autofocus` there: "an entry's content is read-only; put the control beside the entry") | |
+| `textInput` | `value`, `placeholder`, `mode`, `icon` (an icon of the theme's icon set, drawn at the leading edge), `unit` (text, drawn muted at the trailing edge inside the field and announced after the field's description, such as `°C`), `prefix` (text, drawn muted at the leading edge inside the field, after the icon, and announced before the field's description, such as `±`), `emphasis` (`normal`, the default, or `prominent`: the screen's focal field, such as a scanner's, which the frontend draws so that it stands out), `align` (`start`, the default, `center` or `end`: where the text sits in the field; a literal name, and an `end` input draws its digits at one width each) — `unit`, `icon`, `prefix`, `emphasis` and `align` refused beside a literal `mode: multiline`, and a computed mode that turns out multiline is reported once and its unit, icon and prefix are left out, `mono` (a literal flag: the text and the placeholder in the `mono` text role's face; also on a multiline input), `commitOn` (`change`, `blur`, `enter`), `label`, `showLabel` (a literal `bool`; default `false`), `onChange`, `onCommit`, `onSubmit` | `value`, `draft`, `dirty`, `focused`, `touched` |
 | `checkbox` | `label`, `checked`, `onToggle`, `onChange` | `checked` |
-| `select` | `options`, `selected`, `style`, `label`, `showLabel`, `onStale` (`clear`, `keep`), `onChoose`, `onChange` | `selected`, `selectedOption` |
-| `menu` | `items`: parts `{label, icon, keys, checked, enabled, onClick, items}` | |
-| `column`, `row` | `children`, `gap`, `align` (across the axis: `start`, `center`, `end`, `stretch`, the default), `justify` (the spare length along the axis while no shown child stretches: `start`, the default, `center`, `end`, `between`, in equal gaps never less than `gap`) | |
-| `grid` | `children`, `gap`, `columns`, `align` (each cell's content in its row, as a row's) | |
+| `select` | `options`, `selected`, `style` (`dropdown`, the default, `radio`, or `segmented`: every option one segment of a row, one marked; a constant is checked at load, and a computed one that names none is reported once and drawn as a dropdown), `label`, `showLabel`, `onStale` (`clear`, `keep`), `onChoose`, `onChange` | `selected`, `selectedOption` |
+| `menu` | `items`: parts `{label, icon, keys, checked, enabled, onClick, items, description, visible}` (`description` a muted line of help with the entry; `visible` a condition, a hidden entry left out), or `{separator: true}` alone, a line between entries; `style` (`bar`, the default, or `button`: one button that opens the entries); for `style: button`, the trigger's `label`, `icon` and `emphasis` (as a button's) | |
+| `group` | `label` (the legend), `required` (the legend's mark only: a group has no value, so no `Required` is derived from it), `description` (a line under the children), `errors` (as on an input), `gap`, `children` | |
+| `column`, `row` | `children`, `gap`, `padding` (a spacing step, 0 to 5, that insets the children from every edge, default 0; or the constant list `{"lit": [vertical, horizontal]}` of two steps, each 0 to 5, for the ends and the sides apart; any other `lit` list is refused at load, a computed padding is one step, and one that yields a list is reported once and taken as 0), `pageEdge` (a literal boolean, default `false`: the stack insets its own content, so as the screen's shown root it lies at the page's edges and the shell does not inset the page; it means nothing anywhere else, and the loader does not refuse it there), `headJoined` (a literal boolean, default `false`, which needs `pageEdge` on the same stack and is refused without it: the stack's first child continues the head's block. As the shell's shown root the shell then draws its top bar on the `toolbarJoined` surface, with no rule under it, and the first child draws the rule under the whole block: `pinned`'s divided column draws it under its top bar, a `tabs` strip its own, and a hand-made root is `divided`), `selected` (a condition: this stack is the chosen entry of a list, as a check box inside it says. While true it draws the accent's 3 px bar at its leading edge, down its whole height, over its surface and under its children, clipped to its own surface's shape; there is no fill, so a `surface` chosen by condition and the bar compose, and no click: the control inside is the one target. The bar lies inside the stack's leading padding, so a stack with `selected` and no leading padding draws it over its first 3 px: give it padding. The stack becomes a `Grouping` for assistive technology unless it names a role, reports `selectable` and follows the condition as `selected`; name it, as an unnamed group is one screen readers pass over. A `grid` refuses it), `align` (across the axis: `start`, `center`, `end`, `stretch`, the default), `justify` (the spare length along the axis while no shown child stretches: `start`, the default, `center`, `end`, `between`, in equal gaps never less than `gap`); a `row` also takes `wrap` (a literal boolean, default `false`: the children continue on the next line when they do not fit, as the `StackWidget` row of the backend contract says; a `column` has no `wrap`, and the loader refuses it there); `divided` (a literal boolean, default `false`: a 1 px rule in the theme's divider colour is drawn between each two shown children, centred in the gap and taking 1 px of its own, so a gap of 0 still separates them; a column's rule is horizontal and a row's vertical, the line's height; the terminal draws none; the loader refuses it on a `row` that also has `wrap`, since a rule between lines and within them would be two rules) | |
+| `grid` | `children`, `gap`, `columns` (columns sharing the width), `tracks` (in place of `columns`; parts `{width, align}`, one per column: `width` a sizing, default `{"stretch": 1}`, as a table column's; `align` `start`, the default, `center` or `end`, where a text's text and a label-width cell sit across the column, as a table column's `align`; a container cell fills it), `align` (each cell's content in its row, as a row's) | |
 | `spacer` | | |
-| `panel` | `title`, `header` (nodes, shown beside the title, usable while collapsed), `padding`, `collapsible`, `collapsed`, `onToggle`, `children` | |
+| `panel` | `title`, `header` (nodes, shown beside the title, usable while collapsed), `padding` (one spacing step; a list is refused at load), `gap` (the spacing step between several `children`, default 2, read once; a single child has none to space), `collapsible`, `collapsed`, `onToggle`, `children` | |
 | `scroll` | `axis`, `children` | |
 | `switch` | `on` (required), `cases`: parts `{when, scope, children ⓘ}`, `default` | |
-| `tabs` | `tabs`: parts `{label, children}`; the node keeps the user's pick, so picking a tab mounts and shows its page | |
-| `dialog`, `drawer` | `open`, `title`, `showErrors`, `side`, `scope`, `children` ⓘ, `default` ⓘ, `cancel` ⓘ, `actions` ⓘ (parts `actionButton`, [The head](#the-head)), `onDismiss` | `open`, `ready`, `submitted` |
+| `tabs` | `tabs`: parts `{id, label, children}`, `selected`, `onChoose`, `moreLabel` (an expression, default `More`, translated with `t` and in English: the label of the menu a frontend may draw for the tabs that do not fit in the bar), `inset` (a literal spacing step, 0 to 5, default 0: the strip and its rule span the node's width, the first tab starts this far in from the leading edge, and each page is padded by it on every side, and the page's inset is the whole gap under the strip's rule; a computed or out-of-range value is refused), `pageInset` (a literal spacing step, 0 to 5, default `inset`: the padding of each page, apart from the strip's; each page pads its own content inside its own scroll, so a `bleed` child of a page reaches the node's edges whether or not the page scrolls; a computed or out-of-range value is refused), `stripSurface` (a surface name: the strip, and nothing else, is drawn on that surface across the node's width; with a `pageEdge` column as the root, a tabs node with both is a page whose strip sits in the head's block and whose content is inset below its rule); a tab's `label` follows its expression, and the list of tabs is fixed (a tab takes no `visible`). `selected` is the id of the tab shown, controlled as a select's: a pick runs `onChoose` with the tab's id as `event`, and the page follows `selected` alone; a literal `null` is no binding. Without it the node keeps the user's pick, so picking a tab mounts and shows its page. A relabel keeps the pick. A command chooses a tab by setting the state `selected` reads; `set` never names a tabs node | `selected` (the shown tab's id: the bound one, else the pick, else the first tab's) |
+| `dialog`, `drawer` | `open`, `gap` (the spacing step between several `children`, default 3, read once), `title`, `description` (a line in the head under the title, ruled off from the body, which does not scroll with the content and is the overlay's accessible description), `descriptionSpans` (the line as runs, as a `text`'s `spans`: a client that knows it draws them in place of `description`, and the accessible description is their characters joined), `showErrors`, `side`, `scope`, `children` ⓘ, `default` ⓘ, `cancel` ⓘ, `actions` ⓘ (parts `actionButton`, [The head](#the-head)), `onDismiss`; a dialog's `sheet` (a condition: while true the dialog is drawn as a sheet that fills the window, with a head of a dismiss control and the title centred on the sheet, ruled off from the body, the document choosing by the width class, as `{"fn": "eq", "args": [{"env": "widthClass"}, "compact"]}`) and `dismissLabel` (the dismiss control's label, default `Close`, translated with `t`; only with `sheet`); the dismiss control dismisses exactly as Escape does, and a drawer takes neither | `open`, `ready`, `submitted` |
 | `busy` | `active`, `label` | |
-| `forEach` | `rows` (required), `key` ⓘ, `axis`, `gap`, `scope`, `children` ⓘ | |
-| `table` | `rows`, or `model` and `action` with `body` and `mode`; `key` ⓘ, `columns` (parts `{id, label, width, role ⓘ, cell ⓘ}`, or an expression — `role` styles the column's default cell and has no effect on one with its own `cell`), `selectionMode`, `selection`, `sort`, `filters`, `rowTone` ⓘ, `highlightKey`, `onActivate` ⓘ, `empty` (nodes: shown instead of the table while `rows` is an empty list), `scope` | `selection`, `activeKey`, `sort`, `filters`, `viewCount`, `sourceCount`, `selectedCount`, `pending`, `error`, `hoveredKey` |
+| `forEach` | `rows` (required), `key` ⓘ, `axis`, `gap`, `wrap` (a literal boolean, default `false`; the rows continue on the next line when they do not fit; the loader refuses `true` where a literal `axis` is not `horizontal`, and a computed `axis` that is not horizontal at lowering is reported and the rows do not wrap), `divided` (as a column's, for a vertical `forEach`; the loader refuses it where a literal `axis` is `horizontal`), `scope`, `children` ⓘ | |
+| `table` | `rows`, or `model` and `action` with `body` and `mode`; `key` ⓘ, `columns` (parts `{id, label, width, role ⓘ, align, valign, sortable, wrap, sortBy ⓘ, cell ⓘ}`, or an expression of `{id, label, align, valign}` records — `role` styles the column's default cell and has no other effect on one with its own `cell`; it takes a text's role names, and a literal one is checked the same way; a `mono` role also sets the width unit of the column's `fixed(n)`: n mono characters, plus the cell padding, with or without a `cell`, so a column of identifiers says `mono` to hold them whole; `wrap` (a literal boolean, default `true`) with `false` draws the column's text cells on one line, cut at the column's width with an ellipsis, such as a value with its unit; `align` (`start`, the default, `center`, `end`) places a text cell's or a text input's text, a badge, check box or push button cell, and the header label across the column, while a container cell fills it; `valign` (`start`, `center`, the default, `end`) places every cell down its row; both are literal names, and a computed column's place of no known name is reported once and takes the default), `valign` (the default of every column that gives none), `selectionMode`, `selection` (a list of row keys: bound, it is controlled, as a select's `selected` is; refused without a `selectionMode` of `single` or `multiple`, and on a model-backed table), `onSelectionChange` (after each user change, with `event` the new keys; the same rules), `selectColumn` (a literal flag, only with a literal `selectionMode: multiple`: the table draws its selection as a leading column of check boxes under a select-all box), `selectAllLabel` (the select-all box's accessible name, only with `selectColumn`; default `Select all`, translated with `t`), `rowLabel` ⓘ (each row's accessible name, which its box carries; default the row's key as text), `sort` (a list of keys `{"column": <a sortable column's id>, "direction": "asc" or "desc"}`, most significant first, `[]` the source order: the table orders its rows by it; bound, it is controlled, as `selection` is, and unbound the table holds it from `[]`; a literal one names sortable columns, each once; a column's `sortable`, a literal flag that needs its `id`, makes a click on its header sort by it alone, ascending, or descending when it already is the first key ascending; its `sortBy`, only with `sortable`, is the value the rows order by, read per row as `key` is, default the row's field of the column's `id`), `onSortChange` (after a header click, with `event` the new sort; needs a sortable column), `pageSize` (a positive integer: the table shows one page of that many of its sorted rows; absent or `null`, every row; a literal below 1 is refused), `group` (a part `{by ⓘ, heading ⓘ}`: a heading row before each run of adjacent rows whose `by` values are equal, drawn from `heading` in a row scope whose `row` is the run's record `{key, count, first, last, items}` of the whole group; a heading spans every column, is never selected, marked or activated, and counts in no element value; with a sort, each group keeps its place and its rows are sorted within it, and a group split across pages gets its heading on both; refused on a model-backed table; a heading's key is reserved, `"\u001Fgroup:"` then the canonical JSON of its run's key, `":"` and its ordinal among the runs with that key, and a data row with a field `"\u001Fgroup"` is taken for a heading), `page` (the page shown, from 0, clamped to the last; absent or `null`, the first; needs `pageSize`; `pageSize` and `page` are refused on a model-backed table, whose engine pages), `filters` and `highlightKey` (a model-backed table's only), `rowTone` ⓘ, `onActivate` ⓘ, `empty` (nodes: shown instead of the table while `rows` is an empty list), `scope` | `selection`, `activeKey`, `sort`, `filters`, `viewCount` (the rows the table orders, every page), `sourceCount` (the rows `rows` gave), `selectedCount`, `pending`, `error`, `hoveredKey`, `page` (the page shown, clamped), `pageCount` (at least 1), `pageFirst` and `pageLast` (the 1-based positions of the page's first and last rows, both 0 when there are none; a table that does not page reads page 0 of 1 over every row) |
 | `dateTimeInput` | `value`, `mode`, `label`, `showLabel`, `onChange`, `onCommit` | as `textInput` |
 | `slider` | `value`, `min`, `max`, `step`, `label`, `onChange`, `onCommit` | as `textInput` |
 | `filePicker` | `accept`, `multiple`, `mode`, `label`, `onPick` | |
-| `banner` | `tone`, `text`, `dismissible`, `action` (`{label, onClick}`), `onDismiss` | |
-| `badge` | `tone`, `text`, `icon` | |
-| `progress` | `value`, `label` | |
-| `steps` | `items`, `current` | |
-| `keyValue` | `items` | |
+| `banner` | `tone`, `text`, `spans` (as on `text`; a run may also carry `action`, below), `dismissible`, `action` (`{label, onClick}`), `actionStyle` (a literal name: `ghost`, the default, an unframed button at the trailing edge; `button`, a framed normal button there; `link`, the action drawn inside the message, underlined in the accent, wrapping with the sentence; to assistive technology a link stays a button named by the action's label, and runs the action rather than navigating), `actionStretch` (a literal boolean, default `false`: the action takes a line of its own under the message, as wide as the banner; the loader refuses it beside `actionStyle: "link"` and without an `action`), `onDismiss`. In a `link` banner's `spans` at most one run may carry `"action": true`: its text is the link, at that place in the sentence; without such a run the link follows the message, its text the action's label. The loader refuses an `action` run in any other kind's spans, in a banner whose style is not `link`, and a second one in the same spans | |
+| `badge` | `tone`, `text`, `icon`, `style` (`filled`, the default, or `outline`: the surface's fill, with the tone's outline colour as border and its colour as text), `shape` (`default` or `round`) and `mono` (a literal flag), as on `button`, `onRemove` (commands: the badge draws a remove control after its text and takes the focus, and removing it runs them; a removable badge is a filter chip), `removeLabel` (the control's accessible name, only with `onRemove`; default `Remove ` and the text, translated with `t`) | |
+| `progress` | `value` (0 to 1; a decimal is read exactly, at whatever places it carries), `label` | |
+| `steps` | `items`, `current`, `labelled` (a condition, default true: false draws only the marks and the connectors, and each step keeps its label as its accessible name) | |
+| `keyValue` | `items` (a list of `{label, value, spans, tone}` records: `spans` as on `text`, shown in place of `value` by a client that knows them; `tone` (`ok`, `warn`, `err`, `info`; `neutral` or `null` for none) draws the value in the tone's colour and strong weight, and a name that is none of them is reported once and drawn as none), `fieldLayout` (`inline`, the default: each caption beside its value; `stacked`: each caption above it, as a `form`'s) | |
 | `emptyState` | `title`, `text`, `icon`, `action` | |
-| `splitter` | `orientation`, `sizes`, `children` | |
-| `collapsible` | `title`, `open`, `header`, `children`, `onToggle` | |
+| `chart` | `summary` (required: the text alternative), `series` (required, 1 to 4 parts `{points, y ⓘ, x ⓘ, xLabel ⓘ, tone ⓘ, note ⓘ, label, joined}`), `lines` (0 to 16 parts `{value, label, tone, style}`), `yMin`, `yMax`, `yPlaces` (a literal integer, 0 to 18), `yLabel`; see [Charts](#charts) | |
+| `splitter` | `orientation`, `sizes` (a list of integers in units, one per pane; a list of another length shares the space equally), `children` | |
+| `collapsible` | `title`, `gap` (as a panel's, default 2), `open`, `header`, `children`, `onToggle` | |
 | `dropZone` | `accept`, `multiple`, `children`, `onDrop` | |
 | `customize` | `point` (required) | |
 | `boundary` | `loading`, `error`, `children` | |
@@ -202,9 +298,60 @@ A `dateTimeInput`'s `value` is a `timestamp` or an ISO-8601 date or date-time st
 `yyyy-MM-ddTHH:MM:SS[.fff][Z]`); the loader refuses any other type at `value`. The field keeps the type the
 document declares and writes it back: a string field writes `yyyy-MM-dd` in `date` mode and the ISO-8601 instant
 in `date-time` mode, and `""` on clearing; a timestamp field writes the timestamp, or `null` on clearing. A value
-whose type the document leaves undecided is written as the type it holds at the edit.
+whose type the document leaves undecided is written as the type it holds at the edit. The input reads its value as
+the expression language's date functions do ([`expressions.md`](expressions.md#semantics), "Dates and instants"):
+a `yyyy-MM-dd` string is a date, which it shows as midnight in the display zone, and `""` is a date not given yet.
+
+**Spans.** A `text`'s or a `banner`'s `spans` is an expression of a list of runs, the one way to emphasise part of
+a sentence: an identifier in the monospace face, a bold word, a figure in a tone. Each run is a record
+`{text, strong, mono, tone}`, whose `text` is shown as any value is (a number as its digits), whose `strong` and
+`mono` are booleans that default to `false` and whose `tone` (`ok`, `warn`, `err`, `info`; `neutral` or `null` for
+none) colours the run, or a plain value, a run with no flag and no tone. The node's role gives every run its size,
+and its colour unless the run has a tone: a muted line with a `mono` run is muted in the mono face. Data is only ever the text of a run and is never parsed, so it cannot
+open a run of its own. A `spans` written as a `list` is checked at load: a literal run is a string, and an `obj` run
+has a `text`, no keys but `text`, `strong`, `mono` and `tone`, a literal flag that is a boolean and a literal tone
+that is one of the names. A computed run of another shape (a list, `null`, a record without `text`) is dropped and
+reported once at the node's `spans`, and a computed tone of no known name is reported once there and the run is
+drawn untoned. A node may give
+`text`, `spans` or both: a client that knows spans draws them and does not read `text`, and `text` beside `spans` is
+what a client older than spans draws, so a document that may reach one gives both.
+
+```json
+{"kind": "text", "role": "muted",
+ "spans": {"list": ["Signing as ", {"obj": {"text": {"ref": "meaningLabel"}, "strong": true}}, "."]}}
+```
+
+**Groups.** A `group` is a labelled set of inputs, HTML's `fieldset` and `legend`: its legend is drawn with the
+required mark when `required`, its description and its shown errors under its children. Which of its children are
+required is the application's rule, which a check targeting the group says: the check's message shows on the group
+and keeps a dialog from `ready`. A group counts as touched once any element inside it is, so under the `touched`
+policy its message shows as soon as the user has acted inside it.
 
 A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
+
+### Charts
+
+A `chart` plots points against a numeric axis, optionally joined, with horizontal reference lines: a control
+chart, a trend, a stability plot. It is a palette node rather than a host component, so it reaches every client and
+backend, and what it plots, marks and says is the interpreter's ([`interpreter.md`](interpreter.md#charts)).
+
+- A **series** draws one point per element of `points`. `y` (required), `x`, `xLabel`, `tone` and `note` are read
+  once per point, with `row` the point's element, as a table's `key` is; no row scope is made, so they read no name
+  a row scope would declare. `y` is a number or a quantity, and `null` leaves a gap; `x` is a number, a date or an
+  instant, and without `x` on any series a point sits at its index; `xLabel` labels the point on the horizontal
+  axis; `tone` (`neutral`, `info`, `ok`, `warn`, `err`, or `null`) marks it; `note` is text beside it. `label` is
+  the series' name in the legend, required when there are two or more series. `joined` (a literal `bool`, default
+  `true`) joins the points.
+- A **line** is drawn at `value` (required, a number or a quantity), in its `tone` (default `neutral`), with
+  `style` `solid` (the default), `dashed` or `dotted`; `label` defaults to the value at `yPlaces`.
+- `yMin` and `yMax` fix the ends of the value axis; `yPlaces` is the places its labels are shown at; `yLabel` names
+  its unit.
+
+The loader refuses, each at its path: a chart without `summary` or `series`; a series without `points` or `y`; two
+or more series where one has no `label`; `x` on some series and not on others; more than 4 series or 16 lines; a
+`yPlaces` that is not a literal integer from 0 to 18; a `style` other than the three; a literal `tone` that names no
+tone; literal `yMin` above literal `yMax`. A computed value that breaks one of these is reported when it is
+evaluated.
 
 ## Scopes and names
 
@@ -243,19 +390,23 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   shell's (`Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+W`, `Ctrl+K`). A flag (`showLabel`) is a literal
   `true` or `false`, and `showLabel` needs a `label` to show. A size bound is a literal integer of 0 or more, a
   minimum is no more than its maximum, and no bound is given on a `dialog` or `drawer` (an overlay is sized by the
-  frontend, not by its container). On Qt Quick, that sizing caps the overlay at the window less a margin on each
+  frontend, not by its container; a sheet is the window's size). On Qt Quick, that sizing caps the overlay at the window less a margin on each
   axis, and scrolls whatever content does not fit between the title and the footer, which both stay reachable.
   There is also no bound on a `custom` node (which carries no common properties). A literal `sizing` is
   one of its forms, and a literal fixed amount lies inside its dimension's bounds (a fixed size has no room to
   bound); a `sizing` that is not literal (a `record`, `cond` or `obj` expression) is read at mount, and one that
   evaluates to none of the forms is reported once and lowers to content. A literal text `role` is one of its names; a computed one is read at mount, and one that evaluates to no role is
-  reported once for its path and drawn `normal`. A `button`'s `selected` needs `"style": "item"` (it marks a list item). A `grid` takes no `justify` (its columns
-  share its width; there is no spare length to justify); `alignSelf` is given only on a child of a `row`, `column`,
+  reported once for its path and drawn `normal`. A `menu`'s `label`, `icon` and `emphasis` need `style: button`, and a
+  button-style menu has a `label` or an `a11y` name (its trigger's accessible name); a menu entry's `separator` is
+  `true` and takes no other key. A `grid` takes no `justify` (its columns
+  are sized by their count or tracks; there is no spare length to justify), and `columns` or `tracks`, not both, with
+  at least one track; a track's `align` is `start`, `center` or `end`; `alignSelf` is given only on a child of a `row`, `column`,
   `grid` or `forEach`, not on the view root, a component's fallback root or the content of another kind (a `panel`,
   a `dialog`); and the `column` or `row` an `arrange` point orders takes no `align` or `justify`, since it is drawn as
   a list. An `actionButton` has an `id` and a `label`, and its
   id is used once in its list (a screen's `actions`, a dialog's or drawer's); `subtitle`, `status` and `actions` are
-  refused on the app document.
+  refused on the app document. A tab's `id` is used once among its node's tabs; every tab has one when the node
+  gives `selected` or `onChoose`; and a literal `selected` names one of them.
 - **Expressions.** Each parses and has at most 256 nodes; each name resolves as above; a function's
   statically known argument kinds are ones it takes; `visible`, `enabled`, `readonly`, `required`,
   `stale`, `open`, `when`, `dirty`, a check's `assert` and every `if` condition are `bool` where
@@ -265,8 +416,17 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
   from what it writes (`set`, `reset`) to the watches that read it in `on`, directly or through
   `let`; a watch that writes what it reads is a cycle of one. The refusal names the cycle in order.
 - **Targets.** `set` names state, an input (`textInput`, `checkbox`, `select`, `dateTimeInput`,
-  `slider`) or `app.name`; `reset` state or a dialog; `run`, `signIn` and `upload` a mutation;
-  `refetch` a query; `open` and `close` a dialog or drawer (`close` also `self`); `focus` an element;
+  `slider`) or `app.name`, never a table: a table's selection changes through state its `selection` binds, and the
+  refusal says so; `reset` state or a dialog; `run`, `signIn` and `upload` a mutation;
+  `refetch` a query; `open` and `close` a dialog or drawer (`close` also `self`: the innermost dialog or drawer whose
+  content holds the command, or the screen when there is none; inside a component, only a dialog or drawer of the
+  component's own); `focus` an element of the command's scope chain, or else one declared in the `switch` cases
+  reachable below that chain (down through cases only, never into a row, dialog, drawer or component): the
+  declarations there must all be cases of one switch, since at most one case is mounted, and two switches declaring
+  the name are refused with both paths. `focus` with `row` (an expression of a row key) names an element of a
+  `forEach`'s or table's row scope: the one row scope declaring it among the command's own and those below its scope
+  chain through switch cases; none, or two, is refused. Only `focus` reaches into cases: reading an element's value
+  from outside its case stays refused;
   `resetPrefs` a point or `all`; a download to preview a state. `from` and `into` are `ref` or `bytes`; a download
   from bytes gives a `name`; `type` is given only with `"from": "bytes"`, and `nameAs` and `typeAs` only with
   `"into": "bytes"`. A check's targets are elements;

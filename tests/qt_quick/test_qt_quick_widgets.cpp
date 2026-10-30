@@ -5,27 +5,46 @@
 // probe cannot reach"): read-only fields of every kind, unreachable widgets, and controlled inputs other than a
 // text field snapping back.
 
+#include <QAccessible>
+#include <QAccessibleInterface>
 #include <QColor>
 #include <QDate>
 #include <QDateTime>
+#include <QFont>
+#include <QFontInfo>
+#include <QList>
+#include <QMessageLogContext>
 #include <QObject>
 #include <QPointF>
+#include <QQmlComponent>
+#include <QQmlEngine>
+#include <QQmlProperty>
 #include <QQuickItem>
+#include <QRectF>
+#include <QString>
 #include <QStringList>
 #include <QTest>
+#include <QUrl>
+#include <QVariant>
 #include <QVariantList>
+#include <QtLogging>
+#include <algorithm>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/reactive/signal.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "qt_quick/keys.hpp"
@@ -520,7 +539,7 @@ TEST_CASE("qt_quick widgets: a calendar day keeps a date-time input's time of da
 }
 
 // Mutation: place the popup by the field's scene position. The popup is placed in its parent's coordinates, so a
-// scene position puts it off by the field's own offset as soon as the placement is recomputed, here on a new width.
+// scene position puts it off by the field's own offset.
 TEST_CASE("qt_quick widgets: a calendar opens under its field, wherever the field sits", "[qt_quick]") {
     Scene scene;
     auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
@@ -540,17 +559,13 @@ TEST_CASE("qt_quick widgets: a calendar opens under its field, wherever the fiel
     auto* const background = popup->property("background").value<QQuickItem*>();
     REQUIRE(background != nullptr);
     auto const check = [&] {
-        QPointF const fieldBottomRight = field.mapToScene(QPointF{field.width(), field.height()});
-        QPointF const topRight = background->mapToScene(QPointF{background->width(), 0});
-        INFO("field bottom-right " << fieldBottomRight.x() << "," << fieldBottomRight.y() << ", popup top-right "
-                                   << topRight.x() << "," << topRight.y());
-        CHECK(std::abs(topRight.y() - fieldBottomRight.y()) <= 1.0);
-        CHECK(std::abs(topRight.x() - fieldBottomRight.x()) <= 1.0);
+        QPointF const fieldBottomLeft = field.mapToScene(QPointF{0, field.height()});
+        QPointF const topLeft = background->mapToScene(QPointF{0, 0});
+        INFO("field bottom-left " << fieldBottomLeft.x() << "," << fieldBottomLeft.y() << ", popup top-left "
+                                  << topLeft.x() << "," << topLeft.y());
+        CHECK(std::abs(topLeft.y() - fieldBottomLeft.y()) <= 1.0);
+        CHECK(std::abs(topLeft.x() - fieldBottomLeft.x()) <= 1.0);
     };
-    check();
-    // A new width places the calendar again.
-    input->setLayout({.width = ui::Sizing::fixed(40), .height = {}});
-    scene.settle();
     check();
 }
 
@@ -576,6 +591,22 @@ TEST_CASE("qt_quick widgets: a calendar opens on the field's month, not today's"
     REQUIRE(grid != nullptr);
     CHECK(grid->property("year").toInt() == expected.year());
     CHECK(grid->property("month").toInt() == expected.month() - 1);
+}
+
+TEST_CASE("qt_quick widgets: an empty date input's calendar opens on today's month", "[qt_quick]") {
+    Scene scene;
+    auto input = scene.backend().createDateTimeInput(nullptr, ui::DateMode::Date, 0);
+    input->setValue(std::nullopt);
+    scene.settle();
+
+    QQuickItem const* const button = findNamed(Scene::itemOf(*input), QStringLiteral("datePickerButton"));
+    REQUIRE(button != nullptr);
+    scene.click(*button);
+    QQuickItem const* const grid = findNamed(*scene.window().contentItem(), QStringLiteral("datePickerGrid"));
+    REQUIRE(grid != nullptr);
+    QDate const today = QDateTime::currentDateTimeUtc().date();
+    CHECK(grid->property("year").toInt() == today.year());
+    CHECK(grid->property("month").toInt() == today.month() - 1);
 }
 
 TEST_CASE("qt_quick widgets: dates format and parse in a display zone", "[qt_quick]") {
@@ -622,6 +653,138 @@ TEST_CASE("qt_quick widgets: the field state shows errors, required, stale", "[q
     CHECK(item.opacity() < 1.0);
     text->setStale(false);
     CHECK(item.opacity() == 1.0);
+}
+
+// Mutation: leave `removable` unwritten in BadgeImpl::setOnRemove (no remove button is shown or reached).
+TEST_CASE("qt_quick widgets: a removable badge's remove button is named and removes it", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto plain = scene.backend().createBadge(column.get());
+    plain->setText("Plain");
+    auto badge = scene.backend().createBadge(column.get());
+    badge->setText("Result");
+    int removals = 0;
+    badge->setOnRemove([&removals] { ++removals; }, "Remove Result");
+    scene.settle();
+    auto* const remove = Scene::itemOf(*badge).findChild<QQuickItem*>(QStringLiteral("remove"));
+    REQUIRE(remove != nullptr);
+    CHECK(remove->isVisible());
+    auto const* const plainRemove = Scene::itemOf(*plain).findChild<QQuickItem*>(QStringLiteral("remove"));
+    REQUIRE(plainRemove != nullptr);
+    CHECK_FALSE(plainRemove->isVisible());
+
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface const* const named = QAccessible::queryAccessibleInterface(remove);
+    REQUIRE(named != nullptr);
+    CHECK(named->text(QAccessible::Name) == QStringLiteral("Remove Result"));
+    QAccessible::setActive(wasActive);
+
+    scene.click(*remove);
+    CHECK(removals == 1);
+    remove->forceActiveFocus();
+    scene.key(Qt::Key_Delete);
+    CHECK(removals == 2);
+}
+
+// Mutation: put `radius: height / 2` back on the badge's fill (the radius check fails), or draw the label in
+// `Theme.bodyFont` (the size and weight checks fail).
+TEST_CASE("qt_quick widgets: a filled badge is a tag in the small strong step", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const badge = scene.backend().createBadge(column.get());
+    badge->setTone(ui::Tone::Ok);
+    badge->setText("Released");
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QQuickItem& item = Scene::itemOf(*badge);
+    QQuickItem const* const fill = findNamed(item, QStringLiteral("fill"));
+    QQuickItem const* const label = findNamed(item, QStringLiteral("label"));
+    REQUIRE(fill != nullptr);
+    REQUIRE(label != nullptr);
+    CHECK(fill->property("radius").toReal() == theme->property("radiusBadge").toReal());
+    auto const font = label->property("font").value<QFont>();
+    CHECK(font.pixelSize() == static_cast<int>(theme->property("smallPixels").toReal()));
+    CHECK(static_cast<int>(font.weight()) == theme->property("strongWeight").toInt());
+    CHECK(item.height() <= label->implicitHeight() + 2);
+}
+
+// Mutations: leave `textAlign` unwritten (the text starts at the leading edge); draw the prominent field at
+// `Font.DemiBold` (its weight reads 600); ignore `mono` (the family is the body's); lay the text out from the
+// field's own padding alone (it starts under the prefix).
+TEST_CASE("qt_quick widgets: an input's alignment, mono face, prefix and prominent weight", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const value = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    value->setText("0.21");
+    value->setAlign(ui::Align::End);
+    value->setUnit("%");
+    auto const mono = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    mono->setText("S-26-104170");
+    mono->setMono(true);
+    auto const focal = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    focal->setEmphasis(ui::InputEmphasis::Prominent);
+    focal->setMono(true);
+    focal->setPlaceholder("Scan a barcode");
+    auto const window = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    window->setText("7");
+    window->setPrefix("±");
+    auto const plain = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    plain->setText("x");
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto const fieldOf = [](ui::Widget const& widget) -> QQuickItem& {
+        QList<QQuickItem*> const fields = Scene::itemsOf(Scene::itemOf(widget), "QQuickTextField");
+        REQUIRE_FALSE(fields.isEmpty());
+        return *fields.front();
+    };
+
+    QQuickItem const& valueField = fieldOf(*value);
+    CHECK(valueField.property("horizontalAlignment").toInt() == static_cast<int>(Qt::AlignRight));
+    CHECK(Scene::itemOf(*value).property("tabularFigures").toBool());
+    CHECK(fieldOf(*plain).property("horizontalAlignment").toInt() == static_cast<int>(Qt::AlignLeft));
+
+    QStringList const monoFamilies = theme->property("monoFamilies").toStringList();
+    auto const monoFont = fieldOf(*mono).property("font").value<QFont>();
+    CHECK((monoFamilies.isEmpty() || monoFamilies.contains(monoFont.family())));
+    CHECK(monoFont.family() != fieldOf(*plain).property("font").value<QFont>().family());
+
+    auto const focalFont = fieldOf(*focal).property("font").value<QFont>();
+    CHECK(static_cast<int>(focalFont.weight()) == theme->property("strongWeight").toInt());
+    CHECK(focalFont.pixelSize() == static_cast<int>(std::lround(theme->property("headingPixels").toReal())));
+    CHECK_FALSE(focalFont.italic());
+
+    QQuickItem const& windowField = fieldOf(*window);
+    QQuickItem const* const prefix = windowField.findChild<QQuickItem*>(QStringLiteral("prefix"));
+    REQUIRE(prefix != nullptr);
+    CHECK(prefix->isVisible());
+    CHECK(prefix->x() == fieldOf(*plain).property("leftPadding").toReal());
+    CHECK(windowField.property("leftPadding").toReal() >= prefix->x() + prefix->width());
+    CHECK(Scene::itemOf(*window).property("accessibleDescription").toString() == QStringLiteral("±"));
+    CHECK_FALSE(windowField.findChild<QQuickItem*>(QStringLiteral("unit"))->isVisible());
+}
+
+// Mutation: draw a removable badge as a tag (the border is the tone's, the height the tag's).
+TEST_CASE("qt_quick widgets: a removable badge is a chip", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const badge = scene.backend().createBadge(column.get());
+    badge->setText("Status: Released");
+    badge->setOnRemove([] {}, "Remove");
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QQuickItem& item = Scene::itemOf(*badge);
+    QQuickItem const* const fill = findNamed(item, QStringLiteral("fill"));
+    REQUIRE(fill != nullptr);
+    QObject const* const border = fill->property("border").value<QObject*>();
+    REQUIRE(border != nullptr);
+    CHECK(border->property("color").value<QColor>() == theme->property("controlBorder").value<QColor>());
+    CHECK(border->property("width").toReal() == 1.0);
+    CHECK(fill->property("color").value<QColor>() == theme->property("controlSurface").value<QColor>());
+    CHECK(item.height() == theme->property("targetHeight").toReal() - 6);
 }
 
 TEST_CASE("qt_quick widgets: the display kinds show what they are given", "[qt_quick]") {
@@ -687,6 +850,55 @@ TEST_CASE("qt_quick widgets: key-value wraps a long value instead of overflowing
     CHECK(Scene::itemOf(*narrow).implicitHeight() > unconstrainedHeight);
 }
 
+namespace {
+
+// The warnings Qt logs that name a polish loop, counted while a `PolishCounter` lives.
+int& polishWarnings() {
+    static int count = 0;
+    return count;
+}
+
+void countPolish(QtMsgType type, QMessageLogContext const& context, QString const& message) {
+    static_cast<void>(context);
+    if (type == QtWarningMsg && message.contains(QStringLiteral("polish"))) {
+        ++polishWarnings();
+    }
+}
+
+class PolishCounter {
+public:
+    PolishCounter() : _previous{qInstallMessageHandler(countPolish)} { polishWarnings() = 0; }
+    ~PolishCounter() { qInstallMessageHandler(_previous); }
+    PolishCounter(PolishCounter const&) = delete;
+    PolishCounter& operator=(PolishCounter const&) = delete;
+    PolishCounter(PolishCounter&&) = delete;
+    PolishCounter& operator=(PolishCounter&&) = delete;
+
+private:
+    QtMessageHandler _previous;
+};
+
+}  // namespace
+
+// Mutation: cap the value column at the grid's width less a caption width the captions write back while the grid
+// polishes (the Containers = needed pair loops).
+TEST_CASE("qt_quick widgets: a key-value lays out without a polish loop, whatever its text widths", "[qt_quick]") {
+    std::vector<std::pair<std::string, std::string>> const pairs{{"Containers", "needed"},
+                                                                 {"Containers", "180 needed"},
+                                                                 {"Containers", "x"},
+                                                                 {"Container", "180 needed"},
+                                                                 {"Containers", "xxxxxxxxxx"}};
+    for (auto const& [caption, value] : pairs) {
+        CAPTURE(caption, value);
+        PolishCounter const counter;
+        Scene scene;
+        auto pair = scene.backend().createKeyValue(nullptr);
+        pair->setItems({{.label = caption, .value = value}});
+        scene.settle();
+        CHECK(polishWarnings() == 0);
+    }
+}
+
 // Mutation: leave the label visible while inactive (the label stays visible and the size is the label's).
 TEST_CASE("qt_quick widgets: an inactive busy shows neither its indicator nor its label, and takes no room",
           "[qt_quick]") {
@@ -728,9 +940,38 @@ TEST_CASE("qt_quick widgets: a banner's action and dismissal reach their handler
     CHECK(item.isVisible());
 }
 
+// Mutation: put the frame's radius back to 0; leave the message without a colour (it draws in the palette's black);
+// draw the action as the Basic style's button (its background has no ghost flag).
+TEST_CASE(
+    "qt_quick widgets: a banner is a rounded frame, its message is in the tone's colour, its action is a ghost "
+    "button",
+    "[qt_quick]") {
+    Scene scene;
+    auto banner = scene.backend().createBanner(nullptr);
+    banner->setTone(ui::Tone::Err);
+    banner->setSpans({{.text = "Refused: ", .strong = true}, {.text = "the field is empty"}});
+    banner->setActionLabel("Go to the field");
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QQuickItem const& item = Scene::itemOf(*banner);
+    auto const* const frame = item.findChild<QQuickItem*>(QStringLiteral("frame"));
+    REQUIRE(frame != nullptr);
+    CHECK(frame->property("radius").toReal() == theme->property("radiusControl").toReal());
+    CHECK(frame->property("radius").toReal() > 0);
+    auto const* const message = item.findChild<QQuickItem*>(QStringLiteral("message"));
+    REQUIRE(message != nullptr);
+    CHECK(message->property("color").value<QColor>() == theme->property("error").value<QColor>());
+    auto const* const action = item.findChild<QQuickItem*>(QStringLiteral("action"));
+    REQUIRE(action != nullptr);
+    auto const* const background = action->property("background").value<QObject*>();
+    REQUIRE(background != nullptr);
+    CHECK(background->property("ghost").toBool());
+}
+
 TEST_CASE("qt_quick widgets: a menu reports the path of a choosable entry and nothing else", "[qt_quick]") {
     Scene scene;
-    auto menu = scene.backend().createMenu(nullptr);
+    auto menu = scene.backend().createMenu(nullptr, ui::MenuStyle::Bar);
     std::vector<std::vector<std::size_t>> paths;
     menu->setOnActivate([&paths](std::vector<std::size_t> path) { paths.push_back(std::move(path)); });
     menu->setItems(
@@ -839,21 +1080,28 @@ TEST_CASE("qt_quick widgets: chords match exactly the modifiers pressed", "[qt_q
     CHECK_FALSE(detail::chordMatches("Hyper+S", Qt::Key_S, {}));
 }
 
-TEST_CASE("qt_quick widgets: a widget's width class follows the host's width", "[qt_quick]") {
-    CHECK(morph::qt_quick::widthClassOf(599) == "compact");
-    CHECK(morph::qt_quick::widthClassOf(600) == "medium");
-    CHECK(morph::qt_quick::widthClassOf(1199.5) == "medium");
-    CHECK(morph::qt_quick::widthClassOf(1200) == "expanded");
+// Mutation: class the host by its width in pixels (800 px is then `medium`, and the resizes below report other
+// classes), or call the listener at registration (it hears the current class first).
+TEST_CASE("qt_quick widgets: the backend's width class follows the host's width in units", "[qt_quick]") {
+    Scene scene;
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    double const unit = theme->property("unitWidth").toDouble();
+    REQUIRE(unit > 0);
+    CHECK(scene.backend().widthClass() == ui::widthClassOf(800 / unit));
+    scene.window().resize(static_cast<int>(std::ceil(100 * unit)), 600);
+    scene.settle();
+
     std::vector<std::string> classes;
-    Scene scene{morph::qt_quick::BackendOptions{
-        .components = nullptr, .onWidthClass = [&classes](std::string const& name) { classes.push_back(name); }}};
-    scene.window().resize(1300, 600);
-    scene.settle();
-    scene.window().resize(1250, 600);
-    scene.settle();
-    scene.window().resize(500, 600);
-    scene.settle();
-    CHECK(classes == std::vector<std::string>{"compact", "medium", "expanded", "compact"});
+    scene.backend().setOnWidthClass([&classes](std::string const& name) { classes.push_back(name); });
+    CHECK(classes.empty());
+    for (double const units : {170.0, 120.0, 100.0, 70.0, 75.0}) {
+        scene.window().resize(static_cast<int>(std::ceil(units * unit)), 600);
+        scene.settle();
+    }
+    CHECK(classes == std::vector<std::string>{"expanded", "medium", "compact"});
+    scene.backend().setOnWidthClass({});
 }
 
 TEST_CASE(
@@ -937,4 +1185,1176 @@ TEST_CASE("qt_quick widgets: a content-sized Item-style button also composes wit
                       << " w=" << badgeItem.width());
     CHECK(badgeItem.width() > 0.0);
     CHECK(badgeItem.x() >= itemItem.x() + itemItem.width() - 1.0);
+}
+
+namespace {
+
+/// The width a `PlainText` Text of @p text in @p font lays out to: the characters, never markup.
+qreal plainWidth(QQmlEngine& engine, QString const& text, QFont const& font) {
+    QQmlComponent component{&engine};
+    component.setData("import QtQuick\nText { textFormat: Text.PlainText }", QUrl{});
+    std::unique_ptr<QObject> const made{component.create()};
+    REQUIRE(made != nullptr);
+    made->setProperty("text", text);
+    made->setProperty("font", font);
+    return made->property("implicitWidth").toReal();
+}
+
+/// Every shown Text under @p root whose text holds a bold tag.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+void markupTexts(QQuickItem const& root, QList<QQuickItem const*>& found) {
+    for (QQuickItem const* const child : root.childItems()) {
+        if (!child->isVisible()) {
+            continue;
+        }
+        if (child->inherits("QQuickText") && child->property("text").toString().contains(QStringLiteral("<b>"))) {
+            found.append(child);
+        }
+        markupTexts(*child, found);
+    }
+}
+
+}  // namespace
+
+// Mutation: drop one Label's `textFormat`, or the tooltip's content item, and the walk names it.
+TEST_CASE("qt_quick widgets: every text a document gives is drawn as its characters, never as markup", "[qt_quick]") {
+    Scene scene;
+    QString const tagged = QStringLiteral("<b>x</b> & <i>y</i>");
+    std::string const raw = tagged.toStdString();
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    int strings = 0;
+    // First, so it is inside the window for the pointer to rest on.
+    auto tipped = scene.backend().createText(column.get());
+    tipped->setText("hover");
+    tipped->setTooltip(raw);
+    ++strings;
+    auto text = scene.backend().createText(column.get());
+    text->setText(raw);
+    ++strings;
+    auto button = scene.backend().createButton(column.get());
+    button->setLabel(raw);
+    ++strings;
+    auto checkbox = scene.backend().createCheckbox(column.get());
+    checkbox->setLabel(raw);
+    ++strings;
+    auto radio = scene.backend().createSelect(column.get(), ui::SelectStyle::Radio);
+    radio->setOptions({{.key = std::string{"a"}, .label = raw}, {.key = std::string{"b"}, .label = raw + "2"}});
+    strings += 2;
+    auto dropdown = scene.backend().createSelect(column.get(), ui::SelectStyle::Dropdown);
+    dropdown->setOptions({{.key = std::string{"a"}, .label = raw}, {.key = std::string{"b"}, .label = raw + "2"}});
+    strings += 2;
+    auto badge = scene.backend().createBadge(column.get());
+    badge->setText(raw);
+    ++strings;
+    auto banner = scene.backend().createBanner(column.get());
+    banner->setText(raw);
+    banner->setActionLabel(raw);
+    strings += 2;
+    auto keyValue = scene.backend().createKeyValue(column.get());
+    keyValue->setItems({{.label = raw, .value = raw}});
+    strings += 2;
+    auto panel = scene.backend().createPanel(column.get());
+    panel->setTitle(raw);
+    ++strings;
+    auto collapsible = scene.backend().createCollapsible(column.get());
+    collapsible->setTitle(raw);
+    ++strings;
+    auto tabs = scene.backend().createTabs(column.get());
+    tabs->setTabs({raw});
+    ++strings;
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    input->setCaption(raw, true);
+    input->setErrors({raw});
+    strings += 2;
+    auto steps = scene.backend().createSteps(column.get());
+    steps->setSteps({{.label = raw}});
+    ++strings;
+    auto empty = scene.backend().createEmptyState(column.get());
+    empty->setTitle(raw);
+    empty->setText(raw);
+    empty->setActionLabel(raw);
+    strings += 3;
+    auto menu = scene.backend().createMenu(column.get(), ui::MenuStyle::Bar);
+    menu->setItems({{.label = raw, .items = {{.label = raw}}}});
+    strings += 2;
+    auto buttonMenu = scene.backend().createMenu(column.get(), ui::MenuStyle::Button);
+    buttonMenu->setTrigger({.label = raw});
+    ++strings;
+    scene.settle();
+    // The popups whose texts exist only while open: the tooltip first, while nothing covers its widget.
+    QTest::mouseMove(&scene.window(), Scene::centreOf(Scene::itemOf(*tipped)));
+    scene.settle();
+    QTest::qWait(800);
+    scene.settle();
+    auto* const combo = qobject_cast<QQuickItem*>(base(*dropdown).part("control"));
+    REQUIRE(combo != nullptr);
+    auto* const popup = combo->property("popup").value<QObject*>();
+    REQUIRE(popup != nullptr);
+    QMetaObject::invokeMethod(popup, "open");
+    base(*menu).call("open", QVariant{QVariantList{0}});
+    scene.settle();
+    QList<QQuickItem const*> found;
+    markupTexts(*scene.window().contentItem(), found);
+    // Last, and walked on its own: a modal dialog takes the hover from the widgets under it, and the tooltip with it,
+    // which Qt closes as the dialog opens or only at the next pointer event, depending on its version.
+    auto dialog = scene.backend().createDialog(nullptr);
+    dialog->setTitle(raw);
+    dialog->setOpen(true);
+    ++strings;
+    scene.settle();
+    QList<QQuickItem const*> withDialog;
+    markupTexts(*scene.window().contentItem(), withDialog);
+    for (QQuickItem const* const item : std::as_const(withDialog)) {
+        if (!found.contains(item)) {
+            found.append(item);
+        }
+    }
+    CHECK(found.size() == strings);
+    for (QQuickItem const* const item : std::as_const(found)) {
+        QString const shown = item->property("text").toString();
+        INFO("a Text showing " << shown.toStdString() << " in " << item->parentItem()->metaObject()->className());
+        CHECK(item->property("textFormat").toInt() == 0);  // Text.PlainText
+        qreal const padding = item->property("leftPadding").toReal() + item->property("rightPadding").toReal();
+        CHECK(std::abs(item->property("implicitWidth").toReal() - padding -
+                       plainWidth(scene.engine(), shown, item->property("font").value<QFont>())) < 0.5);
+    }
+}
+
+namespace {
+
+// The warnings Qt logs that name a binding loop, collected while a `BindingLoopWatch` lives.
+QStringList& bindingLoops() {
+    static QStringList loops;
+    return loops;
+}
+
+void collectBindingLoops(QtMsgType type, QMessageLogContext const& context, QString const& message) {
+    static_cast<void>(context);
+    if (type == QtWarningMsg && message.contains(QStringLiteral("Binding loop"))) {
+        bindingLoops().append(message);
+    }
+}
+
+class BindingLoopWatch {
+public:
+    BindingLoopWatch() : _previous{qInstallMessageHandler(collectBindingLoops)} { bindingLoops().clear(); }
+    ~BindingLoopWatch() { qInstallMessageHandler(_previous); }
+    BindingLoopWatch(BindingLoopWatch const&) = delete;
+    BindingLoopWatch& operator=(BindingLoopWatch const&) = delete;
+    BindingLoopWatch(BindingLoopWatch&&) = delete;
+    BindingLoopWatch& operator=(BindingLoopWatch&&) = delete;
+
+private:
+    QtMessageHandler _previous;
+};
+
+}  // namespace
+
+// Mutation: leave the elided text without a tooltip, or let the automatic tooltip win over the node's own; or let a
+// one-line text's width read its label's, which depends on what it shows and so on the width the layout derives
+// from it (a binding loop Qt 6.8 reports).
+TEST_CASE("qt_quick widgets: an elided mono text's tooltip is its full text, and a node's own tooltip wins",
+          "[qt_quick]") {
+    BindingLoopWatch const loops;
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const elided = scene.backend().createText(column.get());
+    elided->setRole(ui::TextRole::Mono);
+    elided->setText("S-26-104170-AND-A-LONG-TAIL");
+    auto const own = scene.backend().createText(column.get());
+    own->setRole(ui::TextRole::Mono);
+    own->setText("S-26-104170-AND-A-LONG-TAIL");
+    own->setTooltip("Sample");
+    auto const fits = scene.backend().createText(column.get());
+    fits->setRole(ui::TextRole::Mono);
+    fits->setText("S-1");
+    scene.settle();
+    for (ui::TextWidget* const widget : {elided.get(), own.get(), fits.get()}) {
+        // A width narrower than the long text elides it; the short one still fits.
+        widget->setLayout({.width = ui::Sizing::fixed(12)});
+    }
+    scene.settle();
+    CHECK(Scene::itemOf(*elided).property("elided").toBool());
+    CHECK(Scene::controlOf(*elided).property("lineCount").toInt() == 1);
+    CHECK(Scene::itemOf(*elided).property("tooltipText").toString() == QStringLiteral("S-26-104170-AND-A-LONG-TAIL"));
+    CHECK(Scene::itemOf(*own).property("tooltipText").toString() == QStringLiteral("Sample"));
+    CHECK_FALSE(Scene::itemOf(*fits).property("elided").toBool());
+    CHECK(Scene::itemOf(*fits).property("tooltipText").toString().isEmpty());
+    INFO("binding loops: " << bindingLoops().join(QLatin1Char('\n')).toStdString());
+    CHECK(bindingLoops().isEmpty());
+}
+
+// Mutation: ignore `tone` in MorphText (the colour stays the role's), or colour the role's font instead (the font
+// stays heading-sized and the colour check passes, so the font check is what keeps the role).
+TEST_CASE("qt_quick widgets: a text's tone is its colour whatever its role, and the role keeps its font",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const toned = scene.backend().createText(column.get());
+    toned->setText("7");
+    toned->setRole(ui::TextRole::Heading);
+    toned->setTone(ui::Tone::Err);
+    auto const plain = scene.backend().createText(column.get());
+    plain->setText("7");
+    plain->setRole(ui::TextRole::Heading);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QObject const& label = Scene::controlOf(*toned);
+    CHECK(label.property("font").value<QFont>() == theme->property("headingFont").value<QFont>());
+    CHECK(label.property("color").value<QColor>() == theme->property("error").value<QColor>());
+    CHECK(Scene::controlOf(*plain).property("color").value<QColor>() != theme->property("error").value<QColor>());
+}
+
+// Mutation: unwrap a mono run's span (it breaks anywhere in the line, and the heights below differ), or drop the
+// tone from the run list (the toned run keeps the text colour).
+TEST_CASE(
+    "qt_quick widgets: a mono run inside a narrow text still wraps with its sentence, and a toned run is "
+    "coloured",
+    "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const narrow = scene.backend().createText(column.get());
+    narrow->setSpans({{.text = "S-26-104170", .mono = true}});
+    auto const toned = scene.backend().createText(column.get());
+    toned->setSpans({{.text = "x", .tone = ui::Tone::Ok}});
+    scene.settle();
+    QObject& label = Scene::controlOf(*narrow);
+    qreal const oneLine = Scene::controlOf(*toned).property("implicitHeight").toReal();
+    label.setProperty("width", 20.0);
+    scene.settle();
+    CHECK(label.property("implicitHeight").toReal() > oneLine + 1);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(Scene::controlOf(*toned).property("text").toString().contains(
+        QStringLiteral("color:") + theme->property("success").value<QColor>().name()));
+}
+
+// Mutation: drop `toHtmlEscaped` (the markup run draws as styled `x & y`, narrower); drop the `pre-wrap` span (the
+// line feed and the spaces fold); build a mono run without its `font-family` (as wide as the body font).
+TEST_CASE("qt_quick widgets: a text's runs are escaped rich text that keeps their characters and faces",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const markup = scene.backend().createText(column.get());
+    markup->setSpans({{.text = "<b>x</b> & <i>y</i>"}});
+    auto const lines = scene.backend().createText(column.get());
+    lines->setSpans({{.text = "a\nb"}});
+    auto const line = scene.backend().createText(column.get());
+    line->setSpans({{.text = "a"}});
+    auto const spaced = scene.backend().createText(column.get());
+    spaced->setSpans({{.text = "a     b"}});
+    auto const mono = scene.backend().createText(column.get());
+    mono->setSpans({{.text = "iiiiiiiiii", .mono = true}});
+    auto const body = scene.backend().createText(column.get());
+    body->setSpans({{.text = "iiiiiiiiii"}});
+    scene.settle();
+    auto const widthOf = [](ui::Widget const& widget) {
+        return Scene::controlOf(widget).property("implicitWidth").toReal();
+    };
+    auto const font = Scene::controlOf(*markup).property("font").value<QFont>();
+    CHECK(Scene::controlOf(*markup).property("textFormat").toInt() == 1);  // Text.RichText
+    CHECK(std::abs(widthOf(*markup) - plainWidth(scene.engine(), QStringLiteral("<b>x</b> & <i>y</i>"), font)) < 1.0);
+    CHECK(Scene::itemOf(*markup).property("accessibleName").toString() == QStringLiteral("<b>x</b> & <i>y</i>"));
+    CHECK(base(*markup).shownText() == "<b>x</b> & <i>y</i>");
+    qreal const lineHeight = Scene::controlOf(*line).property("implicitHeight").toReal();
+    CHECK(std::abs(Scene::controlOf(*lines).property("implicitHeight").toReal() - (2 * lineHeight)) < 1.0);
+    CHECK(std::abs(widthOf(*spaced) - plainWidth(scene.engine(), QStringLiteral("a     b"), font)) < 1.0);
+    // A machine without a fixed-pitch family would draw the mono run in a proportional fallback and measure nothing.
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QStringList const families = theme->property("monoFamilies").toStringList();
+    REQUIRE_FALSE(families.isEmpty());
+    REQUIRE(QFontInfo{QFont{families.first()}}.fixedPitch());
+    CHECK(widthOf(*mono) > widthOf(*body) + 10);
+    // A plain text set after the runs shows as plain text again.
+    markup->setText("<b>y</b>");
+    scene.settle();
+    CHECK(Scene::controlOf(*markup).property("textFormat").toInt() == 0);
+    CHECK(Scene::controlOf(*markup).property("text").toString() == QStringLiteral("<b>y</b>"));
+}
+
+namespace {
+
+/// Every item named @p name under @p root, depth first.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+void namedItems(QQuickItem const& root, QString const& name, QList<QQuickItem*>& found) {
+    for (QQuickItem* const child : root.childItems()) {
+        if (child->objectName() == name) {
+            found.append(child);
+        }
+        namedItems(*child, name, found);
+    }
+}
+
+QList<QQuickItem*> named(QQuickItem const& root, QString const& name) {
+    QList<QQuickItem*> found;
+    namedItems(root, name, found);
+    return found;
+}
+
+}  // namespace
+
+// Mutation: ignore `captionsAbove` in MorphKeyValue (the caption sits level with its value, and no rule shows).
+TEST_CASE("qt_quick widgets: a stacked key-value puts each caption over its value with a rule between pairs",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const kv = scene.backend().createKeyValue(column.get());
+    kv->setCaptionPlacement(ui::CaptionPlacement::Above);
+    kv->setItems({{.label = "Serial number", .spans = {{.text = "DEAB-902114", .mono = true}}},
+                  {.label = "Containers", .value = "180 needed", .tone = ui::Tone::Err}});
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*kv);
+    QList<QQuickItem*> const captions = named(item, QStringLiteral("caption"));
+    QList<QQuickItem*> const values = named(item, QStringLiteral("value"));
+    REQUIRE(captions.size() == 2);
+    REQUIRE(values.size() == 2);
+    QPointF const firstValue = values.at(0)->mapToItem(&item, QPointF{0, 0});
+    CHECK(captions.at(1)->mapToItem(&item, QPointF{0, 0}).y() > firstValue.y() + values.at(0)->height());
+    CHECK(values.at(0)->mapToItem(&item, QPointF{0, 0}).y() >=
+          captions.at(0)->mapToItem(&item, QPointF{0, 0}).y() + captions.at(0)->height());
+    QList<QQuickItem*> const rules = named(item, QStringLiteral("rule"));
+    REQUIRE(rules.size() == 2);
+    CHECK(rules.at(0)->isVisible());
+    CHECK_FALSE(rules.at(1)->isVisible());
+    QObject const* const scheme = item.property("scheme").value<QObject*>();
+    REQUIRE(scheme != nullptr);
+    CHECK(values.at(1)->property("color").value<QColor>() == scheme->property("error").value<QColor>());
+    CHECK(values.at(0)->property("color").value<QColor>() == scheme->property("text").value<QColor>());
+    CHECK(values.at(0)->property("textFormat").toInt() == 1);  // the run, as rich text
+}
+
+// Mutation: put the mark back at the right edge under the caption (its `y` is then the caption's height); bind a
+// text's mark to the label's `contentWidth` (its `x` is then after the first, longer line).
+TEST_CASE("qt_quick widgets: a required mark follows a caption, or a text's last line", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const captioned = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    captioned->setCaption("Meaning", true);
+    captioned->setRequired(true);
+    auto const bare = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    bare->setRequired(true);
+    auto const text = scene.backend().createText(column.get());
+    text->setText("A first line that is the longer one\nshort");
+    text->setRequired(true);
+    scene.settle();
+    QQuickItem& field = Scene::itemOf(*captioned);
+    QQuickItem const* const caption = findNamed(field, QStringLiteral("caption"));
+    QQuickItem const* const mark = findNamed(field, QStringLiteral("requiredMark"));
+    REQUIRE(caption != nullptr);
+    REQUIRE(mark != nullptr);
+    qreal const space = Scene::itemOf(*captioned).property("markerRoom").toReal() - mark->implicitWidth();
+    CHECK(mark->y() == caption->y());
+    CHECK(mark->x() >= caption->property("contentWidth").toReal());
+    CHECK(mark->x() <= caption->property("contentWidth").toReal() + space + 1);
+    CHECK(Scene::controlOf(*captioned).width() == field.width());
+    QQuickItem& bareField = Scene::itemOf(*bare);
+    QQuickItem const* const bareMark = findNamed(bareField, QStringLiteral("requiredMark"));
+    REQUIRE(bareMark != nullptr);
+    CHECK(std::abs(bareMark->x() + bareMark->width() - bareField.width()) < 1);
+    QQuickItem& textItem = Scene::itemOf(*text);
+    QQuickItem const* const textMark = findNamed(textItem, QStringLiteral("requiredMark"));
+    QQuickItem const& label = Scene::controlOf(*text);
+    REQUIRE(textMark != nullptr);
+    qreal const lineHeight = label.property("contentHeight").toReal() / 2;
+    CHECK(textMark->y() >= lineHeight - 1);
+    CHECK(textMark->x() < label.property("contentWidth").toReal() / 2);
+    CHECK(textMark->x() > 0);
+}
+
+// Mutation: leave `announcedUnit` out of MorphField's accessible description (it then ends with the description).
+TEST_CASE("qt_quick widgets: a text input announces its unit after its description", "[qt_quick]") {
+    Scene scene;
+    auto const input = scene.backend().createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    input->setUnit("°C");
+    input->setDescription("Required range 2–8 °C");
+    scene.settle();
+    QString const declared = Scene::itemOf(*input).property("accessibleDescription").toString();
+    CHECK(declared == QStringLiteral("Required range 2–8 °C\n°C"));
+}
+
+// Mutation: map DangerOutline to Danger in ButtonImpl::setEmphasis (the fill then reads the error colour).
+TEST_CASE("qt_quick widgets: a danger outlined button, an outline badge, and a stretched segmented select",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const reject = scene.backend().createButton(column.get());
+    reject->setLabel("Reject");
+    reject->setEmphasis(ui::ButtonEmphasis::DangerOutline);
+    auto const stat = scene.backend().createBadge(column.get());
+    stat->setTone(ui::Tone::Err);
+    stat->setText("STAT");
+    stat->setStyle(ui::BadgeStyle::Outline);
+    auto const show = scene.backend().createSelect(column.get(), ui::SelectStyle::Segmented);
+    show->setLayout({.width = ui::Sizing::stretch(1), .height = {}});
+    show->setOptions(
+        {{.key = std::string{"all"}, .label = "All 24"}, {.key = std::string{"flagged"}, .label = "Flagged 2"}});
+    show->setSelected(std::string{"all"});
+    scene.window().resize(300, 600);
+    scene.settle();
+    QObject const* const scheme = Scene::itemOf(*reject).property("scheme").value<QObject*>();
+    REQUIRE(scheme != nullptr);
+    auto const surface = scheme->property("surface").value<QColor>();
+    auto const error = scheme->property("error").value<QColor>();
+    CHECK(Scene::itemOf(*reject).property("fill").value<QColor>() == surface);
+    QList<QQuickItem*> const buttons = Scene::itemsOf(Scene::itemOf(*reject), "QQuickButton");
+    REQUIRE_FALSE(buttons.isEmpty());
+    auto const* const content = buttons.front()->property("contentItem").value<QQuickItem*>();
+    REQUIRE(content != nullptr);
+    CHECK(content->property("color").value<QColor>() == error);
+    QQuickItem const* const fill = findNamed(Scene::itemOf(*stat), QStringLiteral("fill"));
+    REQUIRE(fill != nullptr);
+    CHECK(fill->property("color").value<QColor>() == surface);
+    CHECK(fill->property("border").value<QObject*>()->property("color").value<QColor>() ==
+          scheme->property("errorBorder").value<QColor>());
+    QList<QQuickItem*> const segments = named(Scene::itemOf(*show), QStringLiteral("segment"));
+    REQUIRE(segments.size() == 2);
+    CHECK(std::abs(segments.at(0)->width() - segments.at(1)->width()) <= 1);
+    CHECK(segments.at(0)->width() > 100);
+}
+
+// Mutation: leave the content column outside the `Button` (the press on the third line then reaches nothing).
+TEST_CASE("qt_quick widgets: a list entry's content fills the entry, and a press anywhere on it clicks the entry",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const item = scene.backend().createButton(column.get());
+    item->setLabel("WS-2026-0412, 2 h");
+    item->setStyle(ui::ButtonStyle::Item);
+    item->setSelected(true);
+    int clicks = 0;
+    item->setOnClick([&clicks] { ++clicks; });
+    auto const lines = scene.backend().createStack(&item->content(), ui::Axis::Vertical);
+    auto const first = scene.backend().createText(lines.get());
+    first->setText("WS-2026-0412");
+    auto const second = scene.backend().createText(lines.get());
+    second->setText("Assay");
+    auto const third = scene.backend().createText(lines.get());
+    third->setText("Tags");
+    scene.settle();
+    QQuickItem& entry = Scene::itemOf(*item);
+    QList<QQuickItem*> const buttons = Scene::itemsOf(entry, "QQuickButton");
+    REQUIRE_FALSE(buttons.isEmpty());
+    auto const* const background = buttons.front()->property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    CHECK(background->height() == entry.height());
+    CHECK(entry.height() >= 3 * Scene::itemOf(*first).height());
+    CHECK(Scene::itemOf(*third).isVisible());
+    CHECK(entry.property("accessibleName").toString() == QStringLiteral("WS-2026-0412, 2 h"));
+    scene.click(Scene::itemOf(*third));
+    CHECK(clicks == 1);
+}
+
+// Mutation: keep the QML string builder for a calendar day (the calendar then writes `2026-10-26 10:00`).
+TEST_CASE("qt_quick widgets: a date input with a pattern shows, reads and picks in it", "[qt_quick]") {
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const input = scene.backend().createDateTimeInput(column.get(), ui::DateMode::DateTime, 0);
+    auto const other = scene.backend().createButton(column.get());
+    std::vector<std::optional<morph::time::Timestamp>> changes;
+    input->setOnChange([&changes](std::optional<morph::time::Timestamp> value) { changes.push_back(value); });
+    input->setPattern("dd-MMM-yyyy HH:mm");
+    input->setValue(
+        morph::time::Timestamp{DateTime{year{2026}, month{10}, day{24}, hours{9}, minutes{41}, seconds{0}}});
+    scene.settle();
+    CHECK(base(*input).shownText() == "24-Oct-2026 09:41");
+    CHECK(Scene::controlOf(*input).property("placeholderText").toString() == QStringLiteral("dd-mmm-yyyy hh:mm"));
+    scene.click(Scene::controlOf(*input));
+    scene.standardKey(QKeySequence::SelectAll);
+    scene.enter(QStringLiteral("25-Oct-2026 10:00"));
+    scene.click(Scene::itemOf(*other));
+    REQUIRE(changes.size() == 1);
+    REQUIRE(changes.back().has_value());
+    CHECK(changes.back()->value->toIso8601() == "2026-10-25T10:00:00.000Z");
+    QQuickItem const* const button = findNamed(Scene::itemOf(*input), QStringLiteral("datePickerButton"));
+    REQUIRE(button != nullptr);
+    scene.click(*button);
+    QQuickItem const* const cell = findNamed(*scene.window().contentItem(), QStringLiteral("day_2026-9-26"));
+    REQUIRE(cell != nullptr);
+    scene.click(*cell);
+    REQUIRE(changes.size() == 2);
+    CHECK(base(*input).shownText() == "26-Oct-2026 10:00");
+    CHECK(changes.back()->value->toIso8601() == "2026-10-26T10:00:00.000Z");
+}
+
+namespace {
+
+// The items named @p name below @p root in the visual tree, in the order the model made them, left to right.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+void collectNamed(QQuickItem& item, QString const& name, QList<QQuickItem*>& found) {
+    for (QQuickItem* const child : item.childItems()) {
+        if (child->objectName() == name && child->isVisible()) {
+            found.append(child);
+        }
+        collectNamed(*child, name, found);
+    }
+}
+
+QList<QQuickItem*> namedItems(QQuickItem& root, char const* name) {
+    QList<QQuickItem*> found;
+    collectNamed(root, QString::fromUtf8(name), found);
+    std::ranges::sort(found, [](QQuickItem const* left, QQuickItem const* right) {
+        return left->mapToScene(QPointF{}).x() < right->mapToScene(QPointF{}).x();
+    });
+    return found;
+}
+
+QColor colorOf(QObject& item, char const* property) {
+    return QQmlProperty{&item, QString::fromUtf8(property)}.read().value<QColor>();
+}
+
+}  // namespace
+
+TEST_CASE("qt_quick widgets: steps are numbered circles joined by connectors that share the width", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 200);
+    auto steps = scene.backend().createSteps(nullptr);
+    steps->setSteps({{.label = "Product", .state = ui::StepState::Done},
+                     {.label = "Conditions", .state = ui::StepState::Active},
+                     {.label = "Tests", .state = ui::StepState::Pending},
+                     {.label = "Review", .state = ui::StepState::Pending}});
+    steps->setCurrent(1);
+    steps->setLabelled(false);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto const accent = theme->property("accent").value<QColor>();
+    auto const controlBorder = theme->property("controlBorder").value<QColor>();
+    QQuickItem& indicator = Scene::itemOf(*steps);
+
+    auto const circles = namedItems(indicator, "circle");
+    REQUIRE(circles.size() == 4);
+    int filled = 0;
+    int accentOutlined = 0;
+    int plainOutlined = 0;
+    for (QQuickItem* const circle : circles) {
+        if (colorOf(*circle, "color") == accent) {
+            ++filled;
+        }
+        QColor const outline = colorOf(*circle, "border.color");
+        accentOutlined += outline == accent ? 1 : 0;
+        plainOutlined += outline == controlBorder ? 1 : 0;
+    }
+    // The done circle is filled and outlined in the accent; the current one is outlined in it with an empty fill.
+    CHECK(filled == 1);
+    CHECK(accentOutlined == 2);
+    CHECK(plainOutlined == 2);
+    auto const marks = namedItems(indicator, "mark");
+    REQUIRE(marks.size() == 4);
+    CHECK(marks.at(1)->property("text").toString() == QStringLiteral("2"));
+    CHECK(colorOf(*marks.at(1), "color") == accent);
+    CHECK(marks.at(0)->property("text").toString() == QStringLiteral("✓"));
+
+    auto const connectors = namedItems(indicator, "connector");
+    REQUIRE(connectors.size() == 3);
+    CHECK(connectors.at(0)->width() > 0);
+    CHECK(std::abs(connectors.at(0)->width() - connectors.at(1)->width()) <= 1.0);
+    CHECK(std::abs(connectors.at(1)->width() - connectors.at(2)->width()) <= 1.0);
+    CHECK(colorOf(*connectors.at(0), "color") == accent);
+    CHECK(colorOf(*connectors.at(1), "color") == controlBorder);
+    // The connectors take the spare width, so the last circle ends where the indicator does.
+    QQuickItem const& last = *circles.back();
+    double const lastRight = last.mapToItem(&indicator, QPointF{last.width(), 0}).x();
+    CHECK(std::abs(lastRight - indicator.width()) < 1.0);
+}
+
+TEST_CASE("qt_quick widgets: an unlabelled steps indicator names each step by its label and state", "[qt_quick]") {
+    Scene scene;
+    auto steps = scene.backend().createSteps(nullptr);
+    steps->setSteps({{.label = "Product", .state = ui::StepState::Done},
+                     {.label = "Conditions", .state = ui::StepState::Active},
+                     {.label = "Tests", .state = ui::StepState::Pending}});
+    steps->setCurrent(1);
+    steps->setLabelled(false);
+    scene.settle();
+    auto const cells = namedItems(Scene::itemOf(*steps), "step");
+    REQUIRE(cells.size() == 3);
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface const* const done = QAccessible::queryAccessibleInterface(cells.at(0));
+    QAccessibleInterface const* const current = QAccessible::queryAccessibleInterface(cells.at(1));
+    QAccessibleInterface const* const upcoming = QAccessible::queryAccessibleInterface(cells.at(2));
+    REQUIRE(done != nullptr);
+    REQUIRE(current != nullptr);
+    REQUIRE(upcoming != nullptr);
+    CHECK(done->text(QAccessible::Name) == QStringLiteral("Product, done"));
+    CHECK(current->text(QAccessible::Name) == QStringLiteral("Conditions, current"));
+    CHECK(upcoming->text(QAccessible::Name) == QStringLiteral("Tests"));
+    QAccessibleInterface const* const list = QAccessible::queryAccessibleInterface(&Scene::itemOf(*steps));
+    REQUIRE(list != nullptr);
+    CHECK(list->text(QAccessible::Name) == QStringLiteral("Conditions"));
+    CHECK(list->role() == QAccessible::List);
+    QAccessible::setActive(wasActive);
+}
+
+namespace {
+
+/// The background item of the control a button or a button-style menu draws.
+QQuickItem const& controlBackground(QQuickItem const& item) {
+    auto const* const control = item.property("focusTarget").value<QQuickItem*>();
+    REQUIRE(control != nullptr);
+    auto const* const background = control->property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    return *background;
+}
+
+QObject* themeOf(Scene& scene) {
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    return theme;
+}
+
+}  // namespace
+
+// Mutation: draw `square` as `default` (the button is eight units wide, with the normal padding and weight).
+TEST_CASE(
+    "qt_quick widgets: a square button is as wide as it is tall, with the control's corners and a strong caption",
+    "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.window().resize(400, 200);
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto const square = scene.backend().createButton(row.get());
+    square->setLabel("\xE2\x80\xB9");
+    square->setShape(ui::ControlShape::Square);
+    auto const plain = scene.backend().createButton(row.get());
+    plain->setLabel("\xE2\x80\xB9");
+    scene.settle();
+    QObject const* const theme = themeOf(scene);
+    QQuickItem& item = Scene::itemOf(*square);
+    double const target = theme->property("targetHeight").toReal();
+    CHECK(item.height() == target);
+    CHECK(item.width() == target);
+    CHECK(Scene::itemOf(*plain).width() > target);
+    QQuickItem const& background = controlBackground(item);
+    CHECK(background.property("radius").toReal() == theme->property("radiusControl").toReal());
+    QList<QQuickItem*> const texts = Scene::itemsOf(item, "QQuickText");
+    REQUIRE_FALSE(texts.isEmpty());
+    auto const font = texts.front()->property("font").value<QFont>();
+    CHECK(font.pixelSize() == static_cast<int>(std::lround(theme->property("bodyPixels").toReal())));
+    CHECK(font.weight() == static_cast<QFont::Weight>(theme->property("strongWeight").toInt()));
+    auto const normal = Scene::itemsOf(Scene::itemOf(*plain), "QQuickText").front()->property("font").value<QFont>();
+    CHECK(normal.weight() != font.weight());
+}
+
+// Mutation: ignore `Theme.iconOnlySquare` in the menu's trigger.
+TEST_CASE("qt_quick widgets: under shape.iconOnly an icon-only menu trigger is square, and otherwise is not",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 200);
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto const more = scene.backend().createMenu(row.get(), ui::MenuStyle::Button);
+    more->setTrigger({.label = "", .icon = "more", .emphasis = ui::ButtonEmphasis::Ghost});
+    more->setItems({{.label = "Open"}});
+    auto const labelled = scene.backend().createMenu(row.get(), ui::MenuStyle::Button);
+    labelled->setTrigger({.label = "Actions", .icon = "more", .emphasis = ui::ButtonEmphasis::Ghost});
+    labelled->setItems({{.label = "Open"}});
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.settle();
+    QQuickItem const& trigger = Scene::itemOf(*more);
+    CHECK(trigger.width() < trigger.height());
+
+    auto const tokens = ui::parseTokens(R"({"shape": {"iconOnly": {"$type": "keyword", "$value": "square"}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    scene.settle();
+    CHECK(trigger.width() == trigger.height());
+    CHECK(Scene::itemOf(*labelled).width() > Scene::itemOf(*labelled).height());
+}
+
+// Mutation: draw an overline as a section whatever the token (the size check fails).
+TEST_CASE(
+    "qt_quick widgets: an overline is small, strong, muted capitals under font.overline.case, and a section otherwise",
+    "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 200);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const overline = scene.backend().createText(column.get());
+    overline->setText("Record type");
+    overline->setRole(ui::TextRole::Overline);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.settle();
+    QObject const* const theme = themeOf(scene);
+    auto const labelFont = [&] { return Scene::controlOf(*overline).property("font").value<QFont>(); };
+    auto const strong = theme->property("strongFont").value<QFont>();
+    CHECK(labelFont().pixelSize() == strong.pixelSize());
+    CHECK(labelFont().weight() == strong.weight());
+    CHECK(labelFont().capitalization() == QFont::MixedCase);
+
+    auto const tokens =
+        ui::parseTokens(R"({"font": {"overline": {"case": {"$type": "keyword", "$value": "uppercase"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    scene.settle();
+    QFont const font = labelFont();
+    CHECK(font.pixelSize() == static_cast<int>(std::lround(theme->property("smallPixels").toReal())));
+    CHECK(font.weight() == static_cast<QFont::Weight>(theme->property("strongWeight").toInt()));
+    CHECK(font.capitalization() == QFont::AllUppercase);
+    CHECK(font.letterSpacing() > 0.0);
+    CHECK(Scene::controlOf(*overline).property("color").value<QColor>() == theme->property("muted").value<QColor>());
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface const* const node = QAccessible::queryAccessibleInterface(&Scene::itemOf(*overline));
+    REQUIRE(node != nullptr);
+    CHECK(node->text(QAccessible::Name) == QStringLiteral("Record type"));
+    QAccessible::setActive(wasActive);
+}
+
+namespace {
+
+/// The first item named @p name under @p root, depth first; null when there is none.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+QQuickItem* firstNamed(QQuickItem const& root, QString const& name) {
+    for (QQuickItem* const child : root.childItems()) {
+        if (child->objectName() == name) {
+            return child;
+        }
+        if (QQuickItem* const found = firstNamed(*child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+/// A theme property read as a number.
+qreal themeNumber(Scene& scene, char const* property) {
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    return theme->property(property).toReal();
+}
+
+}  // namespace
+
+// Mutation: keep the style's vertical padding around the box (+12 px), or keep the indicator at `unitHeight` on
+// compact.
+TEST_CASE("qt_quick widgets: a check box has no padding of its own, and its box is half the touch height on compact",
+          "[qt_quick]") {
+    Scene scene;
+    auto box = scene.backend().createCheckbox(nullptr);
+    box->setLabel("Agree");
+    scene.settle();
+    QQuickItem const& control = Scene::controlOf(*box);
+    QQuickItem const* const indicator = firstNamed(control, QStringLiteral("boxIndicator"));
+    REQUIRE(indicator != nullptr);
+    qreal const unit = themeNumber(scene, "unitHeight");
+    qreal const line = control.property("implicitContentHeight").toReal();
+    CHECK(control.height() == Catch::Approx(std::max(line, unit)).margin(0.5));
+    CHECK(indicator->height() == Catch::Approx(unit).margin(0.5));
+
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme->setProperty("touchTargets", true));
+    scene.settle();
+    qreal const half = themeNumber(scene, "touchHeight") / 2;
+    CHECK(indicator->height() == Catch::Approx(half).margin(0.5));
+    CHECK(indicator->width() == Catch::Approx(half).margin(0.5));
+    CHECK(control.height() >= themeNumber(scene, "targetHeight") - 0.5);
+}
+
+// Mutation: leave the connector filling its cell (it touches the label before it and the circle after it).
+TEST_CASE("qt_quick widgets: a step connector stands a step of 2 off the steps either side", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 200);
+    auto steps = scene.backend().createSteps(nullptr);
+    steps->setSteps({{.label = "Product", .state = ui::StepState::Done},
+                     {.label = "Conditions", .state = ui::StepState::Active},
+                     {.label = "Tests", .state = ui::StepState::Pending}});
+    steps->setCurrent(1);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal gap = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, gap), Q_ARG(int, 2)));
+    QQuickItem& indicator = Scene::itemOf(*steps);
+    auto const labels = namedItems(indicator, "label");
+    auto const circles = namedItems(indicator, "circle");
+    auto const connectors = namedItems(indicator, "connector");
+    REQUIRE(labels.size() == 3);
+    REQUIRE(circles.size() == 3);
+    REQUIRE(connectors.size() == 2);
+    for (qsizetype i = 0; i < connectors.size(); ++i) {
+        QQuickItem const& connector = *connectors.at(i);
+        qreal const left = connector.mapToScene(QPointF{0, 0}).x();
+        qreal const right = connector.mapToScene(QPointF{connector.width(), 0}).x();
+        QQuickItem const& before = *labels.at(i);
+        qreal const labelRight = before.mapToScene(QPointF{before.width(), 0}).x();
+        qreal const circleLeft = circles.at(i + 1)->mapToScene(QPointF{0, 0}).x();
+        INFO("connector " << i);
+        CHECK(left >= labelRight + gap - 0.5);
+        CHECK(right <= circleLeft - gap + 0.5);
+        CHECK(connector.width() > 0);
+    }
+}
+
+// Mutation: put the content item back (a square button with `nav.back` and no set draws nothing, one with an unnamed
+// `scan` icon and no label stays blank, and `close` draws no glyph).
+TEST_CASE("qt_quick widgets: an icon-only button is never blank when the theme does not name its icon", "[qt_quick]") {
+    Scene scene;
+    auto pager = scene.backend().createButton(nullptr);
+    pager->setIcon("nav.back");
+    pager->setShape(ui::ControlShape::Square);
+    pager->setAccessibleName("Previous page");
+    auto scan = scene.backend().createButton(nullptr);
+    scan->setIcon("scan");
+    scan->setAccessibleName("Scan");
+    auto close = scene.backend().createButton(nullptr);
+    close->setIcon("close");
+    close->setAccessibleName("Close");
+    scene.settle();
+
+    QQuickItem const* const chevron = firstNamed(Scene::itemOf(*pager), QStringLiteral("navChevron"));
+    REQUIRE(chevron != nullptr);
+    CHECK(chevron->isVisible());
+    CHECK(chevron->height() >= 0.55 * themeNumber(scene, "bodyPixels"));
+    QQuickItem const* const scanText = firstNamed(Scene::itemOf(*scan), QStringLiteral("contentLabel"));
+    REQUIRE(scanText != nullptr);
+    CHECK(scanText->isVisible());
+    CHECK(scanText->property("text").toString() == QStringLiteral("Scan"));
+    QQuickItem const* const closeText = firstNamed(Scene::itemOf(*close), QStringLiteral("contentLabel"));
+    REQUIRE(closeText != nullptr);
+    CHECK(closeText->property("text").toString() == QStringLiteral("×"));
+}
+
+// Mutation: ignore the style (no anchor in the label and no proxy), fire the action on a click of the proxy only, or
+// leave the stretched action in the message's row.
+TEST_CASE("qt_quick widgets: a link banner draws its action as an anchor in the sentence, behind an accessible proxy",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 300);
+    auto banner = scene.backend().createBanner(nullptr);
+    banner->setLayout({.width = ui::Sizing::stretch()});
+    banner->setTone(ui::Tone::Warn);
+    banner->setSpans(
+        {{.text = "1 field needs attention: "}, {.text = "Containers per pull", .action = true}, {.text = "."}});
+    banner->setActionLabel("Containers per pull");
+    banner->setActionStyle(ui::BannerActionStyle::Link, false);
+    int fired = 0;
+    banner->setOnAction([&fired] { ++fired; });
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*banner);
+    auto* const message = item.findChild<QQuickItem*>(QStringLiteral("message"));
+    REQUIRE(message != nullptr);
+    QString const markup = message->property("text").toString();
+    CHECK(markup.count(QStringLiteral("<a href=\"action\"")) == 1);
+    CHECK((markup.contains(QStringLiteral("Containers per pull</span></a>")) ||
+           markup.contains(QStringLiteral("Containers per pull</a>"))));
+    CHECK(markup.indexOf(QStringLiteral("</a>")) < markup.lastIndexOf(QStringLiteral(".")));
+    CHECK(item.findChild<QQuickItem*>(QStringLiteral("action"))->isVisible() == false);
+
+    QMetaObject::invokeMethod(message, "linkActivated", Q_ARG(QString, QStringLiteral("action")));
+    CHECK(fired == 1);
+
+    auto* const proxy = item.findChild<QQuickItem*>(QStringLiteral("actionProxy"));
+    REQUIRE(proxy != nullptr);
+    QAccessibleInterface const* const node = QAccessible::queryAccessibleInterface(proxy);
+    REQUIRE(node != nullptr);
+    CHECK(node->role() == QAccessible::Button);
+    CHECK(node->text(QAccessible::Name) == QStringLiteral("Containers per pull"));
+    proxy->forceActiveFocus();
+    scene.key(Qt::Key_Return);
+    CHECK(fired == 2);
+}
+
+// Mutation: a link banner whose runs name no action gets no anchor after them.
+TEST_CASE("qt_quick widgets: a link banner without an action run puts the link after the message", "[qt_quick]") {
+    Scene scene;
+    auto banner = scene.backend().createBanner(nullptr);
+    banner->setText("Offline");
+    banner->setActionLabel("Retry");
+    banner->setActionStyle(ui::BannerActionStyle::Link, false);
+    scene.settle();
+    auto* const message = Scene::itemOf(*banner).findChild<QQuickItem*>(QStringLiteral("message"));
+    REQUIRE(message != nullptr);
+    QString const markup = message->property("text").toString();
+    CHECK(markup.contains(QStringLiteral("Offline")));
+    CHECK(markup.indexOf(QStringLiteral("Offline")) < markup.indexOf(QStringLiteral("<a href=\"action\"")));
+    CHECK(markup.contains(QStringLiteral("Retry")));
+}
+
+// Mutation: ignore `stretch` (the action stays at the trailing edge of the message's row).
+TEST_CASE("qt_quick widgets: a stretched button action is as wide as the banner's content and below the text",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 300);
+    auto banner = scene.backend().createBanner(nullptr);
+    banner->setLayout({.width = ui::Sizing::stretch()});
+    banner->setText("Run 4 is overdue");
+    banner->setActionLabel("Open run");
+    banner->setActionStyle(ui::BannerActionStyle::Button, true);
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*banner);
+    auto* const message = item.findChild<QQuickItem*>(QStringLiteral("message"));
+    auto* const action = item.findChild<QQuickItem*>(QStringLiteral("action"));
+    REQUIRE((message != nullptr && action != nullptr));
+    QPointF const messageAt = message->mapToItem(&item, QPointF{0, 0});
+    QPointF const actionAt = action->mapToItem(&item, QPointF{0, 0});
+    CHECK(actionAt.y() >= messageAt.y() + message->height());
+    CHECK(action->width() == Catch::Approx(item.width() - (2 * actionAt.x())).margin(1.0));
+    auto const* const background = action->property("background").value<QObject*>();
+    REQUIRE(background != nullptr);
+    CHECK_FALSE(background->property("ghost").toBool());
+}
+
+namespace {
+
+/// The x of the first character's rectangle in a single-line text control: 0 while its text starts at the left edge of
+/// the text area, negative once the field has scrolled.
+qreal firstCharacterX(QQuickItem& control) {
+    QRectF rectangle;
+    REQUIRE(
+        QMetaObject::invokeMethod(&control, "positionToRectangle", Q_RETURN_ARG(QRectF, rectangle), Q_ARG(int, 0)));
+    return rectangle.x();
+}
+
+}  // namespace
+
+// Mutation: leave the field's `autoScroll` at its default (the first check reads the end of the text, as stock Qt
+// does).
+TEST_CASE("qt_quick widgets: a text input narrower than its text shows the start until it has the focus",
+          "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(10), .height = ui::Sizing::content()});
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    input->setLayout({.width = ui::Sizing::fixed(10), .height = ui::Sizing::content()});
+    input->setText("Ease, finished product of a lot of letters");
+    scene.settle();
+    QQuickItem& control = Scene::controlOf(*input);
+    REQUIRE(control.width() < 100.0);
+    qreal const padding = 0.0;
+    CHECK(firstCharacterX(control) == Catch::Approx(padding));
+
+    control.forceActiveFocus();
+    scene.settle();
+    scene.key(Qt::Key_End);
+    CHECK(firstCharacterX(control) < 0.0);
+
+    control.setFocus(false);
+    scene.settle();
+    CHECK_FALSE(control.hasActiveFocus());
+    CHECK(firstCharacterX(control) == Catch::Approx(padding));
+}
+
+// Mutation: as above, in the date-time input's field.
+TEST_CASE("qt_quick widgets: a date-time input narrower than its text shows the start until it has the focus",
+          "[qt_quick]") {
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(10), .height = ui::Sizing::content()});
+    auto input = scene.backend().createDateTimeInput(column.get(), ui::DateMode::DateTime, 0);
+    input->setLayout({.width = ui::Sizing::fixed(10), .height = ui::Sizing::content()});
+    input->setValue(
+        morph::time::Timestamp{DateTime{year{2026}, month{10}, day{4}, hours{9}, minutes{41}, seconds{0}}});
+    scene.settle();
+    QQuickItem& control = Scene::controlOf(*input);
+    REQUIRE(control.width() < 100.0);
+    qreal const padding = 0.0;
+    CHECK(firstCharacterX(control) == Catch::Approx(padding));
+
+    control.forceActiveFocus();
+    scene.settle();
+    scene.key(Qt::Key_End);
+    CHECK(firstCharacterX(control) < 0.0);
+
+    control.setFocus(false);
+    scene.settle();
+    CHECK(firstCharacterX(control) == Catch::Approx(padding));
+}
+
+namespace {
+
+/// The inset of a text control's text from its leading edge.
+qreal textInset(QQuickItem const& control) { return control.property("leftPadding").toReal(); }
+
+/// Where the first line starts below the top of a text control. A single-line field reports its rectangle inside
+/// the padding, a text area's includes it.
+qreal textTop(QQuickItem& control, bool multiline) {
+    QRectF rectangle;
+    REQUIRE(
+        QMetaObject::invokeMethod(&control, "positionToRectangle", Q_RETURN_ARG(QRectF, rectangle), Q_ARG(int, 0)));
+    return (multiline ? 0.0 : control.property("topPadding").toReal()) + rectangle.y();
+}
+
+}  // namespace
+
+// Mutation: leave one control on its own step (the text input's 12, the text area's 16, the date input's 12 or the
+// select's 8), or leave the token unread.
+TEST_CASE("qt_quick widgets: every input's text starts input.paddingX from its edge", "[qt_quick]") {
+    Scene scene;
+    auto const tokens =
+        ui::parseTokens(R"({"input": {"paddingX": {"$type": "dimension", "$value": {"value": 10, "unit": "px"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto area = scene.backend().createTextInput(column.get(), ui::TextInputMode::Multiline);
+    auto date = scene.backend().createDateTimeInput(column.get(), ui::DateMode::Date, 0);
+    auto select = scene.backend().createSelect(column.get(), ui::SelectStyle::Dropdown);
+    input->setText("Signer");
+    area->setText("Reason");
+    select->setOptions({{.key = std::string{"a"}, .label = "Alpha"}});
+    select->setSelected(ui::Key{std::string{"a"}});
+    scene.settle();
+    CHECK(textInset(Scene::controlOf(*input)) == Catch::Approx(10.0));
+    CHECK(textInset(Scene::controlOf(*area)) == Catch::Approx(10.0));
+    QQuickItem const& dateControl = Scene::controlOf(*date);
+    CHECK(dateControl.property("leftPadding").toReal() == Catch::Approx(10.0));
+    CHECK(dateControl.property("rightPadding").toReal() >= 10.0);
+    QQuickItem const* const value = findNamed(Scene::itemOf(*select), QStringLiteral("value"));
+    REQUIRE(value != nullptr);
+    CHECK(value->property("leftPadding").toReal() == Catch::Approx(10.0));
+}
+
+// Mutation: leave the text area's vertical padding at its own step (its first line sits lower than a single-line
+// input's text).
+TEST_CASE("qt_quick widgets: a text area's first line sits where a single-line input's text sits", "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto area = scene.backend().createTextInput(column.get(), ui::TextInputMode::Multiline);
+    input->setText("Signer");
+    area->setText("Reason");
+    scene.settle();
+    QQuickItem& inputControl = Scene::controlOf(*input);
+    QQuickItem& areaControl = Scene::controlOf(*area);
+    CHECK(textTop(areaControl, true) == Catch::Approx(textTop(inputControl, false)).margin(1.0));
+    // And with the stock inset, the area's text is as far in as the input's.
+    CHECK(textInset(areaControl) == Catch::Approx(textInset(inputControl)));
+}
+
+namespace {
+
+/// A selected item button whose content is a stretching title and a badge, under @p surface.
+struct SelectedEntry {
+    std::unique_ptr<ui::ButtonWidget> button;
+    std::unique_ptr<ui::StackWidget> row;
+    std::unique_ptr<ui::TextWidget> title;
+    std::unique_ptr<ui::BadgeWidget> badge;
+};
+
+SelectedEntry makeSelectedEntry(Scene& scene, ui::ContainerWidget* parent, std::string_view surface) {
+    SelectedEntry entry;
+    entry.button = scene.backend().createButton(parent);
+    entry.button->setStyle(ui::ButtonStyle::Item);
+    entry.button->setLabel("Instrument 3");
+    entry.button->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::content()});
+    if (!surface.empty()) {
+        entry.button->setSurface(surface);
+    }
+    entry.row = scene.backend().createStack(&entry.button->content(), ui::Axis::Horizontal);
+    entry.row->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::content()});
+    entry.title = scene.backend().createText(entry.row.get());
+    entry.title->setText("Instrument 3");
+    entry.title->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::content()});
+    entry.badge = scene.backend().createBadge(entry.row.get());
+    entry.badge->setText("12");
+    entry.button->setSelected(true);
+    return entry;
+}
+
+/// The colour the title text is drawn in: the first visible Text of @p root showing @p text.
+QColor drawnColor(QQuickItem& root, QString const& text) {
+    for (QQuickItem const* const candidate : Scene::itemsOf(root, "QQuickText")) {
+        if (candidate->isVisible() && candidate->property("text").toString() == text) {
+            return candidate->property("color").value<QColor>();
+        }
+    }
+    FAIL("no visible text " << text.toStdString());
+    return {};
+}
+
+/// The `Button` inside a MorphButton.
+QQuickItem& buttonControl(ui::Widget const& widget) {
+    auto* const control = qobject_cast<QQuickItem*>(base(widget).part("focusTarget"));
+    REQUIRE(control != nullptr);
+    return *control;
+}
+
+/// The 3 px accent bar of an item's background, or nothing.
+QQuickItem* accentBar(QQuickItem& control) {
+    auto* const background = control.property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    for (QQuickItem* const child : background->childItems()) {
+        if (child->width() == 3.0 && child->objectName().isEmpty()) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Mutation: hand the content the button's own `scheme` (the content's text stays the scheme's text while selected
+// under accent), or draw the background under the button's label only (the badge lies outside it).
+TEST_CASE("qt_quick widgets: a selected item with content is marked across it, in the accent under accent",
+          "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(300), .height = ui::Sizing::content()});
+    auto entry = makeSelectedEntry(scene, column.get(), "");
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto* const scheme = theme->property("themeScheme").value<QObject*>();
+    REQUIRE(scheme != nullptr);
+    QQuickItem& control = buttonControl(*entry.button);
+    auto* const background = control.property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    CHECK(background->width() == Catch::Approx(control.width()));
+    QQuickItem const& badge = Scene::itemOf(*entry.badge);
+    CHECK(badge.mapToScene(QPointF{badge.width(), 0}).x() <=
+          background->mapToScene(QPointF{background->width(), 0}).x() + 0.5);
+    QQuickItem const* const bar = accentBar(control);
+    REQUIRE(bar != nullptr);
+    CHECK(bar->isVisible());
+    auto const accent = scheme->property("accent").value<QColor>();
+    auto const text = scheme->property("text").value<QColor>();
+    REQUIRE(accent != text);
+    QQuickItem& root = Scene::itemOf(*entry.button);
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == accent);
+    // Deselected, the text returns to the scheme's text with nothing adopted again.
+    entry.button->setSelected(false);
+    scene.settle();
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == text);
+    entry.button->setSelected(true);
+    scene.settle();
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == accent);
+}
+
+// Mutation: ignore `listSelectionFill` in the content's scheme (the label stays the accent) or in the background (the
+// bar shows).
+TEST_CASE("qt_quick widgets: on a surface whose list selection is fill, a selected item has no bar and a text label",
+          "[qt_quick]") {
+    Scene scene;
+    auto const fillTokens = ui::parseTokens(R"({"list": {"selection": {"$type": "keyword", "$value": "fill"}}})");
+    REQUIRE(fillTokens);
+    auto const fillResolved = ui::resolveTokens({&*fillTokens});
+    REQUIRE(fillResolved);
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"sidebar", ui::themeValues(*fillResolved)}};
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), surfaces).empty());
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(300), .height = ui::Sizing::content()});
+    auto entry = makeSelectedEntry(scene, column.get(), "sidebar");
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
+    REQUIRE(sidebar != nullptr);
+    QQuickItem& control = buttonControl(*entry.button);
+    QQuickItem const* const bar = accentBar(control);
+    REQUIRE(bar != nullptr);
+    CHECK_FALSE(bar->isVisible());
+    QQuickItem& root = Scene::itemOf(*entry.button);
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == sidebar->property("text").value<QColor>());
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) != sidebar->property("accent").value<QColor>());
 }

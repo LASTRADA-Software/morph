@@ -14,71 +14,100 @@ MorphWidget {
     property bool collapsible: false
     property bool collapsed: false
     readonly property Item content: column
-    readonly property Item headerArea: headerSlot
-    readonly property bool headerRowShown: root.title !== "" || root.collapsible || headerSlot.children.length > 0
+    readonly property Item headerArea: header.slot
+    // Whether a shown content child stretches down; the content then takes the panel's spare height, else a filler
+    // does, which keeps the content under the header instead of centred in the spare height.
+    readonly property bool contentStretches: {
+        for (const child of column.children) {
+            if (child.visible && child.heightKind === 2)
+                return true
+        }
+        return false
+    }
+    // The scheme the frame and the divider draw with: a panel that names no surface is a card, whatever scheme it
+    // inherits.
+    readonly property MorphScheme frameScheme: root.surface === "" ? Theme.cardScheme : root.scheme
+    // Whether the content is hidden, so the panel is its header row alone.
+    readonly property bool folded: root.collapsible && root.collapsed
+    readonly property bool headerRowShown: root.title !== "" || root.collapsible || headerArea.children.length > 0
 
     implicitWidth: frame.implicitWidth
     implicitHeight: frame.implicitHeight
+    needWidth: inner.Layout.minimumWidth
+    haveWidth: inner.width
+    contentMinimumWidth: 2 * Theme.spaceOf(root.padding) + 2 + root.needWidth
+    overflowKind: "panel"
 
     Rectangle {
         id: frame
+        objectName: "frame"
         anchors.fill: parent
         implicitWidth: inner.implicitWidth + 2 * Theme.spaceOf(root.padding) + 2
-        implicitHeight: inner.implicitHeight + 2 * Theme.spaceOf(root.padding) + 2
-        // A panel is drawn as a card on its scheme's surface.
-        color: root.scheme.surface
+        implicitHeight: inner.implicitHeight + Theme.spaceOf(root.padding) *
+                        (root.folded ? 0 : root.headerRowShown && root.collapsible ? 1 : 2) + 2
+        // A panel that names no surface fills itself as a card. One that names a surface the theme draws leaves the
+        // fill to the widget, which draws that surface behind the frame, so the frame is not drawn twice.
+        color: root.surface === "" ? Theme.cardScheme.surface
+               : Theme.draws(root.surface) ? "transparent" : root.scheme.surface
         radius: Theme.radiusCard
-        border.color: root.scheme.border
+        border.color: root.frameScheme.border
+
+        // A card's shadow, drawn under a panel that names no surface unless it sits on a card already: a card on a
+        // card has no elevation.
+        Rectangle {
+            objectName: "frameShadow"
+            anchors.fill: parent
+            anchors.leftMargin: Theme.cardShadowOffsetX - Theme.cardShadowSpread
+            anchors.rightMargin: -Theme.cardShadowOffsetX - Theme.cardShadowSpread
+            anchors.topMargin: Theme.cardShadowOffsetY - Theme.cardShadowSpread
+            anchors.bottomMargin: -Theme.cardShadowOffsetY - Theme.cardShadowSpread
+            z: -1
+            visible: root.surface === "" && root.inheritedScheme !== Theme.cardScheme
+            radius: Theme.radiusCard + Theme.cardShadowBlur / 4
+            color: Theme.cardShadowColor
+        }
 
         ColumnLayout {
             id: inner
             anchors.fill: parent
             anchors.leftMargin: Theme.spaceOf(root.padding) + 1
             anchors.rightMargin: Theme.spaceOf(root.padding) + 1
-            anchors.topMargin: Theme.spaceOf(root.padding) + 1
-            anchors.bottomMargin: Theme.spaceOf(root.padding) + 1
+            // A foldable panel's header is flush with the frame's top; its content has the padding above it.
+            anchors.topMargin: (root.headerRowShown && root.collapsible ? 0 : Theme.spaceOf(root.padding)) + 1
+            // A folded panel is its header row inside the frame: no padding below it and no spacing to the hidden content.
+            anchors.bottomMargin: (root.folded ? 0 : Theme.spaceOf(root.padding)) + 1
+            spacing: root.folded ? 0 : 5  // the layout's default
 
-            RowLayout {
-                visible: root.headerRowShown
-
-                ToolButton {
-                    font: Theme.bodyFont
-                    id: toggle
-                    visible: root.collapsible
-                    icon.source: Theme.iconSource(root.collapsed ? "nav.expand" : "nav.collapse")
-                    icon.color: "transparent"
-                    text: icon.source.toString() !== "" ? "" : root.collapsed ? "▸" : "▾"
-                    onClicked: {
-                        root.collapsed = !root.collapsed
-                        root.fire("toggle", root.collapsed)
-                    }
-                }
-
-                Label {
-                    font: Theme.strongFont
-                    text: root.title
-                }
-
-                RowLayout {
-                    id: headerSlot
-                    Layout.fillWidth: true
-                }
-            }
-
-            // Divided from the content exactly when the header row above is shown.
-            Rectangle {
-                objectName: "divider"
+            MorphSectionHeader {
+                id: header
                 visible: root.headerRowShown
                 Layout.fillWidth: true
-                implicitHeight: 1
-                color: root.scheme.border
-                opacity: 0.6
+                // A header sits at least one step in from the frame, whatever the padding around the content.
+                Layout.leftMargin: Math.max(0, Theme.spaceOf(2) - Theme.spaceOf(root.padding))
+                Layout.rightMargin: Layout.leftMargin
+                title: root.title
+                open: !root.collapsed
+                foldable: root.collapsible
+                scheme: root.frameScheme
+                onToggled: {
+                    root.collapsed = !root.collapsed
+                    root.fire("toggle", root.collapsed)
+                }
             }
 
             ColumnLayout {
                 id: column
+                // What a bleeding child reaches past: the panel's padding, so it ends at the frame's inner edges.
+                readonly property real childBleedInset: Theme.spaceOf(root.padding)
                 visible: !root.collapsible || !root.collapsed
+                Layout.topMargin: root.headerRowShown && root.collapsible ? Theme.spaceOf(root.padding) : 0
                 Layout.fillWidth: true
+                Layout.fillHeight: root.contentStretches
+            }
+
+            Item {
+                Layout.fillHeight: true
+                visible: !root.contentStretches && !root.folded
             }
         }
     }

@@ -6,6 +6,8 @@
 // entry and a file drop go through the component's own entry point, which the menu's items and the drop area call.
 
 #include <QPointF>
+#include <QQmlContext>
+#include <QQmlProperty>
 #include <QQuickItem>
 #include <QTest>
 #include <catch2/catch_test_macros.hpp>
@@ -53,6 +55,17 @@ public:
             return "something else";
         }
         return base(widget).shownText();
+    }
+
+    // What the widget's accessible node, its `accessibleItem` or else its item, declares as `Accessible.description`.
+    std::optional<std::string> descriptionOf(ui::Widget const& widget) override {
+        settle();
+        auto* node = qobject_cast<QQuickItem*>(base(widget).part("accessibleItem"));
+        if (node == nullptr) {
+            node = base(widget).item();
+        }
+        QQmlProperty const description{node, QStringLiteral("Accessible.description"), qmlContext(node)};
+        return morph::qt_quick::detail::toUtf8(description.read().toString());
     }
 
     bool visibleOf(ui::Widget const& widget) override { return base(widget).ownVisible(); }
@@ -120,6 +133,11 @@ public:
             mouseClick(item != nullptr ? item->findChild<QQuickItem*>(QStringLiteral("dismiss")) : nullptr);
             return;
         }
+        if (auto const* const badge = dynamic_cast<detail::BadgeImpl const*>(&widget)) {
+            QQuickItem const* const item = badge->item();
+            mouseClick(item != nullptr ? item->findChild<QQuickItem*>(QStringLiteral("remove")) : nullptr);
+            return;
+        }
         _scene.key(Qt::Key_Escape);
     }
 
@@ -133,6 +151,39 @@ public:
                 mouseClick(children.at(row)->item(), modifiers);
             }
             first = false;
+        }
+    }
+
+    void clickRow(ui::Widget& table, std::size_t row, ui::RowClick click) override {
+        settle();
+        auto const& children = core(dynamic_cast<ui::ContainerWidget&>(table)).children();
+        if (row >= children.size()) {
+            return;
+        }
+        Qt::KeyboardModifiers modifiers = Qt::NoModifier;
+        if (click == ui::RowClick::Toggle) {
+            modifiers = Qt::ControlModifier;
+        } else if (click == ui::RowClick::Range) {
+            modifiers = Qt::ShiftModifier;
+        }
+        mouseClick(children.at(row)->item(), modifiers);
+    }
+
+    // A mouse click on the column's header label.
+    void clickHeader(ui::Widget& table, std::size_t column) override {
+        settle();
+        // The labels are a Repeater's delegates: items under the table's item, not QObject children of it.
+        QString const name = QStringLiteral("header%1").arg(column);
+        QList<QQuickItem const*> pending{Backend::itemOf(table)};
+        while (!pending.isEmpty()) {
+            QQuickItem const* const item = pending.takeLast();
+            if (item->objectName() == name) {
+                mouseClick(item, Qt::NoModifier);
+                return;
+            }
+            for (QQuickItem const* const child : item->childItems()) {
+                pending.append(child);
+            }
         }
     }
 

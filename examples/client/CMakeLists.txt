@@ -46,7 +46,7 @@ foreach(_morph_client IN LISTS _morph_clients)
         else()
             add_executable(${_morph_client} main.cpp local_apps.hpp example_apps.cpp)
         endif()
-        target_link_libraries(${_morph_client} PRIVATE gallery_screens)
+        target_link_libraries(${_morph_client} PRIVATE gallery_screens lims_gallery_screens)
         # Each ladder rung with screens runs in local mode too, when the ladder builds it.
         set(_morph_client_lims 0)
         if(TARGET ladder_lims_screens)
@@ -96,4 +96,8 @@ if(MORPH_BUILD_TESTS AND _morph_client_qt_quick)
              COMMAND morph_examples_client --app gallery --ui=qt --exit-after-mount)
     set_tests_properties(morph_examples_client.gallery_local_offscreen PROPERTIES
         TIMEOUT 120 LABELS "gallery" ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME morph_examples_client.lims_gallery_local_offscreen
+             COMMAND morph_examples_client --app lims-gallery --ui=qt --exit-after-mount)
+    set_tests_properties(morph_examples_client.lims_gallery_local_offscreen PROPERTIES
+        TIMEOUT 120 LABELS "lims-gallery" ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()

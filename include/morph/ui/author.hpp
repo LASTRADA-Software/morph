@@ -35,8 +35,12 @@
 #include "../util/datetime.hpp"
 #include "../util/rational.hpp"
 #include "alignment.hpp"
+#include "badge_style.hpp"
+#include "banner_action_style.hpp"
 #include "button_emphasis.hpp"
 #include "button_style.hpp"
+#include "control_shape.hpp"
+#include "input_emphasis.hpp"
 
 /// @file
 /// @brief Server-side authoring of UI documents (spec 5 §11): typed builders that write a screen's JSON, and the
@@ -574,25 +578,37 @@ inline void putSection(Json& object, std::string_view key, Json const& section) 
     return std::pair{form, *text};
 }
 
-/// @brief A field read below a named read.
-/// @param json  The named read.
-/// @param field The field.
-/// @return The read of `path.field`.
-/// @throws AuthoringError when @p json is not a named read: `expr/1` reads fields only below a name.
+/// @brief A field read out of a value: the named read's own path extended, a `get`'s path extended, or a `get` of
+///        any other expression.
+/// @param json  The value's expression.
+/// @param field The field, or a dotted path.
+/// @return The read of `path.field`, `{"ref": ...}` or `{"row": ...}` below a name and `{"get": e, "path": ...}`
+///         below a computed value.
 [[nodiscard]] inline Json fieldOf(Json const& json, std::string_view field) {
-    auto read = namedRead(json);
-    if (!read) {
-        throw AuthoringError{
-            "a field is read below a name -- a param, state, let, query, row, element or bound "
-            "name -- and not below a computed value; field `" +
-            std::string{field} + "`"};
+    if (auto read = namedRead(json)) {
+        std::string path = read->second;
+        if (!path.empty()) {
+            path += '.';
+        }
+        path += field;
+        return single(read->first, std::move(path));
     }
-    std::string path = read->second;
-    if (!path.empty()) {
-        path += '.';
+    auto const* const object = std::get_if<Json::object_t>(&json.data);
+    if (object != nullptr && object->size() == 2) {
+        auto const* const source = object->find("get");
+        auto const* const path = object->find("path");
+        std::string const* const text = path == object->end() ? nullptr : std::get_if<std::string>(&path->second.data);
+        if (source != object->end() && text != nullptr) {
+            Json extended = Json::object_t{};
+            put(extended, "get", source->second);
+            put(extended, "path", *text + "." + std::string{field});
+            return extended;
+        }
     }
-    path += field;
-    return single(read->first, std::move(path));
+    Json read = Json::object_t{};
+    put(read, "get", json);
+    put(read, "path", std::string{field});
+    return read;
 }
 
 /// @brief The name a named read reads.
@@ -696,8 +712,7 @@ public:
     /// @tparam Class  The class of the member, the value's type.
     /// @tparam Member The member's type.
     /// @param member The member.
-    /// @return The field read.
-    /// @throws AuthoringError when the handle is not a named read.
+    /// @return The field read: below a name, the name's path extended; below a computed value, a `get`.
     template <typename Class, typename Member>
         requires std::same_as<T, Any> || std::same_as<detail::UnwrappedT<T>, Class>
     [[nodiscard]] Handle<Member> at(Member Class::* member) const {
@@ -706,8 +721,7 @@ public:
 
     /// @brief A field of the value, by name.
     /// @param field The field, or a dotted path.
-    /// @return The field read.
-    /// @throws AuthoringError when the handle is not a named read.
+    /// @return The field read: below a name, the name's path extended; below a computed value, a `get`.
     [[nodiscard]] Handle<Any> at(std::string_view field) const {
         return Handle<Any>::raw(detail::fieldOf(json(), field));
     }
@@ -1017,12 +1031,101 @@ template <typename T>
 /// @return The test.
 [[nodiscard]] inline Handle<bool> isEmpty(AnyHandle const& value) { return call<bool>("isEmpty", {value}); }
 
-/// @brief `round(x, dp)`, half to even.
+/// @brief How a function that rounds breaks a tie.
+enum class Rounding : std::uint8_t {
+    HalfEven,  ///< `"halfEven"`: to the even neighbour, `0.125 -> 0.12`; the default, written as no mode.
+    HalfUp,    ///< `"halfUp"`: away from zero, `0.125 -> 0.13`, `-0.125 -> -0.13`, the pharmacopoeial rule.
+};
+
+namespace detail {
+
+/// @brief A rounding call's arguments, with the mode written only when it is not the default.
 /// @param value  The number.
 /// @param places The places.
+/// @param mode   The tie-breaking rule.
+/// @return The arguments.
+[[nodiscard]] inline std::vector<AnyHandle> roundingArgs(AnyHandle const& value, std::int64_t places, Rounding mode) {
+    std::vector<AnyHandle> args{value, places};
+    if (mode == Rounding::HalfUp) {
+        args.emplace_back(std::string{"halfUp"});
+    }
+    return args;
+}
+
+}  // namespace detail
+
+/// @brief `round(x, dp, mode?)`: the number rounded once at @p places.
+/// @param value  The number.
+/// @param places The places, 0 to 18.
+/// @param mode   The tie-breaking rule; half to even unless given.
 /// @return The rounded number.
-[[nodiscard]] inline AnyHandle round(AnyHandle const& value, std::int64_t places) {
-    return call("round", {value, places});
+[[nodiscard]] inline AnyHandle round(AnyHandle const& value, std::int64_t places, Rounding mode = Rounding::HalfEven) {
+    return call("round", detail::roundingArgs(value, places, mode));
+}
+
+/// @brief `decimal(x, dp, mode?)`: the number shown at @p places, rounded once.
+/// @param value  The number.
+/// @param places The places, 0 to 18.
+/// @param mode   The tie-breaking rule; half to even unless given.
+/// @return The text.
+[[nodiscard]] inline Handle<std::string> decimal(AnyHandle const& value, std::int64_t places,
+                                                 Rounding mode = Rounding::HalfEven) {
+    return call<std::string>("decimal", detail::roundingArgs(value, places, mode));
+}
+
+/// @brief `abs(x)`: a number's magnitude, of the same kind, places and unit.
+/// @param value The number or quantity.
+/// @return The magnitude.
+[[nodiscard]] inline AnyHandle abs(AnyHandle const& value) { return call("abs", {value}); }
+
+/// @brief `sqrt(x, dp, mode?)`: the square root of a plain number of 0 or more, exact until it is rounded once at
+/// @p places.
+/// @param value  The number.
+/// @param places The places of the result, 0 to 18.
+/// @param mode   The tie-breaking rule; half to even unless given.
+/// @return The root, a decimal at @p places.
+[[nodiscard]] inline AnyHandle sqrt(AnyHandle const& value, std::int64_t places, Rounding mode = Rounding::HalfEven) {
+    return call("sqrt", detail::roundingArgs(value, places, mode));
+}
+
+/// @brief `stdev(list, dp, mode?)`: the sample standard deviation (n - 1) of numbers, or of quantities in the first
+/// element's unit, rounded once at @p places; `null` for fewer than two values.
+/// @param list   The values.
+/// @param places The places of the result, 0 to 18.
+/// @param mode   The tie-breaking rule; half to even unless given.
+/// @return The standard deviation, a decimal or a quantity.
+[[nodiscard]] inline AnyHandle stdev(AnyHandle const& list, std::int64_t places, Rounding mode = Rounding::HalfEven) {
+    return call("stdev", detail::roundingArgs(list, places, mode));
+}
+
+/// @brief `rsd(list, dp, mode?)`: the relative standard deviation in percent, 100 * SD / |mean|, rounded once at
+/// @p places; `null` for fewer than two values.
+/// @param list   The values.
+/// @param places The places of the result, 0 to 18.
+/// @param mode   The tie-breaking rule; half to even unless given.
+/// @return The RSD, a plain decimal.
+[[nodiscard]] inline AnyHandle rsd(AnyHandle const& list, std::int64_t places, Rounding mode = Rounding::HalfEven) {
+    return call("rsd", detail::roundingArgs(list, places, mode));
+}
+
+/// @brief The unit `dateAdd` adds.
+enum class DateUnit : std::uint8_t {
+    Days,     ///< `"days"`: calendar days on a date, 24 hours on an instant.
+    Weeks,    ///< `"weeks"`: seven days.
+    Months,   ///< `"months"`: calendar months, the day clamped to the month's last.
+    Years,    ///< `"years"`: twelve months.
+    Hours,    ///< `"hours"`: exact hours, on an instant only.
+    Minutes,  ///< `"minutes"`: exact minutes, on an instant only.
+};
+
+/// @brief `dateAdd(value, amount, unit)`: a date or an instant moved by whole units, in the value's own form.
+/// @param value  A `yyyy-MM-dd` date, a timestamp or ISO date-time text.
+/// @param amount The amount, an `int`; negative to go back.
+/// @param unit   The unit.
+/// @return The moved date or instant.
+[[nodiscard]] inline AnyHandle dateAdd(AnyHandle const& value, Handle<std::int64_t> const& amount, DateUnit unit) {
+    constexpr std::array<std::string_view, 6> kNames = {"days", "weeks", "months", "years", "hours", "minutes"};
+    return call("dateAdd", {value, amount, std::string{kNames.at(static_cast<std::size_t>(unit))}});
 }
 
 /// @brief `parseDecimal(text)`: typed text, in the client's locale, as an exact decimal; `null` while it does not
@@ -1193,6 +1296,75 @@ template <typename E = Any>
     return AnyHandle::raw(std::move(json));
 }
 
+/// @brief `slice`: @p count elements of a list from @p start, or every element from it; past the end, none.
+/// @param list  The list.
+/// @param start The first element's position, from 0.
+/// @param count How many; absent takes the rest.
+/// @return The slice.
+[[nodiscard]] inline AnyHandle slice(AnyHandle const& list, AnyHandle const& start, AnyHandle const& count = {}) {
+    std::vector<AnyHandle> args{list, start};
+    if (count.present()) {
+        args.push_back(count);
+    }
+    return call("slice", args);
+}
+
+/// @brief Which way a sort orders.
+enum class SortOrder : std::uint8_t {
+    Ascending,   ///< Smallest first: `"asc"`.
+    Descending,  ///< Largest first: `"desc"`.
+};
+
+/// @brief A sort over a list, `{"sort": e, "as": "x", "by": e, "order": e}`: the list ordered by the value @p by
+///        gives each element, strings case-folded, `null` last, equal values in their source order.
+/// @tparam E The element type.
+/// @param source The list.
+/// @param name   The element's name inside @p orderBy.
+/// @param orderBy Builds the value to order by from the element's handle.
+/// @param order  `"asc"` or `"desc"`; absent sorts ascending.
+/// @return The sorted list.
+template <typename E = Any>
+[[nodiscard]] AnyHandle sorted(AnyHandle const& source, std::string const& name,
+                               std::type_identity_t<std::function<AnyHandle(Handle<E> const&)>> const& orderBy,
+                               AnyHandle const& order = {}) {
+    Json json = Json::object_t{};
+    detail::put(json, "sort", source.json());
+    detail::put(json, "as", name);
+    detail::put(json, "by", orderBy(author::ref<E>(name)).json());
+    if (order.present()) {
+        detail::put(json, "order", order.json());
+    }
+    return AnyHandle::raw(std::move(json));
+}
+
+/// @brief `runs`, `{"runs": e, "as": "x", "by": e}`: the list split into runs of adjacent elements whose @p groupBy
+///        values are equal, each a record `{key, count, first, last, items}`.
+/// @tparam E The element type.
+/// @param source  The list.
+/// @param name    The element's name inside @p groupBy.
+/// @param groupBy Builds the value a run shares from the element's handle.
+/// @return The runs.
+template <typename E = Any>
+[[nodiscard]] AnyHandle runs(AnyHandle const& source, std::string const& name,
+                             std::type_identity_t<std::function<AnyHandle(Handle<E> const&)>> const& groupBy) {
+    Json json = Json::object_t{};
+    detail::put(json, "runs", source.json());
+    detail::put(json, "as", name);
+    detail::put(json, "by", groupBy(author::ref<E>(name)).json());
+    return AnyHandle::raw(std::move(json));
+}
+
+/// @brief One key of a table's `sort`, `{"column": id, "direction": "asc" | "desc"}`; a `list` of them, most
+///        significant first, is a sort.
+/// @param column The id of a sortable column.
+/// @param order  The direction.
+/// @return The key, a constant.
+[[nodiscard]] inline AnyHandle sortKey(std::string const& column, SortOrder order = SortOrder::Ascending) {
+    return AnyHandle::raw(detail::constant(
+        Value{ValueRecord{{"column", Value{column}},
+                          {"direction", Value{std::string{order == SortOrder::Ascending ? "asc" : "desc"}}}}}));
+}
+
 /// @brief The elements of a list whose boolean member is true.
 /// @tparam Class The element type.
 /// @param source The list.
@@ -1288,10 +1460,10 @@ private:
 /// @return The element.
 [[nodiscard]] inline Element element(std::string name) { return Element{std::move(name)}; }
 
-/// @brief The dialog or drawer a command list runs in, for `close`.
+/// @brief The dialog or drawer a command list runs in, for `close`; outside every dialog and drawer, the screen.
 struct Self {};
 
-/// @brief The dialog or drawer a command list runs in.
+/// @brief The innermost dialog or drawer whose content holds the command list, or the screen when there is none.
 inline constexpr Self self{};
 
 /// @brief A query of a scope, without its action type: what `refetch`, `prefetch` and `optimistic` name.
@@ -1385,36 +1557,6 @@ private:
     std::string _name;
 };
 
-/// @brief A mutation's result: a `Handle` with no field reads.
-///
-/// A result is not a named read, so a field of it cannot be read in place: the screen binds it first,
-/// `auto r = screen.let("r", m.result());`, and reads `r.at(...)`. The `at` overloads are deleted, so the mistake is
-/// a compile error at the call rather than a refusal when the screen is registered. It converts to `Handle<T>`
-/// wherever a handle is taken.
-/// @tparam T The result's C++ type.
-template <typename T>
-class ResultHandle : public Handle<T> {
-public:
-    /// @brief The result read.
-    /// @param handle The `{"result": name}` expression.
-    explicit ResultHandle(Handle<T> const& handle) : Handle<T>{handle} {}
-
-    /// @brief Not available: bind the result with `let` first, `auto r = screen.let("r", m.result());`, then read
-    ///        `r.at(...)`.
-    /// @tparam Class  The class of the member.
-    /// @tparam Member The member's type.
-    /// @param member The member.
-    /// @return Nothing; the overload is deleted.
-    template <typename Class, typename Member>
-    [[nodiscard]] Handle<Member> at(Member Class::* member) const = delete;
-
-    /// @brief Not available: bind the result with `let` first, `auto r = screen.let("r", m.result());`, then read
-    ///        `r.at(...)`.
-    /// @param field The field.
-    /// @return Nothing; the overload is deleted.
-    [[nodiscard]] Handle<Any> at(std::string_view field) const = delete;
-};
-
 /// @brief A mutation declared by a scope.
 /// @tparam Action The action it runs; `::morph::model::ActionTraits<Action>::Result` is the result's type.
 template <typename Action>
@@ -1431,11 +1573,9 @@ public:
     /// @return The name.
     [[nodiscard]] std::string const& name() const noexcept { return _name; }
 
-    /// @brief The last run's result; bind it with `let` to read its fields.
-    /// @return `{"result": name}`, with no `at`.
-    [[nodiscard]] ResultHandle<Result> result() const {
-        return ResultHandle<Result>{Handle<Result>::raw(detail::single("result", _name))};
-    }
+    /// @brief The last run's result.
+    /// @return `{"result": name}`; `at` on it reads a field with `get`.
+    [[nodiscard]] Handle<Result> result() const { return Handle<Result>::raw(detail::single("result", _name)); }
 
     /// @brief Whether a run is in flight.
     /// @return `{"pending": name}`.
@@ -1871,6 +2011,16 @@ public:
     /// @return The node with it.
     [[nodiscard]] Node alignSelf(Align align) const { return withText("alignSelf", detail::alignName(align)); }
 
+    /// @brief Lays the node's sides at its parent's edges, past the parent's horizontal padding, while its siblings
+    ///        stay inside it. The parent is a column, a panel or a tab page, and the node its direct child; the loader
+    ///        refuses it anywhere else.
+    /// @return The node with it.
+    [[nodiscard]] Node bleed() const {
+        Node out = *this;
+        detail::put(out._json, "bleed", true);
+        return out;
+    }
+
     /// @brief The least width, in backend units.
     /// @param units The bound, 0 or more.
     /// @return The node with it.
@@ -1910,6 +2060,17 @@ public:
     /// @param name The token set.
     /// @return The node with it.
     [[nodiscard]] Node surface(std::string const& name) const { return withText("surface", name); }
+
+    /// @brief A named token set for the subtree, as a literal: the overload a string literal picks.
+    /// @param name The token set.
+    /// @return The node with it.
+    [[nodiscard]] Node surface(char const* name) const { return withText("surface", name); }
+
+    /// @brief A token set for the subtree that follows the data: the surface's name, or `""` for the theme's
+    ///        default.
+    /// @param name An expression of the surface's name.
+    /// @return The node with it.
+    [[nodiscard]] Node surface(AnyHandle const& name) const { return with("surface", name); }
 
     /// @brief The accessible name and role.
     /// @param name The name.
@@ -1982,6 +2143,18 @@ public:
     /// @param condition The condition.
     /// @return The node with it.
     [[nodiscard]] Node stale(AnyHandle const& condition) const { return with("stale", condition); }
+
+    /// @brief A line that describes an input, drawn under it and announced as its accessible description; a text
+    ///        refuses it.
+    /// @param text The line.
+    /// @return The node with it.
+    [[nodiscard]] Node description(AnyHandle const& text) const { return with("description", text); }
+
+    /// @brief An evaluation of an input's value that does not make it invalid (`ok`, `warn`, `err`, `info`; `null`
+    ///        for none): it outlines the input and colours its description. A text refuses it.
+    /// @param tone The tone's name.
+    /// @return The node with it.
+    [[nodiscard]] Node tone(AnyHandle const& tone) const { return with("tone", tone); }
 
 private:
     Json _json = Json::object_t{};
@@ -2397,6 +2570,82 @@ private:
     std::string _name;
 };
 
+/// @brief An item of a `menu`; `items` nests a submenu.
+struct MenuItem {
+    /// @brief The entry's id, a name: what choosing an entry of a screen head's own menu (`Scope::menu`) names. A
+    ///        `menu` node's entries take none.
+    std::string id;
+    /// @brief The label.
+    AnyHandle label;
+    /// @brief An icon.
+    AnyHandle icon;
+    /// @brief The shortcut shown beside it.
+    std::string keys;
+    /// @brief Whether a checkable item is checked.
+    AnyHandle checked;
+    /// @brief Whether it is enabled.
+    AnyHandle enabled;
+    /// @brief Commands run when it is chosen.
+    Commands onClick;
+    /// @brief A submenu.
+    std::vector<MenuItem> items;
+    /// @brief Whether the item is a line between entries; a separator writes no other key.
+    bool separator = false;
+    /// @brief A muted line of help with the entry.
+    AnyHandle description;
+    /// @brief Whether the entry is shown, a condition; absent shows it.
+    AnyHandle visible;
+};
+
+/// @brief A line between menu entries.
+/// @return The item.
+[[nodiscard]] inline MenuItem menuSeparator() { return MenuItem{.separator = true}; }
+
+namespace detail {
+
+/// @brief A menu item's JSON.
+/// @param item The item.
+/// @return The JSON.
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is written item by item; the nesting is the document's own.
+[[nodiscard]] inline Json menuItem(MenuItem const& item) {
+    Json json = Json::object_t{};
+    if (item.separator) {
+        detail::put(json, "separator", true);
+        return json;
+    }
+    auto put = [&json](char const* key, AnyHandle const& value) {
+        if (value.present()) {
+            detail::put(json, key, value.json());
+        }
+    };
+    if (!item.id.empty()) {
+        detail::put(json, "id", item.id);
+    }
+    put("label", item.label);
+    put("icon", item.icon);
+    if (!item.keys.empty()) {
+        detail::put(json, "keys", item.keys);
+    }
+    put("checked", item.checked);
+    put("enabled", item.enabled);
+    put("description", item.description);
+    put("visible", item.visible);
+    if (!item.onClick.empty()) {
+        detail::put(json, "onClick", item.onClick.json());
+    }
+    if (!item.items.empty()) {
+        Json::array_t items;
+        items.reserve(item.items.size());
+        for (MenuItem const& child : item.items) {
+            items.push_back(menuItem(child));
+        }
+        detail::put(json, "items", std::move(items));
+    }
+    return json;
+}
+
+}  // namespace detail
+
 /// @brief A status badge of the screen's head (`screen.status`).
 struct HeadBadgeOptions {
     /// @brief The badge's text.
@@ -2417,6 +2666,9 @@ struct ActionButtonOptions {
     AnyHandle label;
     /// @brief The name of an icon.
     AnyHandle icon;
+    /// @brief A condition: while true the button draws its icon alone and its label is its accessible name and
+    ///        tooltip. Needs an `icon`; absent draws the label.
+    AnyHandle iconOnly;
     /// @brief How much it stands out; `Normal` writes no key.
     ButtonEmphasis emphasis = ButtonEmphasis::Normal;
     /// @brief Whether it can be run; absent enables it.
@@ -2425,6 +2677,48 @@ struct ActionButtonOptions {
     AnyHandle visible;
     /// @brief Commands run when it is clicked, in the scope its list belongs to.
     Commands onClick;
+};
+
+/// @brief A search field of a screen's head (`screen.tool`): a controlled line of text.
+struct HeadSearchOptions {
+    /// @brief The tool's id, unique among the head's tools: a name.
+    std::string id;
+    /// @brief The accessible name; required. The head draws no caption.
+    AnyHandle label;
+    /// @brief The text it shows; the user's edits come back through `onChange`.
+    AnyHandle value;
+    /// @brief Shown while it is empty.
+    AnyHandle placeholder;
+    /// @brief Commands run after each user edit, with `event` the text.
+    Commands onChange;
+    /// @brief Commands run when the user submits it, with `event` its text.
+    Commands onSubmit;
+    /// @brief The width in units; 0 writes no key, which is 30.
+    int width = 0;
+    /// @brief Whether it is shown; absent shows it.
+    AnyHandle visible;
+    /// @brief Whether it can be used; absent enables it.
+    AnyHandle enabled;
+};
+
+/// @brief A select of a screen's head (`screen.tool`): a controlled choice of one option.
+struct HeadSelectOptions {
+    /// @brief The tool's id, unique among the head's tools: a name.
+    std::string id;
+    /// @brief The accessible name; required. The head draws no caption.
+    AnyHandle label;
+    /// @brief The options, as a `select`'s; required.
+    AnyHandle options;
+    /// @brief The chosen key; the user's choice comes back through `onChoose`.
+    AnyHandle selected;
+    /// @brief Commands run when the user chooses, with `event` the chosen key.
+    Commands onChoose;
+    /// @brief The width in units; 0 writes no key, which is the content's.
+    int width = 0;
+    /// @brief Whether it is shown; absent shows it.
+    AnyHandle visible;
+    /// @brief Whether it can be used; absent enables it.
+    AnyHandle enabled;
 };
 
 namespace detail {
@@ -2451,6 +2745,29 @@ inline void putPresent(Json& json, char const* key, AnyHandle const& value) {
     return json;
 }
 
+/// @brief A `headTool` part's JSON, the keys both kinds share.
+/// @param toolId  The id.
+/// @param kind    `search` or `select`.
+/// @param label   The accessible name.
+/// @param width   The width in units; 0 writes none.
+/// @param visible Whether it is shown.
+/// @param enabled Whether it can be used.
+/// @return The JSON.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the part's keys, in the order the document lists them.
+[[nodiscard]] inline Json headTool(std::string const& toolId, char const* kind, AnyHandle const& label, int width,
+                                   AnyHandle const& visible, AnyHandle const& enabled) {
+    Json json = Json::object_t{};
+    detail::put(json, "id", toolId);
+    detail::put(json, "kind", std::string{kind});
+    putPresent(json, "label", label);
+    if (width > 0) {
+        detail::put(json, "width", static_cast<std::int64_t>(width));
+    }
+    putPresent(json, "visible", visible);
+    putPresent(json, "enabled", enabled);
+    return json;
+}
+
 /// @brief An `actionButton` part's JSON.
 /// @param action The button.
 /// @return The JSON.
@@ -2459,12 +2776,9 @@ inline void putPresent(Json& json, char const* key, AnyHandle const& value) {
     detail::put(json, "id", action.id);
     putPresent(json, "label", action.label);
     putPresent(json, "icon", action.icon);
-    if (action.emphasis == ButtonEmphasis::Primary) {
-        detail::put(json, "emphasis", std::string{"primary"});
-    } else if (action.emphasis == ButtonEmphasis::Danger) {
-        detail::put(json, "emphasis", std::string{"danger"});
-    } else if (action.emphasis == ButtonEmphasis::Ghost) {
-        detail::put(json, "emphasis", std::string{"ghost"});
+    putPresent(json, "iconOnly", action.iconOnly);
+    if (action.emphasis != ButtonEmphasis::Normal) {
+        detail::put(json, "emphasis", std::string{emphasisName(action.emphasis)});
     }
     putPresent(json, "enabled", action.enabled);
     putPresent(json, "visible", action.visible);
@@ -2515,9 +2829,44 @@ public:
     /// @param dirty The condition.
     void dirty(AnyHandle const& dirty) { detail::put(_head, "dirty", dirty.json()); }
 
+    /// @brief The title as runs (`spans`), which a shell that knows them draws in its top bar in place of `title`: an
+    ///        identifier in the monospace face beside plain words. `title` stays the tab's caption.
+    /// @param runs The runs.
+    void titleSpans(AnyHandle const& runs) { detail::put(_head, "titleSpans", runs.json()); }
+
+    /// @brief The head's line above the title.
+    /// @param eyebrow The expression.
+    void eyebrow(AnyHandle const& eyebrow) { detail::put(_head, "eyebrow", eyebrow.json()); }
+
+    /// @brief The head's line above the title as runs (`spans`), which a shell that knows them draws in place of the
+    ///        `eyebrow` beside it.
+    /// @param runs The runs.
+    void eyebrowSpans(AnyHandle const& runs) { detail::put(_head, "eyebrowSpans", runs.json()); }
+
     /// @brief The head's line under the title.
     /// @param subtitle The expression.
     void subtitle(AnyHandle const& subtitle) { detail::put(_head, "subtitle", subtitle.json()); }
+
+    /// @brief The head's line under the title as runs (`spans`), which a shell that knows them draws in place of the
+    ///        `subtitle` beside it: an identifier in the monospace face, a bold word.
+    /// @param runs The runs.
+    void subtitleSpans(AnyHandle const& runs) { detail::put(_head, "subtitleSpans", runs.json()); }
+
+    /// @brief Where the head's lead (the subtitle and the badges) sits: an expression of `"below"` (the default, under
+    ///        the title), `"inline"` (on the title's line, after it) or `"end"` (at the trailing edge of the head's
+    ///        first line, after the tools and before the actions). A literal is checked at load.
+    /// @param placement The expression.
+    void leadPlacement(AnyHandle const& placement) { detail::put(_head, "leadPlacement", placement.json()); }
+
+    /// @brief The surface the shell draws its top bar on while the screen is shown: an expression of a surface's
+    ///        name, `null` for none.
+    /// @param surface The expression.
+    void headSurface(AnyHandle const& surface) { detail::put(_head, "headSurface", surface.json()); }
+
+    /// @brief The surface the shell draws the page area on while the screen is shown: an expression of a surface's
+    ///        name, `null` for the built-in `page` surface.
+    /// @param surface The expression.
+    void pageSurface(AnyHandle const& surface) { detail::put(_head, "pageSurface", surface.json()); }
 
     /// @brief Appends a status badge to the head.
     /// @param badge The badge.
@@ -2526,6 +2875,43 @@ public:
     /// @brief Appends an action to the head, run in the screen scope.
     /// @param action The action; its id is unique among the head's actions.
     void action(ActionButtonOptions const& action) { detail::append(_head, "actions", detail::actionButton(action)); }
+
+    /// @brief Appends a search field to the head's tools, run in the screen scope.
+    /// @param search The field; its id is unique among the head's tools.
+    void tool(HeadSearchOptions const& search) {
+        Json json = detail::headTool(search.id, "search", search.label, search.width, search.visible, search.enabled);
+        detail::putPresent(json, "value", search.value);
+        detail::putPresent(json, "placeholder", search.placeholder);
+        if (!search.onChange.empty()) {
+            detail::put(json, "onChange", search.onChange.json());
+        }
+        if (!search.onSubmit.empty()) {
+            detail::put(json, "onSubmit", search.onSubmit.json());
+        }
+        detail::append(_head, "tools", std::move(json));
+    }
+
+    /// @brief Appends a select to the head's tools, run in the screen scope.
+    /// @param select The select; its id is unique among the head's tools.
+    void tool(HeadSelectOptions const& select) {
+        Json json = detail::headTool(select.id, "select", select.label, select.width, select.visible, select.enabled);
+        detail::putPresent(json, "options", select.options);
+        detail::putPresent(json, "selected", select.selected);
+        if (!select.onChoose.empty()) {
+            detail::put(json, "onChoose", select.onChoose.json());
+        }
+        detail::append(_head, "tools", std::move(json));
+    }
+
+    /// @brief Appends an entry to the head's own menu, drawn behind one icon button after the actions and run in the
+    ///        screen scope.
+    /// @param item The entry: one that is chosen has an id, unique across the head's menu; a separator or a submenu
+    ///        has none.
+    void menu(MenuItem const& item) { detail::append(_head, "menu", detail::menuItem(item)); }
+
+    /// @brief The accessible name of the head menu's trigger; absent is "More actions".
+    /// @param label The expression.
+    void menuLabel(AnyHandle const& label) { detail::put(_head, "menuLabel", label.json()); }
 
     /// @brief Commands run when the screen mounts.
     /// @param commands The commands.
@@ -2783,7 +3169,9 @@ template <typename Action>
 /// @return The command.
 [[nodiscard]] inline Command close(Element const& dialog) { return detail::command("close", dialog.name()); }
 
-/// @brief `close` of the dialog or drawer the command list runs in.
+/// @brief `close` of the innermost dialog or drawer whose content holds the command list. Outside every dialog and
+///        drawer it ends the screen, through the host. Inside a component it names only a dialog or drawer of the
+///        component's own, and with none it is reported and fails.
 /// @param current `self`.
 /// @return The command.
 [[nodiscard]] inline Command close(Self current) {
@@ -3069,6 +3457,14 @@ public:
         return *this;
     }
 
+    /// @brief A literal `true` flag.
+    /// @param key The key.
+    /// @return This writer.
+    NodeWriter& flag(char const* key) {
+        detail::put(_json, key, true);
+        return *this;
+    }
+
     /// @brief Any JSON.
     /// @param key   The key.
     /// @param value The JSON.
@@ -3110,12 +3506,79 @@ private:
 
 }  // namespace detail
 
+/// @brief The look of a run of text: its weight, its face and its colour.
+struct SpanStyle {
+    /// @brief Whether the run is drawn in the strong weight.
+    bool strong = false;
+    /// @brief Whether the run is drawn in the theme's monospace face.
+    bool mono = false;
+    /// @brief The tone (`ok`, `warn`, `err`, `info`) whose colour the run is drawn in; absent keeps the text's own.
+    AnyHandle tone;
+};
+
+/// @brief A run of text in a span list with the look @p style gives: `{"obj": {"text": …, "strong": true, …}}`, each
+///        flag and the tone written only when set.
+/// @param text  The run's text; data is never parsed for markup.
+/// @param style Its weight, face and colour.
+/// @return The run.
+[[nodiscard]] inline AnyHandle styled(AnyHandle const& text, SpanStyle const& style) {
+    std::vector<std::pair<std::string, AnyHandle>> fields{{"text", text}};
+    if (style.strong) {
+        fields.emplace_back("strong", AnyHandle{true});
+    }
+    if (style.mono) {
+        fields.emplace_back("mono", AnyHandle{true});
+    }
+    if (style.tone.present()) {
+        fields.emplace_back("tone", style.tone);
+    }
+    return obj(fields);
+}
+
+/// @brief The run of a banner's spans that is its action, drawn as a link at its place in the sentence. The banner's
+///        `actionStyle` is `Link`; the loader refuses the run anywhere else and a second one in the same spans.
+/// @param text The link's text.
+/// @return The run.
+[[nodiscard]] inline AnyHandle actionRun(AnyHandle const& text) {
+    return obj(std::vector<std::pair<std::string, AnyHandle>>{{"text", text}, {"action", AnyHandle{true}}});
+}
+
+/// @brief A run of text in the strong weight, for a span list.
+/// @param text The run's text.
+/// @return The run.
+[[nodiscard]] inline AnyHandle strong(AnyHandle const& text) { return styled(text, {.strong = true}); }
+
+/// @brief A run of text in the theme's monospace face, such as an identifier inside a sentence, for a span list.
+/// @param text The run's text.
+/// @return The run.
+[[nodiscard]] inline AnyHandle mono(AnyHandle const& text) { return styled(text, {.mono = true}); }
+
+/// @brief A run of text drawn in a tone's colour, for a span list.
+/// @param text The run's text.
+/// @param tone The tone: `ok`, `warn`, `err` or `info`; a computed one is read when the run is drawn.
+/// @return The run.
+[[nodiscard]] inline AnyHandle toned(AnyHandle const& text, AnyHandle const& tone) {
+    return styled(text, {.tone = tone});
+}
+
+/// @brief A span list: the runs of a text, a banner, a key-value item, a dialog's or drawer's description or a
+///        screen's subtitle, in order. A string is a plain run; `strong`, `mono`, `toned` and `styled` make the
+///        others.
+/// @param runs The runs.
+/// @return The list, `{"list": [...]}`.
+[[nodiscard]] inline AnyHandle spans(std::vector<AnyHandle> const& runs) { return list(runs); }
+
 /// @brief Options of `text`.
 struct TextOptions {
-    /// @brief The text.
+    /// @brief The text; beside `spans`, what a client that does not know spans draws.
     AnyHandle text;
+    /// @brief The text as runs (`spans`), shown in place of `text` by a client that knows them.
+    AnyHandle spans;
     /// @brief The typographic role, such as `heading`.
     AnyHandle role;
+    /// @brief The tone (`ok`, `warn`, `err`, `info`; `neutral` or null for none) whose colour the text is drawn in,
+    ///        whatever its role: the role keeps the size, weight and face.
+    AnyHandle tone;
     /// @brief Whether the shown value is being recalculated.
     AnyHandle stale;
 };
@@ -3126,7 +3589,9 @@ struct TextOptions {
 [[nodiscard]] inline Node text(TextOptions const& options) {
     return detail::NodeWriter{"text"}
         .put("text", options.text)
+        .put("spans", options.spans)
         .put("role", options.role)
+        .put("tone", options.tone)
         .put("stale", options.stale)
         .done();
 }
@@ -3145,9 +3610,17 @@ struct ButtonOptions {
     Commands onActivate;
     /// @brief A push button or a list entry; absent writes no key, a push button.
     std::optional<ButtonStyle> style;
-    /// @brief Whether a list entry is the current one, a condition; only with `ButtonStyle::Item`, which the loader
-    ///        checks.
+    /// @brief A condition: whether a list entry is the current one, or a push button is pressed in.
     AnyHandle selected;
+    /// @brief A list entry's content, drawn in place of its label, which still names it; display kinds only, and only
+    ///        with `ButtonStyle::Item`, which the loader checks.
+    Nodes children;
+    /// @brief The button's outline; `Default` writes no key.
+    ControlShape shape = ControlShape::Default;
+    /// @brief The button's density; `Normal` writes no key.
+    ButtonSize size = ButtonSize::Normal;
+    /// @brief Whether the caption is drawn in the `mono` text role's face.
+    bool mono = false;
 };
 
 /// @brief A `button` node.
@@ -3155,15 +3628,20 @@ struct ButtonOptions {
 /// @return The node.
 [[nodiscard]] inline Node button(ButtonOptions const& options) {
     detail::NodeWriter writer{"button"};
-    if (options.emphasis == ButtonEmphasis::Primary) {
-        writer.put("emphasis", std::string{"primary"});
-    } else if (options.emphasis == ButtonEmphasis::Danger) {
-        writer.put("emphasis", std::string{"danger"});
-    } else if (options.emphasis == ButtonEmphasis::Ghost) {
-        writer.put("emphasis", std::string{"ghost"});
+    if (options.emphasis != ButtonEmphasis::Normal) {
+        writer.put("emphasis", std::string{emphasisName(options.emphasis)});
     }
     if (options.style) {
         writer.text("style", *options.style == ButtonStyle::Item ? "item" : "push");
+    }
+    if (options.shape != ControlShape::Default) {
+        writer.text("shape", std::string{shapeName(options.shape)});
+    }
+    if (options.size != ButtonSize::Normal) {
+        writer.text("size", std::string{sizeName(options.size)});
+    }
+    if (options.mono) {
+        writer.flag("mono");
     }
     return std::move(writer)
         .put("label", options.label)
@@ -3171,6 +3649,7 @@ struct ButtonOptions {
         .put("selected", options.selected)
         .put("onClick", options.onClick)
         .put("onActivate", options.onActivate)
+        .put("children", options.children)
         .done();
 }
 
@@ -3194,6 +3673,20 @@ struct TextInputOptions {
     /// @brief An icon of the theme's icon map, drawn at the input's leading edge; empty shows none. Refused on a
     ///        multiline input.
     AnyHandle icon;
+    /// @brief The unit the input shows, muted, at its trailing edge, and announces after its description, such as
+    ///        `°C`; refused on a multiline input.
+    AnyHandle unit;
+    /// @brief How much it stands out: `Prominent` for the screen's focal field, such as a scanner's; `Normal` writes
+    ///        no key. Refused on a multiline input.
+    InputEmphasis emphasis = InputEmphasis::Normal;
+    /// @brief Text drawn muted at the input's leading edge inside it, and announced before the value, such as `±`;
+    ///        refused on a multiline input.
+    AnyHandle prefix;
+    /// @brief Whether the text and the placeholder are drawn in the `mono` text role's face.
+    bool mono = false;
+    /// @brief Where the text sits: `Start`, `Center` or `End`; absent writes no key, the start. Refused on a
+    ///        multiline input; `Stretch` is refused by the loader.
+    std::optional<Align> align;
     /// @brief When the draft commits.
     std::optional<Commit> commitOn;
     /// @brief Commands run on every edit.
@@ -3214,7 +3707,18 @@ struct TextInputOptions {
         .put("label", options.label)
         .put("placeholder", options.placeholder)
         .put("mode", options.mode)
-        .put("icon", options.icon);
+        .put("icon", options.icon)
+        .put("unit", options.unit)
+        .put("prefix", options.prefix);
+    if (options.emphasis == InputEmphasis::Prominent) {
+        node.text("emphasis", "prominent");
+    }
+    if (options.mono) {
+        node.flag("mono");
+    }
+    if (options.align) {
+        node.text("align", detail::alignName(*options.align));
+    }
     if (options.commitOn) {
         node.text("commitOn", kCommits.at(static_cast<std::size_t>(*options.commitOn)));
     }
@@ -3287,60 +3791,6 @@ struct SelectOptions {
     return node.put("onChoose", options.onChoose).put("onChange", options.onChange).done();
 }
 
-/// @brief An item of a `menu`; `items` nests a submenu.
-struct MenuItem {
-    /// @brief The label.
-    AnyHandle label;
-    /// @brief An icon.
-    AnyHandle icon;
-    /// @brief The shortcut shown beside it.
-    std::string keys;
-    /// @brief Whether a checkable item is checked.
-    AnyHandle checked;
-    /// @brief Whether it is enabled.
-    AnyHandle enabled;
-    /// @brief Commands run when it is chosen.
-    Commands onClick;
-    /// @brief A submenu.
-    std::vector<MenuItem> items;
-};
-
-namespace detail {
-
-/// @brief A menu item's JSON.
-/// @param item The item.
-/// @return The JSON.
-// NOLINTNEXTLINE(misc-no-recursion): a submenu is written item by item; the nesting is the document's own.
-[[nodiscard]] inline Json menuItem(MenuItem const& item) {
-    Json json = Json::object_t{};
-    auto put = [&json](char const* key, AnyHandle const& value) {
-        if (value.present()) {
-            detail::put(json, key, value.json());
-        }
-    };
-    put("label", item.label);
-    put("icon", item.icon);
-    if (!item.keys.empty()) {
-        detail::put(json, "keys", item.keys);
-    }
-    put("checked", item.checked);
-    put("enabled", item.enabled);
-    if (!item.onClick.empty()) {
-        detail::put(json, "onClick", item.onClick.json());
-    }
-    if (!item.items.empty()) {
-        Json::array_t items;
-        items.reserve(item.items.size());
-        for (MenuItem const& child : item.items) {
-            items.push_back(menuItem(child));
-        }
-        detail::put(json, "items", std::move(items));
-    }
-    return json;
-}
-
-}  // namespace detail
-
 /// @brief A `menu` node.
 /// @param items The items.
 /// @return The node.
@@ -3353,18 +3803,95 @@ namespace detail {
     return detail::NodeWriter{"menu"}.raw("items", std::move(array)).done();
 }
 
+/// @brief Options of `menuButton`: the trigger.
+struct MenuButtonOptions {
+    /// @brief The trigger's text and accessible name; an icon-only trigger names itself with `.a11y(...)` instead.
+    AnyHandle label;
+    /// @brief An icon of the theme's icon map; `more` draws `⋯` when the map does not name it.
+    std::string icon;
+    /// @brief The trigger's emphasis, as a button's.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
+};
+
+/// @brief A `menu` node with `style: button`: one button that opens the items as a popup.
+/// @param options The trigger.
+/// @param items   The items.
+/// @return The node.
+[[nodiscard]] inline Node menuButton(MenuButtonOptions const& options, std::vector<MenuItem> const& items) {
+    Json::array_t array;
+    array.reserve(items.size());
+    for (MenuItem const& item : items) {
+        array.push_back(detail::menuItem(item));
+    }
+    detail::NodeWriter writer{"menu"};
+    writer.raw("items", std::move(array)).text("style", "button").put("label", options.label);
+    if (!options.icon.empty()) {
+        writer.text("icon", options.icon);
+    }
+    if (options.emphasis == ButtonEmphasis::Primary) {
+        writer.text("emphasis", "primary");
+    } else if (options.emphasis == ButtonEmphasis::Danger) {
+        writer.text("emphasis", "danger");
+    } else if (options.emphasis == ButtonEmphasis::Ghost) {
+        writer.text("emphasis", "ghost");
+    }
+    return writer.done();
+}
+
+/// @brief One column track of a `grid`.
+struct GridTrack {
+    /// @brief The column's width: `content()`, `fixed(n)` or `stretch(w)`; absent stretches with weight 1.
+    AnyHandle width;
+    /// @brief Where a text's text and a label-width cell sit across the column: `Start`, `Center` or `End`; absent
+    ///        writes no key, the start.
+    std::optional<Align> align;
+};
+
 /// @brief Options of `column`, `row` and `grid`.
 struct ContainerOptions {
     /// @brief The gap between children: a spacing step, 0 to `kMaxSpacingStep`.
     AnyHandle gap;
-    /// @brief A grid's columns; adaptive layouts read `env("widthClass")`.
+    /// @brief A grid's columns, sharing its width; adaptive layouts read `env("widthClass")`.
     AnyHandle columns;
+    /// @brief A grid's column tracks, in place of `columns`; empty writes none.
+    std::vector<GridTrack> tracks;
     /// @brief Where the children sit across the axis; absent stretches them.
     std::optional<Align> align;
     /// @brief A row's or column's spare length along its axis; absent packs at the start. Not on a grid, whose
-    ///        columns share its width.
+    ///        columns are sized by their count or tracks.
     std::optional<Justify> justify;
+    /// @brief Whether a row's children continue on the next line when they do not fit. Only a `row` has it; the
+    ///        loader refuses it on a `column`.
+    bool wrap = false;
+    /// @brief Whether a column, or a row that does not wrap, draws a rule between its children. The loader refuses it
+    ///        on a row that wraps.
+    bool divided = false;
+    /// @brief The inset of the children from every edge of a `column` or `row`: a spacing step, 0 to
+    ///        `kMaxSpacingStep`, or `padding(vertical, horizontal)`. Not on a grid.
+    AnyHandle padding;
+    /// @brief Whether a `column` or `row` insets its own content and so is the page's edge: when it is the screen's
+    ///        shown root, the shell lays it at the page's edges and does not inset the page. Written for a grid too,
+    ///        so the loader refuses it rather than the author silently losing it.
+    bool pageEdge = false;
+    /// @brief Whether the stack's first child continues the head's block: as the screen's shown root, the shell draws
+    ///        its top bar on the `toolbarJoined` surface, with no rule under it, and the first child draws the rule
+    ///        under the whole block. Needs `pageEdge`, since an inset page has a margin between it and the head; the
+    ///        loader refuses it without. A `column` or `row`; written for a grid too, so the loader refuses it.
+    bool headJoined = false;
+    /// @brief A `column` or `row` that is the chosen entry of a list: a condition. While it holds, the stack draws the
+    ///        accent's 3 px bar at its leading edge (inside its leading padding) and is a `Grouping` for assistive
+    ///        technology; absent writes no key. Not on a grid.
+    AnyHandle selected;
 };
+
+/// @brief A two-step padding for `ContainerOptions::padding`: the vertical step above and below, the horizontal step
+///        at the sides, written as the constant list `{"lit": [vertical, horizontal]}`.
+/// @param vertical   The step above and below, 0 to `kMaxSpacingStep`.
+/// @param horizontal The step at the sides, 0 to `kMaxSpacingStep`.
+/// @return The padding.
+[[nodiscard]] inline AnyHandle padding(int vertical, int horizontal) {
+    return AnyHandle{std::vector<std::int64_t>{vertical, horizontal}};
+}
 
 namespace detail {
 
@@ -3375,12 +3902,28 @@ namespace detail {
 /// @return The node.
 [[nodiscard]] inline Node stackNode(char const* kind, Nodes const& children, ContainerOptions const& options) {
     NodeWriter node{kind};
-    node.put("children", children).put("gap", options.gap);
+    node.put("children", children)
+        .put("gap", options.gap)
+        .put("padding", options.padding)
+        .put("selected", options.selected);
     if (options.align) {
         node.text("align", alignName(*options.align));
     }
     if (options.justify) {
         node.text("justify", justifyName(*options.justify));
+    }
+    if (options.wrap) {
+        // Written for a column too, so the loader refuses it rather than the author silently losing it.
+        node.flag("wrap");
+    }
+    if (options.divided) {
+        node.flag("divided");
+    }
+    if (options.pageEdge) {
+        node.flag("pageEdge");
+    }
+    if (options.headJoined) {
+        node.flag("headJoined");
     }
     return node.done();
 }
@@ -3395,6 +3938,36 @@ namespace detail {
     return detail::stackNode("column", children, options);
 }
 
+/// @brief Options of `group`.
+struct GroupOptions {
+    /// @brief The legend: the group's caption and accessible name.
+    AnyHandle label;
+    /// @brief Whether the legend carries the required mark, a condition. The mark only: which of the children are
+    ///        required is a check's to say.
+    AnyHandle required;
+    /// @brief A line under the children, read in order after them.
+    AnyHandle description;
+    /// @brief Messages shown under the group, as on an input; a check that targets the group adds its own.
+    AnyHandle errors;
+    /// @brief The gap between the legend, the children and the lines under them: a spacing step.
+    AnyHandle gap;
+};
+
+/// @brief A `group` node: a labelled set of inputs, a fieldset with a legend.
+/// @param children The inputs and whatever arranges them.
+/// @param options  The legend, the mark, the description, the errors and the gap.
+/// @return The node.
+[[nodiscard]] inline Node group(Nodes const& children, GroupOptions const& options) {
+    return detail::NodeWriter{"group"}
+        .put("label", options.label)
+        .put("required", options.required)
+        .put("description", options.description)
+        .put("errors", options.errors)
+        .put("gap", options.gap)
+        .put("children", children)
+        .done();
+}
+
 /// @brief A `row` node.
 /// @param children The children.
 /// @param options  The gap and the alignment.
@@ -3405,11 +3978,26 @@ namespace detail {
 
 /// @brief A `grid` node.
 /// @param children The children.
-/// @param options  The gap, columns and alignment; a `justify` is written, and the loader refuses it.
+/// @param options  The gap, columns or tracks, and alignment; a `justify` is written, and the loader refuses it.
 /// @return The node.
 [[nodiscard]] inline Node grid(Nodes const& children, ContainerOptions const& options = {}) {
     detail::NodeWriter node{"grid"};
     node.put("children", children).put("gap", options.gap).put("columns", options.columns);
+    if (!options.tracks.empty()) {
+        Json::array_t tracks;
+        tracks.reserve(options.tracks.size());
+        for (GridTrack const& track : options.tracks) {
+            Json part = Json::object_t{};
+            if (track.width.present()) {
+                detail::put(part, "width", track.width.json());
+            }
+            if (track.align) {
+                detail::put(part, "align", detail::alignName(*track.align));
+            }
+            tracks.emplace_back(std::move(part));
+        }
+        node.raw("tracks", std::move(tracks));
+    }
     if (options.align) {
         node.text("align", detail::alignName(*options.align));
     }
@@ -3461,6 +4049,92 @@ struct PanelOptions {
 /// @return The node.
 [[nodiscard]] inline Node scroll(Nodes const& children, AnyHandle const& axis = {}) {
     return detail::NodeWriter{"scroll"}.put("axis", axis).put("children", children).done();
+}
+
+/// @brief The bars `pinned` keeps in view around its content.
+struct PinnedOptions {
+    /// @brief The nodes above the content, which stay at the top; none when empty.
+    Nodes top;
+    /// @brief The nodes below the content, which stay at the bottom, such as a bar of actions; none when empty.
+    Nodes bottom;
+    /// @brief The surface each bar is drawn on; empty draws the bars on the surface around them.
+    std::string surface = "bar";
+    /// @brief The page's inset, a spacing step: the shell's own, 4. The content and each bar's content are inset by
+    /// it,
+    ///        and the column is marked as the page's edge, so the shell does not inset the page around it. 0 writes
+    ///        the content as it is and bars padded by 2 on every side, and the shell insets the page.
+    int inset = 4;
+};
+
+namespace detail {
+
+/// @brief The condition under which a list of nodes shows something: the nodes' own `visible` conditions or-ed, when
+///        every node has one.
+/// @param nodes The nodes.
+/// @return The condition; absent when a node has none, which always shows, or when the list is empty.
+[[nodiscard]] inline AnyHandle anyShown(Nodes const& nodes) {
+    AnyHandle shown;
+    for (Json const& item : std::get<Json::array_t>(nodes.json().data)) {
+        auto const& members = std::get<Json::object_t>(item.data);
+        auto const* const found = members.find("visible");
+        if (found == members.end()) {
+            return {};
+        }
+        AnyHandle const condition = AnyHandle::raw(found->second);
+        shown = shown.present() ? AnyHandle::raw(call("or", {shown.json(), condition.json()})) : condition;
+    }
+    return shown;
+}
+
+/// @brief Whether any of the nodes has a `visible` condition.
+/// @param nodes The nodes.
+/// @return Whether one can hide.
+[[nodiscard]] inline bool anyConditioned(Nodes const& nodes) {
+    return std::ranges::any_of(std::get<Json::array_t>(nodes.json().data), [](Json const& item) {
+        return std::get<Json::object_t>(item.data).contains("visible");
+    });
+}
+
+}  // namespace detail
+
+/// @brief Content that scrolls between bars that stay in view: a divided column that stretches both ways, holding the
+///        top bar, a vertical `scroll` that stretches in height around @p content, and the bottom bar. A bar is a
+///        `column` of its nodes drawn on `PinnedOptions::surface` (the built-in `bar`: the theme's surface colour with
+///        no border), so a rule separates it from the content; an empty list leaves its bar out, and a bar whose nodes
+///        all have a `visible` condition shows while any of them does. The column spans the page: the content is
+///        inset by `PinnedOptions::inset` inside the scroll, and each bar is padded by step 2 above and below and by
+///        the inset at its sides, so a bar's surface and rule reach the page's edges and its content lines up with the
+///        body's. When the top bar always shows (it has nodes, none with a `visible` condition) and the page is inset,
+///        the column also says it `headJoined`: the bar continues the head's block, so the shell draws no rule
+///        between them and the column's own rule under the bar is the block's. The scroll takes the column's spare
+///        height, so the bars stay at the column's ends however long the
+///        content is. Use it as a screen's root, which the workspace then lets fill the page.
+/// @param content The content that scrolls.
+/// @param options The bars.
+/// @return The column.
+[[nodiscard]] inline Node pinned(Nodes const& content, PinnedOptions const& options = {}) {
+    std::vector<Node> children;
+    bool const inset = options.inset > 0;
+    // Each bar carries its list's catalog facts, so the column names every model and action it does.
+    auto const bar = [&options, inset](Nodes const& nodes) {
+        Node node = column(nodes, {.padding = inset ? padding(2, options.inset) : AnyHandle{2}});
+        if (AnyHandle const shown = detail::anyShown(nodes); shown.present()) {
+            node = node.visible(shown);
+        }
+        return options.surface.empty() ? node : node.surface(options.surface);
+    };
+    auto const present = [](Nodes const& nodes) { return !std::get<Json::array_t>(nodes.json().data).empty(); };
+    if (present(options.top)) {
+        children.push_back(bar(options.top));
+    }
+    children.push_back(
+        scroll(inset ? Nodes{column(content, {.padding = options.inset})} : content).sizing(stretch(), stretch()));
+    if (present(options.bottom)) {
+        children.push_back(bar(options.bottom));
+    }
+    bool const joined = inset && present(options.top) && !detail::anyConditioned(options.top);
+    return column(Nodes{children}, {.divided = true, .pageEdge = inset, .headJoined = joined})
+        .sizing(stretch(), stretch());
 }
 
 /// @brief A scope's builder: declares on the scope and returns the nodes that read it.
@@ -3524,33 +4198,74 @@ private:
 
 /// @brief A page of a `tabs` node.
 struct Tab {
-    /// @brief The label.
+    /// @brief The tab's key, which `selected` and `onChoose` name; empty for none. Every tab has one when the node
+    ///        gives `selected` or `onChoose`.
+    std::string id;
+    /// @brief The label; it may follow the data.
     AnyHandle label;
     /// @brief The page's nodes.
     Nodes children;
 };
 
+/// @brief Options of a `tabs` node.
+struct TabsOptions {
+    /// @brief The id of the tab shown, controlled: the user's pick comes back through `onChoose`, and the shown tab
+    ///        follows this alone. Absent: the node keeps the user's pick itself.
+    AnyHandle selected;
+    /// @brief Commands run when the user picks a tab, with the tab's id as `event`.
+    Commands onChoose;
+    /// @brief The label of the menu that holds the tabs that do not fit in the bar; absent: `More`.
+    AnyHandle moreLabel;
+    /// @brief A spacing step, 0 to `kMaxSpacingStep`, written as a literal: the strip and its rule span the node's
+    ///        width, the first tab starts this far in, and each page is padded by it on every side. A tabs node with
+    ///        it can be a page's edge-to-edge root. 0 writes none.
+    int inset = 0;
+    /// @brief A spacing step, 0 to `kMaxSpacingStep`, written as a literal, that pads each page in place of `inset`.
+    ///        A page that scrolls gives 0 and pads its own scrolled content, so that content's bleeding children reach
+    ///        the scroll's edges. Absent pads the pages by `inset`.
+    std::optional<int> pageInset;
+    /// @brief The surface the strip, and nothing else, is drawn on, such as `"bar"`; empty draws it on the surface
+    ///        around it.
+    std::string stripSurface;
+};
+
 /// @brief A `tabs` node.
-/// @param tabs The pages.
+/// @param tabs    The pages.
+/// @param options The tab shown and what a pick runs.
 /// @return The node.
-[[nodiscard]] inline Node tabs(std::vector<Tab> const& tabs) {
+[[nodiscard]] inline Node tabs(std::vector<Tab> const& tabs, TabsOptions const& options = {}) {
     detail::NodeWriter node{"tabs"};
     Json::array_t parts;
     parts.reserve(tabs.size());
     for (Tab const& tab : tabs) {
         Json part = Json::object_t{};
+        if (!tab.id.empty()) {
+            detail::put(part, "id", tab.id);
+        }
         detail::put(part, "label", tab.label.json());
         detail::put(part, "children", tab.children.json());
         node.facts(tab.children.facts());
         parts.push_back(std::move(part));
     }
-    return node.raw("tabs", std::move(parts)).done();
+    return node.raw("tabs", std::move(parts))
+        .put("selected", options.selected)
+        .put("onChoose", options.onChoose)
+        .put("moreLabel", options.moreLabel)
+        .put("inset", options.inset != 0 ? AnyHandle{options.inset} : AnyHandle{})
+        .put("pageInset", options.pageInset ? AnyHandle{*options.pageInset} : AnyHandle{})
+        .text("stripSurface", options.stripSurface)
+        .done();
 }
 
 /// @brief Options of `dialog` and `drawer`.
 struct DialogOptions {
     /// @brief The title: the accessible name.
     AnyHandle title;
+    /// @brief A line under the title, in the head, ruled off from the body: the accessible description.
+    AnyHandle description;
+    /// @brief The description as runs (`spans`), shown in place of `description` by a client that knows them, and the
+    ///        accessible description by their characters; `description` beside it is what an older client shows.
+    AnyHandle descriptionSpans;
     /// @brief Whether it is open; absent for `open` and `close` commands alone.
     AnyHandle open;
     /// @brief When its element errors show.
@@ -3565,6 +4280,11 @@ struct DialogOptions {
     Commands onDismiss;
     /// @brief The buttons of its footer, run in its scope; each id once.
     std::vector<ActionButtonOptions> actions;
+    /// @brief A dialog's condition for being drawn as a sheet that fills the window, such as
+    ///        `eq(env("widthClass"), "compact")`; a drawer takes none.
+    AnyHandle sheet;
+    /// @brief The label of a sheet's dismiss control; absent is "Close". Only with `sheet`.
+    AnyHandle dismissLabel;
 };
 
 namespace detail {
@@ -3580,7 +4300,11 @@ namespace detail {
     DeclScope scope;
     Nodes const children = builder(scope);
     NodeWriter node{kind};
-    node.text("id", element.name()).put("title", options.title).put("open", options.open);
+    node.text("id", element.name())
+        .put("title", options.title)
+        .put("description", options.description)
+        .put("descriptionSpans", options.descriptionSpans)
+        .put("open", options.open);
     if (options.showErrors) {
         node.text("showErrors", showErrorsName(*options.showErrors));
     }
@@ -3593,6 +4317,8 @@ namespace detail {
         node.raw("actions", std::move(actions));
     }
     return node.put("side", options.side)
+        .put("sheet", options.sheet)
+        .put("dismissLabel", options.dismissLabel)
         .scope(scope)
         .put("children", children)
         .put("default", options.defaultAction)
@@ -3646,6 +4372,10 @@ struct ForEachOptions {
     AnyHandle axis;
     /// @brief The gap between rows: a spacing step, 0 to `kMaxSpacingStep`.
     AnyHandle gap;
+    /// @brief Whether a horizontal `forEach`'s rows continue on the next line when they do not fit.
+    bool wrap = false;
+    /// @brief Whether a vertical `forEach` draws a rule between its rows.
+    bool divided = false;
 };
 
 /// @brief A `forEach` node: its children once per row, each row a scope of its own.
@@ -3656,14 +4386,15 @@ struct ForEachOptions {
 [[nodiscard]] inline Node forEach(AnyHandle const& rows, ForEachOptions const& options, ScopeBuilder const& builder) {
     DeclScope scope;
     Nodes const children = builder(scope);
-    return detail::NodeWriter{"forEach"}
-        .put("rows", rows)
-        .put("key", options.key)
-        .put("axis", options.axis)
-        .put("gap", options.gap)
-        .scope(scope)
-        .put("children", children)
-        .done();
+    detail::NodeWriter node{"forEach"};
+    node.put("rows", rows).put("key", options.key).put("axis", options.axis).put("gap", options.gap);
+    if (options.wrap) {
+        node.flag("wrap");
+    }
+    if (options.divided) {
+        node.flag("divided");
+    }
+    return node.scope(scope).put("children", children).done();
 }
 
 /// @brief A column of a `table`.
@@ -3674,10 +4405,26 @@ struct TableColumn {
     AnyHandle label;
     /// @brief The width.
     AnyHandle width;
-    /// @brief The column's text role; absent writes no key, `Normal`.
+    /// @brief The column's text role; absent writes no key, `Normal`. A `mono` role also makes a `fixed(n)` width
+    ///        count n monospace characters, plus the cell padding, even when the column has its own `cell`.
     AnyHandle role;
+    /// @brief Where a cell's text, or a label-width cell, sits across the column, and the header label with it:
+    ///        `Start`, `Center` or `End`; absent writes no key, the start. `Stretch` writes `stretch`, which the
+    ///        loader refuses.
+    std::optional<Align> align;
+    /// @brief Where a cell sits down its row: `Start`, `Center` or `End`; absent writes no key and takes the table's
+    ///        `valign`, else the centre.
+    std::optional<Align> valign;
     /// @brief The cell, read in the row scope.
     Nodes cell;
+    /// @brief Whether a click on the header sorts the table by the column; the column needs a `name`.
+    bool sortable = false;
+    /// @brief The value a sortable column orders the rows by, read per row as `key` is; absent: the row's field
+    ///        named by the column's `name`.
+    AnyHandle sortBy;
+    /// @brief Whether the column's text cells may break across lines; `false` draws each on one line, cut at the
+    ///        column's width with an ellipsis, and writes `wrap: false`.
+    bool wrap = true;
 };
 
 /// @brief Columns from cells alone, without ids or labels.
@@ -3705,6 +4452,15 @@ enum class TableMode : std::uint8_t {
     Server,  ///< In the server, through the action's table query.
 };
 
+/// @brief A table's groups: a heading row before each run of adjacent rows that share a value.
+struct TableGroup {
+    /// @brief The value the rows are grouped by, read per row as `key` is.
+    AnyHandle by;
+    /// @brief The heading row's content, read in a row scope whose row is the group's run record (`key`, `count`,
+    ///        `first`, `last`, `items`).
+    Nodes heading;
+};
+
 /// @brief Options of `table` and `dataTable`.
 struct TableOptions {
     /// @brief The row key, read in the row scope.
@@ -3719,12 +4475,34 @@ struct TableOptions {
     std::size_t virtualizeThreshold = 2000;
     /// @brief How many rows beyond the visible range, on each side, keep a realized widget.
     std::size_t virtualizeOverscan = 10;
-    /// @brief How the selection works.
-    std::optional<Selection> selection;
+    /// @brief How many rows the user can select; absent writes no key, none.
+    std::optional<Selection> selectionMode;
+    /// @brief The selected rows' keys, a list: bound, the table shows it and nothing else, and a user's change
+    ///        comes back only through `onSelectionChange`. Absent: the table keeps the user's selection itself.
+    AnyHandle selection;
+    /// @brief Commands run after each user change of the selection, with `event` the new list of keys.
+    Commands onSelectionChange;
+    /// @brief Whether the table draws its selection as a leading column of check boxes under a select-all box; only
+    ///        with `Selection::Multiple`.
+    bool selectColumn = false;
+    /// @brief The select-all box's accessible name; absent: `"Select all"`.
+    AnyHandle selectAllLabel;
+    /// @brief Each row's accessible name, which its select box carries, read in the row scope; absent: the row's key.
+    AnyHandle rowLabel;
     /// @brief Where a model-backed table works; ignored by a table over rows.
     std::optional<TableMode> mode;
-    /// @brief The sort.
+    /// @brief The sort, a list of `sortKey`s, most significant first: bound, the table shows it and a header click
+    ///        comes back only through `onSortChange`. Absent: the table keeps the user's sort itself. A model-backed
+    ///        table's engine reads it as its own.
     AnyHandle sort;
+    /// @brief Commands run after a header click asks to sort, with `event` the new sort.
+    Commands onSortChange;
+    /// @brief How many rows a page holds, a positive integer; absent, the table does not page.
+    AnyHandle pageSize;
+    /// @brief The page shown, from 0; needs `pageSize`; absent, the first page.
+    AnyHandle page;
+    /// @brief A heading row before each group of adjacent rows; absent, none.
+    std::optional<TableGroup> group;
     /// @brief The filters.
     AnyHandle filters;
     /// @brief A row's tone, read in the row scope.
@@ -3736,9 +4514,50 @@ struct TableOptions {
     /// @brief Shown instead of the table while its rows are an empty list, in the table's scope; empty shows the
     ///        table always.
     Nodes empty;
+    /// @brief Where every cell sits down its row, for each column that gives no `valign`; absent writes no key, the
+    ///        centre.
+    std::optional<Align> valign;
 };
 
 namespace detail {
+
+/// @brief A table column part: the keys the column gives, each written only when present.
+/// @param column The column.
+/// @return The part's JSON.
+[[nodiscard]] inline Json columnPart(TableColumn const& column) {
+    Json part = Json::object_t{};
+    if (!column.name.empty()) {
+        detail::put(part, "id", column.name);
+    }
+    if (column.label.present()) {
+        detail::put(part, "label", column.label.json());
+    }
+    if (column.width.present()) {
+        detail::put(part, "width", column.width.json());
+    }
+    if (column.role.present()) {
+        detail::put(part, "role", column.role.json());
+    }
+    if (column.align) {
+        detail::put(part, "align", detail::alignName(*column.align));
+    }
+    if (column.valign) {
+        detail::put(part, "valign", detail::alignName(*column.valign));
+    }
+    if (column.sortable) {
+        detail::put(part, "sortable", true);
+    }
+    if (!column.wrap) {
+        detail::put(part, "wrap", false);
+    }
+    if (column.sortBy.present()) {
+        detail::put(part, "sortBy", column.sortBy.json());
+    }
+    if (!column.cell.empty()) {
+        detail::put(part, "cell", column.cell.json());
+    }
+    return part;
+}
 
 /// @brief Writes a table's options after its source.
 /// @param node    The table so far.
@@ -3754,32 +4573,33 @@ namespace detail {
         Json::array_t parts;
         parts.reserve(columns.size());
         for (TableColumn const& column : columns) {
-            Json part = Json::object_t{};
-            if (!column.name.empty()) {
-                detail::put(part, "id", column.name);
-            }
-            if (column.label.present()) {
-                detail::put(part, "label", column.label.json());
-            }
-            if (column.width.present()) {
-                detail::put(part, "width", column.width.json());
-            }
-            if (column.role.present()) {
-                detail::put(part, "role", column.role.json());
-            }
             if (!column.cell.empty()) {
-                detail::put(part, "cell", column.cell.json());
                 node.facts(column.cell.facts());
             }
-            parts.push_back(std::move(part));
+            parts.push_back(columnPart(column));
         }
         node.raw("columns", std::move(parts));
     }
-    if (options.selection) {
-        node.raw("selectionMode", std::string{kSelections.at(static_cast<std::size_t>(*options.selection))});
+    if (options.group) {
+        node.facts(options.group->heading.facts());
+        Json part = Json::object_t{};
+        detail::put(part, "by", options.group->by.json());
+        detail::put(part, "heading", options.group->heading.json());
+        node.raw("group", std::move(part));
     }
+    if (options.selectionMode) {
+        node.raw("selectionMode", std::string{kSelections.at(static_cast<std::size_t>(*options.selectionMode))});
+    }
+    node.put("selection", options.selection).put("onSelectionChange", options.onSelectionChange);
+    if (options.selectColumn) {
+        node.raw("selectColumn", true);
+    }
+    node.put("selectAllLabel", options.selectAllLabel).put("rowLabel", options.rowLabel);
     if (!options.showHeader) {
         node.raw("showHeader", false);
+    }
+    if (options.valign) {
+        node.raw("valign", detail::alignName(*options.valign));
     }
     if (options.virtualizeThreshold != 2000) {
         node.raw("virtualizeThreshold", static_cast<std::int64_t>(options.virtualizeThreshold));
@@ -3788,6 +4608,9 @@ namespace detail {
         node.raw("virtualizeOverscan", static_cast<std::int64_t>(options.virtualizeOverscan));
     }
     return node.put("sort", options.sort)
+        .put("onSortChange", options.onSortChange)
+        .put("pageSize", options.pageSize)
+        .put("page", options.page)
         .put("filters", options.filters)
         .put("rowTone", options.rowTone)
         .put("highlightKey", options.highlightKey)
@@ -3990,14 +4813,21 @@ inline void actionPart(NodeWriter& node, std::optional<ActionPart> const& action
 struct BannerOptions {
     /// @brief The tone.
     AnyHandle tone;
-    /// @brief The text.
+    /// @brief The text; beside `spans`, what a client that does not know spans draws.
     AnyHandle text;
+    /// @brief The text as runs (`spans`), shown in place of `text` by a client that knows them.
+    AnyHandle spans;
     /// @brief Whether the user may dismiss it.
     AnyHandle dismissible;
     /// @brief Its action.
     std::optional<ActionPart> action;
     /// @brief Commands run when it is dismissed.
     Commands onDismiss;
+    /// @brief How the action is drawn; `Ghost` writes no key. `Link` draws it inside the message, at the run
+    ///        `actionRun` makes in `spans`, else after the message.
+    BannerActionStyle actionStyle = BannerActionStyle::Ghost;
+    /// @brief Whether the action takes a line of its own under the message, as wide as the banner. Not with `Link`.
+    bool actionStretch = false;
 };
 
 /// @brief A `banner` node.
@@ -4005,18 +4835,75 @@ struct BannerOptions {
 /// @return The node.
 [[nodiscard]] inline Node banner(BannerOptions const& options) {
     detail::NodeWriter node{"banner"};
-    node.put("tone", options.tone).put("text", options.text).put("dismissible", options.dismissible);
+    node.put("tone", options.tone)
+        .put("text", options.text)
+        .put("spans", options.spans)
+        .put("dismissible", options.dismissible);
     detail::actionPart(node, options.action);
+    if (options.actionStyle != BannerActionStyle::Ghost) {
+        node.text("actionStyle", std::string{bannerActionStyleName(options.actionStyle)});
+    }
+    if (options.actionStretch) {
+        node.flag("actionStretch");
+    }
     return node.put("onDismiss", options.onDismiss).done();
 }
 
 /// @brief A `badge` node.
-/// @param text The text.
-/// @param tone The tone.
-/// @param icon An icon.
+/// @param text  The text.
+/// @param tone  The tone.
+/// @param icon  An icon.
+/// @param style Filled, the default, which writes no key, or outlined: the surface's fill with the tone's colour as
+///              border and text.
 /// @return The node.
-[[nodiscard]] inline Node badge(AnyHandle const& text, AnyHandle const& tone = {}, AnyHandle const& icon = {}) {
-    return detail::NodeWriter{"badge"}.put("tone", tone).put("text", text).put("icon", icon).done();
+[[nodiscard]] inline Node badge(AnyHandle const& text, AnyHandle const& tone = {}, AnyHandle const& icon = {},
+                                BadgeStyle style = BadgeStyle::Filled) {
+    detail::NodeWriter node{"badge"};
+    node.put("tone", tone).put("text", text).put("icon", icon);
+    if (style == BadgeStyle::Outline) {
+        node.text("style", "outline");
+    }
+    return node.done();
+}
+
+/// @brief Options of a `badge` that may be removed.
+struct BadgeOptions {
+    /// @brief The label.
+    AnyHandle text;
+    /// @brief The tone.
+    AnyHandle tone;
+    /// @brief An icon of the theme's icon map.
+    AnyHandle icon;
+    /// @brief Commands run when the user removes the badge; given, the badge draws a remove control and takes the
+    ///        focus.
+    Commands onRemove;
+    /// @brief The remove control's accessible name; absent: `Remove ` and the text.
+    AnyHandle removeLabel;
+    /// @brief Filled, the default, which writes no key, or outlined: the surface's fill, with the tone's outline
+    ///        colour as border and its colour as text.
+    BadgeStyle style = BadgeStyle::Filled;
+    /// @brief The badge's outline; `Default` writes no key.
+    ControlShape shape = ControlShape::Default;
+    /// @brief Whether the label is drawn in the `mono` text role's face.
+    bool mono = false;
+};
+
+/// @brief A `badge` node with its options.
+/// @param options The text, tone, icon, style, shape, and what removing it does.
+/// @return The node.
+[[nodiscard]] inline Node badge(BadgeOptions const& options) {
+    detail::NodeWriter node{"badge"};
+    node.put("tone", options.tone).put("text", options.text).put("icon", options.icon);
+    if (options.style == BadgeStyle::Outline) {
+        node.text("style", "outline");
+    }
+    if (options.shape != ControlShape::Default) {
+        node.text("shape", std::string{shapeName(options.shape)});
+    }
+    if (options.mono) {
+        node.flag("mono");
+    }
+    return node.put("onRemove", options.onRemove).put("removeLabel", options.removeLabel).done();
 }
 
 /// @brief A `progress` node.
@@ -4028,11 +4915,301 @@ struct BannerOptions {
 }
 
 /// @brief A `steps` node.
-/// @param items   The steps, `[{label, state}]`.
-/// @param current The current step.
+/// @param items    The steps, `[{label, state}]`.
+/// @param current  The current step.
+/// @param labelled Whether the labels are drawn, a condition; absent draws them. Unlabelled, the steps still carry
+///                 their labels as accessible names.
 /// @return The node.
-[[nodiscard]] inline Node steps(AnyHandle const& items, AnyHandle const& current = {}) {
-    return detail::NodeWriter{"steps"}.put("items", items).put("current", current).done();
+[[nodiscard]] inline Node steps(AnyHandle const& items, AnyHandle const& current = {},
+                                AnyHandle const& labelled = {}) {
+    return detail::NodeWriter{"steps"}.put("items", items).put("current", current).put("labelled", labelled).done();
+}
+
+/// @brief One step of a `stepper`.
+struct StepperStep {
+    /// @brief The step's name in the indicator.
+    std::string label;
+    /// @brief What the step shows while it is the current one.
+    Nodes children;
+    /// @brief Whether Continue may leave the step, a condition; absent always may.
+    AnyHandle canContinue;
+    /// @brief The element Continue focuses while the step cannot continue, such as the field that blocks it; it may
+    ///        be declared in the step's own children. None when absent.
+    std::optional<Element> blocking;
+    /// @brief Commands Continue runs while the step cannot continue, before it focuses `blocking`.
+    Commands onBlocked;
+    /// @brief Continue's text while this step is the current one; absent, the options' `continueLabel`, or
+    ///        `finishLabel` on the last step.
+    std::optional<std::string> continueLabel;
+};
+
+/// @brief Options of a `stepper`.
+struct StepperOptions {
+    /// @brief The `int` state holding the current step, from 0.
+    Handle<std::int64_t> step;
+    /// @brief The steps, in order.
+    std::vector<StepperStep> steps;
+    /// @brief Back's text.
+    std::string backLabel = "Back";
+    /// @brief Continue's text on every step but the last.
+    std::string continueLabel = "Continue";
+    /// @brief Continue's text on the last step.
+    std::string finishLabel = "Finish";
+    /// @brief What Continue runs on the last step, when it may continue.
+    Commands onFinish;
+    /// @brief Footer nodes between Back and Continue, such as a Save draft button.
+    Nodes extra;
+    /// @brief Whether the indicator shows the steps' labels, or only their marks, a condition; absent shows them.
+    AnyHandle labelled;
+    /// @brief Whether Continue stretches to the footer's spare width, with no spacer before the extra nodes.
+    bool continueStretches = false;
+    /// @brief When given, the indicator, Back and Continue take the test ids `<prefix>steps`, `<prefix>back` and
+    ///        `<prefix>continue`; an empty prefix gives `steps`, `back` and `continue`.
+    std::optional<std::string> testIdPrefix;
+};
+
+/// @brief The parts of a `stepper`, for a screen that places them itself, such as in the bars of `pinned`.
+struct StepperParts {
+    /// @brief The `steps` indicator.
+    Node indicator;
+    /// @brief The `switch` on the step, one case per step.
+    Node body;
+    /// @brief The footer row: Back, a spacer unless Continue stretches, the extra nodes and Continue.
+    Node footer;
+};
+
+namespace detail {
+
+/// @brief What Continue does on a step that cannot continue: its `onBlocked` commands, then the focus on its
+///        `blocking` element when it names one.
+/// @param step The step.
+/// @return The commands.
+[[nodiscard]] inline Commands stepBlockedCommands(StepperStep const& step) {
+    if (step.blocking && !step.onBlocked.empty()) {
+        return Commands{seq(step.onBlocked), focus(*step.blocking)};
+    }
+    if (step.blocking) {
+        return Commands{focus(*step.blocking)};
+    }
+    return step.onBlocked;
+}
+
+/// @brief Continue's text: the last step's finish text, else the step's own, else the shared one.
+/// @param options The step state, the steps and the footer.
+/// @return The text, switching on the step.
+[[nodiscard]] inline Handle<std::string> stepperContinueText(StepperOptions const& options) {
+    using Label = Handle<std::string>;
+    auto const last = static_cast<std::int64_t>(options.steps.size()) - 1;
+    auto const hasOwnLabel = [](StepperStep const& step) { return step.continueLabel.has_value(); };
+    if (!std::ranges::any_of(options.steps, hasOwnLabel)) {
+        return cond(eq(options.step, last), Label{options.finishLabel}, Label{options.continueLabel});
+    }
+    auto const textOf = [&](std::int64_t position) {
+        auto const& own = options.steps.at(static_cast<std::size_t>(position)).continueLabel;
+        if (own) {
+            return *own;
+        }
+        return position == last ? options.finishLabel : options.continueLabel;
+    };
+    Label text{textOf(last)};
+    for (auto position = last - 1; position >= 0; --position) {
+        text = cond(eq(options.step, position), Label{textOf(position)}, text);
+    }
+    return text;
+}
+
+}  // namespace detail
+
+/// @brief The parts of a wizard over screen state: a `steps` indicator built from the steps' labels and `step`, a
+///        `switch` on `step` with one case per step, and a footer row of Back, a spacer, `extra` and Continue. Back
+///        moves one step back and is disabled on the first; Continue moves one step on, or runs `onFinish` on the
+///        last, while the step's `canContinue` holds, and otherwise runs its `onBlocked` and focuses its `blocking`
+///        element. On a step that cannot continue and has no `blocking` element, Continue is disabled. Every part is
+///        a node of ui/1; the helper writes the JSON a screen would write by hand.
+/// @param options The step state, the steps and the footer.
+/// @return The three parts.
+[[nodiscard]] inline StepperParts stepperParts(StepperOptions const& options) {
+    using Label = Handle<std::string>;
+    std::vector<AnyHandle> items;
+    std::vector<Case> cases;
+    std::vector<Commands> onSteps;
+    // Continue is disabled on a step that cannot continue and has no field to show the user: a click would do nothing.
+    std::optional<Handle<bool>> enabled;
+    auto const last = static_cast<std::int64_t>(options.steps.size()) - 1;
+    std::int64_t index = 0;
+    for (StepperStep const& step : options.steps) {
+        Label const state = cond(options.step > index, Label{"done"},
+                                 cond(eq(options.step, index), Label{"active"}, Label{"pending"}));
+        items.push_back(obj({{"label", step.label}, {"state", state}}));
+        cases.emplace_back(AnyHandle{index}, step.children);
+        Commands const moveOn = index == last ? options.onFinish : Commands{set(options.step, options.step + 1)};
+        Commands const blocked = detail::stepBlockedCommands(step);
+        Commands const onStep =
+            step.canContinue.present() ? Commands{ifThen(step.canContinue, moveOn, blocked)} : moveOn;
+        onSteps.push_back(onStep);
+        if (step.canContinue.present() && !step.blocking) {
+            Handle<bool> const here = ne(options.step, index) || Handle<bool>{step.canContinue};
+            enabled = enabled ? *enabled && here : here;
+        }
+        ++index;
+    }
+    auto const withId = [&options](Node const& node, std::string const& name) {
+        return options.testIdPrefix ? node.testId(*options.testIdPrefix + name) : node;
+    };
+    // An else-chain, not one `if` per step: a step's own `set` would otherwise satisfy the next step's test, and one
+    // click would move two steps.
+    Commands continueCommands;
+    for (auto position = static_cast<std::int64_t>(onSteps.size()) - 1; position >= 0; --position) {
+        continueCommands = Commands{
+            ifThen(eq(options.step, position), onSteps.at(static_cast<std::size_t>(position)), continueCommands)};
+    }
+    std::vector<Node> footer{withId(
+        button({.label = options.backLabel, .onClick = set(options.step, options.step - 1)}).enabled(options.step > 0),
+        "back")};
+    if (!options.continueStretches) {
+        footer.push_back(spacer().sizing(stretch()));
+    }
+    Json const extra = options.extra.json();
+    for (Json const& node : std::get<Json::array_t>(extra.data)) {
+        footer.emplace_back(node, options.extra.facts());
+    }
+    Node next = button({.label = detail::stepperContinueText(options),
+                        .emphasis = ButtonEmphasis::Primary,
+                        .onClick = continueCommands});
+    if (options.continueStretches) {
+        next = next.sizing(stretch(), content());
+    }
+    footer.push_back(withId(enabled ? next.enabled(*enabled) : next, "continue"));
+    return {.indicator = withId(steps(list(items), options.step, options.labelled), "steps"),
+            .body = switchOn(options.step, cases),
+            .footer = row(Nodes{footer}, {.gap = 1})};
+}
+
+/// @brief A wizard over screen state: a `column` of the parts of `stepperParts`, the indicator, the step's body and
+///        the footer.
+/// @param options The step state, the steps and the footer.
+/// @return The column.
+[[nodiscard]] inline Node stepper(StepperOptions const& options) {
+    StepperParts const parts = stepperParts(options);
+    return column({parts.indicator, parts.body, parts.footer}, {.gap = 2});
+}
+
+/// @brief An expression read once per point of a chart's series, from the point's element (`{"row": ""}`).
+using PointExpression = std::function<AnyHandle(AnyHandle const& point)>;
+
+/// @brief One series of a `chart`.
+struct ChartSeries {
+    /// @brief The series' name in the legend; required when the chart has two or more series.
+    AnyHandle label;
+    /// @brief The elements, one point each.
+    AnyHandle points;
+    /// @brief The value, a number or a quantity; `null` leaves a gap.
+    PointExpression y;
+    /// @brief The position along the axis, a number, a date or an instant; absent on every series spaces points by
+    ///        index.
+    PointExpression x;
+    /// @brief The point's label on the horizontal axis.
+    PointExpression xLabel;
+    /// @brief Marks the point in a tone; `null` leaves it ordinary.
+    PointExpression tone;
+    /// @brief Text drawn beside the point.
+    PointExpression note;
+    /// @brief Whether a line joins the points.
+    bool joined = true;
+};
+
+/// @brief How a chart's reference line is stroked.
+enum class LineStyle : std::uint8_t {
+    Solid,   ///< An unbroken line.
+    Dashed,  ///< Dashes.
+    Dotted,  ///< Dots.
+};
+
+/// @brief A horizontal reference line of a `chart`.
+struct ReferenceLine {
+    /// @brief Where the line is drawn, a number or a quantity.
+    AnyHandle value;
+    /// @brief Its label; absent, its value at the chart's places.
+    AnyHandle label;
+    /// @brief Its colour, a tone name; absent, `neutral`.
+    AnyHandle tone;
+    /// @brief Its stroke.
+    LineStyle style = LineStyle::Solid;
+};
+
+/// @brief Options of `chart`.
+struct ChartOptions {
+    /// @brief The text alternative: what a reader must know from the chart.
+    AnyHandle summary;
+    /// @brief The series, one to four, in drawing order.
+    std::vector<ChartSeries> series;
+    /// @brief The reference lines, at most sixteen.
+    std::vector<ReferenceLine> lines;
+    /// @brief A fixed lower end of the value axis.
+    AnyHandle yMin;
+    /// @brief A fixed upper end of the value axis.
+    AnyHandle yMax;
+    /// @brief The places the axis's labels are shown at, 0 to 18; absent, the widest places of the values.
+    std::optional<int> yPlaces;
+    /// @brief The value axis's unit or name.
+    AnyHandle yLabel;
+};
+
+/// @brief A `chart` node: points against a numeric axis, with reference lines.
+/// @param options The summary, the series, the lines and the axis.
+/// @return The node.
+[[nodiscard]] inline Node chart(ChartOptions const& options) {
+    static constexpr std::array<char const*, 3> kStyles = {"solid", "dashed", "dotted"};
+    AnyHandle const point = row();
+    auto const each = [&point](Json& part, char const* key, PointExpression const& read) {
+        if (read) {
+            AnyHandle const value = read(point);
+            if (value.present()) {
+                detail::put(part, key, value.json());
+            }
+        }
+    };
+    Json::array_t series;
+    for (ChartSeries const& one : options.series) {
+        Json part = Json::object_t{};
+        if (one.label.present()) {
+            detail::put(part, "label", one.label.json());
+        }
+        detail::put(part, "points", one.points.json());
+        each(part, "y", one.y);
+        each(part, "x", one.x);
+        each(part, "xLabel", one.xLabel);
+        each(part, "tone", one.tone);
+        each(part, "note", one.note);
+        if (!one.joined) {
+            detail::put(part, "joined", false);
+        }
+        series.push_back(std::move(part));
+    }
+    detail::NodeWriter node{"chart"};
+    node.put("summary", options.summary).raw("series", std::move(series));
+    if (!options.lines.empty()) {
+        Json::array_t lines;
+        for (ReferenceLine const& line : options.lines) {
+            Json part = Json::object_t{};
+            detail::put(part, "value", line.value.json());
+            if (line.label.present()) {
+                detail::put(part, "label", line.label.json());
+            }
+            if (line.tone.present()) {
+                detail::put(part, "tone", line.tone.json());
+            }
+            if (line.style != LineStyle::Solid) {
+                detail::put(part, "style", std::string{kStyles.at(static_cast<std::size_t>(line.style))});
+            }
+            lines.push_back(std::move(part));
+        }
+        node.raw("lines", std::move(lines));
+    }
+    if (options.yPlaces) {
+        node.raw("yPlaces", static_cast<std::int64_t>(*options.yPlaces));
+    }
+    return node.put("yMin", options.yMin).put("yMax", options.yMax).put("yLabel", options.yLabel).done();
 }
 
 /// @brief A `keyValue` node.
@@ -4040,6 +5217,27 @@ struct BannerOptions {
 /// @return The node.
 [[nodiscard]] inline Node keyValue(AnyHandle const& items) {
     return detail::NodeWriter{"keyValue"}.put("items", items).done();
+}
+
+/// @brief Options of `keyValue`.
+struct KeyValueOptions {
+    /// @brief The pairs: a list of `{label, value, spans, tone}` records.
+    AnyHandle items;
+    /// @brief Where each caption sits: `Inline`, beside its value, or `Stacked`, above it; absent writes no key, which
+    ///        is inline.
+    std::optional<::morph::forms::FieldLayout> fieldLayout;
+};
+
+/// @brief A `keyValue` node with its options.
+/// @param options The pairs and where their captions sit.
+/// @return The node.
+[[nodiscard]] inline Node keyValue(KeyValueOptions const& options) {
+    detail::NodeWriter node{"keyValue"};
+    node.put("items", options.items);
+    if (options.fieldLayout) {
+        node.text("fieldLayout", *options.fieldLayout == ::morph::forms::FieldLayout::Stacked ? "stacked" : "inline");
+    }
+    return node.done();
 }
 
 /// @brief Options of `emptyState`.
@@ -4415,6 +5613,12 @@ namespace detail {
         }
         return "accessibility: a `" + node.kind + "` has a `title` or an `a11y.name`";
     }
+    if (kind == "group") {
+        if (names(node, "label") || hasA11yName(node)) {
+            return {};
+        }
+        return "accessibility: a `group` has a `label` or an `a11y.name`";
+    }
     if ((kind == "table" || kind == "custom") && !hasA11yName(node)) {
         return "accessibility: a `" + node.kind + "` has an `a11y.name`";
     }
@@ -4472,9 +5676,9 @@ inline std::optional<Refusal> accessibilityOf(DocNode const& node, std::string c
 ///
 /// Every text input, date-time input, slider, select, checkbox and file picker has a `label` or an `a11y.name`; a
 /// button without a `label`, every `custom` node and every `table` has an `a11y.name`; every `dialog` and `drawer`
-/// has a `title` or an `a11y.name`. An `icon` never counts, and neither does a label or name written as the
-/// constant `""` or `null`. A form field takes its field's label, so a `form` is not checked. The view and every
-/// component's fallback are walked; the client does not run these rules.
+/// has a `title` or an `a11y.name`, and every `group` a `label` or an `a11y.name`. An `icon` never counts, and neither
+/// does a label or name written as the constant `""` or `null`. A form field takes its field's label, so a `form` is
+/// not checked. The view and every component's fallback are walked; the client does not run these rules.
 /// @param document The loaded document.
 /// @return The first rule broken, with the node's path, or nothing.
 [[nodiscard]] inline std::optional<Refusal> checkAccessibility(Document const& document) {

@@ -37,6 +37,9 @@ public:
     virtual void edited() = 0;
     /// Enter was pressed. Like `edited`, it may end in a handler that destroys the widget.
     virtual void submitted() = 0;
+    /// Whether Enter stops at the field. When it does not, the field still commits on Enter, and the key then goes on
+    /// outwards to the ancestors' chords (a dialog's default).
+    [[nodiscard]] virtual bool submits() const = 0;
     /// The focus left the field while the user could reach it. Like `edited`, it may end in a handler that destroys
     /// the widget.
     virtual void left() = 0;
@@ -60,7 +63,9 @@ public:
 /// Draws @p field into @p canvas as InputField does (muted while the user cannot reach it), then @p fields'
 /// placeholder while it is empty and a `!` in the last column while @p fields marks it invalid. The text cursor is
 /// left as it was unless @p field has the focus: InputField always sets it, and the last field drawn would win.
-void paintField(::core::tui::InputField& field, FieldOwner const& fields, bool reachable, ::core::tui::Canvas& canvas);
+/// The text is bold while @p strong: a prominent input's.
+void paintField(::core::tui::InputField& field, FieldOwner const& fields, bool reachable, ::core::tui::Canvas& canvas,
+                bool strong = false);
 
 /// @p instant as text in the display zone @p offsetMinutes east of UTC: `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`.
 [[nodiscard]] std::string formatLocal(morph::time::DateTime instant, ui::DateMode mode, int offsetMinutes);
@@ -90,19 +95,43 @@ public:
     void setOnSubmit(std::function<void(std::string)> onSubmit) override;
     void setOnCommit(std::function<void(std::string)> onCommit) override;
     void setUnit(std::string_view unit) override;
+    /// The prefix is drawn muted before the text, after the icon.
+    void setPrefix(std::string_view prefix) override;
+    /// Every face of a terminal is monospace, so a mono field draws nothing new.
+    void setMono(bool mono) override { static_cast<void>(mono); }
+    /// An end-aligned field draws its text against the field's right edge while the text fits.
+    void setAlign(ui::Align align) override;
     void setDecimals(int decimals) override;
     void setIcon(std::string_view icon) override;
+    /// A prominent input draws its text bold; the field's background is unchanged.
+    void setEmphasis(ui::InputEmphasis emphasis) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     /// Where the cursor is, as a byte offset into the text shown.
     [[nodiscard]] std::size_t cursor() const noexcept { return _field->cursor(); }
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
+    /// The prefix, the messages, the description, then the unit, so a listener hears the value between them.
+    [[nodiscard]] std::string accessibleDescription() const override {
+        std::string text = TuiField::accessibleDescription();
+        if (!_prefix.empty()) {
+            text = text.empty() ? _prefix : _prefix + "\n" + text;
+        }
+        if (!_unit.empty()) {
+            text += text.empty() ? _unit : "\n" + _unit;
+        }
+        return text;
+    }
     [[nodiscard]] std::string probeText() const override;
-    void paint(::core::tui::Canvas& canvas) override;
+
+protected:
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
+    void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
+    void paintText(::core::tui::Canvas& canvas);
     void edited() override;
     void submitted() override;
+    /// Only a field given a submit handler takes Enter for itself.
+    [[nodiscard]] bool submits() const override { return static_cast<bool>(_onSubmit); }
     void left() override;
     [[nodiscard]] std::optional<::core::tui::EventResult> intercept(::core::tui::KeyEvent const& /*key*/) override {
         return std::nullopt;
@@ -115,11 +144,14 @@ private:
     std::string _reported;
     std::string _placeholder;
     std::string _unit;  ///< Drawn muted at the right edge, before the marks; the editable width ends a cell before it.
+    std::string _prefix;     ///< Drawn muted before the text, after the icon.
+    bool _alignEnd = false;  ///< Whether the text is drawn against the field's right edge while it fits.
     std::string _icon;  ///< A framework icon name draws as a glyph before the field; any other name draws nothing.
     std::function<void(std::string)> _onChange;
     std::function<void(std::string)> _onSubmit;
     std::function<void(std::string)> _onCommit;
     bool _uncommitted = false;  ///< Whether the user edited the text since the last commit.
+    bool _prominent = false;    ///< Whether it is the screen's focal field.
 };
 
 /// DateTimeInput: an ISO-style field in a display zone. Up/Down step by a day (Date) or a minute (DateTime),
@@ -134,15 +166,25 @@ public:
         : TuiField{context}, _mode{mode}, _offsetMinutes{offsetMinutes}, _field{&adopt(makeFieldView(*this, *this))} {}
     void setValue(std::optional<morph::time::Timestamp> const& value) override;
     void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) override;
+    /// Shows the value and reads typed text in @p pattern; ISO is always read too.
+    void setPattern(std::string_view pattern) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override;
-    void paint(::core::tui::Canvas& canvas) override;
+
+protected:
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
+    void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
+    /// The text an instant shows as: in the pattern, else as `formatLocal` writes it.
+    [[nodiscard]] std::string shownOf(morph::time::DateTime instant) const;
+    /// The instant a text names: in the pattern or ISO, else as `parseLocal` reads it.
+    [[nodiscard]] std::optional<morph::time::DateTime> instantOf(std::string_view text) const;
     void edited() override;
     void submitted() override;
+    /// Enter commits what was typed, and stops here.
+    [[nodiscard]] bool submits() const override { return true; }
     void left() override;
     [[nodiscard]] std::optional<::core::tui::EventResult> intercept(::core::tui::KeyEvent const& key) override;
     [[nodiscard]] std::string_view placeholder() const override { return {}; }
@@ -153,6 +195,7 @@ private:
 
     ui::DateMode _mode;
     int _offsetMinutes;
+    std::string _pattern;
     ::core::tui::InputField* _field;
     std::optional<morph::time::DateTime> _committed;  ///< The instant last set or committed; none for an empty field.
     bool _invalid = false;
@@ -170,14 +213,18 @@ public:
     }
     void setPath(std::string_view path) override;
     void setOnPicked(std::function<void(std::string)> onPicked) override;
-    [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override;
-    void paint(::core::tui::Canvas& canvas) override;
+
+protected:
+    [[nodiscard]] ::core::tui::Size controlSize() const override;
+    void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
     void edited() override {}
     void submitted() override;
+    /// Enter picks what was typed, and stops here.
+    [[nodiscard]] bool submits() const override { return true; }
     void left() override;
     [[nodiscard]] std::optional<::core::tui::EventResult> intercept(::core::tui::KeyEvent const& /*key*/) override {
         return std::nullopt;

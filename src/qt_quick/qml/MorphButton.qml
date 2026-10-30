@@ -5,7 +5,9 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // A button: a click, Space or Enter activates it. A list item (`style` 1) is the same button drawn as a line of a
-// list: as wide as its line, its label at the start, unframed, and marked while `selected`.
+// list: as wide as its line, its label at the start, unframed, and marked while `selected`. An item with content
+// draws it in place of its label, inside the `Button`, so a press anywhere on it is the button's; the label still
+// names it.
 MorphWidget {
     id: root
 
@@ -14,34 +16,138 @@ MorphWidget {
     property string label: ""
     // An icon of the theme's icon set, drawn beside the label when the set names it; set once.
     property string icon: ""
-    // 0 normal (outlined), 1 primary (accent-filled), 2 danger (error-filled), 3 ghost (no chrome of its own); set
-    // once.
+    // 0 normal (outlined), 1 primary (accent-filled), 2 danger (error-filled), 3 ghost (no chrome of its own), 4
+    // danger outlined (a normal frame with the error colour's border and label); set once.
     property int emphasis: 0
     // 0 push, 1 item; set once.
     property int style: 0
-    // Whether an item is the current entry of its list; a push button is never told.
+    // Whether an item is the current entry of its list, or a push button is pressed in.
     property bool selected: false
+    // Whether the document gave the button a selection: set with the first `selected`. Such a push button is a toggle
+    // to assistive technology. The control is not `checkable`, since a click would flip `checked` whatever the
+    // document answers.
+    property bool selectable: false
+    // A dense button: the least side padding and the small type step; set once. `round` is the widget's.
+    property bool small: false
+    // Whether the caption is drawn in the mono face; set once.
+    property bool mono: false
+    // Set by C++ once an item has content: the content column becomes the button's content item.
+    property bool hasContent: false
+    // Where C++ puts an item's content.
+    readonly property Item content: contentColumn
+    // Whether a selected item is marked in the accent (a bar and an accent label) and not by a fill alone.
+    readonly property bool accentSelection: root.style === 1 && root.selected && !root.scheme.listSelectionFill
+    // The scheme an item's content draws in: the button's, except that its text role follows the selection, so a
+    // selected item's content reads as its label does. Made with the content, since only an item with content has
+    // anything to hand it.
+    property MorphScheme contentSchemeMade: null
+    readonly property MorphScheme contentScheme: contentSchemeMade ?? root.scheme
     readonly property bool ghost: emphasis === 3
     readonly property color fill: emphasis === 1 ? root.scheme.accent
                                  : emphasis === 2 ? root.scheme.error
                                  : ghost ? "transparent"
-                                         : root.scheme.surface
+                                         : root.scheme.controlSurface
 
     // The widget's item is the one node a driver finds by test id, so it is the button: it carries the role, the
     // label as its name and the press action, and the control inside it is not a second node.
     defaultName: label
     defaultRole: Accessible.Button
+    Accessible.checkable: root.selectable && root.style === 0
+    Accessible.checked: root.selectable && root.style === 0 && root.selected
     Accessible.onPressAction: root.fire("click", undefined)
 
     focusTarget: button
-    implicitWidth: button.implicitWidth
+    // A square push button: the one asked for, or, under the theme's `shape.iconOnly`, a push button that gives no
+    // shape and whose caption is an icon alone.
+    readonly property bool squared: root.square || (Theme.iconOnlySquare && !root.round && root.style === 0
+                                                    && root.label === "" && root.icon !== "")
+    // A round or square button is at least as wide as it is tall: a circle or a square for a short caption, a
+    // stadium or a wider button for a longer one.
+    implicitWidth: root.round || root.squared ? Math.max(button.implicitWidth, button.implicitHeight)
+                                              : button.implicitWidth
     implicitHeight: button.implicitHeight
+
+    // The caption's font: the body face, strong for a filled button; a small button draws a strong caption in the
+    // small step, and a mono one in the mono role's face.
+    readonly property bool strongCaption: root.small || root.squared
+                                          || !(root.emphasis === 0 || root.emphasis === 4 || root.ghost)
+    readonly property font captionFont: {
+        if (root.small || root.mono) {
+            const pixels = root.small ? Theme.smallPixels : root.mono ? Theme.monoPixels : Theme.bodyPixels
+            const weight = root.strongCaption ? Theme.strongWeight : Font.Normal
+            return root.mono ? Theme.monoFontOf(pixels, weight) : Theme.fontOf(pixels, weight)
+        }
+        return root.strongCaption ? Theme.strongFont : Theme.bodyFont
+    }
 
     // An item's content: the icon, then the label at the start of the line, in the accent while selected. The push
     // button keeps its style's own centred content.
     onStyleChanged: {
-        if (root.style === 1)
+        if (root.style === 1 && !root.hasContent)
             button.contentItem = itemContent.createObject(button)
+    }
+    onHasContentChanged: {
+        if (root.hasContent) {
+            if (root.contentSchemeMade === null)
+                root.contentSchemeMade = contentSchemeComponent.createObject(root) as MorphScheme
+            button.contentItem = contentColumn
+            // Inside the button, above its background: the column is declared before the button, so left a child of
+            // the widget it would be painted under the button's fill.
+            contentColumn.parent = button
+        }
+    }
+
+    Component {
+        id: contentSchemeComponent
+
+        MorphScheme {
+            surface: root.scheme.surface
+            text: root.accentSelection ? root.scheme.accent : root.scheme.text
+            muted: root.scheme.muted
+            accent: root.scheme.accent
+            focus: root.scheme.focus
+            selection: root.scheme.selection
+            border: root.scheme.border
+            neutral: root.scheme.neutral
+            neutralBg: root.scheme.neutralBg
+            neutralBorder: root.scheme.neutralBorder
+            neutralDot: root.scheme.neutralDot
+            hover: root.scheme.hover
+            track: root.scheme.track
+            controlSurface: root.scheme.controlSurface
+            controlBorder: root.scheme.controlBorder
+            divider: root.scheme.divider
+            borderDashed: root.scheme.borderDashed
+            listSelectionFill: root.scheme.listSelectionFill
+            error: root.scheme.error
+            success: root.scheme.success
+            info: root.scheme.info
+            warn: root.scheme.warn
+            successBg: root.scheme.successBg
+            successBorder: root.scheme.successBorder
+            successDot: root.scheme.successDot
+            warnBg: root.scheme.warnBg
+            warnBorder: root.scheme.warnBorder
+            warnDot: root.scheme.warnDot
+            errorBg: root.scheme.errorBg
+            errorBorder: root.scheme.errorBorder
+            errorDot: root.scheme.errorDot
+            infoBg: root.scheme.infoBg
+            infoBorder: root.scheme.infoBorder
+            infoDot: root.scheme.infoDot
+            tableHeader: root.scheme.tableHeader
+            chart1: root.scheme.chart1
+            chart2: root.scheme.chart2
+            chart3: root.scheme.chart3
+            chart4: root.scheme.chart4
+        }
+    }
+
+    ColumnLayout {
+        id: contentColumn
+        objectName: "content"
+        visible: root.hasContent
+        spacing: 0
     }
 
     Component {
@@ -51,15 +157,16 @@ MorphWidget {
             spacing: Theme.spaceOf(2)
 
             Image {
-                source: Theme.iconSource(root.icon)
+                source: Theme.iconSourceIn(root.icon, root.accentSelection ? root.scheme.accent : root.scheme.text)
                 visible: root.icon !== "" && source.toString() !== ""
                 Layout.preferredWidth: Theme.bodyPixels
                 Layout.preferredHeight: Theme.bodyPixels
             }
             Label {
+                textFormat: Text.PlainText
                 text: root.label
                 font: Theme.bodyFont
-                color: root.selected ? root.scheme.accent : root.scheme.text
+                color: root.accentSelection ? root.scheme.accent : root.scheme.text
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignLeft
                 verticalAlignment: Text.AlignVCenter
@@ -73,18 +180,30 @@ MorphWidget {
         id: button
         anchors.fill: parent
         text: root.label
-        leftPadding: root.ghost ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
-        rightPadding: root.ghost ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
-        palette.buttonText: root.emphasis === 0 || root.ghost ? root.scheme.text : "white"
-        font: root.emphasis === 0 || root.ghost ? Theme.bodyFont : Theme.strongFont
-        icon.source: Theme.iconSource(root.icon)
+        leftPadding: root.ghost || root.small || root.squared ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
+        rightPadding: leftPadding
+        palette.buttonText: root.emphasis === 4 ? root.scheme.error
+                            : root.ghost ? root.scheme.accent
+                            : root.emphasis === 0 ? root.scheme.text : "white"
+        font: root.captionFont
+        icon.source: Theme.iconSourceIn(root.icon, button.palette.buttonText)
         icon.color: "transparent"
+        contentItem: MorphPlainContent {
+            control: button
+            color: button.palette.buttonText
+            iconName: root.icon
+            fallbackText: root.accessibleName
+        }
         background: MorphButtonBackground {
             scheme: root.scheme
             fill: root.fill
             filled: root.emphasis === 1 || root.emphasis === 2
             item: root.style === 1
             ghost: root.ghost
+            round: root.round
+            compact: root.small
+            square: root.squared
+            borderColor: root.emphasis === 4 ? root.scheme.errorBorder : root.scheme.controlBorder
             selected: root.selected
             hovered: button.hovered
             pressed: button.down
@@ -92,7 +211,15 @@ MorphWidget {
         }
         Accessible.ignored: true
         onClicked: root.fire("click", undefined)
-        Keys.onReturnPressed: root.fire("click", undefined)
-        Keys.onEnterPressed: root.fire("click", undefined)
+        // A chord the button declares comes before its own click; Return and Enter click it otherwise.
+        Keys.onReturnPressed: event => {
+            if (!root.takeOwnChord(event))
+                root.fire("click", undefined)
+        }
+        Keys.onEnterPressed: event => {
+            if (!root.takeOwnChord(event))
+                root.fire("click", undefined)
+        }
+        Keys.onPressed: event => event.accepted = root.takeOwnChord(event)
     }
 }

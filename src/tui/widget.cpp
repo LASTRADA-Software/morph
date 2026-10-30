@@ -208,9 +208,10 @@ std::optional<ui::Tone> WidgetBase::effectiveRowTone() const noexcept {
 
 namespace {
 
-/// Whether the terminal draws a surface inverted: the dark navigator column and the top bar of the app shell.
+/// Whether the terminal draws a surface inverted: the dark navigator column and the top bar of the app shell, joined
+/// to the head's block or not.
 [[nodiscard]] bool invertsSurface(std::string_view surface) noexcept {
-    return surface == "sidebar" || surface == "toolbar";
+    return surface == "sidebar" || surface == "toolbar" || surface == "toolbarJoined";
 }
 
 /// Marks every cell of @p area inverse: what an inverted surface does to what a widget on it painted. Set rather than
@@ -344,11 +345,13 @@ EventResult WidgetBase::dispatch(::core::tui::InputEvent const& event) {
     }
     if (auto const* pressed = std::get_if<::core::tui::KeyEvent>(&event);
         pressed != nullptr && actionable() && !blockedByDialog()) {
-        // A handler of the widget's own key may destroy it; only an ignored key goes on to its chords.
-        if (EventResult const result = key(*pressed); result != EventResult::Ignored) {
+        // A chord the widget declares comes before its own handling of the key: declaring it on this very node is
+        // how an author says the key means something else here. Either handler may destroy the widget, so a handled
+        // key returns at once.
+        if (EventResult const result = chord(*pressed); result != EventResult::Ignored) {
             return result;
         }
-        return chord(*pressed);
+        return key(*pressed);
     }
     return EventResult::Ignored;
 }
@@ -387,21 +390,38 @@ void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks) {
     canvas.putString(0, canvas.width() - width, marks, canvas.theme().warning);
 }
 
-::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption) {
+void paintFieldDescription(::core::tui::Canvas& canvas, std::string_view description, ui::Tone tone) {
+    ::core::tui::Style const& style =
+        tone == ui::Tone::Neutral ? canvas.theme().textMuted : toneStyle(canvas.theme(), tone);
+    int row = 0;
+    for (auto const line : splitLines(description)) {
+        if (row >= canvas.height()) {
+            return;
+        }
+        canvas.putString(row, 0, line, style);
+        ++row;
+    }
+}
+
+::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption, bool required) {
     if (caption.empty()) {
         return canvas.subcanvas({.x = 0, .y = 0, .width = canvas.width(), .height = canvas.height()});
     }
     if (canvas.height() > 0) {
-        canvas.putString(0, 0, caption, canvas.theme().textNormal);
+        int const end = canvas.putString(0, 0, caption, canvas.theme().textNormal);
+        if (required) {
+            canvas.putString(0, end, kRequiredMark, canvas.theme().error);
+        }
     }
     return canvas.subcanvas({.x = 0, .y = 1, .width = canvas.width(), .height = std::max(0, canvas.height() - 1)});
 }
 
-::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption) {
+::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption, bool required) {
     if (caption.empty()) {
         return control;
     }
-    return {.width = std::max(control.width, displayWidth(caption)), .height = control.height + 1};
+    int const mark = required ? displayWidth(kRequiredMark) : 0;
+    return {.width = std::max(control.width, displayWidth(caption) + mark), .height = control.height + 1};
 }
 
 EventResult WidgetBase::pointer(::core::tui::MouseEvent const& mouse) {
@@ -500,7 +520,7 @@ EventResult WidgetBase::release(::core::tui::MouseEvent const& mouse) {
     auto const bounds = _view->screenBounds();
     bool const inside = cell.x >= 0 && cell.y >= 0 && cell.x < bounds.width && cell.y < bounds.height;
     if (inside && actionable()) {
-        click({.x = cell.x + _drawShift.x, .y = cell.y + _drawShift.y});
+        clickWith({.x = cell.x + _drawShift.x, .y = cell.y + _drawShift.y}, mouse.modifiers);
     }
     return EventResult::Handled;
 }
@@ -716,6 +736,7 @@ void solvedAreas(std::span<WidgetBase* const> children, Placement const& placeme
 void columnAreas(std::span<WidgetBase* const> children, Placement const& placement, StackSpec const& spec,
                  std::span<::core::tui::Rect> areas) {
     auto given = spec.extents.begin();
+    auto place = spec.places.begin();
     int offset = 0;
     for (auto const [child, area] : std::views::zip(children, areas)) {
         int extent = 0;
@@ -725,8 +746,18 @@ void columnAreas(std::span<WidgetBase* const> children, Placement const& placeme
         } else {
             extent = mainExtent(child->naturalSize(), placement.vertical);
         }
+        CellPlace const placed =
+            place != spec.places.end() ? *place++ : CellPlace{.across = ui::Align::Start, .down = spec.align};
         if (child->shown()) {
-            area = slotOf(*child, placement, offset, extent, spec.align);
+            area = slotOf(*child, placement, offset, extent, placed.down);
+            // A cell placed at its natural width sits where its column asks; a wider one fills the column.
+            if (!placement.vertical && child->placedAcrossColumn() &&
+                (placed.across == ui::Align::Center || placed.across == ui::Align::End)) {
+                int const space = extent;
+                int const natural = std::min(requestedSize(*child).width, space);
+                area.x += alignedOffset(placed.across, natural, space);
+                area.width = natural;
+            }
         }
         offset += extent + spec.gap;
     }
@@ -753,6 +784,15 @@ int alignedExtent(ui::Align align, ui::Sizing sizing, int requested, int space, 
         return std::clamp(requested, 0, std::max(0, space));
     }
     return layout::crossExtent(sizing, space, bounds);
+}
+
+void bleedAreas(std::span<WidgetBase* const> children, std::vector<::core::tui::Rect>& areas, ::core::tui::Rect span) {
+    for (auto const [child, area] : std::views::zip(children, areas)) {
+        if (child->shown() && (child->layout().bleed || child->passesBleed()) && area.width > 0 && area.height > 0) {
+            area.x = span.x;
+            area.width = span.width;
+        }
+    }
 }
 
 std::vector<::core::tui::Rect> stackAreas(std::span<WidgetBase* const> children, ::core::tui::Rect area,
@@ -787,6 +827,38 @@ std::vector<std::string_view> splitLines(std::string_view text) {
 }
 
 int displayWidth(std::string_view text) { return ::core::tui::stringWidth(text); }
+
+void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& runs, ::core::tui::Style const& style,
+               bool multiline, int row, int column) {
+    for (ui::TextSpan const& run : runs) {
+        ::core::tui::Style runStyle = style;
+        runStyle.bold = style.bold || run.strong;
+        if (run.action) {
+            // The banner's link: the accent, underlined.
+            runStyle.fg = canvas.theme().textAccent.fg;
+            runStyle.underline = true;
+        }
+        if (run.tone != ui::Tone::Neutral) {
+            runStyle.fg = toneStyle(canvas.theme(), run.tone).fg;
+        }
+        bool first = true;
+        for (auto const line : splitLines(run.text)) {
+            if (!first) {
+                if (multiline) {
+                    ++row;
+                    column = 0;
+                } else {
+                    column += canvas.putString(row, column, " ", runStyle);
+                }
+            }
+            first = false;
+            if (row >= canvas.height()) {
+                return;
+            }
+            column += canvas.putString(row, column, line, runStyle);
+        }
+    }
+}
 
 bool isActivation(::core::tui::KeyEvent const& key) noexcept {
     return ::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None &&

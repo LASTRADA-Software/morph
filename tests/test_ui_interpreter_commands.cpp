@@ -414,7 +414,7 @@ TEST_CASE("interpreter commands: a table's element values, and onActivate in the
           "onActivate": [ { "set": "picked", "value": { "ref": "label" } } ] },
         { "kind": "text", "testId": "values", "text": { "fn": "format", "args": [ "{0}/{1}/{2}/{3}",
             { "ref": "t.viewCount" }, { "ref": "t.sourceCount" }, { "ref": "t.pending" }, { "ref": "t.selectedCount" } ] } },
-        { "kind": "text", "testId": "error", "text": { "fn": "coalesce", "args": [ { "ref": "t.error" }, { "ref": "t.sort" }, "-" ] } } ] } })");
+        { "kind": "text", "testId": "error", "text": { "fn": "coalesce", "args": [ { "ref": "t.error" }, { "ref": "t.hoveredKey" }, "-" ] } } ] } })");
     CHECK(h.text("values") == "0/0/true/0");
     h.reply(0, R"([{"id":1,"name":"a"},{"id":2,"name":"b"}])");
     CHECK(h.text("values") == "2/2/false/0");
@@ -427,6 +427,7 @@ TEST_CASE("interpreter commands: a table's element values, and onActivate in the
     h.settle();
     CHECK(h.text("values") == "2/2/false/1");
     CHECK(readJson(*screen, R"({"ref": "t.selection"})") == "[1]");
+    CHECK(readJson(*screen, R"({"ref": "t.sort"})") == "[]");
     CHECK(h.text("error") == "-");
 }
 
@@ -658,6 +659,32 @@ TEST_CASE("interpreter commands: a dialog's actions are buttons in its footer, r
     CHECK(h.text("saved") == "by enter");
 }
 
+// Mutation: drop `ActionModel::icon` in `actionBarOf` (the button has no icon), or ignore `iconOnly` (the label
+// stays).
+TEST_CASE("interpreter commands: a dialog's footer action keeps its icon, and draws it alone while iconOnly",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "overlay.icons",
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "open", "label": "open", "onClick": { "open": "dlg" } },
+        { "kind": "dialog", "id": "dlg",
+          "actions": [
+            { "id": "scan", "label": "Scan", "icon": "scan" },
+            { "id": "only", "label": "Only", "icon": "scan", "iconOnly": true } ],
+          "children": [ { "kind": "text", "text": "Body" } ] } ] } })");
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    int const scan = h.byTestId("Button", "action_scan");
+    CHECK(h.backend.prop(scan, "icon") == "scan");
+    CHECK(h.backend.prop(scan, "label") == "Scan");
+    int const only = h.byTestId("Button", "action_only");
+    CHECK(h.backend.prop(only, "icon") == "scan");
+    CHECK(h.backend.prop(only, "label").empty());
+    CHECK(h.backend.prop(only, "a11yName") == "Only");
+    CHECK(h.backend.prop(only, "tooltip") == "Only");
+}
+
 // Mutation: let an action bar mount wherever it is (it would show in the column, under no overlay).
 TEST_CASE("mount: an action bar outside a dialog's or drawer's content is refused", "[ui][interpreter]") {
     Harness h;
@@ -883,6 +910,24 @@ TEST_CASE("button: style item draws a list entry, and selected follows its condi
     CHECK(h.diagnostics.empty());
 }
 
+// Mutation: bind `selected` for an item alone (the push button records no selection).
+TEST_CASE("button: a push button's selected follows its condition", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "wells", "state": { "on": { "init": true } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "well", "label": "A1", "selected": { "ref": "on" },
+          "onClick": [ { "set": "on", "value": false } ] },
+        { "kind": "button", "testId": "plain", "label": "P" } ] } })");
+    int const well = h.byTestId("Button", "well");
+    CHECK(h.backend.prop(well, "selected") == "true");
+    CHECK(h.backend.prop(well, "style").empty());
+    CHECK_FALSE(h.backend.hasProp(h.byTestId("Button", "plain"), "selected"));
+    h.backend.click(well);
+    h.settle();
+    CHECK(h.backend.prop(well, "selected") == "false");
+}
+
 // Mutation: lower a computed role through roleOf (an unknown name is drawn Normal, unreported).
 TEST_CASE("text: a computed role of no known name is reported once for its path and drawn Normal",
           "[ui][interpreter]") {
@@ -1098,4 +1143,228 @@ TEST_CASE("interpreter slider: a drag reports each change, and a finished move a
     CHECK(readJson(*screen, R"({"ref": "log"})") == R"("change change commit")");
     CHECK(readJson(*screen, R"({"ref": "committed"})") == "5");
     CHECK(h.text("touched") == "true");
+}
+
+namespace {
+
+// `close: self` from each place a dialog's content runs commands: an action, the `default`, a button inside a
+// `switch` case, and a component's fallback; and from a component at screen level.
+constexpr char const* kCloseSelf = R"({
+  "vocab": "ui/1", "id": "self.scope", "state": { "on": { "init": "a" } },
+  "components": { "Closer": { "qml": "sha256:4b1e0000000000000000000000000000000000000000000000000000000000ab",
+                              "fallback": { "kind": "button", "testId": "componentClose", "label": "close",
+                                            "onClick": [ { "close": "self" } ] } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "open", "label": "open", "onClick": { "open": "dlg" } },
+    { "kind": "custom", "name": "Closer" },
+    { "kind": "dialog", "id": "dlg", "default": [ { "close": "self" } ],
+      "actions": [ { "id": "done", "label": "Done", "onClick": [ { "close": "self" } ] } ],
+      "children": [
+        { "kind": "switch", "on": { "ref": "on" }, "cases": [
+          { "when": "a", "children": [ { "kind": "button", "testId": "caseClose", "label": "close",
+                                         "onClick": [ { "close": "self" } ] } ] } ] },
+        { "kind": "custom", "name": "Closer" } ] } ] } })";
+
+/// The number of `closeSelf` calls the host saw.
+std::size_t closes(Harness const& h) {
+    return static_cast<std::size_t>(
+        std::ranges::count_if(h.host.log, [](std::string const& line) { return line.starts_with("close "); }));
+}
+
+/// The first widget under @p root, @p root included, whose test id is @p testId.
+// NOLINTNEXTLINE(misc-no-recursion): the widget tree is finite.
+std::optional<int> within(ui::testing::RecordingBackend const& backend, int root, std::string const& testId) {
+    if (backend.prop(root, "testId") == testId) {
+        return root;
+    }
+    for (int const child : backend.children(root)) {
+        if (std::optional<int> const found = within(backend, child, testId)) {
+            return found;
+        }
+    }
+    return std::nullopt;
+}
+
+/// Opens the dialog of `kCloseSelf` and returns the Dialog widget.
+int openDialog(Harness& h) {
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    int const dialog = h.backend.all("Dialog").at(0);
+    REQUIRE(h.backend.prop(dialog, "open") == "true");
+    return dialog;
+}
+
+}  // namespace
+
+// Mutation: send every `close: self` to the host (the dialog stays open, and the host is asked to close the screen).
+TEST_CASE("interpreter commands: close self inside a dialog closes that dialog, not the screen", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(kCloseSelf);
+    SECTION("from an action") {
+        int const dialog = openDialog(h);
+        h.backend.click(h.byTestId("Button", "action_done"));
+        h.settle();
+        CHECK(h.backend.prop(dialog, "open") == "false");
+    }
+    SECTION("from the default, pressed on the content column that declares it") {
+        int const dialog = openDialog(h);
+        std::optional<int> const content = h.backend.find("Column", "keys", "Enter");
+        REQUIRE(content.has_value());
+        CHECK(h.backend.press(*content, "Enter"));
+        h.settle();
+        CHECK(h.backend.prop(dialog, "open") == "false");
+    }
+    SECTION("from a switch case inside it") {
+        int const dialog = openDialog(h);
+        h.backend.click(h.byTestId("Button", "caseClose"));
+        h.settle();
+        CHECK(h.backend.prop(dialog, "open") == "false");
+    }
+    CHECK(closes(h) == 0);
+    CHECK(h.diagnostics.empty());
+}
+
+// Mutation: let the walk end anywhere and ask the host (the screen-level component's click reaches closeSelf).
+TEST_CASE("interpreter commands: close self inside a component names no dialog or drawer of its own",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(kCloseSelf);
+    SECTION("at screen level") {
+        h.backend.click(h.byTestId("Button", "componentClose"));
+        h.settle();
+    }
+    SECTION("inside a dialog, which stays open") {
+        int const dialog = openDialog(h);
+        std::optional<int> const inner = within(h.backend, dialog, "componentClose");
+        REQUIRE(inner.has_value());
+        h.backend.click(*inner);
+        h.settle();
+        CHECK(h.backend.prop(dialog, "open") == "true");
+    }
+    CHECK(closes(h) == 0);
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().reason == "`close: self` inside a component names no dialog or drawer");
+}
+
+namespace {
+
+// The text inputs, in the order they were mounted.
+std::vector<int> inputs(Harness const& h) { return h.backend.all("TextInput"); }
+
+// The buttons with test id @p testId, in the order they were mounted.
+std::vector<int> buttons(Harness const& h, std::string_view testId) {
+    std::vector<int> found;
+    for (int const button : h.backend.all("Button")) {
+        if (h.backend.prop(button, "testId") == testId) {
+            found.push_back(button);
+        }
+    }
+    return found;
+}
+
+}  // namespace
+
+// Mutation: key every element by its id again (`focusId = node.id`): the first row's field takes the focus.
+TEST_CASE("interpreter commands: focus takes the declaration the command names, not the first widget of its name",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "named",
+      "view": { "kind": "column", "children": [
+        { "kind": "forEach", "rows": { "lit": [ 1, 2 ] }, "children": [ { "kind": "textInput", "id": "name" } ] },
+        { "kind": "textInput", "id": "name", "testId": "screenName" },
+        { "kind": "button", "testId": "go", "label": "Go", "onClick": { "focus": "name" } } ] } })");
+    h.backend.click(h.byTestId("Button", "go"));
+    h.settle();
+    CHECK(h.backend.focused() == h.byTestId("TextInput", "screenName"));
+}
+
+// Mutation: drop the search through switch cases from checkFocus (the document is refused: `perPull` is not an
+// element of this scope).
+TEST_CASE("interpreter commands: focus reaches an element in a switch case, and the case shown", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "wizard",
+      "state": { "step": { "init": 0 } },
+      "view": { "kind": "column", "children": [
+        { "kind": "switch", "on": { "ref": "step" }, "cases": [
+          { "when": 0, "children": [ { "kind": "text", "text": "intro" } ] },
+          { "when": 1, "children": [ { "kind": "textInput", "id": "perPull", "testId": "perPull" },
+                                     { "kind": "textInput", "id": "notes", "testId": "notes1" } ] },
+          { "when": 2, "children": [ { "kind": "textInput", "id": "notes", "testId": "notes2" } ] } ] },
+        { "kind": "button", "testId": "toPull", "label": "Pull", "onClick": { "focus": "perPull" } },
+        { "kind": "button", "testId": "toNotes", "label": "Notes", "onClick": { "focus": "notes" } },
+        { "kind": "button", "testId": "one", "label": "1", "onClick": { "set": "step", "value": 1 } },
+        { "kind": "button", "testId": "two", "label": "2", "onClick": { "set": "step", "value": 2 } } ] } })");
+    h.backend.click(h.byTestId("Button", "toPull"));
+    h.settle();
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().reason == "`perPull` is not mounted");
+    h.backend.click(h.byTestId("Button", "one"));
+    h.settle();
+    h.backend.click(h.byTestId("Button", "toPull"));
+    h.settle();
+    CHECK(h.backend.focused() == h.byTestId("TextInput", "perPull"));
+    h.backend.click(h.byTestId("Button", "toNotes"));
+    h.settle();
+    CHECK(h.backend.focused() == h.byTestId("TextInput", "notes1"));
+    h.backend.click(h.byTestId("Button", "two"));
+    h.settle();
+    h.backend.click(h.byTestId("Button", "toNotes"));
+    h.settle();
+    CHECK(h.backend.focused() == h.byTestId("TextInput", "notes2"));
+}
+
+// Mutation: replace the row key with the command's own (ignore `row`): row 2's button focuses row 2's field.
+TEST_CASE("interpreter commands: inside a row, focus takes that row's element, and `row` another row's",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "rows",
+      "view": { "kind": "forEach", "rows": { "lit": [ 1, 2, 3 ] }, "children": [
+        { "kind": "textInput", "id": "name" },
+        { "kind": "button", "testId": "here", "label": "Here", "onClick": { "focus": "name" } },
+        { "kind": "button", "testId": "third", "label": "Third", "onClick": { "focus": "name", "row": 3 } } ] } })");
+    std::vector<int> const fields = inputs(h);
+    REQUIRE(fields.size() == 3);
+    h.backend.click(buttons(h, "here").at(1));
+    h.settle();
+    CHECK(h.backend.focused() == fields.at(1));
+    h.backend.click(buttons(h, "third").at(0));
+    h.settle();
+    CHECK(h.backend.focused() == fields.at(2));
+}
+
+// Mutation: key a row's element by its innermost row key only (outer row 1's inner row 3 takes the focus).
+TEST_CASE("interpreter commands: `row` in a nested forEach keeps the outer row", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "grid",
+      "view": { "kind": "forEach", "rows": { "lit": [ 1, 2 ] }, "children": [
+        { "kind": "forEach", "rows": { "lit": [ 1, 2, 3 ] }, "children": [
+          { "kind": "textInput", "id": "cell" },
+          { "kind": "button", "testId": "third", "label": "Third", "onClick": { "focus": "cell", "row": 3 } } ] } ] } })");
+    std::vector<int> const fields = inputs(h);
+    REQUIRE(fields.size() == 6);
+    // Outer row 2, inner row 1: the fourth button.
+    h.backend.click(buttons(h, "third").at(3));
+    h.settle();
+    CHECK(h.backend.focused() == fields.at(5));
+}
+
+// Mutation: key an element by its pointer alone, without the component use (the first use's field takes it).
+TEST_CASE("interpreter commands: focus inside a component use takes that use's element", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "uses",
+      "components": { "Field": { "host": "Field", "version": 1, "fallback": { "kind": "column", "children": [
+        { "kind": "textInput", "id": "name" },
+        { "kind": "button", "testId": "here", "label": "Here", "onClick": { "focus": "name" } } ] } } },
+      "view": { "kind": "column", "children": [ { "kind": "custom", "name": "Field" },
+                                                { "kind": "custom", "name": "Field" } ] } })");
+    std::vector<int> const fields = inputs(h);
+    REQUIRE(fields.size() == 2);
+    h.backend.click(buttons(h, "here").at(1));
+    h.settle();
+    CHECK(h.backend.focused() == fields.at(1));
 }

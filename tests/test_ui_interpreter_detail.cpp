@@ -485,3 +485,149 @@ TEST_CASE("interpreter: a sizing is \"content\", or one fixed or stretch member 
     CHECK_FALSE(isSizing(record({{"fixed", Value{std::int64_t{3}}}, {"stretch", Value{std::int64_t{1}}}})));
     CHECK_FALSE(isSizing(Value{std::int64_t{3}}));
 }
+
+namespace {
+
+/// @brief The `layout=` of the widget a slot shows, the slot's direct child, from the backend's dump.
+/// @param dump  The dump.
+/// @param slot  The line prefix of the slot whose child to read.
+/// @return The layout text; `content/content` for a child that records none, empty when the slot shows nothing.
+std::string slotChildLayout(std::string const& dump, std::string const& slot) {
+    std::size_t const at = dump.find(slot);
+    if (at == std::string::npos) {
+        return {};
+    }
+    std::size_t const child = dump.find('\n', at);
+    std::size_t const end = dump.find('\n', child + 1);
+    std::string const line = dump.substr(child + 1, end - child - 1);
+    std::size_t const key = line.find("layout=");
+    if (key == std::string::npos) {
+        return "content/content";  // A default request is never recorded.
+    }
+    std::size_t const stop = line.find(' ', key);
+    return line.substr(key + 7, stop == std::string::npos ? std::string::npos : stop - key - 7);
+}
+
+}  // namespace
+
+// A slot reads its direct child's sizing alone, and the node a `switch` mounts is that child; so the holder's own
+// sizing is what the checks read. Mutation: build `lazy` without the hints (the inner column still stretches, the
+// slot's child does not), or build the column without `listColumn`.
+TEST_CASE("interpreter: a switch case, a default and a dialog body pass their children's stretch to the slot",
+          "[ui][interpreter][layout]") {
+    auto const mounted = [](std::string const& cases, std::string const& fallback, ui::testing::Harness& h) {
+        return h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "switch", "on": 2, "cases": [)" + cases +
+                       R"(], "default": [)" + fallback + R"(] } })");
+    };
+    std::string const stretching =
+        R"({ "kind": "column", "sizing": { "lit": { "height": { "stretch": 1 } } }, "children": [ { "kind": "spacer" } ] })";
+    std::string const text = R"({ "kind": "text", "text": "a" })";
+    SECTION("a case holding a column that stretches down") {
+        ui::testing::Harness h;
+        auto screen = mounted(R"({ "when": 2, "children": [)" + stretching + "] }", text, h);
+        CHECK(slotChildLayout(h.backend.dump(), "Slot") == "content/stretch(1)");
+    }
+    SECTION("a case holding two texts") {
+        ui::testing::Harness h;
+        auto screen = mounted(R"({ "when": 2, "children": [)" + text + "," + text + "] }", text, h);
+        CHECK(slotChildLayout(h.backend.dump(), "Slot") == "content/content");
+    }
+    SECTION("a default of two nodes, one stretching across by 2") {
+        ui::testing::Harness h;
+        std::string const wide = R"({ "kind": "spacer", "sizing": { "lit": { "width": { "stretch": 2 } } } })";
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "switch", "on": 9, "cases": [],
+            "default": [)" + wide +
+                              "," + text + R"(] } })");
+        CHECK(slotChildLayout(h.backend.dump(), "Slot") == "stretch(2)/content");
+    }
+    SECTION("a dialog body holding a stretching text input") {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "dialog", "open": true,
+            "children": [ { "kind": "textInput", "sizing": { "lit": { "stretch": 1 } } } ] } })");
+        CHECK(slotChildLayout(h.backend.dump(), "Dialog") == "stretch(1)/content");
+    }
+    SECTION("a case whose child's sizing reads a name the case declares is held at its content size and reported") {
+        ui::testing::Harness h;
+        auto screen = mounted(
+            R"({ "when": 2, "scope": { "state": { "wide": { "init": true } } }, "children": [
+                 { "kind": "spacer", "sizing": { "if": [ { "ref": "wide" }, { "lit": { "stretch": 1 } }, "content" ] } } ] })",
+            text, h);
+        CHECK(slotChildLayout(h.backend.dump(), "Slot") == "content/content");
+        REQUIRE_FALSE(h.diagnostics.empty());
+        CHECK(h.diagnostics.front().path.contains("sizing"));
+    }
+}
+
+// Mutation: skip the report (the diagnostics stay empty), or keep `wrap` on a vertical stack.
+TEST_CASE("interpreter: a wrapping forEach whose computed axis is not horizontal is reported and does not wrap",
+          "[ui][interpreter][layout]") {
+    ui::testing::Harness h;
+    auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "state": { "on": { "init": false } },
+        "view": { "kind": "forEach", "rows": { "lit": [ 1, 2 ] }, "key": { "row": "" }, "wrap": true,
+                  "axis": { "if": [ { "ref": "on" }, "horizontal", "vertical" ] },
+                  "children": [ { "kind": "text", "text": "x" } ] } })");
+    REQUIRE_FALSE(h.diagnostics.empty());
+    CHECK(h.diagnostics.front().path == "/view/wrap");
+    CHECK_FALSE(h.backend.dump().contains("wrap=true"));
+}
+
+// Mutation: pass no gap to `lowerAll` or `holding` (every column records gap=0), or read the default as 0.
+TEST_CASE(
+    "interpreter: a panel, a collapsible, a dialog and a drawer space their children by gap, and a single child "
+    "is not wrapped",
+    "[ui][interpreter][layout]") {
+    auto const texts = [](std::string const& extra, int count) {
+        std::string made = R"("children": [)";
+        for (int at = 0; at < count; ++at) {
+            made += std::string{at > 0 ? "," : ""} + R"({ "kind": "text", "text": "t" })";
+        }
+        return extra + made + "]";
+    };
+    auto const dumpOf = [&](std::string const& kind, std::string const& extra, int count) {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": ")" + kind + R"(", )" +
+                              texts(extra, count) + " } }");
+        return h.backend.dump();
+    };
+    // The first column under the container that holds the children, its gap as the backend records it.
+    auto const gapOf = [](std::string const& dump, std::string const& container) {
+        std::size_t const at = dump.find(container);
+        // An overlay's body is a one-row ForEach holding the column that carries `visible`; its gap is the column's.
+        std::size_t column = dump.find("Column#", at);
+        if (std::size_t const held = dump.find("visible=true", at); held != std::string::npos) {
+            column = dump.rfind("Column#", held);
+        }
+        std::size_t const gap = dump.find("gap=", column);
+        return dump.substr(gap, dump.find_first_of(" \n", gap) - gap);
+    };
+    CHECK(gapOf(dumpOf("panel", "", 2), "Panel#") == "gap=2");
+    CHECK(gapOf(dumpOf("panel", R"("gap": 0,)", 2), "Panel#") == "gap=0");
+    CHECK(gapOf(dumpOf("collapsible", "", 2), "Collapsible#") == "gap=2");
+    CHECK(gapOf(dumpOf("dialog", R"("open": true,)", 2), "Dialog#") == "gap=3");
+    CHECK(gapOf(dumpOf("drawer", R"("open": true, "gap": 1,)", 2), "Drawer#") == "gap=1");
+    // A single child is lowered unwrapped, so a gap has nothing to space.
+    CHECK_FALSE(dumpOf("panel", "", 1).contains("Column#"));
+}
+
+// Mutation: drop the flag from `lowerAll`'s column (the panel's column records no `passesBleed`), or set it on a
+// column the document wrote.
+TEST_CASE(
+    "interpreter: a panel's or a tab's list of children lowers to a holder column, and a written column is not one",
+    "[ui][interpreter][layout]") {
+    auto const dumpOf = [](std::string const& view) {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": )" + view + " }");
+        return h.backend.dump();
+    };
+    std::string const two = R"("children": [{ "kind": "text", "text": "a" }, { "kind": "text", "text": "b" }])";
+    for (std::string const& kind : {"panel", "tabs"}) {
+        std::string const view = kind == "panel" ? R"({ "kind": "panel", )" + two + " }"
+                                                 : R"({ "kind": "tabs", "tabs": [{ "label": "A", )" + two + " }] }";
+        std::string const dump = dumpOf(view);
+        INFO(kind << ":\n" << dump);
+        CHECK(dump.contains("passesBleed=true"));
+    }
+    CHECK_FALSE(
+        dumpOf(R"({ "kind": "panel", "children": [{ "kind": "text", "text": "a" }] })").contains("passesBleed"));
+    CHECK_FALSE(dumpOf(R"({ "kind": "column", )" + two + " }").contains("passesBleed"));
+}

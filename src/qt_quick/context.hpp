@@ -21,6 +21,14 @@ namespace morph::qt_quick::detail {
 class ContainerCore;
 class Relay;
 
+/// Writes the family of the platform's fixed-pitch font as @p theme's `platformMonoFamily`, which QML cannot ask the
+/// font database for; whether the property took it.
+bool writePlatformMonoFamily(QObject& theme);
+
+/// Writes the text glyph of each framework icon name that has one as @p theme's `iconGlyphs`, the glyphs the terminal
+/// draws; whether the property took them.
+bool writeIconGlyphs(QObject& theme);
+
 /// What every widget of one backend shares: the engine, the compiled components, the column the roots go in, and
 /// the restyle map.
 class Context {
@@ -49,6 +57,9 @@ public:
     /// The engine.
     [[nodiscard]] QQmlEngine& engine() const noexcept { return *_engine; }
 
+    /// The engine's `Theme` singleton's object property @p name (`"cardScheme"`), or null when there is none.
+    [[nodiscard]] QObject* themeObject(char const* name) const;
+
     /// The components and the restyle map, or null.
     [[nodiscard]] Components* components() const noexcept { return _options.components; }
 
@@ -65,12 +76,21 @@ public:
     /// signal handlers and from a table's restriping while a row is destroyed, where an exception cannot pass.
     void undeclared(QObject const& item, char const* name);
 
+    /// The host item's width class: its width in `Theme.unitWidth`s, classed by `ui::widthClassOf`.
+    [[nodiscard]] std::string const& widthClass() const noexcept { return _widthClass; }
+
+    /// Registers the one listener told of each later change of `widthClass()`; empty clears it.
+    void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) {
+        _onWidthClass = std::move(onWidthClass);
+    }
+
     /// Reports, once per name, a node's icon that the bundle's declared icon set does not name; it is drawn as text.
     /// Without a declared set nothing is reported: every icon is drawn as text or as MorphUi's own.
     void checkIcon(std::string_view icon);
 
 private:
-    void widthChanged();
+    // The host's width in units changed: re-classes it, and tells the listener of a new class.
+    void widthChanged(double units);
     // A problem of a widget: through the components' failure callback, or on `std::cerr` without components.
     void report(std::string name, std::string reason) const;
 
@@ -80,6 +100,9 @@ private:
     std::unique_ptr<ContainerCore> _roots;
     std::map<QString, std::unique_ptr<QQmlComponent>> _components;
     std::string _widthClass;
+    std::function<void(std::string const&)> _onWidthClass;
+    // What the roots item reports its width in units through.
+    Relay* _rootsRelay = nullptr;
     std::set<std::pair<std::string, std::string>> _undeclared;
     std::set<std::string, std::less<>> _missingIcons;
 };

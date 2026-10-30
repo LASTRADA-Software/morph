@@ -186,5 +186,5 @@ TEST_CASE("ui::Mounted: a multiline text input refuses an icon", "[ui]") {
     RecordingBackend backend;
     CHECK_THROWS_WITH(
         (ui::Mounted{runtime, backend, ui::textInput({.mode = ui::TextInputMode::Multiline, .icon = "search"})}),
-        "morph::ui: a multiline text input holds no number, so it takes no unit, places or icon");
+        "morph::ui: a multiline text input holds no number, so it takes no unit, prefix, places or icon");
 }

@@ -461,16 +461,17 @@ private:
 
     // An input's event: the application's handler, run as `event` runs it, then the re-assertion of the request.
     // Installed whenever either exists, so a slot without a handler is read-only rather than editable.
-    template <typename T, typename Arg>
-    [[nodiscard]] std::function<void(Arg)> inputEvent(std::function<void(Arg)> const& handler,
-                                                      std::function<void(T const&)> reassert) const {
+    // The first argument is what the user asked for; any others (a table's kind of change) only reach the handler.
+    template <typename T, typename Arg, typename... Rest>
+    [[nodiscard]] std::function<void(Arg, Rest...)> inputEvent(std::function<void(Arg, Rest...)> const& handler,
+                                                               std::function<void(T const&)> reassert) const {
         if (!reassert) {
             return event(handler);
         }
-        return [inner = event(handler), reassert = std::move(reassert)](Arg arg) {
+        return [inner = event(handler), reassert = std::move(reassert)](Arg arg, Rest... rest) {
             T const requested(arg);
             if (inner) {
-                inner(std::move(arg));
+                inner(std::move(arg), std::move(rest)...);
             }
             reassert(requested);
         };
@@ -562,8 +563,8 @@ private:
         if (common.tooltip.isBound() || !common.tooltip.constant().empty()) {
             bind(scope, common.tooltip, [&widget](std::string const& text) { widget.setTooltip(text); });
         }
-        if (!common.surface.empty()) {
-            widget.setSurface(common.surface);
+        if (common.surface.isBound() || !common.surface.constant().empty()) {
+            bind(scope, common.surface, [&widget](std::string const& surface) { widget.setSurface(surface); });
         }
         if (!common.keys.empty()) {
             applyKeys(widget, common.keys);
@@ -630,9 +631,25 @@ private:
     // costs no call.
     Widget& mountStack(reactive::Scope& scope, Axis axis, std::vector<Node> const& children, int gap,
                        Common const& common, ContainerWidget* parent, Align align = Align::Stretch,
-                       Justify justify = Justify::Start) {
+                       Justify justify = Justify::Start, bool wrap = false, bool divided = false, Padding padding = {},
+                       std::optional<Prop<bool>> const& selected = std::nullopt, bool holder = false) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, axis));
+        if (holder) {
+            widget.setPassesBleed(true);
+        }
+        if (wrap) {
+            widget.setWrap(true);
+        }
+        if (divided) {
+            widget.setDivided(true);
+        }
+        if (Padding const inset = clampedPadding(padding); inset != Padding{}) {
+            widget.setPadding(inset);
+        }
         applyCommon(scope, widget, common);
+        if (selected) {
+            bind(scope, *selected, [&widget](bool chosen) { widget.setSelected(chosen); });
+        }
         widget.setGap(spacingStep(gap));
         if (align != Align::Stretch) {
             widget.setAlign(align);
@@ -644,47 +661,110 @@ private:
         return widget;
     }
 
-    // The entries as the widget shows them, each binding read once; called inside the menu's one binding.
-    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
-    [[nodiscard]] static std::vector<MenuEntry> entriesOf(std::vector<MenuItem> const& items) {
+    // A path through a menu tree: an index at each level from the top.
+    using MenuPath = std::vector<std::size_t>;
+
+    // What a menu sent its widget: the entries, and for each the path of the item it shows, so a reported path maps
+    // back to the item that was on screen even after a binding has hidden or shown another.
+    struct ShownMenu {
         std::vector<MenuEntry> entries;
-        entries.reserve(items.size());
-        for (MenuItem const& item : items) {
+        std::map<MenuPath, MenuPath> sources;
+
+        bool operator==(ShownMenu const&) const = default;
+    };
+
+    // Where a level of a menu is: its path among the entries sent, and among the items.
+    struct MenuLevelAt {
+        MenuPath shown;
+        MenuPath source;
+    };
+
+    // The visible entries of one level as the widget shows them, each binding read once, recording each one's item
+    // path under its shown path in @p sources. A separator that hidden entries leave first, last or next to another
+    // separator is left out.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static std::vector<MenuEntry> shownLevel(std::vector<MenuItem> const& items,
+                                                           MenuLevelAt const& where,
+                                                           std::map<MenuPath, MenuPath>& sources) {
+        std::vector<MenuEntry> entries;
+        auto const record = [&](std::size_t source) {
+            MenuPath shownPath = where.shown;
+            shownPath.push_back(entries.size() - 1);
+            MenuPath sourcePath = where.source;
+            sourcePath.push_back(source);
+            sources.insert_or_assign(std::move(shownPath), std::move(sourcePath));
+        };
+        for (std::size_t source = 0; source < items.size(); ++source) {
+            MenuItem const& item = items.at(source);
+            if (item.separator) {
+                if (!entries.empty() && !entries.back().separator) {
+                    entries.push_back(MenuEntry{.separator = true});
+                    record(source);
+                }
+                continue;
+            }
+            if (!item.visible.evaluate()) {
+                continue;
+            }
+            MenuLevelAt child = where;
+            child.shown.push_back(entries.size());
+            child.source.push_back(source);
             entries.push_back(MenuEntry{.label = item.label.evaluate(),
                                         .icon = item.icon,
                                         .keys = item.keys,
                                         .checked = item.checked.evaluate(),
                                         .enabled = item.enabled.evaluate(),
-                                        .items = entriesOf(item.items)});
+                                        .items = shownLevel(item.items, child, sources),
+                                        .description = item.description.evaluate()});
+            record(source);
+        }
+        if (!entries.empty() && entries.back().separator) {
+            MenuPath last = where.shown;
+            last.push_back(entries.size() - 1);
+            sources.erase(last);
+            entries.pop_back();
         }
         return entries;
     }
 
-    // Whether any entry, at any depth, has a bound label, check mark or enablement.
+    // The visible entries as the widget shows them; called inside the menu's one binding.
+    [[nodiscard]] static ShownMenu shownOf(std::vector<MenuItem> const& items) {
+        ShownMenu shown;
+        shown.entries = shownLevel(items, MenuLevelAt{}, shown.sources);
+        return shown;
+    }
+
+    // Whether any entry, at any depth, has a bound label, description, check mark, enablement or visibility.
     // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
     [[nodiscard]] static bool anyBound(std::vector<MenuItem> const& items) {
         return std::ranges::any_of(items, entryBound);
     }
 
-    // Whether this entry, or one in its submenu, has a bound label, check mark or enablement.
+    // Whether this entry, or one in its submenu, has a bound label, description, check mark, enablement or
+    // visibility.
     // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
     [[nodiscard]] static bool entryBound(MenuItem const& item) {
-        return item.label.isBound() || item.checked.isBound() || item.enabled.isBound() || anyBound(item.items);
+        return item.label.isBound() || item.description.isBound() || item.checked.isBound() ||
+               item.enabled.isBound() || item.visible.isBound() || anyBound(item.items);
     }
 
-    // The entry a path names, or null when the path names none.
+    // The item a path through the shown entries names, or null when it names none or a separator.
     [[nodiscard]] static MenuItem const* itemAt(std::vector<MenuItem> const& items,
-                                                std::vector<std::size_t> const& path) {
+                                                std::map<MenuPath, MenuPath> const& sources, MenuPath const& path) {
+        auto const found = sources.find(path);
+        if (found == sources.end()) {
+            return nullptr;
+        }
         std::vector<MenuItem> const* level = &items;
-        MenuItem const* found = nullptr;
-        for (std::size_t const index : path) {
-            if (level == nullptr || index >= level->size()) {
+        MenuItem const* item = nullptr;
+        for (std::size_t const index : found->second) {
+            if (index >= level->size()) {
                 return nullptr;
             }
-            found = &level->at(index);
-            level = &found->items;
+            item = &level->at(index);
+            level = &item->items;
         }
-        return found;
+        return item == nullptr || item->separator ? nullptr : item;
     }
 
     /// An input's label and whether it shows it: only when it has a label or shows one, so an input without a label
@@ -695,6 +775,11 @@ private:
             return;
         }
         bind(scope, label, [&widget, shown](std::string const& text) { widget.setCaption(text, shown); });
+    }
+
+    // Whether a node's spans are given: bound, or a constant with runs.
+    [[nodiscard]] static bool hasSpans(Prop<std::vector<TextSpan>> const& spans) {
+        return spans.isBound() || !spans.constant().empty();
     }
 
     // Like applyCommon, a constant default calls no setter.
@@ -711,20 +796,35 @@ private:
         if (field.stale.isBound() || field.stale.constant()) {
             bind(scope, field.stale, [&widget](bool stale) { widget.setStale(stale); });
         }
+        if (field.description.isBound() || !field.description.constant().empty()) {
+            bind(scope, field.description,
+                 [&widget](std::string const& description) { widget.setDescription(description); });
+        }
+        if (field.tone.isBound() || field.tone.constant() != Tone::Neutral) {
+            bind(scope, field.tone, [&widget](Tone tone) { widget.setTone(tone); });
+        }
     }
 
     Widget& mountKind(reactive::Scope& scope, Text const& spec, ContainerWidget* parent) {
+        if (spec.field.description.isBound() || !spec.field.description.constant().empty()) {
+            throw std::logic_error{"morph::ui: a text is not described; put the line in the text"};
+        }
         TextWidget& widget = scope.adopt(_backend->createText(parent));
         applyCommon(scope, widget, spec.common);
         applyField(scope, widget, spec.field);
-        bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        // Spans replace the text, so a text that has them is never told its plain text.
+        if (hasSpans(spec.spans)) {
+            bind(scope, spec.spans, [&widget](std::vector<TextSpan> const& spans) { widget.setSpans(spans); });
+        } else {
+            bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        }
         bind(scope, spec.role, [&widget](TextRole role) { widget.setRole(role); });
         return widget;
     }
 
     Widget& mountKind(reactive::Scope& scope, Button const& spec, ContainerWidget* parent) {
-        if (spec.style == ButtonStyle::Push && (spec.selected.isBound() || spec.selected.constant())) {
-            throw std::logic_error{"morph::ui: `selected` marks a list item; give the button ButtonStyle::Item"};
+        if (spec.style == ButtonStyle::Push && spec.child != nullptr) {
+            throw std::logic_error{"morph::ui: only a list entry holds content; a push button has a label"};
         }
         ButtonWidget& widget = scope.adopt(_backend->createButton(parent));
         applyCommon(scope, widget, spec.common);
@@ -737,19 +837,39 @@ private:
         }
         if (spec.style == ButtonStyle::Item) {
             widget.setStyle(spec.style);
-            if (spec.selected.isBound() || spec.selected.constant()) {
-                bind(scope, spec.selected, [&widget](bool selected) { widget.setSelected(selected); });
-            }
+        }
+        if (spec.shape != ControlShape::Default) {
+            widget.setShape(spec.shape);
+        }
+        if (spec.size != ButtonSize::Normal) {
+            widget.setSize(spec.size);
+        }
+        if (spec.mono) {
+            widget.setMono(true);
+        }
+        if (spec.selected.isBound() || spec.selected.constant()) {
+            bind(scope, spec.selected, [&widget](bool selected) { widget.setSelected(selected); });
         }
         widget.setOnClick(event(spec.onClick));
+        if (spec.child != nullptr) {
+            static_cast<void>(mount(scope, spec.child, &widget.content()));
+        }
         return widget;
     }
 
     Widget& mountKind(reactive::Scope& scope, TextInput const& spec, ContainerWidget* parent) {
         bool const hasUnit = spec.unit.isBound() || !spec.unit.constant().empty();
-        if ((hasUnit || spec.decimals >= 0 || !spec.icon.empty()) && spec.mode == TextInputMode::Multiline) {
+        bool const hasPrefix = spec.prefix.isBound() || !spec.prefix.constant().empty();
+        if ((hasUnit || hasPrefix || spec.decimals >= 0 || !spec.icon.empty()) &&
+            spec.mode == TextInputMode::Multiline) {
             throw std::logic_error{
-                "morph::ui: a multiline text input holds no number, so it takes no unit, places or icon"};
+                "morph::ui: a multiline text input holds no number, so it takes no unit, prefix, places or icon"};
+        }
+        if (spec.align != Align::Start && spec.mode == TextInputMode::Multiline) {
+            throw std::logic_error{"morph::ui: a multiline text input's text starts at the leading edge"};
+        }
+        if (spec.emphasis != InputEmphasis::Normal && spec.mode == TextInputMode::Multiline) {
+            throw std::logic_error{"morph::ui: a multiline text input's size is its own; it takes no emphasis"};
         }
         TextInputWidget& widget = scope.adopt(_backend->createTextInput(parent, spec.mode));
         applyCommon(scope, widget, spec.common);
@@ -760,15 +880,30 @@ private:
         if (hasUnit) {
             bind(scope, spec.unit, [&widget](std::string const& unit) { widget.setUnit(unit); });
         }
+        if (hasPrefix) {
+            bind(scope, spec.prefix, [&widget](std::string const& prefix) { widget.setPrefix(prefix); });
+        }
         if (spec.decimals >= 0) {
             widget.setDecimals(spec.decimals);
         }
         if (!spec.icon.empty()) {
             widget.setIcon(spec.icon);
         }
+        if (spec.emphasis != InputEmphasis::Normal) {
+            widget.setEmphasis(spec.emphasis);
+        }
+        if (spec.mono) {
+            widget.setMono(true);
+        }
+        if (spec.align != Align::Start) {
+            widget.setAlign(spec.align);
+        }
         applyCaption(scope, widget, spec.label, spec.showLabel);
         widget.setOnChange(inputEvent(spec.onChange, reassert));
-        widget.setOnSubmit(inputEvent(spec.onSubmit, std::move(reassert)));
+        // An empty submit handler tells the backend the field does not submit, so Enter goes on to its ancestors'
+        // chords (a dialog's default) once the field has committed.
+        widget.setOnSubmit(spec.onSubmit ? inputEvent(spec.onSubmit, std::move(reassert))
+                                         : std::function<void(std::string)>{});
         widget.setOnCommit(event(spec.onCommit));
         return widget;
     }
@@ -797,18 +932,26 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, Menu const& spec, ContainerWidget* parent) {
-        MenuWidget& widget = scope.adopt(_backend->createMenu(parent));
+        MenuWidget& widget = scope.adopt(_backend->createMenu(parent, spec.style));
         applyCommon(scope, widget, spec.common);
+        if (spec.style == MenuStyle::Button) {
+            bind(scope, spec.label, [&widget, icon = spec.icon, emphasis = spec.emphasis](std::string const& label) {
+                widget.setTrigger(MenuTrigger{.label = label, .icon = icon, .emphasis = emphasis});
+            });
+        }
         std::vector<MenuItem> const& items = spec.items;
-        // One prop for the whole tree: a bound label, mark or enablement anywhere re-sends every entry, which keeps
-        // setItems the one setter.
-        Prop<std::vector<MenuEntry>> const entries =
-            anyBound(items) ? Prop<std::vector<MenuEntry>>([items = items] { return entriesOf(items); })
-                            : Prop<std::vector<MenuEntry>>(entriesOf(items));
-        bind(scope, entries, [&widget](std::vector<MenuEntry> const& shown) { widget.setItems(shown); });
-        widget.setOnActivate(
-            event(std::function<void(std::vector<std::size_t>)>{[items = items](std::vector<std::size_t> const& path) {
-                MenuItem const* const item = itemAt(items, path);
+        // One prop for the whole tree: a bound label, description, mark, enablement or visibility anywhere re-sends
+        // every entry, which keeps setItems the one setter. A reported path is read against what was last sent.
+        auto sent = std::make_shared<std::map<MenuPath, MenuPath>>();
+        Prop<ShownMenu> const shown = anyBound(items) ? Prop<ShownMenu>([items = items] { return shownOf(items); })
+                                                      : Prop<ShownMenu>(shownOf(items));
+        bind(scope, shown, [&widget, sent](ShownMenu const& menu) {
+            *sent = menu.sources;
+            widget.setItems(menu.entries);
+        });
+        widget.setOnActivate(event(
+            std::function<void(std::vector<std::size_t>)>{[items = items, sent](std::vector<std::size_t> const& path) {
+                MenuItem const* const item = itemAt(items, *sent, path);
                 if (item != nullptr && item->onSelect) {
                     item->onSelect();
                 }
@@ -818,21 +961,29 @@ private:
 
     Widget& mountKind(reactive::Scope& scope, Column const& spec, ContainerWidget* parent) {
         return mountStack(scope, Axis::Vertical, spec.children, spec.gap, spec.common, parent, spec.align,
-                          spec.justify);
+                          spec.justify, false, spec.divided, spec.padding, spec.selected, spec.holder);
     }
 
     Widget& mountKind(reactive::Scope& scope, Row const& spec, ContainerWidget* parent) {
-        if (spec.tone && dynamic_cast<TableWidget*>(parent) == nullptr) {
-            throw std::logic_error{"morph::ui: a row's tone is a table row's; this row is not in a table"};
+        if ((spec.tone || spec.label || spec.heading) && dynamic_cast<TableWidget*>(parent) == nullptr) {
+            throw std::logic_error{
+                "morph::ui: a row's tone, label and heading are a table row's; this row is not in a table"};
+        }
+        if (spec.selected && dynamic_cast<TableWidget*>(parent) != nullptr) {
+            throw std::logic_error{"morph::ui: a table row's selection is the table's; this row gives its own"};
         }
         return mountStack(scope, Axis::Horizontal, spec.children, spec.gap, spec.common, parent, spec.align,
-                          spec.justify);
+                          spec.justify, spec.wrap, spec.divided && !spec.wrap, spec.padding, spec.selected);
     }
 
     Widget& mountKind(reactive::Scope& scope, Grid const& spec, ContainerWidget* parent) {
         GridWidget& widget = scope.adopt(_backend->createGrid(parent));
         applyCommon(scope, widget, spec.common);
-        widget.setColumns(spec.columns);
+        if (spec.tracks.empty()) {
+            widget.setColumns(spec.columns);
+        } else {
+            widget.setTracks(spec.tracks);
+        }
         widget.setGap(spacingStep(spec.gap));
         if (spec.align != Align::Stretch) {
             widget.setAlign(spec.align);
@@ -923,12 +1074,37 @@ private:
     Widget& mountKind(reactive::Scope& scope, Tabs const& spec, ContainerWidget* parent) {
         TabsWidget& widget = scope.adopt(_backend->createTabs(parent));
         applyCommon(scope, widget, spec.common);
-        std::vector<std::string> labels;
-        labels.reserve(spec.tabs.size());
-        for (Tab const& tab : spec.tabs) {
-            labels.push_back(tab.label);
+        if (spacingStep(spec.inset) != 0) {
+            widget.setInset(spacingStep(spec.inset));
         }
-        widget.setTabs(labels);
+        if (spec.pageInset) {
+            widget.setPageInset(spacingStep(*spec.pageInset));
+        }
+        if (!spec.stripSurface.empty()) {
+            widget.setStripSurface(spec.stripSurface);
+        }
+        // One prop over every caption, as a menu's entries: a bound caption re-sends them all. The count never
+        // changes, so the widget keeps its highlight, the shown page and the focus across a relabel.
+        std::vector<Prop<std::string>> captions;
+        captions.reserve(spec.tabs.size());
+        for (Tab const& tab : spec.tabs) {
+            captions.push_back(tab.label);
+        }
+        auto labelsOf = [captions] {
+            std::vector<std::string> labels;
+            labels.reserve(captions.size());
+            for (Prop<std::string> const& caption : captions) {
+                labels.push_back(caption.evaluate());
+            }
+            return labels;
+        };
+        Prop<std::vector<std::string>> const labels = std::ranges::any_of(captions, &Prop<std::string>::isBound)
+                                                          ? Prop<std::vector<std::string>>(std::move(labelsOf))
+                                                          : Prop<std::vector<std::string>>(labelsOf());
+        bind(scope, labels, [&widget](std::vector<std::string> const& shown) { widget.setTabs(shown); });
+        if (spec.moreLabel.isBound() || spec.moreLabel.constant() != "More") {
+            bind(scope, spec.moreLabel, [&widget](std::string const& label) { widget.setMoreLabel(label); });
+        }
         auto& pageScope = scope.child();
         auto& pages = scope.make<Pages>();
         pages.pageSlots.resize(spec.tabs.size(), nullptr);
@@ -1026,6 +1202,10 @@ private:
         auto page = mountPass([&] {
             auto built = std::make_unique<reactive::Scope>(*_rt, pageScope.depth());
             SlotWidget& slot = built->adopt(_backend->createSlot(&widget));
+            // A page fills the area under the strip, pads itself by the node's `pageInset` and scrolls itself while
+            // its content overflows, as a workspace's page does.
+            slot.setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+            slot.setScrollable(true);
             static_cast<void>(mount(*built, node, &slot));
             return std::pair{std::move(built), &slot};
         });
@@ -1045,6 +1225,12 @@ private:
         checkOverlayLayout(spec.common, "dialog");
         DialogWidget& widget = scope.adopt(_backend->createDialog(parent));
         applyCommon(scope, widget, spec.common);
+        if (spec.sheet.isBound() || spec.sheet.constant()) {
+            bind(scope, spec.sheet, [&widget](bool sheet) { widget.setSheet(sheet); });
+        }
+        if (spec.dismissLabel.isBound() || spec.dismissLabel.constant() != "Close") {
+            bind(scope, spec.dismissLabel, [&widget](std::string const& label) { widget.setDismissLabel(label); });
+        }
         return mountOverlay(scope, spec, widget);
     }
 
@@ -1059,6 +1245,14 @@ private:
     template <typename Spec, typename OverlayWidget>
     Widget& mountOverlay(reactive::Scope& scope, Spec const& spec, OverlayWidget& widget) {
         bind(scope, spec.title, [&widget](std::string const& title) { widget.setTitle(title); });
+        // Runs replace the plain description, so an overlay that has them is never told its plain one.
+        if (hasSpans(spec.descriptionSpans)) {
+            bind(scope, spec.descriptionSpans,
+                 [&widget](std::vector<TextSpan> const& spans) { widget.setDescriptionSpans(spans); });
+        } else if (spec.description.isBound() || !spec.description.constant().empty()) {
+            bind(scope, spec.description,
+                 [&widget](std::string const& description) { widget.setDescription(description); });
+        }
         auto& content = scope.make<std::unique_ptr<reactive::Scope>>();
         auto& shownOpen = scope.make<std::optional<bool>>();
         // A bound `open` is controlled: a dismissal the document refuses opens the dialog again, over the content it
@@ -1123,6 +1317,12 @@ private:
 
     Widget& mountKind(reactive::Scope& scope, ForEach const& spec, ContainerWidget* parent) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, spec.axis));
+        if (spec.wrap && spec.axis == Axis::Horizontal) {
+            widget.setWrap(true);
+        }
+        if (spec.divided && spec.axis == Axis::Vertical) {
+            widget.setDivided(true);
+        }
         applyCommon(scope, widget, spec.common);
         widget.setGap(spacingStep(spec.gap));
         mountRows(scope, spec.model, widget, {}, nullptr);
@@ -1137,17 +1337,32 @@ private:
         widget.setColumns(spec.columns);
         widget.setShowHeader(spec.showHeader);
         widget.setSelectionMode(spec.selectionMode);
+        if (spec.selectColumn) {
+            widget.setSelectColumn(true);
+            bind(scope, spec.selectAllLabel, [&widget](std::string const& label) { widget.setSelectAllLabel(label); });
+        }
         widget.setOnActivate(event(spec.onActivate));
+        if (std::ranges::any_of(spec.columns, &TableColumn::sortable)) {
+            bind(scope, spec.sort, [&widget](std::optional<TableSort> const& sort) { widget.setSort(sort); });
+            widget.setOnSort(event(spec.onSort));
+        }
         mountRows(
             scope, spec.rows, widget,
             [this, &widget](reactive::Scope& rowScope, Node const& node, Widget& rowWidget, Key const& key) {
                 widget.setRowKey(rowWidget, key);
-                // A row's tone binds in the row's scope, after its key.
+                // A row's tone binds in the row's scope, after its key and whether it is a heading.
                 Row const* const view = node ? std::get_if<Row>(&node->kind) : nullptr;
+                if (view != nullptr && view->heading) {
+                    widget.setRowHeading(rowWidget);
+                }
                 if (view != nullptr && view->tone) {
                     bind(rowScope, *view->tone, [&widget, &rowWidget](std::optional<Tone> const& tone) {
                         widget.setRowTone(rowWidget, tone);
                     });
+                }
+                if (view != nullptr && view->label) {
+                    bind(rowScope, *view->label,
+                         [&widget, &rowWidget](std::string const& label) { widget.setRowLabel(rowWidget, label); });
                 }
             },
             &spec.virtualize);
@@ -1495,11 +1710,18 @@ private:
         BannerWidget& widget = scope.adopt(_backend->createBanner(parent));
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.tone, [&widget](Tone tone) { widget.setTone(tone); });
-        bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        if (hasSpans(spec.spans)) {
+            bind(scope, spec.spans, [&widget](std::vector<TextSpan> const& spans) { widget.setSpans(spans); });
+        } else {
+            bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
+        }
         bind(scope, spec.action.label, [&widget](std::string const& label) { widget.setActionLabel(label); });
         widget.setOnAction(event(spec.action.onClick));
         widget.setDismissible(spec.dismissible);
         widget.setOnDismiss(event(spec.onDismiss));
+        if (spec.actionStyle != BannerActionStyle::Ghost || spec.actionStretch) {
+            widget.setActionStyle(spec.actionStyle, spec.actionStretch);
+        }
         return widget;
     }
 
@@ -1509,6 +1731,28 @@ private:
         bind(scope, spec.tone, [&widget](Tone tone) { widget.setTone(tone); });
         bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
         widget.setIcon(spec.icon);
+        if (spec.style != BadgeStyle::Filled) {
+            widget.setStyle(spec.style);
+        }
+        if (spec.shape != ControlShape::Default) {
+            widget.setShape(spec.shape);
+        }
+        if (spec.mono) {
+            widget.setMono(true);
+        }
+        if (spec.onRemove) {
+            // An empty label names the control after the badge's text, which may be bound as well.
+            auto const labelOf = [removeLabel = spec.removeLabel, text = spec.text] {
+                std::string const label = removeLabel.evaluate();
+                return label.empty() ? "Remove " + text.evaluate() : label;
+            };
+            Prop<std::string> const label = spec.removeLabel.isBound() || spec.text.isBound()
+                                                ? Prop<std::string>(labelOf)
+                                                : Prop<std::string>(labelOf());
+            bind(scope, label, [&widget, onRemove = event(spec.onRemove)](std::string const& shown) {
+                widget.setOnRemove(onRemove, shown);
+            });
+        }
         return widget;
     }
 
@@ -1525,12 +1769,25 @@ private:
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.items, [&widget](std::vector<Step> const& steps) { widget.setSteps(steps); });
         bind(scope, spec.current, [&widget](std::optional<std::size_t> index) { widget.setCurrent(index); });
+        if (spec.labelled.isBound() || !spec.labelled.constant()) {
+            bind(scope, spec.labelled, [&widget](bool labelled) { widget.setLabelled(labelled); });
+        }
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, Chart const& spec, ContainerWidget* parent) {
+        ChartWidget& widget = scope.adopt(_backend->createChart(parent));
+        applyCommon(scope, widget, spec.common);
+        bind(scope, spec.data, [&widget](ChartData const& data) { widget.setData(data); });
         return widget;
     }
 
     Widget& mountKind(reactive::Scope& scope, KeyValue const& spec, ContainerWidget* parent) {
         KeyValueWidget& widget = scope.adopt(_backend->createKeyValue(parent));
         applyCommon(scope, widget, spec.common);
+        if (spec.captions != CaptionPlacement::Beside) {
+            widget.setCaptionPlacement(spec.captions);
+        }
         bind(scope, spec.items, [&widget](std::vector<KeyValueItem> const& items) { widget.setItems(items); });
         return widget;
     }
@@ -1635,6 +1892,10 @@ private:
             scope.adopt(_backend->createDateTimeInput(parent, spec.mode, spec.offsetMinutes));
         applyCommon(scope, widget, spec.common);
         applyField(scope, widget, spec.field);
+        // Before the value, which is then shown in it; an input with no pattern is told none.
+        if (!spec.pattern.empty()) {
+            widget.setPattern(spec.pattern);
+        }
         widget.setOnChange(inputEvent(
             spec.onChange,
             controlled(scope, spec.value,

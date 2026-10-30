@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
@@ -245,7 +246,7 @@ TEST_CASE("ui::Mounted: an alignment reaches the backend only when it is not the
 }
 
 // Mutation: drop the setStyle call in the button's mountKind (the item records no style).
-TEST_CASE("ui::Mounted: an item button records its style and its selection; a push button neither", "[ui]") {
+TEST_CASE("ui::Mounted: an item button records its style and its selection; a plain button neither", "[ui]") {
     Owner owner;
     Runtime runtime{owner};
     RecordingBackend backend;
@@ -269,10 +270,20 @@ TEST_CASE("ui::Mounted: an item button records its style and its selection; a pu
         owner.runAll();
         CHECK(backend.prop(4, "selected") == "true");
     }
-    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::button({.label = "x", .selected = true})}),
-                      Catch::Matchers::ContainsSubstring("`selected` marks a list item"));
-    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::button({.label = "x", .selected = [] { return false; }})}),
-                      Catch::Matchers::ContainsSubstring("`selected` marks a list item"));
+}
+
+// Mutation: tell `selected` to an item only (the push button records none).
+TEST_CASE("ui::Mounted: a push button with a bound selection records it and follows it", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<bool> picked{runtime, true};
+    ui::Mounted const view{runtime, backend,
+                           ui::button({.label = "A1", .selected = [&picked] { return picked.get(); }})};
+    CHECK(backend.dump() == "Button#1 label=A1 selected=true\n");
+    picked.set(false);
+    owner.runAll();
+    CHECK(backend.prop(1, "selected") == "false");
 }
 
 // Mutation: skip checkPlacement (the panel's child mounts).
@@ -433,6 +444,77 @@ TEST_CASE("ui::Mounted: a menu entry inside a submenu runs its own action", "[ui
     backend.chooseMenuEntry(1, {0, 1, 2});  // out of range: nothing runs
     backend.chooseMenuEntry(1, {0, 1});     // opens the submenu: nothing runs
     CHECK(ran == Lines{"b", "open"});
+}
+
+// A hidden entry is not sent, and a path counts only what was sent. Mutation: map the path through every item, not
+// only the shown ones (choosing the entry after the hidden one then runs the hidden one).
+TEST_CASE("ui::Mounted: a hidden menu entry is not sent, and the shown one after it runs its own action", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<bool> shown{runtime, false};
+    Lines ran;
+    ui::Mounted const view{runtime, backend,
+                           ui::menu({.items = {{.label = "Undo", .onSelect = [&] { ran.emplace_back("undo"); }},
+                                               {.label = "Redo",
+                                                .onSelect = [&] { ran.emplace_back("redo"); },
+                                                .visible = [&] { return shown.get(); }},
+                                               {.label = "Cut", .onSelect = [&] { ran.emplace_back("cut"); }}}})};
+    CHECK(backend.prop(1, "items") == "[Undo,Cut]");
+    backend.chooseMenuEntry(1, {1});
+    CHECK(ran == Lines{"cut"});
+    shown.set(true);
+    owner.runAll();
+    CHECK(backend.prop(1, "items") == "[Undo,Redo,Cut]");
+    backend.chooseMenuEntry(1, {1});
+    CHECK(ran == Lines{"cut", "redo"});
+}
+
+// Mutation: send every separator (the line the hidden first entry leaves is then sent first).
+TEST_CASE("ui::Mounted: a separator hidden entries leave at an end or beside another is not sent", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Lines ran;
+    ui::Mounted const view{runtime, backend,
+                           ui::menu({.items = {{.label = "Hidden", .visible = false},
+                                               {.separator = true},
+                                               {.label = "Print", .onSelect = [&] { ran.emplace_back("print"); }},
+                                               {.separator = true},
+                                               {.label = "Gone", .visible = false},
+                                               {.separator = true},
+                                               {.label = "Export", .description = std::string{"as PDF"}},
+                                               {.separator = true}},
+                                     .style = ui::MenuStyle::Button,
+                                     .label = std::string{"More"}})};
+    CHECK(backend.prop(1, "items") == "[Print,;separator,Export;description=as PDF]");
+    CHECK(backend.prop(1, "style") == "Button");
+    CHECK(backend.prop(1, "label") == "More");
+    backend.chooseMenuEntry(1, {1});  // the separator: nothing runs
+    backend.chooseMenuEntry(1, {0});
+    CHECK(ran == Lines{"print"});
+}
+
+// Mutation: drop the default in the badge's mount (the control is then named by an empty label).
+TEST_CASE("ui::Mounted: a removable badge names its control after its text, and removing it runs once", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<std::string> text{runtime, std::string{"Result"}};
+    int removals = 0;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::column(
+            {.children = {ui::badge({.text = [&] { return text.get(); }, .onRemove = [&removals] { ++removals; }}),
+                          ui::badge({.text = std::string{"Plain"}})}})};
+    CHECK(backend.prop(2, "removable") == "Remove Result");
+    CHECK_FALSE(backend.hasProp(3, "removable"));
+    text.set("Sample");
+    owner.runAll();
+    CHECK(backend.prop(2, "removable") == "Remove Sample");
+    backend.dismiss(2);
+    CHECK(removals == 1);
+    CHECK_THROWS_AS(backend.dismiss(3), std::logic_error);
 }
 
 // Mutations: skip the enabled check (on the entry, or on an entry above it) in RecordingBackend::chooseMenuEntry.
@@ -849,7 +931,9 @@ TEST_CASE("ui::Mounted: a constant Tabs index shows its page and leaves the user
                                               {.label = "B", .node = ui::text({.text = "b"})}},
                                      .selected = std::size_t{1},
                                      .onSelect = [&picks](std::size_t index) { picks.push_back(index); }})};
-    CHECK(backend.dump() == "Tabs#1 selected=1 tabs=[A,B]\n  Slot#2\n    Text#3 role=Normal text=b\n");
+    CHECK(backend.dump() ==
+          "Tabs#1 selected=1 tabs=[A,B]\n  Slot#2 layout=stretch(1)/stretch(1) scrollable=true\n    Text#3 "
+          "role=Normal text=b\n");
     backend.chooseIndex(1, 0);
     owner.runAll();
     CHECK(picks == std::vector<std::size_t>{0});
@@ -908,4 +992,159 @@ TEST_CASE("ui::Mounted: two rows that fail in one run are one report, and neithe
     owner.runAll();
     CHECK(probe.count(morph::reactive::detail::site::kEffectThrew) == 1);
     CHECK(backend.recording().dump() == "Column#1 gap=0\n");
+}
+
+// Mutation: drop the text's description check (a described text then mounts).
+TEST_CASE(
+    "ui::Mounted: a C++ tree's text takes no description, a push button no content, and a text area "
+    "no emphasis",
+    "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Text described{.text = "x"};
+    described.field.description = "a line";
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::text(described)}),
+                      Catch::Matchers::ContainsSubstring("a text is not described"));
+    ui::Button push{.label = "Go"};
+    push.child = ui::text({.text = "inside"});
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::button(push)}),
+                      Catch::Matchers::ContainsSubstring("a push button has a label"));
+    ui::Button entry = push;
+    entry.style = ui::ButtonStyle::Item;
+    {
+        ui::Mounted const view{runtime, backend, ui::button(entry)};
+        CHECK(backend.find("Text", "text", "inside").has_value());
+    }
+    ui::TextInput area{.mode = ui::TextInputMode::Multiline};
+    area.emphasis = ui::InputEmphasis::Prominent;
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::textInput(area)}),
+                      Catch::Matchers::ContainsSubstring("a multiline text input's size is its own"));
+    ui::TextInput focal{};
+    focal.emphasis = ui::InputEmphasis::Prominent;
+    ui::Mounted const view{runtime, backend, ui::textInput(focal)};
+    CHECK(backend.find("TextInput", "emphasis", "Prominent").has_value());
+}
+
+// Mutation: skip the tone in the mount (the text records none), or the spans (the run's tone is not recorded).
+TEST_CASE("ui::Mounted: a text's tone and its runs' tones reach the backend", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Text toned{.text = "7", .role = ui::TextRole::Display};
+    toned.field.tone = ui::Tone::Err;
+    ui::Mounted const text{runtime, backend, ui::text(toned)};
+    CHECK(backend.prop(backend.find("Text", "role", "Display").value(), "tone") == "Err");
+    ui::Text const runs{.spans = std::vector<ui::TextSpan>{{.text = "Past due "},
+                                                           {.text = "7", .strong = true, .tone = ui::Tone::Err}}};
+    ui::Mounted const withRuns{runtime, backend, ui::text(runs)};
+    CHECK(backend.dump().contains("spans=[Past due ,7;strong;tone=Err]"));
+}
+
+// Mutation: never call setWrap in mountStack (the log loses it), or call it after the children are mounted.
+TEST_CASE("ui::Mounted: a wrapping row records wrap before its first child, and a plain row records nothing", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    {
+        ui::Mounted const view{
+            runtime, backend, ui::row({.children = {ui::text({.text = "a"}), ui::text({.text = "b"})}, .wrap = true})};
+        CHECK(backend.dump() ==
+              "Row#1 gap=0 wrap=true\n"
+              "  Text#2 role=Normal text=a\n"
+              "  Text#3 role=Normal text=b\n");
+        auto const& log = backend.log();
+        auto const wrapped = std::ranges::find(log, "set Row#1 wrap=true");
+        auto const firstChild =
+            std::ranges::find_if(log, [](std::string const& entry) { return entry.starts_with("create Text"); });
+        REQUIRE(wrapped != log.end());
+        REQUIRE(firstChild != log.end());
+        CHECK(wrapped < firstChild);
+    }
+    RecordingBackend plain;
+    ui::Mounted const view{runtime, plain, ui::row({.children = {ui::text({.text = "a"})}})};
+    CHECK(plain.dump() ==
+          "Row#1 gap=0\n"
+          "  Text#2 role=Normal text=a\n");
+}
+
+// Mutation: never call setDivided in mountStack (the log loses it), or call it after the children are mounted.
+TEST_CASE("ui::Mounted: a divided column records divided before its first child, and a plain one records nothing",
+          "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    {
+        ui::Mounted const view{
+            runtime, backend,
+            ui::column({.children = {ui::text({.text = "a"}), ui::text({.text = "b"})}, .divided = true})};
+        CHECK(backend.dump() ==
+              "Column#1 divided=true gap=0\n"
+              "  Text#2 role=Normal text=a\n"
+              "  Text#3 role=Normal text=b\n");
+        auto const& log = backend.log();
+        auto const divided = std::ranges::find(log, "set Column#1 divided=true");
+        auto const firstChild =
+            std::ranges::find_if(log, [](std::string const& entry) { return entry.starts_with("create Text"); });
+        REQUIRE(divided != log.end());
+        REQUIRE(firstChild != log.end());
+        CHECK(divided < firstChild);
+    }
+    RecordingBackend plain;
+    ui::Mounted const view{runtime, plain, ui::column({.children = {ui::text({.text = "a"})}})};
+    CHECK(plain.dump() ==
+          "Column#1 gap=0\n"
+          "  Text#2 role=Normal text=a\n");
+}
+
+TEST_CASE("ui::Mounted: a stack's padding reaches the backend as one step or as a step for each axis", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::column({.children = {ui::column({.padding = 3}), ui::row({.padding = ui::Padding{2, 4}}),
+                                 ui::row({.padding = ui::Padding{9, 1}}), ui::column({})}})};
+    CHECK(backend.dump() ==
+          "Column#1 gap=0\n"
+          "  Column#2 gap=0 padding=3\n"
+          "  Row#3 gap=0 padding=2/4\n"
+          "  Row#4 gap=0 padding=5/1\n"
+          "  Column#5 gap=0\n");
+}
+
+TEST_CASE("ui::Mounted: a stack's selected condition reaches the backend at mount and on every change", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<bool> chosen{runtime, false};
+    ui::Mounted const view{runtime, backend,
+                           ui::column({.children = {ui::column({.selected = [&chosen] { return chosen.get(); }}),
+                                                    ui::row({}), ui::row({.selected = true})}})};
+    CHECK(backend.dump() ==
+          "Column#1 gap=0\n"
+          "  Column#2 gap=0 selected=false\n"
+          "  Row#3 gap=0\n"
+          "  Row#4 gap=0 selected=true\n");
+    chosen.set(true);
+    owner.runAll();
+    CHECK(backend.dump().contains("Column#2 gap=0 selected=true"));
+}
+
+// Mutation: never tell the banner its style (the dump has no actionStyle), or tell a ghost banner it too.
+TEST_CASE("ui::Mounted: a banner is told its action style only when it is not the default", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Mounted const view{
+        runtime, backend,
+        ui::column({.children = {
+                        ui::banner({.text = "a", .actionStyle = ui::BannerActionStyle::Link}),
+                        ui::banner({.text = "b"}), ui::banner({.text = "c", .actionStretch = true}),
+                        ui::row({.children = {ui::text({.text = "x"}), ui::text({.text = "y"})}, .divided = true})}})};
+    std::string const dump = backend.dump();
+    CHECK(dump.contains("Banner#2 actionLabel= actionStretch=false actionStyle=link"));
+    CHECK_FALSE(dump.contains("Banner#3 actionStretch"));
+    CHECK(dump.contains("Banner#4 actionLabel= actionStretch=true actionStyle=ghost"));
+    CHECK(dump.contains("Row#5 divided=true"));
 }

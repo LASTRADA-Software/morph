@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -106,6 +107,22 @@ constexpr std::string_view kChooser = R"({
     { "kind": "button", "testId": "choose", "label": "choose", "onClick": [ { "return": "apple" } ] },
     { "kind": "button", "testId": "dismiss", "label": "dismiss", "onClick": [ { "close": "self" } ] } ] } })";
 
+/// A screen whose root is a `switch` on its width: a pinned-style root at `compact`, a plain column at `medium`, two
+/// nodes at `narrow`, and a pinned-style default.
+constexpr std::string_view kEdged = R"({
+  "vocab": "ui/1", "id": "edged",
+  "state": { "w": { "init": "compact" } },
+  "view": { "kind": "switch", "on": { "ref": "w" },
+    "cases": [
+      { "when": "compact", "children": [ { "kind": "column", "pageEdge": true, "children": [
+        { "kind": "button", "testId": "medium", "label": "medium", "onClick": [ { "set": "w", "value": "medium" } ] },
+        { "kind": "button", "testId": "narrow", "label": "narrow", "onClick": [ { "set": "w", "value": "narrow" } ] },
+        { "kind": "button", "testId": "other", "label": "other", "onClick": [ { "set": "w", "value": "other" } ] } ] } ] },
+      { "when": "medium", "children": [ { "kind": "column", "children": [] } ] },
+      { "when": "narrow", "children": [ { "kind": "column", "pageEdge": true, "children": [] },
+                                        { "kind": "column", "pageEdge": true, "children": [] } ] } ],
+    "default": [ { "kind": "column", "pageEdge": true, "children": [] } ] } })";
+
 /// A shell over the harness: it records what it is asked to navigate to, and decides the close guard by a script.
 class Shell final : public DocumentScreenHost {
 public:
@@ -129,6 +146,8 @@ public:
         static_cast<void>(screen);
         ++closedThemselves;
     }
+
+    using DocumentScreenHost::settleCall;
 
     std::vector<std::pair<std::string, ParamMap>> navigated;
     std::vector<std::string> as;
@@ -154,6 +173,7 @@ private:
             {"draft", loadOrFail(kDraft, morph::ui::testing::corpusCatalog())},
             {"transferring", loadOrFail(kTransferring, morph::ui::testing::corpusCatalog())},
             {"uploadDraft", loadOrFail(kUploadDraft, morph::ui::testing::corpusCatalog())},
+            {"edged", loadOrFail(kEdged, morph::ui::testing::corpusCatalog())},
             {"opener", loadOrFail(kOpener, morph::ui::testing::corpusCatalog())},
             {"chooser", loadOrFail(kChooser, morph::ui::testing::corpusCatalog())}};
         DocumentScreenHostOptions made;
@@ -944,4 +964,92 @@ TEST_CASE("A dialog answers its opener under a host that ignores screens closing
     harness.settle();
     CHECK(opener->title().get() == "apple");
     CHECK(DocumentScreenHost::rootOf(*chooser) == nullptr);
+}
+
+// Mutation: leave the unclaimed calls in place (the opener's title stays "none").
+TEST_CASE("cancelUnclaimedCalls answers every call no mount adopted with a cancel, once", "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    auto opener = std::move(*shell.mount("opener", ParamMap{}));
+    harness.backend.click(harness.byTestId("Button", "pick"));
+    harness.settle();
+    REQUIRE(shell.navigated.size() == 1);
+    CHECK(opener->title().get() == "none");
+    shell.cancelUnclaimedCalls();
+    harness.settle();
+    CHECK(opener->title().get() == "cancelled");
+    // The chooser mounted now adopts no call: its answer reaches nobody.
+    auto const chooser = std::move(*shell.mount(shell.navigated[0].first, shell.navigated[0].second));
+    harness.settle();
+    harness.backend.click(harness.byTestId("Button", "choose"));
+    harness.settle();
+    CHECK(opener->title().get() == "cancelled");
+}
+
+// Mutation: settle the oldest call whatever its params (the call for `from: opener` is cancelled by the first
+// settleCall).
+TEST_CASE("settleCall cancels the call of the screen and params it names, and no other", "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    auto opener = std::move(*shell.mount("opener", ParamMap{}));
+    harness.backend.click(harness.byTestId("Button", "pick"));
+    harness.settle();
+    REQUIRE(shell.navigated.size() == 1);
+    shell.settleCall("chooser", ParamMap{{"from", Value{std::string{"elsewhere"}}}});
+    shell.settleCall("note", shell.navigated[0].second);
+    harness.settle();
+    CHECK(opener->title().get() == "none");
+    shell.settleCall("chooser", shell.navigated[0].second);
+    harness.settle();
+    CHECK(opener->title().get() == "cancelled");
+}
+
+// Mutation: mount a null app document (the host dereferences it).
+TEST_CASE("DocumentScreenHost::mountApp refuses no document and a document that is not the app's", "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    auto const none = shell.mountApp(nullptr);
+    REQUIRE_FALSE(none.has_value());
+    CHECK(none.error().screenId == "app");
+    CHECK(none.error().reason == "no app document");
+    auto const note = shell.mountApp(loadOrFail(kNote, morph::ui::testing::corpusCatalog()));
+    REQUIRE_FALSE(note.has_value());
+    CHECK(note.error().screenId == "note");
+    CHECK(note.error().reason.contains("the app document's id is `app`"));
+}
+
+// Mutation: read the view's root only (the first check fails: a switch has no flag), or stop at the first case instead
+// of the one shown (the width change is not followed), or enter a case of two nodes.
+TEST_CASE("A screen's head reads pageEdge through the switch it is rooted in, and follows the case shown",
+          "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    auto mounted = shell.mount("edged", ParamMap{});
+    REQUIRE(mounted.has_value());
+    ScreenHandle& screen = **mounted;
+    harness.settle();
+    morph::ui::ScreenHead const* const head = screen.head();
+    REQUIRE(head != nullptr);
+    REQUIRE(head->pageEdge() != nullptr);
+    CHECK(head->pageEdge()->get());
+
+    // A case that is not pinned.
+    harness.backend.click(harness.byTestId("Button", "medium"));
+    harness.settle();
+    CHECK_FALSE(head->pageEdge()->get());
+}
+
+TEST_CASE("A screen's head answers false for a switch case of two nodes, and true for the default", "[ui][host]") {
+    Harness harness;
+    Shell shell{harness, std::nullopt};
+    auto mounted = shell.mount("edged", ParamMap{});
+    REQUIRE(mounted.has_value());
+    ScreenHandle& screen = **mounted;
+    harness.settle();
+    morph::ui::ScreenHead const* const head = screen.head();
+    REQUIRE(head != nullptr);
+    std::string const press = GENERATE(as<std::string>{}, "narrow", "other");
+    harness.backend.click(harness.byTestId("Button", press));
+    harness.settle();
+    CHECK(head->pageEdge()->get() == (press == "other"));
 }

@@ -26,8 +26,55 @@
 namespace morph::tui::detail {
 
 void StackImpl::setGap(int gap) {
+    _gapStep = gap;
     _gap = layout::stepCells(gap, _axis);
     refresh();
+}
+
+void StackImpl::setPadding(ui::Padding padding) {
+    _paddingRows = layout::stepCells(padding.vertical, ui::Axis::Vertical);
+    _paddingColumns = layout::stepCells(padding.horizontal, ui::Axis::Horizontal);
+    refresh();
+}
+
+void StackImpl::setPassesBleed(bool passes) {
+    _passesBleed = passes;
+    refresh();
+}
+
+void StackImpl::setSelected(bool selected) {
+    _selectable = true;
+    _selected = selected;
+    refresh();
+}
+
+void StackImpl::setWrap(bool wrap) {
+    _wrap = wrap;
+    refresh();
+}
+
+StackImpl::WrappedLines StackImpl::wrappedLines(int width) const {
+    WrappedLines lines;
+    std::vector<layout::Item> items;
+    for (WidgetBase const* const child : children()) {
+        if (!child->shown()) {
+            continue;
+        }
+        ui::LayoutHints const& hints = child->layout();
+        layout::Bounds const bounds = layout::boundsOf(hints.minWidth, hints.maxWidth);
+        lines.shown.push_back(child);
+        items.push_back(layout::Item{.sizing = hints.width,
+                                     .natural = child->naturalSize().width,
+                                     .minimum = bounds.minimum,
+                                     .maximum = bounds.maximum});
+    }
+    lines.plan = layout::planWrap(items, layout::Track{.length = width, .gap = _gap}, _justify);
+    lines.lineHeights.assign(static_cast<std::size_t>(lines.plan.lines), 0);
+    for (auto const [child, placed] : std::views::zip(lines.shown, lines.plan.placed)) {
+        int& height = lines.lineHeights.at(static_cast<std::size_t>(placed.line));
+        height = std::max(height, requestedSize(*child).height);
+    }
+    return lines;
 }
 
 void StackImpl::setAlign(ui::Align align) {
@@ -40,12 +87,35 @@ void StackImpl::setJustify(ui::Justify justify) {
     refresh();
 }
 
-void StackImpl::setColumnLayout(std::vector<int> extents, int gap) {
+void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<CellPlace> places) {
     _extents = std::move(extents);
     _extentGap = gap;
+    _places = std::move(places);
 }
 
 ::core::tui::Size StackImpl::naturalSize() const {
+    auto const inner = innerNaturalSize();
+    return {.width = inner.width + leadingColumns() + _paddingColumns, .height = inner.height + (2 * _paddingRows)};
+}
+
+::core::tui::Size StackImpl::innerNaturalSize() const {
+    if (_wrap && _axis == ui::Axis::Horizontal && _extents.empty()) {
+        // One line is the natural width; the height is that of the lines at the width the row was last drawn at.
+        auto const oneLine = stackNaturalSize(children(), _axis, _gap);
+        if (_drawnWidth <= 0) {
+            return oneLine;
+        }
+        WrappedLines const lines = wrappedLines(_drawnWidth);
+        int const rowGap = layout::stepCells(_gapStep, ui::Axis::Vertical);
+        int height = 0;
+        for (int const lineHeight : lines.lineHeights) {
+            height += lineHeight;
+        }
+        if (!lines.lineHeights.empty()) {
+            height += rowGap * (static_cast<int>(lines.lineHeights.size()) - 1);
+        }
+        return ::core::tui::Size{.width = oneLine.width, .height = std::max(height, oneLine.height)};
+    }
     if (_extents.empty()) {
         return stackNaturalSize(children(), _axis, _gap);
     }
@@ -57,27 +127,166 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap) {
 }
 
 std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) const {
+    // A holder lies over its container's whole span, so it pads its children by the container's padding itself.
+    int const passed = _passesBleed && container() != nullptr ? container()->bleedColumns() : 0;
+    auto const inside = layout::pad({.x = 0, .y = 0, .width = size.width, .height = size.height}, _paddingRows,
+                                    _paddingColumns + passed);
+    // The selection's column, when the padding has none, comes off the leading side only.
+    int const extra = leadingColumns() - _paddingColumns;
+    auto areas = innerAreas({.width = std::max(inside.width - extra, 0), .height = inside.height});
+    for (auto& area : areas) {
+        area.x += inside.x + extra;
+        area.y += inside.y;
+    }
+    if (_axis == ui::Axis::Vertical) {
+        bleedAreas(children(), areas, {.x = 0, .y = 0, .width = size.width, .height = size.height});
+    }
+    return areas;
+}
+
+std::vector<::core::tui::Rect> StackImpl::innerAreas(::core::tui::Size size) const {
+    if (_wrap && _axis == ui::Axis::Horizontal && _extents.empty()) {
+        WrappedLines const lines = wrappedLines(size.width);
+        int const rowGap = layout::stepCells(_gapStep, ui::Axis::Vertical);
+        std::vector<int> lineY;
+        int y = 0;
+        for (int const lineHeight : lines.lineHeights) {
+            lineY.push_back(y);
+            y += lineHeight + rowGap;
+        }
+        std::vector<::core::tui::Rect> areas(children().size());
+        std::size_t shownIndex = 0;
+        for (auto const [child, area] : std::views::zip(children(), areas)) {
+            if (!child->shown()) {
+                continue;
+            }
+            layout::WrapPlaced const& placed = lines.plan.placed.at(shownIndex++);
+            auto const line = static_cast<std::size_t>(placed.line);
+            int const lineHeight = lines.lineHeights.at(line);
+            ui::LayoutHints const& hints = child->layout();
+            ui::Align const across = hints.alignSelf.value_or(_align);
+            int const height = alignedExtent(across, hints.height, requestedSize(*child).height, lineHeight,
+                                             layout::boundsOf(hints.minHeight, hints.maxHeight));
+            area = {.x = placed.x,
+                    .y = lineY.at(line) + alignedOffset(across, height, lineHeight),
+                    .width = placed.width,
+                    .height = height};
+        }
+        return areas;
+    }
     return stackAreas(children(), {.x = 0, .y = 0, .width = size.width, .height = size.height},
                       StackSpec{.axis = _axis,
                                 .gap = _extents.empty() ? _gap : _extentGap,
                                 .extents = _extents,
-                                .align = _align,
+                                .places = _places,
+                                // A table row's cells are placed by their columns, whatever the row's own
+                                // alignment: a cell takes none.
+                                .align = _extents.empty() ? _align : ui::Align::Center,
                                 .justify = _justify});
 }
 
-void StackImpl::paint(::core::tui::Canvas& canvas) { placeChildren(childAreas(canvas.size())); }
+void StackImpl::paint(::core::tui::Canvas& canvas) {
+    int const innerWidth = std::max(canvas.size().width - leadingColumns() - _paddingColumns, 0);
+    if (_wrap && innerWidth != _drawnWidth) {
+        // The row's height follows its width, so its container lays it out again at the next frame.
+        _drawnWidth = innerWidth;
+        refresh();
+    }
+    placeChildren(childAreas(canvas.size()));
+    if (_selected) {
+        for (int row = 0; row < canvas.size().height; ++row) {
+            canvas.putString(row, 0, "▌", canvas.theme().listItemSelected);
+        }
+    }
+}
+
+::core::tui::Size ScrollImpl::naturalSize() const { return stackNaturalSize(children(), _scroller.axis(), 0); }
+
+std::vector<::core::tui::Rect> ScrollImpl::childAreas(::core::tui::Size size) const {
+    return _scroller.childAreas(*this, size);
+}
+
+bool ScrollImpl::wantsFocus() const { return ScrollViewport::wantsFocus(*this); }
+
+void ScrollImpl::paint(::core::tui::Canvas& canvas) { _scroller.paint(*this, canvas); }
+
+::core::tui::EventResult ScrollImpl::key(::core::tui::KeyEvent const& key) { return _scroller.key(*this, key); }
+
+bool ScrollImpl::wheel(int delta) { return _scroller.wheel(*this, delta); }
 
 ::core::tui::Size SlotImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Vertical, 0); }
 
-std::vector<::core::tui::Rect> SlotImpl::childAreas(::core::tui::Size size) const {
-    return stackAreas(children(), {.x = 0, .y = 0, .width = size.width, .height = size.height},
-                      StackSpec{.axis = ui::Axis::Vertical});
+::core::tui::Size SlotImpl::contentInsets() const {
+    return container() != nullptr ? container()->pageInsets() : ::core::tui::Size{};
 }
 
-void SlotImpl::paint(::core::tui::Canvas& canvas) { placeChildren(childAreas(canvas.size())); }
+std::vector<::core::tui::Rect> SlotImpl::childAreas(::core::tui::Size size) const {
+    if (scrolls(size.height)) {
+        return _scroller.childAreas(*this, size);
+    }
+    auto const inset = contentInsets();
+    auto areas = stackAreas(children(),
+                            {.x = inset.width,
+                             .y = inset.height,
+                             .width = std::max(0, size.width - (2 * inset.width)),
+                             .height = std::max(0, size.height - (2 * inset.height))},
+                            StackSpec{.axis = ui::Axis::Vertical});
+    bleedAreas(children(), areas, {.x = 0, .y = 0, .width = size.width, .height = 0});
+    return areas;
+}
+
+bool SlotImpl::wantsFocus() const { return scrolls(height()) && ScrollViewport::wantsFocus(*this); }
+
+void SlotImpl::paint(::core::tui::Canvas& canvas) {
+    if (scrolls(canvas.size().height)) {
+        _scroller.paint(*this, canvas);
+        return;
+    }
+    placeChildren(childAreas(canvas.size()));
+}
+
+::core::tui::EventResult SlotImpl::key(::core::tui::KeyEvent const& key) {
+    return scrolls(height()) ? _scroller.key(*this, key) : ::core::tui::EventResult::Ignored;
+}
+
+bool SlotImpl::wheel(int delta) { return scrolls(height()) && _scroller.wheel(*this, delta); }
+
+void SlotImpl::setScrollable(bool scrollable) {
+    if (scrollable != _scrollable) {
+        _scrollable = scrollable;
+        refresh();
+    }
+}
+
+int SlotImpl::height() const { return view().area().height; }
+
+// A child that stretches down fills the slot, so only content-height children scroll, and only once they are taller
+// than the slot; a stretching child whose `minHeight` is more than the slot is tall keeps that height instead, and
+// the slot scrolls it.
+bool SlotImpl::scrolls(int height) const {
+    if (!_scrollable) {
+        return false;
+    }
+    int const padding = 2 * contentInsets().height;
+    bool stretches = false;
+    for (auto const* child : children()) {
+        if (child->shown() && child->layout().height.kind == ui::Sizing::Kind::Stretch) {
+            if (child->layout().minHeight.value_or(0) + padding > height) {
+                return true;
+            }
+            stretches = true;
+        }
+    }
+    return !stretches && stackNaturalSize(children(), ui::Axis::Vertical, 0).height + padding > height;
+}
 
 void GridImpl::setColumns(int columns) {
     _columns = columns;
+    refresh();
+}
+
+void GridImpl::setTracks(std::vector<ui::GridTrack> const& tracks) {
+    _tracks = tracks;
     refresh();
 }
 
@@ -121,10 +330,45 @@ std::vector<layout::GridCell> GridImpl::cellsOf(std::span<WidgetBase* const> sho
     return cells;
 }
 
+std::vector<layout::Item> GridImpl::trackItems(std::span<WidgetBase* const> shown) const {
+    std::vector<layout::Item> items;
+    items.reserve(_tracks.size());
+    for (ui::GridTrack const& track : _tracks) {
+        items.push_back(layout::Item{.sizing = track.width, .natural = 0});
+    }
+    // Where each cell lands depends only on the spans, so a plan of no width says which track each one is in.
+    auto const slots = layout::planGrid(items, cellsOf(shown), layout::Track{}, 0).slots;
+    for (auto const [child, slot] : std::views::zip(shown, slots)) {
+        if (slot.span == 1) {
+            auto& item = items.at(static_cast<std::size_t>(slot.column));
+            item.natural = std::max(item.natural, requestedSize(*child).width);
+        }
+    }
+    return items;
+}
+
+layout::GridPlan GridImpl::planOf(std::span<WidgetBase* const> shown, int width) const {
+    layout::Track const track{.length = width, .gap = _columnGap};
+    return _tracks.empty() ? layout::planGrid(_columns, cellsOf(shown), track, _rowGap)
+                           : layout::planGrid(trackItems(shown), cellsOf(shown), track, _rowGap);
+}
+
 ::core::tui::Size GridImpl::naturalSize() const {
     auto const shown = shownChildren();
     if (shown.empty()) {
         return {.width = 0, .height = 0};
+    }
+    if (!_tracks.empty()) {
+        // Each track at its natural width: a fixed one its amount, a content or stretch one its widest cell.
+        auto const items = trackItems(shown);
+        int width = _columnGap * (static_cast<int>(items.size()) - 1);
+        for (layout::Item const& item : items) {
+            width += item.sizing.kind == ui::Sizing::Kind::Fixed ? std::max(0, item.sizing.amount) : item.natural;
+        }
+        auto const plan = planOf(shown, width);
+        int const height = std::accumulate(plan.rowHeights.begin(), plan.rowHeights.end(), 0) +
+                           (_rowGap * (static_cast<int>(plan.rowHeights.size()) - 1));
+        return {.width = width, .height = height};
     }
     int const columns = std::max(1, _columns);
     int unit = 0;
@@ -143,8 +387,7 @@ std::vector<layout::GridCell> GridImpl::cellsOf(std::span<WidgetBase* const> sho
 
 std::vector<::core::tui::Rect> GridImpl::childAreas(::core::tui::Size size) const {
     auto const shown = shownChildren();
-    auto const plan =
-        layout::planGrid(_columns, cellsOf(shown), layout::Track{.length = size.width, .gap = _columnGap}, _rowGap);
+    auto const plan = planOf(shown, size.width);
     std::vector<::core::tui::Rect> areas;
     areas.reserve(children().size());
     auto slot = plan.slots.begin();
@@ -158,6 +401,16 @@ std::vector<::core::tui::Rect> GridImpl::childAreas(::core::tui::Size size) cons
         // alignment places it.
         ui::LayoutHints const& hints = child->layout();
         area.width = layout::crossExtent(hints.width, area.width, layout::boundsOf(hints.minWidth, hints.maxWidth));
+        // A track places a cell drawn at its natural width at its start, centre or end; a spanning cell by its
+        // first track.
+        if (!_tracks.empty() && child->placedAcrossColumn()) {
+            ui::Align const across = _tracks.at(static_cast<std::size_t>(slot->column)).align;
+            if (across == ui::Align::Center || across == ui::Align::End) {
+                int const natural = std::min(requestedSize(*child).width, area.width);
+                area.x += alignedOffset(across, natural, area.width);
+                area.width = natural;
+            }
+        }
         ui::Align const placed = hints.alignSelf.value_or(_align);
         int const height = alignedExtent(placed, hints.height, requestedSize(*child).height, area.height,
                                          layout::boundsOf(hints.minHeight, hints.maxHeight));
@@ -275,6 +528,8 @@ std::vector<::core::tui::Rect> PanelImpl::childAreas(::core::tui::Size size) con
         }
         ++index;
     }
+    // A bleeding child ends at the frame's inner edges, past the padding.
+    bleedAreas(children(), areas, {.x = 1, .y = 0, .width = std::max(0, size.width - 2), .height = 0});
     return areas;
 }
 
@@ -283,14 +538,16 @@ std::vector<::core::tui::Rect> PanelImpl::childAreas(::core::tui::Size size) con
 void PanelImpl::paint(::core::tui::Canvas& canvas) {
     auto const& theme = canvas.theme();
     auto const& style = hasFocus() ? theme.buttonFocused : theme.textNormal;
+    // The title is bold, as a collapsible's is.
+    auto const& titleStyle = hasFocus() ? theme.buttonFocused : theme.textBold;
     if (_collapsed) {
-        canvas.putString(0, 0, heading(), style);
+        canvas.putString(0, 0, heading(), titleStyle);
         placeChildren(childAreas(canvas.size()));
         return;
     }
     canvas.drawBox(canvas.area(), ::core::tui::BorderStyle::Single, style);
     auto title = canvas.subcanvas({.x = 2, .y = 0, .width = std::max(0, canvas.width() - 4), .height = 1});
-    title.putString(0, 0, heading(), style);
+    title.putString(0, 0, heading(), titleStyle);
     placeChildren(childAreas(canvas.size()));
 }
 
@@ -326,21 +583,29 @@ void PanelImpl::click(::core::tui::Point cell) {
     }
 }
 
-::core::tui::Size ScrollImpl::naturalSize() const { return stackNaturalSize(children(), _axis, 0); }
-
-std::vector<::core::tui::Rect> ScrollImpl::contentAreas(::core::tui::Size viewport) const {
-    auto const natural = naturalSize();
-    auto content = ::core::tui::Rect{.x = 0, .y = 0, .width = viewport.width, .height = viewport.height};
+std::vector<::core::tui::Rect> ScrollViewport::contentAreas(ContainerBase const& owner,
+                                                            ::core::tui::Size viewport) const {
+    auto const natural = stackNaturalSize(owner.children(), _axis, 0);
+    // The owner's padding lies inside the scroll, around the content.
+    auto const inset = owner.contentInsets();
+    auto content = ::core::tui::Rect{.x = inset.width,
+                                     .y = inset.height,
+                                     .width = std::max(0, viewport.width - (2 * inset.width)),
+                                     .height = std::max(0, viewport.height - (2 * inset.height))};
     if (_axis == ui::Axis::Vertical) {
-        content.height = std::max(viewport.height, natural.height);
+        content.height = std::max(content.height, natural.height);
     } else {
-        content.width = std::max(viewport.width, natural.width);
+        content.width = std::max(content.width, natural.width);
     }
-    return stackAreas(children(), content, StackSpec{.axis = _axis});
+    auto areas = stackAreas(owner.children(), content, StackSpec{.axis = _axis});
+    if (_axis == ui::Axis::Vertical) {
+        bleedAreas(owner.children(), areas, {.x = 0, .y = 0, .width = viewport.width, .height = 0});
+    }
+    return areas;
 }
 
-std::vector<::core::tui::Rect> ScrollImpl::childAreas(::core::tui::Size size) const {
-    auto areas = contentAreas(size);
+std::vector<::core::tui::Rect> ScrollViewport::childAreas(ContainerBase const& owner, ::core::tui::Size size) const {
+    auto areas = contentAreas(owner, size);
     bool const vertical = _axis == ui::Axis::Vertical;
     for (auto& area : areas) {
         if (!area.empty()) {
@@ -370,19 +635,20 @@ namespace {
 
 // Walks down from this scroll's child to the focused widget, each container saying where the next one lies inside
 // it. Where one does not say, or puts the next out of its own area, the last area known is the answer.
-std::optional<::core::tui::Rect> ScrollImpl::focusedArea(::core::tui::Size viewport) const {
+std::optional<::core::tui::Rect> ScrollViewport::focusedArea(ContainerBase const& owner,
+                                                             ::core::tui::Size viewport) const {
     std::vector<WidgetBase const*> chain;
-    for (auto const* widget = context().ownerOf(context().screen->focusedComponent()); widget != nullptr;
+    for (auto const* widget = owner.context().ownerOf(owner.context().screen->focusedComponent()); widget != nullptr;
          widget = widget->container()) {
         chain.push_back(widget);
-        if (widget->container() == this) {
+        if (widget->container() == &owner) {
             break;
         }
     }
-    if (chain.empty() || chain.back()->container() != this) {
+    if (chain.empty() || chain.back()->container() != &owner) {
         return std::nullopt;
     }
-    auto area = areaOf(*this, contentAreas(viewport), chain.back());
+    auto area = areaOf(owner, contentAreas(owner, viewport), chain.back());
     for (auto const [inner, outer] :
          std::views::zip(chain | std::views::reverse | std::views::drop(1), chain | std::views::reverse)) {
         auto const* const container = dynamic_cast<ContainerBase const*>(outer);
@@ -404,14 +670,14 @@ std::optional<::core::tui::Rect> ScrollImpl::focusedArea(::core::tui::Size viewp
 
 // Moving the view where the user asked does not count as a change: the focused widget's place in the content and
 // the view's size are what is compared.
-void ScrollImpl::followFocus(::core::tui::Size viewport) {
-    auto const* const focused = context().screen->focusedComponent();
-    bool const inside = focused != nullptr && focused != &view() && isWithin(focused, view());
+void ScrollViewport::followFocus(ContainerBase const& owner, ::core::tui::Size viewport) {
+    auto const* const focused = owner.context().screen->focusedComponent();
+    bool const inside = focused != nullptr && focused != &owner.view() && isWithin(focused, owner.view());
     if (!inside) {
         _followed = {};
         return;
     }
-    auto const area = focusedArea(viewport);
+    auto const area = focusedArea(owner, viewport);
     Followed const now{.view = focused, .area = area.value_or(::core::tui::Rect{}), .viewport = viewport};
     if (now == _followed) {
         return;
@@ -429,38 +695,40 @@ void ScrollImpl::followFocus(::core::tui::Size viewport) {
     _offset = std::min(_offset, first);
 }
 
-void ScrollImpl::paint(::core::tui::Canvas& canvas) {
+void ScrollViewport::paint(ContainerBase const& owner, ::core::tui::Canvas& canvas) {
     auto const viewport = canvas.size();
     _viewportSize = viewport;
     bool const vertical = _axis == ui::Axis::Vertical;
-    auto const natural = naturalSize();
+    auto const natural = stackNaturalSize(owner.children(), _axis, 0);
     _viewport = vertical ? viewport.height : viewport.width;
-    _extent = std::max(_viewport, vertical ? natural.height : natural.width);
-    followFocus(viewport);
+    auto const inset = owner.contentInsets();
+    _extent = std::max(_viewport, vertical ? natural.height + (2 * inset.height) : natural.width + (2 * inset.width));
+    followFocus(owner, viewport);
     _offset = std::clamp(_offset, 0, _extent - _viewport);
-    placeChildren(childAreas(viewport));
+    owner.placeChildren(childAreas(owner, viewport));
 }
 
 // A move the user asked for counts as having followed the focus as it is now, so the next frame does not undo it
 // when the focus moved since the last one.
-bool ScrollImpl::scrollBy(int cells) {
+bool ScrollViewport::scrollBy(ContainerBase const& owner, int cells) {
     int const target = std::clamp(_offset + cells, 0, std::max(0, _extent - _viewport));
     if (target == _offset) {
         return false;
     }
     _offset = target;
-    auto const* const focused = context().screen->focusedComponent();
-    _followed = {
-        .view = focused, .area = focusedArea(_viewportSize).value_or(::core::tui::Rect{}), .viewport = _viewportSize};
-    refresh();
+    auto const* const focused = owner.context().screen->focusedComponent();
+    _followed = {.view = focused,
+                 .area = focusedArea(owner, _viewportSize).value_or(::core::tui::Rect{}),
+                 .viewport = _viewportSize};
+    owner.refresh();
     return true;
 }
 
-bool ScrollImpl::wheel(int delta) { return scrollBy(delta); }
+bool ScrollViewport::wheel(ContainerBase const& owner, int delta) { return scrollBy(owner, delta); }
 
 // Each widget below says whether it wants the focus; a scroll among them asks its own content in turn.
-bool ScrollImpl::wantsFocus() const {
-    std::vector<WidgetBase const*> pending{children().begin(), children().end()};
+bool ScrollViewport::wantsFocus(ContainerBase const& owner) {
+    std::vector<WidgetBase const*> pending{owner.children().begin(), owner.children().end()};
     while (!pending.empty()) {
         auto const* const widget = pending.back();
         pending.pop_back();
@@ -477,7 +745,7 @@ bool ScrollImpl::wantsFocus() const {
     return true;
 }
 
-::core::tui::EventResult ScrollImpl::key(::core::tui::KeyEvent const& key) {
+::core::tui::EventResult ScrollViewport::key(ContainerBase const& owner, ::core::tui::KeyEvent const& key) {
     using ::core::tui::KeyCode;
     if (::core::tui::withoutLockKeys(key.modifiers) != ::core::tui::Modifier::None) {
         return ::core::tui::EventResult::Ignored;
@@ -498,7 +766,8 @@ bool ScrollImpl::wantsFocus() const {
     } else if (key.key == KeyCode::End) {
         cells = _extent - _viewport - _offset;
     }
-    return cells != 0 && scrollBy(cells) ? ::core::tui::EventResult::Handled : ::core::tui::EventResult::Ignored;
+    return cells != 0 && scrollBy(owner, cells) ? ::core::tui::EventResult::Handled
+                                                : ::core::tui::EventResult::Ignored;
 }
 
 namespace {
@@ -592,6 +861,30 @@ void OverlayCore::setTitle(std::string_view title) {
     _self->refresh();
 }
 
+void OverlayCore::setDescription(std::string_view description) {
+    _description = std::string{description};
+    _descriptionRuns.clear();
+    _self->refresh();
+}
+
+void OverlayCore::setDescriptionSpans(std::vector<ui::TextSpan> const& spans) {
+    _description = ui::spansText(spans);
+    _descriptionRuns = spans;
+    _self->refresh();
+}
+
+void OverlayCore::setSheet(bool sheet) {
+    _sheet = sheet;
+    _self->refresh();
+}
+
+void OverlayCore::setDismissLabel(std::string_view label) {
+    _dismissLabel = std::string{label};
+    _self->refresh();
+}
+
+std::pair<int, int> OverlayCore::dismissCells() const { return {2, displayWidth(_dismissLabel) + 2}; }
+
 ::core::tui::Size FooterImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Horizontal, 1); }
 
 std::vector<::core::tui::Rect> FooterImpl::childAreas(::core::tui::Size size) const {
@@ -612,10 +905,25 @@ ui::ContainerWidget& OverlayFooter::of(ContainerBase& overlay) {
     return *_footer;
 }
 
+// A description takes the first row inside the frame and a rule the second, so the content starts two rows lower.
 std::vector<::core::tui::Rect> OverlayCore::childAreas(::core::tui::Size size) const {
-    return stackAreas(_self->children(),
-                      {.x = 2, .y = 1, .width = std::max(0, size.width - 4), .height = std::max(0, size.height - 2)},
-                      StackSpec{.axis = ui::Axis::Vertical});
+    int const head = _description.empty() ? 0 : 2;
+    ::core::tui::Rect const inner{
+        .x = 2, .y = 1 + head, .width = std::max(0, size.width - 4), .height = std::max(0, size.height - 2 - head)};
+    std::span<WidgetBase* const> const children = _self->children();
+    // A sheet's footer stands at the bottom of the box, under content that takes the rest of its height.
+    bool const footerLast = _sheet && !children.empty() && children.back() == _footer && _footer->shown();
+    if (!footerLast) {
+        return stackAreas(children, inner, StackSpec{.axis = ui::Axis::Vertical});
+    }
+    int const footerHeight = std::min(inner.height, requestedSize(*_footer).height);
+    std::vector<::core::tui::Rect> areas =
+        stackAreas(children.first(children.size() - 1),
+                   {.x = inner.x, .y = inner.y, .width = inner.width, .height = inner.height - footerHeight},
+                   StackSpec{.axis = ui::Axis::Vertical});
+    areas.push_back(
+        {.x = inner.x, .y = inner.y + inner.height - footerHeight, .width = inner.width, .height = footerHeight});
+    return areas;
 }
 
 bool OverlayCore::showsFrame() const {
@@ -635,16 +943,24 @@ bool OverlayCore::showsFrame() const {
 ::core::tui::Size OverlayCore::frameSize() const {
     auto const inner = stackNaturalSize(_self->children(), ui::Axis::Vertical, 0);
     auto const area = _self->context().screen->viewportArea();
-    int const width = std::max(inner.width + 4, displayWidth(_title) + 4);
+    if (_sheet && !_side.has_value()) {
+        return {.width = area.width, .height = area.height};
+    }
+    int const width = std::max({inner.width + 4, displayWidth(_title) + 4, displayWidth(_description) + 4});
+    int const head = _description.empty() ? 0 : 2;
     if (_side.has_value()) {
         return {.width = std::min(width, area.width), .height = area.height};
     }
-    return {.width = std::min(width, area.width), .height = std::min(inner.height + 2, area.height)};
+    return {.width = std::min(width, area.width), .height = std::min(inner.height + 2 + head, area.height)};
 }
 
 // A dialog is centred; a drawer stands against its side, the whole height of the screen.
 ::core::tui::Point OverlayCore::framePosition() const {
     auto const& screen = *_self->context().screen;
+    if (_sheet && !_side.has_value()) {
+        auto const area = screen.viewportArea();
+        return {.x = area.x, .y = area.y};
+    }
     if (!_side.has_value()) {
         return centredIn(screen, frameSize());
     }
@@ -660,7 +976,25 @@ void OverlayCore::paintFrame(::core::tui::Canvas& canvas) {
     canvas.fill(canvas.area(), ' ', theme.dialogBackground);
     canvas.drawBox(canvas.area(), ::core::tui::BorderStyle::Single, theme.dialogBorder);
     auto title = canvas.subcanvas({.x = 2, .y = 0, .width = std::max(0, canvas.width() - 4), .height = 1});
-    title.putString(0, 0, _title, theme.dialogTitle);
+    if (_sheet) {
+        std::string const control = "[" + _dismissLabel + "]";
+        title.putString(0, 0, control, theme.dialogTitle);
+        title.putString(0, displayWidth(control) + 1, _title, theme.dialogTitle);
+    } else {
+        title.putString(0, 0, _title, theme.dialogTitle);
+    }
+    if (!_description.empty() && canvas.height() > 3) {
+        // One row, clipped at the frame's width like any terminal text, then a rule across the frame's inside.
+        auto line = canvas.subcanvas({.x = 2, .y = 1, .width = std::max(0, canvas.width() - 4), .height = 1});
+        if (_descriptionRuns.empty()) {
+            line.putString(0, 0, splitLines(_description).front(), theme.textMuted);
+        } else {
+            paintRuns(line, _descriptionRuns, theme.textMuted, false);
+        }
+        for (int column = 1; column + 1 < canvas.width(); ++column) {
+            canvas.putString(2, column, "─", theme.dialogBorder);
+        }
+    }
     _self->placeChildren(childAreas(canvas.size()));
 }
 
@@ -673,6 +1007,13 @@ void OverlayCore::paintFrame(::core::tui::Canvas& canvas) {
     if (auto const* const mouse = std::get_if<::core::tui::MouseEvent>(&event)) {
         if (mouse->type == ::core::tui::MouseEvent::Type::Press) {
             _self->context().endPress();
+            // core::tui made the event relative to the box, so this is the cell in it.
+            auto const [first, width] = dismissCells();
+            int const column = mouse->x - 1;
+            bool const onDismiss = _sheet && mouse->y - 1 == 0 && column >= first && column < first + width;
+            if (onDismiss && _open && _self->actionable()) {
+                dismiss();
+            }
         }
         return ::core::tui::EventResult::Handled;
     }

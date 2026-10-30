@@ -20,26 +20,37 @@ MorphField {
         font: Theme.bodyFont
         id: box
         width: root.controlWidth
+        // No vertical padding of its own: the box is as tall as its label's line or its indicator, and the container's
+        // gap spaces the rows. A touch target while the window is compact.
+        topPadding: 0
+        bottomPadding: 0
+        implicitHeight: Math.max(implicitContentHeight, implicitIndicatorHeight,
+                                 Theme.touchTargets ? Theme.targetHeight : 0)
         text: root.label
         palette.windowText: root.scheme.text
-        indicator: Rectangle {
+        contentItem: Text {
+            leftPadding: box.indicator.width + box.spacing
+            text: box.text
+            textFormat: Text.PlainText
+            font: box.font
+            color: box.palette.windowText
+            elide: Text.ElideRight
+            verticalAlignment: Text.AlignVCenter
+        }
+        indicator: MorphCheckIndicator {
+            objectName: "boxIndicator"
             x: box.leftPadding
             y: (box.height - height) / 2
-            implicitWidth: Theme.unitHeight
-            implicitHeight: Theme.unitHeight
-            radius: Theme.radiusControl / 2
-            color: box.checked ? root.scheme.accent : root.scheme.surface
-            border.width: box.visualFocus ? 2 : 1
-            border.color: box.visualFocus ? root.scheme.focus : box.checked ? root.scheme.accent : root.scheme.border
-
-            Text {
-                anchors.centerIn: parent
-                visible: box.checked
-                text: "✓"
-                color: "white"
-                font.pixelSize: parent.height * 0.75
-            }
+            scheme: root.scheme
+            checked: box.checked
+            focused: box.visualFocus
+            // A toned box keeps its tone's border while focused; focus shows as the border's width.
+            toned: root.shownTone !== 0
+            toneColor: root.toneOf(root.shownTone)
         }
+        // The widget's own chords come before the control's handling of the key.
+        Keys.priority: Keys.BeforeItem
+        Keys.onPressed: event => event.accepted = root.takeOwnChord(event)
         // Declared, as the text input's field declares them.
         Accessible.role: root.accessibleRole
         Accessible.name: root.accessibleName

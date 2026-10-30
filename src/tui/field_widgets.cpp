@@ -12,12 +12,15 @@
 #include <cstdlib>
 #include <format>
 #include <memory>
+#include <morph/ui/date_pattern.hpp>
 #include <morph/ui/theme.hpp>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
+#include "tui/context.hpp"
 #include "tui/drag.hpp"
 
 namespace morph::tui::detail {
@@ -77,6 +80,10 @@ public:
         auto* const fields = _fields;
         auto const input = asFieldInput(event);
         if (auto const* key = std::get_if<::core::tui::KeyEvent>(&input)) {
+            // The field's own chords come before its editing keys, so a chord it declares takes that key from it.
+            if (EventResult const result = owner().chord(*key); result != EventResult::Ignored) {
+                return result;
+            }
             if (key->codepoint == 0 && (key->key == KeyCode::Tab || key->key == KeyCode::Escape)) {
                 return EventResult::Ignored;
             }
@@ -96,14 +103,10 @@ public:
             return EventResult::Handled;
         }
         if (action == ::core::tui::InputFieldAction::Submit) {
-            fields->submitted();
-            return EventResult::Handled;
+            return submit(*fields);
         }
-        // None, and the agent-shell actions (Ctrl+T, Ctrl+G, …) that mean nothing here, go to the widget's chords
-        // and then bubble on.
-        if (auto const* key = std::get_if<::core::tui::KeyEvent>(&input)) {
-            return owner().chord(*key);
-        }
+        // None, and the agent-shell actions (Ctrl+T, Ctrl+G, …) that mean nothing here, bubble on: the widget's
+        // chords were tried first.
         return EventResult::Ignored;
     }
 
@@ -117,6 +120,22 @@ public:
     }
 
 private:
+    /// Enter: the field submits, and the key stops here when the owner submits; otherwise the field has committed
+    /// and Enter goes on outwards, to a dialog's default. The commit's handler may destroy the owner and this view,
+    /// and then the key stops here too, since nothing may bubble from a destroyed view.
+    [[nodiscard]] EventResult submit(FieldOwner& fields) {
+        if (fields.submits()) {
+            fields.submitted();
+            return EventResult::Handled;
+        }
+        Context& context = owner().context();
+        WidgetBase* alive = &owner();
+        context.watches.push_back(&alive);
+        fields.submitted();
+        std::erase(context.watches, &alive);
+        return alive != nullptr ? EventResult::Ignored : EventResult::Handled;
+    }
+
     /// What a read-only field does with @p input: whatever moves the cursor or the selection does so, and whatever
     /// would change the text is undone and reports nothing, nor does a submit.
     [[nodiscard]] EventResult lockedEvent(::core::tui::InputEvent const& input) {
@@ -132,10 +151,9 @@ private:
             return EventResult::Handled;
         }
         if (action == ::core::tui::InputFieldAction::Submit) {
-            return EventResult::Handled;
+            return _fields->submits() ? EventResult::Handled : EventResult::Ignored;
         }
-        auto const* key = std::get_if<::core::tui::KeyEvent>(&input);
-        return key != nullptr ? owner().chord(*key) : EventResult::Ignored;
+        return EventResult::Ignored;
     }
 
     FieldOwner* _fields;
@@ -147,17 +165,21 @@ std::unique_ptr<::core::tui::InputField> makeFieldView(WidgetBase& owner, FieldO
     return std::make_unique<FieldView>(owner, fields);
 }
 
-void paintField(::core::tui::InputField& field, FieldOwner const& fields, bool reachable,
-                ::core::tui::Canvas& canvas) {
+void paintField(::core::tui::InputField& field, FieldOwner const& fields, bool reachable, ::core::tui::Canvas& canvas,
+                bool strong) {
     auto const& theme = canvas.theme();
     auto& buffer = canvas.buffer();
     auto const cursor = buffer.cursor();
     bool const cursorShown = buffer.cursorVisible();
-    field.setStyles(reachable ? ::core::tui::InputFieldStyles{}
-                              : ::core::tui::InputFieldStyles{.text = theme.textMuted,
-                                                              .ghost = std::nullopt,
-                                                              .selection = std::nullopt,
-                                                              .background = std::nullopt});
+    ::core::tui::InputFieldStyles styles{};
+    if (!reachable) {
+        styles.text = theme.textMuted;
+    } else if (strong) {
+        ::core::tui::Style text = field.focused() ? theme.inputFocused : theme.inputNormal;
+        text.bold = true;
+        styles.text = text;
+    }
+    field.setStyles(styles);
     field.InputField::render(canvas);
     if (!field.focused()) {
         buffer.setCursor(cursor.y, cursor.x);
@@ -296,6 +318,24 @@ void TextInputImpl::setUnit(std::string_view unit) {
     refresh();
 }
 
+// The mount never asks a multiline input for a prefix.
+void TextInputImpl::setPrefix(std::string_view prefix) {
+    if (_mode == ui::TextInputMode::Multiline) {
+        throw std::logic_error{"morph::tui: a multiline text input shows no prefix"};
+    }
+    _prefix = std::string{prefix};
+    refresh();
+}
+
+// The mount never asks a multiline input to align its text.
+void TextInputImpl::setAlign(ui::Align align) {
+    if (_mode == ui::TextInputMode::Multiline) {
+        throw std::logic_error{"morph::tui: a multiline text input's text starts at the leading edge"};
+    }
+    _alignEnd = align == ui::Align::End;
+    refresh();
+}
+
 void TextInputImpl::setDecimals(int decimals) {
     if (_mode == ui::TextInputMode::Multiline) {
         throw std::logic_error{"morph::tui: a multiline text input takes no places"};
@@ -304,6 +344,14 @@ void TextInputImpl::setDecimals(int decimals) {
 }
 
 // The mount never asks a multiline input for an icon.
+void TextInputImpl::setEmphasis(ui::InputEmphasis emphasis) {
+    if (_mode == ui::TextInputMode::Multiline) {
+        throw std::logic_error{"morph::tui: a multiline text input takes no emphasis"};
+    }
+    _prominent = emphasis == ui::InputEmphasis::Prominent;
+    refresh();
+}
+
 void TextInputImpl::setIcon(std::string_view icon) {
     if (_mode == ui::TextInputMode::Multiline) {
         throw std::logic_error{"morph::tui: a multiline text input shows no icon"};
@@ -312,35 +360,67 @@ void TextInputImpl::setIcon(std::string_view icon) {
     refresh();
 }
 
-::core::tui::Size TextInputImpl::naturalSize() const {
+::core::tui::Size TextInputImpl::controlSize() const {
     int const unit = _unit.empty() ? 0 : displayWidth(_unit) + 1;
     std::string_view const glyph = ui::iconGlyph(_icon);
     int const icon = glyph.empty() ? 0 : displayWidth(glyph) + 1;
-    int const width = std::max({20, displayWidth(_field->text()) + 1, displayWidth(_placeholder)}) + unit + icon;
+    int const prefix = _prefix.empty() ? 0 : displayWidth(_prefix) + 1;
+    int const width =
+        std::max({20, displayWidth(_field->text()) + 1, displayWidth(_placeholder)}) + unit + icon + prefix;
     int const height = _mode == ui::TextInputMode::Multiline ? std::max(3, _field->lineCount()) : 1;
-    return withFieldCaption({.width = width, .height = height}, caption());
+    return withCaption({.width = width, .height = height});
 }
 
 std::string TextInputImpl::probeText() const { return std::string{_field->text()}; }
 
-void TextInputImpl::paint(::core::tui::Canvas& canvas) {
-    auto control = paintFieldCaption(canvas, caption());
+void TextInputImpl::paintControl(::core::tui::Canvas& canvas) {
+    auto control = paintCaption(canvas);
     std::string_view const glyph = ui::iconGlyph(_icon);
     int const iconWidth = glyph.empty() ? 0 : displayWidth(glyph) + 1;
     if (iconWidth > 0) {
         control.putString(0, 0, glyph, control.theme().textMuted);
     }
+    int const prefixWidth = _prefix.empty() ? 0 : displayWidth(_prefix) + 1;
+    if (prefixWidth > 0) {
+        control.putString(0, iconWidth, _prefix, control.theme().textMuted);
+    }
+    int const start = iconWidth + prefixWidth;
     auto field = control.subcanvas(
-        {.x = iconWidth, .y = 0, .width = std::max(0, control.width() - iconWidth), .height = control.height()});
+        {.x = start, .y = 0, .width = std::max(0, control.width() - start), .height = control.height()});
     if (_unit.empty()) {
-        paintField(*_field, *this, actionable(), field);
+        paintText(field);
     } else {
         int const unitX = std::max(0, field.width() - marksWidth() - displayWidth(_unit));
         auto text = field.subcanvas({.x = 0, .y = 0, .width = std::max(0, unitX - 1), .height = field.height()});
-        paintField(*_field, *this, actionable(), text);
+        paintText(text);
         field.putString(0, unitX, _unit, field.theme().textMuted);
     }
     paintMarks(control);
+}
+
+// The editable text in @p canvas. An end-aligned single-line field shows its text against the right edge while the
+// text fits: as it is when unfocused, with the cursor's cell after it while focused. Another text, an empty field
+// and a masked one are drawn from the start.
+void TextInputImpl::paintText(::core::tui::Canvas& canvas) {
+    int const textWidth = displayWidth(_field->text());
+    int const room = canvas.width() - (_field->focused() ? 1 : 0);
+    bool const aligned = _alignEnd && _mode == ui::TextInputMode::SingleLine && textWidth > 0 && textWidth < room;
+    if (!aligned) {
+        paintField(*_field, *this, actionable(), canvas, _prominent);
+        return;
+    }
+    int const x = room - textWidth;
+    if (!_field->focused()) {
+        ::core::tui::Style text = canvas.theme().inputNormal;
+        text.bold = _prominent;
+        if (!actionable()) {
+            text = canvas.theme().textMuted;
+        }
+        canvas.putString(0, x, _field->text(), text);
+        return;
+    }
+    auto shifted = canvas.subcanvas({.x = x, .y = 0, .width = canvas.width() - x, .height = canvas.height()});
+    paintField(*_field, *this, actionable(), shifted, _prominent);
 }
 
 void TextInputImpl::edited() {
@@ -381,12 +461,31 @@ void TextInputImpl::left() {
     }
 }
 
+void DateTimeInputImpl::setPattern(std::string_view pattern) {
+    _pattern = std::string{pattern};
+    refresh();
+}
+
+std::string DateTimeInputImpl::shownOf(morph::time::DateTime instant) const {
+    if (_pattern.empty()) {
+        return formatLocal(instant, _mode, _offsetMinutes);
+    }
+    return ui::formatDate(_pattern, instant + std::chrono::minutes{_offsetMinutes}, _offsetMinutes);
+}
+
+std::optional<morph::time::DateTime> DateTimeInputImpl::instantOf(std::string_view text) const {
+    if (_pattern.empty()) {
+        return parseLocal(text, _mode, _offsetMinutes);
+    }
+    return ui::parseDate(_pattern, text, _offsetMinutes);
+}
+
 void DateTimeInputImpl::setValue(std::optional<morph::time::Timestamp> const& value) {
-    auto const text = value && value->hasValue() ? formatLocal(**value, _mode, _offsetMinutes) : std::string{};
+    auto const text = value && value->hasValue() ? shownOf(**value) : std::string{};
     if (text != _field->text()) {
         _field->setText(text);
     }
-    _committed = parseLocal(text, _mode, _offsetMinutes);
+    _committed = instantOf(text);
     _invalid = false;
     refresh();
 }
@@ -395,14 +494,19 @@ void DateTimeInputImpl::setOnChange(std::function<void(std::optional<morph::time
     _onChange = std::move(onChange);
 }
 
-::core::tui::Size DateTimeInputImpl::naturalSize() const {
-    return withFieldCaption({.width = _mode == ui::DateMode::Date ? 12 : 18, .height = 1}, caption());
+::core::tui::Size DateTimeInputImpl::controlSize() const {
+    // A pattern is as wide as what it writes, and a cell for the cursor.
+    int width = _mode == ui::DateMode::Date ? 12 : 18;
+    if (!_pattern.empty()) {
+        width = displayWidth(ui::formatDate(_pattern, {}, _offsetMinutes)) + 2;
+    }
+    return withCaption({.width = width, .height = 1});
 }
 
 std::string DateTimeInputImpl::probeText() const { return std::string{_field->text()}; }
 
-void DateTimeInputImpl::paint(::core::tui::Canvas& canvas) {
-    auto control = paintFieldCaption(canvas, caption());
+void DateTimeInputImpl::paintControl(::core::tui::Canvas& canvas) {
+    auto control = paintCaption(canvas);
     paintField(*_field, *this, actionable(), control);
     paintMarks(control);
 }
@@ -415,7 +519,7 @@ void DateTimeInputImpl::submitted() { commitTyped(); }
 // same instant.
 void DateTimeInputImpl::left() {
     auto const text = _field->text();
-    auto const typed = text.empty() ? std::nullopt : parseLocal(text, _mode, _offsetMinutes);
+    auto const typed = text.empty() ? std::nullopt : instantOf(text);
     if (!text.empty() && !typed) {
         commitTyped();
         return;
@@ -424,7 +528,7 @@ void DateTimeInputImpl::left() {
         commit(typed);
         return;
     }
-    auto const shown = typed ? formatLocal(*typed, _mode, _offsetMinutes) : std::string{};
+    auto const shown = typed ? shownOf(*typed) : std::string{};
     if (shown != text) {
         _field->setText(shown);
         refresh();
@@ -436,7 +540,7 @@ void DateTimeInputImpl::commitTyped() {
         commit(std::nullopt);
         return;
     }
-    if (auto const parsed = parseLocal(_field->text(), _mode, _offsetMinutes); parsed.has_value()) {
+    if (auto const parsed = instantOf(_field->text()); parsed.has_value()) {
         commit(parsed);
         return;
     }
@@ -466,8 +570,7 @@ std::optional<EventResult> DateTimeInputImpl::intercept(::core::tui::KeyEvent co
 // An empty field steps from now; text that does not parse is left alone and marked.
 void DateTimeInputImpl::step(std::chrono::minutes delta) {
     auto const text = _field->text();
-    auto const current =
-        text.empty() ? std::optional{morph::time::DateTime::now()} : parseLocal(text, _mode, _offsetMinutes);
+    auto const current = text.empty() ? std::optional{morph::time::DateTime::now()} : instantOf(text);
     if (!current) {
         _invalid = true;
         refresh();
@@ -479,8 +582,8 @@ void DateTimeInputImpl::step(std::chrono::minutes delta) {
 // What is reported is read back from the text shown, so it is the instant the user sees: local midnight in Date
 // mode, the whole minute in DateTime mode.
 void DateTimeInputImpl::commit(std::optional<morph::time::DateTime> value) {
-    auto const text = value ? formatLocal(*value, _mode, _offsetMinutes) : std::string{};
-    auto const shown = parseLocal(text, _mode, _offsetMinutes);
+    auto const text = value ? shownOf(*value) : std::string{};
+    auto const shown = instantOf(text);
     _invalid = false;
     _field->setText(text);
     _committed = shown;
@@ -501,13 +604,13 @@ void FilePickerImpl::setPath(std::string_view path) {
 
 void FilePickerImpl::setOnPicked(std::function<void(std::string)> onPicked) { _onPicked = std::move(onPicked); }
 
-::core::tui::Size FilePickerImpl::naturalSize() const {
+::core::tui::Size FilePickerImpl::controlSize() const {
     return {.width = std::max(30, displayWidth(_field->prompt()) + displayWidth(_field->text()) + 1), .height = 1};
 }
 
 std::string FilePickerImpl::probeText() const { return std::string{_field->text()}; }
 
-void FilePickerImpl::paint(::core::tui::Canvas& canvas) {
+void FilePickerImpl::paintControl(::core::tui::Canvas& canvas) {
     paintField(*_field, *this, actionable(), canvas);
     paintMarks(canvas);
 }

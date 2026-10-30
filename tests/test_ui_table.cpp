@@ -60,7 +60,8 @@ struct Fixture {
             },
             {.selectionMode = ui::SelectionMode::Single,
              .selection = [this] { return selection.get(); },
-             .onSelectionChange = [this](std::vector<ui::Key> keys) { selection.set(std::move(keys)); },
+             .onSelectionChange = [this](std::vector<ui::Key> keys,
+                                         ui::SelectionChange /*change*/) { selection.set(std::move(keys)); },
              .onActivate = [this](ui::Key key) { activated.push_back(std::move(key)); }});
     }
 };
@@ -243,12 +244,13 @@ TEST_CASE("ui::table: a Multiple table reports every selected key, in the user's
     Runtime runtime{owner};
     RecordingBackend backend;
     std::vector<std::vector<ui::Key>> reported;
-    ui::Mounted const mounted{runtime, backend,
-                              ui::table<Item>({{.label = "Name"}}, [] { return fruit(); }, keyOf, nameCell,
-                                              {.selectionMode = ui::SelectionMode::Multiple,
-                                               .onSelectionChange = [&reported](std::vector<ui::Key> keys) {
-                                                   reported.push_back(std::move(keys));
-                                               }})};
+    ui::Mounted const mounted{
+        runtime, backend,
+        ui::table<Item>({{.label = "Name"}}, [] { return fruit(); }, keyOf, nameCell,
+                        {.selectionMode = ui::SelectionMode::Multiple,
+                         .onSelectionChange = [&reported](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) {
+                             reported.push_back(std::move(keys));
+                         }})};
     backend.selectRows(1, {intKey(3), intKey(1)});
     CHECK(reported == std::vector<std::vector<ui::Key>>{{intKey(3), intKey(1)}});
     CHECK(backend.prop(1, "selection") == "[3,1]");
@@ -261,13 +263,14 @@ TEST_CASE("ui::table: a user's change reports the selected rows only, and drops 
     RecordingBackend backend;
     Signal<std::vector<Item>> items{runtime, {{.id = 1, .name = "apple"}, {.id = 3, .name = "plum"}}};
     std::vector<std::vector<ui::Key>> reported;
-    ui::Mounted const mounted{runtime, backend,
-                              ui::table<Item>({{.label = "Name"}}, [&items] { return items.get(); }, keyOf, nameCell,
-                                              {.selectionMode = ui::SelectionMode::Multiple,
-                                               .selection = std::vector<ui::Key>{intKey(1), intKey(2)},
-                                               .onSelectionChange = [&reported](std::vector<ui::Key> keys) {
-                                                   reported.push_back(std::move(keys));
-                                               }})};
+    ui::Mounted const mounted{
+        runtime, backend,
+        ui::table<Item>({{.label = "Name"}}, [&items] { return items.get(); }, keyOf, nameCell,
+                        {.selectionMode = ui::SelectionMode::Multiple,
+                         .selection = std::vector<ui::Key>{intKey(1), intKey(2)},
+                         .onSelectionChange = [&reported](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) {
+                             reported.push_back(std::move(keys));
+                         }})};
     CHECK(backend.prop(1, "selection") == "[1]");  // 2 waits for its row
 
     backend.selectRows(1, {intKey(3), intKey(1)});
@@ -314,13 +317,15 @@ TEST_CASE("ui::table: a hidden or disabled table takes no selection and no activ
     Signal<bool> shown{runtime, false};
     Signal<bool> enabled{runtime, true};
     int calls = 0;
-    ui::Mounted const mounted{runtime, backend,
-                              ui::table<Item>({{.label = "Name"}}, [] { return fruit(); }, keyOf, nameCell,
-                                              {.selectionMode = ui::SelectionMode::Single,
-                                               .onSelectionChange = [&calls](std::vector<ui::Key> const&) { ++calls; },
-                                               .onActivate = [&calls](ui::Key const&) { ++calls; },
-                                               .common = {.visible = [&shown] { return shown.get(); },
-                                                          .enabled = [&enabled] { return enabled.get(); }}})};
+    ui::Mounted const mounted{
+        runtime, backend,
+        ui::table<Item>(
+            {{.label = "Name"}}, [] { return fruit(); }, keyOf, nameCell,
+            {.selectionMode = ui::SelectionMode::Single,
+             .onSelectionChange = [&calls](std::vector<ui::Key> const&, ui::SelectionChange /*change*/) { ++calls; },
+             .onActivate = [&calls](ui::Key const&) { ++calls; },
+             .common = {.visible = [&shown] { return shown.get(); },
+                        .enabled = [&enabled] { return enabled.get(); }}})};
     backend.selectRows(1, {intKey(1)});
     backend.activateRow(1, intKey(1));
     CHECK(calls == 0);
@@ -350,7 +355,8 @@ TEST_CASE("ui::table: a callback that throws is reported and goes no further", "
         ui::table<Item>(
             {{.label = "Name"}}, [] { return fruit(); }, keyOf, nameCell,
             {.selectionMode = ui::SelectionMode::Single,
-             .onSelectionChange = [](std::vector<ui::Key> const&) { throw std::runtime_error{"selection failed"}; },
+             .onSelectionChange = [](std::vector<ui::Key> const&,
+                                     ui::SelectionChange /*change*/) { throw std::runtime_error{"selection failed"}; },
              .onActivate = [](ui::Key const&) { throw std::runtime_error{"activation failed"}; }})};
     CHECK_NOTHROW(backend.selectRows(1, {intKey(2)}));
     CHECK_NOTHROW(backend.activateRow(1, intKey(2)));
@@ -368,19 +374,20 @@ TEST_CASE("ui::table: activating a row may remove it, and a selection may empty 
     std::string seenAfter;
     ui::Mounted const mounted{
         runtime, backend,
-        ui::table<Item>({{.label = "Name"}}, [&items] { return items.get(); }, keyOf, nameCell,
-                        {.selectionMode = ui::SelectionMode::Single,
-                         .onSelectionChange =
-                             [&items, &seenAfter, note = note](std::vector<ui::Key> const&) {
-                                 items.set({});
-                                 seenAfter = note + "cleared";
-                             },
-                         .onActivate =
-                             [&items, &backend, &rowAliveAfterWrite, &seenAfter, note = note](ui::Key const& key) {
-                                 removeItem(items, std::get<std::int64_t>(key));
-                                 rowAliveAfterWrite = backend.exists(4);
-                                 seenAfter = note + "removed";
-                             }})};
+        ui::table<Item>(
+            {{.label = "Name"}}, [&items] { return items.get(); }, keyOf, nameCell,
+            {.selectionMode = ui::SelectionMode::Single,
+             .onSelectionChange =
+                 [&items, &seenAfter, note = note](std::vector<ui::Key> const&, ui::SelectionChange /*change*/) {
+                     items.set({});
+                     seenAfter = note + "cleared";
+                 },
+             .onActivate =
+                 [&items, &backend, &rowAliveAfterWrite, &seenAfter, note = note](ui::Key const& key) {
+                     removeItem(items, std::get<std::int64_t>(key));
+                     rowAliveAfterWrite = backend.exists(4);
+                     seenAfter = note + "removed";
+                 }})};
     std::size_t const mountedNodes = runtime.core()->liveNodes();
 
     backend.clearLog();
@@ -412,7 +419,8 @@ TEST_CASE("ui::table: a callback may destroy the whole view, its table included"
             ui::table<Item>({{.label = "Name"}}, [] { return fruit(); }, keyOf, nameCell,
                             {.selectionMode = ui::SelectionMode::Single,
                              .onSelectionChange =
-                                 [&view, &seenAfter, note = note](std::vector<ui::Key> const& keys) {
+                                 [&view, &seenAfter, note = note](std::vector<ui::Key> const& keys,
+                                                                  ui::SelectionChange /*change*/) {
                                      view.reset();
                                      seenAfter = note + std::to_string(keys.size());
                                  },

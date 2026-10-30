@@ -11,7 +11,25 @@ QtObject {
     property color focus: "#1565c0"
     property color selection: "#cfe3ff"
     property color border: "#c7c7cc"
-    property color neutral: "#e5e5ea"
+    // The neutral tone's text, fill, outline and marker: `color.neutral` and its `.bg`, `.border` and `.dot`.
+    property color neutral: "#6e6e73"
+    property color neutralBg: "#266e6e73"
+    property color neutralBorder: "#6e6e73"
+    property color neutralDot: "#6e6e73"
+    // The fill under a hovered or pressed list item, ghost button, segmented option and menu entry; and the unfilled
+    // part of a progress bar and the segmented select's track.
+    property color hover: "#141d1d1f"
+    property color track: "#e5e5ea"
+    // A text input's, a text area's, a select's, a date input's, a check box's and a normal button's fill and outline;
+    // the rule between the rows of a table or a divided list.
+    property color controlSurface: "#ffffff"
+    property color controlBorder: "#c7c7cc"
+    property color divider: "#dcdce0"
+    // Whether the outlines of the controls on this surface are stroked in dashes: `border.style`.
+    property bool borderDashed: false
+    // Whether a selected list item is drawn as a plain fill, with its label in the text colour and no accent bar:
+    // `list.selection`.
+    property bool listSelectionFill: false
     property color error: "#c62828"
     property color success: "#2e7d32"
     property color info: "#1565c0"
@@ -31,4 +49,9 @@ QtObject {
     property color infoDot: "#1565c0"
     // A table's header background; transparent draws no fill, matching a table with no theme-set header.
     property color tableHeader: "#00000000"
+    // A chart's series colours, in drawing order: `color.chart.1` to `color.chart.4`.
+    property color chart1: "#0072b2"
+    property color chart2: "#c25400"
+    property color chart3: "#00805e"
+    property color chart4: "#a8508a"
 }

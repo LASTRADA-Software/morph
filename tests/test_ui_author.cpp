@@ -14,6 +14,8 @@
 #include <string_view>
 #include <vector>
 
+#include "ui_interpreter_support.hpp"
+
 /// @file
 /// @brief The server-side builders of `morph::ui::author`: expression handles, declarations, nodes, commands,
 ///        registration with its catalog and accessibility rules, and the authoring goldens.
@@ -317,12 +319,105 @@ TEST_CASE("handles read fields by member pointer below a name", "[ui][author]") 
     CHECK(text(ui::row<ResultView>().at(&ResultView::id)) == R"({"row":"id"})");
     CHECK(text(ui::row("inputs").at("mass")) == R"({"row":"inputs.mass"})");
     CHECK(text(ui::ref("x").at("y")) == R"({"ref":"x.y"})");
-    // A computed value has no name to read below.
-    CHECK_THROWS_AS((view.orElse(view)).at(&ResultView::id), ui::AuthoringError);
-    CHECK_THROWS_AS(ui::env("locale").at("x"), ui::AuthoringError);
     // A member glaze does not reflect has no JSON name.
     CHECK_THROWS_AS(ui::row(&author_test::Partial::hidden), ui::AuthoringError);
     CHECK(text(ui::row(&author_test::Partial::shown)) == R"({"row":"shown"})");
+}
+
+// Mutation: write the bars as plain children of the column again (no bar column, surface or padding).
+TEST_CASE(
+    "pinned writes a divided column around a stretching scroll, with each bar a padded column on the bar surface",
+    "[ui][author]") {
+    ui::Node const node =
+        ui::pinned(ui::text({.text = "body"}),
+                   {.top = ui::text({.text = "head"}), .bottom = ui::text({.text = "bar"}), .inset = 0});
+    CHECK(
+        text(node) ==
+        R"({"kind":"column","children":[{"kind":"column","children":[{"kind":"text","text":"head"}],"padding":2,"surface":"bar"},)"
+        R"({"kind":"scroll","children":[{"kind":"text","text":"body"}],)"
+        R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}},)"
+        R"({"kind":"column","children":[{"kind":"text","text":"bar"}],"padding":2,"surface":"bar"}],"divided":true,)"
+        R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}})");
+    ui::Node const bare =
+        ui::pinned(ui::text({.text = "body"}), {.bottom = ui::text({.text = "bar"}), .surface = "", .inset = 0});
+    CHECK(text(bare) == R"({"kind":"column","children":[{"kind":"scroll","children":[{"kind":"text","text":"body"}],)"
+                        R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}},)"
+                        R"({"kind":"column","children":[{"kind":"text","text":"bar"}],"padding":2}],"divided":true,)"
+                        R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}})");
+}
+
+// Mutation: drop the focus from a blocked step's commands in stepper (the blocking field is not focused).
+TEST_CASE("stepper writes a wizard over screen state; Continue moves one step, or focuses a blocked step's field",
+          "[ui][author]") {
+    ui::ScreenRegistry screens;
+    auto const added = screens.add(ui::screen("author.stepper", [](ui::Scope& screen) {
+        auto const step = screen.state("step", std::int64_t{0});
+        auto const ready = screen.state("ready", false);
+        auto const attempted = screen.state("attempted", false);
+        auto const pulls = ui::element("pulls");
+        return ui::stepper({.step = step,
+                            .steps = {{.label = "One", .children = ui::text({.text = "one"}).testId("one")},
+                                      {.label = "Two",
+                                       .children = ui::textInput({.label = "Pulls"}).id(pulls).testId("pulls"),
+                                       .canContinue = ready,
+                                       .blocking = pulls,
+                                       .onBlocked = ui::set(attempted, true)}},
+                            .onFinish = ui::notify("done"),
+                            .testIdPrefix = "w-"});
+    }));
+    INFO((added ? std::string{} : added.error().message()));
+    REQUIRE(added.has_value());
+    std::string const& written = (*added)->text;
+    CHECK(written.contains(R"({"kind":"steps","items":)"));
+    CHECK(written.contains(R"("kind":"switch","on":{"ref":"step"})"));
+    morph::ui::testing::Harness h;
+    auto const mounted = h.mount(written);
+    REQUIRE(mounted != nullptr);
+    CHECK(h.backend.find("Text", "testId", "one").has_value());
+    h.backend.click(h.byTestId("Button", "w-continue"));
+    h.settle();
+    // One step on, not two: the step's own `set` must not satisfy the next step's test.
+    REQUIRE(h.backend.find("TextInput", "testId", "pulls").has_value());
+    CHECK(h.backend.prop(h.byTestId("Button", "w-continue"), "label") == "Finish");
+    h.backend.click(h.byTestId("Button", "w-continue"));
+    h.settle();
+    CHECK(h.backend.focused() == h.byTestId("TextInput", "pulls"));
+    CHECK(morph::ui::testing::readJson(*mounted, R"({"ref":"attempted"})") == "true");
+    // A step that names its blocking field keeps Continue enabled, so the click can show the field.
+    CHECK(h.backend.prop(h.byTestId("Button", "w-continue"), "enabled") != "false");
+}
+
+TEST_CASE("stepper writes the same document by default, and its parts are the pieces of it", "[ui][author]") {
+    auto const step = ui::Handle<std::int64_t>{ui::ref<std::int64_t>("step")};
+    ui::StepperOptions options{.step = step,
+                               .steps = {{.label = "One", .children = ui::text({.text = "one"})},
+                                         {.label = "Two", .children = ui::text({.text = "two"})}},
+                               .onFinish = ui::notify("done")};
+    auto const whole = ui::stepper(options);
+    auto const parts = ui::stepperParts(options);
+    // The column holds the parts in order; reordering them fails this.
+    CHECK(text(whole) == text(ui::column({parts.indicator, parts.body, parts.footer}, {.gap = 2})));
+    CHECK(text(parts.indicator).starts_with(R"({"kind":"steps","items":{"list":[{"obj":{"label":"One")"));
+    CHECK_FALSE(text(parts.indicator).contains("labelled"));
+    CHECK(text(parts.body).starts_with(R"({"kind":"switch")"));
+    CHECK(text(parts.footer).starts_with(R"({"kind":"row")"));
+    CHECK(text(parts.footer).contains(R"("kind":"spacer")"));
+    CHECK(text(parts.footer).contains(R"({"if":[{"fn":"eq","args":[{"ref":"step"},1]},"Finish","Continue"]})"));
+
+    // Unlabelled keeps the labels and says so.
+    options.labelled = false;
+    auto const unlabelled = ui::stepperParts(options);
+    CHECK(text(unlabelled.indicator).contains(R"("label":"One")"));
+    CHECK(text(unlabelled.indicator).contains(R"("labelled":false)"));
+
+    // A step's own Continue text is part of Continue's condition, and a stretching Continue has no spacer.
+    options.labelled = {};
+    options.steps.front().continueLabel = "Continue to tests";
+    options.continueStretches = true;
+    auto const stretched = ui::stepperParts(options);
+    CHECK(text(stretched.footer).contains("Continue to tests"));
+    CHECK_FALSE(text(stretched.footer).contains(R"("kind":"spacer")"));
+    CHECK(text(stretched.footer).contains(R"("width":{"stretch":1})"));
 }
 
 TEST_CASE("the library and reading forms have builders", "[ui][author]") {
@@ -335,12 +430,37 @@ TEST_CASE("the library and reading forms have builders", "[ui][author]") {
     ui::Handle<std::vector<std::int64_t>> const typed =
         ui::concatLists(std::vector{ui::ref<std::vector<std::int64_t>>("a"), ui::ref<std::vector<std::int64_t>>("b")});
     CHECK(text(typed) == R"({"fn":"concatLists","args":[{"ref":"a"},{"ref":"b"}]})");
+    CHECK(text(ui::slice(ui::ref("a"), 0, 5)) == R"({"fn":"slice","args":[{"ref":"a"},0,5]})");
+    CHECK(text(ui::slice(ui::ref("a"), 5)) == R"({"fn":"slice","args":[{"ref":"a"},5]})");
+    CHECK(text(ui::sorted(ui::ref("a"), "x", [](ui::AnyHandle const& item) { return item.at("due"); })) ==
+          R"({"sort":{"ref":"a"},"as":"x","by":{"ref":"x.due"}})");
+    CHECK(text(ui::sorted(
+              ui::ref("a"), "x", [](ui::AnyHandle const& item) { return item; }, "desc")) ==
+          R"({"sort":{"ref":"a"},"as":"x","by":{"ref":"x"},"order":"desc"})");
+    CHECK(text(ui::sortKey("due", ui::SortOrder::Descending)) == R"({"lit":{"column":"due","direction":"desc"}})");
+    CHECK(text(ui::runs(ui::ref("a"), "w", [](ui::AnyHandle const& well) { return well.at("empty"); })) ==
+          R"({"runs":{"ref":"a"},"as":"w","by":{"ref":"w.empty"}})");
     CHECK(text(ui::format("{0} of {1}", {1, 2})) == R"({"fn":"format","args":["{0} of {1}",1,2]})");
     CHECK(text(ui::count(items)) == R"({"fn":"count","args":[{"ref":"items"}]})");
     CHECK(text(ui::sum(items)) == R"({"fn":"sum","args":[{"ref":"items"}]})");
     CHECK(text(ui::includes(items, 3)) == R"({"fn":"includes","args":[{"ref":"items"},3]})");
     CHECK(text(ui::isEmpty(items)) == R"({"fn":"isEmpty","args":[{"ref":"items"}]})");
     CHECK(text(ui::round(ui::ref("x"), 2)) == R"({"fn":"round","args":[{"ref":"x"},2]})");
+    // The default mode is written as no mode, so documents written before it are unchanged.
+    CHECK(text(ui::round(ui::ref("x"), 2, ui::Rounding::HalfEven)) == R"({"fn":"round","args":[{"ref":"x"},2]})");
+    CHECK(text(ui::round(ui::ref("x"), 2, ui::Rounding::HalfUp)) ==
+          R"({"fn":"round","args":[{"ref":"x"},2,"halfUp"]})");
+    CHECK(text(ui::decimal(ui::ref("x"), 1)) == R"({"fn":"decimal","args":[{"ref":"x"},1]})");
+    CHECK(text(ui::decimal(ui::ref("x"), 1, ui::Rounding::HalfUp)) ==
+          R"({"fn":"decimal","args":[{"ref":"x"},1,"halfUp"]})");
+    CHECK(text(ui::abs(ui::ref("x"))) == R"({"fn":"abs","args":[{"ref":"x"}]})");
+    CHECK(text(ui::dateAdd(ui::ref("start"), 3, ui::DateUnit::Months)) ==
+          R"({"fn":"dateAdd","args":[{"ref":"start"},3,"months"]})");
+    CHECK(text(ui::dateAdd(ui::ref("start"), ui::ref<std::int64_t>("n"), ui::DateUnit::Minutes)) ==
+          R"({"fn":"dateAdd","args":[{"ref":"start"},{"ref":"n"},"minutes"]})");
+    CHECK(text(ui::sqrt(ui::ref("x"), 4)) == R"({"fn":"sqrt","args":[{"ref":"x"},4]})");
+    CHECK(text(ui::stdev(items, 3)) == R"({"fn":"stdev","args":[{"ref":"items"},3]})");
+    CHECK(text(ui::rsd(items, 2, ui::Rounding::HalfUp)) == R"({"fn":"rsd","args":[{"ref":"items"},2,"halfUp"]})");
     CHECK(text(ui::quantity(ui::ref("q"))) == R"({"fn":"quantity","args":[{"ref":"q"}]})");
     CHECK(text(ui::quantity(ui::ref("q"), "mg/L")) == R"({"fn":"quantity","args":[{"ref":"q"},"mg/L"]})");
     CHECK(text(ui::call("mean", {items})) == R"({"fn":"mean","args":[{"ref":"items"}]})");
@@ -387,6 +507,36 @@ TEST_CASE("an arrange point names the column whose children it orders, and the s
     CHECK((*added)->text.contains(R"("tiles":{"kind":"arrange","of":"board"})"));
 }
 
+// Mutation: drop the separator branch of menuItem (the separator is then written as an empty entry).
+TEST_CASE("a menu button writes its style and trigger, and a separator writes nothing else", "[ui][author]") {
+    CHECK(text(ui::menuButton({.label = "More", .icon = "more", .emphasis = morph::ui::ButtonEmphasis::Ghost},
+                              {{.label = "Print"},
+                               ui::menuSeparator(),
+                               {.label = "Retire", .description = "needs reason", .visible = false}})
+                   .json()) ==
+          R"({"kind":"menu","items":[{"label":"Print"},{"separator":true},)"
+          R"({"label":"Retire","description":"needs reason","visible":false}],"style":"button","label":"More",)"
+          R"("icon":"more","emphasis":"ghost"})");
+}
+
+// Mutation: drop `onRemove` from the badge's writer.
+TEST_CASE("a removable badge writes its remove commands and label", "[ui][author]") {
+    CHECK(text(ui::badge({.text = "Result", .onRemove = ui::notify("gone"), .removeLabel = "Drop Result"}).json())
+              .contains(R"("onRemove":)"));
+    CHECK(text(ui::badge({.text = "Result", .onRemove = ui::notify("gone"), .removeLabel = "Drop Result"}).json())
+              .contains(R"("removeLabel":"Drop Result")"));
+}
+
+// Mutation: drop the tracks branch of grid (no `tracks` is written).
+TEST_CASE("a grid's tracks are written as parts, each key only when given", "[ui][author]") {
+    CHECK(text(ui::grid(ui::Nodes{}, {.tracks = {{.width = ui::fixed(3)},
+                                                 {.width = ui::fixed(6), .align = morph::ui::Align::Center},
+                                                 {}}})
+                   .json()) ==
+          R"({"kind":"grid","tracks":[{"width":{"lit":{"fixed":3}}},{"width":{"lit":{"fixed":6}},"align":"center"},)"
+          R"({}]})");
+}
+
 // Mutation: drop the align branch of stackNode (the column's `align` is not written).
 TEST_CASE("align, justify and alignSelf are written by name, and a screen using them validates", "[ui][author]") {
     CHECK(text(ui::column({ui::text({.text = "a"}).alignSelf(morph::ui::Align::End)},
@@ -413,6 +563,27 @@ TEST_CASE("align, justify and alignSelf are written by name, and a screen using 
     CHECK(refused.error().message().contains("`alignSelf` places a node in its row, column or grid"));
 }
 
+// Mutation: leave `align` out of tableNode's column parts (the column is written without it).
+TEST_CASE("a table column's align and valign and the table's valign are written by name", "[ui][author]") {
+    CHECK(text(ui::table(
+                   ui::ref("rows"),
+                   {.columns = {{.name = "area", .align = morph::ui::Align::End, .valign = morph::ui::Align::Start},
+                                {.name = "id"}},
+                    .valign = morph::ui::Align::End})
+                   .json()) ==
+          R"({"kind":"table","rows":{"ref":"rows"},"columns":[{"id":"area","align":"end","valign":"start"},)"
+          R"({"id":"id"}],"valign":"end"})");
+}
+
+// Mutation: leave `prefix`, `mono` or `align` out of textInput() (the key is not written).
+TEST_CASE("a text input's prefix, mono and align are written only when given", "[ui][author]") {
+    CHECK(text(ui::textInput(
+                   {.label = "Window", .unit = "days", .prefix = "±", .mono = true, .align = morph::ui::Align::End})
+                   .json()) ==
+          R"({"kind":"textInput","label":"Window","unit":"days","prefix":"±","mono":true,"align":"end"})");
+    CHECK(text(ui::textInput({.label = "Window"}).json()) == R"({"kind":"textInput","label":"Window"})");
+}
+
 // Mutation: leave `style` out of button() (the item is written as a push button).
 TEST_CASE("a button's style and selection are written, and the loader takes them", "[ui][author]") {
     auto const current = ui::ref<std::string>("current");
@@ -424,17 +595,26 @@ TEST_CASE("a button's style and selection are written, and the loader takes them
     CHECK(text(ui::button({.label = "P"}).json()) == R"({"kind":"button","label":"P"})");
 }
 
-// The checks are templates: a requires-expression outside one makes a deleted call a hard error.
-template <typename M>
-concept ResultReadsMember = requires(M mutation) { mutation.result().at(&ResultView::id); };
-template <typename M>
-concept ResultReadsField = requires(M mutation) { mutation.result().at("id"); };
+// Mutation: leave `shape`, `size` or `mono` out of button() or badge() (the key is not written, and the well is a
+// plain button).
+TEST_CASE("a button's and a badge's shape, size and mono are written only when given", "[ui][author]") {
+    CHECK(text(ui::button({.label = "S1",
+                           .shape = morph::ui::ControlShape::Round,
+                           .size = morph::ui::ButtonSize::Small,
+                           .mono = true})
+                   .json()) == R"({"kind":"button","shape":"round","size":"small","mono":true,"label":"S1"})");
+    CHECK(text(ui::button({.label = "S1"}).json()) == R"({"kind":"button","label":"S1"})");
+    CHECK(text(ui::badge({.text = "QC",
+                          .style = morph::ui::BadgeStyle::Outline,
+                          .shape = morph::ui::ControlShape::Round,
+                          .mono = true})
+                   .json()) == R"({"kind":"badge","text":"QC","style":"outline","shape":"round","mono":true})");
+    CHECK(text(ui::badge({.text = "QC"}).json()) == R"({"kind":"badge","text":"QC"})");
+}
+
 template <typename M>
 concept ResultBinds = requires(ui::Scope& screen, M mutation) { screen.let("r", mutation.result()); };
 
-// Mutation: drop the deleted `at` overloads of ResultHandle; the first two assertions stop holding.
-static_assert(!ResultReadsMember<ui::MutationHandle<CaptureConcentration>>, "a mutation's result has no member read");
-static_assert(!ResultReadsField<ui::MutationHandle<CaptureConcentration>>, "a mutation's result has no named read");
 static_assert(ResultBinds<ui::MutationHandle<CaptureConcentration>>, "a mutation's result binds with let");
 
 TEST_CASE("query and mutation handles read their state", "[ui][author]") {
@@ -447,8 +627,7 @@ TEST_CASE("query and mutation handles read their state", "[ui][author]") {
     CHECK(text(header.at(&Header::sampleNumber)) == R"({"ref":"header.sampleNumber"})");
     ui::MutationHandle<CaptureConcentration> const capture{"capture"};
     CHECK(text(capture.result()) == R"({"result":"capture"})");
-    // A result has no field reads at compile time; one built as a plain handle is refused when it is read.
-    CHECK_THROWS_AS(ui::Handle<ResultView>{capture.result()}.at(&ResultView::id), ui::AuthoringError);
+    CHECK(text(capture.result().at(&ResultView::id)) == R"({"get":{"result":"capture"},"path":"id"})");
     CHECK(text(capture.pending()) == R"({"pending":"capture"})");
     CHECK(text(capture.error()) == R"({"error":"capture"})");
     CHECK(text(capture.errorKind()) == R"({"errorKind":"capture"})");
@@ -579,6 +758,25 @@ ui::Screen declarationsScreen() {
     });
 }
 
+// Mutation: write `x` from the `xLabel` reader in `ui::chart` (the series' `x` then reads the run).
+TEST_CASE("author: a chart writes its series per point from the row, and its lines", "[ui][author]") {
+    ui::Node const node =
+        ui::chart({.summary = ui::ref("trendSummary"),
+                   .series = {{.label = "25 °C",
+                               .points = ui::ref("assay25"),
+                               .y = [](ui::AnyHandle const& point) { return point.at("value"); },
+                               .x = [](ui::AnyHandle const& point) { return point.at("month"); },
+                               .xLabel = [](ui::AnyHandle const& point) { return point.at("run"); },
+                               .joined = false}},
+                   .lines = {{.value = 95, .label = "LSL 95.0", .tone = "err", .style = ui::LineStyle::Dashed}},
+                   .yPlaces = 1,
+                   .yLabel = "Assay, % LC"});
+    CHECK(text(node) == R"({"kind":"chart","summary":{"ref":"trendSummary"},"series":[{"label":"25 °C",)"
+                        R"("points":{"ref":"assay25"},"y":{"row":"value"},"x":{"row":"month"},"xLabel":{"row":"run"},)"
+                        R"("joined":false}],"lines":[{"value":95,"label":"LSL 95.0","tone":"err","style":"dashed"}],)"
+                        R"("yPlaces":1,"yLabel":"Assay, % LC"})");
+}
+
 /// Every node kind of the palette, and the properties every node takes.
 ui::Screen paletteScreen() {
     return ui::screen("lims.palette", [](ui::Scope& screen) {
@@ -682,24 +880,29 @@ ui::Screen paletteScreen() {
                              auto rowHeader = rowScope.query<GetHeader>("rowHeader", rowSample);
                              return ui::text({.text = rowHeader.at(&Header::sampleNumber)});
                          }),
-             ui::table(
-                 results.value(),
-                 {.key = ui::row(&ResultView::id),
-                  .columns = {{.name = "id", .label = "Id", .width = 80, .cell = ui::text({.text = ui::row("id")})},
-                              {.name = "flag"}},
-                  .selection = ui::Selection::Multiple,
-                  .sort = ui::list({}),
-                  .filters = ui::list({}),
-                  .rowTone = "neutral",
-                  .highlightKey = ui::ref("choice"),
-                  .onActivate = ui::set(choice, ui::row("id"))})
+             ui::table(results.value(), {.key = ui::row(&ResultView::id),
+                                         .columns = {{.name = "id",
+                                                      .label = "Id",
+                                                      .width = 80,
+                                                      .cell = ui::text({.text = ui::row("id")}),
+                                                      .sortable = true,
+                                                      .sortBy = ui::row("id")},
+                                                     {.name = "flag"}},
+                                         .selectionMode = ui::Selection::Multiple,
+                                         .sort = ui::list({ui::sortKey("id", ui::SortOrder::Descending)}),
+                                         .onSortChange = ui::set(choice, "sorted"),
+                                         .rowTone = "neutral",
+                                         .onActivate = ui::set(choice, ui::row("id"))})
                  .a11y("Results"),
              ui::dataTable<ListProjects>(sample, {{&ListProjects::page, 0}},
-                                         {.selection = ui::Selection::Single,
+                                         {.selectionMode = ui::Selection::Single,
                                           .mode = ui::TableMode::Server,
+                                          .sort = ui::list({}),
+                                          .filters = ui::list({}),
+                                          .highlightKey = ui::ref("choice"),
                                           .onActivate = ui::run(pick, {{&LoadSample::id, ui::row("id")}})})
                  .a11y("Projects"),
-             ui::dataTable<ListProjects>(sample, {.selection = ui::Selection::None, .mode = ui::TableMode::Client})
+             ui::dataTable<ListProjects>(sample, {.selectionMode = ui::Selection::None, .mode = ui::TableMode::Client})
                  .a11y("All projects")});
 
         auto feedback = ui::column(
@@ -711,6 +914,10 @@ ui::Screen paletteScreen() {
              ui::banner({.text = "Bare", .action = ui::ActionPart{}}), ui::badge("New", "info", "star"),
              ui::badge("Plain"), ui::progress(ui::AnyHandle{nullptr}, "Working"), ui::progress(1),
              ui::steps(ui::list({}), 0), ui::steps(ui::list({})), ui::keyValue(ui::list({})),
+             ui::chart(
+                 {.summary = "Runs within limits",
+                  .series = {{.points = ui::list({}), .y = [](ui::AnyHandle const& run) { return run.at("value"); }}},
+                  .lines = {{.value = 100, .label = "mean"}}}),
              ui::emptyState({.title = "Nothing",
                              .text = "No rows",
                              .icon = "empty",
@@ -867,14 +1074,15 @@ TEST_CASE("every command matches its golden", "[ui][author][golden]") {
 }
 
 TEST_CASE("a builder error refuses the screen at its root", "[ui][author][registration]") {
+    // A field of a computed int is written as a `get`, which the loader refuses where it is read.
     auto const belowComputed = refusalOf(ui::screen("author.computed", [](ui::Scope& screen) {
         auto value = screen.state("value", std::int64_t{1});
         return ui::text({.text = (value + 1).at("x")});
     }));
     REQUIRE(belowComputed.has_value());
     CHECK(belowComputed->document == "author.computed");
-    CHECK(belowComputed->path.empty());
-    CHECK(belowComputed->reason.starts_with("a field is read below a name"));
+    CHECK(belowComputed->path == "/view/text");
+    CHECK(belowComputed->reason.contains("`get` reads a path out of a record or a list, not int"));
 
     auto const setComputed = refusalOf(ui::screen("author.setComputed", [](ui::Scope& screen) {
         auto value = screen.state("value", std::int64_t{1});
@@ -1207,11 +1415,22 @@ TEST_CASE("MORPH_REGISTER_SCREEN enrols at static initialisation and keeps refus
     CHECK(registry.refusals().front().path == "/view");
 }
 
-TEST_CASE("only a ref or row read has fields and names a target", "[ui][author]") {
-    // A form with companion keys, and a form whose value is not a name, are not named reads.
-    CHECK_THROWS_AS(ui::t("k", "Fallback").at("x"), ui::AuthoringError);
-    CHECK_THROWS_AS(ui::list({1}).at("x"), ui::AuthoringError);
-    CHECK_THROWS_AS(ui::AnyHandle{1}.at("x"), ui::AuthoringError);
+// Mutation: let fieldOf throw below a value that is not a named read, as it once did; every `get` case fails.
+TEST_CASE("a field of a computed value is read with get", "[ui][author]") {
+    auto const xs = ui::ref("xs");
+    auto const first = ui::call("first", {xs});
+    CHECK(text(first.at("date")) == R"({"get":{"fn":"first","args":[{"ref":"xs"}]},"path":"date"})");
+    // A field below a `get` extends its path: one node, not a `get` of a `get`.
+    CHECK(text(first.at("a").at("b")) == R"({"get":{"fn":"first","args":[{"ref":"xs"}]},"path":"a.b"})");
+    auto const view = ui::ref<ResultView>("view");
+    CHECK(text(view.orElse(view).at(&ResultView::id)) ==
+          R"({"get":{"fn":"coalesce","args":[{"ref":"view"},{"ref":"view"}]},"path":"id"})");
+    CHECK(text(ui::list({1}).at("0")) == R"({"get":{"list":[1]},"path":"0"})");
+    // A `t` carries companion keys, so it is not a `get` to extend.
+    CHECK(text(ui::t("k", "Fallback").at("x")) == R"({"get":{"t":"k","fallback":"Fallback"},"path":"x"})");
+}
+
+TEST_CASE("only a ref or row read names a target", "[ui][author]") {
     // A row field is read, but never written.
     CHECK_THROWS_AS(ui::set(ui::row("x"), 1), ui::AuthoringError);
     CHECK_THROWS_AS(ui::reset(ui::env("locale")), ui::AuthoringError);
@@ -1331,6 +1550,48 @@ TEST_CASE("a screen's head writes its subtitle, status badges and actions beside
         R"("actions":[{"id":"save","label":"Save","emphasis":"primary","onClick":[{"set":"stage","value":"Saved"}]}])"));
 }
 
+// Mutation: leave the id out of a menu item's JSON (the head menu entry has nothing to be chosen by).
+TEST_CASE("a screen's head writes its own menu, each entry with its id, and the menu's label", "[ui][author]") {
+    auto const emitted =
+        ui::screen("author.head.menu", [](ui::Scope& screen) {
+            auto stage = screen.state<std::string>("stage", ui::AnyHandle{"Draft"});
+            screen.title(ui::AnyHandle{"Instrument"});
+            screen.menuLabel(ui::AnyHandle{"More"});
+            screen.menu({.id = "calibrate",
+                         .label = ui::AnyHandle{"Calibrate"},
+                         .onClick = {ui::set(stage, ui::AnyHandle{"Calibrated"})}});
+            screen.menu(ui::menuSeparator());
+            screen.menu(
+                {.id = "retire", .label = ui::AnyHandle{"Retire"}, .description = ui::AnyHandle{"needs reason"}});
+            return ui::spacer();
+        }).write();
+    REQUIRE(emitted.has_value());
+    CHECK(emitted->text.contains(R"("menuLabel":"More")"));
+    CHECK(emitted->text.contains(
+        R"("menu":[{"id":"calibrate","label":"Calibrate","onClick":[{"set":"stage","value":"Calibrated"}]},)"
+        R"({"separator":true},{"id":"retire","label":"Retire","description":"needs reason"}])"));
+}
+
+// Mutation: write a head select's kind as `search`, or write a width of 0 (a key the default leaves out).
+TEST_CASE("a screen's head writes its search and select tools in order", "[ui][author]") {
+    auto const emitted = ui::screen("author.head.tools", [](ui::Scope& screen) {
+                             auto query = screen.state<std::string>("query", ui::AnyHandle{""});
+                             screen.title(ui::AnyHandle{"Samples"});
+                             screen.tool(ui::HeadSearchOptions{.id = "q",
+                                                               .label = ui::AnyHandle{"Search"},
+                                                               .value = query,
+                                                               .onChange = {ui::set(query, ui::event())},
+                                                               .width = 24});
+                             screen.tool(ui::HeadSelectOptions{
+                                 .id = "lab", .label = ui::AnyHandle{"Lab"}, .options = ui::AnyHandle{"North"}});
+                             return ui::spacer();
+                         }).write();
+    REQUIRE(emitted.has_value());
+    CHECK(emitted->text.contains(
+        R"("tools":[{"id":"q","kind":"search","label":"Search","width":24,"value":{"ref":"query"},)"
+        R"("onChange":[{"set":"query","value":{"ref":"event"}}]},{"id":"lab","kind":"select","label":"Lab","options":"North"}])"));
+}
+
 // Mutation: leave the options' actions out of the overlay (the dialog carries no footer buttons).
 TEST_CASE("a dialog's actions are written as its footer buttons, in its scope", "[ui][author]") {
     auto const emitted = ui::screen("author.dialog.actions", [](ui::Scope& screen) {
@@ -1345,4 +1606,198 @@ TEST_CASE("a dialog's actions are written as its footer buttons, in its scope", 
     REQUIRE(emitted.has_value());
     CHECK(emitted->text.contains(
         R"("actions":[{"id":"ok","label":"OK","emphasis":"primary","onClick":[{"set":"saved","value":"yes"}]}])"));
+}
+
+// Mutation: leave `spans` out of text() (the node is written without its runs).
+TEST_CASE("a text's spans are written as runs that the loader takes", "[ui][author]") {
+    auto const lot = ui::ref<std::string>("lot");
+    CHECK(text(ui::text({.text = "Lot",
+                         .spans = ui::spans({"Lot ", ui::mono(lot), ui::strong("!"),
+                                             ui::styled("x", {.strong = true, .mono = true})}),
+                         .role = "muted"})
+                   .json()) ==
+          R"({"kind":"text","text":"Lot","spans":{"list":["Lot ",{"obj":{"text":{"ref":"lot"},"mono":true}},)"
+          R"({"obj":{"text":"!","strong":true}},{"obj":{"text":"x","strong":true,"mono":true}}]},"role":"muted"})");
+    ui::ScreenRegistry screens;
+    auto const added = screens.add(ui::screen("author.spans", [](ui::Scope&) {
+        return ui::banner({.spans = ui::spans({ui::strong("Refused."), " Try again."})});
+    }));
+    INFO((added ? std::string{} : added.error().message()));
+    CHECK(added.has_value());
+}
+
+// Mutation: leave `tone` out of text() or of styled() (the keys are not written), or `descriptionSpans` out of the
+// dialog writer.
+TEST_CASE("a text's tone, a toned run and a dialog's description runs are written", "[ui][author]") {
+    CHECK(text(ui::text({.text = "7", .role = "display", .tone = "err"}).json()) ==
+          R"({"kind":"text","text":"7","role":"display","tone":"err"})");
+    CHECK(text(ui::text({.spans = ui::spans(
+                             {"a ", ui::toned("b", "ok"), ui::styled("c", {.strong = true, .tone = "err"})})})
+                   .json()) == R"({"kind":"text","spans":{"list":["a ",{"obj":{"text":"b","tone":"ok"}},)"
+                               R"({"obj":{"text":"c","strong":true,"tone":"err"}}]}})");
+    auto const sign = ui::element("sign");
+    auto const json = text(
+        ui::dialog(
+            sign, {ui::text({.text = "x"})},
+            {.title = "Sign", .description = "Plain", .descriptionSpans = ui::spans({"Plain ", ui::strong("bold")})})
+            .json());
+    CHECK(json.contains(R"("description":"Plain","descriptionSpans":{"list":["Plain ",)"));
+}
+
+// Mutation: leave `description` out of the dialog writer (the key is not written).
+TEST_CASE("a dialog's description is written beside its title", "[ui][author]") {
+    auto const sign = ui::element("sign");
+    auto const json =
+        text(ui::dialog(sign, {ui::text({.text = "x"})}, {.title = "Sign", .description = "Stored"}).json());
+    CHECK(json.contains(R"("title":"Sign","description":"Stored")"));
+}
+
+// Mutation: drop the group rule from brokenRule (the unnamed group passes).
+TEST_CASE("accessibility: a group has a label or an a11y.name", "[ui][author]") {
+    auto const unnamed = accessibility(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "group", "children": []}})");
+    REQUIRE(unnamed.has_value());
+    CHECK(unnamed->reason == "accessibility: a `group` has a `label` or an `a11y.name`");
+    CHECK_FALSE(accessibility(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "group", "label": "Conditions",
+        "children": []}})")
+                    .has_value());
+    CHECK_FALSE(accessibility(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "group",
+        "a11y": {"name": "Conditions"}, "children": []}})")
+                    .has_value());
+}
+
+// Mutation: write `danger` as `primary` in menuButton (the second trigger then reads `primary`).
+TEST_CASE("author: a menu button writes each emphasis by name, and none for normal", "[ui][author]") {
+    auto const trigger = [](morph::ui::ButtonEmphasis emphasis) {
+        return text(ui::menuButton({.label = "More", .emphasis = emphasis}, {{.label = "Print"}}).json());
+    };
+    std::string const head = R"({"kind":"menu","items":[{"label":"Print"}],"style":"button","label":"More")";
+    CHECK(trigger(morph::ui::ButtonEmphasis::Primary) == head + R"(,"emphasis":"primary"})");
+    CHECK(trigger(morph::ui::ButtonEmphasis::Danger) == head + R"(,"emphasis":"danger"})");
+    CHECK(trigger(morph::ui::ButtonEmphasis::Normal) == head + "}");
+}
+
+// Mutation: write a reference line's dotted style as dashed (the line then reads `dashed`).
+TEST_CASE("author: a chart writes no lines key without lines, and a line's style only when not solid",
+          "[ui][author]") {
+    CHECK(text(ui::chart({.summary = "s",
+                          .series = {{.points = ui::ref("runs"),
+                                      .y = [](ui::AnyHandle const& point) { return point.at("value"); }}}})) ==
+          R"({"kind":"chart","summary":"s","series":[{"points":{"ref":"runs"},"y":{"row":"value"}}]})");
+    CHECK(text(ui::chart({.summary = "s",
+                          .series = {{.points = ui::ref("runs"),
+                                      .y = [](ui::AnyHandle const& point) { return point.at("value"); }}},
+                          .lines = {{.value = 1}, {.value = 2, .style = ui::LineStyle::Dotted}}})) ==
+          R"({"kind":"chart","summary":"s","series":[{"points":{"ref":"runs"},"y":{"row":"value"}}],)"
+          R"("lines":[{"value":1},{"value":2,"style":"dotted"}]})");
+}
+
+// Mutation: write a stacked key-value's layout as inline (it then reads `inline`).
+TEST_CASE("author: a key-value writes its caption layout only when given", "[ui][author]") {
+    CHECK(text(ui::keyValue(ui::KeyValueOptions{.items = ui::ref("pairs")})) ==
+          R"({"kind":"keyValue","items":{"ref":"pairs"}})");
+    CHECK(text(ui::keyValue(
+              ui::KeyValueOptions{.items = ui::ref("pairs"), .fieldLayout = morph::forms::FieldLayout::Stacked})) ==
+          R"({"kind":"keyValue","items":{"ref":"pairs"},"fieldLayout":"stacked"})");
+    CHECK(text(ui::keyValue(
+              ui::KeyValueOptions{.items = ui::ref("pairs"), .fieldLayout = morph::forms::FieldLayout::Inline})) ==
+          R"({"kind":"keyValue","items":{"ref":"pairs"},"fieldLayout":"inline"})");
+}
+
+// Mutation: write today's helper (no page edge, no inset around the content, bars padded by 2 on every side).
+TEST_CASE("pinned marks its column as the page's edge and insets the content and each bar's sides", "[ui][author]") {
+    ui::Node const node = ui::pinned(ui::text({.text = "body"}), {.bottom = ui::text({.text = "bar"})});
+    CHECK(text(node) ==
+          R"({"kind":"column","children":[{"kind":"scroll","children":[{"kind":"column",)"
+          R"("children":[{"kind":"text","text":"body"}],"padding":4}],)"
+          R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}},)"
+          R"({"kind":"column","children":[{"kind":"text","text":"bar"}],"padding":{"lit":[2,4]},"surface":"bar"}],)"
+          R"("divided":true,"pageEdge":true,"sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}})");
+}
+
+// Mutation: write no `visible` on the bar (today's helper).
+TEST_CASE("pinned shows a bar while any of its nodes shows, when every node has a condition", "[ui][author]") {
+    auto const a = ui::ref("a");
+    auto const b = ui::ref("b");
+    ui::Node const one = ui::pinned(ui::text({.text = "body"}), {.bottom = ui::text({.text = "x"}).visible(a)});
+    CHECK(text(one).contains(R"("kind":"column","children":[{"kind":"text","text":"x","visible":{"ref":"a"}}],)"));
+    CHECK(text(one).contains(R"("visible":{"ref":"a"},"surface":"bar")"));
+    ui::Node const two =
+        ui::pinned(ui::text({.text = "body"}),
+                   {.bottom = ui::Nodes{ui::text({.text = "x"}).visible(a), ui::text({.text = "y"}).visible(b)}});
+    CHECK(text(two).contains(R"("visible":{"fn":"or","args":[{"ref":"a"},{"ref":"b"}]},"surface":"bar")"));
+    ui::Node const mixed =
+        ui::pinned(ui::text({.text = "body"}),
+                   {.bottom = ui::Nodes{ui::text({.text = "x"}).visible(a), ui::text({.text = "y"})}});
+    CHECK_FALSE(text(mixed).contains(R"("visible":{"ref":"a"},"surface")"));
+}
+
+// Mutation: drop `inset` and `stripSurface` from the tabs node.
+TEST_CASE("tabs writes its inset as a literal step and its strip surface as a name", "[ui][author]") {
+    ui::Node const node = ui::tabs({{.id = "a", .label = "A", .children = ui::text({.text = "x"})}},
+                                   {.inset = 4, .stripSurface = "bar"});
+    CHECK(text(node).contains(R"("inset":4,"stripSurface":"bar")"));
+    ui::Node const plain = ui::tabs({{.id = "a", .label = "A", .children = ui::text({.text = "x"})}});
+    CHECK_FALSE(text(plain).contains("inset"));
+    CHECK_FALSE(text(plain).contains("stripSurface"));
+}
+
+// Mutation: leave the lead placement, the head surface or `iconOnly` out of the JSON.
+TEST_CASE("a screen's head writes its lead placement, its surface and an icon-only action", "[ui][author]") {
+    auto const emitted = ui::screen("author.head.placed", [](ui::Scope& screen) {
+                             screen.title(ui::AnyHandle{"Console"});
+                             screen.leadPlacement(ui::AnyHandle{"end"});
+                             screen.headSurface(ui::AnyHandle{"darkHead"});
+                             screen.pageSurface(ui::AnyHandle{"plainPage"});
+                             screen.action({.id = "scan",
+                                            .label = ui::AnyHandle{"Scan"},
+                                            .icon = ui::AnyHandle{"scan"},
+                                            .iconOnly = ui::AnyHandle{true}});
+                             return ui::spacer();
+                         }).write();
+    REQUIRE(emitted.has_value());
+    CHECK(emitted->text.contains(R"("leadPlacement":"end")"));
+    CHECK(emitted->text.contains(R"("headSurface":"darkHead")"));
+    CHECK(emitted->text.contains(R"("pageSurface":"plainPage")"));
+    CHECK(emitted->text.contains(R"("actions":[{"id":"scan","label":"Scan","icon":"scan","iconOnly":true}])"));
+}
+
+// Mutation: drop the flag from `bleed()`, or write `pageInset` when none is given.
+TEST_CASE("bleed() writes the flag and tabs writes pageInset as a literal step, 0 included", "[ui][author]") {
+    CHECK(text(ui::text({.text = "x"}).bleed()) == R"({"kind":"text","text":"x","bleed":true})");
+    ui::Node const node = ui::tabs({{.id = "a", .label = "A", .children = ui::text({.text = "x"})}},
+                                   {.inset = 4, .pageInset = 0, .stripSurface = "bar"});
+    CHECK(text(node).contains(R"("inset":4,"pageInset":0,"stripSurface":"bar")"));
+    ui::Node const plain = ui::tabs({{.id = "a", .label = "A", .children = ui::text({.text = "x"})}}, {.inset = 4});
+    CHECK_FALSE(text(plain).contains("pageInset"));
+}
+
+// Mutation: write the style for a ghost banner, or drop the action mark from the run.
+TEST_CASE("banner writes its action style and stretch, and actionRun marks the link's run", "[ui][author]") {
+    ui::Node const link = ui::banner({.spans = ui::spans({"1 field needs attention: ", ui::actionRun("Go"), "."}),
+                                      .action = ui::ActionPart{.label = "Go"},
+                                      .actionStyle = morph::ui::BannerActionStyle::Link});
+    CHECK(text(link).contains(R"("actionStyle":"link")"));
+    CHECK(text(link).contains(R"("action":true)"));
+    ui::Node const plain = ui::banner({.text = "x", .action = ui::ActionPart{.label = "Go"}});
+    CHECK_FALSE(text(plain).contains("actionStyle"));
+    CHECK_FALSE(text(plain).contains("actionStretch"));
+    ui::Node const stretched = ui::banner({.text = "x",
+                                           .action = ui::ActionPart{.label = "Go"},
+                                           .actionStyle = morph::ui::BannerActionStyle::Button,
+                                           .actionStretch = true});
+    CHECK(text(stretched).contains(R"("actionStyle":"button")"));
+    CHECK(text(stretched).contains(R"("actionStretch":true)"));
+}
+
+// Mutation: write `headJoined` for every top bar (the second, third and fourth checks fail), or never (the first).
+TEST_CASE("pinned says the page is headJoined only for an inset page whose top bar always shows", "[ui][author]") {
+    ui::Node const always = ui::pinned(ui::text({.text = "body"}), {.top = ui::text({.text = "bar"})});
+    CHECK(text(always).contains(R"("headJoined":true)"));
+    ui::Node const hideable =
+        ui::pinned(ui::text({.text = "body"}), {.top = ui::text({.text = "bar"}).visible(ui::ref("a"))});
+    CHECK_FALSE(text(hideable).contains("headJoined"));
+    ui::Node const bottomOnly = ui::pinned(ui::text({.text = "body"}), {.bottom = ui::text({.text = "bar"})});
+    CHECK_FALSE(text(bottomOnly).contains("headJoined"));
+    ui::Node const flush = ui::pinned(ui::text({.text = "body"}), {.top = ui::text({.text = "bar"}), .inset = 0});
+    CHECK_FALSE(text(flush).contains("headJoined"));
 }

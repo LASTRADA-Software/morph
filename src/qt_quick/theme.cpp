@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QColor>
 #include <QFont>
+#include <QFontDatabase>
 #include <QFontInfo>
 #include <QList>
 #include <QMetaObject>
@@ -16,6 +17,7 @@
 #include <functional>
 #include <map>
 #include <morph/qt_quick/theme.hpp>
+#include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <string>
@@ -23,12 +25,14 @@
 #include <utility>
 #include <vector>
 
+#include "qt_quick/context.hpp"
+
 namespace morph::qt_quick {
 
 namespace {
 
 /// The `Theme` property each colour token of the set sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 25> kColorProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 38> kColorProperties = {{
     {"color.text", "text"},
     {"color.muted", "muted"},
     {"color.err", "error"},
@@ -36,6 +40,14 @@ constexpr std::array<std::pair<std::string_view, char const*>, 25> kColorPropert
     {"color.info", "info"},
     {"color.warn", "warn"},
     {"color.neutral", "neutral"},
+    {"color.neutral.bg", "neutralBg"},
+    {"color.neutral.border", "neutralBorder"},
+    {"color.neutral.dot", "neutralDot"},
+    {"color.hover", "hover"},
+    {"color.track", "track"},
+    {"color.controlSurface", "controlSurface"},
+    {"color.controlBorder", "controlBorder"},
+    {"color.divider", "divider"},
     {"color.surface", "surface"},
     {"color.border", "border"},
     {"color.selection", "selection"},
@@ -54,10 +66,15 @@ constexpr std::array<std::pair<std::string_view, char const*>, 25> kColorPropert
     {"color.info.border", "infoBorder"},
     {"color.info.dot", "infoDot"},
     {"color.table.header", "tableHeader"},
+    {"color.chart.1", "chart1"},
+    {"color.chart.2", "chart2"},
+    {"color.chart.3", "chart3"},
+    {"color.chart.4", "chart4"},
+    {"color.scrim", "scrim"},
 }};
 
 /// The scheme property each colour token of a surface sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 25> kSchemeProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 37> kSchemeProperties = {{
     {"color.surface", "surface"},
     {"color.text", "text"},
     {"color.muted", "muted"},
@@ -66,6 +83,14 @@ constexpr std::array<std::pair<std::string_view, char const*>, 25> kSchemeProper
     {"color.selection", "selection"},
     {"color.border", "border"},
     {"color.neutral", "neutral"},
+    {"color.neutral.bg", "neutralBg"},
+    {"color.neutral.border", "neutralBorder"},
+    {"color.neutral.dot", "neutralDot"},
+    {"color.hover", "hover"},
+    {"color.track", "track"},
+    {"color.controlSurface", "controlSurface"},
+    {"color.controlBorder", "controlBorder"},
+    {"color.divider", "divider"},
     {"color.err", "error"},
     {"color.ok", "success"},
     {"color.info", "info"},
@@ -83,16 +108,42 @@ constexpr std::array<std::pair<std::string_view, char const*>, 25> kSchemeProper
     {"color.info.border", "infoBorder"},
     {"color.info.dot", "infoDot"},
     {"color.table.header", "tableHeader"},
+    {"color.chart.1", "chart1"},
+    {"color.chart.2", "chart2"},
+    {"color.chart.3", "chart3"},
+    {"color.chart.4", "chart4"},
 }};
 
 /// The `Theme` property each dimension token of the set sets, besides the spacing scale.
-constexpr std::array<std::pair<std::string_view, char const*>, 5> kDimensionProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 14> kDimensionProperties = {{
     {"radius.control", "radiusControl"},
     {"radius.card", "radiusCard"},
+    {"radius.badge", "radiusBadge"},
     {"control.height", "controlHeight"},
+    {"control.touchHeight", "touchHeight"},
     {"font.size.body", "bodySize"},
     {"font.size.heading", "headingSize"},
+    {"font.size.small", "smallSize"},
+    {"font.size.caption", "captionSize"},
+    {"font.size.mono", "monoSize"},
+    {"font.size.display", "displaySize"},
+    {"table.cellPaddingX", "tableCellPaddingX"},
+    {"table.cellPaddingY", "tableCellPaddingY"},
+    {"input.paddingX", "inputPaddingX"},
 }};
+
+// Whether a surface's outlines are stroked in dashes: `border.style`.
+bool dashed(ui::ThemeValues const& values) {
+    auto const found = values.strokes.find("border.style");
+    return found != values.strokes.end() && found->second == "dashed";
+}
+
+// Whether the keyword at @p path names @p name.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the keyword's path, then a name; swapped, no keyword is found.
+bool keywordIs(ui::ThemeValues const& values, std::string_view path, std::string_view name) {
+    auto const found = values.keywords.find(path);
+    return found != values.keywords.end() && found->second == name;
+}
 
 // The colours, the stale opacity, the background and the dimensions; each property that would not take its value
 // is added to @p unset.
@@ -111,6 +162,25 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
         stale != values.numbers.end() && !theme.setProperty("staleOpacity", stale->second)) {
         unset.emplace_back("staleOpacity");
     }
+    if (!theme.setProperty("borderDashed", dashed(values))) {
+        unset.emplace_back("borderDashed");
+    }
+    if (!theme.setProperty("iconOnlySquare", keywordIs(values, "shape.iconOnly", "square"))) {
+        unset.emplace_back("iconOnlySquare");
+    }
+    if (!theme.setProperty("collapsibleMarker", !keywordIs(values, "collapsible.marker", "none"))) {
+        unset.emplace_back("collapsibleMarker");
+    }
+    if (!theme.setProperty("listSelectionFill", keywordIs(values, "list.selection", "fill"))) {
+        unset.emplace_back("listSelectionFill");
+    }
+    if (!theme.setProperty("overlineCaps", keywordIs(values, "font.overline.case", "uppercase"))) {
+        unset.emplace_back("overlineCaps");
+    }
+    if (auto const weight = values.numbers.find("font.weight.strong");
+        weight != values.numbers.end() && !theme.setProperty("strongWeight", static_cast<int>(weight->second))) {
+        unset.emplace_back("strongWeight");
+    }
     if (auto const background = values.colors.find("color.background"); background != values.colors.end()) {
         ui::Rgba const& color = background->second;
         if (!theme.setProperty("background", QColor{color.r, color.g, color.b, color.a})) {
@@ -125,10 +195,12 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     }
 }
 
-// The families of `font.family`; one Qt resolves to none of them falls back to Qt's own substitute and is reported, so
-// a theme naming a font the machine lacks says so rather than drawing in another.
-void setFamilies(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
-    auto const found = values.families.find("font.family");
+// The families of a family token (`font.family`, `font.mono`) onto @p property; one Qt resolves to none of them falls
+// back to Qt's own substitute and is reported, so a theme naming a font the machine lacks says so rather than drawing
+// in another.
+void setFamilies(QObject& theme, ui::ThemeValues const& values, std::string_view path, char const* property,
+                 std::vector<std::string>& unset) {
+    auto const found = values.families.find(path);
     if (found == values.families.end()) {
         return;
     }
@@ -138,8 +210,8 @@ void setFamilies(QObject& theme, ui::ThemeValues const& values, std::vector<std:
         names.append(QString::fromStdString(name));
         listed += (listed.empty() ? "" : ", ") + name;
     }
-    if (!theme.setProperty("fontFamilies", QVariant::fromValue(names))) {
-        unset.emplace_back("fontFamilies");
+    if (!theme.setProperty(property, QVariant::fromValue(names))) {
+        unset.emplace_back(property);
         return;
     }
     if (names.isEmpty()) {
@@ -148,27 +220,38 @@ void setFamilies(QObject& theme, ui::ThemeValues const& values, std::vector<std:
     QFont font;
     font.setFamilies(names);
     if (!names.contains(QFontInfo{font}.family(), Qt::CaseInsensitive)) {
-        unset.push_back("font.family: none of " + listed + " is installed");
+        unset.push_back(std::string{path} + ": none of " + listed + " is installed");
     }
 }
 
-// The card's shadow and the spacing steps, which only a complete set of steps replaces.
-void setShadowAndSpace(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
-    if (auto const card = values.shadows.find("elevation.card"); card != values.shadows.end()) {
-        ui::ThemeShadow const& shadow = card->second;
-        std::array<std::pair<char const*, QVariant>, 5> const parts{{
-            {"cardShadowColor", QColor{shadow.color.r, shadow.color.g, shadow.color.b, shadow.color.a}},
-            {"cardShadowOffsetX", shadow.offsetX},
-            {"cardShadowOffsetY", shadow.offsetY},
-            {"cardShadowBlur", shadow.blur},
-            {"cardShadowSpread", shadow.spread},
-        }};
-        for (auto const& [property, value] : parts) {
-            if (!theme.setProperty(property, value)) {
-                unset.emplace_back(property);
-            }
+// A shadow token onto the five `Theme` properties that begin with @p prefix.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the token's path, then the property prefix; swapped, no token is found.
+void setShadow(QObject& theme, ui::ThemeValues const& values, std::string_view path, std::string_view prefix,
+               std::vector<std::string>& unset) {
+    auto const found = values.shadows.find(path);
+    if (found == values.shadows.end()) {
+        return;
+    }
+    ui::ThemeShadow const& shadow = found->second;
+    std::array<std::pair<char const*, QVariant>, 5> const parts{{
+        {"ShadowColor", QColor{shadow.color.r, shadow.color.g, shadow.color.b, shadow.color.a}},
+        {"ShadowOffsetX", shadow.offsetX},
+        {"ShadowOffsetY", shadow.offsetY},
+        {"ShadowBlur", shadow.blur},
+        {"ShadowSpread", shadow.spread},
+    }};
+    for (auto const& [suffix, value] : parts) {
+        std::string const property = std::string{prefix} + suffix;
+        if (!theme.setProperty(property.c_str(), value)) {
+            unset.push_back(property);
         }
     }
+}
+
+// The card's and the popup's shadows and the spacing steps, which only a complete set of steps replaces.
+void setShadowAndSpace(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
+    setShadow(theme, values, "elevation.card", "card", unset);
+    setShadow(theme, values, "elevation.popup", "popup", unset);
     QList<qreal> space;
     for (int step = 0; step <= ui::kMaxSpacingStep; ++step) {
         auto const found = values.dimensions.find("space." + std::to_string(step));
@@ -182,7 +265,7 @@ void setShadowAndSpace(QObject& theme, ui::ThemeValues const& values, std::vecto
     }
 }
 
-// Each surface's colours, onto the scheme the theme keeps for it.
+// Each surface's colours, and how it strokes an outline, onto the scheme the theme keeps for it.
 void setSurfaces(QObject& theme, std::map<std::string, ui::ThemeValues, std::less<>> const& surfaces,
                  std::vector<std::string>& unset) {
     for (auto const& [name, surface] : surfaces) {
@@ -204,10 +287,36 @@ void setSurfaces(QObject& theme, std::map<std::string, ui::ThemeValues, std::les
                 unset.push_back(name + "." + property);
             }
         }
+        if (!scheme->setProperty("borderDashed", dashed(surface))) {
+            unset.push_back(name + ".borderDashed");
+        }
+        if (!scheme->setProperty("listSelectionFill", keywordIs(surface, "list.selection", "fill"))) {
+            unset.push_back(name + ".listSelectionFill");
+        }
     }
 }
 
 }  // namespace
+
+namespace detail {
+
+bool writePlatformMonoFamily(QObject& theme) {
+    return theme.setProperty("platformMonoFamily", QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
+}
+
+bool writeIconGlyphs(QObject& theme) {
+    QVariantMap glyphs;
+    for (std::string_view const name : ui::kFrameworkIcons) {
+        std::string_view const glyph = ui::iconGlyph(name);
+        if (!glyph.empty()) {
+            glyphs.insert(QString::fromUtf8(name.data(), static_cast<qsizetype>(name.size())),
+                          QString::fromUtf8(glyph.data(), static_cast<qsizetype>(glyph.size())));
+        }
+    }
+    return theme.setProperty("iconGlyphs", QVariant::fromValue(glyphs));
+}
+
+}  // namespace detail
 
 std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& values,
                                     std::map<std::string, ui::ThemeValues, std::less<>> const& surfaces) {
@@ -218,7 +327,11 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
         return unset;
     }
     setPlainTokens(*theme, values, unset);
-    setFamilies(*theme, values, unset);
+    setFamilies(*theme, values, "font.family", "fontFamilies", unset);
+    setFamilies(*theme, values, "font.mono", "monoFontFamilies", unset);
+    if (!detail::writePlatformMonoFamily(*theme)) {
+        unset.emplace_back("platformMonoFamily");
+    }
     setShadowAndSpace(*theme, values, unset);
     setSurfaces(*theme, surfaces, unset);
     return unset;
@@ -233,13 +346,21 @@ std::vector<std::string> setIcons(QQmlEngine& engine, std::map<std::string, std:
         return {"Theme"};
     }
     QVariantMap urls;
+    QVariantMap texts;
     for (auto const& [name, svg] : icons) {
         urls.insert(QString::fromStdString(name), QStringLiteral("data:image/svg+xml;base64,") +
                                                       QString::fromLatin1(QByteArray::fromStdString(svg).toBase64()));
+        texts.insert(QString::fromStdString(name), QString::fromStdString(svg));
     }
     std::vector<std::string> unset;
+    if (!detail::writeIconGlyphs(*theme)) {
+        unset.emplace_back("iconGlyphs");
+    }
     if (!theme->setProperty("icons", QVariant::fromValue(urls))) {
         unset.emplace_back("icons");
+    }
+    if (!theme->setProperty("iconSvgs", QVariant::fromValue(texts))) {
+        unset.emplace_back("iconSvgs");
     }
     if (!theme->setProperty("iconSet", !icons.empty())) {
         unset.emplace_back("iconSet");
@@ -285,7 +406,11 @@ std::vector<std::string> applyIndex(QQmlEngine& engine,
         }
         surfaces.insert_or_assign(name, ui::themeValues(*layered));
     }
-    return applyTheme(engine, ui::themeValues(*base), surfaces);
+    std::vector<std::string> problems = applyTheme(engine, ui::themeValues(*base), surfaces);
+    for (std::string const& problem : ui::themeProblems(*index, lookup)) {
+        problems.push_back("theme: " + problem);
+    }
+    return problems;
 }
 
 }  // namespace

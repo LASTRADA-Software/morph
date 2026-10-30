@@ -19,8 +19,12 @@
 #include "../reactive/signal.hpp"
 #include "../util/datetime.hpp"
 #include "alignment.hpp"
+#include "badge_style.hpp"
+#include "banner_action_style.hpp"
 #include "button_emphasis.hpp"
 #include "button_style.hpp"
+#include "control_shape.hpp"
+#include "input_emphasis.hpp"
 
 /// @file
 /// @brief The toolkit-agnostic view tree: props, node kinds and their builders.
@@ -150,6 +154,25 @@ public:
         refuseEmpty();
     }
 
+    /// @brief A copy: the same constant, or a slot with the same id and a copy of its read.
+    /// @param other The property to copy.
+    /// @throws std::bad_variant_access when @p other was left without a value by an assignment that threw.
+    Prop(Prop const& other) : _value{copyOf(other._value)} {}
+
+    /// @brief Moves the constant or the slot out of another property.
+    Prop(Prop&&) = default;
+
+    /// @brief Replaces this property with a copy of another.
+    /// @return This property.
+    Prop& operator=(Prop const&) = default;
+
+    /// @brief Replaces this property with another, moved from.
+    /// @return This property.
+    Prop& operator=(Prop&&) = default;
+
+    /// @brief Destroys the constant or the slot.
+    ~Prop() = default;
+
     /// @brief Whether this is a slot.
     /// @return True for a slot, false for a constant.
     [[nodiscard]] bool isBound() const noexcept { return _value.index() == 1; }
@@ -192,17 +215,39 @@ private:
         }
     }
 
+    /// @brief A copy of @p from, built in place as the alternative it holds.
+    ///
+    /// The copy constructor uses this rather than `std::variant`'s own. GCC 15 at -O3 warns
+    /// (-Wmaybe-uninitialized) about the variant's copy: on its exception path it destroys a `Slot` whose
+    /// `std::function` it cannot see was constructed. Constructing the chosen alternative in place leaves no
+    /// partly built variant to destroy, so that path does not exist.
+    /// @param from The value to copy.
+    /// @return The copy.
+    /// @throws std::bad_variant_access when @p from holds no alternative.
+    static std::variant<T, Slot> copyOf(std::variant<T, Slot> const& from) {
+        if (Slot const* const bound = std::get_if<1>(&from); bound != nullptr) {
+            return std::variant<T, Slot>{std::in_place_index<1>, *bound};
+        }
+        return std::variant<T, Slot>{std::in_place_index<0>, std::get<0>(from)};
+    }
+
     std::variant<T, Slot> _value;
 };
 
 /// @brief How a `Text` is styled; each backend maps a role to its theme.
 enum class TextRole : std::uint8_t {
-    Normal,   ///< Body text.
-    Muted,    ///< Secondary text.
-    Heading,  ///< A section heading.
-    Error,    ///< An error message.
-    Success,  ///< A confirmation.
-    Section,  ///< The heading of a group within a list: body size, bold and muted, below a `Heading`.
+    Normal,    ///< Body text.
+    Muted,     ///< Secondary text.
+    Heading,   ///< A section heading.
+    Error,     ///< An error message.
+    Success,   ///< A confirmation.
+    Section,   ///< The heading of a group within a list: body size, bold and muted, below a `Heading`.
+    Mono,      ///< An identifier: the theme's fixed-pitch family (`font.mono`) at `font.size.mono`, the text colour.
+    Display,   ///< A figure that stands out, such as a KPI's number: `font.size.display`, strong, the text colour.
+    Small,     ///< A footnote or a timestamp: `font.size.small`, regular, the text colour.
+    Overline,  ///< A short label over a group: as `Section` unless the theme's `font.overline.case` is `uppercase`,
+               ///< which draws it at `font.size.small`, strong, muted, in letter-spaced capitals. Written as it
+               ///< reads; the terminal draws it as `Section`, whatever the theme.
 };
 
 /// @brief How a `TextInput` edits.
@@ -214,8 +259,15 @@ enum class TextInputMode : std::uint8_t {
 
 /// @brief How a `Select` presents its options.
 enum class SelectStyle : std::uint8_t {
-    Dropdown,  ///< A closed field that opens a list.
-    Radio,     ///< Every option visible, one marked.
+    Dropdown,   ///< A closed field that opens a list.
+    Radio,      ///< Every option visible, one marked.
+    Segmented,  ///< Every option visible as one row of joined segments, one marked.
+};
+
+/// @brief How a `Menu` presents its entries.
+enum class MenuStyle : std::uint8_t {
+    Bar,     ///< One control per top-level entry.
+    Button,  ///< One button that opens the entries as a popup.
 };
 
 /// @brief The direction a stack arranges, or a scroll area scrolls, its content.
@@ -259,11 +311,52 @@ enum class StepState : std::uint8_t {
     Failed,   ///< Stopped by a failure.
 };
 
+/// @brief How a chart's reference line is stroked.
+enum class ChartLineStyle : std::uint8_t {
+    Solid,   ///< An unbroken line.
+    Dashed,  ///< Dashes.
+    Dotted,  ///< Dots.
+};
+
+/// @brief Whether a chart's point lies outside the value axis the document fixed, and on which side.
+enum class ChartClip : std::uint8_t {
+    None,   ///< Inside the axis.
+    Below,  ///< Below its lower end; drawn at that end, pointing down.
+    Above,  ///< Above its upper end; drawn at that end, pointing up.
+};
+
 /// @brief How many rows of a `Table` the user can select.
 enum class SelectionMode : std::uint8_t {
     None,      ///< Rows can be activated, not selected.
     Single,    ///< At most one row.
     Multiple,  ///< Any number of rows.
+};
+
+/// @brief What a user's change of a table's selection did, which travels with every report: a backend that holds
+///        only some of the rows (one page) cannot report the keys it does not hold, so only the kind tells whether
+///        those stay selected.
+enum class SelectionChange : std::uint8_t {
+    Replace,  ///< The reported keys are the whole selection: a click, a Shift-click or Shift+arrow, any `Single`
+              ///< change.
+    Extend,   ///< The reported keys replace those the backend holds and keep the rest: a Ctrl-click, Space, Ctrl+A.
+};
+
+/// @brief Which way a table is sorted by a column.
+enum class SortDirection : std::uint8_t {
+    Ascending,   ///< Smallest first.
+    Descending,  ///< Largest first.
+};
+
+/// @brief The column a table's header marks as sorting the rows, and its direction.
+struct TableSort {
+    /// @brief The column's index among the columns `setColumns` gave.
+    std::size_t column = 0;
+    /// @brief The direction.
+    SortDirection direction = SortDirection::Ascending;
+    /// @brief Equal when both fields are.
+    /// @param other The other sort.
+    /// @return Whether they are equal.
+    [[nodiscard]] bool operator==(TableSort const& other) const = default;
 };
 
 /// @brief How much space a widget asks for along one dimension, in backend units (a character cell on the TUI).
@@ -321,6 +414,10 @@ struct LayoutHints {
     /// @brief Where the node sits across its row's, column's or grid row's axis; `nullopt` takes the container's
     ///        `align`.
     std::optional<Align> alignSelf;
+    /// @brief Whether the node's sides lie at its parent's edges, past the parent's horizontal padding, while its
+    ///        siblings stay inside it. Only a direct child of a column, a panel or a tab page bleeds, and only
+    ///        across: the node's place along the parent is its siblings'.
+    bool bleed = false;
 
     /// @brief Memberwise equality.
     /// @return Whether the sizings, the bounds and the alignment match.
@@ -368,8 +465,8 @@ struct Common {
     /// @brief Text shown while the pointer rests on the widget; empty shows none.
     Prop<std::string> tooltip;
     /// @brief The named token set of the theme that styles this node and everything inside it; empty is the
-    ///        theme's default. Set once.
-    std::string surface;
+    ///        theme's default. May be bound: the widget restyles itself and its content on each change.
+    Prop<std::string> surface;
     /// @brief Chords handled while focus is inside the node; the innermost node declaring a chord takes it. For a
     ///        chord listed twice, the first entry is the one called.
     std::vector<KeyBinding> keys;
@@ -395,7 +492,43 @@ struct FieldState {
     Prop<std::vector<std::string>> errors;
     /// @brief Whether the value shown is the last known one while a newer one is computed.
     Prop<bool> stale = false;
+    /// @brief A line that describes the field, under its control and announced as its accessible description; empty
+    ///        shows none. Not on a text.
+    Prop<std::string> description;
+    /// @brief An evaluation of the value that does not make it invalid, drawn as the control's outline and the
+    ///        description's colour; `Neutral` is none. On a text it is the text's colour.
+    Prop<Tone> tone = Tone::Neutral;
 };
+
+/// @brief A run of text inside a sentence, drawn in the node's role with its own weight, face and colour.
+struct TextSpan {
+    /// @brief The run's text, UTF-8; shown as its characters, never as markup.
+    std::string text;
+    /// @brief Whether the run is drawn in the strong weight.
+    bool strong = false;
+    /// @brief Whether the run is drawn in the theme's monospace face (`font.mono`).
+    bool mono = false;
+    /// @brief The run's colour, the tone's; `Neutral` is the text's own colour.
+    Tone tone = Tone::Neutral;
+    /// @brief Whether the run is the action of a banner drawn as a link: the run's text is the link, at its place in
+    ///        the sentence. Only a banner reads it.
+    bool action = false;
+
+    /// @brief Memberwise equality.
+    /// @return Whether text, both flags, the tone and the action mark match.
+    bool operator==(TextSpan const&) const = default;
+};
+
+/// @brief The characters a list of runs shows, joined in order: what assistive technology and a probe read.
+/// @param spans The runs.
+/// @return Their text, joined.
+[[nodiscard]] inline std::string spansText(std::vector<TextSpan> const& spans) {
+    std::string joined;
+    for (TextSpan const& span : spans) {
+        joined += span.text;
+    }
+    return joined;
+}
 
 struct NodeData;
 
@@ -404,8 +537,11 @@ using Node = std::shared_ptr<NodeData const>;
 
 /// @brief Static or bound text.
 struct Text {
-    /// @brief The text, UTF-8.
+    /// @brief The text, UTF-8; not applied while the text has spans.
     Prop<std::string> text;
+    /// @brief The text as runs, each plain, strong or monospace; while bound or not empty, it is shown in place of
+    ///        `text`.
+    Prop<std::vector<TextSpan>> spans;
     /// @brief The style.
     Prop<TextRole> role = TextRole::Normal;
     /// @brief Read-only, required, errors and stale.
@@ -428,9 +564,16 @@ struct Button {
     std::string icon;
     /// @brief A push button or a list entry; set once.
     ButtonStyle style = ButtonStyle::Push;
-    /// @brief Whether a list entry is the current one. Only an `Item` takes it: the mount refuses a bound or `true`
-    ///        value on a push button.
+    /// @brief An entry's content, drawn in place of its label, which then names it; only on an `Item`. May be null.
+    Node child;
+    /// @brief Whether the button is selected: a list entry is the current one, a push button is pressed in.
     Prop<bool> selected = false;
+    /// @brief Its outline: the theme's corners, or round; set once.
+    ControlShape shape = ControlShape::Default;
+    /// @brief Its density: normal, or small, with the least side padding and the small type step; set once.
+    ButtonSize size = ButtonSize::Normal;
+    /// @brief Whether the caption is drawn in the `mono` text role's face; set once.
+    bool mono = false;
 };
 
 /// @brief An editable text field. The backend never reports its own `setText` back through `onChange`.
@@ -467,6 +610,17 @@ struct TextInput {
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief How much it stands out; set once, and never on a multiline input. The mount tells the widget only
+    ///        `Prominent`.
+    InputEmphasis emphasis = InputEmphasis::Normal;
+    /// @brief Whether the text and the placeholder are drawn in the `mono` text role's face; set once.
+    bool mono = false;
+    /// @brief Where the text sits in the field: `Start`, `Center` or `End`; set once. Never on a multiline input,
+    ///        and the mount tells the widget only a value other than `Start`.
+    Align align = Align::Start;
+    /// @brief Text drawn muted at the field's leading edge, inside it, such as `±`; empty shows none. Only a
+    ///        single-line or password input shows one: the mount refuses a multiline input with a prefix.
+    Prop<std::string> prefix;
 };
 
 /// @brief A labelled check box.
@@ -540,15 +694,31 @@ struct MenuItem {
     Prop<bool> enabled = true;
     /// @brief The submenu's entries; empty: the entry is chosen rather than opened.
     std::vector<MenuItem> items;
+    /// @brief Whether the entry is a line between entries, which is never chosen and shows no other field. Set once.
+    bool separator = false;
+    /// @brief A muted line of help with the entry; empty shows none.
+    Prop<std::string> description;
+    /// @brief Whether the entry is shown; a hidden entry is not sent at all, and a separator a hidden entry leaves
+    ///        at the start or end of its level, or next to another separator, is not sent either.
+    Prop<bool> visible = true;
 };
 
-/// @brief A vertical list of commands.
+/// @brief A menu of commands: a bar of top-level entries, or one button that opens them.
 struct Menu {
-    /// @brief The entries, in order; the list itself is set once, each entry's label, check mark and enablement
-    ///        may be bound.
+    /// @brief The entries, in order; the list itself is set once, each entry's label, description, check mark,
+    ///        enablement and visibility may be bound.
     std::vector<MenuItem> items;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief How the entries are presented; set once.
+    MenuStyle style = MenuStyle::Bar;
+    /// @brief The trigger's label, for `MenuStyle::Button`; empty draws the icon alone.
+    Prop<std::string> label;
+    /// @brief The trigger's icon, for `MenuStyle::Button`: a name in the theme's icon map; empty shows none. Set
+    ///        once.
+    std::string icon;
+    /// @brief The trigger's emphasis, for `MenuStyle::Button`; set once.
+    ButtonEmphasis emphasis = ButtonEmphasis::Normal;
 };
 
 /// @brief The largest spacing step: a `gap` or `padding` names a step from 0 (none) to this, which each backend maps
@@ -559,6 +729,37 @@ inline constexpr int kMaxSpacingStep = 5;
 /// @param value The value as written.
 /// @return @p value clamped to `[0, kMaxSpacingStep]`.
 [[nodiscard]] constexpr int spacingStep(int value) noexcept { return std::clamp(value, 0, kMaxSpacingStep); }
+
+/// @brief The inset of a stack's children: one spacing step above and below, one at the sides.
+struct Padding {
+    /// @brief The step above and below, 0 to `kMaxSpacingStep`.
+    int vertical = 0;
+    /// @brief The step at the leading and trailing sides, 0 to `kMaxSpacingStep`.
+    int horizontal = 0;
+
+    /// @brief The same step on every side.
+    /// @param step A spacing step.
+    // NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions): `.padding = 3` writes every side.
+    constexpr Padding(int step = 0) noexcept : vertical(step), horizontal(step) {}
+
+    /// @brief A step for each axis.
+    /// @param vertical_   The step above and below.
+    /// @param horizontal_ The step at the sides.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): vertical, then horizontal; swapped, only the axes trade places.
+    constexpr Padding(int vertical_, int horizontal_) noexcept : vertical(vertical_), horizontal(horizontal_) {}
+
+    /// @brief Whether both steps match.
+    /// @param other The other padding.
+    /// @return Whether both axes are equal.
+    [[nodiscard]] constexpr bool operator==(Padding const& other) const noexcept = default;
+};
+
+/// @brief A padding with each step clamped as `spacingStep` clamps one.
+/// @param padding The padding as written.
+/// @return It, with both steps in `[0, kMaxSpacingStep]`.
+[[nodiscard]] constexpr Padding clampedPadding(Padding padding) noexcept {
+    return Padding{spacingStep(padding.vertical), spacingStep(padding.horizontal)};
+}
 
 /// @brief Children stacked top to bottom.
 struct Column {
@@ -572,6 +773,21 @@ struct Column {
     Align align = Align::Stretch;
     /// @brief Where the spare height goes while no shown child stretches; set once.
     Justify justify = Justify::Start;
+    /// @brief Whether a 1 px rule in the theme's divider colour is drawn between each two shown children, centred in
+    ///        the gap; set once. The terminal draws none.
+    bool divided = false;
+    /// @brief The inset of the children: a spacing step on every side, or one step above and below and one at the
+    ///        sides; set once.
+    Padding padding;
+    /// @brief Whether the stack is the chosen entry of a list: while true it draws the accent's 3 px bar at its
+    ///        leading edge, over its surface and under its children, and takes the `Grouping` accessibility role.
+    ///        Disengaged when none was given. The mount refuses it on a table's row view.
+    std::optional<Prop<bool>> selected;
+    /// @brief Whether the column is the holder the interpreter makes for a list of nodes (a panel's, a tab page's, a
+    ///        scroll's children). A holder is transparent to `bleed`: its children reach past the padding of the
+    ///        container the document names, not past the holder's own. The mount calls
+    ///        `StackWidget::setPassesBleed(true)` for a holder, before its first child; set once.
+    bool holder = false;
 };
 
 /// @brief Children laid out left to right.
@@ -585,10 +801,29 @@ struct Row {
     /// @brief A table row's tone: disengaged when none was given; an engaged `Prop` whose value is `nullopt` has no
     ///        tone at the moment. Only `table`'s row view sets it; the mount refuses it on a row outside a table.
     std::optional<Prop<std::optional<Tone>>> tone;
+    /// @brief A table row's accessible name, and its select box's: disengaged when none was given, which names the
+    ///        row by its key. Only `table`'s row view sets it; the mount refuses it on a row outside a table.
+    std::optional<Prop<std::string>> label;
+    /// @brief Whether a table row is a heading: one cell spanning every column, never selected or activated. Only
+    ///        `table`'s row view sets it; the mount refuses it on a row outside a table.
+    bool heading = false;
     /// @brief Where the children sit across the row (vertically); set once.
     Align align = Align::Stretch;
     /// @brief Where the spare width goes while no shown child stretches; set once.
     Justify justify = Justify::Start;
+    /// @brief Whether children that do not fit on one line continue on the next, as a flex row with `wrap` does;
+    ///        set once. A table row never wraps.
+    bool wrap = false;
+    /// @brief Whether a vertical 1 px rule in the theme's divider colour is drawn between each two shown children,
+    ///        centred in the gap; set once. A wrapping row is not divided: the mount ignores it there.
+    bool divided = false;
+    /// @brief The inset of the children: a spacing step on every side, or one step above and below and one at the
+    ///        sides; set once.
+    Padding padding;
+    /// @brief Whether the stack is the chosen entry of a list: while true it draws the accent's 3 px bar at its
+    ///        leading edge, over its surface and under its children, and takes the `Grouping` accessibility role.
+    ///        Disengaged when none was given. The mount refuses it on a table's row view.
+    std::optional<Prop<bool>> selected;
 };
 
 /// @brief One cell of a `Grid`.
@@ -599,18 +834,32 @@ struct GridCell {
     int span = 1;
 };
 
+/// @brief One column track of a grid: how wide its column is and where each cell sits across it.
+struct GridTrack {
+    /// @brief The column's width: fixed tracks first, content tracks to their widest one-column cell, stretch tracks
+    ///        share the rest by weight.
+    Sizing width = Sizing::stretch();
+    /// @brief Where a cell sits across the column: the text of a text cell and a label-width cell (a badge, a check
+    ///        box, a push button) at its natural width, at the start, centre or end. A container cell fills the
+    ///        column whatever this says; `Stretch` reads as `Start`.
+    Align align = Align::Start;
+};
+
 /// @brief Cells laid out row-major in a fixed number of columns.
 struct Grid {
-    /// @brief The column count.
+    /// @brief The column count; ignored when `tracks` is not empty.
     int columns = 1;
+    /// @brief The column tracks, set once; empty gives `columns` columns sharing the width. Given, the column count
+    ///        is their number.
+    std::vector<GridTrack> tracks;
     /// @brief The cells, row-major.
     std::vector<GridCell> cells;
     /// @brief Space between cells: a spacing step, 0 to `kMaxSpacingStep`.
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
-    /// @brief Where each cell's content sits vertically in its row; set once. A grid's columns share its width, so
-    ///        there is no spare length to justify.
+    /// @brief Where each cell's content sits vertically in its row; set once. A grid's columns are sized by their
+    ///        count or tracks, so there is no spare length to justify.
     Align align = Align::Stretch;
 };
 
@@ -672,22 +921,34 @@ struct Switch {
 
 /// @brief One page of `Tabs`.
 struct Tab {
-    /// @brief The tab's caption; set once.
-    std::string label;
+    /// @brief The tab's caption; may be bound, and the bar follows it.
+    Prop<std::string> label;
     /// @brief The page content, mounted the first time the tab is selected.
     Node node;
 };
 
 /// @brief A tab bar over pages.
 struct Tabs {
-    /// @brief The pages, in order; set once.
+    /// @brief The pages, in order; the list is set once, each caption may be bound.
     std::vector<Tab> tabs;
     /// @brief The selected page's index; an index past the last page shows none.
     Prop<std::size_t> selected;
     /// @brief Called with the index the user picked, and with the page still shown when a picked page fails to mount.
     std::function<void(std::size_t)> onSelect;
+    /// @brief The label of the menu that holds the tabs that do not fit in the bar, where a frontend has one.
+    Prop<std::string> moreLabel = std::string{"More"};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief The strip's inset, a spacing step, 0 to `kMaxSpacingStep`; set once. The strip and its rule span the
+    ///        node's width, the first tab starts this far in from the leading edge, and each page is padded by it on
+    ///        every side unless `pageInset` says otherwise.
+    int inset = 0;
+    /// @brief The padding of each page, a spacing step, 0 to `kMaxSpacingStep`; set once. Disengaged pads the pages
+    ///        by `inset`. Each page pads its own content inside its scroll, so a child of a page can bleed to the
+    ///        node's edges whether or not the page scrolls.
+    std::optional<int> pageInset;
+    /// @brief The surface the strip, and nothing else, is drawn on; empty draws it on the surface around it. Set once.
+    std::string stripSurface;
 };
 
 /// @brief A modal overlay; its content is mounted only while it is open.
@@ -696,12 +957,23 @@ struct Dialog {
     Prop<bool> open;
     /// @brief The title.
     Prop<std::string> title;
+    /// @brief A line under the title, in the head, that describes the dialog and is its accessible description;
+    ///        empty shows none. Applied only when bound or not empty.
+    Prop<std::string> description;
     /// @brief The content; may be null.
     Node child;
     /// @brief Called when the user dismisses it (Esc on the TUI).
     Action onDismiss;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief Whether it is drawn as a sheet that fills the window, with a head holding a dismiss control and the
+    ///        title. Changing it while open keeps the content and its state.
+    Prop<bool> sheet = false;
+    /// @brief The label of a sheet's dismiss control, which dismisses as Escape does.
+    Prop<std::string> dismissLabel = std::string{"Close"};
+    /// @brief The description as runs; while bound or not empty, shown in place of `description`, which an older
+    ///        client draws.
+    Prop<std::vector<TextSpan>> descriptionSpans;
 };
 
 /// @brief A progress indicator.
@@ -870,6 +1142,12 @@ struct ForEach {
     int gap = 0;
     /// @brief Visibility, enablement, layout, drag-and-drop of the row container.
     Common common{};
+    /// @brief Whether rows that do not fit on one line continue on the next; set once. Only a horizontal `axis`
+    ///        wraps: the mount ignores it on a vertical one.
+    bool wrap = false;
+    /// @brief Whether a rule is drawn between each two shown rows, as a Column's `divided`; set once. Only a vertical
+    ///        `axis` divides: the mount ignores it on a horizontal one.
+    bool divided = false;
 };
 
 /// @brief One column of a `Table`.
@@ -878,9 +1156,23 @@ struct TableColumn {
     std::string label;
     /// @brief The column's width request.
     Sizing width = Sizing::content();
-    /// @brief The text style of this column's default cell; `Normal` renders unchanged. Has no effect on a column
-    ///        with its own `.cell`, or on a `Table` constructed directly without going through the interpreter.
+    /// @brief The text style of this column's default cell; `Normal` renders unchanged. Has no effect on the style of
+    ///        a column's own `.cell`, or on a `Table` constructed directly without going through the interpreter. A
+    ///        `Mono` role also sets the column's width unit: a fixed width counts monospace characters.
     TextRole role = TextRole::Normal;
+    /// @brief Where a cell sits across the column: the text of a text cell or a text input cell, and a label-width
+    ///        cell (a badge, a check box, a push button) at its natural width, at the start, centre or end; the
+    ///        header label follows it. A container cell fills the column whatever this says. `Stretch` reads as
+    ///        `Start`.
+    Align align = Align::Start;
+    /// @brief Where a cell sits down its row when the row is taller than the cell: `Start` at the top, `Center`, or
+    ///        `End` at the bottom. `Stretch` fills the row's height.
+    Align valign = Align::Center;
+    /// @brief Whether a click on the column's header asks to sort by it (`Table::onSort`).
+    bool sortable = false;
+    /// @brief Whether the column's text cells may break across lines. With `false` each is drawn on one line and cut
+    ///        at the column's width with an ellipsis, such as a value with its unit in a narrow column.
+    bool wrap = true;
 };
 
 /// @brief Keyed rows of cells under column headers. Each row's view is a `Row` whose children are the cells, one
@@ -902,8 +1194,18 @@ struct Table {
     SelectionMode selectionMode = SelectionMode::None;
     /// @brief The selected rows' keys. A key with no row selects nothing until such a row appears.
     Prop<std::vector<Key>> selection;
-    /// @brief Called with the keys the user selected.
-    std::function<void(std::vector<Key>)> onSelectionChange;
+    /// @brief Called with the keys the user selected and what kind of change it was.
+    std::function<void(std::vector<Key>, SelectionChange)> onSelectionChange;
+    /// @brief Whether the table draws its selection as a leading column of check boxes, one per row, under a box
+    ///        that selects every row shown; set once. Only a `Multiple` table draws it.
+    bool selectColumn = false;
+    /// @brief The accessible name of the select column's header box.
+    Prop<std::string> selectAllLabel = std::string{"Select all"};
+    /// @brief The column whose header shows the sort, and its direction; none marks no header. The table never
+    ///        orders its rows itself: they come in the order shown.
+    Prop<std::optional<TableSort>> sort;
+    /// @brief Called with a sortable column's index when the user asks to sort by it (a click on its header).
+    std::function<void(std::size_t)> onSort;
     /// @brief Called with a row's key when the user activates it (Enter or a double click).
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop.
@@ -930,6 +1232,9 @@ struct DateTimeInput {
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief The pattern the value is shown and read in (`checkDatePattern`), ISO being always read too; empty
+    ///        means ISO. Set once.
+    std::string pattern;
 };
 
 /// @brief An integer chosen on a range.
@@ -978,8 +1283,11 @@ struct ActionButton {
 struct Banner {
     /// @brief What the message conveys.
     Prop<Tone> tone = Tone::Info;
-    /// @brief The message.
+    /// @brief The message; not applied while the banner has spans.
     Prop<std::string> text;
+    /// @brief The message as runs, each plain, strong or monospace; while bound or not empty, it is shown in place
+    ///        of `text`.
+    Prop<std::vector<TextSpan>> spans;
     /// @brief The button beside the message; an empty label shows none.
     ActionButton action{};
     /// @brief Whether the user can dismiss it; set once.
@@ -988,6 +1296,12 @@ struct Banner {
     Action onDismiss;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief How the action is drawn; set once. `Link` draws it inside the message, at the run of `spans` marked
+    ///        `action`, else after the message.
+    BannerActionStyle actionStyle = BannerActionStyle::Ghost;
+    /// @brief Whether the action takes a line of its own under the message, as wide as the banner; set once. Not with
+    ///        `Link`.
+    bool actionStretch = false;
 };
 
 /// @brief A short label marking a state, such as a count or a status.
@@ -998,8 +1312,19 @@ struct Badge {
     Prop<std::string> text;
     /// @brief The name of an icon in the theme's icon map; empty shows none. Set once.
     std::string icon;
+    /// @brief Filled or outlined; set once.
+    BadgeStyle style = BadgeStyle::Filled;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief Called when the user removes the badge; empty: the badge has no remove control and takes no focus.
+    ///        Set once.
+    Action onRemove;
+    /// @brief The remove control's accessible name; empty: `Remove ` and the badge's text.
+    Prop<std::string> removeLabel;
+    /// @brief Its outline: the theme's corners, or round; set once.
+    ControlShape shape = ControlShape::Default;
+    /// @brief Whether the label is drawn in the `mono` text role's face; set once.
+    bool mono = false;
 };
 
 /// @brief A progress bar.
@@ -1030,6 +1355,9 @@ struct Steps {
     Prop<std::vector<Step>> items;
     /// @brief The step to highlight, by position; `nullopt` or a position past the last highlights none.
     Prop<std::optional<std::size_t>> current;
+    /// @brief Whether the indicator draws the steps' labels; unlabelled, it draws only the marks and connectors, and
+    ///        each step keeps its label as its accessible name.
+    Prop<bool> labelled = true;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };
@@ -1038,18 +1366,133 @@ struct Steps {
 struct KeyValueItem {
     /// @brief The caption.
     std::string label;
-    /// @brief The value, as text.
+    /// @brief The value, as text; not shown while the item has spans.
     std::string value;
+    /// @brief The value as runs, as a `Text`'s spans; while not empty, shown in place of `value`.
+    std::vector<TextSpan> spans;
+    /// @brief An evaluation of the value, drawn in the tone's colour and the strong weight; `Neutral` is none.
+    Tone tone = Tone::Neutral;
 
     /// @brief Memberwise equality.
-    /// @return Whether label and value match.
+    /// @return Whether every member matches.
     bool operator==(KeyValueItem const&) const = default;
 };
 
-/// @brief Captions beside their values, one pair per row.
+/// @brief One point of a chart's series.
+struct ChartPoint {
+    /// @brief The position along the horizontal axis: the point's index, a number, or an instant's milliseconds
+    ///        since the epoch.
+    double x = 0.0;
+    /// @brief The value, or the axis end a clipped point is drawn at; `nullopt` is a gap, which no line joins
+    ///        across.
+    std::optional<double> y;
+    /// @brief Whether the value lies outside the axis the document fixed.
+    ChartClip clip = ChartClip::None;
+    /// @brief The point's label on the horizontal axis; empty for none.
+    std::string xLabel;
+    /// @brief Engaged: the point is marked, in this tone.
+    std::optional<Tone> tone;
+    /// @brief Text drawn beside the point; empty for none.
+    std::string note;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ChartPoint const&) const = default;
+};
+
+/// @brief One series of a chart: its points in order.
+struct ChartSeries {
+    /// @brief The series' name in the legend; empty for a chart's one series.
+    std::string label;
+    /// @brief Whether a line joins the points.
+    bool joined = true;
+    /// @brief The points, in order.
+    std::vector<ChartPoint> points;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ChartSeries const&) const = default;
+};
+
+/// @brief A horizontal reference line of a chart, such as a control or a specification limit.
+struct ChartLine {
+    /// @brief Where the line is drawn on the value axis.
+    double value = 0.0;
+    /// @brief Its label.
+    std::string label;
+    /// @brief Its colour.
+    Tone tone = Tone::Neutral;
+    /// @brief Its stroke.
+    ChartLineStyle style = ChartLineStyle::Solid;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ChartLine const&) const = default;
+};
+
+/// @brief One labelled tick of a chart's value axis.
+struct ChartTick {
+    /// @brief Where it is on the value axis.
+    double value = 0.0;
+    /// @brief Its label, formatted in the active locale.
+    std::string text;
+
+    /// @brief Memberwise equality.
+    /// @return Whether both members match.
+    bool operator==(ChartTick const&) const = default;
+};
+
+/// @brief Everything a chart draws, computed from exact values by the lowering: positions as doubles, and every
+///        text already formatted.
+///
+/// One value rather than a setter per part: the range depends on every point and line, so the parts change
+/// together, and one equality check keeps an unchanged chart from drawing again.
+struct ChartData {
+    /// @brief The left end of the horizontal axis, padding included.
+    double xMin = 0.0;
+    /// @brief The right end of the horizontal axis, padding included.
+    double xMax = 0.0;
+    /// @brief The lower end of the value axis, padding included.
+    double yMin = 0.0;
+    /// @brief The upper end of the value axis, padding included.
+    double yMax = 0.0;
+    /// @brief The value axis's unit or name, drawn above its labels; empty for none.
+    std::string yLabel;
+    /// @brief The value axis's ticks; empty when three or more reference lines label the axis.
+    std::vector<ChartTick> yTicks;
+    /// @brief The reference lines.
+    std::vector<ChartLine> lines;
+    /// @brief The series, in drawing order.
+    std::vector<ChartSeries> series;
+    /// @brief The text alternative: what a reader must know from the chart.
+    std::string summary;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ChartData const&) const = default;
+};
+
+/// @brief Points against a numeric axis, optionally joined, with horizontal reference lines. Takes no focus and
+///        calls no handler.
+struct Chart {
+    /// @brief What the chart draws.
+    Prop<ChartData> data;
+    /// @brief Visibility, enablement, layout, drag-and-drop.
+    Common common{};
+};
+
+/// @brief Where a key-value list draws each caption relative to its value.
+enum class CaptionPlacement : std::uint8_t {
+    Beside,  ///< Each caption beside its value, one pair per row.
+    Above,   ///< Each caption above its value, the pairs one under another.
+};
+
+/// @brief Captions beside, or above, their values.
 struct KeyValue {
     /// @brief The pairs, in order.
     Prop<std::vector<KeyValueItem>> items;
+    /// @brief Where the captions sit; set once.
+    CaptionPlacement captions = CaptionPlacement::Beside;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };
@@ -1074,6 +1517,8 @@ struct Drawer {
     Prop<bool> open;
     /// @brief The title.
     Prop<std::string> title;
+    /// @brief A line under the title, as a dialog's.
+    Prop<std::string> description;
     /// @brief The content; may be null.
     Node child;
     /// @brief Called when the user dismisses it (Esc on the TUI).
@@ -1082,6 +1527,8 @@ struct Drawer {
     Side side = Side::End;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief The description as runs, as a dialog's.
+    Prop<std::vector<TextSpan>> descriptionSpans;
 };
 
 /// @brief A row of buttons in the footer of the dialog or drawer whose content holds it: what a document's overlay
@@ -1171,7 +1618,7 @@ struct NodeData {
     /// @brief The node.
     std::variant<Text, Button, TextInput, Checkbox, Select, Menu, Column, Row, Grid, Spacer, Panel, Scroll, Switch,
                  Tabs, Dialog, Busy, ForEach, Table, DateTimeInput, Slider, FilePicker, Banner, Badge, Progress, Steps,
-                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar>
+                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar, Chart>
         kind;
 };
 
@@ -1303,6 +1750,11 @@ template <typename Kind>
 /// @return The node.
 [[nodiscard]] inline Node steps(Steps spec) { return detail::makeNode(std::move(spec)); }
 
+/// @brief Points against a numeric axis, with reference lines.
+/// @param spec The node.
+/// @return The node.
+[[nodiscard]] inline Node chart(Chart spec) { return detail::makeNode(std::move(spec)); }
+
 /// @brief Captions beside their values.
 /// @param spec The node.
 /// @return The node.
@@ -1390,17 +1842,23 @@ template <typename E>
 ///        bindings: what the view reads directly while it is built is read once and never again.
 /// @param axis The stacking direction.
 /// @param gap Space between rows.
+/// @param common Visibility, enablement, layout and the rest of the row container's common properties.
+/// @param wrap Whether rows continue on the next line when they do not fit; only a horizontal @p axis wraps.
+/// @param divided Whether a rule is drawn between each two shown rows; only a vertical @p axis divides.
 /// @return The node.
 /// @throws std::invalid_argument when @p rows, @p keyOf or @p rowView is empty.
 template <typename RowT>
 [[nodiscard]] Node forEach(std::function<std::vector<RowT>()> rows, std::function<Key(RowT const&)> keyOf,
                            std::function<Node(reactive::Signal<RowT> const&)> rowView, Axis axis = Axis::Vertical,
-                           int gap = 0) {
+                           int gap = 0, Common const& common = {}, bool wrap = false, bool divided = false) {
     return detail::makeNode(ForEach{
         .model =
             std::make_shared<detail::TypedForEach<RowT> const>(std::move(rows), std::move(keyOf), std::move(rowView)),
         .axis = axis,
         .gap = gap,
+        .common = common,
+        .wrap = wrap,
+        .divided = divided,
     });
 }
 
@@ -1411,13 +1869,17 @@ template <typename RowT>
 /// @param rowView Builds a row's view once, from a signal the mount keeps equal to the row.
 /// @param axis The stacking direction.
 /// @param gap Space between rows.
+/// @param common Visibility, enablement, layout and the rest of the row container's common properties.
+/// @param wrap Whether rows continue on the next line when they do not fit; only a horizontal @p axis wraps.
+/// @param divided Whether a rule is drawn between each two shown rows; only a vertical @p axis divides.
 /// @return The node.
 /// @throws std::invalid_argument when @p keyOf or @p rowView is empty.
 template <typename RowT>
 [[nodiscard]] Node forEach(reactive::Signal<std::vector<RowT>> const& rows, std::function<Key(RowT const&)> keyOf,
                            std::function<Node(reactive::Signal<RowT> const&)> rowView, Axis axis = Axis::Vertical,
-                           int gap = 0) {
-    return forEach<RowT>([&rows] { return rows.get(); }, std::move(keyOf), std::move(rowView), axis, gap);
+                           int gap = 0, Common const& common = {}, bool wrap = false, bool divided = false) {
+    return forEach<RowT>([&rows] { return rows.get(); }, std::move(keyOf), std::move(rowView), axis, gap, common, wrap,
+                         divided);
 }
 
 /// @brief Everything about a `table` beyond its columns and rows.
@@ -1430,8 +1892,16 @@ struct TableOptions {
     SelectionMode selectionMode = SelectionMode::None;
     /// @brief The selected rows' keys.
     Prop<std::vector<Key>> selection;
-    /// @brief Called with the keys the user selected.
-    std::function<void(std::vector<Key>)> onSelectionChange;
+    /// @brief Called with the keys the user selected and what kind of change it was.
+    std::function<void(std::vector<Key>, SelectionChange)> onSelectionChange;
+    /// @brief Whether the table draws its selection as a leading column of check boxes.
+    bool selectColumn = false;
+    /// @brief The accessible name of the select column's header box.
+    Prop<std::string> selectAllLabel = std::string{"Select all"};
+    /// @brief The column whose header shows the sort, and its direction.
+    Prop<std::optional<TableSort>> sort;
+    /// @brief Called with a sortable column's index when the user asks to sort by it.
+    std::function<void(std::size_t)> onSort;
     /// @brief Called with a row's key when the user activates it.
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop of the table.
@@ -1444,6 +1914,11 @@ struct TableRowView {
     std::vector<Node> cells;
     /// @brief The row's tone, bound in the row's own scope; disengaged for none.
     std::optional<Prop<std::optional<Tone>>> tone;
+    /// @brief The row's accessible name, and its select box's, bound in the row's own scope; disengaged names the row
+    ///        by its key.
+    std::optional<Prop<std::string>> label = std::nullopt;
+    /// @brief Whether the row is a heading: exactly one cell, spanning every column, never selected or activated.
+    bool heading = false;
 };
 
 /// @brief A table of keyed rows: one `Row` of cells per row, under the column headers.
@@ -1499,11 +1974,16 @@ template <typename RowT>
     std::function<Node(reactive::Signal<RowT> const&)> rowNode =
         [viewOf = std::move(rowView), count = columns.size()](reactive::Signal<RowT> const& entry) {
             TableRowView made = viewOf(entry);
-            if (made.cells.size() != count ||
+            std::size_t const wanted = made.heading ? 1 : count;
+            if (made.cells.size() != wanted ||
                 std::ranges::any_of(made.cells, [](Node const& cell) { return cell == nullptr; })) {
-                throw std::invalid_argument{"ui::table: a row needs exactly one non-null cell per column"};
+                throw std::invalid_argument{
+                    "ui::table: a row needs exactly one non-null cell per column, and a heading row one cell"};
             }
-            return row(Row{.children = std::move(made.cells), .tone = std::move(made.tone)});
+            return row(Row{.children = std::move(made.cells),
+                           .tone = std::move(made.tone),
+                           .label = std::move(made.label),
+                           .heading = made.heading});
         };
     Table spec{
         .rows =
@@ -1515,6 +1995,10 @@ template <typename RowT>
     spec.columns = std::move(columns);
     spec.selection = std::move(options.selection);
     spec.onSelectionChange = std::move(options.onSelectionChange);
+    spec.selectColumn = options.selectColumn;
+    spec.selectAllLabel = std::move(options.selectAllLabel);
+    spec.sort = std::move(options.sort);
+    spec.onSort = std::move(options.onSort);
     spec.onActivate = std::move(options.onActivate);
     spec.common = std::move(options.common);
     return detail::makeNode(std::move(spec));

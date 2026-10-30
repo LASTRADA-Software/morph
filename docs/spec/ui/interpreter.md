@@ -34,7 +34,7 @@ Read this before changing what a mounted document does. What a document may say 
 | `BridgeDispatcher` | The application's `Dispatcher`: `bind` makes a `bridge::RawHandler` (`bindByType`, and `attach` for a key), `execute` is `executeRaw`. An `evaluate` query goes through the `Evaluator` it was built with (`ui::evaluatorOver`, the UI service's `ui-evaluate`); without one it is refused with a `std::runtime_error`. It has no offline queue of its own: `queueOffline` is ignored unless a `QueueingDispatcher` wraps it. A shared binding without a key is left unattached, which the bridge refuses at the first call. |
 | `QueueingDispatcher` | The client's offline queue (`include/morph/ui/queueing_dispatcher.hpp`), around any `Dispatcher`. A call made with `queueOffline` that fails with `backend::DisconnectedError` is held, and the caller's completion stays pending, so the mutation stays `pending` and its elements `stale`. While anything is held, a later queued call joins the queue unsent, so the server sees calls in the order they were made. `replay()` re-sends the held calls oldest first, one at a time, and settles each caller with its replay: a refusal runs the mutation's `onError`, and a call still unreachable stops the replay and stays held with every call behind it. A call without `queueOffline`, and an evaluation, are never held. `held()` and `setOnHeld` report the count. When to replay is the host's: it calls `replay()` once its transport reconnects. |
 | `InterpreterHost` | What only the application can do: `navigate`, `closeSelf` (`return`, `close: self`), `hostCommand`, `switchBackend` (asynchronous: it answers whether the backend is listed and calls `done` once the switch committed or failed), `resetPrefs`, `setLocale`, `notify`, `signIn`, `signOut`, `setAppValue` (`set` of `app.name`), `uploadFor` (an `UploadRequest`: the file, and the model type and action of the mutation that will reference it; its default calls `upload(file, …)`), `download`, `readFile(file, maxBytes, done)` and `saveFile(InlineFile{name, mediaType, bytes}, option, done)` (a file's bytes moved inline; a host reads a file's size before its bytes and refuses one over `maxBytes`), `preferenceChanged`, `permissionsStale`. Every default answers "not supported", and the interpreter reports it — `notify`'s own default is still this safe no-op. `client::ApplicationHost` (the generic client's host, [`client/client.md`](../client/client.md)) has a working `notify`, wired through its `ShellFrame`'s toast; an application building its own host without `ApplicationHost` still gets the safe default unless it wires its own sink the same way. A session with host commands (`Session::setHostCommands`, filled by `HostVocabulary`, [`host_vocabulary.md`](host_vocabulary.md)) runs `{"host": …}` itself and answers `{"can": "host:…"}` from them. |
-| `Session` | What screens of one client session share: the query cache, the mounted queries, the permitted action ids `can` reads (`setPermitted`), the formatting facts (`setFormatting`, `setLocale`), and the `env`, `session` and `host` values. `clear()` is `signOut` and a principal change; `backendChanged(backend)` carries out a committed backend switch. `appScope()` is the mounted app document's scope. |
+| `Session` | What screens of one client session share: the query cache, the mounted queries, the permitted action ids `can` reads (`setPermitted`), the formatting facts (`setFormatting`, `setLocale`), and the `env`, `session` and `host` values: `setEnvironment` replaces the `env` record, and `setEnvironmentValue(name, value)` sets one value and keeps the others, as a committed backend switch keeps the width class. `clear()` is `signOut` and a principal change; `backendChanged(backend)` carries out a committed backend switch. `appScope()` is the mounted app document's scope. |
 | `Interpreter` | `mount(doc, params, backend, MountOptions)` → `Screen`. |
 | `Screen` | A mounted screen: `root()`, `title()`, `identity()`, `dirty()`, `requestClose()` (runs `onClose`; false when it ran `cancelClose`), `beginClose()` (runs `onClose` and returns the `cancelClose` flag it shares with what it starts; null without `onClose`), `pending()` (a tracked read: an open dialog or drawer, a mutation run, or an upload or download in flight), `declares(key)`, `runtime()`, `runLifecycle(key)`, `setPreference(point, value)`, `document()`, `lend(alias)`, `read(expression)`, `diagnostics()`. Destroying it runs `onUnmount` and unmounts. A host mounts and closes screens through [host.md](host.md). |
 
@@ -52,12 +52,20 @@ throws `std::invalid_argument` for 0 and for a cap above `kMaxInlineFileBytes`, 
 ## The app root scope
 
 `Interpreter::mountApp(doc)` mounts the app document (id `app`) as an `AppRoot`: its state, lets,
-queries and mutations, declared once for the session, and its `onMount`. A second root on the same
+queries and mutations, declared once for the session, and its `onMount`. Its `formatting` patterns become the
+session's (`Session::setDatePatterns`), so every screen of the bundle writes and reads dates in them; a C++ host may
+set the same `FormatContext` fields directly. A `dateTimeInput` reads the pattern of its mode once, untracked, when
+it is lowered, as it reads the zone: a pattern changed later applies to inputs mounted later. A second root on the same
 session, and a document whose id is not `app`, are refused. While it lives, `Session::appScope()`
 names its scope: `{"ref": "app.name"}` in any screen reads the name there, reactively, so a query of
 the app document runs once however many screens read it, and `{"set": "app.name"}` writes the root's
 state (a name that is not state is reported). Destroying the root runs its `onUnmount` and takes its
 scope off the session; the screens that read it are destroyed first, as sign-out does (spec 6 §5).
+
+`AppRoot::navigationBadges()` is a `reactive::Computed` of the document's `navigation` badges that are visible, in
+order, each a `NavigationBadge{screen, text, tone}`: the parts are lowered once in the app scope when the root
+mounts, so a count follows the state it reads. It is empty when the document declares none, and goes with the root,
+before its scope. A shell copies it onto its navigator ([client.md](../client/client.md#the-shell)).
 
 ## Mounting
 
@@ -203,29 +211,40 @@ reply; `parallel` applies each. `pending` counts runs in flight and queued.
 
 ## Relations
 
+- **Tabs.** The tab ids map to indices once. A bound `selected` is the controlled index: a pick runs `onChoose`
+  with the tab's id as a user event and leaves the highlight on the tab `selected` names until it changes. A value
+  that names no tab shows the first and is reported once at the node's `selected` path. Without `selected` the node
+  keeps the pick itself, which is its element value `selected`.
 - **Inputs.** A text input, date-time input or slider whose `value` is bound (a checkbox's `checked`,
   a select's `selected`) is controlled: its draft follows the bound value while the user has not edited
   it, and keeps the user's edit until the bound value equals it. An input whose value is not bound keeps
   its own `committed` value. A text input's values are text.
+- **Tables.** A table's `selection` is controlled as a select's `selected` is: any expression but a literal
+  `null` binds it, and the table then shows the bound keys and nothing else. A user's change runs
+  `onSelectionChange` with `event` the new keys, and shows only once the document writes them back.
 - **Date inputs.** A date input holds its value as a `timestamp` or as a string. The loader records the
   static type of `value` when it is a `timestamp` or a `string`; a value whose type is `any` or `key`
   takes the type it holds at the edit, and an uncontrolled input holds a timestamp. A string field
-  shows a `yyyy-MM-dd` date as midnight in the display zone and an ISO-8601 date-time as its instant,
+  shows a `yyyy-MM-dd` date as midnight in the display zone and an ISO-8601 date-time as its instant
+  (it reads the value with `readDateValue`, as the date functions do),
   and writes `yyyy-MM-dd` in `date` mode or the ISO-8601 instant in `date-time` mode (`""` on
   clearing); a timestamp field writes the timestamp (`null` on clearing). A value that names no date
   shows empty and is reported once at the node's `value` path. A date input follows its bound value by
   instant: the draft and the bound value show the same when both read to the same instant, and two
   values that read to nothing are the same.
 - **`commitOn`** (`change` by default, `blur`, `enter`) decides when an edit commits: the committed
-  value is written and `onChange` runs. `onCommit` (Enter or focus leaving after an edit) also marks the
+  value is written and `onChange` runs. A text input is given a submit handler only when it has `onSubmit` or
+  commits on `enter`; any other one lets Enter go on to its ancestors' chords once it has committed. `onCommit` (Enter or focus leaving after an edit) also marks the
   element `touched`. A date input's change is its commit: `onChange` runs, then `onCommit` with the same
   value. A slider reports `onChange` on each step and `onCommit` on a finished move (a release after a
-  drag, a key step, a wheel step). Both commits mark the element `touched`. The view tree reports no
-  focus, so `focused` stays false.
+  drag, a key step, a wheel step). Both commits mark the element `touched`. A check box's toggle and a select's
+  choice are their commits, and mark them `touched` too. A `group` has no value to touch: it counts as touched once
+  any element inside it is. The view tree reports no focus, so `focused` stays false.
 - **Errors.** An element's `errors` are, in order: `Required` when `required` is true and the value is
-  not engaged (`null`, `""` or an empty list), the node's own `errors`, the field errors of a reply in
+  not engaged (`null`, `""` or an empty list; never for a `group`, whose `required` is its legend's mark only),
+  the node's own `errors`, the field errors of a reply in
   its scope (a query's or mutation's value `errors.<id>`), and each failing check's message. `valid` is
-  `errors` empty.
+  `errors` empty. A field's `tone` is not an error: it changes the field's look and nothing of `valid` or `ready`.
 - **`shownErrors`** follows the `showErrors` of the innermost dialog, else the screen: `always`;
   `submit` once submitted; `touched` (the default) once touched or submitted.
 - **`ready`** of a dialog or drawer holds when every visible element of its content is valid and no
@@ -252,9 +271,23 @@ its target does not resolve, and when the host does not support it.
 - `if` with a condition that is not a `bool` (`null` included) runs neither branch.
 - `open` and `close` set a dialog's own `open`; a dialog whose `open` is an expression is refused and
   reported. `reset` of a dialog restores its content's state and inputs and clears `submitted`.
-- `navigate` runs `onResult` with the returned value as `event`, or `onCancel`.
-- `focus` moves keyboard focus to the element of that id in the screen's mounted tree (`Mounted::focus`); an
-  element that is not mounted is reported and fails the command.
+- `close: self` is resolved by scope. The command's scope and its parents are walked to the first one a dialog or
+  drawer owns (its content, `default`, `cancel` and actions all run there), and that overlay is closed as
+  `close: <id>` closes it. A walk that reaches the screen's root scope asks the host's `closeSelf`, so a screen
+  opened as a dialog still ends itself. A component's fallback scope has no parent, so a walk that ends there, with
+  no dialog or drawer of the component's own around the command, is reported ("`close: self` inside a component
+  names no dialog or drawer") and fails the command: it never closes the screen the component sits in. A
+  mutation's `onSuccess` runs in the scope that declares the mutation, so the same lexical rule applies to it.
+- `navigate` runs `onResult` with the returned value as `event`, or `onCancel`. A `navigate` with neither asks
+  the host with no handlers, so it files no call ([host.md](host.md#documentscreenhost)): the screen it opens
+  answers nobody.
+- `focus` moves keyboard focus to the declaration its target resolved to at load (`Document::focusTargets`), in the
+  screen's mounted tree (`Mounted::focus`). The lowering gives every element the focus key of its declaration: the
+  node's JSON Pointer, after the key of the `custom` node whose fallback lowered it, followed by `@<canonical row
+  key>` for each row scope it sits in, outermost first. A key is unique per declaration, row and component use, and
+  the same on every re-render. The command keys each candidate with its own enclosing row keys, as many as enclose
+  the candidate, the innermost replaced by `row`'s value when it gives one, and focuses the candidate that is
+  mounted. None mounted, or a `row` of `null`, is reported as `` `x` is not mounted `` and fails the command.
 - `switchBackend` asks the host; a backend it does not list is reported. When the switch commits,
   `Session::backendChanged` runs, in one batch, every mounted screen's and the app root's `onBackendChange`, then
   marks every entry stale and refetches the mounted queries, and sets `{"env": "backend"}`; the command then
@@ -292,20 +325,69 @@ literal integers the loader checked, become `LayoutHints::minWidth`, `maxWidth`,
 `justify` and `alignSelf`, names the loader checked, become the stack's or grid's `align` and `justify` and
 `LayoutHints::alignSelf`.
 
+**Holders.** The interpreter mounts some content through a holder: a `switch` case, an overlay's body (a one-row
+`forEach`, so that the content's scope lives only while it is mounted), several nodes written where one is expected
+(a `default`, a panel's, a scroll's or a collapsible's content, a table cell, an `empty` state, a group heading, an
+error boundary's fallback) and a `forEach` row's content (a column). A holder's sizing on each axis is a stretch, by
+the largest weight, when one of its children's is, and content otherwise; a node's bounds and `alignSelf` stay with
+the node. The holder a slot sees is the one-row `forEach`, because a slot reads only its direct child's sizing, so
+that `forEach` carries the hints too; they are worked out from the document's children before the content mounts. A
+literal sizing is read as written and a computed one is evaluated once in the enclosing scope. A computed sizing that
+reads a name the case or overlay itself declares cannot be evaluated before the content mounts: it is reported at its
+path and the holder stays content-sized on that axis. A tab page is mounted into a slot that fills the tabs node's page area, is scrollable and pads its own content (`Mounter::mountPage`): a screen needs no `scroll` of its own, and a stretching child fills the page but is never shorter than its `minHeight`. A single node of a list is lowered unwrapped. The column that wraps several nodes is a holder (`Column::holder`): a child of it that bleeds reaches past the padding of the container the document names (a panel's, a tab page's), not past the column's own, which has none; a column the document wrote is not a holder and gives its children nothing to bleed past. A document panel or collapsible puts `gap` (default 2) between several
+children and a dialog or drawer (default 3), the holder's column carrying it; a panel built in the view tree holds one child and
+its author picks that child's gap.
+
+A `group` lowers to a `Column` (gap `gap`) of existing kinds, so the view tree and the contract do not change: a
+`Text` of its `label` whose `field.required` is its `required` (so the mark follows the legend's last line), its
+children, a muted `Text` of its `description` shown while it is not empty, and an `Error` `Text` of its
+`shownErrors`, one per line, shown while there are any. The column's `Common` is the node's own, with `a11y.role`
+`group` and `a11y.name` the label unless the node's `a11y` names it. The description is read in order after the
+children, not as an accessible description: `Common` carries a name and a role only.
+
+Wherever the lowering turns a decimal into a number for the view tree, it reads the exact value: a `progress`'s
+`value` and a custom component's `number` prop take the quotient unrounded, and an integer property (a grid's
+`columns`, `gap` and `span`, `sizing`, a slider's value and range, the steps' `current`, a table's virtualization
+bounds) truncates it toward zero. A decimal's places are a display fact, so only display rounds to them: `29 / 100`
+keeps its operands' 0 places and still fills 0.29 of a bar.
+
 - **Scoped content.** A dialog's, drawer's or switch case's content is lowered behind a one-row
   `forEach` whose row view declares the content's scope, so the scope is made when the content mounts
   and released when it unmounts. Row scopes are made by the row view of a `forEach` or `table`.
 - **`switch`** selects the first case whose `when` equals `on` (structurally), else `default`.
+- **`splitter`** binds `sizes`, each item read as an integer property is. A value that is not a list of numbers is
+  reported once for its path and lowers to an empty list, which shares the space equally. The document has no
+  `onResize`, so a user's drag stays the splitter's own.
 - **Action parts.** `ScreenCore::lowerActionParts(parts, ctx)` lowers a list of `actionButton` parts into
   `ActionModels`: the label, icon, `enabled` and `visible` bound in `ctx`'s scope, the emphasis, and a run function
   that runs the part's `onClick` there as a user event, in one batch.
 - **Overlay actions.** A dialog's or drawer's `actions` are lowered with its content, in its scope, and end the
   content as a `ui::ActionBar` of buttons (test id `action_<id>`, shown and enabled as the action is), so their
   bindings hold the overlay's scope as the content does; the mount puts the bar in the overlay's footer. `default`
-  and `cancel` keep their Enter and Escape bindings.
-- **The head.** A screen's `status` and `actions` are lowered once, at mount, in the screen scope; `Screen::status()`
-  and `Screen::actions()` read the visible ones (a tracked read), `Screen::subtitle()` evaluates `subtitle`, and
-  `Screen::runAction(id)` runs an enabled, visible action, reporting an unknown, hidden or disabled id.
+  and `cancel` keep their Enter and Escape bindings, chords of the content column. So the `default` runs for Enter
+  that no focused widget inside took: a button, a text input with `onSubmit` or that commits on Enter, and a table
+  take it first.
+- **The shown root's `pageEdge`.** `Screen::pageEdge()` is a tracked read that starts at the view's root and, while the
+  node is a `switch`, moves to the case shown now (the default when none matches) when that case holds exactly one node
+  and declares no scope of its own; it answers that node's `pageEdge`, and `false` for any other node or a case of
+  several nodes. A `byWidth` switch and a nested one are seen through, and the answer follows a width or state change.
+- **The shown root.** `pageEdge()` and `headJoined()` share one walk, `shownRoot()`: the node the screen shows as its
+  root, seen through `switch`es as above. `Screen::headJoined()` answers that node's `headJoined`.
+- **The head's placement.** `Screen::leadPlacement()` is a tracked read of the document's `leadPlacement` as a
+  `LeadPlacement` (`Below`, `Inline`, `End`); absent is `Below`, and a value that names none of the places is reported
+  once at its path and taken as `Below`. `Screen::headSurface()` is a tracked read of `headSurface` as a name, empty for
+  none, and `Screen::pageSurface()` of `pageSurface` alike (empty is the built-in `page`). `AppRoot::principalPlacement()` answers the app document's `principalPlacement` as a `PrincipalPlacement`
+  (`Sidebar`, `Head`), `Sidebar` when the document gives none.
+- **A footer action.** `actionBarOf` draws each `actions` part of a dialog or drawer as a button with the part's `icon`;
+  with `iconOnly` the button's label is empty while the condition holds and the part's label is its accessible name and
+  tooltip. A head action carries `iconOnly` in `HeadAction`.
+- **The head.** A screen's `status`, `tools`, `actions` and `menu` are lowered once, at mount, in the screen scope;
+  `Screen::status()`, `tools()`, `actions()` and `menu()` read the visible ones (a tracked read), `Screen::subtitle()`,
+  `eyebrow()`, `titleSpans()`, `eyebrowSpans()`, `subtitleSpans()` and `menuLabel()` evaluate `subtitle`, `eyebrow`, `titleSpans`, `eyebrowSpans` and `subtitleSpans` (into runs, with a run it cannot read
+  dropped and a tone of no known name reported once) and `menuLabel`, and `Screen::runAction(id)`, `chooseMenuEntry(id)`,
+  `editTool(id, value)` and `submitTool(id)` run an enabled, visible part's commands as a user event, reporting an
+  unknown, hidden or disabled id. A head tool is controlled: the interpreter holds no draft for it, so its `value` or
+  `selected` is the document's binding alone, and an edit reaches the screen only through its commands.
 - **A field's `label`.** A text input, select, slider, date-time input or file picker shows no caption of
   its own unless the document asks, so its `label` is bound as its accessible name (`Common::a11y.name`). An
   `a11y` part that gives a `name` wins over it; one that gives only a `role` leaves the label as the name. A
@@ -317,7 +399,53 @@ literal integers the loader checked, become `LayoutHints::minWidth`, `maxWidth`,
   `{id, label}`. `onActivate` runs in the activated row's scope. `rowTone` is evaluated in each row's
   scope and gives the row its tone: `"neutral"`, `"info"`, `"ok"`, `"warn"`, `"err"`, or `null` for
   none; another value shows no tone and is reported once for the table (`rowTone is <v>; a tone is
-  neutral, info, ok, warn or err`). `sort`, `filters` and `hoveredKey` are not lowered. With `empty`,
+  neutral, info, ok, warn or err`). The selection the table shows is a slot over the bound `selection`
+  (each item a key), or over the table's own selection when no key binds it; a bound value that is `null`
+  selects nothing, and one that is neither a list nor `null` selects nothing and is reported once at the
+  table's `selection` path. A user's change sets the table's own selection when no key binds one, then
+  runs `onSelectionChange` in the table's scope with `event` the new keys, as a user event, in one batch.
+  The mount re-asserts the slot after the handler, so a bound selection the document does not write back
+  snaps back, and a literal one never changes. The element values `selection` and `selectedCount` read the
+  bound value when there is one and the table's own otherwise.
+  **The rows' pipeline.** The table's element holds a computed made when the element is wired, beside its
+  `rows`, so every reader of its element values (a pager drawn before the table included) and the table's own
+  lowering see one order, and `rows` is evaluated once per change. It evaluates `rows`, then sorts the list by
+  the table's sort: the bound `sort`, or the table's own (starting at `[]`) when no key binds one. Each key
+  names a sortable column; the column's `sortBy`, or the row's field of the column's `id`, is read once per row
+  with the row bound, in the table's scope, and the rows are ordered by those values as `sort` orders
+  (`expressions.md`, Sorting), key by key. A sort of `null` or `[]` keeps the source order; one that is not a
+  list of `{column, direction}` records naming sortable columns, or whose values cannot be ordered, keeps the
+  source order and is reported once at the table's `sort` path, so a data error does not blank the screen.
+  `sortBy` runs before any row's scope exists, as `key` does, so a row-scope name in it reads `null`. Then it
+  pages the sorted list, so page 2 holds the second page of the whole sorted list: `pageSize` and `page` are read
+  in the table's scope; a `pageSize` of `null` does not page, and one that is no positive integer is reported once
+  at its path and does not page either; a `page` of `null` is the first, one that is negative or no integer is
+  reported once and shows the first, and one past the last shows the last, unreported, since a filter that shrinks
+  the rows under the user is normal. The backend holds the page's rows alone, as it would a short table. On a
+  user's change of the selection, an `Extend` report keeps the selected keys of the rows on other pages, in their
+  order, before the reported keys; a `Replace` report is the whole new selection, so a plain click or a range
+  clears the other pages' keys as it clears the rest of its own, and every `Single` change is one. A key whose row
+  `rows` no longer has drops on any user change. `empty` shows while `rows` is empty, not while a page is.
+  **Groups.** With `group`, the pipeline splits the source rows into runs by `by` (read per row as `sortBy` is,
+  adjacent rows with equal values, `null` equal to `null`), gives each row its run's index, and sorts by that index
+  first and the sort's keys second, so every group keeps its place and its rows are ordered inside it. It pages the
+  data rows, and puts a heading entry before the first row of each run the page holds: the run record of the whole
+  group, computed before paging, so a group split across pages reads the same `count`, `first` and `last` on both,
+  with its key in a reserved field. The row view lowers `heading` for that entry as one cell, in a row scope of its
+  own whose row is the record, and the table makes it a heading row (`TableRowView::heading`). A heading's key is
+  `"\u001Fgroup:"`, the canonical JSON of the run's key, `":"` and its ordinal among runs with an equal key, so
+  groups A, B, A get three headings; a data key equal to one is reported as a duplicate by the mount. Heading keys
+  never reach `onSelectionChange`: the lowering drops them from a report, since a virtualized backend's Ctrl+A or
+  range can name a row it has not realized. `viewCount`, `selectedCount` and the page positions count data rows. A table
+  lowered where names are bound (a component's `props`) sorts its own copy with those names, which its element
+  values cannot see. The mount's keyed reconciliation moves the sorted rows, so each keeps its widget, its
+  native state and its selection. The header marks the sort's first key (`Table::sort`); a header click on a
+  sortable column (`Table::onSort`) makes that column the single key, `desc` when it already is the first key
+  and `asc`, `asc` otherwise, sets the table's own sort when no key binds one, and runs `onSortChange` with
+  `event` the new sort, as a user event, in one batch. The element value `sort` reads the bound sort or the
+  table's own, `viewCount` the rows the table orders (every page), and `page`, `pageCount`, `pageFirst` and
+  `pageLast` the page. `filters` and `hoveredKey` are not lowered: the
+  loader refuses `filters` and `highlightKey` on a table over `rows`. With `empty`,
   the table lowers to a `Column` holding the table and the lowered `empty` content, in the table's own scope:
   while `rows` evaluates to an empty list the table is hidden and the content shown; while it is a non-empty
   list, or `null` (a query not answered yet), the reverse. The column takes the node's `visible` and its layout,
@@ -388,6 +516,47 @@ literal integers the loader checked, become `LayoutHints::minWidth`, `maxWidth`,
   view's heading (`collection_title`, `wizard_title`). They have no element values
   and no events. A document the catalog lacks, one for another action, one that does not build, or
   a wizard step without a schema is reported and shown as a muted text naming the action.
+
+### Charts
+
+`lowerChart` binds one `ChartData` (`view_tree.md`, Chart data) in the chart's scope: one tracked read evaluates
+`summary`, `yLabel`, each series' `points`, each point's keys with `row` the point's element (as a table's `key` is
+read, with no row scope made), and each line, so a change to the list or to anything a point reads recomputes the
+chart once, and a recomputation that changes nothing sets nothing. The range, the ticks and the labels are computed
+in `math::Rational` (`chart_scale.hpp`) and converted to `double` only at the end; no label is derived from a
+position.
+
+- **Values.** `y` and a line's `value` are numbers or quantities, and convert to the unit of the chart's first
+  value read (the series in order, then the lines), as `sum` converts. A value that is not a number, or does not
+  convert, is left out and reported for its path, once (`a chart value is a number or a quantity; this one is left
+  out`; `… does not convert to the unit of the chart's first value …`). A `null` `y` is a gap: the point is kept,
+  and no line joins across it. A line whose `value` is `null` is not drawn.
+- **Points.** `points` that is `null` draws as empty without a report (a query still loading); any other value
+  that is not a list draws as empty and is reported. A series draws its last 1000 points, reported once past that:
+  a chart is a picture of a few hundred values, and a larger set is a table's. `xLabel` and `note` show as `textOf`
+  shows a value, so an `int` needs no `format` call; `null` marks nothing, and a `tone` outside the five names marks
+  nothing and is reported once for its path.
+- **The horizontal axis.** Without `x`, point *i* of every series sits at *i*, its element's index, so series of
+  equal length line up run by run. With `x`, a number is its value and a date or an instant its milliseconds since
+  the epoch (a `yyyy-MM-dd` date is midnight of it in the display zone, as a date input reads it); a point whose `x`
+  is `null` is left out, and one that is neither is reported and left out. Numbers mixed with dates and instants
+  are reported once, and every point then sits at its index. The axis spans every position, widened by 5 % of the
+  span at each end; a span of zero is widened by one either side.
+- **The value axis.** It spans every drawn value and every line, widened by 5 % of the span at each end, so the
+  outermost point and line lie inside the plot; a span of zero is widened by one unit in the last of the places
+  either side, and a chart with nothing to draw spans 0 to 1. The places are `yPlaces`, or else the widest places of
+  the values and lines. `yMin` and `yMax`, evaluated and converted as values are, replace the computed ends; ends
+  that leave the axis empty are reported (``yMin` is not below `yMax``) and the computed range is kept. A value
+  beyond a fixed end is drawn at that end as clipped (`ChartClip`), not as the end's value, and is reported nowhere:
+  a document that fixed the axis chose that, and the summary carries the value.
+- **Ticks.** With three or more lines, the lines label the axis (they are the scale a control chart is read
+  against) and `yTicks` is empty. With fewer, the ticks are the multiples, inside the range, of the largest step of
+  1, 2 or 5 × 10ᵏ that puts three or more there (three to six, or seven or eight where a step of 5 × 10ᵏ would put
+  two), each shown at the wider of the places and the step's own places, in the active locale. Two specification
+  lines alone would leave the values between them without a scale.
+- **Labels.** A line without a `label` is labelled with its value at the places. Every text is formatted through
+  the session's `FormatContext`, so a decimal takes the locale's separator.
+- **Overflow.** A range the checked arithmetic cannot hold is reported once, and the chart draws its summary alone.
 
 ## Development tools
 

@@ -41,6 +41,7 @@
 #include "../reactive/scope.hpp"
 #include "../reactive/signal.hpp"
 #include "../ui/backend.hpp"
+#include "chart_scale.hpp"
 #include "dev_tools.hpp"
 #include "document.hpp"
 #include "expression.hpp"
@@ -192,6 +193,10 @@ struct NavigateRequest {
     Value params;
     /// @brief `tab`, `dialog`, `drawer` or `window`; empty for the shell's choice.
     std::string as;
+    /// @brief Whether the navigation filed a call (the command has `onResult` or `onCancel`), which the next mount of
+    ///        the screen with these params adopts. Set by the host that filed it, `DocumentScreenHost`; a host that
+    ///        handles such a navigation without mounting that screen settles the call.
+    bool call = false;
 };
 
 /// @brief What an `upload` command asks the host to send, and the mutation that will reference the file, which is what
@@ -941,6 +946,21 @@ public:
     /// @return They.
     [[nodiscard]] FormatContext const& formatting() const { return *_format.get(); }
 
+    /// @brief The formatting facts, read without tracking: what a value set once at mount reads.
+    /// @return They.
+    [[nodiscard]] FormatContext const& formattingNow() const { return *_format.peek(); }
+
+    /// @brief Sets the patterns every date and every date and time is written and read in, keeping the other
+    ///        formatting facts; an empty one keeps ISO.
+    /// @param date     The date pattern, such as `dd-MMM-yyyy`.
+    /// @param dateTime The date-and-time pattern, such as `dd-MMM-yyyy HH:mm`.
+    void setDatePatterns(std::string date, std::string dateTime) {
+        FormatContext next = *_format.peek();
+        next.datePattern = std::move(date);
+        next.dateTimePattern = std::move(dateTime);
+        setFormatting(std::move(next));
+    }
+
     /// @brief Changes the active locale, keeping the other formatting facts.
     /// @param locale The BCP 47 locale.
     void setLocale(std::string locale) {
@@ -960,6 +980,16 @@ public:
     /// @brief Sets the `env` values (`widthClass`, `locale`, `platform`, `online`, `backend`).
     /// @param values The values.
     void setEnvironment(ValueRecord values) { _env.set(std::move(values)); }
+
+    /// @brief Sets one `env` value and keeps the others, so a client that learns its width class does not drop the
+    ///        `backend` a switch set, nor a switch the width class.
+    /// @param name The value's name, such as `widthClass`.
+    /// @param value The value.
+    void setEnvironmentValue(std::string const& name, Value value) {
+        ValueRecord env = _env.peek();
+        env.insert_or_assign(name, std::move(value));
+        _env.set(std::move(env));
+    }
 
     /// @brief Sets the `session` values (`principal`, `userName`, …).
     /// @param values The values.
@@ -1517,6 +1547,34 @@ struct TransferState {
     reactive::Signal<Value> error;
 };
 
+/// @brief The field of a table's heading entry that holds the heading row's key; the rest of the entry is the run
+///        record its heading reads. A data row with this field would be taken for a heading.
+inline constexpr std::string_view kGroupHeadingField = "\x1Fgroup";
+
+/// @brief A table's rows as the table shows them: every row `rows` gave, in the order of the table's sort, and the
+///        page of them it shows.
+struct TableView {
+    /// @brief The rows, sorted: every page.
+    std::vector<Value> rows;
+    /// @brief With `group`, each row's group: its index in `runs`; empty without.
+    std::vector<std::size_t> runOf;
+    /// @brief With `group`, each group's heading entry: the run record of the whole group, in source order, and its
+    ///        heading key in `kGroupHeadingField`.
+    std::vector<Value> runs;
+    /// @brief The position in `rows` of the page's first row.
+    std::size_t first = 0;
+    /// @brief The position in `rows` past the page's last row.
+    std::size_t last = 0;
+    /// @brief The page shown, 0-based, clamped to the last page.
+    std::int64_t page = 0;
+    /// @brief How many pages there are; at least 1.
+    std::int64_t pageCount = 1;
+    /// @brief Equal when the rows are.
+    /// @param other The other view.
+    /// @return Whether they are equal.
+    [[nodiscard]] bool operator==(TableView const& other) const = default;
+};
+
 /// @brief An element's live values (spec 5 §6).
 struct ElementState {
     /// @brief The element's state before any user action.
@@ -1530,6 +1588,7 @@ struct ElementState {
           open{runtime, false},
           submitted{runtime, false},
           selection{runtime, Value{ValueList{}}},
+          sort{runtime, Value{ValueList{}}},
           activeKey{runtime},
           checksVersion{runtime, 0},
           inner{runtime, nullptr} {}
@@ -1555,6 +1614,8 @@ struct ElementState {
     reactive::Signal<bool> submitted;
     /// @brief A table's selected keys.
     reactive::Signal<Value> selection;
+    /// @brief A table's own sort, a list of keys, while no `sort` key binds one.
+    reactive::Signal<Value> sort;
     /// @brief A table's last activated key.
     reactive::Signal<Value> activeKey;
     /// @brief Bumped when a check targeting it comes or goes.
@@ -1563,14 +1624,19 @@ struct ElementState {
     reactive::Signal<RtScope*> inner;
     /// @brief The checks targeting it.
     std::vector<CheckRuntime*> checks;
-    /// @brief The value an expression binds (`value`, `checked`, `selected`); `nullptr` when the element is
-    ///        uncontrolled.
+    /// @brief The value an expression binds (`value`, `checked`, `selected`, a table's `selection`); `nullptr` when
+    ///        the element is uncontrolled.
     reactive::Computed<Value>* bound = nullptr;
     /// @brief What is wrong now, as a list of strings: `required` unmet, the node's `errors`, the reply's field
     ///        errors and the failing checks' messages.
     reactive::Computed<Value>* errors = nullptr;
     /// @brief A table's rows or a select's options, for its counts and `selectedOption`.
     reactive::Computed<Value>* rows = nullptr;
+    /// @brief A table's bound `sort`; `nullptr` while the table holds its own.
+    reactive::Computed<Value>* sortBound = nullptr;
+    /// @brief A table's rows as it shows them, made beside `rows` so that every reader of the table's element
+    ///        values, the table's own lowering included, sees one order; `nullptr` for a table without `rows`.
+    reactive::Computed<TableView>* view = nullptr;
     /// @brief A `form`'s session (spec 2), made when the element is wired; null when its schema is unknown.
     std::unique_ptr<forms::FormSession> form;
     /// @brief A `collection`'s session (spec 2), made when the element is wired; null when its view document is
@@ -1703,6 +1769,11 @@ public:
     std::shared_ptr<RtScope> parent;
     /// @brief The row of a row scope.
     reactive::Signal<Value> const* row = nullptr;
+    /// @brief The canonical key of a row scope's row; empty for any other scope.
+    std::string rowKey;
+    /// @brief For a component fallback's scope, the focus key of the `custom` node it is lowered for, so one
+    ///        fallback lowered for two uses keys its elements apart; empty for any other scope.
+    std::string usePrefix;
     /// @brief The dialog or drawer whose content it is.
     ElementState* owner = nullptr;
     /// @brief `touched`, `submit` or `always`, for a scope that decides it.
@@ -1833,9 +1904,10 @@ private:
     if (bool const* const flag = value.asBool()) {
         return *flag ? "true" : "false";
     }
+    // A number that cannot be rounded at its own places shows as its exact JSON rather than as a clamped value.
     if (Quantity const* const quantity = value.asQuantity()) {
-        return formatNumber(value, format.numeric).value_or(std::string{}) + " " +
-               unitDisplay(quantity->unit, format.units);
+        auto number = formatNumber(value, format.numeric);
+        return number ? *number + " " + unitDisplay(quantity->unit, format.units) : canonicalJson(value);
     }
     if (auto number = formatNumber(value, format.numeric)) {
         return *std::move(number);
@@ -2102,6 +2174,12 @@ struct InterpreterOptions {
     std::function<void(Refusal const&)> diagnostics;
 };
 
+/// @brief The kind of a tool of a screen's head.
+enum class HeadToolKind : std::uint8_t {
+    Search,  ///< A search field: one line of text.
+    Select,  ///< A choice of one option.
+};
+
 namespace detail {
 
 /// @brief Where a command list runs: its scope, the names bound there, and what it may answer.
@@ -2150,6 +2228,8 @@ struct ActionModel {
     Prop<std::string> label;
     /// @brief The name of an icon; empty for none.
     Prop<std::string> icon;
+    /// @brief Whether the button draws its icon alone, the label being its accessible name and tooltip.
+    Prop<bool> iconOnly = false;
     /// @brief How much it stands out.
     ButtonEmphasis emphasis = ButtonEmphasis::Normal;
     /// @brief Whether it can be run.
@@ -2174,6 +2254,81 @@ struct BadgeModel {
     /// @brief Whether it is shown.
     Prop<bool> visible = true;
 };
+
+/// @brief A `headMenuItem` part, lowered in the screen scope: the entry as a menu item, with the id
+///        `ScreenHead::choose` takes and its submenu's entries beside it.
+struct HeadMenuModel {
+    /// @brief The entry's id; empty for a separator or a submenu.
+    std::string id;
+    /// @brief The part's JSON Pointer, where a diagnostic about it is reported.
+    std::string path;
+    /// @brief The entry, its own `items` empty.
+    MenuItem item;
+    /// @brief The submenu's entries; empty for an entry that is chosen.
+    std::vector<HeadMenuModel> items;
+};
+
+/// @brief A `headTool` part, lowered in the screen scope.
+struct HeadToolModel {
+    /// @brief The tool's id, unique among the head's tools.
+    std::string id;
+    /// @brief The part's JSON Pointer, where a diagnostic about it is reported.
+    std::string path;
+    /// @brief A search field or a select.
+    HeadToolKind kind = HeadToolKind::Search;
+    /// @brief The accessible name.
+    Prop<std::string> label;
+    /// @brief A search's text.
+    Prop<std::string> value;
+    /// @brief A search's placeholder.
+    Prop<std::string> placeholder;
+    /// @brief A select's options.
+    Prop<std::vector<SelectOption>> options;
+    /// @brief A select's chosen key, or none.
+    Prop<std::optional<Key>> selected;
+    /// @brief The width in units; 0 for the content's.
+    int width = 0;
+    /// @brief Whether it can be used.
+    Prop<bool> enabled = true;
+    /// @brief Whether it is shown.
+    Prop<bool> visible = true;
+    /// @brief Runs a search's `onChange` or a select's `onChoose` with `event` the edit, as a user event.
+    std::function<void(Value)> edit;
+    /// @brief Runs a search's `onSubmit` with `event` its text, as a user event; empty for a select.
+    std::function<void(Value)> submit;
+};
+
+/// @brief Collects the `onClick` lists of menu entries, submenus included.
+/// @param entries The entries.
+/// @param lists Where they go, in document order.
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+inline void menuCommandLists(std::span<DocNodePtr const> entries, std::vector<Commands const*>& lists) {
+    for (DocNodePtr const& entry : entries) {
+        if (Commands const* const commands = entry->event("onClick")) {
+            lists.push_back(commands);
+        }
+        menuCommandLists(entry->partList("items"), lists);
+    }
+}
+
+/// @brief Collects the command lists of a screen's head: its actions', its menu entries' and its tools'.
+/// @param doc The screen's document.
+/// @param lists Where they go, in document order.
+inline void headCommandLists(Document const& doc, std::vector<Commands const*>& lists) {
+    for (DocNodePtr const& action : doc.actions) {
+        if (Commands const* const commands = action->event("onClick")) {
+            lists.push_back(commands);
+        }
+    }
+    menuCommandLists(doc.menu, lists);
+    for (DocNodePtr const& tool : doc.tools) {
+        for (std::string_view const key : {"onChange", "onSubmit", "onChoose"}) {
+            if (Commands const* const commands = tool->event(key)) {
+                lists.push_back(commands);
+            }
+        }
+    }
+}
 
 /// @brief A kind's key spec, from the kind table.
 /// @param kind The kind spec.
@@ -2260,6 +2415,42 @@ inline constexpr std::size_t kPruneLoweredAt = 256;
             return "unknown";
     }
 }
+
+/// @brief What the horizontal positions of a chart's points have been, across every series.
+struct ChartAxisKinds {
+    /// @brief A position was a number.
+    bool numbers = false;
+    /// @brief A position was a date or an instant.
+    bool instants = false;
+};
+
+/// @brief One reference line of a chart as the lowering reads it, before its default label is known.
+struct ChartRawLine {
+    /// @brief Where it is drawn, in the chart's unit.
+    math::Rational value;
+    /// @brief Its label; none takes the value at the chart's places.
+    std::optional<std::string> label;
+    /// @brief Its colour.
+    Tone tone = Tone::Neutral;
+    /// @brief Its stroke.
+    ChartLineStyle style = ChartLineStyle::Solid;
+};
+
+/// @brief One point of a chart's series as the lowering reads it, before the range is known.
+struct ChartRawPoint {
+    /// @brief The element's position in the series' list.
+    std::size_t index = 0;
+    /// @brief Its `x`: a number, or an instant's milliseconds since the epoch; none without `x`.
+    std::optional<math::Rational> x;
+    /// @brief Its value in the chart's unit; none is a gap.
+    std::optional<math::Rational> y;
+    /// @brief Its label on the horizontal axis.
+    std::string xLabel;
+    /// @brief The tone that marks it.
+    std::optional<Tone> tone;
+    /// @brief The text beside it.
+    std::string note;
+};
 
 /// @brief One mounted screen's interpreter: its document, diagnostics, slots and preferences, and the code that
 ///        declares scopes, lowers nodes and runs commands.
@@ -2377,6 +2568,11 @@ public:
     /// @param name    The value's name.
     /// @return The value.
     [[nodiscard]] Value elementValue(ElementState const& element, std::string_view name) const;
+    /// @brief Whether @p element is a group with an element inside it the user touched: a group has no value of its
+    ///        own to touch, so its errors show under the `touched` policy once any of its inputs is.
+    /// @param element The element.
+    /// @return True when it is such a group.
+    [[nodiscard]] static bool touchedWithin(ElementState const& element);
 
     /// @brief The current value of an input, checkbox or select: what `required` tests.
     /// @param element The element.
@@ -2421,6 +2617,18 @@ public:
     /// @return The models, in the parts' order.
     [[nodiscard]] ActionModels lowerActionParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
 
+    /// @brief Lowers a screen head's `menu` in the scope @p ctx names.
+    /// @param parts The `headMenuItem` parts.
+    /// @param ctx   The scope.
+    /// @return The entries, in document order, submenus included.
+    [[nodiscard]] std::vector<HeadMenuModel> lowerHeadMenu(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
+
+    /// @brief Lowers a screen head's `tools` in the scope @p ctx names.
+    /// @param parts The `headTool` parts.
+    /// @param ctx   The scope.
+    /// @return The tools, in document order.
+    [[nodiscard]] std::vector<HeadToolModel> lowerHeadTools(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
+
     /// @brief An overlay's actions as the action bar its footer shows: a button per action, test id
     ///        `action_<id>`, shown and enabled as the action is.
     /// @param actions The lowered actions, in order.
@@ -2444,18 +2652,30 @@ public:
     /// @brief Lowers a node list into one node: the node itself, or a column of them.
     /// @param nodes The nodes.
     /// @param ctx   Where.
+    /// @param gap   The spacing step between the nodes of a list of several; a single node is lowered unwrapped.
     /// @return The node.
     // NOLINTNEXTLINE(misc-no-recursion): one level per nested node of the document.
-    [[nodiscard]] Node lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx) {
-        if (nodes.size() == 1) {
-            return lower(*nodes.front(), ctx);
-        }
-        Column column;
-        for (DocNodePtr const& child : nodes) {
-            column.children.push_back(lower(*child, ctx));
-        }
-        return ui::column(std::move(column));
-    }
+    [[nodiscard]] Node lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx, int gap = 0);
+
+    /// @brief The size request of one child of a holder.
+    /// @param node The child.
+    /// @param own  The names the holder's own scope declares.
+    /// @param ctx  Where the holder is lowered.
+    /// @return The child's hints; content size where its sizing reads a name in @p own.
+    [[nodiscard]] LayoutHints nodeHints(DocNode const& node, std::set<std::string, std::less<>> const& own,
+                                        LowerCtx const& ctx);
+
+    /// @brief The size request of a holder of @p content: the largest stretch of its children on each axis.
+    ///
+    /// A literal sizing is read as written and a computed one is evaluated once in the enclosing scope. A computed
+    /// sizing that reads a name the holder's own scope declares cannot be evaluated before the holder mounts; it is
+    /// reported and counts as content.
+    /// @param content The holder's document children.
+    /// @param decl    The declarations of the holder's own scope; `nullptr` for none.
+    /// @param ctx     Where the holder is lowered.
+    /// @return The hints; bounds and `alignSelf` stay unset, because they belong to a child.
+    [[nodiscard]] LayoutHints holderHints(std::span<DocNode const* const> content, ScopeDecl const* decl,
+                                          LowerCtx const& ctx);
 
     // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the screen's shared state, which its
     // scopes and runtimes read and write directly.
@@ -2543,16 +2763,60 @@ public:
 private:
     void wireElement(ElementState& element);
     void wireErrors(ElementState& element);
+    /// A table's rows in the order of its sort, read in the table's scope with @p bindings. A sort that is not a
+    /// list of the table's sortable columns, or whose values cannot be ordered, is reported and leaves the source
+    /// order.
+    void sortedRows(ElementState const& element, Bindings const* bindings, TableView& view);
+    /// A grouped table's runs of its source rows by its `group`'s `by`: each row's run index and each run's heading
+    /// entry, into @p view.
+    static void groupRows(ElementState const& element, Bindings const* bindings, TableView& view);
+    /// A table's sorted rows and the page of them it shows, by its `pageSize` and `page`.
+    TableView tableView(ElementState const& element, Bindings const* bindings);
     void collect(DocNode const& node, RtScope& scope, std::vector<Commands const*>& commands);
     Node lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerSwitch(DocNode const& node, LowerCtx const& ctx);
     Node lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A grouped table's heading row: its `group`'s `heading`, lowered as one cell in a row scope of its own whose
+    /// row is the group's run record and whose key is `key`, the row's canonical key, as a data row's scope has.
+    TableRowView headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
+                            std::string key);
     /// A `rowTone` value as a tone: `neutral`, `info`, `ok`, `warn`, `err`, or `null` for none. Another value is
     /// reported, at @p path, while @p noted is still false, and shows no tone.
     std::optional<Tone> rowToneOf(Value const& value, std::string const& path, bool& noted);
     Node lowerBoundary(DocNode const& node, LowerCtx const& ctx);
+    /// A group: a column of its legend (a text carrying the mark), its children, its description and its shown
+    /// errors, named and announced as a group.
+    Node lowerGroup(DocNode const& node, LowerCtx const& ctx, ElementState* element, std::vector<Node> children);
     Node lowerCustom(DocNode const& node, LowerCtx const& ctx);
+    Node lowerChart(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// Everything a chart draws, read from its node in @p scope; the one tracked read of the chart's binding.
+    ChartData chartData(DocNode const& node, RtScope const& scope, Bindings const* bindings);
+    /// One series' points, read exactly: each value in @p unit, the chart's, which the first value fixes.
+    std::vector<detail::ChartRawPoint> chartPoints(DocNode const& series, RtScope const& scope,
+                                                   Bindings const* bindings, std::optional<std::string>& unit,
+                                                   detail::ChartAxisKinds& kinds);
+    /// A chart value as an exact magnitude in @p unit, which the first value read fixes; a value that is not a number
+    /// or does not convert is reported at @p path and read as none.
+    std::optional<math::Rational> chartMagnitude(Value const& value, std::string const& path,
+                                                 std::optional<std::string>& unit);
+    /// A chart tone: one of the five names, or `null` for none; another value is reported at @p path.
+    std::optional<Tone> chartToneOf(Value const& value, std::string const& path);
+    /// A point's `x` as a number or an instant's milliseconds, noting its kind in @p kinds; none for `null`, and for
+    /// another value, which is reported at @p path.
+    std::optional<math::Rational> chartPosition(Value const& value, std::string const& path,
+                                                detail::ChartAxisKinds& kinds);
+    /// A chart's reference lines, read exactly in @p unit; a line whose value is `null` or not a number is left out.
+    std::vector<detail::ChartRawLine> chartLines(DocNode const& node, RtScope const& scope, Bindings const* bindings,
+                                                 std::optional<std::string>& unit);
+    /// @p range with `yMin` and `yMax` in place of its computed ends; ends that leave it empty are reported, and
+    /// @p range is kept.
+    ChartRange chartFixedRange(DocNode const& node, RtScope const& scope, Bindings const* bindings,
+                               std::optional<std::string>& unit, ChartRange const& range);
+    /// The drawn series: each point at its own `x` when @p positioned, else at its index, clipped to @p range.
+    void chartSeries(ChartData& data, DocNode const& node, RtScope const& scope, Bindings const* bindings,
+                     std::vector<std::vector<detail::ChartRawPoint>>& series, bool positioned,
+                     ChartRange const& range) const;
     /// A form field's control drawn by the host component its overlay names, with the built-in control as the
     /// fallback.
     Node fieldComponent(forms::FieldView const& view, DocNode const& overlay, LowerCtx const& ctx);
@@ -2576,12 +2840,17 @@ private:
     void wireComposite(ElementState& element);
     Node lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     void presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options);
+    Node lowerTabs(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    Prop<std::size_t> controlledTabSelection(DocNode const& node, LowerCtx const& ctx, ExprPtr const& selected,
+                                             std::shared_ptr<std::vector<std::string>> const& ids);
     std::shared_ptr<RtScope> rowScope(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
-                                      std::vector<DocNode const*> const& content);
+                                      std::vector<DocNode const*> const& content, std::string key);
+    bool focusTarget(Command const& command, RtScope const& scope, Bindings const* bindings);
     void commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common);
     void layoutOf(DocNode const& node, LowerCtx const& ctx, LayoutHints& layout);
     void fieldOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, FieldState& field);
     std::vector<MenuItem> menuItems(std::span<DocNodePtr const> parts, LowerCtx const& ctx);
+    MenuItem menuItemOf(DocNode const& part, LowerCtx const& ctx);
     void ownQueries(DocNode const& node, RtScope const& scope, BoundaryRuntime& boundary,
                     std::set<std::string, std::less<>>& seen);
     void ownQueriesOf(ExprPtr const& expr, RtScope const& scope, BoundaryRuntime& boundary,
@@ -2622,6 +2891,15 @@ private:
     /// @brief A text's role: a literal one as the loader checked it; a computed one evaluated in its slot, where a
     ///        name of no role is reported once for its path and drawn `Normal`.
     Prop<TextRole> roleProp(LowerCtx const& ctx, ExprPtr const& expr);
+    /// A key-value item: its caption, its value or spans, and its tone, each problem reported once at @p path.
+    KeyValueItem keyValueItemOf(Value const& item, std::string const& path);
+    /// A text's or a banner's `spans`, reported once at its path when it drops a run.
+    Prop<std::vector<TextSpan>> spansProp(LowerCtx const& ctx, ExprPtr const& expr);
+
+    /// @brief A node's surface: the name of a theme surface, or empty for the default. A computed one is evaluated in
+    ///        its slot; `null` is no surface, and any other value that is not a string is reported for the node's
+    ///        `surface` path and drawn as no surface.
+    Prop<std::string> surfaceOf(DocNode const& node, LowerCtx const& ctx);
 
     /// @brief A property read through @p read, as a numbered slot.
     template <typename T, typename Read>
@@ -2671,6 +2949,39 @@ struct HeadBadge {
     bool operator==(HeadBadge const&) const = default;
 };
 
+/// @brief Where a screen's head puts its lead, the subtitle and the badges.
+enum class LeadPlacement : std::uint8_t {
+    /// @brief Under the title.
+    Below,
+    /// @brief On the title's line, right after the title.
+    Inline,
+    /// @brief At the trailing edge of the head's first line, after the tools and before the actions.
+    End,
+};
+
+/// @brief Where a shell shows who is signed in.
+enum class PrincipalPlacement : std::uint8_t {
+    /// @brief At the sidebar's foot.
+    Sidebar,
+    /// @brief In the top bar, at its trailing end.
+    Head,
+};
+
+/// @brief A count the app document puts on a navigator entry (its `navigation`), as `AppRoot::navigationBadges`
+///        answers it.
+struct NavigationBadge {
+    /// @brief The screen id of the entry it goes on.
+    std::string screen;
+    /// @brief The badge's text.
+    std::string text;
+    /// @brief Its tone.
+    Tone tone = Tone::Neutral;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(NavigationBadge const&) const = default;
+};
+
 /// @brief An action of a screen's head, as its handle answers it.
 struct HeadAction {
     /// @brief The action's id, what `ScreenHead::run` takes.
@@ -2679,6 +2990,8 @@ struct HeadAction {
     std::string label;
     /// @brief The name of an icon; empty for none.
     std::string icon;
+    /// @brief Whether the button draws its icon alone, its label being its accessible name and tooltip.
+    bool iconOnly = false;
     /// @brief How much it stands out.
     ButtonEmphasis emphasis = ButtonEmphasis::Normal;
     /// @brief Whether it can be run now.
@@ -2687,6 +3000,59 @@ struct HeadAction {
     /// @brief Memberwise equality.
     /// @return Whether every member matches.
     bool operator==(HeadAction const&) const = default;
+};
+
+/// @brief An entry of a screen head's own menu, as its handle answers it: a menu entry with the id
+///        `ScreenHead::choose` takes.
+struct HeadMenuEntry {
+    /// @brief The entry's id, what `ScreenHead::choose` takes; empty for a separator or a submenu.
+    std::string id;
+    /// @brief The caption.
+    std::string label;
+    /// @brief The name of an icon; empty for none.
+    std::string icon;
+    /// @brief The chord shown beside the label; empty for none.
+    std::string keys;
+    /// @brief Engaged: a checkable entry with this mark; `nullopt`: not checkable.
+    std::optional<bool> checked;
+    /// @brief Whether it can be chosen, or its submenu opened.
+    bool enabled = true;
+    /// @brief The submenu's visible entries; empty for an entry that is chosen.
+    std::vector<HeadMenuEntry> items;
+    /// @brief Whether it is a line between entries.
+    bool separator = false;
+    /// @brief A muted line of help with the entry; empty for none.
+    std::string description;
+
+    /// @brief Memberwise equality, submenus included.
+    /// @return Whether every member matches.
+    bool operator==(HeadMenuEntry const&) const = default;
+};
+
+/// @brief A tool of a screen's head, as its handle answers it: a search field or a select the shell draws.
+struct HeadTool {
+    /// @brief The tool's id, what `ScreenHead::edit` and `submit` take.
+    std::string id;
+    /// @brief A search field or a select.
+    HeadToolKind kind = HeadToolKind::Search;
+    /// @brief The accessible name; the shell draws no caption.
+    std::string label;
+    /// @brief A search's text.
+    std::string value;
+    /// @brief A search's placeholder.
+    std::string placeholder;
+    /// @brief A select's options.
+    std::vector<SelectOption> options;
+    /// @brief A select's chosen key, or none.
+    std::optional<Key> selected;
+    /// @brief The width in units; 0 for the content's.
+    int width = 0;
+    /// @brief Whether it can be used now.
+    bool enabled = true;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(HeadTool const&) const = default;
 };
 
 /// @brief A mounted screen: its scopes, its view mounted through `Mounted`, and what its host asks of it.
@@ -2712,6 +3078,8 @@ public:
         _mounted.reset();
         _headActions.clear();
         _headStatus.clear();
+        _headMenu.clear();
+        _headTools.clear();
         _scope.reset();
     }
 
@@ -2748,9 +3116,52 @@ public:
     /// @return It, or `null`.
     [[nodiscard]] Value identity() const { return detail::evalIn(*_scope, nullptr, _core->doc().identity); }
 
+    /// @brief Whether the screen's shown root lays itself at the page's edges (`pageEdge`). A tracked read: it starts
+    ///        at the view's root, and while the node is a `switch` it moves to the case shown now (the default when
+    ///        none matches) if that holds exactly one node, so a width- or state-dependent root is seen through.
+    ///        A case that declares a scope of its own is not entered, since its names are not the screen's.
+    /// @return The shown root's flag; `false` for a root of any other shape.
+    [[nodiscard]] bool pageEdge() const;
+
+    /// @brief Whether the shown root's first child continues the head's block (`headJoined`). A tracked read that
+    ///        sees through `switch`es as `pageEdge` does.
+    /// @return The shown root's flag; `false` for a root of any other shape.
+    [[nodiscard]] bool headJoined() const;
+
+    /// @brief Where the head's lead sits: the document's `leadPlacement`, read now. A tracked read. A value that
+    ///        names none of the three places is reported once at its path and taken as `below`.
+    /// @return The place; `Below` when the document declares none.
+    [[nodiscard]] LeadPlacement leadPlacement() const;
+
+    /// @brief The name of the surface the shell draws the top bar on while this screen is shown: the document's
+    ///        `headSurface`, read now. A tracked read.
+    /// @return The name; empty for none.
+    [[nodiscard]] std::string headSurface() const;
+
+    /// @brief The name of the surface the shell draws the page area on while this screen is shown: the document's
+    ///        `pageSurface`, read now. A tracked read.
+    /// @return The name; empty for none, which is the built-in `page` surface.
+    [[nodiscard]] std::string pageSurface() const;
+
+    /// @brief Evaluates the document's `titleSpans` into runs; a run the head cannot read is dropped and reported.
+    /// @return The runs; none when the document declares none.
+    [[nodiscard]] std::vector<TextSpan> titleSpans() const;
+
+    /// @brief Evaluates the document's `eyebrow`, the head's line above the title.
+    /// @return It, or `null`.
+    [[nodiscard]] Value eyebrow() const { return detail::evalIn(*_scope, nullptr, _core->doc().eyebrow); }
+
+    /// @brief Evaluates the document's `eyebrowSpans` into runs; a run the head cannot read is dropped and reported.
+    /// @return The runs; none when the document declares none.
+    [[nodiscard]] std::vector<TextSpan> eyebrowSpans() const;
+
     /// @brief Evaluates the document's `subtitle`, the head's line under the title.
     /// @return It, or `null`.
     [[nodiscard]] Value subtitle() const { return detail::evalIn(*_scope, nullptr, _core->doc().subtitle); }
+
+    /// @brief Evaluates the document's `subtitleSpans` into runs; a run the head cannot read is dropped and reported.
+    /// @return The runs; none when the document declares none.
+    [[nodiscard]] std::vector<TextSpan> subtitleSpans() const;
 
     /// @brief The head's status badges that are visible now, in order. A tracked read.
     /// @return They.
@@ -2774,6 +3185,7 @@ public:
                 shown.push_back(HeadAction{.id = action.id,
                                            .label = action.label.evaluate(),
                                            .icon = action.icon.evaluate(),
+                                           .iconOnly = action.iconOnly.evaluate(),
                                            .emphasis = action.emphasis,
                                            .enabled = action.enabled.evaluate()});
             }
@@ -2800,6 +3212,102 @@ public:
         if (found->run) {
             found->run();
         }
+        return true;
+    }
+
+    /// @brief The head menu's visible entries, in order, each with whether it is enabled. A separator that hidden
+    ///        entries leave first, last or next to another is left out, as a menu's mount leaves it out. A tracked
+    ///        read.
+    /// @return They; empty when the document declares no `menu`.
+    [[nodiscard]] std::vector<HeadMenuEntry> menu() const { return shownHeadMenu(_headMenu); }
+
+    /// @brief Evaluates the document's `menuLabel`, the accessible name of the head menu's trigger.
+    /// @return It, or "More actions" when the document declares none.
+    [[nodiscard]] std::string menuLabel() const {
+        if (!_core->doc().menuLabel) {
+            return "More actions";
+        }
+        return detail::textOf(detail::evalIn(*_scope, nullptr, _core->doc().menuLabel), _core->session.formatting());
+    }
+
+    /// @brief Runs a head menu entry's `onClick` as a user event in the screen scope, in one batch.
+    /// @param entryId The entry's id.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the menu does not hold, or holds hidden or
+    ///         disabled (the entry itself or a submenu it is in).
+    bool chooseMenuEntry(std::string_view entryId) {
+        FoundEntry const found = runtime().untracked([&] { return findHeadEntry(_headMenu, entryId, FoundEntry{}); });
+        if (found.model == nullptr) {
+            _core->report("/menu", "head menu entry " + std::string{entryId} + " is unknown");
+            return false;
+        }
+        if (!found.visible || !found.enabled) {
+            _core->report(found.model->path,
+                          "head menu entry " + found.model->id + (found.visible ? " is disabled" : " is hidden"));
+            return false;
+        }
+        if (found.model->item.onSelect) {
+            found.model->item.onSelect();
+        }
+        return true;
+    }
+
+    /// @brief The head's tools that are visible now, in order, each with its value and whether it is enabled. A
+    ///        tracked read.
+    /// @return They; empty when the document declares no `tools`.
+    [[nodiscard]] std::vector<HeadTool> tools() const {
+        std::vector<HeadTool> shown;
+        for (detail::HeadToolModel const& tool : _headTools) {
+            if (!tool.visible.evaluate()) {
+                continue;
+            }
+            bool const search = tool.kind == HeadToolKind::Search;
+            shown.push_back(HeadTool{.id = tool.id,
+                                     .kind = tool.kind,
+                                     .label = tool.label.evaluate(),
+                                     .value = search ? tool.value.evaluate() : std::string{},
+                                     .placeholder = search ? tool.placeholder.evaluate() : std::string{},
+                                     .options = search ? std::vector<SelectOption>{} : tool.options.evaluate(),
+                                     .selected = search ? std::nullopt : tool.selected.evaluate(),
+                                     .width = tool.width,
+                                     .enabled = tool.enabled.evaluate()});
+        }
+        return shown;
+    }
+
+    /// @brief Reports a user's edit of a head tool: runs a search's `onChange` with `event` the text, or a select's
+    ///        `onChoose` with `event` the chosen key, as a user event in the screen scope, in one batch.
+    /// @param toolId The tool's id.
+    /// @param value  A search's text, or a select's key.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold, or holds hidden or
+    ///         disabled, and for a search given anything but a string.
+    bool editTool(std::string_view toolId, Value const& value) {
+        detail::HeadToolModel const* const tool = usableTool(toolId);
+        if (tool == nullptr) {
+            return false;
+        }
+        if (tool->kind == HeadToolKind::Search && value.asString() == nullptr) {
+            _core->report(tool->path, "head tool " + tool->id + " is a search, edited with text");
+            return false;
+        }
+        tool->edit(value);
+        return true;
+    }
+
+    /// @brief Reports a user's submit of a head search: runs its `onSubmit` with `event` its text, as a user event in
+    ///        the screen scope, in one batch.
+    /// @param toolId The tool's id.
+    /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold, or holds hidden or
+    ///         disabled, and for a select.
+    bool submitTool(std::string_view toolId) {
+        detail::HeadToolModel const* const tool = usableTool(toolId);
+        if (tool == nullptr) {
+            return false;
+        }
+        if (tool->kind != HeadToolKind::Search) {
+            _core->report(tool->path, "head tool " + tool->id + " is a select, which is not submitted");
+            return false;
+        }
+        tool->submit(Value{runtime().untracked([&] { return tool->value.evaluate(); })});
         return true;
     }
 
@@ -2889,6 +3397,14 @@ private:
 
     Screen() = default;
 
+    /// Evaluates a head expression of runs; a run the head cannot read is dropped and reported.
+    [[nodiscard]] std::vector<TextSpan> headSpans(ExprPtr const& expr) const;
+
+    /// The view node the screen shows as its root: the view's root, or, while it is a `switch`, the case shown now
+    /// (the default when none matches) if that holds exactly one node. Null for a case that declares a scope of its
+    /// own, whose names are not the screen's, and for a shape that is no single node. A tracked read.
+    [[nodiscard]] DocNode const* shownRoot() const;
+
     /// The states of the screen's own scope that have a value, by name: what a screen that replaces it keeps.
     [[nodiscard]] std::map<std::string, detail::ScreenCore::KeptState, std::less<>> ownState() const {
         std::map<std::string, detail::ScreenCore::KeptState, std::less<>> states;
@@ -2935,12 +3451,86 @@ private:
         return std::ranges::find(options, text) != options.end();
     }
 
+    // A head tool by id that is visible and enabled; null, with a diagnostic, for any other.
+    [[nodiscard]] detail::HeadToolModel const* usableTool(std::string_view toolId) const {
+        auto const found = std::ranges::find(_headTools, toolId, &detail::HeadToolModel::id);
+        if (found == _headTools.end()) {
+            _core->report("/tools", "head tool " + std::string{toolId} + " is unknown");
+            return nullptr;
+        }
+        auto const [visible, enabled] =
+            runtime().untracked([&] { return std::pair{found->visible.evaluate(), found->enabled.evaluate()}; });
+        if (!visible || !enabled) {
+            _core->report(found->path, "head tool " + found->id + (visible ? " is disabled" : " is hidden"));
+            return nullptr;
+        }
+        return &*found;
+    }
+
+    // A head menu entry by id, with whether it and every submenu it is in are visible and enabled.
+    struct FoundEntry {
+        detail::HeadMenuModel const* model = nullptr;
+        bool visible = true;
+        bool enabled = true;
+    };
+
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static FoundEntry findHeadEntry(std::vector<detail::HeadMenuModel> const& level,
+                                                  std::string_view entryId, FoundEntry const& outer) {
+        for (detail::HeadMenuModel const& model : level) {
+            FoundEntry const here{.model = &model,
+                                  .visible = outer.visible && model.item.visible.evaluate(),
+                                  .enabled = outer.enabled && model.item.enabled.evaluate()};
+            if (!model.id.empty() && model.id == entryId) {
+                return here;
+            }
+            if (FoundEntry const inner = findHeadEntry(model.items, entryId, here); inner.model != nullptr) {
+                return inner;
+            }
+        }
+        return FoundEntry{};
+    }
+
+    // One level of the head menu as it shows now: hidden entries left out, and a separator they leave first, last or
+    // next to another with them.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    [[nodiscard]] static std::vector<HeadMenuEntry> shownHeadMenu(std::vector<detail::HeadMenuModel> const& level) {
+        std::vector<HeadMenuEntry> shown;
+        for (detail::HeadMenuModel const& model : level) {
+            MenuItem const& item = model.item;
+            if (item.separator) {
+                if (!shown.empty() && !shown.back().separator) {
+                    shown.push_back(HeadMenuEntry{.separator = true});
+                }
+                continue;
+            }
+            if (!item.visible.evaluate()) {
+                continue;
+            }
+            shown.push_back(HeadMenuEntry{.id = model.id,
+                                          .label = item.label.evaluate(),
+                                          .icon = item.icon,
+                                          .keys = item.keys,
+                                          .checked = item.checked.evaluate(),
+                                          .enabled = item.enabled.evaluate(),
+                                          .items = shownHeadMenu(model.items),
+                                          .separator = false,
+                                          .description = item.description.evaluate()});
+        }
+        if (!shown.empty() && shown.back().separator) {
+            shown.pop_back();
+        }
+        return shown;
+    }
+
     std::unique_ptr<detail::ScreenCore> _core;
     std::shared_ptr<detail::RtScope> _scope;
     std::optional<Mounted> _mounted;
     // The head's parts, bound in the screen scope.
     std::vector<detail::BadgeModel> _headStatus;
     detail::ActionModels _headActions;
+    std::vector<detail::HeadMenuModel> _headMenu;
+    std::vector<detail::HeadToolModel> _headTools;
 };
 
 /// @brief The app document mounted as the root scope every screen of the session shares (spec 6 §5).
@@ -2964,8 +3554,24 @@ public:
             }
         } catch (...) {  // NOLINT(bugprone-empty-catch): a destructor has no one to report to.
         }
+        // The counts read the scope, so they go before it.
+        _navigationBadges.reset();
+        _navigation.clear();
         _core->session.setAppScope(nullptr);
         _scope.reset();
+    }
+
+    /// @brief The app document's `navigation` badges that are visible now, in order, each with the screen whose
+    ///        navigator entry it goes on, and following the app state they read.
+    /// @return They, valid as long as the root; empty when the document declares no `navigation`.
+    [[nodiscard]] reactive::Computed<std::vector<NavigationBadge>> const& navigationBadges() const {
+        return *_navigationBadges;
+    }
+
+    /// @brief Where a shell shows who is signed in: the document's `principalPlacement`.
+    /// @return The place; `Sidebar` when the document declares none.
+    [[nodiscard]] PrincipalPlacement principalPlacement() const noexcept {
+        return _core->doc().principalPlacement == "head" ? PrincipalPlacement::Head : PrincipalPlacement::Sidebar;
     }
 
     /// @brief Evaluates an expression in the app document's scope.
@@ -2996,8 +3602,16 @@ private:
         _core->runtime().batch([&] { _core->runList(commands, ctx, {}); });
     }
 
+    // A navigation badge, lowered in the app scope, with the screen of its entry.
+    struct PlacedBadge {
+        std::string screen;
+        detail::BadgeModel badge;
+    };
+
     std::unique_ptr<detail::ScreenCore> _core;
     std::shared_ptr<detail::RtScope> _scope;
+    std::vector<PlacedBadge> _navigation;
+    std::unique_ptr<reactive::Computed<std::vector<NavigationBadge>>> _navigationBadges;
 };
 
 /// @brief Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher.
@@ -4204,38 +4818,27 @@ struct DateReading {
 
 /// @brief Reads what a date input shows for @p value, in a display zone @p offsetMinutes from UTC.
 ///
-/// A timestamp is its instant; a `yyyy-MM-dd` string is midnight of that date in the display zone; a string
-/// `DateTime::fromIso8601` reads is its instant; `null` and `""` are empty. Any other value is empty and
-/// unreadable.
+/// The value is read as the date functions read it (`readDateValue`): a timestamp is its instant; a `yyyy-MM-dd`
+/// string is midnight of that date in the display zone; a string `DateTime::fromIso8601` reads is its instant; `null`
+/// and `""` are empty. Any other value is empty and unreadable.
 /// @param value         The value.
 /// @param offsetMinutes The display zone's offset from UTC, in minutes.
 /// @return The instant, or nothing, and whether the value was readable.
 [[nodiscard]] inline DateReading dateInstantOf(Value const& value, std::int32_t offsetMinutes) {
-    if (value.isNull()) {
-        return {};
-    }
-    if (time::DateTime const* const instant = value.asTimestamp()) {
-        return {.instant = *instant};
-    }
-    std::string const* const text = value.asString();
-    if (text == nullptr) {
-        return {.instant = std::nullopt, .readable = false};
-    }
-    if (text->empty()) {
-        return {};
-    }
-    if (forms::detail::engine::isIsoDate(*text)) {
-        auto const wall = forms::detail::engine::parseWallClock(std::string{*text} + "T00:00");
-        if (!wall) {
+    DateValue const reading = readDateValue(value);
+    switch (reading.form) {
+        case DateForm::Absent:
+            return {};
+        case DateForm::Date:
+            return {.instant =
+                        time::DateTime{std::chrono::sys_days{reading.date} - std::chrono::minutes{offsetMinutes}}};
+        case DateForm::Timestamp:
+        case DateForm::InstantText:
+            return {.instant = reading.instant};
+        case DateForm::Unreadable:
+        default:
             return {.instant = std::nullopt, .readable = false};
-        }
-        auto const utc =
-            std::chrono::time_point_cast<std::chrono::milliseconds>(*wall - std::chrono::minutes{offsetMinutes});
-        return {.instant = time::DateTime{utc}};
     }
-    std::optional<time::DateTime> parsed = time::DateTime::fromIso8601(*text);
-    bool const readable = parsed.has_value();
-    return {.instant = std::move(parsed), .readable = readable};
 }
 
 /// @brief A date input's date text for @p instant in a display zone @p offsetMinutes from UTC.
@@ -4291,7 +4894,8 @@ inline void ScreenCore::wireErrors(ElementState& element) {
         DocNode const& field = *element.node;
         RtScope const& owner = *element.scope;
         std::vector<std::string> errors;
-        if (ExprPtr const required = field.prop("required")) {
+        // A group's `required` is its legend's mark only: a group has no value, so no `Required` is derived from it.
+        if (ExprPtr const required = field.kind != "group" ? field.prop("required") : nullptr) {
             Value const requiredNow = evalIn(owner, nullptr, required);
             bool const* const flag = requiredNow.asBool();
             if (flag != nullptr && *flag && !engaged(inputValue(element))) {
@@ -4390,7 +4994,291 @@ inline void ScreenCore::wireElement(ElementState& element) {
     if (kind == "table" && node.prop("rows")) {
         element.rows =
             &scope.nodes.computed([&scope, expr = node.prop("rows")] { return evalIn(scope, nullptr, expr); });
+        // A bound selection is controlled, as a select's `selected` is: any expression but a literal `null` binds it.
+        ExprPtr const selection = node.prop("selection");
+        if (selection && (selection->kind != ExprKind::Literal || !selection->literal.isNull())) {
+            element.bound = &scope.nodes.computed([&scope, selection] { return evalIn(scope, nullptr, selection); });
+        }
+        // A bound sort is controlled as the selection is.
+        ExprPtr const sort = node.prop("sort");
+        if (sort && (sort->kind != ExprKind::Literal || !sort->literal.isNull())) {
+            element.sortBound = &scope.nodes.computed([&scope, sort] { return evalIn(scope, nullptr, sort); });
+        }
+        element.view = &scope.nodes.computed([this, &element] { return tableView(element, nullptr); });
     }
+}
+
+/// @brief A table's sort as its element value reads it: the bound `sort` when the key binds one, else the table's
+///        own.
+/// @param element The table's element.
+/// @return The sort. Tracked.
+[[nodiscard]] inline Value tableSort(ElementState const& element) {
+    return element.sortBound != nullptr ? element.sortBound->get() : element.sort.get();
+}
+
+/// @brief A table's page values: `viewCount` (the rows it orders, every page), `page`, `pageCount`, and
+///        `pageFirst` and `pageLast`, the 1-based positions of the page's first and last rows, both 0 when there are
+///        none. A table that does not page reads page 0 of 1, over every row.
+/// @param element The table's element.
+/// @param name    The value's name.
+/// @return The value. Tracked.
+[[nodiscard]] inline Value tablePageValue(ElementState const& element, std::string_view name) {
+    if (element.view == nullptr) {
+        return name == "pageCount" ? std::int64_t{1} : std::int64_t{0};
+    }
+    TableView const& view = element.view->get();
+    if (name == "viewCount") {
+        return static_cast<std::int64_t>(view.rows.size());
+    }
+    if (name == "page") {
+        return view.page;
+    }
+    if (name == "pageCount") {
+        return view.pageCount;
+    }
+    bool const none = view.first == view.last;
+    if (name == "pageFirst") {
+        return none ? std::int64_t{0} : static_cast<std::int64_t>(view.first + 1);
+    }
+    return static_cast<std::int64_t>(view.last);
+}
+
+/// @brief The selected keys of the rows a table holds on pages other than the one shown, in their order: what an
+///        `Extend` report keeps, since the backend holds the shown page alone.
+/// @param view      The table's rows and page.
+/// @param selection The selection, a list of keys.
+/// @param rowKey    A row's key.
+/// @return The keys.
+[[nodiscard]] inline ValueList selectedOffPage(TableView const& view, Value const& selection,
+                                               std::function<Key(Value const&)> const& rowKey) {
+    std::unordered_set<Key> onPage;
+    std::unordered_set<Key> offPage;
+    for (std::size_t index = 0; index < view.rows.size(); ++index) {
+        (index >= view.first && index < view.last ? onPage : offPage).insert(rowKey(view.rows.at(index)));
+    }
+    ValueList kept;
+    if (ValueList const* const selected = selection.asList()) {
+        for (Value const& item : *selected) {
+            Key const key = keyOf(item);
+            if (offPage.contains(key) && !onPage.contains(key)) {
+                kept.push_back(item);
+            }
+        }
+    }
+    return kept;
+}
+
+/// @brief The sortable column part of a table with the id @p columnId.
+/// @param table    The table.
+/// @param columnId The column's id.
+/// @return The part, or `nullptr` when no sortable column has that id.
+[[nodiscard]] inline DocNode const* sortableColumn(DocNode const& table, std::string_view columnId) {
+    for (DocNodePtr const& column : table.partList("columns")) {
+        if (column->id == columnId && column->flag("sortable")) {
+            return column.get();
+        }
+    }
+    return nullptr;
+}
+
+/// @brief One key of a table's sort: the column part that orders the rows, and whether it is descending.
+struct SortKey {
+    /// @brief The sortable column.
+    DocNode const* column = nullptr;
+    /// @brief Whether the key sorts descending.
+    bool descending = false;
+};
+
+/// @brief A table's sort read as its keys: a list of `{"column", "direction"}` records naming sortable columns.
+/// @param table The table.
+/// @param sort  The sort; `null` is the source order, as `[]` is.
+/// @return The keys, most significant first; `nullopt` when @p sort is not such a list.
+[[nodiscard]] inline std::optional<std::vector<SortKey>> sortKeysOf(DocNode const& table, Value const& sort) {
+    std::vector<SortKey> keys;
+    if (sort.isNull()) {
+        return keys;
+    }
+    ValueList const* const items = sort.asList();
+    if (items == nullptr) {
+        return std::nullopt;
+    }
+    for (Value const& item : *items) {
+        Value const* const column = item.field("column");
+        Value const* const direction = item.field("direction");
+        std::string const* const columnId = column == nullptr ? nullptr : column->asString();
+        std::string const* const way = direction == nullptr ? nullptr : direction->asString();
+        DocNode const* const part = columnId == nullptr ? nullptr : sortableColumn(table, *columnId);
+        if (part == nullptr || way == nullptr || (*way != "asc" && *way != "desc")) {
+            return std::nullopt;
+        }
+        keys.push_back(SortKey{.column = part, .descending = *way == "desc"});
+    }
+    return keys;
+}
+
+inline void ScreenCore::groupRows(ElementState const& element, Bindings const* bindings, TableView& view) {
+    auto const parts = element.node->partList("group");
+    if (parts.empty()) {
+        return;
+    }
+    ExprPtr const groupBy = parts.front()->prop("by");
+    RtScope const& scope = *element.scope;
+    ScopeEnv const tableEnv{scope, bindings};
+    Evaluator runs{tableEnv};
+    // A heading's key is its run's key and its ordinal among the runs with an equal key, since adjacent grouping
+    // can give two runs one key (samples A, B, A); the ordinal stays put across a sort, which moves no run.
+    std::map<std::string, std::size_t, std::less<>> ordinals;
+    Value key;
+    ValueList run;
+    auto const close = [&] {
+        std::string const json = canonicalJson(key);
+        Value const record = runRecord(key, std::exchange(run, {}));
+        ValueRecord entry = *record.asRecord();
+        entry.insert_or_assign(std::string{kGroupHeadingField},
+                               Value{"\x1Fgroup:" + json + ":" + std::to_string(ordinals[json]++)});
+        view.runs.emplace_back(std::move(entry));
+    };
+    for (Value const& row : view.rows) {
+        Value value = evaluate(*groupBy, ScopeEnv{scope, bindings, &row});
+        if (!run.empty() && !runs.sameRun(key, value)) {
+            close();
+        }
+        if (run.empty()) {
+            key = std::move(value);
+        }
+        run.push_back(row);
+        view.runOf.push_back(view.runs.size());
+    }
+    if (!run.empty()) {
+        close();
+    }
+}
+
+inline void ScreenCore::sortedRows(ElementState const& element, Bindings const* bindings, TableView& view) {
+    DocNode const& node = *element.node;
+    RtScope const& scope = *element.scope;
+    Value const source = bindings == nullptr ? element.rows->get() : evalIn(scope, bindings, node.prop("rows"));
+    ValueList const* const items = source.asList();
+    if (items == nullptr) {
+        return;
+    }
+    view.rows.assign(items->begin(), items->end());
+    groupRows(element, bindings, view);
+    Value const sort = tableSort(element);
+    std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, sort);
+    std::string const sortPath = pointerAppend(node.path, "sort");
+    if (!keys) {
+        report(
+            sortPath,
+            "sort is " + canonicalJson(sort) +
+                R"(; a table's sort is a list of {"column": <a sortable column's id>, "direction": "asc" or "desc"})");
+        return;
+    }
+    if (keys->empty()) {
+        return;
+    }
+    // Each row's keys are read once, then the rows are ordered by them: a change to the sort, the rows, or anything
+    // a `sortBy` reads sorts again. A grouped table orders by the group first, so every group keeps its place in
+    // the source order and its rows are sorted within it.
+    bool const grouped = !view.runOf.empty();
+    std::vector<std::vector<Value>> rowKeys;
+    rowKeys.reserve(view.rows.size());
+    for (std::size_t index = 0; index < view.rows.size(); ++index) {
+        Value const& row = view.rows.at(index);
+        ScopeEnv const env{scope, bindings, &row};
+        std::vector<Value> values;
+        values.reserve(keys->size() + 1);
+        if (grouped) {
+            values.emplace_back(static_cast<std::int64_t>(view.runOf.at(index)));
+        }
+        for (SortKey const& key : *keys) {
+            if (ExprPtr const sortBy = key.column->prop("sortBy")) {
+                values.push_back(evaluate(*sortBy, env));
+            } else {
+                Value const* const field = row.field(key.column->id);
+                values.push_back(field == nullptr ? Value{} : *field);
+            }
+        }
+        rowKeys.push_back(std::move(values));
+    }
+    std::vector<bool> descending;
+    descending.reserve(keys->size() + 1);
+    if (grouped) {
+        descending.push_back(false);
+    }
+    for (SortKey const& key : *keys) {
+        descending.push_back(key.descending);
+    }
+    ScopeEnv const env{scope, bindings};
+    std::optional<std::vector<std::size_t>> const order = Evaluator{env}.sortRows(rowKeys, descending);
+    if (!order) {
+        report(sortPath, "the rows' values for the sort are not of one comparable kind; the rows keep their order");
+        return;
+    }
+    std::vector<Value> sorted;
+    std::vector<std::size_t> runOf;
+    sorted.reserve(view.rows.size());
+    for (std::size_t const index : *order) {
+        sorted.push_back(view.rows.at(index));
+        if (grouped) {
+            runOf.push_back(view.runOf.at(index));
+        }
+    }
+    view.rows = std::move(sorted);
+    view.runOf = std::move(runOf);
+}
+
+inline TableView ScreenCore::tableView(ElementState const& element, Bindings const* bindings) {
+    DocNode const& node = *element.node;
+    RtScope const& scope = *element.scope;
+    TableView view;
+    sortedRows(element, bindings, view);
+    view.last = view.rows.size();
+    ExprPtr const sizeExpr = node.prop("pageSize");
+    if (!sizeExpr) {
+        return view;
+    }
+    // A `pageSize` of `null` does not page; one that is no positive integer is reported and does not page either.
+    Value const size = evalIn(scope, bindings, sizeExpr);
+    std::int64_t const* const perPage = size.asInt();
+    if (size.isNull() || perPage == nullptr || *perPage < 1) {
+        if (!size.isNull()) {
+            report(pointerAppend(node.path, "pageSize"),
+                   "pageSize is " + canonicalJson(size) + "; a page holds a positive whole number of rows");
+        }
+        return view;
+    }
+    // A `page` of `null` is the first; one that is negative or not a whole number is reported and shows the first.
+    // One past the last is the last: a filter that shrinks the rows under the user is normal, not an error.
+    std::int64_t asked = 0;
+    if (ExprPtr const pageExpr = node.prop("page")) {
+        Value const page = evalIn(scope, bindings, pageExpr);
+        std::int64_t const* const index = page.asInt();
+        if (index != nullptr && *index >= 0) {
+            asked = *index;
+        } else if (!page.isNull()) {
+            report(pointerAppend(node.path, "page"),
+                   "page is " + canonicalJson(page) + "; a page is a whole number from 0");
+        }
+    }
+    auto const total = static_cast<std::int64_t>(view.rows.size());
+    view.pageCount = std::max<std::int64_t>(1, (total + *perPage - 1) / *perPage);
+    view.page = std::min(asked, view.pageCount - 1);
+    view.first = static_cast<std::size_t>(std::min(total, view.page * *perPage));
+    view.last = static_cast<std::size_t>(std::min(total, (view.page + 1) * *perPage));
+    return view;
+}
+
+/// @brief A table's selection as its element value reads it: the bound `selection` when the key binds one, else
+///        the table's own. A bound value that is not a list (`null` while state starts empty) selects nothing.
+/// @param element The table's element.
+/// @return A list of keys. Tracked.
+[[nodiscard]] inline Value tableSelection(ElementState const& element) {
+    if (element.bound == nullptr) {
+        return element.selection.get();
+    }
+    Value const bound = element.bound->get();
+    return bound.asList() != nullptr ? bound : Value{ValueList{}};
 }
 
 /// @brief A JSON text as a document value; `null` when it is not JSON or holds what a value cannot (a fraction).
@@ -4508,7 +5396,7 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
         std::string const mode = policy.showErrors.empty() ? _doc->showErrors : policy.showErrors;
         bool const submittedNow = policy.submitted != nullptr && policy.submitted->get();
         if (mode == "always" || (mode == "submit" && submittedNow) ||
-            (mode != "submit" && (submittedNow || element.touched.get()))) {
+            (mode != "submit" && (submittedNow || element.touched.get() || touchedWithin(element)))) {
             return errors();
         }
         return Value{ValueList{}};
@@ -4528,15 +5416,22 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
     }
     if (kind == "table") {
         if (name == "selection") {
-            return element.selection.get();
+            return tableSelection(element);
         }
         if (name == "activeKey") {
             return element.activeKey.get();
         }
         if (name == "selectedCount") {
-            return count(element.selection.get());
+            return count(tableSelection(element));
         }
-        if (name == "viewCount" || name == "sourceCount") {
+        if (name == "sort") {
+            return tableSort(element);
+        }
+        if (name == "viewCount" || name == "page" || name == "pageCount" || name == "pageFirst" ||
+            name == "pageLast") {
+            return tablePageValue(element, name);
+        }
+        if (name == "sourceCount") {
             return element.rows == nullptr ? Value{std::int64_t{0}} : count(element.rows->get());
         }
         ExprPtr const rows = node.prop("rows");
@@ -4545,6 +5440,21 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
             return env.control(name == "pending" ? ExprKind::Pending : ExprKind::Error, rows->name);
         }
         return name == "pending" ? Value{false} : Value{};
+    }
+    if (kind == "tabs") {
+        // The shown tab's id: the bound one, else the user's own pick, else the first tab's.
+        ExprPtr const selected = node.prop("selected");
+        if (name != "selected") {
+            return Value{};
+        }
+        if (selected && (selected->kind != ExprKind::Literal || !selected->literal.isNull())) {
+            return evalIn(scope, nullptr, selected);
+        }
+        if (Value picked = element.draft.get(); !picked.isNull()) {
+            return picked;
+        }
+        auto const tabs = node.partList("tabs");
+        return tabs.empty() || tabs.front()->id.empty() ? Value{} : Value{tabs.front()->id};
     }
     if (kind == "form") {
         return formValue(element, name);
@@ -4583,6 +5493,16 @@ inline Value ScreenCore::elementValue(ElementState const& element, std::string_v
         return element.committed.get();
     }
     return Value{};
+}
+
+inline bool ScreenCore::touchedWithin(ElementState const& element) {
+    if (element.node->kind != "group") {
+        return false;
+    }
+    std::string const inside = element.node->path + "/";
+    return std::ranges::any_of(element.scope->elements, [&inside](std::unique_ptr<ElementState> const& other) {
+        return other->node->path.starts_with(inside) && other->touched.get();
+    });
 }
 
 // --- Commands --------------------------------------------------------------------------------------------------
@@ -4644,12 +5564,29 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
         }
         case CommandKind::Open:
         case CommandKind::Close: {
+            ElementState* target = nullptr;
             if (command.kind == CommandKind::Close && command.target == "self") {
-                finish((host != nullptr && host->closeSelf(_doc->id, std::nullopt)) ||
-                       unsupported(command, "`close: self`"));
-                return;
+                // `self` is the innermost dialog or drawer whose content holds the command, found lexically. A
+                // component's fallback scope has no parent, so the walk stops at its boundary as its names do.
+                RtScope const* walk = &scope;
+                while (walk->owner == nullptr && walk->parent) {
+                    walk = walk->parent.get();
+                }
+                target = walk->owner;
+                if (target == nullptr && walk != rootScope.lock().get()) {
+                    report(command.path, "`close: self` inside a component names no dialog or drawer");
+                    finish(false);
+                    return;
+                }
+                if (target == nullptr) {
+                    finish((host != nullptr && host->closeSelf(_doc->id, std::nullopt)) ||
+                           unsupported(command, "`close: self`"));
+                    return;
+                }
+            } else {
+                target = scope.find(command.target)->element;
             }
-            ElementState& element = *scope.find(command.target)->element;
+            ElementState& element = *target;
             if (element.node->prop("open")) {
                 report(command.path, "the dialog's `open` is bound to an expression");
                 finish(false);
@@ -4668,9 +5605,16 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
             NavigateRequest const request{.screen = command.target,
                                           .route = eval(command.extra),
                                           .params = eval(command.value),
-                                          .as = command.option};
+                                          .as = command.option,
+                                          .call = false};
             if (host == nullptr) {
                 finish(unsupported(command, "`navigate`"));
+                return;
+            }
+            // A navigation without `onResult` and `onCancel` asks for no answer, so it files no call: the screen it
+            // opens answers nobody, and its `return` is the application's.
+            if (command.commands.empty() && command.alternative.empty()) {
+                finish(host->navigate(request, {}, {}) || unsupported(command, "`navigate`"));
                 return;
             }
             std::weak_ptr<RtScope> const weak = ctx.scope;
@@ -4703,7 +5647,7 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
                        : unsupported(command, "`return`"));
             return;
         case CommandKind::Focus:
-            if (focusElement && focusElement(command.target)) {
+            if (focusTarget(command, scope, ctx.bindings.get())) {
                 finish(true);
                 return;
             }
@@ -5463,16 +6407,28 @@ namespace detail {
         if (std::int64_t const* const whole = value.asInt()) {
             return std::to_string(*whole);
         }
+        // A value that cannot be rounded at its own places is written as its exact JSON, never clamped.
         if (Decimal const* const number = value.asDecimal()) {
-            return detail::decimalText(number->value, static_cast<std::uint32_t>(number->value.decimalPlaces.value));
+            return detail::decimalText(number->value, static_cast<std::uint32_t>(number->value.decimalPlaces.value))
+                .value_or(canonicalJson(value));
         }
         if (Quantity const* const quantity = value.asQuantity()) {
-            return detail::decimalText(quantity->value,
-                                       static_cast<std::uint32_t>(quantity->value.decimalPlaces.value)) +
-                   " " + quantity->unit;
+            auto const text =
+                detail::decimalText(quantity->value, static_cast<std::uint32_t>(quantity->value.decimalPlaces.value));
+            return text ? *text + " " + quantity->unit : canonicalJson(value);
         }
     }
     return textOf(value, format);
+}
+
+/// @brief An exact rational as the nearest double, unrounded.
+///
+/// `Rational::toDouble` rounds to the value's own places, which is a display reading: `29 / 100` keeps its operands'
+/// 0 places and would read as 0. The view tree wants the magnitude, so the lowering reads it here.
+/// @param value The rational.
+/// @return Its numerator divided by its denominator.
+[[nodiscard]] inline double realOf(math::Rational const& value) noexcept {
+    return static_cast<double>(value.numerator) / static_cast<double>(value.denominator);
 }
 
 /// @brief A value as a custom component's `number` prop: the one kind that crosses as a double.
@@ -5483,10 +6439,10 @@ namespace detail {
         return static_cast<double>(*whole);
     }
     if (Decimal const* const number = value.asDecimal()) {
-        return number->value.toDouble();
+        return realOf(number->value);
     }
     if (Quantity const* const quantity = value.asQuantity()) {
-        return quantity->value.toDouble();
+        return realOf(quantity->value);
     }
     return 0.0;
 }
@@ -5527,13 +6483,14 @@ namespace detail {
         return *number;
     }
     if (Decimal const* const number = value.asDecimal()) {
-        return static_cast<std::int64_t>(number->value.toDouble());
+        // Integer division truncates toward zero, and reads the exact value rather than one rounded to its places.
+        return number->value.numerator / number->value.denominator;
     }
     return fallback;
 }
 
 /// @brief A text role by name.
-/// @param name `normal`, `muted`, `heading` (or `title`), `section`, `error`, `success`.
+/// @param name `normal`, `muted`, `heading` (or `title`), `section`, `error`, `success`, `mono`, `display`, `small`.
 /// @return The role; `nullopt` for any other name.
 [[nodiscard]] inline std::optional<TextRole> roleNamed(std::string_view name) {
     if (name == "normal") {
@@ -5554,8 +6511,24 @@ namespace detail {
     if (name == "success") {
         return TextRole::Success;
     }
+    if (name == "mono") {
+        return TextRole::Mono;
+    }
+    if (name == "display") {
+        return TextRole::Display;
+    }
+    if (name == "small") {
+        return TextRole::Small;
+    }
+    if (name == "overline") {
+        return TextRole::Overline;
+    }
     return std::nullopt;
 }
+
+/// @brief What a role that names none is told: the names `roleNamed` reads.
+inline constexpr std::string_view kRoleNames =
+    "a role is normal, muted, heading, section, error, success, mono, display, small or overline";
 
 /// @brief A text role by name, as `roleNamed` reads it.
 /// @param value  The name.
@@ -5584,6 +6557,127 @@ namespace detail {
         return Tone::Err;
     }
     return Tone::Neutral;
+}
+
+/// @brief A tone by its exact name, the strict reading of a value's evaluation: a table row's and a key-value item's
+///        tone, which unlike `toneOf` takes no alias, so a misspelt name can be reported.
+/// @param value `neutral`, `info`, `ok`, `warn` or `err`; `null` is `Neutral`.
+/// @return The tone; `nullopt` for anything else.
+[[nodiscard]] inline std::optional<Tone> toneNamed(Value const& value) {
+    if (value.isNull()) {
+        return Tone::Neutral;
+    }
+    static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {{
+        {"neutral", Tone::Neutral},
+        {"info", Tone::Info},
+        {"ok", Tone::Ok},
+        {"warn", Tone::Warn},
+        {"err", Tone::Err},
+    }};
+    if (std::string const* const text = value.asString()) {
+        // A loop, not std::ranges::find: an array's iterator is a pointer on some standard libraries and not on
+        // others, so `auto` there reads differently to each.
+        for (auto const& [name, tone] : kTones) {
+            if (name == *text) {
+                return tone;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+/// @brief A span list's runs: each element a record `{text, strong?, mono?, tone?}`, or a plain run of any other value
+///        but a list or `null`. A run's text is shown as `textOf` shows any value, so a computed number is a run of
+///        its digits, and a flag is set only by `true`.
+/// @param value   The list; `null` is no runs.
+/// @param format  How a run's value is written.
+/// @param dropped Set when the value is not a list, or an element is a list, `null`, or a record without `text`;
+///                such an element is left out.
+/// @param badTone Set, when given, when a run's `tone` is none of the tone names; the run is kept, untoned.
+/// @return The runs, in order.
+[[nodiscard]] inline std::vector<TextSpan> spansOf(Value const& value, FormatContext const& format, bool& dropped,
+                                                   bool* badTone = nullptr) {
+    std::vector<TextSpan> spans;
+    if (value.isNull()) {
+        return spans;
+    }
+    ValueList const* const runs = value.asList();
+    if (runs == nullptr) {
+        dropped = true;
+        return spans;
+    }
+    auto const flag = [](Value const* field) {
+        bool const* const set = field != nullptr ? field->asBool() : nullptr;
+        return set != nullptr && *set;
+    };
+    for (Value const& run : *runs) {
+        if (run.asRecord() == nullptr) {
+            if (run.isNull() || run.asList() != nullptr) {
+                dropped = true;
+            } else {
+                spans.push_back(TextSpan{.text = textOf(run, format)});
+            }
+            continue;
+        }
+        Value const* const text = run.field("text");
+        if (text == nullptr) {
+            dropped = true;
+            continue;
+        }
+        Tone tone = Tone::Neutral;
+        if (Value const* const named = run.field("tone")) {
+            if (std::optional<Tone> const known = toneNamed(*named)) {
+                tone = *known;
+            } else if (badTone != nullptr) {
+                *badTone = true;
+            }
+        }
+        spans.push_back(TextSpan{.text = textOf(*text, format),
+                                 .strong = flag(run.field("strong")),
+                                 .mono = flag(run.field("mono")),
+                                 .tone = tone,
+                                 .action = flag(run.field("action"))});
+    }
+    return spans;
+}
+
+/// @brief Whether a scope declares any name, so a node in it reads names the screen's own scope lacks.
+/// @param scope The scope.
+/// @return True when it declares a model, state, let, query, mutation, watch or check.
+[[nodiscard]] inline bool declaresNames(ScopeDecl const& scope) noexcept {
+    return !(scope.models.empty() && scope.state.empty() && scope.lets.empty() && scope.queries.empty() &&
+             scope.mutations.empty() && scope.watches.empty() && scope.checks.empty());
+}
+
+/// @brief What a span list with a run it drops is told.
+inline constexpr std::string_view kSpansReason =
+    "spans is a list of runs, each a value or a record with `text`; a list, a null or a record without `text` is "
+    "dropped";
+
+/// @brief What a tone of no known name is told.
+inline constexpr std::string_view kToneNames = "a tone is neutral, info, ok, warn or err, or null for none";
+
+/// @brief What a span list with a run of a tone of no known name is told.
+inline constexpr std::string_view kSpanToneReason =
+    "a run's tone is neutral, info, ok, warn or err, or null for none; a run of another tone is drawn untoned";
+
+/// @brief A splitter's `sizes`: a list of numbers, each read as `intOf` reads it.
+/// @param value The value.
+/// @return The sizes; `nullopt` for anything but a list whose every item is an `int` or a decimal.
+[[nodiscard]] inline std::optional<std::vector<int>> splitterSizesOf(Value const& value) {
+    ValueList const* const items = value.asList();
+    if (items == nullptr) {
+        return std::nullopt;
+    }
+    std::vector<int> sizes;
+    sizes.reserve(items->size());
+    for (Value const& item : *items) {
+        if (item.asInt() == nullptr && item.asDecimal() == nullptr) {
+            return std::nullopt;
+        }
+        sizes.push_back(static_cast<int>(intOf(item, 0)));
+    }
+    return sizes;
 }
 
 /// @brief A sizing by its document form: `"content"`, `{"fixed": n}` or `{"stretch": w}`.
@@ -5625,6 +6719,22 @@ namespace detail {
         return Align::End;
     }
     return Align::Stretch;
+}
+
+/// @brief A table cell's place by name: across its column (`align`) or down its row (`valign`).
+/// @param name `start`, `center` or `end`.
+/// @return The place; `nullopt` for any other name, `stretch` included.
+[[nodiscard]] inline std::optional<Align> cellPlaceNamed(std::string_view name) {
+    if (name == "start") {
+        return Align::Start;
+    }
+    if (name == "center") {
+        return Align::Center;
+    }
+    if (name == "end") {
+        return Align::End;
+    }
+    return std::nullopt;
 }
 
 /// @brief A justification by name, as the loader checked it: `center`, `end`, `between`, or start for none.
@@ -5680,13 +6790,74 @@ namespace detail {
     return out;
 }
 
+/// @brief The default spacing step between the children of a document panel or collapsible, the mockups' 8 px.
+inline constexpr int kPanelGap = 2;
+/// @brief The default spacing step between the children of a document dialog or drawer, the mockups' 12 px.
+inline constexpr int kDialogGap = 3;
+
+/// @brief A node's size request.
+/// @param node The node; may be null.
+/// @return Its layout hints, or none for a null node or a kind that has no `Common`.
+[[nodiscard]] inline LayoutHints layoutHintsOf(Node const& node) {
+    if (!node) {
+        return {};
+    }
+    return std::visit(
+        [](auto const& spec) -> LayoutHints {
+            if constexpr (requires { spec.common.layout; }) {
+                return spec.common.layout;
+            } else {
+                return {};
+            }
+        },
+        node->kind);
+}
+
+/// @brief The size request of a holder of @p sizings: a stretch by the largest weight where any is a stretch, and
+///        content otherwise.
+/// @param sizings One dimension's sizing of each child.
+/// @return The holder's sizing.
+[[nodiscard]] inline Sizing holderSizing(std::span<Sizing const> sizings) {
+    int weight = 0;
+    for (Sizing const& sizing : sizings) {
+        if (sizing.kind == Sizing::Kind::Stretch) {
+            weight = std::max(weight, sizing.amount);
+        }
+    }
+    return weight > 0 ? Sizing::stretch(weight) : Sizing::content();
+}
+
+/// @brief The column that holds a node list. It stretches along an axis when one of its children does, so the
+///        content means what its nodes would mean written inline in the holder's parent.
+/// @param children The content.
+/// @param gap      The spacing step between children.
+/// @return The column; bounds and `alignSelf` stay unset, because they belong to a child.
+[[nodiscard]] inline Column listColumn(std::vector<Node> children, int gap = 0) {
+    std::vector<Sizing> widths;
+    std::vector<Sizing> heights;
+    for (Node const& child : children) {
+        LayoutHints const hints = layoutHintsOf(child);
+        widths.push_back(hints.width);
+        heights.push_back(hints.height);
+    }
+    Column column{.children = std::move(children), .gap = gap};
+    column.common.layout.width = holderSizing(widths);
+    column.common.layout.height = holderSizing(heights);
+    return column;
+}
+
 /// @brief Content whose scope is made when it mounts and released when it unmounts: a one-row `forEach` whose
 ///        row view builds it.
 /// @param build Builds the content, its scope included.
+/// @param hints The size request of the content. A slot reads the sizing of its direct child alone, which is this
+///        `forEach`, so the content's stretch reaches the slot only through these.
 /// @return The node.
-[[nodiscard]] inline Node lazy(std::function<Node()> build) {
+[[nodiscard]] inline Node lazy(std::function<Node()> build, LayoutHints const& hints = {}) {
+    Common common;
+    common.layout = hints;
     return ui::forEach<int>([] { return std::vector<int>{0}; }, [](int const&) { return Key{std::int64_t{0}}; },
-                            [build = std::move(build)](reactive::Signal<int> const&) { return build(); });
+                            [build = std::move(build)](reactive::Signal<int> const&) { return build(); },
+                            Axis::Vertical, 0, common);
 }
 
 /// @brief A column of content that holds its scope for as long as it is mounted: its `visible` is a binding
@@ -5694,13 +6865,124 @@ namespace detail {
 /// @param children The content.
 /// @param scope    The scope.
 /// @param keys     The chords of the content.
+/// @param gap      The spacing step between the children.
 /// @return The node.
 [[nodiscard]] inline Node holding(std::vector<Node> children, std::shared_ptr<RtScope> scope,
-                                  std::vector<KeyBinding> keys = {}) {
-    Column column{.children = std::move(children)};
+                                  std::vector<KeyBinding> keys = {}, int gap = 0) {
+    Column column = listColumn(std::move(children), gap);
     column.common.visible = Prop<bool>{[held = std::move(scope)] { return held != nullptr; }};
     column.common.keys = std::move(keys);
     return ui::column(std::move(column));
+}
+
+/// @brief Whether an expression reads a name in @p names.
+/// @param expr  The expression.
+/// @param names The names.
+/// @return Whether any form of the expression names one.
+// NOLINTBEGIN(misc-no-recursion): an expression nests its arguments and fields, and the walk follows them.
+[[nodiscard]] inline bool readsAny(ExprPtr const& expr, std::set<std::string, std::less<>> const& names) {
+    if (!expr) {
+        return false;
+    }
+    if (!expr->name.empty() && names.contains(expr->name)) {
+        return true;
+    }
+    return std::ranges::any_of(expr->args, [&](ExprPtr const& arg) { return readsAny(arg, names); }) ||
+           std::ranges::any_of(expr->fields, [&](auto const& field) { return readsAny(field.second, names); });
+}
+// NOLINTEND(misc-no-recursion)
+
+/// @brief Collects the element ids of a document subtree.
+/// @param node The root.
+/// @param out  Receives the ids.
+// NOLINTNEXTLINE(misc-no-recursion): a node's children and parts are nodes, and the walk follows them.
+inline void collectIds(DocNode const& node, std::set<std::string, std::less<>>& out) {
+    if (!node.id.empty()) {
+        out.insert(node.id);
+    }
+    for (auto const* group : {&node.children, &node.parts}) {
+        for (auto const& [key, list] : *group) {
+            for (DocNodePtr const& child : list) {
+                collectIds(*child, out);
+            }
+        }
+    }
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): lowering a node lowers its children, which come back through here.
+inline Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx, int gap) {
+    if (nodes.size() == 1) {
+        return lower(*nodes.front(), ctx);
+    }
+    std::vector<Node> children;
+    children.reserve(nodes.size());
+    for (DocNodePtr const& child : nodes) {
+        children.push_back(lower(*child, ctx));
+    }
+    Column holder = listColumn(std::move(children), gap);
+    // The column is the mount's, not the document's: a child that bleeds reaches past the padding of the container
+    // the document names, so the column passes that padding on instead of hiding it.
+    holder.holder = true;
+    return ui::column(std::move(holder));
+}
+
+inline LayoutHints ScreenCore::nodeHints(DocNode const& node, std::set<std::string, std::less<>> const& own,
+                                         LowerCtx const& ctx) {
+    LayoutHints hints;
+    if (ExprPtr const sizing = node.prop("sizing")) {
+        if (sizing->kind != ExprKind::Literal && readsAny(sizing, own)) {
+            report(sizing->path,
+                   "this sizing reads a name the case declares, so the case is held at its "
+                   "content size");
+        } else {
+            Value const value = once(ctx, sizing);
+            Value const* const width = value.field("width");
+            Value const* const height = value.field("height");
+            if (width != nullptr || height != nullptr) {
+                hints.width = width != nullptr && isSizing(*width) ? sizingOf(*width) : Sizing::content();
+                hints.height = height != nullptr && isSizing(*height) ? sizingOf(*height) : Sizing::content();
+            } else if (isSizing(value)) {
+                hints.width = sizingOf(value);
+            }
+        }
+    }
+    return hints;
+}
+
+inline LayoutHints ScreenCore::holderHints(std::span<DocNode const* const> content, ScopeDecl const* decl,
+                                           LowerCtx const& ctx) {
+    std::set<std::string, std::less<>> own;
+    for (DocNode const* const node : content) {
+        collectIds(*node, own);
+    }
+    if (decl != nullptr) {
+        for (ModelDecl const& model : decl->models) {
+            own.insert(model.name);
+        }
+        for (StateDecl const& state : decl->state) {
+            own.insert(state.name);
+        }
+        for (LetDecl const& let : decl->lets) {
+            own.insert(let.name);
+        }
+        for (QueryDecl const& query : decl->queries) {
+            own.insert(query.name);
+        }
+        for (MutationDecl const& mutation : decl->mutations) {
+            own.insert(mutation.name);
+        }
+    }
+    std::vector<Sizing> widths;
+    std::vector<Sizing> heights;
+    for (DocNode const* const node : content) {
+        LayoutHints const hints = nodeHints(*node, own, ctx);
+        widths.push_back(hints.width);
+        heights.push_back(hints.height);
+    }
+    LayoutHints out;
+    out.width = holderSizing(widths);
+    out.height = holderSizing(heights);
+    return out;
 }
 
 // NOLINTBEGIN(misc-no-recursion): a menu nests, and lowering descends the document.
@@ -5722,10 +7004,118 @@ inline Prop<TextRole> ScreenCore::roleProp(LowerCtx const& ctx, ExprPtr const& e
         Value const value = evalIn(*scope, bindings.get(), expr);
         std::optional<TextRole> const role = roleNamed(textOf(value, session.formatting()));
         if (!role) {
-            report(expr->path, "role is " + canonicalJson(value) +
-                                   "; a role is normal, muted, heading, section, error or success");
+            report(expr->path, "role is " + canonicalJson(value) + "; " + std::string{kRoleNames});
         }
         return role.value_or(TextRole::Normal);
+    });
+}
+
+inline Prop<std::string> ScreenCore::surfaceOf(DocNode const& node, LowerCtx const& ctx) {
+    ExprPtr const expr = node.prop("surface");
+    auto nameOf = [this, path = pointerAppend(node.path, "surface")](Value const& value) -> std::string {
+        if (std::string const* const name = value.asString()) {
+            return *name;
+        }
+        if (!value.isNull()) {
+            report(path, "a surface is the name of one; " + canonicalJson(value) + " is not a string");
+        }
+        return {};
+    };
+    if (!expr || expr->kind == ExprKind::Literal) {
+        return expr ? Prop<std::string>{nameOf(expr->literal)} : Prop<std::string>{std::string{}};
+    }
+    return slotProp<std::string>([scope = ctx.scope, bindings = ctx.bindings, expr, nameOf = std::move(nameOf)] {
+        return nameOf(evalIn(*scope, bindings.get(), expr));
+    });
+}
+
+inline KeyValueItem ScreenCore::keyValueItemOf(Value const& item, std::string const& path) {
+    FormatContext const& format = session.formatting();
+    Value const* const label = item.field("label");
+    Value const* const value = item.field("value");
+    KeyValueItem out{.label = label == nullptr ? std::string{} : textOf(*label, format),
+                     .value = value == nullptr ? std::string{} : textOf(*value, format)};
+    if (Value const* const spans = item.field("spans")) {
+        bool dropped = false;
+        bool badTone = false;
+        out.spans = spansOf(*spans, format, dropped, &badTone);
+        if (dropped) {
+            report(path, kSpansReason);
+        }
+        if (badTone) {
+            report(path, kSpanToneReason);
+        }
+    }
+    if (Value const* const tone = item.field("tone")) {
+        std::optional<Tone> const named = toneNamed(*tone);
+        if (!named) {
+            report(path, "an item's tone is " + canonicalJson(*tone) + "; " + std::string{kToneNames});
+        }
+        out.tone = named.value_or(Tone::Neutral);
+    }
+    return out;
+}
+
+// A group needs no widget of its own: it lowers to kinds every backend has, so the view tree and the contract do not
+// change. Its description is a line read in order after its children, since `Common` carries no accessible
+// description.
+inline Node ScreenCore::lowerGroup(DocNode const& node, LowerCtx const& ctx, ElementState* element,
+                                   std::vector<Node> children) {
+    Text legend{.text = bindProp<std::string>(ctx, node.prop("label"), std::string{}, stringOf)};
+    legend.field.required = bindProp<bool>(ctx, node.prop("required"), false, boolOf);
+    std::vector<Node> column;
+    column.reserve(children.size() + 3);
+    column.push_back(ui::text(std::move(legend)));
+    std::ranges::move(children, std::back_inserter(column));
+    if (ExprPtr const description = node.prop("description")) {
+        Text line{.text = bindProp<std::string>(ctx, description, std::string{}, stringOf), .role = TextRole::Muted};
+        line.common.visible = slotProp<bool>([scope = ctx.scope, bindings = ctx.bindings, description, this] {
+            return !textOf(evalIn(*scope, bindings.get(), description), session.formatting()).empty();
+        });
+        column.push_back(ui::text(std::move(line)));
+    }
+    // The shown errors, one line each: a check that targets the group shows its message here.
+    auto shown = [this, element, scope = ctx.scope, bindings = ctx.bindings, errors = node.prop("errors")] {
+        return stringsOf(element != nullptr ? elementValue(*element, "shownErrors")
+                                            : evalIn(*scope, bindings.get(), errors));
+    };
+    Text messages{.text = slotProp<std::string>([shown] {
+                      std::string joined;
+                      for (std::string const& message : shown()) {
+                          joined += (joined.empty() ? "" : "\n") + message;
+                      }
+                      return joined;
+                  }),
+                  .role = TextRole::Error};
+    messages.common.visible = slotProp<bool>([shown] { return !shown().empty(); });
+    column.push_back(ui::text(std::move(messages)));
+    Column spec{.children = std::move(column),
+                .gap = static_cast<int>(intOf(node.prop("gap") ? once(ctx, node.prop("gap")) : Value{}, 0))};
+    commonOf(node, ctx, element, spec.common);
+    if (spec.common.a11y.role.empty()) {
+        spec.common.a11y.role = "group";
+    }
+    bool const named = std::ranges::any_of(node.partList("a11y"),
+                                           [](DocNodePtr const& a11y) { return a11y->prop("name") != nullptr; });
+    if (!named) {
+        spec.common.a11y.name = bindProp<std::string>(ctx, node.prop("label"), std::string{}, stringOf);
+    }
+    return ui::column(std::move(spec));
+}
+
+inline Prop<std::vector<TextSpan>> ScreenCore::spansProp(LowerCtx const& ctx, ExprPtr const& expr) {
+    return slotProp<std::vector<TextSpan>>([this, scope = ctx.scope, bindings = ctx.bindings, expr] {
+        bool dropped = false;
+        bool badTone = false;
+        std::vector<TextSpan> spans =
+            spansOf(evalIn(*scope, bindings.get(), expr), session.formatting(), dropped, &badTone);
+        if (dropped) {
+            report(expr->path, kSpansReason);
+        }
+        if (badTone) {
+            report(expr->path, kSpanToneReason);
+        }
+        return spans;
     });
 }
 
@@ -5754,6 +7144,7 @@ inline void ScreenCore::layoutOf(DocNode const& node, LowerCtx const& ctx, Layou
     if (std::string_view const placed = node.name("alignSelf"); !placed.empty()) {
         layout.alignSelf = alignOf(placed);
     }
+    layout.bleed = node.flag("bleed");
     // Literal integers, checked at load.
     for (auto const& [key, bound] :
          {std::pair{"minWidth", &LayoutHints::minWidth}, std::pair{"maxWidth", &LayoutHints::maxWidth},
@@ -5764,6 +7155,53 @@ inline void ScreenCore::layoutOf(DocNode const& node, LowerCtx const& ctx, Layou
     }
 }
 
+/// @brief Where a declaration is lowered, as a focus key reads it.
+struct FocusPlace {
+    /// @brief The focus key of the component use it is lowered for, and `>`; empty outside a component.
+    std::string prefix;
+    /// @brief The keys of the rows that enclose it, outermost first.
+    std::vector<std::string> rows;
+};
+
+/// @brief Where @p scope is: the row keys of its chain and the component use it is lowered for.
+/// @param scope The scope.
+/// @return It.
+[[nodiscard]] inline FocusPlace focusPlace(RtScope const& scope) {
+    FocusPlace place;
+    for (RtScope const* current = &scope; current != nullptr; current = current->parent.get()) {
+        if (current->row != nullptr) {
+            place.rows.push_back(current->rowKey);
+        }
+        if (current->parent == nullptr) {
+            place.prefix = current->usePrefix;
+        }
+    }
+    std::ranges::reverse(place.rows);
+    return place;
+}
+
+/// @brief A focus key: a declaration's pointer under its component use's prefix, with one key per enclosing row.
+/// @param place Where the declaration is lowered.
+/// @param path  The declaring node's JSON Pointer.
+/// @return The key, unique per declaration, row and component use.
+[[nodiscard]] inline std::string focusKey(FocusPlace const& place, std::string_view path) {
+    std::string key = place.prefix;
+    key += path;
+    for (std::string const& row : place.rows) {
+        key += '@';
+        key += row;
+    }
+    return key;
+}
+
+/// @brief The focus key of the element @p path declares, lowered in @p scope.
+/// @param path  The declaring node's JSON Pointer.
+/// @param scope The scope it is lowered in.
+/// @return The key.
+[[nodiscard]] inline std::string focusKeyOf(std::string_view path, RtScope const& scope) {
+    return focusKey(focusPlace(scope), path);
+}
+
 inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, ElementState* element, Common& common) {
     static_cast<void>(element);
     common.visible = bindProp<bool>(ctx, node.prop("visible"), true, boolOf);
@@ -5771,8 +7209,10 @@ inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, Eleme
     common.tooltip = bindProp<std::string>(ctx, node.prop("tooltip"), std::string{}, stringOf);
     layoutOf(node, ctx, common.layout);
     common.testId = std::string{node.name("testId")};
-    common.focusId = node.id;
-    common.surface = std::string{node.name("surface")};
+    if (!node.id.empty()) {
+        common.focusId = focusKeyOf(node.path, *ctx.scope);
+    }
+    common.surface = surfaceOf(node, ctx);
     if (ExprPtr const autofocus = node.prop("autofocus")) {
         common.autofocus = boolOf(once(ctx, autofocus), session.formatting());
     }
@@ -5822,33 +7262,122 @@ inline void ScreenCore::fieldOf(DocNode const& node, LowerCtx const& ctx, Elemen
             return stringsOf(evalIn(*scope, bindings.get(), errors));
         });
     }
+    // A tone evaluates the value and is not an error: it changes the field's look and nothing of `valid`.
+    if (node.prop("description")) {
+        field.description = bindProp<std::string>(ctx, node.prop("description"), std::string{}, stringOf);
+    }
+    if (ExprPtr const tone = node.prop("tone")) {
+        field.tone = slotProp<Tone>([this, scope = ctx.scope, bindings = ctx.bindings, tone] {
+            Value const value = evalIn(*scope, bindings.get(), tone);
+            std::optional<Tone> const named = toneNamed(value);
+            if (!named) {
+                report(tone->path, "tone is " + canonicalJson(value) + "; " + std::string{kToneNames});
+            }
+            return named.value_or(Tone::Neutral);
+        });
+    }
 }
 
+inline MenuItem ScreenCore::menuItemOf(DocNode const& part, LowerCtx const& ctx) {
+    MenuItem item;
+    if (part.flag("separator")) {
+        item.separator = true;
+        return item;
+    }
+    item.label = bindProp<std::string>(ctx, part.prop("label"), std::string{}, stringOf);
+    item.description = bindProp<std::string>(ctx, part.prop("description"), std::string{}, stringOf);
+    item.visible = bindProp<bool>(ctx, part.prop("visible"), true, boolOf);
+    if (Commands const* const commands = part.event("onClick")) {
+        item.onSelect = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
+    }
+    if (ExprPtr const icon = part.prop("icon")) {
+        item.icon = textOf(once(ctx, icon), session.formatting());
+    }
+    item.keys = std::string{part.name("keys")};
+    if (ExprPtr const checked = part.prop("checked")) {
+        item.checked = slotProp<std::optional<bool>>(
+            [scope = ctx.scope, bindings = ctx.bindings, checked]() -> std::optional<bool> {
+                Value const value = evalIn(*scope, bindings.get(), checked);
+                bool const* const flag = value.asBool();
+                return flag == nullptr ? std::nullopt : std::optional<bool>{*flag};
+            });
+    }
+    item.enabled = bindProp<bool>(ctx, part.prop("enabled"), true, boolOf);
+    return item;
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
 inline std::vector<MenuItem> ScreenCore::menuItems(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
     std::vector<MenuItem> items;
     for (DocNodePtr const& part : parts) {
-        MenuItem item;
-        item.label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf);
-        if (Commands const* const commands = part->event("onClick")) {
-            item.onSelect = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
+        MenuItem item = menuItemOf(*part, ctx);
+        if (!item.separator) {
+            item.items = menuItems(part->partList("items"), ctx);
         }
-        if (ExprPtr const icon = part->prop("icon")) {
-            item.icon = textOf(once(ctx, icon), session.formatting());
-        }
-        item.keys = std::string{part->name("keys")};
-        if (ExprPtr const checked = part->prop("checked")) {
-            item.checked = slotProp<std::optional<bool>>(
-                [scope = ctx.scope, bindings = ctx.bindings, checked]() -> std::optional<bool> {
-                    Value const value = evalIn(*scope, bindings.get(), checked);
-                    bool const* const flag = value.asBool();
-                    return flag == nullptr ? std::nullopt : std::optional<bool>{*flag};
-                });
-        }
-        item.enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf);
-        item.items = menuItems(part->partList("items"), ctx);
         items.push_back(std::move(item));
     }
     return items;
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+inline std::vector<HeadMenuModel> ScreenCore::lowerHeadMenu(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
+    std::vector<HeadMenuModel> models;
+    models.reserve(parts.size());
+    for (DocNodePtr const& part : parts) {
+        models.push_back(HeadMenuModel{.id = part->id,
+                                       .path = part->path,
+                                       .item = menuItemOf(*part, ctx),
+                                       .items = lowerHeadMenu(part->partList("items"), ctx)});
+    }
+    return models;
+}
+
+inline std::vector<HeadToolModel> ScreenCore::lowerHeadTools(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
+    static constexpr int kSearchWidth = 30;
+    std::vector<HeadToolModel> models;
+    models.reserve(parts.size());
+    for (DocNodePtr const& part : parts) {
+        bool const search = part->name("kind") == "search";
+        HeadToolModel model{
+            .id = part->id,
+            .path = part->path,
+            .kind = search ? HeadToolKind::Search : HeadToolKind::Select,
+            .label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf),
+            .value = bindProp<std::string>(ctx, part->prop("value"), std::string{}, stringOf),
+            .placeholder = bindProp<std::string>(ctx, part->prop("placeholder"), std::string{}, stringOf),
+            .options = {},
+            .selected = {},
+            .width = search ? kSearchWidth : 0,
+            .enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf),
+            .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
+            .edit = {},
+            .submit = {}};
+        if (ExprPtr const width = part->prop("width")) {
+            if (std::int64_t const* const units = width->literal.asInt()) {
+                model.width = static_cast<int>(*units);
+            }
+        }
+        if (!search) {
+            model.options = slotProp<std::vector<SelectOption>>(
+                [this, scope = ctx.scope, bindings = ctx.bindings, options = part->prop("options")] {
+                    return selectOptions(evalIn(*scope, bindings.get(), options), session.formatting());
+                });
+            model.selected = slotProp<std::optional<Key>>([scope = ctx.scope, bindings = ctx.bindings,
+                                                           selected = part->prop("selected")]() -> std::optional<Key> {
+                Value const value = selected ? evalIn(*scope, bindings.get(), selected) : Value{};
+                return value.isNull() ? std::nullopt : std::optional<Key>{keyOf(value)};
+            });
+        }
+        Commands const* const edited = part->event(search ? "onChange" : "onChoose");
+        model.edit = [this, ctx, edited](Value event) { runEvent(edited, ctx, std::move(event)); };
+        if (search) {
+            model.submit = [this, ctx, onSubmit = part->event("onSubmit")](Value event) {
+                runEvent(onSubmit, ctx, std::move(event));
+            };
+        }
+        models.push_back(std::move(model));
+    }
+    return models;
 }
 
 inline ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> parts, LowerCtx const& ctx) {
@@ -5859,17 +7388,12 @@ inline ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> par
                           .path = part->path,
                           .label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf),
                           .icon = bindProp<std::string>(ctx, part->prop("icon"), std::string{}, stringOf),
+                          .iconOnly = bindProp<bool>(ctx, part->prop("iconOnly"), false, boolOf),
                           .emphasis = ButtonEmphasis::Normal,
                           .enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf),
                           .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
                           .run = {}};
-        if (part->name("emphasis") == "primary") {
-            model.emphasis = ButtonEmphasis::Primary;
-        } else if (part->name("emphasis") == "danger") {
-            model.emphasis = ButtonEmphasis::Danger;
-        } else if (part->name("emphasis") == "ghost") {
-            model.emphasis = ButtonEmphasis::Ghost;
-        }
+        model.emphasis = emphasisNamed(part->name("emphasis")).value_or(ButtonEmphasis::Normal);
         if (Commands const* const commands = part->event("onClick")) {
             model.run = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
         }
@@ -5881,10 +7405,19 @@ inline ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> par
 inline Node ScreenCore::actionBarOf(ActionModels actions) {
     ActionBar bar;
     for (ActionModel& action : actions) {
-        Button button{.label = std::move(action.label),
+        Button button{.label = action.label,
                       .emphasis = action.emphasis,
                       .onClick = std::move(action.run),
-                      .common = {}};
+                      .common = {},
+                      .icon = action.icon.evaluate()};
+        if (action.iconOnly.isBound() || action.iconOnly.constant()) {
+            // The label is the button's name and tooltip; the caption is empty while the icon stands alone.
+            button.label = Prop<std::string>{[label = action.label, iconOnly = action.iconOnly] {
+                return iconOnly.evaluate() ? std::string{} : label.evaluate();
+            }};
+            button.common.a11y.name = action.label;
+            button.common.tooltip = action.label;
+        }
         button.common.visible = std::move(action.visible);
         button.common.enabled = std::move(action.enabled);
         button.common.testId = "action_" + action.id;
@@ -5916,9 +7449,9 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         }
         return out;
     };
-    auto child = [&](std::string_view key) -> Node {
+    auto child = [&](std::string_view key, int gap = 0) -> Node {
         auto const nodes = node.nodes(key);
-        return nodes.empty() ? Node{} : lowerAll(nodes, ctx);
+        return nodes.empty() ? Node{} : lowerAll(nodes, ctx, gap);
     };
     auto onceInt = [&](std::string_view key, std::int64_t fallback) {
         ExprPtr const expr = node.prop(key);
@@ -5927,6 +7460,23 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     auto onceBool = [&](std::string_view key, bool fallback) {
         ExprPtr const expr = node.prop(key);
         return expr ? boolOf(once(ctx, expr), format) : fallback;
+    };
+    // A stack's padding: one step, or the loader-checked constant list of the vertical and the horizontal step. A
+    // computed padding that yields a list is not a step: it is reported once and taken as 0.
+    auto stackPadding = [&]() -> Padding {
+        ExprPtr const expr = node.prop("padding");
+        if (!expr) {
+            return {};
+        }
+        Value const value = once(ctx, expr);
+        if (ValueList const* const steps = value.asList()) {
+            if (expr->kind == ExprKind::Literal && steps->size() == 2) {
+                return Padding{static_cast<int>(intOf(steps->at(0), 0)), static_cast<int>(intOf(steps->at(1), 0))};
+            }
+            report(node.path + "/padding", "a computed `padding` is one spacing step, not a list; taken as 0");
+            return {};
+        }
+        return Padding{static_cast<int>(intOf(value, 0))};
     };
     auto onceText = [&](std::string_view key) {
         ExprPtr const expr = node.prop(key);
@@ -5973,7 +7523,13 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     };
 
     if (kind == "text") {
-        Text spec{.text = textProp("text"), .role = roleProp(ctx, node.prop("role"))};
+        Text spec{.role = roleProp(ctx, node.prop("role"))};
+        // A text with spans shows them, so its `text`, an older client's fallback, is not lowered.
+        if (ExprPtr const spans = node.prop("spans")) {
+            spec.spans = spansProp(ctx, spans);
+        } else {
+            spec.text = textProp("text");
+        }
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         return ui::text(std::move(spec));
@@ -5981,16 +7537,21 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     if (kind == "button") {
         Button spec{.label = textProp("label")};
         spec.icon = onceText("icon");
-        if (node.name("emphasis") == "primary") {
-            spec.emphasis = ButtonEmphasis::Primary;
-        } else if (node.name("emphasis") == "danger") {
-            spec.emphasis = ButtonEmphasis::Danger;
-        } else if (node.name("emphasis") == "ghost") {
-            spec.emphasis = ButtonEmphasis::Ghost;
-        }
+        spec.emphasis = emphasisNamed(node.name("emphasis")).value_or(ButtonEmphasis::Normal);
         if (node.name("style") == "item") {
             spec.style = ButtonStyle::Item;
+        }
+        spec.shape = shapeNamed(node.name("shape")).value_or(ControlShape::Default);
+        spec.size = sizeNamed(node.name("size")).value_or(ButtonSize::Normal);
+        spec.mono = node.flag("mono");
+        if (node.prop("selected")) {
             spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
+            // An entry's content, drawn in place of its label: one node as it is, several in a column.
+            if (std::vector<Node> content = children("children"); content.size() == 1) {
+                spec.child = std::move(content.front());
+            } else if (!content.empty()) {
+                spec.child = ui::column(Column{.children = std::move(content)});
+            }
         }
         Commands const* const onClick = node.event("onClick");
         Commands const* const onActivate = node.event("onActivate");
@@ -6032,10 +7593,14 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             commit("blur", text);
             runEvent(onCommit, ctx, Value{text});
         };
-        spec.onSubmit = [this, ctx, commit, onSubmit = node.event("onSubmit")](std::string const& text) {
-            commit("enter", text);
-            runEvent(onSubmit, ctx, Value{text});
-        };
+        // Only a field that does something on Enter submits: one without `onSubmit` that does not commit on Enter
+        // lets Enter go on to its ancestors' chords, a dialog's `default` among them.
+        if (Commands const* const onSubmit = node.event("onSubmit"); onSubmit != nullptr || commitOn == "enter") {
+            spec.onSubmit = [this, ctx, commit, onSubmit](std::string const& text) {
+                commit("enter", text);
+                runEvent(onSubmit, ctx, Value{text});
+            };
+        }
         spec.placeholder = textProp("placeholder");
         std::string const mode = onceText("mode");
         spec.mode = TextInputMode::SingleLine;
@@ -6044,7 +7609,29 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         } else if (mode == "password") {
             spec.mode = TextInputMode::Password;
         }
-        spec.icon = onceText("icon");
+        // A multiline input shows no unit and no icon; a computed mode that turns out multiline is reported and
+        // its unit and icon left out, so the mount never meets them there. The loader refuses a literal one.
+        for (std::string_view const key :
+             {std::string_view{"unit"}, std::string_view{"icon"}, std::string_view{"prefix"}}) {
+            if (ExprPtr const given = node.prop(key); given != nullptr && spec.mode == TextInputMode::Multiline) {
+                report(given->path, "a multiline input shows no " + std::string{key});
+            }
+        }
+        spec.mono = node.flag("mono");
+        if (spec.mode != TextInputMode::Multiline) {
+            spec.emphasis = node.name("emphasis") == "prominent" ? InputEmphasis::Prominent : InputEmphasis::Normal;
+            spec.icon = onceText("icon");
+            spec.align = alignOf(node.name("align"));
+            if (spec.align == Align::Stretch) {
+                spec.align = Align::Start;
+            }
+            if (node.prop("unit")) {
+                spec.unit = textProp("unit");
+            }
+            if (node.prop("prefix")) {
+                spec.prefix = textProp("prefix");
+            }
+        }
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);
@@ -6059,12 +7646,14 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                                                   })};
         spec.onToggle = [this, ctx, element, onToggle = node.event("onToggle"),
                          onChange = node.event("onChange")](bool checked) {
-            if (element->bound == nullptr) {
-                session.asUser([&] {
+            // A toggle is a check box's commit, so it touches the box.
+            session.asUser([&] {
+                if (element->bound == nullptr) {
                     session.noteWrite();
                     element->draft.set(checked);
-                });
-            }
+                }
+                element->touched.set(true);
+            });
             runEvent(onToggle, ctx, Value{checked});
             runEvent(onChange, ctx, Value{checked});
         };
@@ -6083,16 +7672,29 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         spec.onSelect = [this, ctx, element, onChoose = node.event("onChoose"),
                          onChange = node.event("onChange")](Key const& key) {
             Value const chosen = valueOfKey(key);
-            if (element->bound == nullptr) {
-                session.asUser([&] {
+            // A choice is a select's commit, so it touches the select.
+            session.asUser([&] {
+                if (element->bound == nullptr) {
                     session.noteWrite();
                     element->draft.set(chosen);
-                });
-            }
+                }
+                element->touched.set(true);
+            });
             runEvent(onChoose, ctx, chosen);
             runEvent(onChange, ctx, chosen);
         };
-        spec.style = onceText("style") == "radio" ? SelectStyle::Radio : SelectStyle::Dropdown;
+        // A computed style of no known name is reported once and drawn as a dropdown; the loader refuses a constant
+        // one.
+        if (ExprPtr const style = node.prop("style")) {
+            std::string const name = textOf(once(ctx, style), session.formatting());
+            if (name == "radio") {
+                spec.style = SelectStyle::Radio;
+            } else if (name == "segmented") {
+                spec.style = SelectStyle::Segmented;
+            } else if (name != "dropdown") {
+                report(style->path, "style is `" + name + "`; a select's style is dropdown, radio or segmented");
+            }
+        }
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);
@@ -6177,6 +7779,9 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         };
         spec.mode = mode;
         spec.offsetMinutes = offsetMinutes;
+        // Read once and untracked, like the zone: a pattern changed after mount applies to inputs mounted later.
+        FormatContext const& now = session.formattingNow();
+        spec.pattern = mode == DateMode::Date ? now.datePattern : now.dateTimePattern;
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         nameByLabel(spec.common);
@@ -6203,8 +7808,23 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     }
     if (kind == "menu") {
         Menu spec{.items = menuItems(node.partList("items"), ctx)};
+        if (node.name("style") == "button") {
+            spec.style = MenuStyle::Button;
+            spec.label = textProp("label");
+            spec.icon = onceText("icon");
+            if (node.name("emphasis") == "primary") {
+                spec.emphasis = ButtonEmphasis::Primary;
+            } else if (node.name("emphasis") == "danger") {
+                spec.emphasis = ButtonEmphasis::Danger;
+            } else if (node.name("emphasis") == "ghost") {
+                spec.emphasis = ButtonEmphasis::Ghost;
+            }
+        }
         commonOf(node, ctx, element, spec.common);
         return ui::menu(std::move(spec));
+    }
+    if (kind == "group") {
+        return lowerGroup(node, ctx, element, children("children"));
     }
     if (kind == "column" || kind == "row") {
         int const gap = static_cast<int>(onceInt("gap", 0));
@@ -6216,14 +7836,25 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             Column spec{.children = children("children"),
                         .gap = gap,
                         .align = alignOf(node.name("align")),
-                        .justify = justifyOf(node.name("justify"))};
+                        .justify = justifyOf(node.name("justify")),
+                        .divided = node.flag("divided"),
+                        .padding = stackPadding()};
+            if (node.prop("selected")) {
+                spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
+            }
             commonOf(node, ctx, element, spec.common);
             return ui::column(std::move(spec));
         }
         Row spec{.children = children("children"),
                  .gap = gap,
                  .align = alignOf(node.name("align")),
-                 .justify = justifyOf(node.name("justify"))};
+                 .justify = justifyOf(node.name("justify")),
+                 .wrap = node.flag("wrap"),
+                 .divided = node.flag("divided"),
+                 .padding = stackPadding()};
+        if (node.prop("selected")) {
+            spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
+        }
         commonOf(node, ctx, element, spec.common);
         return ui::row(std::move(spec));
     }
@@ -6231,6 +7862,11 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         Grid spec{.columns = static_cast<int>(onceInt("columns", 1)),
                   .gap = static_cast<int>(onceInt("gap", 0)),
                   .align = alignOf(node.name("align"))};
+        for (DocNodePtr const& track : node.partList("tracks")) {
+            ExprPtr const width = track->prop("width");
+            spec.tracks.push_back(GridTrack{.width = width ? sizingOf(once(ctx, width)) : Sizing::stretch(),
+                                            .align = cellPlaceNamed(track->name("align")).value_or(Align::Start)});
+        }
         for (DocNodePtr const& cell : node.nodes("children")) {
             ExprPtr const span = cell->prop("span");
             spec.cells.push_back(
@@ -6247,7 +7883,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     if (kind == "panel") {
         Panel spec{.title = textProp("title"), .padding = static_cast<int>(onceInt("padding", 0))};
         spec.header = child("header");
-        spec.child = child("children");
+        spec.child = child("children", static_cast<int>(onceInt("gap", kPanelGap)));
         spec.collapsible = onceBool("collapsible", false);
         spec.collapsed = bindProp<bool>(ctx, node.prop("collapsed"), false, boolOf);
         if (Commands const* const commands = node.event("onToggle")) {
@@ -6266,20 +7902,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         return lowerSwitch(node, ctx);
     }
     if (kind == "tabs") {
-        Tabs spec;
-        for (DocNodePtr const& tab : node.partList("tabs")) {
-            ExprPtr const label = tab->prop("label");
-            auto const nodes = tab->nodes("children");
-            spec.tabs.push_back(Tab{.label = label ? textOf(once(ctx, label), format) : std::string{},
-                                    .node = nodes.empty() ? Node{} : lowerAll(nodes, ctx)});
-        }
-        // A document names no index, so the node keeps the user's pick itself: a bound index is the controlled one,
-        // whose page follows the pick, where a constant would move only the bar's highlight.
-        auto const picked = std::make_shared<reactive::Signal<std::size_t>>(runtime(), std::size_t{0});
-        spec.selected = [picked] { return picked->get(); };
-        spec.onSelect = [picked](std::size_t index) { picked->set(index); };
-        commonOf(node, ctx, element, spec.common);
-        return ui::tabs(std::move(spec));
+        return lowerTabs(node, ctx, element);
     }
     if (kind == "dialog" || kind == "drawer") {
         return lowerDialog(node, ctx, element);
@@ -6293,16 +7916,30 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         return lowerRows(node, ctx, element);
     }
     if (kind == "banner") {
-        Banner spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Info, toneOf), .text = textProp("text")};
+        Banner spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Info, toneOf)};
+        if (ExprPtr const spans = node.prop("spans")) {
+            spec.spans = spansProp(ctx, spans);
+        } else {
+            spec.text = textProp("text");
+        }
         spec.action = actionPart();
         spec.dismissible = onceBool("dismissible", false);
         spec.onDismiss = action("onDismiss");
+        spec.actionStyle = bannerActionStyleNamed(node.name("actionStyle")).value_or(BannerActionStyle::Ghost);
+        spec.actionStretch = node.flag("actionStretch");
         commonOf(node, ctx, element, spec.common);
         return ui::banner(std::move(spec));
     }
     if (kind == "badge") {
         Badge spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Neutral, toneOf), .text = textProp("text")};
         spec.icon = onceText("icon");
+        spec.style = node.name("style") == "outline" ? BadgeStyle::Outline : BadgeStyle::Filled;
+        spec.shape = shapeNamed(node.name("shape")).value_or(ControlShape::Default);
+        spec.mono = node.flag("mono");
+        if (Commands const* const onRemove = node.event("onRemove")) {
+            spec.onRemove = [this, ctx, onRemove] { runEvent(onRemove, ctx, Value{}); };
+            spec.removeLabel = textProp("removeLabel");
+        }
         commonOf(node, ctx, element, spec.common);
         return ui::badge(std::move(spec));
     }
@@ -6315,7 +7952,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                     return static_cast<double>(*number);
                 }
                 if (Decimal const* const number = value.asDecimal()) {
-                    return number->value.toDouble();
+                    return realOf(number->value);
                 }
                 return std::nullopt;
             });
@@ -6346,22 +7983,23 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                 std::int64_t const index = intOf(evalIn(*scope, bindings.get(), expr), -1);
                 return index < 0 ? std::nullopt : std::optional<std::size_t>{static_cast<std::size_t>(index)};
             });
+        spec.labelled = bindProp<bool>(ctx, node.prop("labelled"), true, boolOf);
         commonOf(node, ctx, element, spec.common);
         return ui::steps(std::move(spec));
     }
+    if (kind == "chart") {
+        return lowerChart(node, ctx, element);
+    }
     if (kind == "keyValue") {
         KeyValue spec;
+        spec.captions = node.name("fieldLayout") == "stacked" ? CaptionPlacement::Above : CaptionPlacement::Beside;
         spec.items = slotProp<std::vector<KeyValueItem>>(
             [this, scope = ctx.scope, bindings = ctx.bindings, expr = node.prop("items")] {
                 std::vector<KeyValueItem> out;
                 Value const items = evalIn(*scope, bindings.get(), expr);
                 if (ValueList const* const list = items.asList()) {
                     for (Value const& item : *list) {
-                        Value const* const label = item.field("label");
-                        Value const* const value = item.field("value");
-                        out.push_back(KeyValueItem{
-                            .label = label == nullptr ? std::string{} : textOf(*label, session.formatting()),
-                            .value = value == nullptr ? std::string{} : textOf(*value, session.formatting())});
+                        out.push_back(keyValueItemOf(item, expr->path));
                     }
                 }
                 return out;
@@ -6382,6 +8020,18 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                       .orientation = orientation && axisOf(once(ctx, orientation)) == Axis::Vertical
                                          ? Axis::Vertical
                                          : Axis::Horizontal};
+        // No `onResize`: a user's drag stays the splitter's own, and the document's sizes are where it starts.
+        if (ExprPtr const sizes = node.prop("sizes")) {
+            spec.sizes = bindProp<std::vector<int>>(
+                ctx, sizes, {}, [this, path = sizes->path](Value const& value, FormatContext const& /*format*/) {
+                    std::optional<std::vector<int>> parsed = splitterSizesOf(value);
+                    if (!parsed) {
+                        report(path,
+                               "sizes is " + canonicalJson(value) + "; sizes is a list of numbers, one per pane");
+                    }
+                    return std::move(parsed).value_or(std::vector<int>{});
+                });
+        }
         commonOf(node, ctx, element, spec.common);
         return ui::splitter(std::move(spec));
     }
@@ -6391,7 +8041,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             spec.onToggle = [this, ctx, commands](bool open) { runEvent(commands, ctx, Value{open}); };
         }
         spec.header = child("header");
-        spec.child = child("children");
+        spec.child = child("children", static_cast<int>(onceInt("gap", kPanelGap)));
         commonOf(node, ctx, element, spec.common);
         return ui::collapsible(std::move(spec));
     }
@@ -6924,50 +8574,61 @@ inline Node ScreenCore::lowerComposite(DocNode const& node, LowerCtx const& ctx,
 inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     Prop<bool> open = node.prop("open") ? bindProp<bool>(ctx, node.prop("open"), false, boolOf)
                                         : slotProp<bool>([element] { return element->open.get(); });
-    Node body = lazy([this, ctx, &node, element]() -> Node {
-        auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
-        inner->owner = element;
-        addPending(1);
-        inner->submitted = &element->submitted;
-        inner->showErrors = std::string{node.name("showErrors")};
-        std::vector<DocNode const*> content;
-        for (DocNodePtr const& child : node.nodes("children")) {
-            content.push_back(child.get());
-        }
-        std::vector<Commands const*> lists;
-        for (std::string_view const key : {"default", "cancel"}) {
-            if (Commands const* const commands = node.event(key)) {
-                lists.push_back(commands);
+    std::vector<DocNode const*> bodyContent;
+    for (DocNodePtr const& child : node.nodes("children")) {
+        bodyContent.push_back(child.get());
+    }
+    int const bodyGap =
+        node.prop("gap") ? static_cast<int>(intOf(once(ctx, node.prop("gap")), kDialogGap)) : kDialogGap;
+    LayoutHints const bodyHints = holderHints(bodyContent, node.scope ? &*node.scope : nullptr, ctx);
+    Node body = lazy(
+        [this, ctx, &node, element, bodyGap]() -> Node {
+            auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
+            inner->owner = element;
+            addPending(1);
+            inner->submitted = &element->submitted;
+            inner->showErrors = std::string{node.name("showErrors")};
+            std::vector<DocNode const*> content;
+            for (DocNodePtr const& child : node.nodes("children")) {
+                content.push_back(child.get());
             }
-        }
-        for (DocNodePtr const& action : node.partList("actions")) {
-            if (Commands const* const commands = action->event("onClick")) {
-                lists.push_back(commands);
+            std::vector<Commands const*> lists;
+            for (std::string_view const key : {"default", "cancel"}) {
+                if (Commands const* const commands = node.event(key)) {
+                    lists.push_back(commands);
+                }
             }
-        }
-        declare(*inner, node.scope ? &*node.scope : nullptr, content, lists);
-        element->inner.set(inner.get());
-        LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
-        std::vector<Node> children;
-        children.reserve(content.size());
-        for (DocNode const* const child : content) {
-            children.push_back(lower(*child, innerCtx));
-        }
-        // The overlay's actions end its scoped content, so they bind in its scope; the mount puts them in its footer.
-        if (ActionModels actions = lowerActionParts(node.partList("actions"), innerCtx); !actions.empty()) {
-            children.push_back(actionBarOf(std::move(actions)));
-        }
-        std::vector<KeyBinding> keys;
-        if (Commands const* const commands = node.event("default")) {
-            keys.push_back(KeyBinding{
-                .chord = "Enter", .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); }});
-        }
-        if (Commands const* const commands = node.event("cancel")) {
-            keys.push_back(KeyBinding{
-                .chord = "Esc", .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); }});
-        }
-        return holding(std::move(children), inner, std::move(keys));
-    });
+            for (DocNodePtr const& action : node.partList("actions")) {
+                if (Commands const* const commands = action->event("onClick")) {
+                    lists.push_back(commands);
+                }
+            }
+            declare(*inner, node.scope ? &*node.scope : nullptr, content, lists);
+            element->inner.set(inner.get());
+            LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
+            std::vector<Node> children;
+            children.reserve(content.size());
+            for (DocNode const* const child : content) {
+                children.push_back(lower(*child, innerCtx));
+            }
+            // The overlay's actions end its scoped content, so they bind in its scope; the mount puts them in its
+            // footer.
+            if (ActionModels actions = lowerActionParts(node.partList("actions"), innerCtx); !actions.empty()) {
+                children.push_back(actionBarOf(std::move(actions)));
+            }
+            std::vector<KeyBinding> keys;
+            if (Commands const* const commands = node.event("default")) {
+                keys.push_back(KeyBinding{.chord = "Enter", .onPress = [this, innerCtx, commands] {
+                                              runEvent(commands, innerCtx, Value{});
+                                          }});
+            }
+            if (Commands const* const commands = node.event("cancel")) {
+                keys.push_back(KeyBinding{
+                    .chord = "Esc", .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); }});
+            }
+            return holding(std::move(children), inner, std::move(keys), bodyGap);
+        },
+        bodyHints);
     Action onDismiss = [this, ctx, element, commands = node.event("onDismiss")] {
         session.asUser([&] {
             session.noteWrite();
@@ -6980,16 +8641,27 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
         Drawer spec{
             .open = std::move(open),
             .title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf),
+            .description = bindProp<std::string>(ctx, node.prop("description"), std::string{}, stringOf),
             .child = std::move(body),
             .onDismiss = std::move(onDismiss),
             .side = side && textOf(once(ctx, side), session.formatting()) == "start" ? Side::Start : Side::End};
+        if (ExprPtr const spans = node.prop("descriptionSpans")) {
+            spec.descriptionSpans = spansProp(ctx, spans);
+        }
         commonOf(node, ctx, element, spec.common);
         return ui::drawer(std::move(spec));
     }
     Dialog spec{.open = std::move(open),
                 .title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf),
+                .description = bindProp<std::string>(ctx, node.prop("description"), std::string{}, stringOf),
                 .child = std::move(body),
-                .onDismiss = std::move(onDismiss)};
+                .onDismiss = std::move(onDismiss),
+                .common = {},
+                .sheet = bindProp<bool>(ctx, node.prop("sheet"), false, boolOf),
+                .dismissLabel = bindProp<std::string>(ctx, node.prop("dismissLabel"), std::string{"Close"}, stringOf)};
+    if (ExprPtr const spans = node.prop("descriptionSpans")) {
+        spec.descriptionSpans = spansProp(ctx, spans);
+    }
     commonOf(node, ctx, element, spec.common);
     return ui::dialog(std::move(spec));
 }
@@ -7001,23 +8673,30 @@ inline Node ScreenCore::lowerSwitch(DocNode const& node, LowerCtx const& ctx) {
     for (DocNodePtr const& part : node.partList("cases")) {
         whens.push_back(part->prop("when"));
         DocNode const* const casePart = part.get();
+        std::vector<DocNode const*> caseContent;
+        for (DocNodePtr const& child : casePart->nodes("children")) {
+            caseContent.push_back(child.get());
+        }
+        LayoutHints const caseHints = holderHints(caseContent, casePart->scope ? &*casePart->scope : nullptr, ctx);
         spec.cases.push_back(SwitchCase{
             .key = Key{index++},
-            .node = lazy([this, ctx, casePart]() -> Node {
-                auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
-                std::vector<DocNode const*> content;
-                for (DocNodePtr const& child : casePart->nodes("children")) {
-                    content.push_back(child.get());
-                }
-                declare(*inner, casePart->scope ? &*casePart->scope : nullptr, content, {});
-                LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
-                std::vector<Node> children;
-                children.reserve(content.size());
-                for (DocNode const* const child : content) {
-                    children.push_back(lower(*child, innerCtx));
-                }
-                return holding(std::move(children), inner);
-            })});
+            .node = lazy(
+                [this, ctx, casePart]() -> Node {
+                    auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
+                    std::vector<DocNode const*> content;
+                    for (DocNodePtr const& child : casePart->nodes("children")) {
+                        content.push_back(child.get());
+                    }
+                    declare(*inner, casePart->scope ? &*casePart->scope : nullptr, content, {});
+                    LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
+                    std::vector<Node> children;
+                    children.reserve(content.size());
+                    for (DocNode const* const child : content) {
+                        children.push_back(lower(*child, innerCtx));
+                    }
+                    return holding(std::move(children), inner);
+                },
+                caseHints)});
     }
     spec.selector = slotProp<Key>(
         [scope = ctx.scope, bindings = ctx.bindings, selected = node.prop("on"), whens = std::move(whens)] {
@@ -7035,10 +8714,114 @@ inline Node ScreenCore::lowerSwitch(DocNode const& node, LowerCtx const& ctx) {
     return ui::switchOf(std::move(spec));
 }
 
+// The tab a bound `selected` names. A value that names no tab shows the first, and is reported once.
+inline Prop<std::size_t> ScreenCore::controlledTabSelection(DocNode const& node, LowerCtx const& ctx,
+                                                            ExprPtr const& selected,
+                                                            std::shared_ptr<std::vector<std::string>> const& ids) {
+    auto const unknownReported = std::make_shared<bool>(false);
+    return Prop<std::size_t>{[this, scope = ctx.scope, bindings = ctx.bindings, selected, ids, unknownReported,
+                              path = pointerAppend(node.path, "selected")]() -> std::size_t {
+        Value const value = evalIn(*scope, bindings.get(), selected);
+        std::string const* const named = value.asString();
+        auto const found = named == nullptr ? ids->end() : std::ranges::find(*ids, *named);
+        if (found != ids->end()) {
+            return static_cast<std::size_t>(std::distance(ids->begin(), found));
+        }
+        if (!*unknownReported) {
+            *unknownReported = true;
+            report(path, canonicalJson(value) + " names no tab; the first is shown");
+        }
+        return 0;
+    }};
+}
+
+// A document names tabs by id; the view tree by index, so the ids map to indices once. A bound `selected` is the
+// controlled index: a pick runs `onChoose` and the page follows `selected` alone. Without it the node keeps the
+// user's pick itself, as a bound index too, whose page follows the pick: a constant would move only the highlight.
+inline Node ScreenCore::lowerTabs(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    Tabs spec;
+    auto ids = std::make_shared<std::vector<std::string>>();
+    for (DocNodePtr const& tab : node.partList("tabs")) {
+        auto const nodes = tab->nodes("children");
+        ids->push_back(tab->id);
+        spec.tabs.push_back(Tab{.label = bindProp<std::string>(ctx, tab->prop("label"), std::string{}, stringOf),
+                                .node = nodes.empty() ? Node{} : lowerAll(nodes, ctx)});
+    }
+    spec.moreLabel = bindProp<std::string>(ctx, node.prop("moreLabel"), std::string{"More"}, stringOf);
+    if (ExprPtr const inset = node.prop("inset")) {
+        spec.inset = static_cast<int>(intOf(once(ctx, inset), 0));
+    }
+    if (ExprPtr const pageInset = node.prop("pageInset")) {
+        spec.pageInset = static_cast<int>(intOf(once(ctx, pageInset), 0));
+    }
+    spec.stripSurface = std::string{node.name("stripSurface")};
+    ExprPtr const selected = node.prop("selected");
+    Commands const* const onChoose = node.event("onChoose");
+    bool const controlled = selected && (selected->kind != ExprKind::Literal || !selected->literal.isNull());
+    auto const picked = std::make_shared<reactive::Signal<std::size_t>>(runtime(), std::size_t{0});
+    spec.selected = controlled ? controlledTabSelection(node, ctx, selected, ids)
+                               : Prop<std::size_t>{[picked] { return picked->get(); }};
+    spec.onSelect = [this, ctx, onChoose, ids, picked, controlled, element](std::size_t index) {
+        if (!controlled) {
+            picked->set(index);
+            if (element != nullptr && index < ids->size()) {
+                element->draft.set(Value{ids->at(index)});
+            }
+        }
+        if (onChoose != nullptr && index < ids->size()) {
+            runEvent(onChoose, ctx, Value{ids->at(index)});
+        }
+    };
+    commonOf(node, ctx, element, spec.common);
+    return ui::tabs(std::move(spec));
+}
+
+// Focuses the declaration the command's target resolved to: of several candidates (cases of one switch), the one
+// that is mounted. Each candidate is keyed by the command's own enclosing row keys, as many as enclose the
+// candidate; with `row`, the innermost of them is the row's key instead.
+inline bool ScreenCore::focusTarget(Command const& command, RtScope const& scope, Bindings const* bindings) {
+    if (!focusElement) {
+        return false;
+    }
+    auto const found = _doc->focusTargets.find(command.path);
+    if (found == _doc->focusTargets.end()) {
+        return focusElement(command.target);
+    }
+    FocusPlace const place = focusPlace(scope);
+    std::optional<std::string> row;
+    if (found->second.row) {
+        Value const value = evalIn(scope, bindings, command.extra);
+        if (value.isNull()) {
+            return false;
+        }
+        row = canonicalJson(valueOfKey(keyOf(value)));
+    }
+    for (FocusCandidate const& candidate : found->second.candidates) {
+        std::size_t const kept = row ? candidate.rows - 1 : candidate.rows;
+        if (candidate.rows == 0 && row) {
+            continue;
+        }
+        if (kept > place.rows.size()) {
+            continue;
+        }
+        FocusPlace candidatePlace{
+            .prefix = place.prefix,
+            .rows = {place.rows.begin(), std::next(place.rows.begin(), static_cast<std::ptrdiff_t>(kept))}};
+        if (row) {
+            candidatePlace.rows.push_back(*row);
+        }
+        if (focusElement(focusKey(candidatePlace, candidate.path))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 inline std::shared_ptr<RtScope> ScreenCore::rowScope(DocNode const& node, LowerCtx const& ctx,
                                                      reactive::Signal<Value> const& row,
-                                                     std::vector<DocNode const*> const& content) {
+                                                     std::vector<DocNode const*> const& content, std::string key) {
     auto scope = std::make_shared<RtScope>(*this, ctx.scope, &row, ctx.scope->nodes.depth() + 2);
+    scope->rowKey = std::move(key);
     declare(*scope, node.scope ? &*node.scope : nullptr, content, {});
     return scope;
 }
@@ -7050,12 +8833,15 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         report(node.path, "a model-backed `table` needs the table engine, which this interpreter does not lower yet");
         return ui::text(Text{.text = std::string{"table"}, .role = TextRole::Muted});
     }
-    auto rows = [scope = ctx.scope, bindings = ctx.bindings, rowsExpr] {
+    std::function<std::vector<Value>()> rows = [scope = ctx.scope, bindings = ctx.bindings, rowsExpr] {
         Value const value = evalIn(*scope, bindings.get(), rowsExpr);
         ValueList const* const items = value.asList();
         return items == nullptr ? std::vector<Value>{} : std::vector<Value>{items->begin(), items->end()};
     };
     auto keyFn = [scope = ctx.scope, bindings = ctx.bindings, keyExpr = node.prop("key")](Value const& row) -> Key {
+        if (Value const* const heading = row.field(kGroupHeadingField); heading != nullptr && heading->asString()) {
+            return Key{*heading->asString()};
+        }
         if (!keyExpr) {
             Value const rowKey = rowId(row);
             return keyOf(rowKey.isNull() ? row : rowKey);
@@ -7068,8 +8854,9 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         for (DocNodePtr const& child : node.nodes("children")) {
             content.push_back(child.get());
         }
-        auto rowView = [this, ctx, &node, content](reactive::Signal<Value> const& row) -> Node {
-            auto scope = rowScope(node, ctx, row, content);
+        auto rowView = [this, ctx, &node, content, keyFn](reactive::Signal<Value> const& row) -> Node {
+            std::string key = runtime().untracked([&] { return canonicalJson(valueOfKey(keyFn(row.peek()))); });
+            auto scope = rowScope(node, ctx, row, content, std::move(key));
             LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
             std::vector<Node> children;
             children.reserve(content.size());
@@ -7080,9 +8867,48 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
         };
         ExprPtr const axis = node.prop("axis");
         ExprPtr const gap = node.prop("gap");
-        return ui::forEach<Value>(std::move(rows), std::move(keyFn), std::move(rowView),
-                                  axis ? axisOf(once(ctx, axis)) : Axis::Vertical,
-                                  gap ? static_cast<int>(intOf(once(ctx, gap), 0)) : 0);
+        Common common;
+        commonOf(node, ctx, element, common);
+        Axis const along = axis ? axisOf(once(ctx, axis)) : Axis::Vertical;
+        bool wrap = node.flag("wrap");
+        if (wrap && along != Axis::Horizontal) {
+            // Only a computed axis gets here: the loader refuses a literal one that is not horizontal.
+            report(node.path + "/wrap",
+                   "`wrap` fills lines along a row; this `forEach`'s `axis` is not \"horizontal\"");
+            wrap = false;
+        }
+        bool divided = node.flag("divided");
+        if (divided && along != Axis::Vertical) {
+            report(node.path + "/divided",
+                   "`divided` draws rules between rows of a column; this `forEach`'s `axis` is \"horizontal\"");
+            divided = false;
+        }
+        return ui::forEach<Value>(std::move(rows), std::move(keyFn), std::move(rowView), along,
+                                  gap ? static_cast<int>(intOf(once(ctx, gap), 0)) : 0, common, wrap, divided);
+    }
+    // The table's rows, sorted: the element's own view, which its element values read too, unless names bound
+    // where the table is lowered (a component's `props`) reach its rows, which the element cannot see.
+    reactive::Computed<TableView> const* view = element == nullptr ? nullptr : element->view;
+    if (view != nullptr && ctx.bindings != nullptr && !ctx.bindings->empty()) {
+        view = &ctx.scope->nodes.computed(
+            [this, element, bindings = ctx.bindings] { return tableView(*element, bindings.get()); });
+    }
+    if (view != nullptr) {
+        // The page's rows, each group's heading entry before the first of its rows the page holds, so a group split
+        // across pages gets its heading on both.
+        rows = [view] {
+            TableView const& shown = view->get();
+            std::vector<Value> entries;
+            entries.reserve(shown.last - shown.first);
+            for (std::size_t index = shown.first; index < shown.last; ++index) {
+                if (!shown.runOf.empty() &&
+                    (index == shown.first || shown.runOf.at(index) != shown.runOf.at(index - 1))) {
+                    entries.push_back(shown.runs.at(shown.runOf.at(index)));
+                }
+                entries.push_back(shown.rows.at(index));
+            }
+            return entries;
+        };
     }
     std::vector<TableColumn> columns;
     std::vector<DocNode const*> cells;
@@ -7092,28 +8918,63 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     // that outlives this function) so the default-cell closure can apply each column's role to its generated cell.
     std::vector<TextRole> roles;
     FormatContext const& format = session.formatting();
+    // The table's `valign` is the default of every column that gives none; the loader checked both names.
+    Align const tableValign = cellPlaceNamed(node.name("valign")).value_or(Align::Center);
     if (ExprPtr const derived = node.prop("columns")) {
         Value const list = once(ctx, derived);
+        // A computed place that names none is reported once for the table, whichever column and key it was.
+        bool placeReported = false;
+        auto const placeOf = [&](Value const& item, std::string_view key, Align fallback) {
+            Value const* const given = item.field(key);
+            if (given == nullptr || given->isNull()) {
+                return fallback;
+            }
+            std::string const* const name = given->asString();
+            std::optional<Align> const placed = name == nullptr ? std::nullopt : cellPlaceNamed(*name);
+            if (!placed && !placeReported) {
+                placeReported = true;
+                report(derived->path, "a column's `" + std::string{key} + "` is " + canonicalJson(*given) +
+                                          "; a cell's place is start, center or end");
+            }
+            return placed.value_or(fallback);
+        };
         if (ValueList const* const items = list.asList()) {
             for (Value const& item : *items) {
                 Value const* const field = item.field("id");
                 Value const* const label = item.field("label");
                 fields.push_back(field == nullptr ? std::string{} : textOf(*field, format));
                 columns.push_back(
-                    TableColumn{.label = textOf(label != nullptr ? *label : Value{fields.back()}, format)});
+                    TableColumn{.label = textOf(label != nullptr ? *label : Value{fields.back()}, format),
+                                .align = placeOf(item, "align", Align::Start),
+                                .valign = placeOf(item, "valign", tableValign)});
                 cells.push_back(nullptr);
                 roles.push_back(TextRole::Normal);
             }
         }
     }
+    // A part's column index, which a header click reports, counts the derived columns before it.
+    std::size_t const derivedCount = columns.size();
     for (DocNodePtr const& part : node.partList("columns")) {
         ExprPtr const label = part->prop("label");
         ExprPtr const width = part->prop("width");
         ExprPtr const role = part->prop("role");
-        TextRole const columnRole = role ? roleOf(once(ctx, role), format) : TextRole::Normal;
+        TextRole columnRole = TextRole::Normal;
+        if (role) {
+            // Read once, with the rest of the column; a value that names no role is reported, as a text's is.
+            Value const value = once(ctx, role);
+            std::optional<TextRole> const named = roleNamed(textOf(value, format));
+            if (!named) {
+                report(role->path, "role is " + canonicalJson(value) + "; " + std::string{kRoleNames});
+            }
+            columnRole = named.value_or(TextRole::Normal);
+        }
         columns.push_back(TableColumn{.label = label ? textOf(once(ctx, label), format) : std::string{},
                                       .width = width ? sizingOf(once(ctx, width)) : Sizing::content(),
-                                      .role = columnRole});
+                                      .role = columnRole,
+                                      .align = cellPlaceNamed(part->name("align")).value_or(Align::Start),
+                                      .valign = cellPlaceNamed(part->name("valign")).value_or(tableValign),
+                                      .sortable = part->flag("sortable"),
+                                      .wrap = part->flag("wrap", true)});
         cells.push_back(part.get());
         fields.emplace_back(part->id);
         roles.push_back(columnRole);
@@ -7123,6 +8984,10 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     auto toneReported = std::make_shared<bool>(false);
     auto cellsOf = [this, ctx, &node, cells, fields, roles, registry, keyFn,
                     toneReported](reactive::Signal<Value> const& row) {
+        if (row.peek().field(kGroupHeadingField) != nullptr) {
+            return headingRow(node, ctx, row,
+                              runtime().untracked([&] { return canonicalJson(valueOfKey(keyFn(row.peek()))); }));
+        }
         std::vector<DocNode const*> content;
         for (DocNode const* const column : cells) {
             if (column != nullptr) {
@@ -7131,8 +8996,9 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                 }
             }
         }
-        auto scope = rowScope(node, ctx, row, content);
-        (*registry)[canonicalJson(valueOfKey(keyFn(row.peek())))] = scope;
+        std::string key = runtime().untracked([&] { return canonicalJson(valueOfKey(keyFn(row.peek()))); });
+        auto scope = rowScope(node, ctx, row, content, key);
+        (*registry)[std::move(key)] = scope;
         LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
         std::vector<Node> out;
         for (std::size_t index = 0; index < cells.size(); ++index) {
@@ -7150,19 +9016,30 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                                         .role = roles.at(index)}));
         }
         if (!out.empty()) {
-            out.front() = holding({out.front()}, scope);
+            // The row's first cell owns the row's scope, which lives as long as the row's node: a cell is placed by
+            // its column, so the scope is not held by a wrapping container, which the column would place instead.
+            auto owner = std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(out.front(), scope);
+            out.front() = Node{owner, owner->first.get()};
         }
-        TableRowView view{.cells = std::move(out), .tone = std::nullopt};
+        TableRowView rowView{.cells = std::move(out), .tone = std::nullopt};
+        // The row's name, in its own scope: what its select box and assistive technology read.
+        if (ExprPtr const labelExpr = node.prop("rowLabel")) {
+            rowView.label = bindProp<std::string>(rowCtx, labelExpr, std::string{}, stringOf);
+        }
         if (ExprPtr const toneExpr = node.prop("rowTone")) {
-            view.tone = slotProp<std::optional<Tone>>(
+            rowView.tone = slotProp<std::optional<Tone>>(
                 [this, scope, bindings = ctx.bindings, toneExpr, toneReported]() -> std::optional<Tone> {
                     return rowToneOf(evalIn(*scope, bindings.get(), toneExpr), toneExpr->path, *toneReported);
                 });
         }
-        return view;
+        return rowView;
     };
     TableOptions options;
-    options.showHeader = node.prop("showHeader") ? boolOf(once(ctx, node.prop("showHeader")), format) : true;
+    options.showHeader = node.flag("showHeader", true);
+    options.selectColumn = node.flag("selectColumn");
+    if (ExprPtr const selectAll = node.prop("selectAllLabel")) {
+        options.selectAllLabel = bindProp<std::string>(ctx, selectAll, std::string{}, stringOf);
+    }
     if (ExprPtr const threshold = node.prop("virtualizeThreshold")) {
         options.virtualize.threshold =
             static_cast<std::size_t>(std::max<std::int64_t>(0, intOf(once(ctx, threshold), 2000)));
@@ -7179,23 +9056,107 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     } else if (mode == "multiple") {
         options.selectionMode = SelectionMode::Multiple;
     }
-    options.selection = slotProp<std::vector<Key>>([element] {
+    // The selection the table shows: the bound `selection`, or the table's own. A slot even for a literal list, so
+    // a bound selection is fixed until the document writes it, and a user's change the document leaves unwritten
+    // snaps back. A bound value that is neither a list nor `null` is reported once.
+    auto selectionReported = std::make_shared<bool>(false);
+    options.selection = slotProp<std::vector<Key>>([this, element, selectionReported, path = node.path] {
         std::vector<Key> keys;
-        if (ValueList const* const items = element->selection.get().asList()) {
+        if (element->bound != nullptr) {
+            Value const bound = element->bound->get();
+            if (!bound.isNull() && bound.asList() == nullptr && !*selectionReported) {
+                *selectionReported = true;
+                report(pointerAppend(path, "selection"),
+                       "selection is " + canonicalJson(bound) + "; a table's selection is a list of keys");
+            }
+        }
+        Value const selection = tableSelection(*element);
+        if (ValueList const* const items = selection.asList()) {
             for (Value const& item : *items) {
                 keys.push_back(keyOf(item));
             }
         }
         return keys;
     });
-    options.onSelectionChange = [this, element](std::vector<Key> const& keys) {
+    // A user's change: the table's own selection takes it when no key binds one, then `onSelectionChange` runs with
+    // `event` the new selection, in the table's scope, in the same batch. The backend holds one page: a `Replace`
+    // is the whole new selection, and an `Extend` keeps the selected keys of the rows on other pages, before the
+    // reported ones. A key whose row `rows` no longer has drops on any user change.
+    options.onSelectionChange = [this, ctx, element, view, keyFn, commands = node.event("onSelectionChange")](
+                                    std::vector<Key> const& keys, SelectionChange change) {
         ValueList items;
+        if (change == SelectionChange::Extend && view != nullptr) {
+            items = runtime().untracked([&] { return selectedOffPage(view->get(), tableSelection(*element), keyFn); });
+        }
+        // A heading is never selected. A virtualized backend knows the keys of rows it has not realized but not
+        // which of them are headings, so its Ctrl+A or range can name one.
         for (Key const& key : keys) {
+            if (std::string const* const text = std::get_if<std::string>(&key);
+                text != nullptr && text->starts_with("\x1Fgroup:")) {
+                continue;
+            }
             items.push_back(valueOfKey(key));
         }
-        session.asUser([&] {
-            session.noteWrite();
-            element->selection.set(Value{std::move(items)});
+        Value const selected{std::move(items)};
+        runtime().batch([&] {
+            if (element->bound == nullptr) {
+                session.asUser([&] {
+                    session.noteWrite();
+                    element->selection.set(selected);
+                });
+            }
+            runEvent(commands, ctx, selected);
+        });
+    };
+    // The header marks the sort's first key; a sort that names no sortable column marks none.
+    auto const columnIndex = [&node, derivedCount](std::string_view columnId) -> std::optional<std::size_t> {
+        auto const parts = node.partList("columns");
+        auto const found =
+            std::ranges::find_if(parts, [columnId](DocNodePtr const& part) { return part->id == columnId; });
+        if (found == parts.end()) {
+            return std::nullopt;
+        }
+        return derivedCount + static_cast<std::size_t>(std::distance(parts.begin(), found));
+    };
+    options.sort = slotProp<std::optional<TableSort>>([element, &node, columnIndex]() -> std::optional<TableSort> {
+        std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, tableSort(*element));
+        if (!keys || keys->empty()) {
+            return std::nullopt;
+        }
+        std::optional<std::size_t> const index = columnIndex(keys->front().column->id);
+        if (!index) {
+            return std::nullopt;
+        }
+        return TableSort{.column = *index,
+                         .direction = keys->front().descending ? SortDirection::Descending : SortDirection::Ascending};
+    });
+    // A header click makes its column the single key: descending when it already is the first key ascending,
+    // ascending otherwise. The table's own sort takes it when no key binds one, then `onSortChange` runs with
+    // `event` the new sort.
+    options.onSort = [this, ctx, element, &node, derivedCount,
+                      commands = node.event("onSortChange")](std::size_t index) {
+        auto const parts = node.partList("columns");
+        if (index < derivedCount || index - derivedCount >= parts.size() ||
+            !parts.subspan(index - derivedCount).front()->flag("sortable")) {
+            return;
+        }
+        std::string const& columnId = parts.subspan(index - derivedCount).front()->id;
+        Value const current = runtime().untracked([&] { return tableSort(*element); });
+        std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, current);
+        bool const descending =
+            keys && !keys->empty() && keys->front().column->id == columnId && !keys->front().descending;
+        ValueRecord key;
+        key.insert_or_assign("column", Value{columnId});
+        key.insert_or_assign("direction", Value{std::string{descending ? "desc" : "asc"}});
+        Value const next{ValueList{Value{std::move(key)}}};
+        runtime().batch([&] {
+            if (element->sortBound == nullptr) {
+                session.asUser([&] {
+                    session.noteWrite();
+                    element->sort.set(next);
+                });
+            }
+            runEvent(commands, ctx, next);
         });
     };
     options.onActivate = [this, ctx, element, registry, commands = node.event("onActivate")](Key const& key) {
@@ -7235,10 +9196,55 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     return ui::column(std::move(wrapper));
 }
 
-inline std::optional<Tone> ScreenCore::rowToneOf(Value const& value, std::string const& path, bool& noted) {
-    if (value.isNull()) {
+inline TableRowView ScreenCore::headingRow(DocNode const& node, LowerCtx const& ctx,
+                                           reactive::Signal<Value> const& row, std::string key) {
+    auto const heading = node.partList("group").front()->nodes("heading");
+    std::vector<DocNode const*> content;
+    content.reserve(heading.size());
+    for (DocNodePtr const& child : heading) {
+        content.push_back(child.get());
+    }
+    auto scope = rowScope(node, ctx, row, content, std::move(key));
+    LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
+    // The cell owns the heading's scope, for as long as the row's node lives, as a data row's first cell does.
+    auto owner = std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(lowerAll(heading, rowCtx), scope);
+    return TableRowView{.cells = {Node{owner, owner->first.get()}}, .tone = std::nullopt, .heading = true};
+}
+
+inline Node ScreenCore::lowerChart(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    Chart spec;
+    spec.data = slotProp<ChartData>(
+        [this, &node, scope = ctx.scope, bindings = ctx.bindings] { return chartData(node, *scope, bindings.get()); });
+    commonOf(node, ctx, element, spec.common);
+    return ui::chart(std::move(spec));
+}
+
+inline std::optional<math::Rational> ScreenCore::chartMagnitude(Value const& value, std::string const& path,
+                                                                std::optional<std::string>& unit) {
+    std::optional<Number> const number = numeric(value);
+    if (!number) {
+        report(path, "a chart value is a number or a quantity; this one is left out");
         return std::nullopt;
     }
+    std::string const own = number->unit != nullptr ? *number->unit : std::string{};
+    if (!unit) {
+        unit = own;
+        return number->value;
+    }
+    if (*unit == own) {
+        return number->value;
+    }
+    std::optional<math::Rational> converted;
+    if (!own.empty() && !unit->empty()) {
+        converted = convertUnit(number->value, own, *unit, session.formatting().units);
+    }
+    if (!converted) {
+        report(path, "a chart value does not convert to the unit of the chart's first value; it is left out");
+    }
+    return converted;
+}
+
+inline std::optional<Tone> ScreenCore::chartToneOf(Value const& value, std::string const& path) {
     static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {{
         {"neutral", Tone::Neutral},
         {"info", Tone::Info},
@@ -7246,14 +9252,284 @@ inline std::optional<Tone> ScreenCore::rowToneOf(Value const& value, std::string
         {"warn", Tone::Warn},
         {"err", Tone::Err},
     }};
+    if (value.isNull()) {
+        return std::nullopt;
+    }
     if (std::string const* const text = value.asString()) {
-        // A loop, not std::ranges::find: an array's iterator is a pointer on some standard libraries and not on
-        // others, so `auto` there reads differently to each.
         for (auto const& [name, tone] : kTones) {
             if (name == *text) {
                 return tone;
             }
         }
+    }
+    report(path, "a chart tone is neutral, info, ok, warn or err; this one marks nothing");
+    return std::nullopt;
+}
+
+inline std::optional<math::Rational> ScreenCore::chartPosition(Value const& value, std::string const& path,
+                                                               detail::ChartAxisKinds& kinds) {
+    if (value.isNull()) {
+        return std::nullopt;
+    }
+    if (std::optional<Number> const number = numeric(value)) {
+        kinds.numbers = true;
+        return number->value;
+    }
+    if (std::optional<time::DateTime> const instant =
+            dateInstantOf(value, session.formatting().utcOffsetMinutes).instant) {
+        kinds.instants = true;
+        return math::Rational{instant->value.time_since_epoch().count(), math::DecimalPlaces{0}};
+    }
+    report(path, "a chart's `x` is a number, a date or an instant; this point is left out");
+    return std::nullopt;
+}
+
+inline std::vector<detail::ChartRawPoint> ScreenCore::chartPoints(DocNode const& series, RtScope const& scope,
+                                                                  Bindings const* bindings,
+                                                                  std::optional<std::string>& unit,
+                                                                  detail::ChartAxisKinds& kinds) {
+    // A chart is a picture of a few hundred values; a larger set is a table's.
+    static constexpr std::size_t kMaxPoints = 1000;
+    FormatContext const& format = session.formatting();
+    ExprPtr const pointsExpr = series.prop("points");
+    Value const listed = evalIn(scope, bindings, pointsExpr);
+    ValueList const* const list = listed.asList();
+    if (list == nullptr) {
+        // `null` is a query still loading, and draws as empty without a word.
+        if (!listed.isNull()) {
+            report(pointsExpr->path, "`points` is a list; the series draws as empty");
+        }
+        return {};
+    }
+    std::size_t const first = list->size() > kMaxPoints ? list->size() - kMaxPoints : 0;
+    if (first > 0) {
+        report(pointsExpr->path, "a series draws its last 1000 points");
+    }
+    ExprPtr const yExpr = series.prop("y");
+    ExprPtr const xExpr = series.prop("x");
+    ExprPtr const labelExpr = series.prop("xLabel");
+    ExprPtr const toneExpr = series.prop("tone");
+    ExprPtr const noteExpr = series.prop("note");
+    std::vector<detail::ChartRawPoint> points;
+    for (std::size_t index = first; index < list->size(); ++index) {
+        ScopeEnv const env{scope, bindings, &list->at(index)};
+        detail::ChartRawPoint point{.index = index};
+        if (xExpr) {
+            point.x = chartPosition(evaluate(*xExpr, env), xExpr->path, kinds);
+            if (!point.x) {
+                continue;
+            }
+        }
+        Value const value = evaluate(*yExpr, env);
+        if (!value.isNull()) {
+            point.y = chartMagnitude(value, yExpr->path, unit);
+            if (!point.y) {
+                continue;
+            }
+        }
+        point.xLabel = labelExpr ? textOf(evaluate(*labelExpr, env), format) : std::string{};
+        point.note = noteExpr ? textOf(evaluate(*noteExpr, env), format) : std::string{};
+        point.tone = toneExpr ? chartToneOf(evaluate(*toneExpr, env), toneExpr->path) : std::nullopt;
+        points.push_back(std::move(point));
+    }
+    return points;
+}
+
+/// @brief A chart's exact value at @p places, as the active locale writes it.
+/// @param value  The value.
+/// @param places The places, at most 18.
+/// @param format The formatting facts.
+/// @return The text; the exact JSON when the rounded value does not fit.
+[[nodiscard]] inline std::string chartNumberText(math::Rational const& value, std::uint32_t places,
+                                                 FormatContext const& format) {
+    std::optional<math::Rational> rounded =
+        math::checkedRoundToDecimalPlaces(value, math::DecimalPlaces{places}, math::RoundingMode::HalfEven);
+    if (!rounded) {
+        return textOf(Value{Decimal{value}}, format);
+    }
+    rounded->decimalPlaces = math::DecimalPlaces{places};
+    return textOf(Value{Decimal{*rounded}}, format);
+}
+
+/// @brief A reference line's stroke by its document name.
+/// @param name `solid`, `dashed`, `dotted`, or empty for solid; the loader refuses any other.
+/// @return The stroke.
+[[nodiscard]] inline ChartLineStyle chartLineStyle(std::string_view name) {
+    if (name == "dashed") {
+        return ChartLineStyle::Dashed;
+    }
+    return name == "dotted" ? ChartLineStyle::Dotted : ChartLineStyle::Solid;
+}
+
+/// @brief Where a point sits along a value axis that a document may have fixed, and on which side it is clipped.
+/// @param value The point's value.
+/// @param range The axis.
+/// @return The value drawn, the axis end for a value outside, and the side it lies beyond.
+[[nodiscard]] inline std::pair<math::Rational, ChartClip> chartClipped(math::Rational const& value,
+                                                                       ChartRange const& range) {
+    if (value < range.low) {
+        return {range.low, ChartClip::Below};
+    }
+    if (value > range.high) {
+        return {range.high, ChartClip::Above};
+    }
+    return {value, ChartClip::None};
+}
+
+inline std::vector<detail::ChartRawLine> ScreenCore::chartLines(DocNode const& node, RtScope const& scope,
+                                                                Bindings const* bindings,
+                                                                std::optional<std::string>& unit) {
+    FormatContext const& format = session.formatting();
+    std::vector<detail::ChartRawLine> lines;
+    for (DocNodePtr const& part : node.partList("lines")) {
+        ExprPtr const valueExpr = part->prop("value");
+        Value const value = evalIn(scope, bindings, valueExpr);
+        std::optional<math::Rational> const magnitude =
+            value.isNull() ? std::nullopt : chartMagnitude(value, valueExpr->path, unit);
+        if (!magnitude) {
+            continue;
+        }
+        detail::ChartRawLine line{.value = *magnitude, .label = std::nullopt};
+        if (ExprPtr const label = part->prop("label")) {
+            line.label = textOf(evalIn(scope, bindings, label), format);
+        }
+        if (ExprPtr const tone = part->prop("tone")) {
+            line.tone = chartToneOf(evalIn(scope, bindings, tone), tone->path).value_or(Tone::Neutral);
+        }
+        line.style = detail::chartLineStyle(part->name("style"));
+        lines.push_back(std::move(line));
+    }
+    return lines;
+}
+
+inline ChartRange ScreenCore::chartFixedRange(DocNode const& node, RtScope const& scope, Bindings const* bindings,
+                                              std::optional<std::string>& unit, ChartRange const& range) {
+    ChartRange fixed = range;
+    for (auto const& [key, end] : {std::pair{"yMin", &fixed.low}, std::pair{"yMax", &fixed.high}}) {
+        if (ExprPtr const expr = node.prop(key)) {
+            Value const value = evalIn(scope, bindings, expr);
+            if (!value.isNull()) {
+                *end = chartMagnitude(value, expr->path, unit).value_or(*end);
+            }
+        }
+    }
+    if (fixed.high > fixed.low) {
+        return fixed;
+    }
+    report(pointerAppend(node.path, "yMin"), "`yMin` is not below `yMax`; the chart takes its range from its values");
+    return range;
+}
+
+inline void ScreenCore::chartSeries(ChartData& data, DocNode const& node, RtScope const& scope,
+                                    Bindings const* bindings, std::vector<std::vector<detail::ChartRawPoint>>& series,
+                                    bool positioned, ChartRange const& range) const {
+    auto const positionOf = [positioned](detail::ChartRawPoint const& point) {
+        return positioned && point.x ? *point.x
+                                     : math::Rational{static_cast<std::int64_t>(point.index), math::DecimalPlaces{0}};
+    };
+    std::vector<math::Rational> positions;
+    for (auto const& points : series) {
+        std::ranges::transform(points, std::back_inserter(positions), positionOf);
+    }
+    if (std::optional<ChartRange> const across = chartRange(positions, 0)) {
+        data.xMin = realOf(across->low);
+        data.xMax = realOf(across->high);
+    }
+    std::size_t index = 0;
+    for (DocNodePtr const& part : node.partList("series")) {
+        ChartSeries drawn;
+        if (ExprPtr const label = part->prop("label")) {
+            drawn.label = textOf(evalIn(scope, bindings, label), session.formatting());
+        }
+        drawn.joined = !part->flags.contains("joined") || part->flag("joined");
+        for (detail::ChartRawPoint& point : series.at(index)) {
+            ChartPoint out{.x = realOf(positionOf(point)),
+                           .y = std::nullopt,
+                           .clip = ChartClip::None,
+                           .xLabel = std::move(point.xLabel),
+                           .tone = point.tone,
+                           .note = std::move(point.note)};
+            if (point.y) {
+                auto const [shown, clip] = detail::chartClipped(*point.y, range);
+                out.y = realOf(shown);
+                out.clip = clip;
+            }
+            drawn.points.push_back(std::move(out));
+        }
+        data.series.push_back(std::move(drawn));
+        ++index;
+    }
+}
+
+inline ChartData ScreenCore::chartData(DocNode const& node, RtScope const& scope, Bindings const* bindings) {
+    FormatContext const& format = session.formatting();
+    ChartData data;
+    data.summary = textOf(evalIn(scope, bindings, node.prop("summary")), format);
+    if (ExprPtr const label = node.prop("yLabel")) {
+        data.yLabel = textOf(evalIn(scope, bindings, label), format);
+    }
+    std::optional<std::string> unit;
+    detail::ChartAxisKinds kinds;
+    std::vector<std::vector<detail::ChartRawPoint>> series;
+    for (DocNodePtr const& part : node.partList("series")) {
+        series.push_back(chartPoints(*part, scope, bindings, unit, kinds));
+    }
+    std::vector<detail::ChartRawLine> const lines = chartLines(node, scope, bindings, unit);
+    // The values the axis must hold, and the places they are shown at.
+    std::vector<math::Rational> values;
+    for (auto const& points : series) {
+        for (detail::ChartRawPoint const& point : points) {
+            if (point.y) {
+                values.push_back(*point.y);
+            }
+        }
+    }
+    std::ranges::transform(lines, std::back_inserter(values), &detail::ChartRawLine::value);
+    std::uint32_t widest = 0;
+    for (math::Rational const& value : values) {
+        widest = std::max(widest, value.decimalPlaces.value);
+    }
+    ExprPtr const placesExpr = node.prop("yPlaces");
+    std::int64_t const* const fixedPlaces = placesExpr ? placesExpr->literal.asInt() : nullptr;
+    std::uint32_t const places = fixedPlaces != nullptr ? static_cast<std::uint32_t>(*fixedPlaces) : widest;
+    std::optional<ChartRange> const computed = chartRange(values, places);
+    if (!computed) {
+        report(node.path, "the chart's values overflow its arithmetic; it draws nothing");
+        return data;
+    }
+    ChartRange const range = chartFixedRange(node, scope, bindings, unit, *computed);
+    data.yMin = realOf(range.low);
+    data.yMax = realOf(range.high);
+    // Three or more lines are the scale a reader reads the chart against; fewer leave the values without one.
+    std::optional<ChartTicks> const ticks = lines.size() < 3 ? chartTicks(range) : std::nullopt;
+    if (ticks) {
+        std::uint32_t const tickPlaces = std::max(places, ticks->places);
+        for (math::Rational const& tick : ticks->values) {
+            data.yTicks.push_back(
+                ChartTick{.value = realOf(tick), .text = detail::chartNumberText(tick, tickPlaces, format)});
+        }
+    }
+    for (detail::ChartRawLine const& line : lines) {
+        data.lines.push_back(
+            ChartLine{.value = realOf(line.value),
+                      .label = line.label.value_or(detail::chartNumberText(line.value, places, format)),
+                      .tone = line.tone,
+                      .style = line.style});
+    }
+    if (kinds.numbers && kinds.instants) {
+        report(pointerAppend(node.path, "series"),
+               "a chart's `x` values are all numbers or all dates and instants; the points are spaced by index");
+    }
+    chartSeries(data, node, scope, bindings, series, kinds.numbers != kinds.instants, range);
+    return data;
+}
+
+inline std::optional<Tone> ScreenCore::rowToneOf(Value const& value, std::string const& path, bool& noted) {
+    if (value.isNull()) {
+        return std::nullopt;
+    }
+    if (std::optional<Tone> const tone = toneNamed(value)) {
+        return tone;
     }
     if (!noted) {
         noted = true;
@@ -7371,6 +9647,7 @@ inline Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
                     return Value{std::move(record)};
                 }});
     auto scope = std::make_shared<RtScope>(*this, nullptr, nullptr, ctx.scope->nodes.depth() + 1);
+    scope->usePrefix = focusKeyOf(node.path, *ctx.scope) + ">";
     DocNode const& fallback = *component.fallback;
     declare(*scope, nullptr, {&fallback}, {});
     Node lowered = lower(fallback, LowerCtx{.scope = scope, .bindings = bindings, .boundary = nullptr});
@@ -7665,6 +9942,94 @@ inline Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx)
 
 }  // namespace detail
 
+inline std::vector<TextSpan> Screen::headSpans(ExprPtr const& expr) const {
+    if (expr == nullptr) {
+        return {};
+    }
+    bool dropped = false;
+    bool badTone = false;
+    std::vector<TextSpan> spans =
+        detail::spansOf(detail::evalIn(*_scope, nullptr, expr), _core->session.formatting(), dropped, &badTone);
+    if (dropped) {
+        _core->report(expr->path, detail::kSpansReason);
+    }
+    if (badTone) {
+        _core->report(expr->path, detail::kSpanToneReason);
+    }
+    return spans;
+}
+
+inline DocNode const* Screen::shownRoot() const {
+    DocNode const* node = _core->doc().view.get();
+    while (node != nullptr && node->kind == "switch") {
+        Value const value = detail::evalIn(*_scope, nullptr, node->prop("on"));
+        std::span<DocNodePtr const> shown = node->nodes("default");
+        for (DocNodePtr const& part : node->partList("cases")) {
+            if (!(detail::evalIn(*_scope, nullptr, part->prop("when")) == value)) {
+                continue;
+            }
+            if (part->scope.has_value() && detail::declaresNames(*part->scope)) {
+                return nullptr;
+            }
+            shown = part->nodes("children");
+            break;
+        }
+        node = shown.size() == 1 ? shown.front().get() : nullptr;
+    }
+    return node;
+}
+
+inline bool Screen::pageEdge() const {
+    DocNode const* const node = shownRoot();
+    return node != nullptr && node->flag("pageEdge");
+}
+
+inline bool Screen::headJoined() const {
+    DocNode const* const node = shownRoot();
+    return node != nullptr && node->flag("headJoined");
+}
+
+inline LeadPlacement Screen::leadPlacement() const {
+    ExprPtr const& placement = _core->doc().leadPlacement;
+    if (placement == nullptr) {
+        return LeadPlacement::Below;
+    }
+    Value const value = detail::evalIn(*_scope, nullptr, placement);
+    if (std::string const* const name = value.asString()) {
+        if (*name == "inline") {
+            return LeadPlacement::Inline;
+        }
+        if (*name == "end") {
+            return LeadPlacement::End;
+        }
+        if (*name == "below") {
+            return LeadPlacement::Below;
+        }
+    }
+    if (!value.isNull()) {
+        _core->report(placement->path, "`leadPlacement` is `below`, `inline` or `end`");
+    }
+    return LeadPlacement::Below;
+}
+
+inline std::string Screen::headSurface() const {
+    Value const value = detail::evalIn(*_scope, nullptr, _core->doc().headSurface);
+    std::string const* const name = value.asString();
+    return name == nullptr ? std::string{} : *name;
+}
+
+inline std::string Screen::pageSurface() const {
+    Value const value = detail::evalIn(*_scope, nullptr, _core->doc().pageSurface);
+    std::string const* const name = value.asString();
+    return name == nullptr ? std::string{} : *name;
+}
+
+inline std::vector<TextSpan> Screen::subtitleSpans() const { return headSpans(_core->doc().subtitleSpans); }
+
+inline std::vector<TextSpan> Screen::titleSpans() const { return headSpans(_core->doc().titleSpans); }
+
+inline std::vector<TextSpan> Screen::eyebrowSpans() const { return headSpans(_core->doc().eyebrowSpans); }
+
 inline BorrowedModel Screen::lend(std::string_view alias) const {
     detail::NameRef const* const found = _scope->find(alias);
     if (found == nullptr || found->category != detail::NameCategory::Model) {
@@ -7728,11 +10093,7 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
         static_cast<void>(chord);
         lists.push_back(&commands);
     }
-    for (DocNodePtr const& action : doc->actions) {
-        if (Commands const* const commands = action->event("onClick")) {
-            lists.push_back(commands);
-        }
-    }
+    detail::headCommandLists(*doc, lists);
     Node root = runtime.untracked([&] {
         core.declare(scope, &doc->scope, {doc->view.get()}, lists);
         detail::LowerCtx const ctx{
@@ -7740,6 +10101,8 @@ inline std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::s
         Node lowered = core.lower(*doc->view, ctx);
         screen->_headStatus = core.lowerBadgeParts(doc->status, ctx);
         screen->_headActions = core.lowerActionParts(doc->actions, ctx);
+        screen->_headMenu = core.lowerHeadMenu(doc->menu, ctx);
+        screen->_headTools = core.lowerHeadTools(doc->tools, ctx);
         if (!doc->keys.empty()) {
             std::vector<KeyBinding> keys;
             for (auto const& [chord, commands] : doc->keys) {
@@ -7779,7 +10142,33 @@ inline std::expected<std::unique_ptr<AppRoot>, Refusal> Interpreter::mountApp(st
         static_cast<void>(key);
         lists.push_back(&commands);
     }
-    _session->runtime().untracked([&] { core.declare(*root->_scope, &doc->scope, {}, lists); });
+    _session->runtime().untracked([&] {
+        core.declare(*root->_scope, &doc->scope, {}, lists);
+        detail::LowerCtx const ctx{
+            .scope = root->_scope, .bindings = std::make_shared<detail::Bindings const>(), .boundary = nullptr};
+        std::vector<detail::BadgeModel> badges = core.lowerBadgeParts(doc->navigation, ctx);
+        for (std::size_t index = 0; index < badges.size(); ++index) {
+            root->_navigation.push_back(
+                AppRoot::PlacedBadge{.screen = std::string{doc->navigation.at(index)->name("screen")},
+                                     .badge = std::move(badges.at(index))});
+        }
+    });
+    root->_navigationBadges = std::make_unique<reactive::Computed<std::vector<NavigationBadge>>>(
+        _session->runtime(), [placed = &root->_navigation] {
+            std::vector<NavigationBadge> shown;
+            for (AppRoot::PlacedBadge const& entry : *placed) {
+                if (entry.badge.visible.evaluate()) {
+                    shown.push_back(NavigationBadge{.screen = entry.screen,
+                                                    .text = entry.badge.text.evaluate(),
+                                                    .tone = entry.badge.tone.evaluate()});
+                }
+            }
+            return shown;
+        });
+    // The app document's date patterns are the application's: every screen of the bundle shows and reads dates so.
+    if (!doc->datePattern.empty() || !doc->dateTimePattern.empty()) {
+        _session->setDatePatterns(doc->datePattern, doc->dateTimePattern);
+    }
     _session->setAppScope(root->_scope.get());
     if (auto const found = doc->lifecycle.find("onMount"); found != doc->lifecycle.end()) {
         root->runCommands(found->second);

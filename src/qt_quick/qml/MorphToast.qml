@@ -58,6 +58,7 @@ MorphWidget {
             }
 
             Label {
+                textFormat: Text.PlainText
                 font: Theme.bodyFont
                 text: popup.text
                 wrapMode: Text.Wrap

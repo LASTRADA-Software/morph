@@ -90,8 +90,11 @@ struct DateTime {
     constexpr DateTime(std::chrono::year year, std::chrono::month month, std::chrono::day day, std::chrono::hours hour,
                        std::chrono::minutes minute, std::chrono::seconds second,
                        std::chrono::milliseconds millisecond = std::chrono::milliseconds{0}) noexcept
-        : value{static_cast<std::chrono::sys_days>(std::chrono::year_month_day{year, month, day}) + hour + minute +
-                second + millisecond} {}
+        // Milliseconds first: on an implementation whose days, hours and minutes count in 32 bits, their sum is
+        // computed in minutes and wraps after year 6053.
+        : value{std::chrono::sys_time<std::chrono::milliseconds>{
+                    static_cast<std::chrono::sys_days>(std::chrono::year_month_day{year, month, day})} +
+                hour + minute + second + millisecond} {}
 
     /// @brief The current UTC instant, truncated to milliseconds.
     ///

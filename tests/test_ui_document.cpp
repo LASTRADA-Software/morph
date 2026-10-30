@@ -244,7 +244,8 @@ TEST_CASE("ui document: a refusal names the document", "[ui][document]") {
     CHECK(loaded->view->kind == "text");
 
     auto const kinds = morph::ui::nodeKinds();
-    CHECK(kinds.size() == 37);
+    CHECK(kinds.size() == 39);
+    CHECK(std::ranges::find(kinds, "chart") != kinds.end());
     CHECK(std::ranges::find(kinds, "dateTimeInput") != kinds.end());
     CHECK(std::ranges::find(kinds, "menuItem") == kinds.end());
 }
@@ -301,4 +302,200 @@ TEST_CASE("ui document: a date input's value is a timestamp or a string, and any
         "state": { "when": { "type": "any" } },
         "view": { "kind": "dateTimeInput", "value": { "ref": "when" } }})")
               .has_value());
+}
+
+// Mutation: drop `spans` from the text's keys, and the first two documents are refused; drop the run check, and the
+// third loads.
+TEST_CASE("ui document: a text's spans load beside or in place of its text, and a run without text is refused",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": ["Lot ", {"obj": {"text": "L-26-0381", "mono": true}}]}}})")
+              .has_value());
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "banner", "text": "Lot L-26-0381",
+        "spans": {"list": ["Lot ", {"obj": {"text": "L-26-0381", "mono": true, "strong": false}}]}}})")
+              .has_value());
+    auto const noText = loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": ["Lot ", {"obj": {"strong": true}}]}}})");
+    REQUIRE_FALSE(noText.has_value());
+    CHECK(noText.error().path == "/view/spans/list/1");
+    CHECK(noText.error().reason == "a run's record gives its `text`");
+    auto const notAFlag = loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": [{"obj": {"text": "x", "mono": "yes"}}]}}})");
+    REQUIRE_FALSE(notAFlag.has_value());
+    CHECK(notAFlag.error().reason == "a run's `mono` is true or false");
+    auto const number = loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": [7]}}})");
+    REQUIRE_FALSE(number.has_value());
+    CHECK(number.error().reason == "a run is a string or a record with `text`");
+}
+
+// Mutation: drop the keyValue's fieldLayout check (the grid layout loads).
+TEST_CASE("ui document: a key-value's fieldLayout is inline or stacked, and its items' spans are checked",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "k", "view": {"kind": "keyValue", "fieldLayout": "stacked",
+        "items": {"list": [{"obj": {"label": "Serial", "spans": {"list": [{"obj": {"text": "D-9", "mono": true}}]}}}]}}})")
+              .has_value());
+    auto const grid = loadDocumentText(R"({"vocab": "ui/1", "id": "k", "view": {"kind": "keyValue",
+        "fieldLayout": "grid", "items": {"list": []}}})");
+    REQUIRE_FALSE(grid.has_value());
+    CHECK(grid.error().path == "/view/fieldLayout");
+    auto const run = loadDocumentText(R"({"vocab": "ui/1", "id": "k", "view": {"kind": "keyValue",
+        "items": {"list": [{"obj": {"label": "Serial", "spans": {"list": [{"obj": {"mono": true}}]}}}]}}})");
+    REQUIRE_FALSE(run.has_value());
+    CHECK(run.error().reason == "a run's record gives its `text`");
+}
+
+// Mutation: drop the text's refusal of `description` (the text loads), or refuse `tone` on a text again.
+TEST_CASE("ui document: an input takes a description and a tone, and a text takes a tone but no description",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "d", "view": {"kind": "textInput",
+        "description": "Required range 2–8 °C", "tone": {"if": [true, "err", null]}}})")
+              .has_value());
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "d", "view": {"kind": "text", "text": "7",
+        "role": "display", "tone": "err"}})")
+              .has_value());
+    auto const text = loadDocumentText(R"({"vocab": "ui/1", "id": "d", "view": {"kind": "text", "text": "x",
+        "description": "y"}})");
+    REQUIRE_FALSE(text.has_value());
+    CHECK(text.error().path == "/view/description");
+    CHECK(text.error().reason == "a text is not described; put the line in the text");
+}
+
+// Mutation: drop `tone` from the run keys (the first loads fail), drop the literal tone check (the pink run loads),
+// or drop `subtitleSpans` / `descriptionSpans` from their keys (the last two are refused as unknown).
+TEST_CASE("ui document: a run takes a tone, and a head's subtitle and an overlay's description take runs",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": [{"obj": {"text": "7", "tone": "err"}}, {"obj": {"text": "x", "tone": null}}]}}})")
+              .has_value());
+    auto const pink = loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": [{"obj": {"text": "7", "tone": "pink"}}]}}})");
+    REQUIRE_FALSE(pink.has_value());
+    CHECK(pink.error().reason == "a run's `tone` is neutral, info, ok, warn or err");
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "text",
+        "spans": {"list": [{"obj": {"text": "7", "tone": {"ref": "t"}}}]}}, "state": {"t": {"init": "err"}}})")
+              .has_value());
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "s", "title": "Instrument",
+        "subtitleSpans": {"list": ["Instruments › ", {"obj": {"text": "EQ-0142", "mono": true}}]},
+        "view": {"kind": "text", "text": "x"}})")
+              .has_value());
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "dialog", "title": "Confirm",
+        "description": "plain", "descriptionSpans": {"list": ["a ", {"obj": {"text": "b", "strong": true}}]},
+        "children": []}})")
+              .has_value());
+    auto const noText = loadDocumentText(R"({"vocab": "ui/1", "id": "s", "view": {"kind": "drawer", "title": "t",
+        "descriptionSpans": {"list": [{"obj": {"strong": true}}]}, "children": []}})");
+    REQUIRE_FALSE(noText.has_value());
+    CHECK(noText.error().reason == "a run's record gives its `text`");
+}
+
+// Mutation: drop `group` from the kinds (every document here is refused for its kind).
+TEST_CASE("ui document: a group loads with its legend and children, and its keys are checked as a column's",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "group", "id": "conditions",
+        "label": "Condition on receipt", "required": true, "gap": 1, "description": "Container, seal and label.",
+        "children": [{"kind": "checkbox", "label": "Container intact"}]}})")
+              .has_value());
+    auto const gap = loadDocumentText(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "group", "label": "x",
+        "gap": {"bogus": 1}, "children": []}})");
+    REQUIRE_FALSE(gap.has_value());
+    CHECK(gap.error().path.starts_with("/view/gap"));
+    auto const column = loadDocumentText(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "column",
+        "gap": {"bogus": 1}, "children": []}})");
+    REQUIRE_FALSE(column.has_value());
+    CHECK(column.error().reason == gap.error().reason);
+}
+
+// Mutation: drop checkMultilineExtras (both documents load, and the icon's mount throws).
+TEST_CASE("ui document: a multiline text input refuses a unit and an icon", "[ui][document]") {
+    CHECK(
+        loadDocumentText(R"({"vocab": "ui/1", "id": "u", "view": {"kind": "textInput", "label": "T", "unit": "°C"}})")
+            .has_value());
+    auto const unit = loadDocumentText(R"({"vocab": "ui/1", "id": "u", "view": {"kind": "textInput", "label": "T",
+        "mode": "multiline", "unit": "°C"}})");
+    REQUIRE_FALSE(unit.has_value());
+    CHECK(unit.error().path == "/view/unit");
+    CHECK(unit.error().reason == "a multiline input shows no unit");
+    auto const icon = loadDocumentText(R"({"vocab": "ui/1", "id": "u", "view": {"kind": "textInput", "label": "T",
+        "mode": "multiline", "icon": "search"}})");
+    REQUIRE_FALSE(icon.has_value());
+    CHECK(icon.error().path == "/view/icon");
+}
+
+// Mutation: leave `dangerOutline` out of a button's emphases (the first document is refused).
+TEST_CASE("ui document: dangerOutline, an outline badge and a segmented select load; other names are refused",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "c", "view": {"kind": "column", "children": [
+        {"kind": "button", "label": "Reject", "emphasis": "dangerOutline"},
+        {"kind": "badge", "text": "STAT", "tone": "err", "style": "outline"},
+        {"kind": "select", "label": "Show", "style": "segmented", "options": {"list": []}}]}})")
+              .has_value());
+    auto const emphasis = loadDocumentText(R"({"vocab": "ui/1", "id": "c", "view": {"kind": "button", "label": "x",
+        "emphasis": "outline"}})");
+    REQUIRE_FALSE(emphasis.has_value());
+    CHECK(emphasis.error().path == "/view/emphasis");
+    auto const badge = loadDocumentText(R"({"vocab": "ui/1", "id": "c", "view": {"kind": "badge", "text": "x",
+        "style": "ghost"}})");
+    REQUIRE_FALSE(badge.has_value());
+    CHECK(badge.error().path == "/view/style");
+    auto const select = loadDocumentText(R"({"vocab": "ui/1", "id": "c", "view": {"kind": "select", "label": "x",
+        "style": "radios"}})");
+    REQUIRE_FALSE(select.has_value());
+    CHECK(select.error().path == "/view/style");
+    CHECK(select.error().reason == "`radios` is not one of the values of `style`");
+}
+
+// Mutation: drop checkEntryContent (the push button and the nested input load).
+TEST_CASE("ui document: only a list entry holds content, and only display kinds", "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "style": "item", "label": "x",
+        "children": [{"kind": "column", "children": [{"kind": "text", "text": "a"}, {"kind": "badge", "text": "b"}]}]}})")
+              .has_value());
+    auto const push = loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "label": "x",
+        "children": [{"kind": "text", "text": "a"}]}})");
+    REQUIRE_FALSE(push.has_value());
+    CHECK(push.error().reason == "only a list entry holds content; a push button has a label");
+    auto const input = loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "style": "item",
+        "label": "x", "children": [{"kind": "column", "children": [{"kind": "row", "children": [
+          {"kind": "textInput", "label": "y"}]}]}]}})");
+    REQUIRE_FALSE(input.has_value());
+    CHECK(input.error().path == "/view/children/0/children/0/children/0");
+    CHECK(input.error().reason == "an entry's content is read-only; put the control beside the entry");
+    CHECK_FALSE(loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "style": "item",
+        "label": "x", "children": [{"kind": "banner", "text": "b"}]}})")
+                    .has_value());
+    auto const keys = loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "button", "style": "item",
+        "label": "x", "children": [{"kind": "text", "text": "a", "keys": {"Enter": []}}]}})");
+    REQUIRE_FALSE(keys.has_value());
+    CHECK(keys.error().path == "/view/children/0/keys");
+}
+
+// Mutation: skip the pattern check (the four-M pattern loads).
+TEST_CASE("ui document: the app document's formatting is checked, and a screen has none", "[ui][document]") {
+    auto const app = loadDocumentText(R"({"vocab": "ui/1", "id": "app",
+        "formatting": {"date": "dd-MMM-yyyy", "dateTime": "dd-MMM-yyyy HH:mm"}})");
+    REQUIRE(app.has_value());
+    CHECK(app->datePattern == "dd-MMM-yyyy");
+    CHECK(app->dateTimePattern == "dd-MMM-yyyy HH:mm");
+    auto const bad = loadDocumentText(R"({"vocab": "ui/1", "id": "app", "formatting": {"date": "dd-MMMM-yyyy"}})");
+    REQUIRE_FALSE(bad.has_value());
+    CHECK(bad.error().path == "/formatting/date");
+    auto const screen = loadDocumentText(R"({"vocab": "ui/1", "id": "s", "formatting": {"date": "dd-MMM-yyyy"},
+        "view": {"kind": "spacer"}})");
+    REQUIRE_FALSE(screen.has_value());
+    CHECK(screen.error().path == "/formatting");
+}
+
+// Mutation: leave `emphasis` out of checkMultilineExtras (the multiline document loads).
+TEST_CASE("ui document: a text input's emphasis is normal or prominent, and a multiline one takes none",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "textInput", "label": "Scan",
+        "emphasis": "prominent"}})")
+              .has_value());
+    auto const multiline = loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "textInput",
+        "label": "Note", "mode": "multiline", "emphasis": "prominent"}})");
+    REQUIRE_FALSE(multiline.has_value());
+    CHECK(multiline.error().path == "/view/emphasis");
+    CHECK_FALSE(loadDocumentText(R"({"vocab": "ui/1", "id": "e", "view": {"kind": "textInput", "label": "Scan",
+        "emphasis": "loud"}})")
+                    .has_value());
 }

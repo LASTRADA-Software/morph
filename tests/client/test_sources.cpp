@@ -508,7 +508,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
 /// Whether the frame's sidebar and top bar both show (`true`), both are hidden (`false`), or neither holds.
 std::optional<bool> chromeShown(morph::ui::testing::RecordingBackend const& backend) {
     auto const sidebar = backend.find("Row", "testId", "shell_sidebar");
-    auto const topBar = backend.find("Row", "testId", "shell_topbar");
+    auto const topBar = backend.find("Column", "testId", "shell_topbar");
     if (!sidebar || !topBar) {
         return std::nullopt;
     }
@@ -557,6 +557,29 @@ TEST_CASE("Client shell: the frame shows its chrome only while signed in, or on 
             CHECK(log.problems.empty());
         });
     }
+    SECTION("compact, the navigation menu's last entry signs out, described by the principal") {
+        shellOver({}, nullptr, [](FakeAppContext& context, auto& backend, ShellLog& log) {
+            backend.click(*backend.find("Button", "testId", "login"));
+            REQUIRE(pumpUntil(context.owner(), [&] { return chromeShown(backend) == true; }));
+            backend.setWidthClass("compact");
+            auto const menu = backend.find("Menu", "testId", "shell_nav_menu");
+            REQUIRE(menu.has_value());
+            REQUIRE(pumpUntil(context.owner(), [&] { return backend.prop(*menu, "visible") == "true"; }));
+            std::string const items = backend.prop(*menu, "items");
+            CHECK(items.ends_with(",;separator,Sign out;description=alice]"));
+            // The last top-level entry: one past the commas outside every submenu.
+            std::size_t depth = 0;
+            std::size_t last = 0;
+            for (char const character : items) {
+                depth += character == '[' ? 1U : 0U;
+                depth -= character == ']' ? 1U : 0U;
+                last += character == ',' && depth == 1 ? 1U : 0U;
+            }
+            backend.chooseMenuEntry(*menu, {last});
+            REQUIRE(pumpUntil(context.owner(), [&] { return chromeShown(backend) == false; }));
+            CHECK(log.mounted.back() == "probe.login");
+        });
+    }
     SECTION("a start screen named by --screen that is not public shows the chrome from the start") {
         shellOver("probe.home", nullptr, [](FakeAppContext& /*context*/, auto& backend, ShellLog& log) {
             REQUIRE(log.mounted == Entries{"probe.home"});
@@ -571,6 +594,78 @@ TEST_CASE("Client shell: the frame shows its chrome only while signed in, or on 
             CHECK(chromeShown(backend) == true);
         });
     }
+}
+
+namespace {
+
+/// An app document with a state `x` of 7, whose `onUnmount` says goodbye through `notify`.
+constexpr std::string_view kAppDocument =
+    R"({"vocab":"ui/1","id":"app","state":{"x":{"init":7}},"onUnmount":[{"notify":"bye"}]})";
+
+/// A screen that reads and writes the app document's `x`.
+constexpr std::string_view kReadsApp =
+    R"({"vocab":"ui/1","id":"probe.app","view":{"kind":"column","children":[)"
+    R"({"kind":"text","testId":"appX","text":{"fn":"format","args":["x {0}",{"ref":"app.x"}]}},)"
+    R"({"kind":"button","testId":"bump","label":"Bump","onClick":{"set":"app.x","value":8}}]}})";
+
+/// The public login, the screen that reads `app.x`, and the app document.
+std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> withAppDocument() {
+    morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    for (auto const& [screenId, text] : {std::pair{"probe.login", kLogin}, std::pair{"probe.app", kReadsApp}}) {
+        morph::ui::CatalogEntry entry;
+        entry.id = screenId;
+        entry.isPublic = screenId == std::string_view{"probe.login"};
+        if (auto added = served.addScreen(std::move(entry), std::string{text}); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    if (auto added = served.addFile(
+            morph::ui::BundleFile{.kind = "app", .id = "app", .bytes = std::string{kAppDocument}, .isPublic = true});
+        !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
+/// How many times a toast has shown "bye": each is one root's `onUnmount`.
+std::size_t goodbyes(morph::ui::testing::RecordingBackend const& backend) {
+    return static_cast<std::size_t>(std::ranges::count_if(backend.log(), [](std::string const& line) {
+        return line.starts_with("set Toast") && line.ends_with(" text=bye");
+    }));
+}
+
+}  // namespace
+
+// Control: drop the shell's mountApp call — the text reads `x null`.
+TEST_CASE("Client shell: the app document is mounted with each frame, and its root goes before the session changes",
+          "[client][shell]") {
+    FakeAppContext context;
+    morph::ui::testing::RecordingBackend backend;
+    LocalSource source{morph::client::LocalApp{.name = "probe", .bundle = &withAppDocument, .setUp = {}},
+                       LocalSetup{.db = {}, .user = "alice"}};
+    ShellLog log;
+    ShellOptions options = log.options("probe.app");
+    options.signIn = [](morph::ui::Value const& /*reply*/) {
+        return std::optional<morph::client::SignedIn>{morph::client::SignedIn{.principal = "alice", .token = "t"}};
+    };
+    {
+        auto const shell =
+            morph::client::mountShell(context, backend, openAndWait(context, source), source, std::move(options));
+        REQUIRE(pumpUntil(context.owner(), [&] { return textOf(backend, "appX") == "x 7"; }));
+        backend.click(*backend.find("Button", "testId", "bump"));
+        REQUIRE(pumpUntil(context.owner(), [&] { return textOf(backend, "appX") == "x 8"; }));
+        CHECK(goodbyes(backend) == 0);
+        backend.click(*backend.find("Button", "testId", "shell_signOut"));
+        REQUIRE(pumpUntil(context.owner(), [&] { return log.mounted.back() == "probe.login"; }));
+        CHECK(goodbyes(backend) == 1);
+        backend.click(*backend.find("Button", "testId", "login"));
+        REQUIRE(pumpUntil(context.owner(), [&] { return textOf(backend, "appX").has_value(); }));
+        // A new root, from the app document's init; the root mounted for the signed-out frame said goodbye too.
+        CHECK(textOf(backend, "appX") == "x 7");
+        CHECK(goodbyes(backend) == 2);
+        CHECK(log.problems.empty());
+    }
+    source.close();
 }
 
 namespace {

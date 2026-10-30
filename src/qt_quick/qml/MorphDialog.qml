@@ -5,11 +5,19 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // A modal dialog: an overlay holding its content, which traps focus while open. Escape or a click outside closes it
-// and reports a dismissal; `show` opens and closes it without one.
+// and reports a dismissal; `show` opens and closes it without one. As a sheet it fills the window, square, with a head
+// row of a dismiss button and the title: a phone has no Escape key and no outside to press.
 MorphWidget {
     id: root
 
     property string title: ""
+    // A line under the title, in the head, divided from the body by a rule: the overlay's accessible description.
+    property string description: ""
+    // The description as runs (`{text, strong, mono, tone}`, each text escaped), which `description` then holds the
+    // joined characters of; while there are any, the label shows their markup.
+    property var descriptionRuns: []
+    property bool sheet: false
+    property string dismissLabel: "Close"
     // Set while C++ opens or closes it, so that is not taken for a dismissal.
     property bool programmatic: false
     readonly property Item content: column
@@ -35,6 +43,11 @@ MorphWidget {
     }
 
     focusTarget: column
+    // A Popup takes no `Accessible` attached property, since it is not an Item, so the content column is the
+    // overlay's accessible node: a dialog named by its title, described by its description.
+    accessibleItem: contentColumn
+    defaultName: title
+    defaultRole: Accessible.Dialog
     implicitWidth: 0
     implicitHeight: 0
     // root is only a zero-sized placeholder for the Popup overlay below, which is reparented to the Overlay; without
@@ -49,24 +62,65 @@ MorphWidget {
 
     Popup {
         id: popup
-        anchors.centerIn: Overlay.overlay
+        // A sheet is placed in the overlay's own coordinates, at its origin; a centred dialog anchors to it.
+        parent: root.sheet ? root.Overlay.overlay : root
+        anchors.centerIn: root.sheet ? undefined : Overlay.overlay
+        x: 0
+        y: 0
+        height: root.sheet ? (root.Overlay.overlay?.height ?? 0) : undefined
+        margins: root.sheet ? 0 : -1
         modal: true
+        // The window behind a dialog is dimmed in `color.scrim`; a sheet fills the window and has nothing to dim.
+        Overlay.modal: Rectangle {
+            objectName: "scrim"
+            color: root.sheet ? "transparent" : Theme.scrim
+        }
         focus: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        closePolicy: root.sheet ? Popup.CloseOnEscape : Popup.CloseOnEscape | Popup.CloseOnPressOutside
         // An explicit width (widthKind Fixed) wins outright over the Popup's own default sizing. The fallback branch
         // evaluates to `undefined`, not a captured number, so it resets rather than sets the Popup's own `hasWidth`
         // state -- a bound value here, even one equal to the Popup's own implicitWidth, would otherwise silently
         // disable QQuickPopupPositioner's window-edge clamping for every dialog, not just ones using the new lever.
-        width: root.widthKind === 1
-            ? Math.min(root.widthAmount * Theme.unitWidth, (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
-            : undefined
+        width: root.sheet
+            ? (root.Overlay.overlay?.width ?? 0)
+            : root.widthKind === 1
+                ? Math.min(root.widthAmount * Theme.unitWidth, (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
+                : undefined
         onAboutToHide: {
             if (!root.programmatic)
                 root.fire("dismiss", undefined)
         }
+        // Drawn as the theme's card whatever surface encloses the node, as its content's colours are (the C++ side
+        // hands the content the card's scheme).
+        padding: Theme.spaceOf(4)
+        // The actions stand step 3 from the bottom edge, as the rule above them stands step 3 off them.
+        bottomPadding: footerArea.visible ? Theme.spaceOf(3) : Theme.spaceOf(4)
+        background: Rectangle {
+            color: Theme.cardScheme.surface
+            border.width: 1
+            border.color: Theme.cardScheme.border
+            radius: root.sheet ? 0 : Theme.radiusCard
+
+            Rectangle {
+                visible: !root.sheet
+                anchors.fill: parent
+                anchors.leftMargin: Theme.cardShadowOffsetX - Theme.cardShadowSpread
+                anchors.rightMargin: -Theme.cardShadowOffsetX - Theme.cardShadowSpread
+                anchors.topMargin: Theme.cardShadowOffsetY - Theme.cardShadowSpread
+                anchors.bottomMargin: -Theme.cardShadowOffsetY - Theme.cardShadowSpread
+                z: -1
+                radius: parent.radius + Theme.cardShadowBlur / 4
+                color: Theme.cardShadowColor
+            }
+        }
 
         contentItem: ColumnLayout {
             id: contentColumn
+            // What a rule's margin adds to the column's spacing to stand step 3 off the item on each side.
+            readonly property real ruleMargin: Theme.spaceOf(3) - contentColumn.spacing
+            Accessible.role: root.accessibleRole
+            Accessible.name: root.accessibleName
+            Accessible.description: root.description
             // A document does not know the window size, so the frontend keeps a wide dialog from running past it;
             // Math.min only ever shrinks, it does not stretch a narrow dialog's own natural width up to the cap.
             // contentItem is the Popup's root, not a layout's child, so its own width is set directly, not via a
@@ -75,15 +129,98 @@ MorphWidget {
             // trigger points (not from a plain change of contentItem's own implicit size), so this must track the
             // Popup's own availableWidth directly rather than keep deriving from its own (by then stale) implicit
             // size, or later content changes would silently drift out of sync with the pinned width.
-            width: root.widthKind === 1
+            width: root.sheet || root.widthKind === 1
                 ? popup.availableWidth
                 : Math.min(implicitWidth, (popup.Overlay.overlay?.width ?? implicitWidth) - 4 * Theme.unitWidth)
+            // A sheet's content fills the window's height between its head and its footer.
+            height: root.sheet ? popup.availableHeight : undefined
+
+            // A sheet's head: the dismiss control, which closes it as Escape does, then the title.
+            RowLayout {
+                id: sheetHead
+                objectName: "sheetHead"
+                visible: root.sheet
+                Layout.fillWidth: true
+                spacing: Theme.spaceOf(2)
+
+                Button {
+                    id: dismissButton
+                    objectName: "sheetDismiss"
+                    flat: true
+                    text: root.dismissLabel
+                    font: Theme.bodyFont
+                    leftPadding: Theme.spaceOf(1)
+                    rightPadding: Theme.spaceOf(1)
+                    palette.buttonText: Theme.cardScheme.accent
+                    contentItem: MorphPlainContent {
+                        control: dismissButton
+                        color: dismissButton.palette.buttonText
+                    }
+                    background: MorphButtonBackground {
+                        scheme: Theme.cardScheme
+                        ghost: true
+                        hovered: dismissButton.hovered
+                        pressed: dismissButton.down
+                        focused: dismissButton.visualFocus
+                    }
+                    Accessible.name: root.dismissLabel
+                    onClicked: popup.close()
+                }
+
+                // The title is a document's characters, never markup, and centred on the sheet: the trailing item is
+                // as wide as the dismiss button, so the row is balanced and the title is not centred on what the
+                // button leaves.
+                Label {
+                    objectName: "sheetTitle"
+                    Layout.fillWidth: true
+                    textFormat: Text.PlainText
+                    horizontalAlignment: Text.AlignHCenter
+                    font: Theme.headingFont
+                    color: Theme.cardScheme.text
+                    elide: Text.ElideRight
+                    text: root.title
+                }
+
+                Item {
+                    Layout.preferredWidth: dismissButton.width
+                    Layout.preferredHeight: 1
+                }
+            }
 
             Label {
+                textFormat: Text.PlainText
                 id: titleLabel
-                font: Theme.strongFont
-                visible: root.title !== ""
+                font: Theme.headingFont
+                color: Theme.cardScheme.text
+                visible: root.title !== "" && !root.sheet
                 text: root.title
+            }
+
+            Label {
+                id: descriptionLabel
+                objectName: "description"
+                textFormat: root.descriptionRuns.length > 0 ? Text.RichText : Text.PlainText
+                font: Theme.bodyFont
+                color: Theme.cardScheme.muted
+                visible: root.description !== ""
+                text: root.descriptionRuns.length > 0 ? root.runsHtml(root.descriptionRuns) : root.description
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+
+            // Spans the overlay, edge to edge, under the head: under the description while it shows, and always on
+            // a sheet.
+            Rectangle {
+                id: headRule
+                objectName: "headRule"
+                visible: root.description !== "" || root.sheet
+                color: Theme.cardScheme.border
+                implicitHeight: 1
+                Layout.fillWidth: true
+                Layout.leftMargin: -popup.leftPadding
+                Layout.rightMargin: -popup.rightPadding
+                Layout.topMargin: contentColumn.ruleMargin
+                Layout.bottomMargin: contentColumn.ruleMargin
             }
 
             // Only the content between the title and the footer scrolls, so both stay reachable however tall the
@@ -96,8 +233,14 @@ MorphWidget {
                 id: scroll
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.maximumHeight: Math.max(0, (popup.Overlay.overlay?.height ?? Infinity) - 4 * Theme.unitHeight -
-                                               titleLabel.height - footerArea.height - contentColumn.spacing * 2)
+                Layout.maximumHeight: root.sheet
+                    ? Infinity
+                    : Math.max(0, (popup.Overlay.overlay?.height ?? Infinity) - 4 * Theme.unitHeight -
+                               titleLabel.height - footerArea.height -
+                               (footerRule.visible ? footerRule.height + contentColumn.spacing + 2 * contentColumn.ruleMargin : 0) -
+                               contentColumn.spacing * 2 - (headRule.visible ? 2 * contentColumn.ruleMargin : 0) -
+                               (root.description === "" ? 0 : descriptionLabel.height + headRule.height +
+                                                              contentColumn.spacing * 2))
                 clip: true
 
                 ColumnLayout {
@@ -106,11 +249,28 @@ MorphWidget {
                 }
             }
 
+            // A hairline above the footer while it holds an action, the divider the cards use between sections.
+            Rectangle {
+                id: footerRule
+                objectName: "footerRule"
+                visible: footerArea.visible
+                color: Theme.divider
+                implicitHeight: 1
+                Layout.fillWidth: true
+                Layout.leftMargin: -popup.leftPadding
+                Layout.rightMargin: -popup.rightPadding
+                Layout.topMargin: contentColumn.ruleMargin
+                Layout.bottomMargin: contentColumn.ruleMargin
+            }
+
             // Shown while the footer holds something: a layout gives no size to what it hides, so its own
             // implicit size cannot say.
             ColumnLayout {
                 id: footerArea
                 Layout.fillWidth: true
+                // A sheet's footer fills the sheet's width, so its action is as wide as a thumb needs; the footer
+                // reads this from the area it sits in.
+                property bool stretchesFooter: root.sheet
                 visible: {
                     for (let i = 0; i < footerArea.children.length; ++i) {
                         if ((footerArea.children[i] as MorphFooter)?.holding)

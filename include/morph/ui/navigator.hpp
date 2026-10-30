@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -23,6 +24,18 @@
 /// Specified in `docs/spec/ui/workspace.md`.
 
 namespace morph::ui {
+
+/// @brief A count on a navigator entry, such as the items waiting on its screen.
+struct NavigatorBadge {
+    /// @brief The badge's text.
+    std::string text;
+    /// @brief Its tone.
+    Tone tone = Tone::Neutral;
+
+    /// @brief Memberwise equality.
+    /// @return Whether both members match.
+    bool operator==(NavigatorBadge const&) const = default;
+};
 
 /// @brief How a `Navigator` lists the catalog and what it reports.
 struct NavigatorOptions {
@@ -46,14 +59,18 @@ struct NavigatorOptions {
 
 /// @brief The catalog as a list a person opens screens from, with a title search and pinned shortcuts.
 ///
-/// Entries are grouped by module, then group, in the order each first appears; each group has a heading. Each entry
-/// is a list item (`ButtonStyle::Item`) as wide as the navigator, and `setCurrent` marks the open screen's. An
-/// unavailable entry is listed disabled, with its reason as its tooltip. The search shows the entries one of whose
-/// titles contains the text, ignoring ASCII case, and the headings of the groups that still show one. Neither
-/// copyable nor movable; owned by the owner thread of its backend.
+/// Entries are grouped by module, then group, in the order each first appears; each group is a column of its own
+/// holding its heading and its entries, and the groups are a spacing step apart. Each entry is a row as wide as the
+/// navigator holding a list item (`ButtonStyle::Item`) whose content is the title and, while `setBadge` gives it one,
+/// a badge at its end, so the item's selection spans the badge; `setCurrent` marks the open screen's. An unavailable
+/// entry is listed disabled, with its reason as its tooltip. The search shows the entries one of whose titles contains
+/// the text, ignoring ASCII case, and the headings of the groups that still show one. `menuEntries` and `choose` give
+/// the same list as a menu, for a frame too narrow for the navigator. Neither copyable nor movable; owned by the owner
+/// thread of its backend.
 ///
-/// Test ids: `navigator`, `navigator_search`, `navigator_pins`, `nav_<screen id>`, `pin_<screen id>`, and
-/// `navigator_group_<module>/<group>` for a heading.
+/// Test ids: `navigator`, `navigator_search`, `navigator_pins`, `nav_row_<screen id>`, `nav_<screen id>`,
+/// `nav_content_<screen id>`, `nav_badge_<screen id>`, `pin_<screen id>`, `navigator_group_<module>/<group>` for a
+/// heading and `navigator_group_<module>/<group>_section` for its column.
 class Navigator {
 public:
     /// @brief The navigator, appended to @p parent.
@@ -63,6 +80,8 @@ public:
     Navigator(IViewBackend& backend MORPH_LIFETIMEBOUND, ContainerWidget* parent, NavigatorOptions options)
         : _backend{&backend}, _options{std::move(options)}, _root{backend.createStack(parent, Axis::Vertical)} {
         _root->setTestId("navigator");
+        // The search, the pins and the groups stand a spacing step apart; a hidden pin row or group takes no gap.
+        _root->setGap(3);
         _search = backend.createTextInput(_root.get(), TextInputMode::SingleLine);
         _search->setTestId("navigator_search");
         _search->setPlaceholder("Search");
@@ -137,25 +156,181 @@ public:
         } else {
             _current.clear();
         }
+        changed();
     }
 
     /// @brief The screen whose entry is marked.
     /// @return Its id; empty when none is.
     [[nodiscard]] std::string const& current() const noexcept { return _current; }
 
+    /// @brief Puts a count at the end of a screen's entry, or takes it away. The entry stays one button to assistive
+    ///        technology, and its accessible name carries the count: "Review, 4".
+    /// @param screenId The screen whose entry it goes on.
+    /// @param badge    The count, or `std::nullopt` to take it away.
+    /// @return Whether the navigator lists the screen: `false`, changing nothing, for one it does not list.
+    bool setBadge(std::string_view screenId, std::optional<NavigatorBadge> const& badge) {
+        Item* const item = itemOf(screenId);
+        if (item == nullptr) {
+            return false;
+        }
+        if (item->shown == badge) {
+            return true;
+        }
+        item->shown = badge;
+        std::string const& title = item->titles.front();
+        if (badge) {
+            item->badge->setText(badge->text);
+            item->badge->setTone(badge->tone);
+            item->button->setAccessibleName(title + ", " + badge->text);
+        } else {
+            item->button->setAccessibleName(title);
+        }
+        item->badge->setVisible(badge.has_value());
+        changed();
+        return true;
+    }
+
+    /// @brief The count on a screen's entry.
+    /// @param screenId The screen.
+    /// @return It, or `std::nullopt` for an entry without one or a screen the navigator does not list.
+    [[nodiscard]] std::optional<NavigatorBadge> badgeOf(std::string_view screenId) const {
+        Item const* const item = itemOf(screenId);
+        return item == nullptr ? std::nullopt : item->shown;
+    }
+
+    /// @brief The navigator as the entries of a menu: the pins first, then a separator, then each group as a
+    ///        submenu labelled by its heading (the entries of a group with no heading at the top level instead).
+    ///        An entry's label is its title with its count after it ("Review · 4"), the current screen's entry is
+    ///        checked, and an unavailable one is disabled.
+    /// @return The entries; `choose` takes a path into them.
+    [[nodiscard]] std::vector<MenuEntry> menuEntries() const { return menu().entries; }
+
+    /// @brief Opens the entry at @p path of `menuEntries()`, as choosing it in the navigator does.
+    /// @param path The entry's index at each level from the top, separators counted.
+    /// @return Whether it named an available entry, which was opened.
+    bool choose(std::vector<std::size_t> const& path) {
+        Menu const shown = menu();
+        std::vector<MenuSlot> const* level = &shown.targets;
+        MenuSlot const* slot = nullptr;
+        for (std::size_t const index : path) {
+            if (index >= level->size()) {
+                return false;
+            }
+            slot = &level->at(index);
+            level = &slot->items;
+        }
+        if (slot == nullptr || slot->screenId.empty() || !slot->items.empty()) {
+            return false;
+        }
+        CatalogEntry const* const entry = entryOf(slot->screenId);
+        if (entry == nullptr || !entry->available) {
+            return false;
+        }
+        if (_options.onOpen) {
+            _options.onOpen(slot->screenId);
+        }
+        return true;
+    }
+
+    /// @brief Sets what is called after anything `menuEntries()` lists changed: a count, the current entry, a pin.
+    /// @param onChanged The handler; empty calls nothing.
+    void setOnChanged(std::function<void()> onChanged) { _onChanged = std::move(onChanged); }
+
 private:
     struct Item {
         CatalogEntry const* entry = nullptr;
         std::vector<std::string> titles;
+        // Declared parent before child: the button is the row's only child, and the title and the badge are the
+        // button's content, which the button owns.
+        std::unique_ptr<StackWidget> row;
         std::unique_ptr<ButtonWidget> button;
+        std::unique_ptr<StackWidget> content;
+        std::unique_ptr<TextWidget> label;
+        std::unique_ptr<BadgeWidget> badge;
+        std::optional<NavigatorBadge> shown;
     };
 
     struct Group {
         std::string module;
         std::string group;
+        std::unique_ptr<StackWidget> section;
         std::unique_ptr<TextWidget> heading;
         std::vector<Item> items;
     };
+
+    // What one entry of `menuEntries()` opens: a screen, or a submenu's entries; neither for a separator.
+    struct MenuSlot {
+        std::string screenId;
+        std::vector<MenuSlot> items;
+    };
+
+    struct Menu {
+        std::vector<MenuEntry> entries;
+        std::vector<MenuSlot> targets;
+    };
+
+    // One entry of the menu: its title, then its count.
+    [[nodiscard]] MenuEntry menuEntry(CatalogEntry const& entry) const {
+        MenuEntry made;
+        made.label = titlesOf(entry).front();
+        if (Item const* const item = itemOf(entry.id); item != nullptr && item->shown) {
+            made.label += " · " + item->shown->text;
+        }
+        if (entry.id == _current) {
+            made.checked = true;
+        }
+        made.enabled = entry.available;
+        return made;
+    }
+
+    [[nodiscard]] Menu menu() const {
+        Menu out;
+        for (std::string const& screenId : _pins) {
+            out.entries.push_back(menuEntry(*entryOf(screenId)));
+            out.targets.push_back(MenuSlot{.screenId = screenId, .items = {}});
+        }
+        if (!_pins.empty() && !_groups.empty()) {
+            out.entries.push_back(MenuEntry{.label = {},
+                                            .icon = {},
+                                            .keys = {},
+                                            .checked = std::nullopt,
+                                            .enabled = true,
+                                            .items = {},
+                                            .separator = true,
+                                            .description = {}});
+            out.targets.push_back(MenuSlot{});
+        }
+        for (Group const& group : _groups) {
+            std::string const heading = headingOf(group);
+            MenuEntry submenu;
+            MenuSlot slot;
+            for (Item const& item : group.items) {
+                (heading.empty() ? out.entries : submenu.items).push_back(menuEntry(*item.entry));
+                (heading.empty() ? out.targets : slot.items)
+                    .push_back(MenuSlot{.screenId = item.entry->id, .items = {}});
+            }
+            if (!heading.empty()) {
+                submenu.label = heading;
+                out.entries.push_back(std::move(submenu));
+                out.targets.push_back(std::move(slot));
+            }
+        }
+        return out;
+    }
+
+    [[nodiscard]] static std::string headingOf(Group const& group) {
+        std::string heading = group.module;
+        if (!group.group.empty()) {
+            heading += heading.empty() ? group.group : " / " + group.group;
+        }
+        return heading;
+    }
+
+    void changed() const {
+        if (_onChanged) {
+            _onChanged();
+        }
+    }
 
     [[nodiscard]] static std::string lower(std::string_view text) {
         std::string out{text};
@@ -182,8 +357,16 @@ private:
 
     [[nodiscard]] bool known(std::string_view screenId) const { return entryOf(screenId) != nullptr; }
 
-    [[nodiscard]] Item const* itemOf(std::string_view screenId) const {
-        for (Group const& group : _groups) {
+    [[nodiscard]] Item const* itemOf(std::string_view screenId) const { return itemIn(_groups, screenId); }
+
+    [[nodiscard]] Item* itemOf(std::string_view screenId) { return itemIn(_groups, screenId); }
+
+    // One search for both constnesses of itemOf: `Groups` is the const or the mutable group list, and the item
+    // pointer it returns carries the same constness.
+    template <typename Groups>
+    [[nodiscard]] static auto itemIn(Groups& groups, std::string_view screenId)
+        -> decltype(&groups.front().items.front()) {
+        for (auto& group : groups) {
             auto const found = std::ranges::find_if(
                 group.items, [screenId](Item const& item) { return !screenId.empty() && item.entry->id == screenId; });
             if (found != group.items.end()) {
@@ -224,27 +407,56 @@ private:
                 return candidate.module == entry.module && candidate.group == entry.group;
             });
             if (!seen) {
-                _groups.push_back(Group{.module = entry.module, .group = entry.group, .heading = {}, .items = {}});
+                _groups.push_back(
+                    Group{.module = entry.module, .group = entry.group, .section = {}, .heading = {}, .items = {}});
             }
         }
         for (Group& group : _groups) {
-            group.heading = _backend->createText(_root.get());
-            group.heading->setRole(TextRole::Section);
+            // The heading and its entries are a column of their own, a step apart from the next group's; the heading
+            // sits a step under whatever precedes it, and the entries' own heights keep them apart.
+            group.section = _backend->createStack(_root.get(), Axis::Vertical);
+            group.section->setGap(1);
+            group.section->setTestId("navigator_group_" + group.module + "/" + group.group + "_section");
+            group.heading = _backend->createText(group.section.get());
+            // An overline, which a theme may draw as small capitals; by default it looks as a section does.
+            group.heading->setRole(TextRole::Overline);
             group.heading->setTestId("navigator_group_" + group.module + "/" + group.group);
-            std::string heading = group.module;
-            if (!group.group.empty()) {
-                heading += heading.empty() ? group.group : " / " + group.group;
-            }
-            group.heading->setText(heading);
+            group.heading->setText(headingOf(group));
             for (CatalogEntry const& entry : _options.entries) {
                 if (entry.module != group.module || entry.group != group.group) {
                     continue;
                 }
-                Item item{.entry = &entry, .titles = titlesOf(entry), .button = _backend->createButton(_root.get())};
+                Item item{.entry = &entry,
+                          .titles = titlesOf(entry),
+                          .row = _backend->createStack(group.section.get(), Axis::Horizontal),
+                          .button = {},
+                          .content = {},
+                          .label = {},
+                          .badge = {},
+                          .shown = std::nullopt};
+                item.row->setTestId("nav_row_" + entry.id);
+                item.row->setLayout({.width = Sizing::stretch(), .height = {}});
+                item.row->setAlign(Align::Center);
+                item.button = _backend->createButton(item.row.get());
                 item.button->setTestId("nav_" + entry.id);
                 item.button->setStyle(ButtonStyle::Item);
                 item.button->setLayout({.width = Sizing::stretch(), .height = {}});
                 wire(*item.button, entry, item.titles.front());
+                // The title and the badge are the button's content, so its selection spans both. The badge is hidden
+                // until a count is set; the button's accessible name carries the count, so the entry stays one
+                // control to assistive technology.
+                ContainerWidget& content = item.button->content();
+                item.content = _backend->createStack(&content, Axis::Horizontal);
+                item.content->setTestId("nav_content_" + entry.id);
+                item.content->setGap(1);
+                item.content->setAlign(Align::Center);
+                item.content->setLayout({.width = Sizing::stretch(), .height = {}});
+                item.label = _backend->createText(item.content.get());
+                item.label->setText(item.titles.front());
+                item.label->setLayout({.width = Sizing::stretch(), .height = {}});
+                item.badge = _backend->createBadge(item.content.get());
+                item.badge->setTestId("nav_badge_" + entry.id);
+                item.badge->setVisible(false);
                 group.items.push_back(std::move(item));
             }
         }
@@ -259,10 +471,10 @@ private:
                     wanted.empty() || std::ranges::any_of(item.titles, [&wanted](std::string const& title) {
                         return lower(title).contains(wanted);
                     });
-                item.button->setVisible(shown);
+                item.row->setVisible(shown);
                 any = any || shown;
             }
-            group.heading->setVisible(any);
+            group.section->setVisible(any);
         }
     }
 
@@ -282,6 +494,7 @@ private:
         if (_options.onPins) {
             _options.onPins(_pins);
         }
+        changed();
     }
 
     IViewBackend* _backend;
@@ -293,6 +506,7 @@ private:
     std::vector<Group> _groups;
     std::vector<std::string> _pins;
     std::string _current;
+    std::function<void()> _onChanged;
 };
 
 }  // namespace morph::ui

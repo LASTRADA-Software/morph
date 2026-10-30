@@ -10,6 +10,11 @@ MorphWidget {
     id: root
 
     property string title: ""
+    // A line under the title, in the head, divided from the body by a rule: the overlay's accessible description.
+    property string description: ""
+    // The description as runs (`{text, strong, mono, tone}`, each text escaped), which `description` then holds the
+    // joined characters of; while there are any, the label shows their markup.
+    property var descriptionRuns: []
     // 0 start, 1 end; fixed at creation.
     property int side: 0
     property bool programmatic: false
@@ -35,6 +40,11 @@ MorphWidget {
     }
 
     focusTarget: column
+    // A Popup takes no `Accessible` attached property, since it is not an Item, so the content column is the
+    // overlay's accessible node: a dialog named by its title, described by its description.
+    accessibleItem: contentColumn
+    defaultName: title
+    defaultRole: Accessible.Dialog
     implicitWidth: 0
     implicitHeight: 0
     // root is only a zero-sized placeholder for the Drawer overlay below, which is reparented to the Overlay; without
@@ -58,6 +68,11 @@ MorphWidget {
         enter: Transition {}
         exit: Transition {}
         modal: true
+        // The window behind the drawer is dimmed in `color.scrim`.
+        Overlay.modal: Rectangle {
+            objectName: "scrim"
+            color: Theme.scrim
+        }
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         // An explicit width (widthKind Fixed) wins outright over the circular inference below, which reports back
@@ -67,22 +82,80 @@ MorphWidget {
         // is a full-height side panel) -- only its width is at issue here.
         width: root.widthKind === 1
             ? Math.min(root.widthAmount * Theme.unitWidth, (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
-            : Math.min(Math.max(column.implicitWidth + 2 * Theme.unitWidth, 30 * Theme.unitWidth),
+            : Math.min(Math.max(column.implicitWidth + drawer.leftPadding + drawer.rightPadding, 30 * Theme.unitWidth),
                        (Overlay.overlay?.width ?? Infinity) - 4 * Theme.unitWidth)
         height: Overlay.overlay ? Overlay.overlay.height : 0
         onAboutToHide: {
             if (!root.programmatic)
                 root.fire("dismiss", undefined)
         }
+        // Drawn as the theme's card whatever surface encloses the node, as its content's colours are (the C++ side
+        // hands the content the card's scheme).
+        // Each side set itself: the style sets a one-pixel side padding along the edge for its own border line.
+        leftPadding: Theme.spaceOf(4)
+        rightPadding: Theme.spaceOf(4)
+        topPadding: Theme.spaceOf(4)
+        // The actions stand step 3 from the bottom edge, as the rule above them stands step 3 off them.
+        bottomPadding: footerArea.visible ? Theme.spaceOf(3) : Theme.spaceOf(4)
+        background: Rectangle {
+            color: Theme.cardScheme.surface
+            border.width: 1
+            border.color: Theme.cardScheme.border
+            // Square: the drawer lies against the window's edge.
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.leftMargin: Theme.cardShadowOffsetX - Theme.cardShadowSpread
+                anchors.rightMargin: -Theme.cardShadowOffsetX - Theme.cardShadowSpread
+                anchors.topMargin: Theme.cardShadowOffsetY - Theme.cardShadowSpread
+                anchors.bottomMargin: -Theme.cardShadowOffsetY - Theme.cardShadowSpread
+                z: -1
+                radius: parent.radius + Theme.cardShadowBlur / 4
+                color: Theme.cardShadowColor
+            }
+        }
 
         contentItem: ColumnLayout {
             id: contentColumn
+            // What a rule's margin adds to the column's spacing to stand step 3 off the item on each side.
+            readonly property real ruleMargin: Theme.spaceOf(3) - contentColumn.spacing
+            Accessible.role: root.accessibleRole
+            Accessible.name: root.accessibleName
+            Accessible.description: root.description
 
             Label {
+                textFormat: Text.PlainText
                 id: titleLabel
-                font: Theme.strongFont
+                font: Theme.headingFont
+                color: Theme.cardScheme.text
                 visible: root.title !== ""
                 text: root.title
+            }
+
+            Label {
+                id: descriptionLabel
+                objectName: "description"
+                textFormat: root.descriptionRuns.length > 0 ? Text.RichText : Text.PlainText
+                font: Theme.bodyFont
+                color: Theme.cardScheme.muted
+                visible: root.description !== ""
+                text: root.descriptionRuns.length > 0 ? root.runsHtml(root.descriptionRuns) : root.description
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+
+            // Spans the overlay, edge to edge, under the head while the description shows.
+            Rectangle {
+                id: headRule
+                objectName: "headRule"
+                visible: root.description !== ""
+                color: Theme.cardScheme.border
+                implicitHeight: 1
+                Layout.fillWidth: true
+                Layout.leftMargin: -drawer.leftPadding
+                Layout.rightMargin: -drawer.rightPadding
+                Layout.topMargin: contentColumn.ruleMargin
+                Layout.bottomMargin: contentColumn.ruleMargin
             }
 
             // Only the content between the title and the footer scrolls, so both stay reachable however tall the
@@ -97,13 +170,31 @@ MorphWidget {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.maximumHeight: Math.max(0, drawer.height - titleLabel.height - footerArea.height -
-                                               contentColumn.spacing * 2)
+                               (footerRule.visible ? footerRule.height + contentColumn.spacing + 2 * contentColumn.ruleMargin : 0) -
+                                               contentColumn.spacing * 2 - (headRule.visible ? 2 * contentColumn.ruleMargin : 0) -
+                                               (root.description === "" ? 0 : descriptionLabel.height +
+                                                                              headRule.height +
+                                                                              contentColumn.spacing * 2))
                 clip: true
 
                 ColumnLayout {
                     id: column
                     width: scroll.availableWidth
                 }
+            }
+
+            // A hairline above the footer while it holds an action, the divider the cards use between sections.
+            Rectangle {
+                id: footerRule
+                objectName: "footerRule"
+                visible: footerArea.visible
+                color: Theme.divider
+                implicitHeight: 1
+                Layout.fillWidth: true
+                Layout.leftMargin: -drawer.leftPadding
+                Layout.rightMargin: -drawer.rightPadding
+                Layout.topMargin: contentColumn.ruleMargin
+                Layout.bottomMargin: contentColumn.ruleMargin
             }
 
             // Shown while the footer holds something: a layout gives no size to what it hides, so its own

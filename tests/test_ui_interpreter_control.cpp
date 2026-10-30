@@ -3,6 +3,7 @@
 // The control corpus of spec 5 §14: queries (latest wins, debounce, timed refresh, the cache), mutations (the four
 // concurrency modes and optimistic writes) and boundaries, mounted on RecordingBackend with a scripted dispatcher.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
@@ -616,4 +617,441 @@ TEST_CASE("interpreter control: picking a tab shows its page, mounted once and k
     // The second page is hidden, not destroyed.
     CHECK(h.backend.find("Text", "testId", "second").has_value());
     CHECK(h.text("first") == "1");
+}
+
+// Mutation: read each tab's label once at lowering (the bar keeps `Comments · 0` after the click).
+TEST_CASE("interpreter control: a tab label follows the data, and the bar keeps the pick", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "labels",
+      "state": { "n": { "init": 0 } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "add", "label": "Add",
+          "onClick": [ { "set": "n", "value": { "fn": "add", "args": [ { "ref": "n" }, 1 ] } } ] },
+        { "kind": "tabs", "testId": "bar", "tabs": [
+          { "label": "Overview", "children": [ { "kind": "text", "text": "o" } ] },
+          { "label": { "fn": "format", "args": [ "Comments \u00b7 {0}", { "ref": "n" } ] },
+            "children": [ { "kind": "text", "text": "c" } ] } ] } ] } })");
+    int const bar = h.backend.find("Tabs", "testId", "bar").value();
+    CHECK(h.backend.prop(bar, "tabs") == "[Overview,Comments \u00b7 0]");
+    h.backend.chooseIndex(bar, 1);
+    h.settle();
+    h.backend.click(h.byTestId("Button", "add"));
+    h.settle();
+    CHECK(h.backend.prop(bar, "tabs") == "[Overview,Comments \u00b7 1]");
+    CHECK(h.backend.prop(bar, "selected") == "1");
+}
+
+// Mutation: lower `selected` from the node's own pick again (the button's write moves nothing).
+TEST_CASE("interpreter control: a command chooses a tab through the state `selected` reads", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "record",
+      "state": { "tab": { "init": "overview" }, "chose": { "init": "" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "book", "label": "Book", "onClick": [ { "set": "tab", "value": "bookings" } ] },
+        { "kind": "text", "testId": "chose", "text": { "ref": "chose" } },
+        { "kind": "text", "testId": "shown", "text": { "ref": "record.selected" } },
+        { "kind": "tabs", "id": "record", "testId": "bar", "selected": { "ref": "tab" },
+          "onChoose": [ { "set": "chose", "value": { "ref": "event" } } ],
+          "tabs": [
+            { "id": "overview", "label": "Overview", "children": [ { "kind": "text", "testId": "first", "text": "1" } ] },
+            { "id": "bookings", "label": "Bookings", "children": [ { "kind": "text", "testId": "second", "text": "2" } ] } ] } ] } })");
+    int const bar = h.backend.find("Tabs", "testId", "bar").value();
+    CHECK(h.backend.prop(bar, "selected") == "0");
+    CHECK(h.text("shown") == "overview");
+    h.backend.click(h.byTestId("Button", "book"));
+    h.settle();
+    CHECK(h.backend.prop(bar, "selected") == "1");
+    REQUIRE(h.backend.find("Text", "testId", "second").has_value());
+    CHECK(h.text("shown") == "bookings");
+    // A pick runs onChoose with the tab's id; `tab` is not written, so the bar goes back to the tab it names.
+    h.backend.chooseIndex(bar, 0);
+    h.settle();
+    CHECK(h.text("chose") == "overview");
+    CHECK(h.backend.prop(bar, "selected") == "1");
+}
+
+// Mutation: apply the surface once in the mount (the panel keeps `outOfSpec` after the flag clears).
+TEST_CASE("interpreter control: a surface follows the data", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "surfaces",
+      "state": { "flag": { "init": true } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "clear", "label": "Clear", "onClick": [ { "set": "flag", "value": false } ] },
+        { "kind": "panel", "testId": "card", "title": "Card",
+          "surface": { "if": [ { "ref": "flag" }, "outOfSpec", "" ] },
+          "children": [ { "kind": "text", "text": "x" } ] },
+        { "kind": "panel", "testId": "odd", "title": "Odd", "surface": { "if": [ { "ref": "flag" }, 3, null ] },
+          "children": [ { "kind": "text", "text": "y" } ] } ] } })");
+    int const card = h.byTestId("Panel", "card");
+    CHECK(h.backend.prop(card, "surface") == "outOfSpec");
+    h.backend.click(h.byTestId("Button", "clear"));
+    h.settle();
+    CHECK(h.backend.prop(card, "surface").empty());
+    // A value that is not a string is reported and drawn as no surface; `null` is no surface.
+    CHECK(h.backend.prop(h.byTestId("Panel", "odd"), "surface").empty());
+    REQUIRE(screen->diagnostics().size() == 1);
+    CHECK(screen->diagnostics().front().path == "/view/children/2/surface");
+}
+
+// Mutation: build the `forEach` without `commonOf` (no Column has the test id `rows`).
+TEST_CASE("interpreter control: a forEach honours its common properties", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "rows",
+      "state": { "shown": { "init": true } },
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "hide", "label": "Hide", "onClick": [ { "set": "shown", "value": false } ] },
+        { "kind": "forEach", "testId": "rows", "visible": { "ref": "shown" },
+          "sizing": { "lit": { "fixed": 20 } }, "rows": { "lit": [ 1, 2 ] },
+          "children": [ { "kind": "text", "testId": "row", "text": { "fn": "format", "args": [ "{0}", { "row": "" } ] } } ] } ] } })");
+    int const rows = h.byTestId("Column", "rows");
+    CHECK(h.backend.prop(rows, "layout") == "fixed(20)/content");
+    CHECK(h.backend.prop(rows, "visible") == "true");
+    h.backend.click(h.byTestId("Button", "hide"));
+    h.settle();
+    CHECK(h.backend.prop(rows, "visible") == "false");
+    // Hiding the container keeps its rows mounted.
+    std::size_t texts = 0;
+    for (int const text : h.backend.all("Text")) {
+        texts += h.backend.prop(text, "testId") == "row" ? 1U : 0U;
+    }
+    CHECK(texts == 2);
+}
+
+// Mutation: leave `sizes` unbound (the splitter records `sizes=[]`).
+TEST_CASE("interpreter control: a splitter's sizes reach the splitter", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "split",
+      "state": { "wide": { "init": 50 } },
+      "view": { "kind": "column", "children": [
+        { "kind": "splitter", "testId": "given", "sizes": { "lit": [ 37, 96 ] },
+          "children": [ { "kind": "spacer" }, { "kind": "spacer" } ] },
+        { "kind": "splitter", "testId": "computed",
+          "sizes": { "list": [ { "fn": "div", "args": [ 59, 2 ] }, { "ref": "wide" } ] },
+          "children": [ { "kind": "spacer" }, { "kind": "spacer" } ] },
+        { "kind": "splitter", "testId": "wrong", "sizes": { "list": [ "a", 2 ] },
+          "children": [ { "kind": "spacer" }, { "kind": "spacer" } ] } ] } })");
+    CHECK(h.backend.prop(h.byTestId("Splitter", "given"), "sizes") == "[37,96]");
+    // Each size is read as an integer property is: a decimal truncates toward zero.
+    CHECK(h.backend.prop(h.byTestId("Splitter", "computed"), "sizes") == "[29,50]");
+    // A value that is not a list of numbers is reported and shares the space equally.
+    CHECK(h.backend.prop(h.byTestId("Splitter", "wrong"), "sizes") == "[]");
+    REQUIRE(h.diagnostics.size() == 1);
+    CHECK(h.diagnostics.front().reason.contains("sizes is a list of numbers"));
+}
+
+// Mutation: lower no tracks (the grid gets `columns=1` and no `tracks`).
+TEST_CASE("interpreter control: a grid's tracks reach the grid in place of a column count", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "tracks",
+      "view": { "kind": "column", "children": [
+        { "kind": "grid", "testId": "plate", "tracks": [
+          { "width": { "lit": { "fixed": 3 } } },
+          { "width": { "lit": { "fixed": 6 } }, "align": "center" },
+          { "align": "end" } ],
+          "children": [ { "kind": "text", "text": "A" } ] },
+        { "kind": "grid", "testId": "plain", "columns": 2, "children": [] } ] } })");
+    int const plate = h.byTestId("Grid", "plate");
+    CHECK(h.backend.prop(plate, "tracks") == "[fixed(3),fixed(6);align=center,stretch(1);align=end]");
+    CHECK_FALSE(h.backend.hasProp(plate, "columns"));
+    int const plain = h.byTestId("Grid", "plain");
+    CHECK(h.backend.prop(plain, "columns") == "2");
+    CHECK_FALSE(h.backend.hasProp(plain, "tracks"));
+}
+
+// Mutation: lower `text` beside `spans`, and the fallback text is recorded; drop the report, and the diagnostic is
+// missing.
+TEST_CASE("interpreter control: a text's and a banner's spans record their runs in place of the text",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "spans",
+      "state": {"attempts": {"init": 3}, "count": {"init": 7}},
+      "view": {"kind": "column", "children": [
+        {"kind": "banner", "tone": "err", "testId": "refused",
+         "spans": {"list": [{"obj": {"text": "Password incorrect.", "strong": true}},
+                            {"fn": "format", "args": [" {0} of 5 attempts left before the account locks.",
+                                                      {"ref": "attempts"}]}]}},
+        {"kind": "text", "testId": "lot", "text": "fallback",
+         "spans": {"list": ["Lot ", {"obj": {"text": "L-26-0381", "mono": true}}]}},
+        {"kind": "text", "testId": "count", "spans": {"list": ["n=", {"ref": "count"}]}},
+        {"kind": "text", "testId": "bad",
+         "spans": {"list": ["a", {"ref": "count"}, {"if": [true, {"obj": {"x": {"ref": "count"}}}, "z"]}]}},
+        {"kind": "button", "testId": "fewer", "label": "Fewer",
+         "onClick": [{"set": "attempts", "value": 2}, {"set": "count", "value": 8}]}]}})");
+    int const banner = h.byTestId("Banner", "refused");
+    CHECK(h.backend.prop(banner, "spans") ==
+          "[Password incorrect.;strong, 3 of 5 attempts left before the account locks.]");
+    CHECK(h.backend.prop(banner, "text").empty());
+    int const lot = h.byTestId("Text", "lot");
+    CHECK(h.backend.prop(lot, "spans") == "[Lot ,L-26-0381;mono]");
+    CHECK_FALSE(h.backend.dump().contains("text=fallback"));
+    CHECK(h.backend.prop(h.byTestId("Text", "count"), "spans") == "[n\\=,7]");
+    int const bad = h.byTestId("Text", "bad");
+    CHECK(h.backend.prop(bad, "spans") == "[a,7]");
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.path == "/view/children/3/spans";
+          }) == 1);
+    h.backend.click(h.byTestId("Button", "fewer"));
+    h.settle();
+    CHECK(h.backend.prop(banner, "spans") ==
+          "[Password incorrect.;strong, 2 of 5 attempts left before the account locks.]");
+    CHECK(h.backend.prop(bad, "spans") == "[a,8]");
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.path == "/view/children/3/spans";
+          }) == 1);
+}
+
+// Mutation: drop the tone from spansOf (the run records none); report a bad tone on every evaluation (the count is
+// two); keep the run's tone when it is none of the names (the run records `Err`).
+TEST_CASE(
+    "interpreter control: a run's tone is read, a text's tone is applied, and a bad computed tone is reported once",
+    "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "tones",
+      "state": {"tone": {"init": "err"}, "n": {"init": 1}},
+      "view": {"kind": "column", "children": [
+        {"kind": "text", "testId": "kpi", "role": "display", "tone": {"ref": "tone"}, "text": "7"},
+        {"kind": "text", "testId": "line",
+         "spans": {"list": ["Past due ", {"obj": {"text": "7", "strong": true, "tone": {"ref": "tone"}}}]}},
+        {"kind": "button", "testId": "bad", "label": "Bad",
+         "onClick": [{"set": "tone", "value": "pink"}, {"set": "n", "value": 2}]}]}})");
+    CHECK(h.backend.prop(h.byTestId("Text", "kpi"), "tone") == "Err");
+    int const line = h.byTestId("Text", "line");
+    CHECK(h.backend.prop(line, "spans") == "[Past due ,7;strong;tone=Err]");
+    h.backend.click(h.byTestId("Button", "bad"));
+    h.settle();
+    CHECK(h.backend.prop(line, "spans") == "[Past due ,7;strong]");
+    h.backend.click(h.byTestId("Button", "bad"));
+    h.settle();
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.path == "/view/children/1/spans";
+          }) == 1);
+}
+
+// Mutation: read every item's tone as none (the `;tone=Err` is not recorded).
+TEST_CASE("interpreter control: a stacked key-value records its captions, its items' runs and their tones",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "kv",
+      "state": {"enough": {"init": false}, "line": {"init": "180 needed, 150 in stock"}},
+      "view": {"kind": "column", "children": [
+        {"kind": "keyValue", "testId": "kv", "fieldLayout": "stacked",
+         "items": {"list": [
+           {"obj": {"label": "Serial number", "spans": {"list": [{"obj": {"text": "DEAB-902114", "mono": true}}]}}},
+           {"obj": {"label": "Containers", "value": {"ref": "line"},
+                    "tone": {"if": [{"ref": "enough"}, null, "err"]}}},
+           {"obj": {"label": "Note; tone=Ok", "value": "a;b", "tone": "loud"}}]}},
+        {"kind": "button", "testId": "stock", "label": "Stock", "onClick": [{"set": "enough", "value": true}]}]}})");
+    int const kv = h.byTestId("KeyValue", "kv");
+    CHECK(h.backend.prop(kv, "captions") == "Above");
+    CHECK(h.backend.prop(kv, "items") ==
+          "[Serial number:[DEAB-902114;mono],Containers:180 needed\\, 150 in "
+          "stock;tone=Err,Note\\; tone\\=Ok:a\\;b]");
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.path == "/view/children/0/items" && refusal.reason.contains("\"loud\"");
+          }) == 1);
+    h.backend.click(h.byTestId("Button", "stock"));
+    h.settle();
+    CHECK(h.backend.prop(kv, "items") ==
+          "[Serial number:[DEAB-902114;mono],Containers:180 needed\\, 150 in stock,Note\\; tone\\=Ok:a\\;b]");
+}
+
+namespace {
+
+constexpr char const* kToned = R"({"vocab": "ui/1", "id": "toned",
+  "models": {"sample": {"type": "Lims_SampleModel"}},
+  "view": {"kind": "column", "children": [
+    {"kind": "button", "testId": "open", "label": "open", "onClick": {"open": "dlg"}},
+    {"kind": "text", "testId": "ready", "text": {"fn": "format", "args": ["{0}", {"ref": "dlg.ready"}]}},
+    {"kind": "dialog", "id": "dlg", "title": "Result",
+     "scope": {"mutations": {"save": {"model": "sample", "action": "Lims_Save", "body": {"obj": {}}}}},
+     "children": [
+       {"kind": "textInput", "id": "impurity", "testId": "impurity", "required": true,
+        "description": "Out of spec: above 0.20", "tone": "err" EXTRA},
+       {"kind": "button", "testId": "save", "label": "save", "onClick": {"run": "save"}}]}]}})";
+
+std::string toned(std::string const& extra) {
+    std::string text = kToned;
+    text.replace(text.find("EXTRA"), 5, extra);
+    return text;
+}
+
+}  // namespace
+
+// Mutation: route `tone` into `errors` in fieldOf (the toned field is then invalid, and the run is refused).
+TEST_CASE("interpreter control: a field's tone evaluates its value without making it invalid", "[ui][interpreter]") {
+    {
+        Harness h;
+        auto const screen = h.mount(toned(""));
+        h.backend.click(h.byTestId("Button", "open"));
+        h.settle();
+        int const input = h.byTestId("TextInput", "impurity");
+        CHECK(h.backend.prop(input, "tone") == "Err");
+        CHECK(h.backend.prop(input, "description") == "Out of spec: above 0.20");
+        h.backend.edit(input, "0.31");
+        h.settle();
+        CHECK(h.text("ready") == "true");
+        h.backend.click(h.byTestId("Button", "save"));
+        h.settle();
+        CHECK(h.dispatcher.count("Lims_Save") == 1);
+    }
+    Harness h;
+    auto const screen = h.mount(toned(R"(, "errors": {"list": ["x"]})"));
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    h.backend.edit(h.byTestId("TextInput", "impurity"), "0.31");
+    h.settle();
+    CHECK(h.text("ready") == "false");
+}
+
+// Mutation: skip `setShape`, `setSize` or `setMono` in the mount (the property is not recorded), or record one for a
+// node that gave none.
+TEST_CASE("interpreter control: a button's and a badge's shape, size and mono reach the backend only when given",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "shapes", "view": {"kind": "column", "children": [
+        {"kind": "button", "testId": "well", "label": "S1", "shape": "round", "size": "small", "mono": true},
+        {"kind": "button", "testId": "plain", "label": "Save"},
+        {"kind": "badge", "testId": "tag", "text": "QC", "shape": "round", "mono": true},
+        {"kind": "badge", "testId": "plainTag", "text": "OK"}]}})");
+    int const well = h.byTestId("Button", "well");
+    CHECK(h.backend.prop(well, "shape") == "round");
+    CHECK(h.backend.prop(well, "size") == "small");
+    CHECK(h.backend.prop(well, "mono") == "true");
+    int const plain = h.byTestId("Button", "plain");
+    CHECK_FALSE(h.backend.hasProp(plain, "shape"));
+    CHECK_FALSE(h.backend.hasProp(plain, "size"));
+    CHECK_FALSE(h.backend.hasProp(plain, "mono"));
+    int const tag = h.byTestId("Badge", "tag");
+    CHECK(h.backend.prop(tag, "shape") == "round");
+    CHECK(h.backend.prop(tag, "mono") == "true");
+    int const plainTag = h.byTestId("Badge", "plainTag");
+    CHECK_FALSE(h.backend.hasProp(plainTag, "shape"));
+    CHECK_FALSE(h.backend.hasProp(plainTag, "mono"));
+}
+
+// Mutation: drop the unit's binding (no `unit` is recorded); drop the computed-mode check (the mount throws).
+TEST_CASE("interpreter control: a text input's unit is bound, and a computed multiline mode drops it with a report",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "unit",
+      "state": {"unit": {"init": "°C"}, "mode": {"init": "multiline"}},
+      "view": {"kind": "column", "children": [
+        {"kind": "textInput", "testId": "fixed", "label": "Temperature", "unit": "°C"},
+        {"kind": "textInput", "testId": "bound", "label": "Assay", "unit": {"ref": "unit"}},
+        {"kind": "textInput", "testId": "area", "label": "Note", "mode": {"ref": "mode"}, "unit": "%",
+         "icon": "search"},
+        {"kind": "button", "testId": "percent", "label": "%", "onClick": [{"set": "unit", "value": "% LC"}]}]}})");
+    CHECK(h.backend.prop(h.byTestId("TextInput", "fixed"), "unit") == "°C");
+    int const bound = h.byTestId("TextInput", "bound");
+    CHECK(h.backend.prop(bound, "unit") == "°C");
+    h.backend.click(h.byTestId("Button", "percent"));
+    h.settle();
+    CHECK(h.backend.prop(bound, "unit") == "% LC");
+    int const area = h.byTestId("TextInput", "area");
+    CHECK_FALSE(h.backend.hasProp(area, "unit"));
+    CHECK_FALSE(h.backend.hasProp(area, "icon"));
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.reason == "a multiline input shows no unit";
+          }) == 1);
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.reason == "a multiline input shows no icon";
+          }) == 1);
+}
+
+// Mutation: skip `setPrefix`, `setMono` or `setAlign` in the mount (the property is not recorded), or tell the widget
+// the default alignment.
+TEST_CASE("interpreter control: an input's prefix, mono and align reach the backend only when given",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "inputs", "view": {"kind": "column", "children": [
+        {"kind": "textInput", "testId": "window", "label": "Window", "prefix": "±", "mono": true, "align": "end",
+         "unit": "days"},
+        {"kind": "textInput", "testId": "plain", "label": "Plain", "align": "start"},
+        {"kind": "textInput", "testId": "area", "label": "Note", "mode": "multiline", "mono": true}]}})");
+    int const window = h.byTestId("TextInput", "window");
+    CHECK(h.backend.prop(window, "prefix") == "±");
+    CHECK(h.backend.prop(window, "mono") == "true");
+    CHECK(h.backend.prop(window, "align") == "end");
+    int const plain = h.byTestId("TextInput", "plain");
+    CHECK_FALSE(h.backend.hasProp(plain, "prefix"));
+    CHECK_FALSE(h.backend.hasProp(plain, "mono"));
+    CHECK_FALSE(h.backend.hasProp(plain, "align"));
+    int const area = h.byTestId("TextInput", "area");
+    CHECK(h.backend.prop(area, "mono") == "true");
+    CHECK_FALSE(h.backend.hasProp(area, "align"));
+}
+
+// Mutation: take a computed style of no known name as radio (the select records `style=Radio`).
+TEST_CASE("interpreter control: a computed select style naming none is reported once and drawn as a dropdown",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "style", "state": {"style": {"init": "radios"}},
+      "view": {"kind": "column", "children": [
+        {"kind": "select", "testId": "odd", "label": "Show", "style": {"ref": "style"}, "options": {"list": []}},
+        {"kind": "select", "testId": "seg", "label": "Show", "style": "segmented", "options": {"list": []}},
+        {"kind": "badge", "testId": "stat", "text": "STAT", "style": "outline"},
+        {"kind": "button", "testId": "reject", "label": "Reject", "emphasis": "dangerOutline"}]}})");
+    CHECK(h.backend.prop(h.byTestId("Select", "odd"), "style") == "Dropdown");
+    CHECK(h.backend.prop(h.byTestId("Select", "seg"), "style") == "Segmented");
+    CHECK(h.backend.prop(h.byTestId("Badge", "stat"), "style") == "Outline");
+    CHECK(h.backend.prop(h.byTestId("Button", "reject"), "emphasis") == "DangerOutline");
+    CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
+              return refusal.reason.contains("a select's style is dropdown, radio or segmented");
+          }) == 1);
+}
+
+// Mutation: have mountApp skip `formatting` (both the input and the text read ISO).
+TEST_CASE("interpreter control: the app document's date patterns reach a screen's inputs and its date texts",
+          "[ui][interpreter]") {
+    Harness h;
+    auto root = h.interpreter.mountApp(ui::testing::loadOrFail(
+        R"({"vocab": "ui/1", "id": "app", "formatting": {"date": "dd-MMM-yyyy", "dateTime": "dd-MMM-yyyy HH:mm"}})",
+        ui::testing::corpusCatalog()));
+    REQUIRE(root.has_value());
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "dates",
+      "state": {"when": {"init": "2026-10-24T09:41:00Z"}},
+      "view": {"kind": "column", "children": [
+        {"kind": "dateTimeInput", "testId": "pulled", "label": "Pulled", "value": {"ref": "when"}},
+        {"kind": "dateTimeInput", "testId": "day", "label": "Day", "mode": "date", "value": {"ref": "when"}},
+        {"kind": "text", "testId": "shown", "text": {"fn": "dateTime", "args": [{"ref": "when"}]}}]}})");
+    CHECK(h.backend.prop(h.byTestId("DateTimeInput", "pulled"), "pattern") == "dd-MMM-yyyy HH:mm");
+    CHECK(h.backend.prop(h.byTestId("DateTimeInput", "day"), "pattern") == "dd-MMM-yyyy");
+    CHECK(h.text("shown") == "24-Oct-2026 09:41");
+}
+
+// Mutation: drop the emphasis in the textInput lowering (no `emphasis` is recorded).
+TEST_CASE("interpreter control: a prominent text input records its emphasis", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "scan",
+      "view": {"kind": "textInput", "testId": "scan", "label": "Scan", "emphasis": "prominent"}})");
+    CHECK(h.backend.prop(h.byTestId("TextInput", "scan"), "emphasis") == "Prominent");
+}
+
+// Mutation: leave the mount's setSheet out for a bound `sheet` (no `sheet` property at all).
+TEST_CASE("interpreter control: a dialog's sheet follows the width class, and its dismiss label is sent",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "sign",
+      "state": { "open": { "init": true } },
+      "view": { "kind": "dialog", "id": "signature", "testId": "signature", "title": "Sign",
+        "open": { "ref": "open" }, "dismissLabel": "Cancel",
+        "sheet": { "fn": "eq", "args": [ { "env": "widthClass" }, "compact" ] },
+        "children": [ { "kind": "text", "testId": "inside", "text": "inside" } ] } })");
+    int const dialog = h.byTestId("Dialog", "signature");
+    CHECK(h.backend.prop(dialog, "sheet") == "false");
+    CHECK(h.backend.prop(dialog, "dismissLabel") == "Cancel");
+    h.session.setEnvironmentValue("widthClass", ui::Value{"compact"});
+    h.settle();
+    CHECK(h.backend.prop(dialog, "sheet") == "true");
+    CHECK(h.text("inside") == "inside");
+    h.session.setEnvironmentValue("widthClass", ui::Value{"expanded"});
+    h.settle();
+    CHECK(h.backend.prop(dialog, "sheet") == "false");
 }

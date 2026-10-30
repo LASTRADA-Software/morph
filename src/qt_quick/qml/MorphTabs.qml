@@ -6,65 +6,231 @@ import QtQuick.Layouts
 
 // A tab bar over page slots. The mount keeps exactly the selected page's slot visible; the bar's highlight follows
 // `select` and the user's clicks. A hidden bar (`barShown` false) gives its height to the pages; a shown one sits a
-// spacing step above them.
+// spacing step above them, or directly over them while the strip is inset. Tabs that do not fit beside a trailing
+// "More" button are left out of the bar and listed in the button's menu; choosing one there chooses that tab, as a
+// click on its button would.
 MorphWidget {
     id: root
 
     property list<string> labels: []
     property bool barShown: true
+    property string moreLabel: "More"
+    // A spacing step: the strip and its rule span the width, and the first tab starts this far in. Each page is padded by
+    // it on every side unless `pageInset` says otherwise.
+    property int inset: 0
+    readonly property real insetPx: Theme.spaceOf(root.inset)
+    // The padding of each page: a spacing step, or -1 for `inset`'s. Each page pads its own content, inside its scroll:
+    // a page that scrolls clips at the node's edges, its bar sits at them, and a bleeding child reaches them.
+    property int pageInset: -1
+    readonly property real pageInsetPx: root.pageInset >= 0 ? Theme.spaceOf(root.pageInset) : root.insetPx
+    // The surface the strip, and nothing else, is drawn on; empty draws it on the surface around it.
+    property string stripSurface: ""
+    // How many leading tabs the bar shows; the rest are the More menu's.
+    property int shownCount: labels.length
+    readonly property bool overflowing: shownCount < labels.length
     readonly property Item content: pages
     readonly property int highlighted: bar.currentIndex
 
     // Highlights tab `index`; past the last highlights none.
     function select(index: int) {
         bar.currentIndex = index < bar.count ? index : -1
+        keepChosenInView()
     }
+
+    // The chosen tab lies wholly inside the bar however it was chosen: placed once the bar has been laid out, since a
+    // tab chosen before the first layout has no position yet, and again whenever the bar's width changes.
+    function keepChosenInView() {
+        Qt.callLater(root.placeChosen)
+    }
+
+    function placeChosen() {
+        const list = bar.contentItem as ListView
+        if (bar.currentIndex >= 0 && list && bar.currentIndex < root.shownCount)
+            list.positionViewAtIndex(bar.currentIndex, ListView.Contain)
+    }
+
+    // The More button's width for a label: the label and the chevron, in the padding a tab has.
+    function moreWidthFor(label: string): real {
+        return metrics.advanceWidth(label + " ▾") + 2 * Theme.spaceOf(3)
+    }
+
+    // Shows the leading tabs that fit beside More when the tabs together are wider than the row. More is measured at
+    // its widest label, the wider of `moreLabel` and the longest tab it would hold, so its label changing with the
+    // chosen tab changes nothing about what fits. The fit reads the tabs' implicit widths, not the widths they are
+    // drawn at, so it does not depend on its own result.
+    function refit() {
+        const count = root.labels.length
+        const widths = []
+        let total = 0
+        for (let i = 0; i < count; ++i) {
+            const button = tabs.itemAt(i) as TabButton
+            const width = button ? button.implicitWidth : 0
+            widths.push(width)
+            total += width
+        }
+        const room = tabRow.width
+        if (total <= room || room <= 0) {
+            root.shownCount = count
+            return
+        }
+        for (let shown = count - 1; shown >= 0; --shown) {
+            let widest = root.moreWidthFor(root.moreLabel)
+            let used = 0
+            for (let i = 0; i < count; ++i) {
+                if (i < shown)
+                    used += widths[i]
+                else
+                    widest = Math.max(widest, root.moreWidthFor(root.labels[i]))
+            }
+            if (used + widest <= room || shown === 0) {
+                root.shownCount = shown
+                return
+            }
+        }
+    }
+
+    function scheduleFit() {
+        Qt.callLater(root.refit)
+    }
+
+    onLabelsChanged: scheduleFit()
+    onMoreLabelChanged: scheduleFit()
 
     // A hidden bar never holds the focus: the workspace's chords must reach a page when a second tab arrives.
     focusTarget: bar.visible ? bar : pages
-    implicitWidth: Math.max(bar.visible ? bar.implicitWidth : 0, pages.implicitWidth)
+    implicitWidth: Math.max(bar.visible ? bar.implicitWidth + (more.visible ? more.implicitWidth : 0) + 2 * root.insetPx
+                                        : 0,
+                            pages.implicitWidth)
     implicitHeight: (bar.visible ? bar.implicitHeight + layout.spacing : 0) + pages.implicitHeight
+
+    FontMetrics {
+        id: metrics
+        font: Theme.bodyFont
+    }
 
     ColumnLayout {
         id: layout
         anchors.fill: parent
-        spacing: Theme.spaceOf(3)
+        // An inset strip sits directly over its pages, whose own inset is the gap.
+        spacing: root.inset > 0 ? 0 : Theme.spaceOf(3)
 
-        TabBar {
-            id: bar
+        Item {
+            id: tabArea
             visible: root.barShown
             Layout.fillWidth: true
-            currentIndex: -1
-            background: Rectangle {
-                color: "transparent"
+            implicitHeight: tabRow.implicitHeight
 
-                Rectangle {
-                    anchors.bottom: parent.bottom
-                    width: parent.width
-                    height: 1
-                    color: root.scheme.border
-                }
+            // The strip's own surface, across the whole width.
+            Rectangle {
+                objectName: "stripSurface"
+                anchors.fill: parent
+                z: -1
+                visible: root.stripSurface !== "" && Theme.draws(root.stripSurface)
+                color: Theme.scheme(root.stripSurface).surface
             }
 
-            Repeater {
-                model: root.labels
+            // The rule under the tabs runs the row's width, past the last tab and More.
+            Rectangle {
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: 1
+                color: root.scheme.border
+            }
 
-                TabButton {
+            RowLayout {
+                id: tabRow
+                anchors.fill: parent
+                anchors.leftMargin: root.insetPx
+                anchors.rightMargin: root.insetPx
+                spacing: 0
+                onWidthChanged: root.scheduleFit()
+
+                // As wide as its shown tabs, so More follows the last one.
+                TabBar {
+                    id: bar
+                    visible: root.barShown
+                    currentIndex: -1
+                    spacing: 0
+                    onWidthChanged: root.keepChosenInView()
+                    background: Item {
+                    }
+
+                    // The model is the count, not the list: a relabel with the same count keeps every button, and with it
+                    // the highlight and the keyboard focus; a list model would rebuild them all.
+                    Repeater {
+                        id: tabs
+                        model: root.labels.length
+
+                        TabButton {
+                            font: Theme.bodyFont
+                            id: tab
+                            required property int index
+                            text: index < root.labels.length ? root.labels[index] : ""
+                            // A tab past the fit leaves the bar, the focus chain and the accessibility tree, and takes no
+                            // width; its implicit width still counts towards the fit.
+                            visible: index < root.shownCount
+                            width: visible ? implicitWidth : 0
+                            onImplicitWidthChanged: root.scheduleFit()
+                            // A tab is a control: at least the control height, and a touch target while the window is
+                            // compact; its label keeps its own size.
+                            implicitHeight: Math.max(implicitContentHeight + topPadding + bottomPadding,
+                                                     Theme.targetHeight)
+                            leftPadding: Theme.spaceOf(3)
+                            rightPadding: Theme.spaceOf(3)
+                            Keys.onRightPressed: event => {
+                                if (index === root.shownCount - 1 && more.visible) {
+                                    more.forceActiveFocus()
+                                    event.accepted = true
+                                }
+                            }
+                            contentItem: Text {
+                                textFormat: Text.PlainText
+                                text: tab.text
+                                font: tab.font
+                                color: tab.checked ? root.scheme.text : root.scheme.muted
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                            }
+                            background: Rectangle {
+                                color: "transparent"
+
+                                Rectangle {
+                                    anchors.bottom: parent.bottom
+                                    width: parent.width
+                                    height: 2
+                                    visible: tab.checked
+                                    color: root.scheme.accent
+                                }
+                            }
+                            onClicked: root.fire("select", index)
+                        }
+                    }
+                }
+
+                // A sibling of the bar, not one of its buttons, so the bar's count and current index stay the tabs'.
+                AbstractButton {
+                    id: more
+                    objectName: "more"
+                    visible: root.barShown && root.overflowing
+                    // The hidden tab that is chosen, whose label More then shows.
+                    readonly property int chosenHidden: bar.currentIndex >= root.shownCount ? bar.currentIndex : -1
+                    text: (chosenHidden >= 0 ? root.labels[chosenHidden] : root.moreLabel) + " ▾"
                     font: Theme.bodyFont
-                    id: tab
-                    required property int index
-                    required property string modelData
-                    text: modelData
-                    width: implicitWidth
-                    leftPadding: Theme.spaceOf(4)
-                    rightPadding: Theme.spaceOf(4)
+                    implicitHeight: bar.implicitHeight
+                    implicitWidth: contentItem.implicitWidth + leftPadding + rightPadding
+                    leftPadding: Theme.spaceOf(3)
+                    rightPadding: Theme.spaceOf(3)
+                    Layout.alignment: Qt.AlignBottom
+                    Accessible.role: Accessible.Button
+                    Accessible.name: text
                     contentItem: Text {
-                        text: tab.text
-                        font: tab.font
-                        color: tab.checked ? root.scheme.accent : root.scheme.muted
+                        textFormat: Text.PlainText
+                        text: more.text
+                        font: more.font
+                        color: more.chosenHidden >= 0 ? root.scheme.text : root.scheme.muted
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
                     }
                     background: Rectangle {
                         color: "transparent"
@@ -73,20 +239,88 @@ MorphWidget {
                             anchors.bottom: parent.bottom
                             width: parent.width
                             height: 2
-                            visible: tab.checked
+                            visible: more.chosenHidden >= 0
                             color: root.scheme.accent
                         }
                     }
-                    onClicked: root.fire("select", index)
+                    onClicked: popup.open()
+                    Keys.onReturnPressed: clicked()
+                    Keys.onEnterPressed: clicked()
+                    Keys.onDownPressed: clicked()
+                    Keys.onLeftPressed: {
+                        const last = tabs.itemAt(root.shownCount - 1) as TabButton
+                        if (last)
+                            last.forceActiveFocus()
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
                 }
             }
         }
 
+        // The pages fill the area under the strip; each pads its own content by `pageInset`.
         ColumnLayout {
             id: pages
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
+            onChildrenChanged: {
+                for (const child of children) {
+                    const page = child as MorphSlot
+                    if (page)
+                        page.contentInset = Qt.binding(() => root.pageInsetPx)
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: popup
+        objectName: "moreMenu"
+        y: tabArea.y + tabArea.height
+        padding: 2
+        onAboutToShow: placement.place(popup, more)
+
+        MorphPopupPlacement {
+            id: placement
+        }
+
+        background: MorphPopupBackground {
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 0
+
+            Repeater {
+                model: root.overflowing ? root.labels.length - root.shownCount : 0
+
+                ItemDelegate {
+                    id: entry
+                    objectName: "moreEntry"
+                    required property int index
+                    readonly property int tabIndex: root.shownCount + index
+                    Layout.fillWidth: true
+                    font: Theme.bodyFont
+                    text: root.labels[tabIndex]
+                    contentItem: MorphPlainContent {
+                        control: entry
+                        color: entry.palette.text
+                        alignment: Qt.AlignLeft
+                    }
+                    background: Rectangle {
+                        radius: Theme.radiusControl
+                        color: entry.down || entry.hovered || entry.visualFocus
+                               ? Theme.cardScheme.hover : "transparent"
+                    }
+                    Accessible.role: Accessible.MenuItem
+                    onClicked: {
+                        popup.close()
+                        root.fire("select", tabIndex)
+                    }
+                }
+            }
         }
     }
 }

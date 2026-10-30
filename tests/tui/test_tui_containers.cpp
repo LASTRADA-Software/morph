@@ -14,6 +14,7 @@
 
 #include "tui/container_widgets.hpp"
 #include "tui/leaf_widgets.hpp"
+#include "tui/list_widgets.hpp"
 #include "tui_harness.hpp"
 
 namespace ui = morph::ui;
@@ -24,7 +25,9 @@ using morph::tui::detail::Direction;
 using morph::tui::detail::GridImpl;
 using morph::tui::detail::PanelImpl;
 using morph::tui::detail::ScrollImpl;
+using morph::tui::detail::SlotImpl;
 using morph::tui::detail::StackImpl;
+using morph::tui::detail::TabsImpl;
 using morph::tui::detail::TextImpl;
 using morph::tui::detail::WidgetBase;
 using morph::tui::testing::Harness;
@@ -845,4 +848,113 @@ TEST_CASE("tui containers: a horizontal scroll keeps the focused child in view",
     harness.focus(*buttons.back());
     CHECK(harness.draw() == Rows{"[ 1 ][ 2 ]"});
     buttons.clear();
+}
+
+// Mutation: reserve the column only while selected (the text moves with the selection).
+TEST_CASE("tui containers: a selected stack draws a bar in its first column and keeps its content in place",
+          "[tui][containers]") {
+    Harness harness{8, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    column->setSelected(true);
+    auto const first = harness.make<TextImpl>(column.get());
+    first->setText("ab");
+    auto const second = harness.make<TextImpl>(column.get());
+    second->setText("cd");
+    CHECK(harness.draw() == Rows{"▌ab", "▌cd"});
+    column->setSelected(false);
+    CHECK(harness.draw() == Rows{" ab", " cd"});
+}
+
+TEST_CASE("tui containers: a selected stack with leading padding draws its bar inside the padding",
+          "[tui][containers]") {
+    Harness harness{8, 1};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    // Step 3: two columns either side.
+    column->setPadding(ui::Padding{0, 3});
+    column->setSelected(true);
+    auto const text = harness.make<TextImpl>(column.get());
+    text->setText("ab");
+    CHECK(harness.draw() == Rows{"▌ ab"});
+}
+
+// Mutation: ignore the hint (the bleeding text is drawn from the padding's edge, in column 2).
+TEST_CASE("tui containers: a bleeding child of a padded column starts at the column's first cell",
+          "[tui][containers]") {
+    Harness harness{8, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    // Step 4: two columns either side.
+    column->setPadding(ui::Padding{0, 4});
+    auto const inside = harness.make<TextImpl>(column.get());
+    inside->setText("xy");
+    auto const bleeding = harness.make<TextImpl>(column.get());
+    bleeding->setText("ab");
+    bleeding->setLayout({.bleed = true});
+    CHECK(harness.draw() == Rows{"  xy", "ab"});
+}
+
+// Mutation: do not widen a holder over the panel's inner span (the bleeding child is cut at the padding), or do not
+// pad the holder's other children by the panel's padding (the sibling sits at the frame's edge).
+TEST_CASE("tui containers: a bleeding child of a holder column reaches its panel's inner edges", "[tui][containers]") {
+    Harness harness{12, 6};
+    auto const panel = harness.make<PanelImpl>(nullptr);
+    // Step 4: two columns either side of the content.
+    panel->setPadding(4);
+    auto const holder = harness.make<StackImpl>(panel.get(), ui::Axis::Vertical);
+    holder->setPassesBleed(true);
+    auto const bleeding = harness.make<TextImpl>(holder.get());
+    bleeding->setText("ab");
+    bleeding->setLayout({.bleed = true});
+    auto const inside = harness.make<TextImpl>(holder.get());
+    inside->setText("xy");
+    Rows const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 4);
+    CHECK(drawn.at(2).starts_with("│ab"));
+    CHECK(drawn.at(3).starts_with("│  xy"));
+}
+
+// Mutation: scroll a scrollable slot whatever its content (the short page takes the focus on Tab), or never scroll it
+// (the tall page takes none).
+TEST_CASE("tui containers: a scrollable slot takes the focus only while its content is taller than it",
+          "[tui][containers]") {
+    Harness harness{10, 4};
+    auto const slot = harness.make<SlotImpl>(nullptr);
+    slot->setScrollable(true);
+    auto const first = harness.make<TextImpl>(slot.get());
+    first->setText("a");
+    auto const second = harness.make<TextImpl>(slot.get());
+    second->setText("b");
+    static_cast<void>(harness.draw());
+    morph::tui::detail::moveFocus(harness.context(), Direction::Forward);
+    CHECK_FALSE(harness.focused(*slot));
+
+    std::vector<std::unique_ptr<TextImpl>> more;
+    for (int line = 0; line < 6; ++line) {
+        more.push_back(harness.make<TextImpl>(slot.get()));
+        more.back()->setText("line " + std::to_string(line));
+    }
+    static_cast<void>(harness.draw());
+    morph::tui::detail::moveFocus(harness.context(), Direction::Forward);
+    CHECK(harness.focused(*slot));
+}
+
+// Mutation: leave the tab page unpadded (its content starts in column 0), or pad it from the tabs node (the bleeding
+// text is cut at the padding).
+TEST_CASE("tui containers: a tab page pads its own content, and a bleeding child of it takes the page's whole width",
+          "[tui][containers]") {
+    Harness harness{10, 4};
+    auto const tabs = harness.make<TabsImpl>(nullptr);
+    tabs->setTabs({"A"});
+    tabs->setBarShown(false);
+    // Step 4: two columns either side of the page's content.
+    tabs->setPageInset(4);
+    auto const slot = harness.make<SlotImpl>(tabs.get());
+    slot->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    slot->setScrollable(true);
+    auto const inside = harness.make<TextImpl>(slot.get());
+    inside->setText("xy");
+    auto const bleeding = harness.make<TextImpl>(slot.get());
+    bleeding->setText("ab");
+    bleeding->setLayout({.bleed = true});
+    CHECK(harness.draw().at(1) == "  xy");
+    CHECK(harness.draw().at(2) == "ab");
 }

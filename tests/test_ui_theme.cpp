@@ -77,7 +77,9 @@ std::string refusal(std::vector<std::string_view> const& files) {
 
 TEST_CASE("theme: a design tool's DTCG 2025.10 export loads and resolves", "[ui][theme]") {
     TokenSet const base = parsed(kBase);
-    CHECK_FALSE(base.contains("motion.spring"));
+    // A token of a type the client does not read is kept with its type, so the report can name it.
+    REQUIRE(base.contains("motion.spring"));
+    CHECK(base.at("motion.spring").type == "springy");
     auto const resolved = morph::ui::resolveTokens({&base});
     REQUIRE(resolved);
     CHECK(morph::ui::colorOf(resolved->at("color.surface").value) == Rgba{.r = 255, .g = 255, .b = 255, .a = 255});
@@ -130,6 +132,7 @@ TEST_CASE("theme: the shell's tokens have defaults, and a shadow is read and che
     CHECK(defaults.colors.at("color.background").hex() == "#f2f3f7");
     CHECK(defaults.dimensions.at("radius.control") == 6.0);
     CHECK(defaults.dimensions.at("radius.card") == 10.0);
+    CHECK(defaults.dimensions.at("radius.badge") == 4.0);
     CHECK(defaults.dimensions.at("control.height") == 32.0);
     // Zero: derived from the platform font.
     CHECK(defaults.dimensions.at("font.size.body") == 0.0);
@@ -156,10 +159,39 @@ TEST_CASE("theme: the shell's tokens have defaults, and a shadow is read and che
     CHECK_THAT(malformed.error(), Catch::Matchers::ContainsSubstring("shadow"));
 }
 
+// Mutation: name the touch token `control.height.touch`, inside the `control.height` token (it is never read, and
+// the default 44 stands).
+TEST_CASE("theme: control.height and control.touchHeight are siblings, each read from one file", "[ui][theme]") {
+    CHECK(morph::ui::themeValues().dimensions.at("control.touchHeight") == 44.0);
+    TokenSet const tokens = parsed(R"({"control": {"$type": "dimension",
+        "height": {"$value": {"value": 30, "unit": "px"}},
+        "touchHeight": {"$value": {"value": 48, "unit": "px"}}}})");
+    auto const resolved = morph::ui::resolveTokens({&tokens});
+    REQUIRE(resolved);
+    morph::ui::ThemeValues const values = morph::ui::themeValues(*resolved);
+    CHECK(values.dimensions.at("control.height") == 30.0);
+    CHECK(values.dimensions.at("control.touchHeight") == 48.0);
+}
+
+// Mutation: name the mono token `font.family.mono` (readGroup reads `font.family` as a token and never descends into
+// it, so the mono family is the default).
+TEST_CASE("theme: font.mono is a sibling of font.family, and themeValues gives both family lists", "[ui][theme]") {
+    TokenSet const both = parsed(R"({"font": {"family": {"$type": "fontFamily", "$value": "Inter"},
+                                              "mono": {"$type": "fontFamily", "$value": ["JetBrains Mono", "Menlo"]}}})");
+    auto const resolved = morph::ui::resolveTokens({&both});
+    REQUIRE(resolved);
+    morph::ui::ThemeValues const values = morph::ui::themeValues(*resolved);
+    CHECK(values.families.at("font.family") == std::vector<std::string>{"Inter"});
+    CHECK(values.families.at("font.mono") == std::vector<std::string>{"JetBrains Mono", "Menlo"});
+    CHECK(morph::ui::themeValues().families.at("font.mono").empty());
+}
+
 TEST_CASE("theme: a missing token takes its default; an unknown path is ignored", "[ui][theme]") {
     morph::ui::ThemeValues const defaults = morph::ui::themeValues();
     CHECK(defaults.colors.at("color.text").hex() == "#1d1d1f");
     CHECK(defaults.numbers.at("opacity.stale") == 0.55);
+    CHECK(defaults.colors.at("color.chart.1").hex() == "#0072b2");
+    CHECK(defaults.colors.at("color.chart.4").hex() == "#a8508a");
 
     TokenSet const base = parsed(kBase);
     auto const resolved = morph::ui::resolveTokens({&base});
@@ -171,7 +203,7 @@ TEST_CASE("theme: a missing token takes its default; an unknown path is ignored"
     CHECK_FALSE(values.colors.contains("space.2"));
     CHECK(values.dimensions.at("space.2") == 8.0);
     CHECK(values.colors.size() + values.numbers.size() + values.dimensions.size() + values.shadows.size() +
-              values.families.size() ==
+              values.families.size() + values.strokes.size() + values.keywords.size() ==
           morph::ui::kThemeTokens.size());
 
     // A path of the set with another type keeps the default.
@@ -486,4 +518,72 @@ TEST_CASE("theme: a number of the set takes the theme's value only when its type
     auto const resolved = morph::ui::resolveTokens({&tokens});
     REQUIRE(resolved);
     CHECK(morph::ui::themeValues(*resolved).numbers.at("opacity.stale") == 0.55);
+}
+
+TEST_CASE("theme: a group's $root is the token at the group's own path", "[ui][theme]") {
+    TokenSet const set = parsed(R"({"color": {"$type": "color",
+        "ok": {"$root": {"$value": "#17602F"}, "bg": {"$value": "#E2F4E8"}},
+        "same": {"$value": "{color.ok.$root}"}, "also": {"$value": "{color.ok}"}}})");
+    REQUIRE(set.contains("color.ok"));
+    REQUIRE(set.contains("color.ok.bg"));
+    CHECK_FALSE(set.contains("color.ok.$root"));
+    auto const resolved = morph::ui::resolveTokens({&set});
+    REQUIRE(resolved);
+    CHECK(morph::ui::colorOf(resolved->at("color.ok").value)->hex() == "#17602f");
+    CHECK(morph::ui::colorOf(resolved->at("color.ok.bg").value)->hex() == "#e2f4e8");
+    CHECK(morph::ui::colorOf(resolved->at("color.same").value)->hex() == "#17602f");
+    CHECK(morph::ui::colorOf(resolved->at("color.also").value)->hex() == "#17602f");
+    morph::ui::ThemeValues const values = morph::ui::themeValues(*resolved);
+    CHECK(values.colors.at("color.ok").hex() == "#17602f");
+    CHECK(values.colors.at("color.ok.bg").hex() == "#e2f4e8");
+
+    // A $root with no $value, and one at the top of a file, are refused.
+    CHECK_FALSE(morph::ui::parseTokens(R"({"color": {"$type": "color", "ok": {"$root": {}}}})"));
+    CHECK_FALSE(morph::ui::parseTokens(R"({"$root": {"$type": "color", "$value": "#fff"}})"));
+}
+
+TEST_CASE("theme: a token that holds members is refused", "[ui][theme]") {
+    auto const tokens = morph::ui::parseTokens(
+        R"({"color": {"$type": "color", "ok": {"$value": "#17602F", "bg": {"$value": "#E2F4E8"}}}})");
+    REQUIRE_FALSE(tokens);
+    CHECK(tokens.error().contains("`color.ok`"));
+    CHECK(tokens.error().contains("`bg`"));
+    CHECK(tokens.error().contains("$root"));
+    // A $-prefixed member is metadata, not a token.
+    CHECK(morph::ui::parseTokens(
+        R"({"color": {"$type": "color", "ok": {"$value": "#17602F", "$description": "within spec"}}})"));
+}
+
+TEST_CASE("theme: the tokens nothing reads are reported, an aliased palette token is read", "[ui][theme]") {
+    morph::ui::ThemeIndex index;
+    index.base = "base";
+    index.variants.emplace("dark", "dark");
+    std::map<std::string, TokenSet, std::less<>> files;
+    files.emplace("base", parsed(R"({
+        "palette": {"$type": "color", "green": {"$value": "#17784A"}, "stray": {"$value": "#010203"}},
+        "color": {"$type": "color", "accent": {"$value": "{palette.green}"}, "sucess": {"$value": "#00ff00"}},
+        "shadow": {"$type": "shadow", "own": {"$value": {"color": "{palette.green}",
+            "offsetX": {"value": 0, "unit": "px"}, "offsetY": {"value": 0, "unit": "px"},
+            "blur": {"value": 1, "unit": "px"}, "spread": {"value": 0, "unit": "px"}}}},
+        "fill": {"$type": "gradient", "hero": {"$value": [1, 2]}}
+    })"));
+    files.emplace("dark", parsed(R"({"color": {"$type": "color", "sucess": {"$value": "#00aa00"}}})"));
+    morph::ui::TokenFileLookup const lookup = [&files](std::string_view id) -> TokenSet const* {
+        auto const found = files.find(id);
+        return found == files.end() ? nullptr : &found->second;
+    };
+    auto const unread = morph::ui::unreadThemeTokens(index, lookup);
+    std::vector<std::string> paths;
+    paths.reserve(unread.size());
+    for (auto const& token : unread) {
+        paths.push_back(token.path);
+    }
+    // palette.green is read through color.accent; the stray palette token, the typo, the gradient and the shadow
+    // nobody refers to are not. color.sucess is reported once, with the first file that has it.
+    CHECK(paths == std::vector<std::string>{"color.sucess", "fill.hero", "palette.stray", "shadow.own"});
+    REQUIRE(unread.size() == 4);
+    CHECK(unread.at(0).file == "base");
+    CHECK(unread.at(0).message().contains("is not a ui-theme/1 token"));
+    CHECK(unread.at(1).message().contains("of type gradient, which ui-theme/1 does not read"));
+    CHECK(morph::ui::themeProblems(index, lookup).size() == 4);
 }

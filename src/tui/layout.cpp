@@ -181,13 +181,20 @@ int crossExtent(ui::Sizing sizing, int space, Bounds bounds) {
 }
 
 GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width, int rowGap) {
-    int const count = std::max(1, columns);
+    std::vector<Item> const equal(static_cast<std::size_t>(std::max(1, columns)),
+                                  Item{.sizing = ui::Sizing::stretch(1), .natural = 0});
+    return planGrid(equal, cells, width, rowGap);
+}
+
+GridPlan planGrid(std::span<Item const> columns, std::span<GridCell const> cells, Track width, int rowGap) {
+    std::vector<Item> const single{Item{.sizing = ui::Sizing::stretch(1), .natural = 0}};
+    std::span<Item const> const tracks = columns.empty() ? std::span<Item const>{single} : columns;
+    // Bounded by memory, as the column widths are, so it saturates rather than overflows.
+    int const count = saturate(static_cast<Wide>(tracks.size()));
     GridPlan plan;
     plan.columnGap = std::max(0, width.gap);
     plan.rowGap = std::max(0, rowGap);
-    std::vector<Item> const equal(static_cast<std::size_t>(count),
-                                  Item{.sizing = ui::Sizing::stretch(1), .natural = 0});
-    plan.columnWidths = distribute(equal, Track{.length = width.length, .gap = plan.columnGap});
+    plan.columnWidths = distribute(tracks, Track{.length = width.length, .gap = plan.columnGap});
     plan.columnX = edgesOf(plan.columnWidths, plan.columnGap);
 
     int column = 0;
@@ -209,6 +216,137 @@ GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width, int
         column += span;
     }
     plan.rowY = edgesOf(plan.rowHeights, plan.rowGap);
+    return plan;
+}
+
+namespace {
+
+/// An item's basis along a wrapping line of @p length cells: a stretch item's minimum, no more than its natural
+/// extent when it has one (it needs no more room than it fills), else what it asks for.
+int basisOf(Item const& item, int length) noexcept {
+    if (isStretch(item.sizing) && item.minimum > 0) {
+        int const wanted = item.natural > 0 ? std::min(item.minimum, item.natural) : item.minimum;
+        return std::min({wanted, maximumOf(boundsOfItem(item)), std::max(0, length)});
+    }
+    return std::min(requestOf(item), std::max(0, length));
+}
+
+/// The value at `index`, checked.
+int valueAt(std::span<int const> values, std::size_t index) {
+    if (index >= values.size()) {
+        throw std::out_of_range{"morph::tui::layout: value " + std::to_string(index) + " past " +
+                                std::to_string(values.size())};
+    }
+    return *std::next(values.begin(), static_cast<std::ptrdiff_t>(index));
+}
+
+/// How a line's spare room is spread: before the first item, between each pair, and how many gaps get one more cell.
+struct Spread {
+    Wide lead = 0;
+    Wide extra = 0;
+    Wide remainder = 0;
+};
+
+/// The spread of @p spare cells over the items of @p extents under @p justify.
+Spread spreadOf(ui::Justify justify, Wide spare, std::span<int const> extents) {
+    Spread spread;
+    if (justify == ui::Justify::Center) {
+        spread.lead = spare / 2;
+    } else if (justify == ui::Justify::End) {
+        spread.lead = spare;
+    } else if (justify == ui::Justify::Between && extents.size() > 1) {
+        auto const gaps = static_cast<Wide>(extents.size()) - 1;
+        spread.extra = spare / gaps;
+        spread.remainder = spare % gaps;
+    }
+    return spread;
+}
+
+/// Places one line's @p members (indices into @p items, in order) in @p length cells.
+void placeLine(std::span<Item const> items, std::span<std::size_t const> members, std::span<int const> bases,
+               Track width, ui::Justify justify, int line, std::vector<WrapPlaced>& placed) {
+    // Items with a basis share the line and its gaps; the others take no space and no gap.
+    std::vector<Item> sharing;
+    std::vector<std::size_t> sharers;
+    for (std::size_t const member : members) {
+        int const basis = valueAt(bases, member);
+        if (basis > 0) {
+            Item item = itemAt(items, member);
+            if (isStretch(item.sizing)) {
+                // The line was filled by the item's basis, which is capped at its natural extent. Raising its share to
+                // the uncapped minimum would take the room from the items after it.
+                item.minimum = std::min(item.minimum, basis);
+            } else {
+                item.sizing = ui::Sizing::fixed(basis);
+                item.minimum = 0;
+                item.maximum = std::numeric_limits<int>::max();
+            }
+            sharing.push_back(item);
+            sharers.push_back(member);
+        }
+    }
+    std::vector<int> const extents = distribute(sharing, width);
+    Wide const used =
+        std::accumulate(extents.begin(), extents.end(), Wide{0}) + gapsBetween(extents.size(), width.gap);
+    Wide const spare = std::max<Wide>(0, Wide{width.length} - used);
+    bool const stretches = std::ranges::any_of(sharing, [](Item const& item) { return isStretch(item.sizing); });
+    auto const [lead, extra, startRemainder] = !stretches && spare > 0 ? spreadOf(justify, spare, extents) : Spread{};
+    Wide remainder = startRemainder;
+    Wide cursor = lead;
+    std::size_t next = 0;
+    bool first = true;
+    for (std::size_t const member : members) {
+        if (next < sharers.size() && sharers.at(next) == member) {
+            if (!first) {
+                cursor += Wide{std::max(0, width.gap)} + extra + (remainder > 0 ? 1 : 0);
+                remainder = std::max<Wide>(0, remainder - 1);
+            }
+            placed.at(member) = WrapPlaced{.line = line, .x = saturate(cursor), .width = extents.at(next)};
+            cursor += extents.at(next);
+            ++next;
+            first = false;
+        } else {
+            placed.at(member) = WrapPlaced{.line = line, .x = saturate(cursor), .width = 0};
+        }
+    }
+}
+
+}  // namespace
+
+WrapPlan planWrap(std::span<Item const> items, Track width, ui::Justify justify) {
+    WrapPlan plan;
+    plan.placed.resize(items.size());
+    std::vector<int> bases;
+    bases.reserve(items.size());
+    for (Item const& item : items) {
+        bases.push_back(basisOf(item, width.length));
+    }
+    int const gap = std::max(0, width.gap);
+    std::vector<std::size_t> members;
+    Wide used = 0;
+    bool occupied = false;
+    auto const flush = [&] {
+        if (!members.empty()) {
+            placeLine(items, members, bases, Track{.length = width.length, .gap = gap}, justify, plan.lines,
+                      plan.placed);
+            ++plan.lines;
+            members.clear();
+        }
+        used = 0;
+        occupied = false;
+    };
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        int const basis = bases.at(index);
+        if (basis > 0 && occupied && used + gap + basis > width.length) {
+            flush();
+        }
+        if (basis > 0) {
+            used += (occupied ? gap : 0) + basis;
+            occupied = true;
+        }
+        members.push_back(index);
+    }
+    flush();
     return plan;
 }
 

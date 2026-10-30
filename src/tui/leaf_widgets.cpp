@@ -12,22 +12,26 @@
 #include <limits>
 #include <memory>
 #include <morph/ui/theme.hpp>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include "tui/container_widgets.hpp"
 #include "tui/drag.hpp"
 
 namespace morph::tui::detail {
 
 namespace {
 
-// A section heading is the muted style, bold: a step below a heading, which is bold body text.
+// A section heading and an overline are the muted style, bold: a step below a heading, which is bold body text. `Mono`
+// is body text: a terminal draws every cell in one fixed-pitch font already. `Display` is bold, as `Heading` is, and
+// `Small` is normal: a cell has one size.
 ::core::tui::Style roleStyle(::core::tui::Theme const& theme, ui::TextRole role) {
     if (role == ui::TextRole::Muted) {
         return theme.textMuted;
     }
-    if (role == ui::TextRole::Heading) {
+    if (role == ui::TextRole::Heading || role == ui::TextRole::Display) {
         return theme.textBold;
     }
     if (role == ui::TextRole::Error) {
@@ -36,7 +40,7 @@ namespace {
     if (role == ui::TextRole::Success) {
         return theme.success;
     }
-    if (role == ui::TextRole::Section) {
+    if (role == ui::TextRole::Section || role == ui::TextRole::Overline) {
         ::core::tui::Style section = theme.textMuted;
         section.bold = true;
         return section;
@@ -76,7 +80,58 @@ namespace {
 
 void TextImpl::setText(std::string_view text) {
     _text = std::string{text};
+    _runs.clear();
     refresh();
+}
+
+namespace {
+
+// @p line cut to @p width cells: unchanged while it fits, else its longest prefix that leaves a cell for an ellipsis,
+// then the ellipsis.
+std::string elidedLine(std::string_view line, int width) {
+    if (displayWidth(line) <= width) {
+        return std::string{line};
+    }
+    if (width <= 0) {
+        return {};
+    }
+    std::size_t kept = 0;
+    while (kept < line.size()) {
+        std::size_t next = kept + 1;
+        while (next < line.size() && (static_cast<unsigned char>(line.at(next)) & 0xC0U) == 0x80U) {
+            ++next;
+        }
+        if (displayWidth(line.substr(0, next)) > width - 1) {
+            break;
+        }
+        kept = next;
+    }
+    return std::string{line.substr(0, kept)} + "…";
+}
+
+}  // namespace
+
+void TextImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
+    _text = ui::spansText(spans);
+    _runs = spans;
+    refresh();
+}
+
+void TextImpl::setDescription(std::string_view description) {
+    static_cast<void>(description);
+    throw std::logic_error{"morph::tui: a text is not described"};
+}
+
+void TextImpl::setTone(ui::Tone tone) {
+    _tone = tone;
+    refresh();
+}
+
+void TextImpl::setElided(bool elided) {
+    if (_elided != elided) {
+        _elided = elided;
+        refresh();
+    }
 }
 
 void TextImpl::setRole(ui::TextRole role) {
@@ -84,26 +139,48 @@ void TextImpl::setRole(ui::TextRole role) {
     refresh();
 }
 
-::core::tui::Size TextImpl::naturalSize() const {
+::core::tui::Size TextImpl::controlSize() const {
     auto const lines = splitLines(_text);
     int width = 0;
     for (auto const line : lines) {
         width = std::max(width, displayWidth(line));
     }
+    // A required text's mark follows its last line, so the cells it takes count, and a row that gives the text its
+    // natural width does not draw the mark over its last characters.
+    if (required()) {
+        width = std::max(width, displayWidth(lines.back()) + displayWidth(kRequiredMark));
+    }
     return {.width = width, .height = static_cast<int>(lines.size())};
 }
 
-void TextImpl::paint(::core::tui::Canvas& canvas) {
-    ::core::tui::Style const style = roleStyle(canvas.theme(), _role);
-    int row = 0;
-    for (auto const line : splitLines(_text)) {
-        if (row >= canvas.height()) {
-            break;
-        }
-        canvas.putString(row, 0, line, style);
-        ++row;
+void TextImpl::paintControl(::core::tui::Canvas& canvas) {
+    ::core::tui::Style style = roleStyle(canvas.theme(), _role);
+    if (_tone != ui::Tone::Neutral) {
+        // The tone is the colour; the role keeps its weight.
+        style.fg = toneStyle(canvas.theme(), _tone).fg;
     }
-    paintMarks(canvas);
+    if (!_runs.empty()) {
+        paintRuns(canvas, _runs, style, true);
+    } else {
+        bool const elide = _elided || _role == ui::TextRole::Mono;
+        int row = 0;
+        for (auto const line : splitLines(_text)) {
+            if (row >= canvas.height()) {
+                break;
+            }
+            canvas.putString(row, 0, elide ? elidedLine(line, canvas.width()) : std::string{line}, style);
+            ++row;
+        }
+    }
+    paintMarks(canvas, false);
+    // The required mark after the last line's end; given less than that, at the right edge.
+    auto const lines = splitLines(_text);
+    auto const last = static_cast<int>(lines.size()) - 1;
+    if (required() && last < canvas.height()) {
+        int const mark = displayWidth(kRequiredMark);
+        canvas.putString(last, std::max(0, std::min(displayWidth(lines.back()), canvas.width() - mark)), kRequiredMark,
+                         canvas.theme().error);
+    }
 }
 
 void ButtonImpl::setLabel(std::string_view label) {
@@ -123,8 +200,23 @@ void ButtonImpl::setIcon(std::string_view icon) {
     refresh();
 }
 
+void ButtonImpl::setAccessibleName(std::string_view name) {
+    applyAccessibleName(name);
+    refresh();
+}
+
 void ButtonImpl::setStyle(ui::ButtonStyle style) {
     _style = style;
+    refresh();
+}
+
+void ButtonImpl::setShape(ui::ControlShape shape) {
+    _square = shape == ui::ControlShape::Square;
+    refresh();
+}
+
+void ButtonImpl::setSize(ui::ButtonSize size) {
+    _size = size;
     refresh();
 }
 
@@ -135,35 +227,86 @@ void ButtonImpl::setSelected(bool selected) {
 
 std::string ButtonImpl::caption() const {
     std::string_view const glyph = ui::iconGlyph(_icon);
-    return glyph.empty() ? _label : std::string{glyph} + " " + _label;
+    if (glyph.empty()) {
+        // An icon-only button whose icon has no glyph names itself, so it is never an empty bracket.
+        return _label.empty() ? accessibleName() : _label;
+    }
+    return std::string{glyph} + " " + _label;
 }
 
 // A push button's brackets and their spaces, or an item's space either side.
+ButtonImpl::~ButtonImpl() {
+    if (_content != nullptr) {
+        forget(*_content);
+    }
+}
+
+ui::ContainerWidget& ButtonImpl::content() {
+    if (_content == nullptr) {
+        auto stack = std::make_unique<StackImpl>(context(), ui::Axis::Vertical);
+        attach(*stack);
+        _content = std::move(stack);
+        refresh();
+    }
+    return dynamic_cast<ui::ContainerWidget&>(*_content);
+}
+
+std::vector<::core::tui::Rect> ButtonImpl::childAreas(::core::tui::Size size) const {
+    if (_content == nullptr) {
+        return {};
+    }
+    // One cell in from the leading edge, where an item's label starts.
+    return {{.x = 1, .y = 0, .width = std::max(0, size.width - 1), .height = size.height}};
+}
+
+void ButtonImpl::click(::core::tui::Point cell) {
+    static_cast<void>(cell);
+    activate();
+}
+
 ::core::tui::Size ButtonImpl::naturalSize() const {
-    return {.width = displayWidth(caption()) + (_style == ui::ButtonStyle::Item ? 2 : 4), .height = 1};
+    if (_content != nullptr) {
+        ::core::tui::Size const inner = requestedSize(*_content);
+        return {.width = inner.width + 1, .height = std::max(1, inner.height)};
+    }
+    int const brackets = _size == ui::ButtonSize::Small || _square ? 2 : 4;
+    return {.width = displayWidth(caption()) + (_style == ui::ButtonStyle::Item ? 2 : brackets), .height = 1};
 }
 
 void ButtonImpl::paint(::core::tui::Canvas& canvas) {
-    // Primary is bold, danger bold in the error colour; ghost falls back to Normal's plain style; neither changes a
-    // disabled button's look.
+    // Primary is bold, danger bold in the error colour, danger outlined in the error colour and not bold, which
+    // keeps it apart from both; ghost falls back to Normal's plain style; none changes a disabled button's look.
     ::core::tui::Style style = buttonStyle(canvas.theme(), actionable(), hasFocus());
-    if (actionable() && _emphasis != ui::ButtonEmphasis::Normal && _emphasis != ui::ButtonEmphasis::Ghost) {
+    if (actionable() && (_emphasis == ui::ButtonEmphasis::Primary || _emphasis == ui::ButtonEmphasis::Danger)) {
         style.bold = true;
-        if (_emphasis == ui::ButtonEmphasis::Danger) {
-            style.fg = canvas.theme().error.fg;
-        }
+    }
+    if (actionable() && (_emphasis == ui::ButtonEmphasis::Danger || _emphasis == ui::ButtonEmphasis::DangerOutline)) {
+        style.fg = canvas.theme().error.fg;
     }
     if (_style == ui::ButtonStyle::Item) {
         // An item is a line of a list: unbracketed and padded to its slot, so the selected and the focused one read as
         // a highlighted row. Focus wins over selection, as the cursor row of a list does.
         ::core::tui::Theme const& theme = canvas.theme();
         ::core::tui::Style const& line = itemStyle(theme, actionable(), hasFocus(), _selected);
+        if (_content != nullptr) {
+            // Every row of the slot on the line's style, and the content over it.
+            canvas.fill(canvas.area(), ' ', line);
+            placeChildren(childAreas(canvas.size()));
+            return;
+        }
         std::string text = " " + caption();
         text.append(static_cast<std::size_t>(std::max(0, canvas.width() - displayWidth(text))), ' ');
         canvas.putString(0, 0, text, line);
         return;
     }
-    canvas.putString(0, 0, "[ " + caption() + " ]", style);
+    // A selected push button draws its caption in the list's selected style and keeps its brackets, so it is as wide
+    // as an unselected one and still reads as a button.
+    bool const small = _size == ui::ButtonSize::Small || _square;
+    int const inset = small ? 1 : 2;
+    canvas.putString(0, 0, small ? "[" : "[ ", style);
+    std::string const shown = caption();
+    canvas.putString(0, inset, shown, _selected ? canvas.theme().listItemSelected : style);
+    canvas.putString(0, inset + displayWidth(shown), small ? "]" : " ]", style);
 }
 
 ::core::tui::EventResult ButtonImpl::key(::core::tui::KeyEvent const& key) {
@@ -196,16 +339,17 @@ void CheckboxImpl::setChecked(bool checked) {
 
 void CheckboxImpl::setOnToggle(std::function<void(bool)> onToggle) { _onToggle = std::move(onToggle); }
 
-::core::tui::Size CheckboxImpl::naturalSize() const { return {.width = displayWidth(_label) + 4, .height = 1}; }
+::core::tui::Size CheckboxImpl::controlSize() const { return {.width = displayWidth(_label) + 4, .height = 1}; }
 
-void CheckboxImpl::paint(::core::tui::Canvas& canvas) {
+void CheckboxImpl::paintControl(::core::tui::Canvas& canvas) {
     canvas.putString(0, 0, std::string{_checked ? "[x] " : "[ ] "} + _label,
                      checkboxStyle(canvas.theme(), actionable(), hasFocus()));
     paintMarks(canvas);
 }
 
+// Space only: Enter goes on outwards, so a dialog's default runs from a focused check box as from a field.
 ::core::tui::EventResult CheckboxImpl::key(::core::tui::KeyEvent const& key) {
-    if (!isActivation(key)) {
+    if (::core::tui::withoutLockKeys(key.modifiers) != ::core::tui::Modifier::None || key.codepoint != U' ') {
         return ::core::tui::EventResult::Ignored;
     }
     activate();
@@ -323,7 +467,7 @@ int SliderImpl::knobCell(int cells) const {
     return static_cast<int>(std::min(cell, scale));
 }
 
-void SliderImpl::paint(::core::tui::Canvas& canvas) {
+void SliderImpl::paintControl(::core::tui::Canvas& canvas) {
     auto const label = std::to_string(_value);
     int const track = std::max(3, canvas.width() - static_cast<int>(label.size()) - 3);
     _track = track;

@@ -164,8 +164,10 @@ int Frontend::run(ui::AppSource& source) {
         _config.onEngine(engine, window);
         hookChangedTheme = themeSnapshot(engine) != before;
     }
-    Backend backend{engine, *window.contentItem(),
-                    BackendOptions{.components = _config.components, .onWidthClass = _config.onWidthClass}};
+    // A window not yet shown has not sized its content item; the backend classes the window's width from that item,
+    // and the shell reads the class before the first mount, so the item takes the window's size now.
+    window.contentItem()->setSize(window.size());
+    Backend backend{engine, *window.contentItem(), BackendOptions{.components = _config.components}};
     Context context{runtime, executor, scheduler};
     QObject::connect(&window, &QQuickWindow::closing, &anchor, [&context] { context.quit(0); });
     // The shell the inspector reads; cleared once the loop has ended, before runApp destroys the shell.

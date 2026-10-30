@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <core/tui/Canvas.hpp>
 #include <core/tui/Component.hpp>
 #include <core/tui/InputEvent.hpp>
@@ -102,6 +103,8 @@ public:
     void applyTooltip(std::string_view text) { _tooltip = text; }
     /// What the hover shows: the tooltip, and a field adds its messages.
     [[nodiscard]] virtual std::string hoverText() const { return _tooltip; }
+    /// What assistive technology reads as the widget's description; none for a widget that is not described.
+    [[nodiscard]] virtual std::string accessibleDescription() const { return {}; }
     /// Declares the chords this widget handles while the focus is inside it.
     void applyKeys(std::vector<std::string> const& chords, std::function<void(std::string)> onChord);
     /// Runs the handler of the chord @p key is, when this widget declares it. A view that handles keys itself calls
@@ -117,12 +120,18 @@ public:
     [[nodiscard]] virtual ::core::tui::Size naturalSize() const = 0;
     /// Whether keyboard focus may land here (and, while actionable, does).
     [[nodiscard]] virtual bool wantsFocus() const { return false; }
+    /// Whether this is a holder: a stack transparent to `bleed`, which its container lays out over the span its
+    /// children bleed to, and which pads its children by that container's `bleedColumns` itself.
+    [[nodiscard]] virtual bool passesBleed() const noexcept { return false; }
     /// Whether a press on this widget moves the focus to it; by default, whenever it wants the focus at all.
     /// Whether a press on the widget is its own (it then takes the moves and the release that follow).
     [[nodiscard]] virtual bool takesPress() const { return wantsFocus(); }
     [[nodiscard]] virtual bool focusesOnPress() const { return wantsFocus(); }
     /// Whether a Content main-axis size means Stretch(1) in a stack (a Spacer).
     [[nodiscard]] virtual bool expandsByDefault() const { return false; }
+    /// Whether a table column places this widget at its natural width (a text, a badge, a check box, a push
+    /// button) rather than filling the column with it.
+    [[nodiscard]] virtual bool placedAcrossColumn() const { return false; }
     /// The text a conformance probe reads.
     [[nodiscard]] virtual std::string probeText() const { return {}; }
     /// Draws the widget into its own area; a container also places its children here. The canvas is as large as
@@ -148,6 +157,12 @@ public:
     virtual void activate() {}
     /// A click on @p cell (0-based, relative to this widget); runs `activate()` unless overridden.
     virtual void click(::core::tui::Point cell);
+    /// A click with the modifiers the terminal reported with it; `click(cell)` unless overridden, since only a table
+    /// row's selection reads them.
+    virtual void clickWith(::core::tui::Point cell, ::core::tui::Modifier modifiers) {
+        static_cast<void>(modifiers);
+        click(cell);
+    }
     /// A left press on @p cell (0-based, relative to this widget) that this widget took, after it took the focus
     /// when it takes it on a press. It may destroy the widget.
     virtual void pressAt(::core::tui::Point cell);
@@ -264,6 +279,15 @@ public:
     /// around the container reads to find a widget it should bring into view. A container that does not say returns
     /// an empty list.
     [[nodiscard]] virtual std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const;
+    /// The columns of padding a bleeding child, or a holder's, reaches past: the padding this container's content is
+    /// inset by. A container whose children are not inset returns 0.
+    [[nodiscard]] virtual int bleedColumns() const { return 0; }
+    /// The columns (width) and rows (height) of padding each page slot among this container's children pads its own
+    /// content by; none for a container whose children are not pages.
+    [[nodiscard]] virtual ::core::tui::Size pageInsets() const { return {}; }
+    /// The columns (width) and rows (height) of padding this container pads its own content by, inside its scroll if
+    /// it has one.
+    [[nodiscard]] virtual ::core::tui::Size contentInsets() const { return {}; }
     /// Gives each of `children()` its area from @p areas, in order; a child past the end gets none.
     void placeChildren(std::span<::core::tui::Rect const> areas) const;
 
@@ -307,11 +331,25 @@ private:
 
 /// Draws @p marks right-aligned on the canvas's first row, over what is there.
 void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks);
-/// Draws @p caption on the canvas's first row and answers the canvas below it, where a captioned field draws its
-/// control; the whole canvas for an empty caption.
-[[nodiscard]] ::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption);
-/// @p control grown by @p caption's row, and as wide as the caption needs; @p control itself for an empty caption.
-[[nodiscard]] ::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption);
+/// @p text split at '\n'.
+[[nodiscard]] std::vector<std::string_view> splitLines(std::string_view text);
+/// The display width of @p text in cells.
+[[nodiscard]] int displayWidth(std::string_view text);
+/// A tone's style: the theme's info, success, warning or error style, and the normal text for `Neutral`.
+[[nodiscard]] ::core::tui::Style const& toneStyle(::core::tui::Theme const& theme, ui::Tone tone);
+/// Draws a field's description under its control: each line muted, or in @p tone's style while toned, clipped at
+/// the canvas's width.
+void paintFieldDescription(::core::tui::Canvas& canvas, std::string_view description, ui::Tone tone);
+/// The required mark drawn after a caption or a text's last line, a space before it.
+inline constexpr std::string_view kRequiredMark = " *";
+/// Draws @p caption on the canvas's first row, followed by the required mark in the error style while @p required,
+/// and answers the canvas below it, where a captioned field draws its control; the whole canvas for an empty caption.
+[[nodiscard]] ::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption,
+                                                    bool required = false);
+/// @p control grown by @p caption's row, and as wide as the caption and, while @p required, its mark need;
+/// @p control itself for an empty caption.
+[[nodiscard]] ::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption,
+                                                 bool required = false);
 
 /// Implements the Common setters of ui interface @p Interface over WidgetBase.
 ///
@@ -319,34 +357,40 @@ void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks);
 /// that sees the class then instantiates this template's virtual members along with its vtable; with the
 /// constructor out of line, a unit that only uses the widget instantiates the class but not its virtual members,
 /// which compilers are free to do differently (MSVC instantiates them all).
-template <class Interface>
-class TuiWidget : public Interface, public WidgetBase {
+/// @tparam Base `WidgetBase`, or `ContainerBase` for a widget that holds a part of its own (a list entry's content).
+template <class Interface, class Base = WidgetBase>
+class TuiWidget : public Interface, public Base {
 public:
-    explicit TuiWidget(Context& context) noexcept : WidgetBase{context} {}
-    void setVisible(bool visible) override { applyVisible(visible); }
-    void setEnabled(bool enabled) override { applyEnabled(enabled); }
-    void setLayout(ui::LayoutHints const& hints) override { applyLayout(hints); }
-    void setDragKey(std::optional<ui::Key> const& key) override { applyDragKey(key); }
+    explicit TuiWidget(Context& context) noexcept : Base{context} {}
+    void setVisible(bool visible) override { this->applyVisible(visible); }
+    void setEnabled(bool enabled) override { this->applyEnabled(enabled); }
+    void setLayout(ui::LayoutHints const& hints) override { this->applyLayout(hints); }
+    void setDragKey(std::optional<ui::Key> const& key) override { this->applyDragKey(key); }
     void setDropHandler(std::function<bool(ui::Key const&)> accepts, std::function<void(ui::Key)> onDrop) override {
-        applyDropHandler(std::move(accepts), std::move(onDrop));
+        this->applyDropHandler(std::move(accepts), std::move(onDrop));
     }
-    void setAccessibleName(std::string_view name) override { applyAccessibleName(name); }
-    void setAccessibleRole(std::string_view role) override { applyAccessibleRole(role); }
-    void setTestId(std::string_view testId) override { applyTestId(testId); }
-    void setTooltip(std::string_view text) override { applyTooltip(text); }
-    void setSurface(std::string_view surface) override { applySurface(surface); }
+    void setAccessibleName(std::string_view name) override { this->applyAccessibleName(name); }
+    void setAccessibleRole(std::string_view role) override { this->applyAccessibleRole(role); }
+    void setTestId(std::string_view testId) override { this->applyTestId(testId); }
+    void setTooltip(std::string_view text) override { this->applyTooltip(text); }
+    void setSurface(std::string_view surface) override { this->applySurface(surface); }
     void setKeys(std::vector<std::string> const& chords, std::function<void(std::string)> onChord) override {
-        applyKeys(chords, std::move(onChord));
+        this->applyKeys(chords, std::move(onChord));
     }
-    void focus() override { takeFocus(); }
+    void focus() override { this->takeFocus(); }
     [[nodiscard]] ui::Widget const& asWidget() const noexcept override { return *this; }
 };
 
 /// Implements the field state of field interface @p Interface: read-only, required, errors and stale.
 ///
-/// A terminal shows the state as marks at the right edge of the field's first row, `paintMarks` drawing them: `*`
-/// for a required field, `!` for one with errors, `~` for a stale value. The messages show on hover, after the
-/// tooltip. A field that edits checks `readOnly()` before it reports an edit.
+/// A terminal shows the state as marks at the right edge of the control's first row, `paintMarks` drawing them: `*`
+/// for a required field that draws no caption, `!` for one with errors or toned `err` or `warn` (the terminal has
+/// no outline), `~` for a stale value. A captioned field's `*` follows its caption instead (`paintCaption`), and a
+/// text's its last line. The description takes the rows under the control, muted or in the tone's style. The
+/// messages, then the description, are the field's accessible description, and show on hover after the tooltip.
+/// A field that edits checks `readOnly()` before it reports an edit.
+///
+/// A kind sizes and draws its control (`controlSize`, `paintControl`); the field adds the description's rows.
 template <class Interface>
 class TuiField : public TuiWidget<Interface> {
 public:
@@ -367,20 +411,84 @@ public:
         _stale = stale;
         this->refresh();
     }
+    void setDescription(std::string_view description) override {
+        _description = std::string{description};
+        this->refresh();
+    }
+    void setTone(ui::Tone tone) override {
+        _tone = tone;
+        this->refresh();
+    }
     [[nodiscard]] bool readOnly() const override { return _readOnly; }
-    [[nodiscard]] std::string hoverText() const override {
-        std::string text = WidgetBase::hoverText();
+    /// What assistive technology reads as the field's description: its messages, then its description.
+    [[nodiscard]] std::string accessibleDescription() const override {
+        std::string text;
         for (std::string const& error : _errors) {
             text += text.empty() ? error : "\n" + error;
         }
+        if (!_description.empty()) {
+            text += text.empty() ? _description : "\n" + _description;
+        }
         return text;
+    }
+    [[nodiscard]] std::string hoverText() const override {
+        std::string text = WidgetBase::hoverText();
+        std::string const described = accessibleDescription();
+        if (!described.empty()) {
+            text += text.empty() ? described : "\n" + described;
+        }
+        return text;
+    }
+    [[nodiscard]] ::core::tui::Size naturalSize() const final {
+        ::core::tui::Size size = controlSize();
+        if (!_description.empty()) {
+            for (auto const line : splitLines(_description)) {
+                size.width = std::max(size.width, displayWidth(line));
+                ++size.height;
+            }
+        }
+        return size;
+    }
+    void paint(::core::tui::Canvas& canvas) final {
+        int const rows = descriptionRows();
+        auto control =
+            canvas.subcanvas({.x = 0, .y = 0, .width = canvas.width(), .height = std::max(0, canvas.height() - rows)});
+        paintControl(control);
+        if (rows > 0) {
+            auto below = canvas.subcanvas({.x = 0,
+                                           .y = control.height(),
+                                           .width = canvas.width(),
+                                           .height = canvas.height() - control.height()});
+            detail::paintFieldDescription(below, _description, _tone);
+        }
     }
 
 protected:
-    /// Draws the marks at the right edge of the canvas's first row.
-    void paintMarks(::core::tui::Canvas& canvas) const { detail::paintFieldMarks(canvas, marks()); }
-    /// How many cells the marks take at the right edge.
-    [[nodiscard]] int marksWidth() const { return static_cast<int>(marks().size()); }
+    /// The size of the control the kind draws, its caption included, without the description.
+    [[nodiscard]] virtual ::core::tui::Size controlSize() const = 0;
+    /// Draws the control, its caption included, on the canvas left above the description.
+    virtual void paintControl(::core::tui::Canvas& canvas) = 0;
+    /// The rows the description takes under the control.
+    [[nodiscard]] int descriptionRows() const {
+        return _description.empty() ? 0 : static_cast<int>(splitLines(_description).size());
+    }
+    /// Draws the control's marks at the right edge of the canvas's first row; @p required false leaves out the `*`,
+    /// for a kind that draws it elsewhere.
+    void paintMarks(::core::tui::Canvas& canvas, bool required = true) const {
+        detail::paintFieldMarks(canvas, controlMarks(required));
+    }
+    /// How many cells the control's marks take at the right edge.
+    [[nodiscard]] int marksWidth() const { return static_cast<int>(controlMarks(true).size()); }
+    /// Whether the field is marked required.
+    [[nodiscard]] bool required() const noexcept { return _required; }
+    /// Draws the caption, with the required mark after it, and answers the canvas left for the control.
+    [[nodiscard]] ::core::tui::Canvas paintCaption(::core::tui::Canvas& canvas) const {
+        return detail::paintFieldCaption(canvas, _caption, _required);
+    }
+    /// @p control grown by the caption and its mark.
+    [[nodiscard]] ::core::tui::Size withCaption(::core::tui::Size control) const {
+        return detail::withFieldCaption(control, _caption, _required);
+    }
     /// Takes the field's label as its caption while @p shown; otherwise the field draws none: what `setCaption`
     /// does for the kinds that have one.
     void showCaption(std::string_view label, bool shown) {
@@ -393,12 +501,13 @@ protected:
     [[nodiscard]] int captionRows() const noexcept { return _caption.empty() ? 0 : 1; }
 
 private:
-    [[nodiscard]] std::string marks() const {
+    // The `*` follows a caption while there is one, so the control's marks leave it out then.
+    [[nodiscard]] std::string controlMarks(bool required) const {
         std::string out;
-        if (_required) {
+        if (_required && required && _caption.empty()) {
             out += '*';
         }
-        if (!_errors.empty()) {
+        if (!_errors.empty() || _tone == ui::Tone::Err || _tone == ui::Tone::Warn) {
             out += '!';
         }
         if (_stale) {
@@ -412,6 +521,8 @@ private:
     bool _stale = false;
     std::vector<std::string> _errors;
     std::string _caption;
+    std::string _description;
+    ui::Tone _tone = ui::Tone::Neutral;
 };
 
 /// Implements the Common setters and `moveChild` of container interface @p Interface over ContainerBase.
@@ -439,12 +550,20 @@ public:
     [[nodiscard]] ui::Widget const& asWidget() const noexcept override { return *this; }
 };
 
+/// Where a table cell sits in its slot: across its column and down its row.
+struct CellPlace {
+    ui::Align across = ui::Align::Start;  ///< Start, Center or End; Stretch reads as Start.
+    ui::Align down = ui::Align::Center;   ///< Start, Center or End; Stretch fills the row's height.
+};
+
 /// How `arrangeStack` places children.
 struct StackSpec {
-    ui::Axis axis = ui::Axis::Vertical;    ///< The main axis.
-    int gap = 0;                           ///< Cells between neighbours.
-    std::span<int const> extents;          ///< When non-empty, the main-axis extents to use, in order (table columns).
-    ui::Align align = ui::Align::Stretch;  ///< Where a child sits across the axis, unless its `alignSelf` says.
+    ui::Axis axis = ui::Axis::Vertical;  ///< The main axis.
+    int gap = 0;                         ///< Cells between neighbours.
+    std::span<int const> extents;        ///< When non-empty, the main-axis extents to use, in order (table columns).
+    /// With extents, each child's place in its slot, in order; a child past the last takes the default place.
+    std::span<CellPlace const> places;
+    ui::Align align = ui::Align::Stretch;      ///< Where a child sits across the axis, unless its `alignSelf` says.
     ui::Justify justify = ui::Justify::Start;  ///< Where the spare length goes while no shown child stretches.
 };
 
@@ -470,13 +589,18 @@ struct StackSpec {
 /// columns; a child past the last extent takes its natural extent.
 [[nodiscard]] std::vector<::core::tui::Rect> stackAreas(std::span<WidgetBase* const> children, ::core::tui::Rect area,
                                                         StackSpec const& spec);
+/// Widens the area of each shown child whose layout says `bleed`, and of each shown holder (`passesBleed`), to @p
+/// span, the container's full width at the sides its padding leaves; the child's place down the container is
+/// unchanged. @p areas has one area per child, in order.
+void bleedAreas(std::span<WidgetBase* const> children, std::vector<::core::tui::Rect>& areas, ::core::tui::Rect span);
 /// Places @p children inside @p area (in the container's coordinates) as `stackAreas` says. Hidden children get an
 /// empty area, so they neither render nor take a click (see `forgetDrawnBounds`).
 void arrangeStack(std::span<WidgetBase* const> children, ::core::tui::Rect area, StackSpec const& spec);
-/// @p text split at '\n'.
-[[nodiscard]] std::vector<std::string_view> splitLines(std::string_view text);
-/// The display width of @p text in cells.
-[[nodiscard]] int displayWidth(std::string_view text);
+/// Draws @p runs one after another from row @p row, column @p column, in @p style, a strong run bold; every cell is
+/// monospace already, so a mono run is drawn as the others. A run's '\n' starts the next row at column 0 while
+/// @p multiline, and is drawn as a space otherwise.
+void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& runs, ::core::tui::Style const& style,
+               bool multiline, int row = 0, int column = 0);
 /// Enter, or Space, with no modifier.
 [[nodiscard]] bool isActivation(::core::tui::KeyEvent const& key) noexcept;
 /// Appends the view of every focusable widget at or below @p root, depth first in `children()` order: Tab order.

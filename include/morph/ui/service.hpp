@@ -362,11 +362,13 @@ public:
     ///
     /// Refused when a screen names a delivered component (`qml`) whose hash no `component` file has, when the
     /// bundle holds more than `kMaxBundleFiles` files or entries, and when it needs more than `kMaxListItems`
-    /// vocabularies or a vocabulary name longer than `kMaxNameBytes`.
+    /// vocabularies or a vocabulary name longer than `kMaxNameBytes`. A theme file's token that nothing reads is
+    /// logged at warn and does not refuse the build.
     /// @return The bundle, or the refusal.
     [[nodiscard]] std::expected<std::shared_ptr<ServedBundle const>, Refusal> build() const {
         auto built = buildImpl();
         if (built) {
+            logThemeProblems();
             ::morph::log::logDebug("[ui-serve] built the bundle of `{}`: {} files, digest {}", _application.id,
                                    (*built)->files.size(), (*built)->digest);
         } else {
@@ -376,6 +378,20 @@ public:
     }
 
 private:
+    /// @brief Logs, at warn, what each theme index's files hold that nothing reads or that cannot be read
+    ///        (`themeProblems`); the bundle is still built.
+    void logThemeProblems() const {
+        TokenFileLookup const lookup = [this](std::string_view fileId) -> TokenSet const* {
+            auto const found = _tokenFiles.find(fileId);
+            return found == _tokenFiles.end() ? nullptr : &found->second;
+        };
+        for (auto const& [indexId, index] : _themeIndexes) {
+            for (std::string const& problem : themeProblems(index, lookup)) {
+                ::morph::log::logWarn("[ui-serve] theme {}: {}", indexId, problem);
+            }
+        }
+    }
+
     /// @brief Registers a screen; the public `addScreen` logs its outcome.
     /// @param entry The catalog entry.
     /// @param text  The document's JSON text.

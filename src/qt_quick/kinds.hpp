@@ -2,9 +2,11 @@
 
 #pragma once
 #include <QString>
+#include <QStringList>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <morph/qt_quick/backend.hpp>
 #include <morph/ui/backend.hpp>
 #include <optional>
@@ -24,11 +26,20 @@ namespace morph::qt_quick::detail {
 
 // ── Fields ────────────────────────────────────────────────────────────────
 
+/// Runs of text as the list a label's markup is built from, in QML: one map per run holding `text` (escaped for
+/// rich text), `strong`, `mono` and `tone` (the `Tone` index, 0 none). The markup itself is built in QML
+/// (`MorphWidget.runsHtml`), from the theme and the widget's scheme as they are when it is drawn, so a theme applied
+/// after the mount restyles the runs.
+[[nodiscard]] QVariantList runsOf(std::vector<ui::TextSpan> const& spans);
+
 class TextImpl final : public FieldItemWidget<ui::TextWidget> {
 public:
     TextImpl(Context& context, ui::ContainerWidget* parent);
     void setText(std::string_view text) override;
     void setRole(ui::TextRole role) override;
+    void setSpans(std::vector<ui::TextSpan> const& spans) override;
+    /// A text is not described; the mount never asks.
+    void setDescription(std::string_view description) override;
     [[nodiscard]] std::string shownText() const override;
 };
 
@@ -41,9 +52,13 @@ public:
     void setOnSubmit(std::function<void(std::string)> onSubmit) override;
     void setOnCommit(std::function<void(std::string)> onCommit) override;
     void setUnit(std::string_view unit) override;
+    void setPrefix(std::string_view prefix) override;
+    void setMono(bool mono) override;
+    void setAlign(ui::Align align) override;
     void setDecimals(int decimals) override;
     void setIcon(std::string_view icon) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
+    void setEmphasis(ui::InputEmphasis emphasis) override;
     [[nodiscard]] std::string shownText() const override;
     /// The cursor, as a byte offset into the UTF-8 text.
     [[nodiscard]] std::size_t cursor() const;
@@ -90,27 +105,35 @@ public:
     DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::DateMode mode, int offsetMinutes);
     void setValue(std::optional<morph::time::Timestamp> const& value) override;
     void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) override;
+    void setPattern(std::string_view pattern) override;
     void setCaption(std::string_view label, bool shown) override { showCaption(label, shown); }
     [[nodiscard]] std::string shownText() const override;
 
 private:
-    /// @brief Shows @p text, unless the control already shows it.
+    /// @brief Shows @p text, unless the control already shows it, and the day it names as the calendar's.
     /// @param text  The text to show.
     /// @param force Whether to write it even when the control already shows it.
     void show(QString const& text, bool force = false) const;
+    /// @brief A day the calendar chose: written with the time of day the field holds, shown and reported.
+    /// @param day The day's `[year, month (zero-based), day]`.
+    void picked(QVariant const& day);
 
     ui::DateMode _mode;
     int _offsetMinutes;
+    std::string _pattern;
     std::function<void(std::optional<morph::time::Timestamp>)> _onChange;
     QString _shown;
 };
 
-/// The text a date-time field shows for an instant, in a zone @p offsetMinutes from UTC.
-[[nodiscard]] QString formatDateTime(morph::time::DateTime const& instant, ui::DateMode mode, int offsetMinutes);
+/// The text a date-time field shows for an instant, in a zone @p offsetMinutes from UTC: in @p pattern, or ISO for
+/// an empty one.
+[[nodiscard]] QString formatDateTime(morph::time::DateTime const& instant, ui::DateMode mode, int offsetMinutes,
+                                     std::string_view pattern = {});
 
-/// The instant a date-time field's text names in a zone @p offsetMinutes from UTC; none for text that names none.
+/// The instant a date-time field's text names in a zone @p offsetMinutes from UTC, in @p pattern or ISO; none for
+/// text that names none.
 [[nodiscard]] std::optional<morph::time::DateTime> parseDateTime(QString const& text, ui::DateMode mode,
-                                                                 int offsetMinutes);
+                                                                 int offsetMinutes, std::string_view pattern = {});
 
 class SliderImpl final : public FieldItemWidget<ui::SliderWidget> {
 public:
@@ -135,22 +158,47 @@ public:
 
 // ── Leaves ────────────────────────────────────────────────────────────────
 
-class ButtonImpl final : public ItemWidget<ui::ButtonWidget> {
+/// A button; a list entry with content holds it in a slot inside the `Button`, so a press on it is the button's.
+// The button is an item and the container of its content's slot at once, as a ContainerItemWidget is: a parent passes
+// its scheme down by cross-casting a child item to its ContainerCore, so the two cannot be split into members.
+// NOLINTNEXTLINE(misc-multiple-inheritance)
+class ButtonImpl final : public ItemWidget<ui::ButtonWidget>, public ContainerCore {
 public:
     ButtonImpl(Context& context, ui::ContainerWidget* parent);
+    ~ButtonImpl() override;
+    ButtonImpl(ButtonImpl const&) = delete;
+    ButtonImpl& operator=(ButtonImpl const&) = delete;
+    ButtonImpl(ButtonImpl&&) = delete;
+    ButtonImpl& operator=(ButtonImpl&&) = delete;
     void setLabel(std::string_view label) override;
     void setOnClick(ui::Action onClick) override;
     void setEmphasis(ui::ButtonEmphasis emphasis) override;
     void setIcon(std::string_view icon) override;
     void setStyle(ui::ButtonStyle style) override;
+    void setShape(ui::ControlShape shape) override;
+    void setSize(ui::ButtonSize size) override;
+    void setMono(bool mono) override;
     void setSelected(bool selected) override;
+    /// The content, a `MorphSlot` in the button's `content` item, made the first time it is asked for.
+    ui::ContainerWidget& content() override;
     [[nodiscard]] std::string shownText() const override;
+
+protected:
+    [[nodiscard]] QQuickItem* contentFor(ItemBase& child) override;
+    /// The scheme the content draws in: the button's, with its text role following the selection.
+    [[nodiscard]] QObject* scheme() const override { return part("contentScheme"); }
+
+private:
+    std::unique_ptr<ContainerItemWidget<ui::SlotWidget>> _content;
 };
 
 class MenuImpl final : public ItemWidget<ui::MenuWidget> {
 public:
-    MenuImpl(Context& context, ui::ContainerWidget* parent);
+    MenuImpl(Context& context, ui::ContainerWidget* parent, ui::MenuStyle style);
     void setItems(std::vector<ui::MenuEntry> const& entries) override;
+    void setTrigger(ui::MenuTrigger const& trigger) override;
+    /// A button-style menu's trigger label; a bar's is empty.
+    [[nodiscard]] std::string shownText() const override;
     void setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) override;
     /// Chooses the entry at @p path as the user would, opening each submenu on the way.
     void choose(std::vector<std::size_t> const& path) const;
@@ -161,7 +209,8 @@ private:
     std::vector<ui::MenuEntry> _entries;
 };
 
-/// Whether @p path names an entry the user can choose: enabled, without a submenu, inside enabled entries.
+/// Whether @p path names an entry the user can choose: not a separator, enabled, without a submenu, inside enabled
+/// entries.
 [[nodiscard]] bool choosable(std::vector<ui::MenuEntry> const& entries, std::vector<std::size_t> const& path);
 
 class SpacerImpl final : public ItemWidget<ui::SpacerWidget> {
@@ -187,10 +236,12 @@ public:
     BannerImpl(Context& context, ui::ContainerWidget* parent);
     void setTone(ui::Tone tone) override;
     void setText(std::string_view text) override;
+    void setSpans(std::vector<ui::TextSpan> const& spans) override;
     void setActionLabel(std::string_view label) override;
     void setOnAction(ui::Action onAction) override;
     void setDismissible(bool dismissible) override;
     void setOnDismiss(ui::Action onDismiss) override;
+    void setActionStyle(ui::BannerActionStyle style, bool stretch) override;
     [[nodiscard]] std::string shownText() const override;
 };
 
@@ -200,6 +251,10 @@ public:
     void setTone(ui::Tone tone) override;
     void setText(std::string_view text) override;
     void setIcon(std::string_view icon) override;
+    void setOnRemove(ui::Action onRemove, std::string_view label) override;
+    void setStyle(ui::BadgeStyle style) override;
+    void setShape(ui::ControlShape shape) override;
+    void setMono(bool mono) override;
     [[nodiscard]] std::string shownText() const override;
 };
 
@@ -215,12 +270,22 @@ public:
     StepsImpl(Context& context, ui::ContainerWidget* parent);
     void setSteps(std::vector<ui::Step> const& steps) override;
     void setCurrent(std::optional<std::size_t> index) override;
+    void setLabelled(bool labelled) override;
+    [[nodiscard]] std::string shownText() const override;
+};
+
+class ChartImpl final : public ItemWidget<ui::ChartWidget> {
+public:
+    ChartImpl(Context& context, ui::ContainerWidget* parent);
+    void setData(ui::ChartData const& data) override;
+    [[nodiscard]] std::string shownText() const override;
 };
 
 class KeyValueImpl final : public ItemWidget<ui::KeyValueWidget> {
 public:
     KeyValueImpl(Context& context, ui::ContainerWidget* parent);
     void setItems(std::vector<ui::KeyValueItem> const& items) override;
+    void setCaptionPlacement(ui::CaptionPlacement placement) override;
 };
 
 class EmptyStateImpl final : public ItemWidget<ui::EmptyStateWidget> {
@@ -251,8 +316,15 @@ public:
     void setGap(int gap) override;
     void setAlign(ui::Align align) override;
     void setJustify(ui::Justify justify) override;
+    void setWrap(bool wrap) override;
+    void setDivided(bool divided) override;
+    void setPadding(ui::Padding padding) override;
+    void setSelected(bool selected) override;
+    void setPassesBleed(bool passes) override;
 
 protected:
+    /// A wrapping row places its children itself, again whenever one's size or visibility changes.
+    void adopted(ItemBase& child) override;
     /// A column fills its children's width, a row their height.
     [[nodiscard]] CrossFill crossFill() const noexcept override {
         return CrossFill{.width = _axis == ui::Axis::Vertical, .height = _axis == ui::Axis::Horizontal};
@@ -262,12 +334,14 @@ protected:
 
 private:
     ui::Axis _axis;
+    bool _wrap = false;
 };
 
 class GridImpl final : public ContainerItemWidget<ui::GridWidget> {
 public:
     GridImpl(Context& context, ui::ContainerWidget* parent);
     void setColumns(int columns) override;
+    void setTracks(std::vector<ui::GridTrack> const& tracks) override;
     void setGap(int gap) override;
     void setSpan(ui::Widget& child, int span) override;
     void setAlign(ui::Align align) override;
@@ -275,6 +349,12 @@ public:
 protected:
     /// A cell's content is placed vertically in its row.
     [[nodiscard]] int alignsAcross() const noexcept override { return 2; }
+    /// A grid with tracks places its cells itself, again whenever one's size, visibility or span changes.
+    void adopted(ItemBase& child) override;
+
+private:
+    /// Lays a grid with tracks out again; a grid without them leaves it to its GridLayout.
+    void place() const;
 };
 
 class PanelImpl final : public ContainerItemWidget<ui::PanelWidget> {
@@ -286,6 +366,10 @@ public:
     void setCollapsible(bool collapsible) override;
     void setCollapsed(bool collapsed) override;
     void setOnToggle(std::function<void(bool)> onToggle) override;
+
+protected:
+    // A panel that names no surface is a card, so its content draws with the card's scheme.
+    [[nodiscard]] QObject* scheme() const override;
 };
 
 class ScrollImpl final : public ContainerItemWidget<ui::ScrollWidget> {
@@ -296,6 +380,14 @@ public:
 class SlotImpl final : public ContainerItemWidget<ui::SlotWidget> {
 public:
     SlotImpl(Context& context, ui::ContainerWidget* parent);
+    void setScrollable(bool scrollable) override;
+};
+
+/// An overlay's footer: a `MorphFooter` row of its actions, which never scrolls.
+class FooterItem final : public ContainerItemWidget<ui::SlotWidget> {
+public:
+    using ContainerItemWidget<ui::SlotWidget>::ContainerItemWidget;
+    void setScrollable(bool scrollable) override { static_cast<void>(scrollable); }
 };
 
 class TabsImpl final : public ContainerItemWidget<ui::TabsWidget> {
@@ -305,13 +397,22 @@ public:
     void setSelected(std::size_t index) override;
     void setOnSelect(std::function<void(std::size_t)> onSelect) override;
     void setBarShown(bool shown) override;
+    void setMoreLabel(std::string_view label) override;
+    void setInset(int inset) override;
+    void setPageInset(int inset) override;
+    void setStripSurface(std::string_view surface) override;
     /// The highlighted tab, or -1.
     [[nodiscard]] int highlighted() const;
+    /// The highlighted tab's caption; empty when none is highlighted.
+    [[nodiscard]] std::string shownText() const override;
 };
 
 /// A dialog or a drawer: a modal overlay whose content is shown only while it is open.
+// NOLINTBEGIN(portability-template-virtual-member-function): the template implements the overlay interfaces' virtual
+// functions, and is instantiated only as the dialog's base and as the drawer, whose virtual functions are all used
+// through the interface; every compiler then instantiates all of them.
 template <class Interface>
-class OverlayImpl final : public ContainerItemWidget<Interface> {
+class OverlayImpl : public ContainerItemWidget<Interface> {
 public:
     OverlayImpl(Context& context, QString const& type, ui::ContainerWidget* parent, QVariantMap initial = {})
         : ContainerItemWidget<Interface>{context, type, parent, std::move(initial)} {}
@@ -326,8 +427,7 @@ public:
         if (_footer == nullptr) {
             _makingFooter = true;
             try {
-                _footer = std::make_unique<ContainerItemWidget<ui::SlotWidget>>(this->context(),
-                                                                                QStringLiteral("MorphFooter"), this);
+                _footer = std::make_unique<FooterItem>(this->context(), QStringLiteral("MorphFooter"), this);
             } catch (...) {
                 _makingFooter = false;
                 throw;
@@ -342,6 +442,14 @@ public:
         }
     }
     void setTitle(std::string_view title) override { this->write("title", toQString(title)); }
+    void setDescription(std::string_view description) override {
+        this->write("descriptionRuns", QVariantList{});
+        this->write("description", toQString(description));
+    }
+    void setDescriptionSpans(std::vector<ui::TextSpan> const& spans) override {
+        this->write("description", toQString(ui::spansText(spans)));
+        this->write("descriptionRuns", runsOf(spans));
+    }
     void setOnDismiss(ui::Action onDismiss) override {
         this->relay().on(QStringLiteral("dismiss"), [onDismiss = std::move(onDismiss)](QVariant const&) {
             if (onDismiss) {
@@ -360,13 +468,23 @@ protected:
         static_cast<void>(child);
         return qobject_cast<QQuickItem*>(this->part(_makingFooter ? "footer" : "content"));
     }
+    // The content draws on the card the overlay is, whatever surface encloses the node that declares it.
+    [[nodiscard]] QObject* scheme() const override { return this->context().themeObject("cardScheme"); }
 
 private:
-    std::unique_ptr<ContainerItemWidget<ui::SlotWidget>> _footer;
+    std::unique_ptr<FooterItem> _footer;
     bool _makingFooter = false;
 };
+// NOLINTEND(portability-template-virtual-member-function)
 
-using DialogImpl = OverlayImpl<ui::DialogWidget>;
+/// A dialog: an overlay that can be drawn as a sheet filling the window.
+class DialogImpl final : public OverlayImpl<ui::DialogWidget> {
+public:
+    using OverlayImpl<ui::DialogWidget>::OverlayImpl;
+    void setSheet(bool sheet) override { write("sheet", sheet); }
+    void setDismissLabel(std::string_view label) override { write("dismissLabel", toQString(label)); }
+};
+
 using DrawerImpl = OverlayImpl<ui::DrawerWidget>;
 
 class SplitterImpl final : public ContainerItemWidget<ui::SplitterWidget> {
@@ -424,21 +542,36 @@ public:
     void setSelectionMode(ui::SelectionMode mode) override;
     void setRowKey(ui::Widget& row, ui::Key const& key) override;
     void setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) override;
+    void setSelectColumn(bool shown) override;
+    void setSelectAllLabel(std::string_view label) override;
+    void setRowLabel(ui::Widget& row, std::string_view label) override;
+    void setRowHeading(ui::Widget& row) override;
     void setSelection(std::vector<ui::Key> const& keys) override;
-    void setOnSelectionChange(std::function<void(std::vector<ui::Key>)> onSelectionChange) override;
+    void setOnSelectionChange(
+        std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
+    void setSort(std::optional<ui::TableSort> sort) override;
+    void setOnSort(std::function<void(std::size_t)> onSort) override;
     void setExistingKeys(std::vector<ui::Key> const& keys) override;
     void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) override;
     void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override;
 
-    /// A click on a row; @p extend for Ctrl+click.
-    void tapped(TableRowImpl const& row, bool extend);
+    /// A click on a row, or Space or Shift with an arrow on the current row, as @p click; the table's selection model
+    /// (`ui::TableWidget`).
+    void tapped(TableRowImpl const& row, ui::RowClick click);
+    /// Makes @p row the anchor of a range when the table has none, or its anchor's row is gone: the row Shift with an
+    /// arrow leaves.
+    void anchorAt(TableRowImpl const& row);
+    /// Ctrl+A in `Multiple` mode: every row, or none when every row is selected already.
+    void selectAll();
     /// A double click on a row, or Enter on it.
     void activated(TableRowImpl const& row) const;
     /// The Flickable reported a scroll; @p first and @p count are what it wants realized next.
     void scrolled(std::size_t first, std::size_t count) const;
     /// Whether a row is marked selected.
     [[nodiscard]] static bool marked(ItemBase const& row);
+    /// Whether a row is a group heading.
+    [[nodiscard]] static bool heading(ItemBase const& row);
 
 protected:
     void adopted(ItemBase& child) override;
@@ -450,15 +583,24 @@ private:
     /// Writes `alternate` on every row but @p leaving: true at each odd position.
     void stripe(ItemBase const* leaving) const noexcept;
     [[nodiscard]] std::vector<ui::Key> existingSelection() const;
+    /// Every key the table has, realized or not, in row order.
+    [[nodiscard]] std::vector<ui::Key> rowKeys() const;
+    /// Makes @p next the requested keys, marks the rows and reports the existing ones as @p change.
+    void select(std::vector<ui::Key> next, ui::SelectionChange change);
 
     ui::SelectionMode _mode = ui::SelectionMode::None;
     std::vector<ui::Key> _requested;
-    std::function<void(std::vector<ui::Key>)> _onSelectionChange;
+    std::function<void(std::vector<ui::Key>, ui::SelectionChange)> _onSelectionChange;
+    // Where a range starts: the row last clicked or toggled.
+    std::optional<ui::Key> _anchor;
     std::function<void(ui::Key)> _onActivate;
+    std::function<void(std::size_t)> _onSort;
     // Every key the table's data has, realized or dewindowed; set only above a virtualized table's threshold
     // (mount.hpp never calls setExistingKeys below it). Empty below threshold, where existingSelection() falls
     // back to realized children alone, which is already exactly every key that exists at that size.
     std::unordered_set<ui::Key> _existingKeys;
+    // The same keys, in row order, for a range or Ctrl+A over rows that are not realized.
+    std::vector<ui::Key> _existingOrder;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
 };
 
@@ -471,6 +613,16 @@ public:
     void setAlign(ui::Align align) override { static_cast<void>(align); }
     /// As `setAlign`.
     void setJustify(ui::Justify justify) override { static_cast<void>(justify); }
+    /// As `setAlign`.
+    void setWrap(bool wrap) override { static_cast<void>(wrap); }
+    /// As `setAlign`.
+    void setDivided(bool divided) override { static_cast<void>(divided); }
+    /// As `setAlign`.
+    void setPadding(ui::Padding padding) override { static_cast<void>(padding); }
+    /// As `setAlign`: the table draws the selection.
+    void setSelected(bool selected) override { static_cast<void>(selected); }
+    /// As `setAlign`: a table row is never a holder.
+    void setPassesBleed(bool passes) override { static_cast<void>(passes); }
     /// Its key, once the table was told it.
     [[nodiscard]] std::optional<ui::Key> const& key() const noexcept { return _key; }
     void setKey(ui::Key key);

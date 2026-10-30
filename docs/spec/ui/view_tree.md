@@ -45,12 +45,12 @@ the mount drives are [`backend_contract.md`](backend_contract.md); the frontend 
 |---|---|---|---|
 | `visible` | `Prop<bool>` | `true` | Shown |
 | `enabled` | `Prop<bool>` | `true` | Accepts input |
-| `layout` | `LayoutHints{width, height, minWidth, maxWidth, minHeight, maxHeight, alignSelf}` | content × content, unbounded, the container's alignment | Set once. `Sizing::content()`, `fixed(units)` or `stretch(weight)` per dimension, in backend units (a character cell on the TUI); each bound an optional number of units the extent is clamped into, whatever the sizing; `alignSelf`, an optional `Align` that places the widget across its stack's or grid row's axis in place of the container's. The mount refuses (`std::logic_error`, naming the node's test id) a negative bound, a minimum above its maximum, a fixed amount outside its bounds, and an `alignSelf` on a node whose parent is not a stack or a grid |
+| `layout` | `LayoutHints{width, height, minWidth, maxWidth, minHeight, maxHeight, alignSelf, bleed}` | content × content, unbounded, the container's alignment | Set once. `Sizing::content()`, `fixed(units)` or `stretch(weight)` per dimension, in backend units (a character cell on the TUI); each bound an optional number of units the extent is clamped into, whatever the sizing; `alignSelf`, an optional `Align` that places the widget across its stack's or grid row's axis in place of the container's. The mount refuses (`std::logic_error`, naming the node's test id) a negative bound, a minimum above its maximum, a fixed amount outside its bounds, and an `alignSelf` on a node whose parent is not a stack or a grid. `bleed` (a `bool`, default false) lays the node's sides at its direct parent's edges, past the parent's horizontal padding: a column's, a panel's (its inner edges) or a tabs node's pages' (their `pageInset`); a backend gives the parent's padding to the child through its own layout, and the node's natural width ignores the bleed |
 | `dragKey` | `Prop<std::optional<Key>>` | `nullopt` | Engaged: the widget can be dragged, and a drop delivers this key |
 | `accepts` | `std::function<bool(Key const&)>` | empty | Which keys a drop target takes; empty takes every key. Used only when `onDrop` is set |
 | `onDrop` | `std::function<void(Key)>` | empty | Set: the widget is a drop target, called with the dropped key |
 
-A `gap` (Column, Row, Grid, ForEach) or `padding` (Panel) is a **spacing step**, 0 to `kMaxSpacingStep` (5), not a
+A `gap` (Column, Row, Grid, ForEach) or `padding` (Column, Row, Panel) is a **spacing step**, 0 to `kMaxSpacingStep` (5), not a
 size: how far apart two things sit is a coarser question than how wide one is, and a step means the same on both
 frontends. The mount clamps a value outside the range with `spacingStep` and passes only the step to the backend,
 which maps it (the theme's `space.<step>` on Qt Quick, rows and columns on the terminal;
@@ -92,7 +92,7 @@ which maps it (the theme's `space.<step>` on Qt Quick, rows and columns on the t
 The node kinds are the palette of the UI document design (§9): its base kinds (text, button, text
 input, checkbox, select, menu, column, row, grid, spacer, panel, scroll, switch, tabs, dialog, busy,
 forEach, table, date-time input, slider and file picker) and its further kinds (banner, badge,
-progress, steps, key-value, empty state, drawer, splitter, collapsible, drop zone), with `custom`,
+progress, steps, key-value, empty state, drawer, splitter, collapsible, drop zone, chart), with `custom`,
 which this mount shows as its fallback. Every other node carries the common properties, inputs and text
 carry the field state, and menu items nest. `boundary` and `customize` are not view-tree kinds: a
 boundary decides what to show from the state of the queries its children read, and a customization
@@ -101,37 +101,38 @@ lowers them to the kinds below.
 
 | Node | Builder | Props and callbacks |
 |---|---|---|
-| `Text` | `text` | `text`, `role` (`TextRole{Normal, Muted, Heading, Error, Success, Section}`; `Section` heads a group within a list: body size, bold and muted, a step below `Heading`) |
-| `Button` | `button` | `label`, `onClick`, `emphasis` and `icon` (set once; the mount tells the widget only a non-`Normal` emphasis and a non-empty icon), `style` (a `ButtonStyle`, `Push` or `Item`, set once; the mount tells the widget only `Item`) and `selected` (a `Prop<bool>`, default `false`: whether an item is the current entry, told to the widget only for an item, when bound or `true`). The mount refuses (`std::logic_error`) a bound or `true` `selected` on a push button |
-| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once), `unit` (the unit the input shows; empty: none), `decimals` (a number's entry places, set once; −1: not a number), `icon` (an icon of the theme's icon set, drawn at the leading edge; empty: none; set once — the mount refuses a multiline input with one, as it does `unit`/`decimals`), `label` and `showLabel` (below) |
+| `Text` | `text` | `text`, `spans` (`std::vector<TextSpan>`, each `{text, strong, mono, tone, action}`, `action` marking the run a banner draws as its link, which only a banner reads: while bound or not empty, shown in place of `text`, which is then not applied), `role` (`TextRole{Normal, Muted, Heading, Error, Success, Section, Mono, Display, Small, Overline}`; `Overline` is a short label over a group: `Section`'s look unless the theme's `font.overline.case` is `uppercase`, which draws it at the small size, strong, muted, in capitals, letter-spaced by 0.05 times the small size; the terminal draws it as `Section`, whatever the theme; `Section` heads a group within a list: body size, bold and muted, a step below `Heading`; `Mono` is an identifier, in the theme's fixed-pitch family; `Display` is a figure that stands out, at the theme's display size and strong weight; `Small` is a footnote at the theme's small size. A terminal draws `Display` bold and `Small` as `Normal`: a cell has one size) |
+| `Button` | `button` | `child` (an item's content, mounted into `content()` and drawn in place of the label, which then names it; the mount refuses a child on a push button), `label`, `onClick`, `emphasis` and `icon` (set once; the mount tells the widget only a non-`Normal` emphasis and a non-empty icon), `style` (a `ButtonStyle`, `Push` or `Item`, set once; the mount tells the widget only `Item`) and `selected` (a `Prop<bool>`, default `false`: whether an item is the current entry or a push button is pressed in, told to the widget for either style, only when bound or `true`), `shape` (a `ControlShape`, `Default` or `Round`, set once; the mount tells the widget only `Round`), `size` (a `ButtonSize`, `Normal` or `Small`, set once; only `Small` is told) and `mono` (a `bool`, set once; only `true` is told) |
+| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once), `unit` (the unit the input shows; empty: none), `decimals` (a number's entry places, set once; −1: not a number), `icon` (an icon of the theme's icon set, drawn at the leading edge; empty: none; set once — the mount refuses a multiline input with one, as it does `unit`/`decimals`), `label` and `showLabel` (below); `emphasis` (`InputEmphasis{Normal, Prominent}`, set once; the mount tells the widget only `Prominent` and refuses it on a multiline input), `prefix` (the text the input shows muted at its leading edge; empty: none; the mount refuses a multiline input with one), `mono` (set once; only `true` is told) and `align` (`Align{Start, Center, End}`, set once; only `Center` and `End` are told, and the mount refuses them on a multiline input) |
 | `Checkbox` | `checkbox` | `label`, `checked`, `onToggle` |
-| `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `onOpen` (the user opened the dropdown, also with no options; a hint a backend may not report), `style` (`SelectStyle{Dropdown, Radio}`, set once), `label` and `showLabel` (below) |
-| `Menu` | `menu` | `items` (`MenuItem{label, onSelect, icon, keys, checked, enabled, items}`: each label beside its handler, so there are no parallel lists. `icon` and `keys` are set once, and `keys` only shows a chord; `checked` engaged makes the entry checkable, and its mark follows the binding alone; an entry with `items` opens a submenu and is not itself chosen. The tree is set once; each entry's `label`, `checked` and `enabled` may be bound) |
-| `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap`, `align` (an `Align`: `Stretch`, the default, `Start`, `Center`, `End`) and `justify` (a `Justify`: `Start`, the default, `Center`, `End`, `Between`), all set once; a Row's `tone` (`std::optional<Prop<std::optional<Tone>>>`), which only `table`'s row view sets: disengaged when no tone was given, an engaged `Prop` whose value is `nullopt` for no tone at the moment. The mount refuses (`std::logic_error`) a Row whose `tone` is engaged outside a table |
-| `Grid` | `grid` | `columns`, `cells` (`GridCell{node, span}`; a null node leaves no cell), `gap`, `align` (each cell's content in its row) — all set once |
+| `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `onOpen` (the user opened the dropdown, also with no options; a hint a backend may not report), `style` (`SelectStyle{Dropdown, Radio, Segmented}`, set once), `label` and `showLabel` (below) |
+| `Menu` | `menu` | `items` (`MenuItem{label, onSelect, icon, keys, checked, enabled, items, separator, description, visible}`: each label beside its handler, so there are no parallel lists. `icon` and `keys` are set once, and `keys` only shows a chord; `checked` engaged makes the entry checkable, and its mark follows the binding alone; an entry with `items` opens a submenu and is not itself chosen; a `separator` is a line between entries; a hidden entry is not sent. The tree is set once; each entry's `label`, `description`, `checked`, `enabled` and `visible` may be bound), `style` (`MenuStyle::Bar`, or `Button`: one button that opens the entries), and a button-style menu's trigger: `label` (may be bound), `icon` and `emphasis` (set once) |
+| `Column`, `Row` | `column`, `row` | `children` (a null child is skipped), `gap`, `padding` (a `Padding`, set once: a spacing step on every side, or the vertical and the horizontal step apart; it converts implicitly from an `int` and compares with `==`, so `.padding = 3` writes every side; `selected` (`std::optional<Prop<bool>>`, disengaged when none was given: when engaged the mount calls `StackWidget::setSelected` at mount, possibly with false, and on every change; the mount refuses (`std::logic_error`) a Row whose `selected` is engaged inside a table, where the selection is the table's); the mount calls `StackWidget::setPadding` before any child, only for a stack with padding), `align` (an `Align`: `Stretch`, the default, `Start`, `Center`, `End`) and `justify` (a `Justify`: `Start`, the default, `Center`, `End`, `Between`), all set once; a Column's or a Row's `divided` (a `bool`, set once; the mount calls `StackWidget::setDivided(true)` before any child, only for a divided stack; a wrapping row is never divided); a Row's `wrap` (a `bool`, set once; the mount calls `StackWidget::setWrap(true)` right after `createStack`, before any child, only for a wrapping row); a Column's `holder` (a `bool`, set once; the interpreter sets it on the column it inserts around a list of nodes, and the mount then calls `StackWidget::setPassesBleed(true)` before any child, only for a holder; a column the document wrote is never one); a Row's `tone` (`std::optional<Prop<std::optional<Tone>>>`), which only `table`'s row view sets: disengaged when no tone was given, an engaged `Prop` whose value is `nullopt` for no tone at the moment. The mount refuses (`std::logic_error`) a Row whose `tone` is engaged outside a table |
+| `Grid` | `grid` | `columns`, `tracks` (`GridTrack{width, align}`: a `Sizing` and where a text's text or a label-width cell sits across the column; given, the column count is their number and `columns` is ignored), `cells` (`GridCell{node, span}`; a null node leaves no cell), `gap`, `align` (each cell's content in its row) — all set once |
 | `Spacer` | `spacer` | none |
 | `Panel` | `panel` | `title`, `header` (shown beside the title, usable while collapsed), `padding` (set once), `child`, `collapsible` (set once), `collapsed`, `onToggle` — a collapsible panel is an accordion section |
 | `Scroll` | `scroll` | `child`, `axis` (`Axis{Vertical, Horizontal}`, set once) |
 | `Switch` | `switchOf`, `switchOn<E>` | `selector` (`Prop<Key>`), `cases` (`SwitchCase{key, node}`; the first case with the key wins), `fallback` |
-| `Tabs` | `tabs` | `tabs` (`Tab{label, node}`, set once), `selected` (`Prop<std::size_t>`), `onSelect` |
-| `Dialog` | `dialog` | `open`, `title`, `child`, `onDismiss` |
+| `Tabs` | `tabs` | `inset` (an `int` spacing step, set once; the mount calls `TabsWidget::setInset` only for a nonzero step), `pageInset` (a `std::optional<int>` spacing step, set once; engaged, the mount calls `TabsWidget::setPageInset`, even with 0, and the pages are padded by it in place of `inset`) and `stripSurface` (a surface name, set once; `TabsWidget::setStripSurface` only for a nonempty one), `tabs` (`Tab{label, node}`; the list is set once, each `label` is a `Prop<std::string>` the bar follows: the mount sends every caption again when one changes), `selected` (`Prop<std::size_t>`), `onSelect`, `moreLabel` (`Prop<std::string>`, default `More`; the mount tells the widget only when it is bound or not the default) |
+| `Dialog` | `dialog` | `open`, `title`, `description` (applied only when bound or not empty), `descriptionSpans` (the description as runs; while bound or not empty, `setDescriptionSpans` is called in place of `setDescription`), `child`, `onDismiss`, `sheet` (default `false`), `dismissLabel` (default `Close`): the mount calls `setSheet` and `setDismissLabel` only when they are bound or not the default |
 | `Busy` | `busy` | `active`, `label` |
-| `ForEach` | `forEach<RowT>` | rows, key function, row view, `axis`, `gap` ([below](#keyed-collections)) |
-| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width, role}`, set once; `role` styles a column's default cell and has no effect on one with its own `.cell`), rows, key function, cells — or a row view answering `TableRowView{cells, tone}`, whose tone binds in the row's own scope — and `TableOptions{selectionMode, selection, onSelectionChange, onActivate, common}` ([below](#keyed-collections)) |
-| `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field; the change is the commit, since both backends report one only when an edit is finished), `onCommit` (the same value, after `onChange`), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC) — the last two set once; `label` and `showLabel` (below) |
+| `ForEach` | `forEach<RowT>` | rows, key function, row view, `axis`, `gap`, `common` (the row container's, as on every kind), `wrap` (a `bool`; honoured on a horizontal `axis` only, as a Row's), `divided` (a `bool`; honoured on a vertical `axis` only, as a Column's) ([below](#keyed-collections)) |
+| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width, role, align, valign, sortable, wrap}`, set once; `sortable` makes a click on the header ask to sort by the column; `role` styles a column's default cell and has no effect on the style of one with its own `.cell`, and a `Mono` role makes a fixed width count monospace characters; `wrap`, default `true`, with `false` keeps the column's text cells to one line, cut at the column's width with an ellipsis; `align`, default `Start`, places a text's or a text input's text, a label-width cell and the header label across the column, and `valign`, default `Center`, places every cell down its row, `Stretch` filling it), rows, key function, cells — or a row view answering `TableRowView{cells, tone, label, heading}`, whose tone and label bind in the row's own scope and whose `heading` makes the row a heading of exactly one cell (`ui::table` refuses any other count, as it refuses a data row of the wrong count) — and `TableOptions{selectionMode, selection, onSelectionChange (the keys and a `SelectionChange`: `Replace`, the whole selection, or `Extend`, which keeps the keys the backend does not hold), onActivate, selectColumn (set once: a leading column of check boxes drawing the selection), selectAllLabel (the header box's name, default `Select all`), sort (a `Prop<std::optional<TableSort{column, direction}>>`: the column whose header marks the sort, and its `SortDirection`; the table never reorders its rows, which arrive sorted), onSort (a sortable column's index when the user asks to sort by it), common}`; the mount tells the widget `sort` and `onSort` only when a column is sortable ([below](#keyed-collections)) |
+| `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field; the change is the commit, since both backends report one only when an edit is finished), `onCommit` (the same value, after `onChange`), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC), `pattern` (the pattern it shows and reads its value in; empty is ISO) — the last three set once; `label` and `showLabel` (below) |
 | `Slider` | `slider` | `value` (`std::int64_t`), `minimum`, `maximum`, `step` (the three set once), `onChange` (each step while a drag lasts), `onCommit` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePicker` | `filePicker` | `path`, `mode` (`FilePickerMode{Open, Save}`, set once), `onPicked` |
-| `Banner` | `banner` | `tone` (`Tone{Neutral, Info, Ok, Warn, Err}`), `text`, `action` (`ActionButton{label, onClick}`; an empty label shows no button), `dismissible` (set once), `onDismiss` — a dismissal leaves the banner shown: the application hides it |
-| `Badge` | `badge` | `tone`, `text`, `icon` (set once) |
+| `Banner` | `banner` | `tone` (`Tone{Neutral, Info, Ok, Warn, Err}`), `text`, `spans` (as a `Text`'s), `action` (`ActionButton{label, onClick}`; an empty label shows no button), `dismissible` (set once), `actionStyle` (`BannerActionStyle{Ghost, Button, Link}`, set once) and `actionStretch` (a `bool`, set once; the mount calls `BannerWidget::setActionStyle` only when the style is not `Ghost` or the action stretches), `onDismiss` — a dismissal leaves the banner shown: the application hides it |
+| `Badge` | `badge` | `tone`, `text`, `icon` (set once), `style` (`BadgeStyle{Filled, Outline}`, set once; the mount tells the widget only `Outline`), `onRemove` (set once; given, the badge is removable and takes the focus), `removeLabel` (the remove control's accessible name; empty: `Remove ` and the text), `shape` (a `ControlShape`, set once; only `Round` is told) and `mono` (a `bool`, set once; only `true` is told) |
 | `Progress` | `progress` | `value` (`std::optional<double>`, 0 to 1; `nullopt` is indeterminate), `label` |
-| `Steps` | `steps` | `items` (`Step{label, state}`, `StepState{Pending, Active, Done, Failed}`), `current` (`std::optional<std::size_t>`) |
-| `KeyValue` | `keyValue` | `items` (`KeyValueItem{label, value}`) |
+| `Steps` | `steps` | `items` (`Step{label, state}`, `StepState{Pending, Active, Done, Failed}`), `current` (`std::optional<std::size_t>`), `labelled` (`bool`, default true) |
+| `KeyValue` | `keyValue` | `items` (`KeyValueItem{label, value, spans, tone}`: `spans` not empty is shown in place of `value`; `tone` `Neutral` is none), `captions` (`CaptionPlacement{Beside, Above}`, set once) |
 | `EmptyState` | `emptyState` | `title`, `text`, `icon` (set once), `action` |
 | `Drawer` | `drawer` | A `Dialog`'s fields and rules, plus `side` (`Side{Start, End}`, set once) |
 | `ActionBar` | `actionBar` | `children` (a null child is skipped). It mounts as a horizontal stack, spacing step 2, in the footer of the Dialog or Drawer whose content holds it, at any depth, including content a Switch, Tabs or row mounts later; anywhere else the mount throws `std::logic_error`. The footer is asked for only when an `ActionBar` mounts |
 | `Splitter` | `splitter` | `children` (a null child is skipped), `orientation` (`Axis`, set once), `sizes` (`std::vector<int>`; empty shares the space equally), `onResize` (every pane's size after the user dragged a handle) |
 | `Collapsible` | `collapsible` | `title`, `open`, `onToggle` (the state the user asked for), `header` (shown beside the title, usable while closed), `child` (mounted once, hidden while closed) |
 | `DropZone` | `dropZone` | `accept` (extensions such as `".csv"`, without regard to case; empty takes every file), `multiple` (both set once), `onDrop` (the paths of a drop it took; a drop with a refused file, or several files when not `multiple`, is refused whole), `child` |
+| `Chart` | `chart` | `data` (`ChartData`, below): points against a numeric axis with horizontal reference lines. It takes no focus and calls no handler |
 | `Custom` | `custom` | `name`, `fallback` (never null: `custom` throws `std::invalid_argument`), `props` (`CustomProp`: a name and a `Prop` of text, `bool` or `double`), `minVersion`, `onEvent(event, payload)`. `Mounted` asks `IViewBackend::createCustom` for the component and mounts the fallback only when it returns null; `Custom` has no `Common` of its own |
 
 Every node but `Custom` also carries `Common`:
@@ -139,15 +140,15 @@ Every node but `Custom` also carries `Common`:
 | Field | Meaning |
 |---|---|
 | `visible`, `enabled` | Whether the widget is shown and accepts input; both apply to everything inside it |
-| `layout` | The size request (`LayoutHints{width, height}` of `Sizing` content, fixed or stretch, the optional bounds `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, and `alignSelf`), set once |
+| `layout` | The size request (`LayoutHints{width, height}` of `Sizing` content, fixed or stretch, the optional bounds `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, `alignSelf` and `bleed`), set once |
 | `dragKey`, `accepts`, `onDrop` | Drag and drop ([backend contract](backend_contract.md#drag-and-drop)) |
 | `a11y` | `Accessibility{name, role}`: what assistive technology announces; `role` is set once |
 | `testId` | The stable identifier an automated test finds the widget by, set once |
 | `tooltip` | Text shown while the pointer rests on the widget |
-| `surface` | The named token set of the theme that styles the node and everything inside it, set once |
-| `keys` | `KeyBinding{chord, onPress}`s: chords handled while focus is inside the node; the innermost node declaring a chord takes it, and for a chord listed twice the first entry is called |
+| `surface` | The named token set of the theme that styles the node and everything inside it, a `Prop<std::string>`; the mount sets it again on each change |
+| `keys` | `KeyBinding{chord, onPress}`s: chords handled while focus is inside the node; the innermost node declaring a chord takes it, and for a chord listed twice the first entry is called. A focused widget's own chords come before its own keys, and its own keys before its ancestors' chords ([`backend_contract.md`](backend_contract.md), Chords) |
 | `autofocus` | The widget takes keyboard focus when the content it is part of mounts ([below](#focus)) |
-| `focusId` | The name `Mounted::focus` finds the widget by after mount, such as a document element's id; set once ([below](#focus)) |
+| `focusId` | The name `Mounted::focus` finds the widget by after mount; set once ([below](#focus)). The interpreter makes it a key unique per declaration, row and component use (its node's pointer, the component use's key and the row keys) |
 
 Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, FilePicker) also carry
 `field`, a `FieldState`:
@@ -155,9 +156,11 @@ Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, Fil
 | Field | Meaning |
 |---|---|
 | `readonly` | The user may not change the value: the widget shows it, takes focus and lets its text be selected, and reports no edit, submit or commit. Changes nothing on text |
-| `required` | A mark that the field must be given. Whether a value is missing is the application's to decide, and to show through `errors` |
+| `required` | A mark that the field must be given, after its caption when the field draws one, else beside its control; a text's follows its last line. Whether a value is missing is the application's to decide, and to show through `errors` |
 | `errors` | The messages shown with the field, in order. Which errors show, and when (spec 5's `shownErrors`), is decided before they reach this property |
 | `stale` | The value shown is the last known one while a newer one is computed |
+| `description` | A line that describes the field, drawn under its control after its messages, and announced as its accessible description after them. Not on a text: the mount refuses a `Text` that has one. A text's `tone` is its colour |
+| `tone` | An evaluation of the value that does not make it invalid (`Tone`; `Neutral` is none): the control is outlined in the tone and the description drawn in its colour. A field with errors is drawn as `Err` whatever its tone. Not on a text |
 
 **Field chrome.** A TextInput, Select and DateTimeInput carry the field's `label` and `showLabel` (set once;
 default `false`). With `showLabel` the input draws the label as a visible caption above its control; without
@@ -172,8 +175,27 @@ The `Prop` fields — the ones a binding may drive — are `Common`'s `visible`,
 `label`; Table `selection`; DateTimeInput `value`; Slider `value`; FilePicker `path`; Banner `tone`,
 `text` and the action's `label`; Badge `tone` and `text`; Progress `value` and `label`; Steps `items` and
 `current`; KeyValue `items`; EmptyState `title`, `text` and the action's `label`; Drawer `open` and `title`;
-Splitter `sizes`; Collapsible `title` and `open`. Every other
+Splitter `sizes`; Collapsible `title` and `open`; Chart `data`. Every other
 field is fixed when the node is built.
+
+**Chart data.** A `Chart` has one property, `ChartData`, rather than a setter per part: its range depends on every
+point and line, so the parts change together, and one equality check keeps an unchanged chart from drawing again.
+Everything in it is computed before the backend sees it ([`interpreter.md`](interpreter.md#charts)): positions are
+`double`s and every text is formatted, so a backend draws and never derives a label from a position.
+
+| Field | Meaning |
+|---|---|
+| `xMin`, `xMax`, `yMin`, `yMax` | The plotted range of each axis, padding included |
+| `yLabel` | The value axis's unit or name; empty for none |
+| `yTicks` | `ChartTick{value, text}`s labelling the value axis; empty when three or more reference lines label it |
+| `lines` | `ChartLine{value, label, tone, style}`: a horizontal reference line in its `Tone`'s colour, `ChartLineStyle{Solid, Dashed, Dotted}` |
+| `series` | `ChartSeries{label, joined, points}`, at most four, in drawing order; `label` names it in the legend |
+| `series[].points` | `ChartPoint{x, y, clip, xLabel, tone, note}`: `x` is an index, a number or an instant's milliseconds since the epoch; `y` empty is a gap no line joins across; `clip` (`ChartClip{None, Below, Above}`) marks a value beyond an axis end the document fixed, and `y` is then that end; `tone` engaged marks the point; `note` is text beside it |
+| `summary` | The text alternative: the accessible description, and what a probe reads as the chart's text |
+
+A series is told apart by its shape as well as its colour (`color.chart.1` to `.4`, [`theme.md`](theme.md)), a
+marked point by a shape no series uses, and a clipped point by an open triangle at the edge, so nothing a chart
+says rests on colour alone.
 
 The builder for a Switch is `switchOf` because `switch` is a keyword. `switchOn<E>(selector, cases,
 fallback)` is the enumeration form: `selector` is a `std::function<E()>`, `cases` pairs enumerators
@@ -183,7 +205,7 @@ selector throws `std::invalid_argument` from `switchOn`.
 
 ## Keyed collections
 
-`forEach<RowT>(rows, keyOf, rowView, axis, gap)` mounts one widget per row and keeps it while its
+`forEach<RowT>(rows, keyOf, rowView, axis, gap, common)` mounts one widget per row and keeps it while its
 key stays:
 
 - `rows` is a binding, `std::function<std::vector<RowT>()>`, so a `Query`'s `value()` works; every
@@ -241,20 +263,21 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
 2. `Common`, in this order. `visible` and `enabled` only when bound or `false`; `layout` only when
    it is not content × content and unbounded; `dragKey` only when bound or engaged; the drop handler only when
    `onDrop` is set, with an accept-everything predicate when `accepts` is empty; `a11y.name` and
-   `tooltip` only when bound or not empty; `a11y.role`, `testId` and `surface` only when not empty;
+   `tooltip` and `surface` only when bound or not empty; `a11y.role` and `testId` only when not empty;
    the chords only when `keys` is not empty, as one `setKeys` whose handler runs the first binding
    of the chord pressed as a widget callback. A new widget is already visible, enabled,
    content-sized, neither draggable nor a drop target, and has none of the rest, so a node that
    says nothing more costs no call. Then, for text and the inputs, `FieldState` the same way:
-   `readonly`, `required` and `stale` only when bound or `true`, `errors` only when bound or not
-   empty. A new field is editable, not required, without errors and not stale.
+   `readonly`, `required` and `stale` only when bound or `true`, `errors` and `description` only when bound or not
+   empty, `tone` only when bound or not `Neutral`. A new field is editable, not required, without errors, not
+   stale, undescribed and untoned.
 3. The kind's own props and callbacks. Every `Prop` is applied, even one that holds its default: a
    constant calls its setter once; a binding makes a `Computed` (equality-gated, so an unchanged
    result calls nothing) and an `Effect` that calls one setter — except a Tabs index and a
    Dialog's `open`, whose `Effect` reads the binding itself ([below](#switch-tabs-dialog)). Fields
    set once (a stack's gap, a grid's columns and gap, a panel's padding and collapsibility, a
    slider's range, a Tabs' labels, a Table's columns and selection mode) are passed to their
-   setters once. A TextInput's `unit` is applied only when bound or not empty, and its `decimals`
+   setters once. A TextInput's `unit` and `prefix` are applied only when bound or not empty, and its `decimals`
    only when 0 or more, so an input that holds no number is told neither; a multiline input with
    either is refused (`std::logic_error`). A TextInput's, Select's and DateTimeInput's `label` is
    applied, as `setCaption(label, showLabel)`, only when bound, not empty, or `showLabel` is set. Each callback is handed over once, as an empty function when the node has none —
@@ -271,11 +294,14 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
      has each prop bound to `setTextProp`, `setBoolProp` or `setNumberProp` and gets `onEvent`
      through `setOnEvent`; when the backend loads nothing, the fallback is mounted under the parent
      and its widget returned;
-   - a Menu sends its whole tree through one `setItems`, as `MenuEntry` values; when any entry at
-     any depth has a bound `label`, `checked` or `enabled`, one binding over all of them sends the
-     tree again whenever one changes. The backend reports a choice as the entry's path, its index
-     at each level from the top, and the dispatcher runs that entry's `onSelect`; a path that
-     names no entry runs nothing. Which entries can be chosen — enabled ones without a submenu,
+   - a Menu sends its whole tree through one `setItems`, as `MenuEntry` values, its visible entries
+     only: a separator that hidden entries leave first or last in a level, or next to another
+     separator, is not sent either. When any entry at any depth has a bound `label`, `description`,
+     `checked`, `enabled` or `visible`, one binding over all of them sends the tree again whenever
+     one changes. A button-style menu's trigger is sent through `setTrigger` at mount and whenever
+     its label changes. The backend reports a choice as the entry's path, its index at each level
+     from the top among the entries last sent, and the dispatcher maps it back through them and
+     runs that entry's `onSelect`; a path that names no entry, or a separator, runs nothing. Which entries can be chosen — enabled ones without a submenu,
      inside enabled entries — is the backend's to enforce, as it is for a disabled widget.
 4. Its children, appended in order.
 
@@ -543,6 +569,7 @@ rows appear at the next change of the rows.
 
 ## Out of scope
 
-Not in the palette: themes beyond `TextRole`, images, charts, and translation catalogues — a
+Not in the palette: themes beyond `TextRole`, images, charts other than points against a numeric axis (bars,
+histograms, areas, pies), chart interaction, and translation catalogues — a
 binding produces translated text. The document's further kinds and properties join with the
 interpreter ([The palette](#the-palette)).

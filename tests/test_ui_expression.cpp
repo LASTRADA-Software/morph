@@ -100,7 +100,9 @@ void fill(StaticEnvironment& env, Json const* spec, ValueRecord& translations) {
         env.format.locale = std::get<std::string>(locale->data);
     }
     if (Json const* const offset = optionalMember(*spec, "offset")) {
-        env.format.utcOffsetMinutes = static_cast<std::int32_t>(std::get<std::uint64_t>(offset->data));
+        auto const minutes = morph::ui::detail::jsonInt(*offset);
+        REQUIRE(minutes.has_value());
+        env.format.utcOffsetMinutes = static_cast<std::int32_t>(*minutes);
     }
     if (Json const* const units = optionalMember(*spec, "units")) {
         addUnits(env.format.units, *units);
@@ -244,7 +246,7 @@ TEST_CASE("ui expressions: the display functions use the client's formatting", "
     CHECK(run(R"({"fn": "decimal", "args": [{"lit": {"num": 3, "den": 2, "dp": 1}}, 2]})") == Value{"1,50"});
     CHECK(run(R"({"fn": "date", "args": [{"ref": "when"}, "long"]})") == Value{"long 2026"});
     CHECK(run(R"({"fn": "dateTime", "args": [{"ref": "when"}]})") == Value{"medium+time 2026"});
-    CHECK(morph::ui::functionNames().size() == 42);
+    CHECK(morph::ui::functionNames().size() == 48);
     CHECK(morph::ui::isName("a_1"));
     CHECK_FALSE(morph::ui::isName("1a"));
     CHECK_FALSE(morph::ui::isName(""));
@@ -324,4 +326,24 @@ TEST_CASE("ui expressions: a resolver decides what names mean", "[ui][expr]") {
     REQUIRE(local.has_value());
     CHECK(checkExpression(**local, resolver).has_value());
     CHECK(checkExpression(**local, PermissiveResolver{}).has_value());
+}
+
+// Mutation: apply the pattern to `medium` only (the `long` case then writes ISO with seconds).
+TEST_CASE("ui expressions: a date pattern writes every style, and a host's formatter still wins", "[ui][expr]") {
+    StaticEnvironment env;
+    env.format.utcOffsetMinutes = 120;
+    env.format.datePattern = "dd-MMM-yyyy";
+    env.format.dateTimePattern = "dd-MMM-yyyy HH:mm";
+    env.names.insert_or_assign("when", Value{*morph::time::DateTime::fromIso8601("2026-10-24T07:41:00Z")});
+    auto run = [&env](std::string_view text) {
+        auto parsed = parseExpression(*parseJson(text));
+        REQUIRE(parsed.has_value());
+        return evaluate(**parsed, env);
+    };
+    CHECK(run(R"({"fn": "dateTime", "args": [{"ref": "when"}]})") == Value{"24-Oct-2026 09:41"});
+    CHECK(run(R"({"fn": "dateTime", "args": [{"ref": "when"}, "short"]})") == Value{"24-Oct-2026 09:41"});
+    CHECK(run(R"({"fn": "dateTime", "args": [{"ref": "when"}, "long"]})") == Value{"24-Oct-2026 09:41"});
+    CHECK(run(R"({"fn": "date", "args": [{"ref": "when"}, "long"]})") == Value{"24-Oct-2026"});
+    env.format.dates = [](morph::time::DateTime, std::string_view style, bool) { return std::string{style}; };
+    CHECK(run(R"({"fn": "dateTime", "args": [{"ref": "when"}, "long"]})") == Value{"long"});
 }

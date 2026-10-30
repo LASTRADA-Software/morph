@@ -56,11 +56,14 @@ by name.
 | `a < b`, `a <= b`, `a > b`, `a >= b`, `eq(a, b)`, `ne(a, b)` | `lt`, `le`, `gt`, `ge`, `eq`, `ne` |
 | `a && b`, `a \|\| b`, `!a` | `and`, `or`, `not` (both operands are written: a document has no short circuit) |
 | `x.orElse(y)` | `coalesce(x, y)` |
-| `x.at(&T::member)`, `x.at("name")` | A field read: `{"ref": "x.member"}`, `{"row": "member"}` |
+| `x.at(&T::member)`, `x.at("name")` | A field read: `{"ref": "x.member"}`, `{"row": "member"}`, and below a computed value `{"get": e, "path": "member"}` |
 | `ref<T>("name.path")`, `row(&T::member)`, `row("path")`, `row<T>()` | `{"ref": ...}`, `{"row": ...}` |
 | `cond(c, a, b)`, `obj({{"k", e}})`, `list({...})` | `{"if": [...]}`, `{"obj": ...}`, `{"list": ...}` |
 | `map(list, "x", fn)`, `filter(list, "x", fn)`, `filter(list, &T::flag)` | The comprehensions; `fn` receives the element's handle |
-| `call<R>(name, {...})` and `engaged`, `coalesce`, `concat`, `concatLists`, `format`, `count`, `sum`, `includes`, `isEmpty`, `round`, `parseDecimal`, `quantity`, `t(key, fallback, {{"n", e}})` | Library calls, and `{"t": ...}` |
+| `sorted(list, "x", by, order?)` | The `sort` form: `by` receives the element's handle and gives the value to order by; `order` is absent for ascending |
+| `runs(list, "x", by)` | The `runs` form: `by` receives the element's handle and gives the value a run shares |
+| `sortKey(column, SortOrder)` | One key of a table's `sort`, `{"column", "direction"}`; a `list` of them is a sort |
+| `call<R>(name, {...})` and `engaged`, `coalesce`, `concat`, `concatLists`, `slice(list, start, count?)`, `format`, `count`, `sum`, `includes`, `isEmpty`, `round(x, dp, Rounding)`, `decimal(x, dp, Rounding)`, `abs`, `sqrt(x, dp, Rounding)`, `stdev(list, dp, Rounding)`, `rsd(list, dp, Rounding)`, `parseDecimal`, `quantity`, `t(key, fallback, {{"n", e}})` | Library calls, and `{"t": ...}`; a `Rounding` of `HalfUp` writes the mode `"halfUp"`, and the default `HalfEven` writes none, so documents written before the mode are unchanged |
 | `env(name)`, `session(name)`, `hostValue(name)`, `prop(name)`, `event()` | `{"env"}`, `{"session"}`, `{"host"}`, `{"ref": "props.name"}`, `{"ref": "event"}` |
 | `element("id")` and its `value()`, `draft()`, `checked()`, `selected()`, `selection()`, `open()`, `valid()`, `ready()`, `get(path)` | An element's values (spec 5 §6) |
 | A query handle's `value()`, `at(&Result::m)`, `pending()`, `error()`, `errorKind()`, `can()`; a mutation handle's `result()`, `pending()`, `error()`, `errorKind()`, `can()` | `{"ref": q}`, `{"pending": q}`, `{"result": m}`, … |
@@ -70,14 +73,12 @@ by name.
   converts to another when its value can: the same type, `Any` on either side, a `std::optional`
   of a type for the type (an expression propagates `null`), a C++ conversion, or a list of such
   elements. A wrong body type is therefore a compile error, as spec 5 §11 asks.
-- **Field reads.** `expr/1` reads a field only below a name, so `at` extends a `ref` or `row` path.
-  A mutation's `result()` is a `ResultHandle`, a handle whose `at` overloads are deleted: reading a
-  field of it in place is a compile error, and the screen binds it first,
-  `auto r = screen.let("r", m.result());`, then reads `r.at(...)`. It converts to `Handle<T>`
-  wherever a handle is taken. `at` on any other expression that is not a named read (a call, or a
-  `result` built through `raw`) throws `AuthoringError`. A member's JSON name is
-  glaze's, found by its address in a value-initialised object of its class: a member a `glz::meta`
-  leaves out has no name and throws as well. A renamed member is a compile error.
+- **Field reads.** `at` reads on any handle. Below a name it extends the `ref` or `row` path; below
+  a `get` it extends the `get`'s path, so `first(xs).at("lot").at("stock")` is one node; below any
+  other expression (a call, a mutation's `result()`, a constant) it writes `{"get": e, "path": ...}`.
+  A member's JSON name is glaze's, found by its address in a value-initialised object of its class:
+  a member a `glz::meta` leaves out has no name and throws `AuthoringError`. A renamed member is a
+  compile error.
 - **Absent handles.** A default-constructed handle is absent: an option left unset writes no key.
   Using an absent handle as an operand throws `AuthoringError`.
 - **`concatLists`** takes a list of `AnyHandle`s, or of `Handle<std::vector<T>>` for one element
@@ -104,7 +105,8 @@ case, the rows of a `forEach` or `table` — takes a builder function that recei
 | `mutation<A>(name, model, {.body, .concurrency, .serialKey, .optimistic, .onSuccess, .onError, .offlineQueue})` | `mutations.name`; `.optimistic` is an `Optimistic{.query, .at, .key, .with}`, read against the run's body bound as `body` |
 | `watch(on, commands, Source::User)`, `check({.name, .assertion, .message, .targets, .blocking})` | `watch`, `checks` |
 | `title`, `identity`, `dirty`, `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange`, `key(chord, commands)`, `showErrors`, `prefetch(query)` | The screen's own keys |
-| `subtitle(expr)`, `status(HeadBadgeOptions)`, `action(ActionButtonOptions)` | The screen's head: its subtitle, and a status badge or an action appended in order |
+| `leadPlacement(expr)`, `headSurface(expr)`, `pageSurface(expr)` | Where the head's lead sits (`"below"`, `"inline"` or `"end"`; a literal is checked at load), the surface the shell draws its top bar on while the screen is shown (a surface name, `null` for none), and the surface it draws the page area on (a surface name, `null` for `page`) |
+| `subtitle(expr)`, `status(HeadBadgeOptions)`, `action(ActionButtonOptions)`, `menu(MenuItem)`, `menuLabel(expr)`, `tool(HeadSearchOptions)`, `tool(HeadSelectOptions)` | The screen's head: its subtitle, and a status badge, an action, an entry of its own menu or a tool appended in order; the menu trigger's accessible name. `ActionButtonOptions{id, label, icon, iconOnly, emphasis, enabled, visible, onClick}` draws `icon` alone while its `iconOnly` condition holds (it needs an `icon`), `HeadSearchOptions{id, label, value, placeholder, onChange, onSubmit, width, visible, enabled}` and `HeadSelectOptions{id, label, options, selected, onChoose, width, visible, enabled}` write a `headTool` of their kind; a `width` of 0 writes none |
 | `component(name, {.qml \| .host + .version, .props, .events, .fallback})` | `components.name`, returning the `ComponentRef` `custom` names |
 | `columnsPoint`, `arrangePoint`, `choicePoint`, `valuePoint<T>`, `point(name, "layout" \| "saved")` | `customize.name`, returning the `Point` `customize`, `resetPrefs` and `pref` name |
 
@@ -140,29 +142,93 @@ Each builder returns a `Command`; `Commands` is a list, built from one command o
 Every kind of the kind table has a builder whose options struct holds the kind's own keys:
 `text`, `button`, `textInput`, `checkbox`, `select`, `menu`, `column`, `row`, `grid`, `spacer`,
 `panel`, `scroll`, `switchOn` with `Case`, `tabs`, `dialog`, `drawer`, `busy`, `forEach`, `table`,
-`dataTable`, `dateTimeInput`, `slider`, `filePicker`, `banner`, `badge`, `progress`, `steps`,
-`keyValue`, `emptyState`, `splitter`, `collapsible`, `dropZone`, `customize`, `boundary`, `form`,
-`collection`, `wizard` and `custom`. Children come first, as a `Nodes` list (`{a, b}`, or one node),
-options second. `DialogOptions::actions` (a `dialog`'s or `drawer`'s) lists its footer buttons as
-`ActionButtonOptions`, run in its scope.
+`dataTable`, `group`, `dateTimeInput`, `slider`, `filePicker`, `banner`, `badge`, `progress`, `steps`,
+`keyValue`, `emptyState`, `chart`, `splitter`, `collapsible`, `dropZone`, `customize`, `boundary`, `form`,
+`collection`, `wizard` and `custom`. `chart(ChartOptions{summary, series, lines, yMin, yMax, yPlaces, yLabel})`
+takes its series as `ChartSeries{label, points, y, x, xLabel, tone, note, joined}`, where each per-point key is a
+`PointExpression`, a function from the point's element (`row()`) to an expression, and its lines as
+`ReferenceLine{value, label, tone, style}` with a `LineStyle`. Children come first, as a `Nodes` list (`{a, b}`, or one node),
+options second. `tabs(tabs, TabsOptions{.selected, .onChoose, .moreLabel, .inset, .pageInset, .stripSurface})` takes `Tab{id, label, children}` pages; `inset` (a spacing step, written as a literal), `pageInset` (the same for the pages, which `inset` pads when it is absent; a page pads its own content inside its scroll, so a bleeding child reaches the node's edges) and `stripSurface` (a surface name) let a tabs node be a page's edge-to-edge root, its strip on that surface across the width.
+`pinned(content, PinnedOptions{.top, .bottom, .surface, .inset})` writes the bar-that-stays-in-view idiom: a `divided`
+column with `pageEdge: true`, sized to stretch both ways, holding the top bar, a vertical `scroll` sized to stretch both
+ways around `content`, and the bottom bar. `inset` is a spacing step, default 4 (the shell's page inset): `content`
+sits in a `column` padded by it on every side, and a bar is a `column` of its list padded `{"lit": [2, inset]}` on
+`surface` (default the built-in `bar`; an empty `surface` writes the column with none), so a bar's surface and rule span
+the column while its content lines up with the body's. `.inset = 0` writes the content as it is, a bar padded by 2 on
+every side and no `pageEdge`, and the shell insets the page. An empty list leaves its bar out, and a bar whose nodes all
+have a `visible` condition is visible while any of them is (a list with an unconditioned node always shows). A page with a top bar, an inset and no `visible` condition on any of the top bar's nodes also writes `headJoined: true`: the bar continues the head's block, so the shell draws no rule between them. A bar that can hide would leave the head with no rule under it while hidden, so such a page writes none, and a screen that wants it writes the key itself (`ContainerOptions::headJoined`). `padding(
+vertical, horizontal)` writes a stack's two-step padding, the constant `{"lit": [vertical, horizontal]}`.
+`stepper(StepperOptions{.step, .steps, .backLabel, .continueLabel, .finishLabel, .onFinish, .extra, .labelled,
+.continueStretches, .testIdPrefix})` writes a wizard over screen state, with no node of its own: a column of a `steps`
+indicator built from the steps' labels and `step`, a `switch` on `step` with one case per step, and a footer row of
+Back, a spacer, `extra` and Continue. `labelled` is a condition (absent: labelled); unlabelled, the steps keep their
+labels and the indicator draws only the marks. `continueStretches` drops the spacer and lets Continue take the
+footer's spare width. `stepperParts(options)` returns the same three nodes as `StepperParts{indicator, body, footer}`,
+for a screen that places them itself, such as in `pinned`'s bars; `stepper` is the column of them. Each
+`StepperStep{label, children, canContinue, blocking, onBlocked, continueLabel}` (`continueLabel`: Continue's text
+while that step is current, else `continueLabel` of the options, or `finishLabel` on the last) gives what Continue does there:
+while `canContinue` holds (absent: always), it sets `step` one on, or runs `onFinish` on the last step; otherwise it
+runs `onBlocked` and focuses `blocking`, which may be declared in the step's own case. On a step that cannot
+continue and names no `blocking` element, Continue is disabled, since a click would do nothing. Continue's commands are one
+`if` chain on `step`, so a step's own `set` never satisfies the next step's test. Back sets `step` one back and is
+disabled on the first. The three labels are plain text and default to English (`Back`, `Continue`, `Finish`). A given
+`testIdPrefix`, empty included, names the indicator, Back and Continue `<prefix>steps`, `<prefix>back` and
+`<prefix>continue`.
+`DialogOptions::actions` (a `dialog`'s or `drawer`'s) lists its footer buttons as
+`ActionButtonOptions`, run in its scope, and `DialogOptions::description` writes its head's description line.
+`DialogOptions::sheet` and `dismissLabel` are a dialog's: the condition for drawing it as a sheet, and its dismiss control's label.
 
 The keys every node takes are member functions of `Node`, each returning a copy with the key set:
-`id(element)`, `visible`, `enabled`, `tooltip`, `sizing`, `span`, `autofocus`, `testId`, `surface`,
+`id(element)`, `visible`, `enabled`, `tooltip`, `sizing`, `span`, `autofocus`, `testId`, `surface` (a name, or an
+expression of one),
 `a11y(name, role)`, `drag(payload)`, `drop(accepts, commands)`, `key(chord, commands)`, the bounds `minWidth(n)`,
-`maxWidth(n)`, `minHeight(n)`, `maxHeight(n)`, `alignSelf(Align)`, and the input decorations `readonly`, `required`, `errors`, `stale`.
+`maxWidth(n)`, `minHeight(n)`, `maxHeight(n)`, `alignSelf(Align)`, `bleed()` (the node's sides lie at its parent's edges, past the parent's horizontal padding; the parent is a column, a panel or a tab page), and the input decorations `readonly`, `required`, `errors`, `stale`.
 `sizing(width, height)` writes both dimensions as a record, a literal one when both are literal. The free helpers
 `content()`, `fixed(n)` and `stretch(w = 1)` answer literal sizings (`"content"`, `{"lit": {"fixed": n}}`,
 `{"lit": {"stretch": w}}`), which the loader checks; a record built with `obj` is evaluated at mount. `with(key, handle)` and
 `withText(key, text)` set any other key, and `Node{json}` wraps a node no builder spells.
 
-- **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected}`: an absent `style`
-  writes no key, and `selected`, a condition, is written as given and refused at load without `ButtonStyle::Item`.
-- **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, align, justify}`; an absent
-  `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` is the grid's, and
-  a grid's `justify` is written so the loader refuses it rather than dropped.
-- **`table`** takes its rows, its options (`key`, `columns`, `selection`, `sort`, `filters`,
-  `rowTone` (each row's tone, which the client draws), `highlightKey`, `onActivate`, `empty` (the nodes shown in
-  its place while its rows are an empty list)), and optionally a row-scope builder that returns the
+- **`badge`** takes its text, tone and icon, or `BadgeOptions{text, tone, icon, onRemove, removeLabel, style, shape,
+  mono}` for one the user can remove, or one drawn outlined, round or in the mono face; `shape` and `mono` are written
+  only when not the default.
+- **`menu`** takes `MenuItem{id, label, icon, keys, checked, enabled, onClick, items, separator, description,
+  visible}` entries, each key written only when given (`id` names an entry of a screen head's own menu, `Scope::menu`;
+  a `menu` node's entries give none); `menuSeparator()` is an entry with `separator`, which writes nothing else.
+  `menuButton(MenuButtonOptions{label, icon, emphasis}, items)` writes a `style: button` menu; an icon-only one names
+  itself with `.a11y(...)`.
+- **`banner`** also takes `BannerOptions{actionStyle (BannerActionStyle: Ghost, Button, Link), actionStretch}`; `actionRun(text)` is the run of its `spans` that is a `Link` action's text, at its place in the sentence.
+- **`text` and `banner`** take `spans` beside `text` (declared right after it, so a call names `.spans` before
+  `.role`). The free helpers build the runs: `strong(text)`, `mono(text)`, `toned(text, tone)` and
+  `styled(text, SpanStyle{.strong, .mono, .tone})` each a record run, and `spans({…})` the list (`list` under a name
+  that reads at the call): `text({.spans = spans({"Lot ", mono(lot)}), .role = "muted"})`. `styled` is not `span`,
+  which a node's `span` already means. A `text` also takes `tone`, its colour whatever its role:
+  `text({.text = "7", .role = "display", .tone = "err"})`. A dialog or drawer takes `descriptionSpans` beside
+  `description`, and `Scope::subtitleSpans(runs)` gives a screen's head its subtitle as runs beside `subtitle`, `Scope::titleSpans(runs)`
+  its title as runs beside `title`, and `Scope::eyebrow(line)` and `eyebrowSpans(runs)` its line above the title.
+- **`group`** takes its children and `GroupOptions{label, required, description, errors, gap}`.
+- **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected, children, shape,
+  size, mono}`: an absent `style` writes no key, and `selected`, a condition, is written as given: an item's current
+  entry, a push button pressed in. `shape` (`ControlShape::Round`), `size` (`ButtonSize::Small`) and `mono` are
+  written only when not the default.
+- **`textInput`** takes `TextInputOptions{value, label, placeholder, mode, icon, unit, emphasis, prefix, mono, align,
+  commitOn, onChange, onCommit, onSubmit}`; `prefix` is an expression, and `mono` and `align` (`Align::Start`,
+  `Center`, `End`; absent writes no key) are written only when given.
+- **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, padding (a column or row; a step, or `padding(vertical, horizontal)`), pageEdge (a column or row), selected (a column or row: a condition), columns, tracks, align, justify, wrap, divided}`; an
+  absent `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` and `tracks`
+  (`GridTrack{width, align}`, each key written only when given) are the grid's, and
+  a grid's `justify` is written so the loader refuses it rather than dropped. `wrap` is a row's: the children
+  continue on the next line when they do not fit; written on a column or a grid, the loader refuses it. `divided` draws a rule between the children of a column, or of a row that does not wrap; the loader refuses it on a wrapping row. `forEach`
+  takes the same `wrap`, for a horizontal `axis`, and `divided`, for a vertical one, in its `ForEachOptions`.
+- **`table`** takes its rows, its options (`key`, `columns` (each `TableColumn{name, label, width, role, align,
+  valign, cell, sortable, sortBy}`; an absent `align` or `valign` is left out and a present one is written by name,
+  `sortable` only when `true`), `selectionMode` (a
+  `Selection`, written as `selectionMode`), `selection` (the selected keys, controlled when given), `onSelectionChange`
+  (with `event` the new keys), `sort` (a list of `sortKey`s, controlled when given), `onSortChange` (with `event` the
+  new sort), `pageSize` and `page`, `group` (a `TableGroup{by, heading}`: a heading row before each run of rows
+  sharing `by`, read in a row scope whose row is the run record), `filters` and `highlightKey` (which the loader takes on a `dataTable` only),
+  `rowTone` (each row's tone, which the client draws), `selectColumn` (written only when `true`), `selectAllLabel`,
+  `rowLabel` (each row's name, in the row scope), `onActivate`, `empty` (the nodes shown in
+  its place while its rows are an empty list), `valign`), and optionally a row-scope builder that returns the
   columns; `cells({...})` makes columns from cells alone. **`dataTable<A>(model, body, options)`**
   is the table of spec 7 declared from a list action, with `mode` (`TableMode::Server` or
   `Client`).
@@ -238,10 +304,13 @@ load-time validation:
 | `textInput`, `dateTimeInput`, `slider`, `select`, `checkbox`, `filePicker` | A `label` or an `a11y.name` |
 | `button` | A `label` or an `a11y.name`; an `icon` never names it |
 | `dialog`, `drawer` | A `title` or an `a11y.name` |
+| `group` | A `label` or an `a11y.name` |
 | `table` (including one declared from an action), `custom` | An `a11y.name` |
 
 - A label, title or name written as the constant `""` or `null` does not count; any other
   expression does, since its value is not known until the client evaluates it.
+- An item with content is named by its label, not by its content: a screen reader reads the label, so whatever a
+  listener needs from the content (an out-of-specification tag) belongs in the label too.
 - A `form` is not checked: each field takes its label from the schema or the `fields` overlay.
 - The view is walked through every node list and every part's nodes (tab pages, `switch` cases,
   table cells, a boundary's `loading` and `error`), and so is each component's fallback.
@@ -285,7 +354,8 @@ is reviewed like code.
 ## Out of scope
 
 - **The app document** (spec 6 §5): `Scope` writes a screen with a view; a builder for the app
-  document, which has none, follows the app shell's work.
+  document, which has none, follows the app shell's work; until then it is written as JSON, whose `principalPlacement`
+  (`"sidebar"`, the default, or `"head"`) puts the principal in the top bar.
 - **Bundles**: the `restyle` map, the manifest and message catalogues are the UI service's.
 - **Spec 6 §11's reference screen** (`lims.sample`): the lims example does not carry it or the
   model additions it needs, so its golden waits for that example work. The `results` golden is

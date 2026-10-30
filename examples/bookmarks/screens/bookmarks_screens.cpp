@@ -152,7 +152,7 @@ ui::Screen bookmarksScreen() {
                                                ui::cond(ui::eq(ui::row("visibility"), "Shared"),
                                                         ui::Handle<std::string>{std::string{"ok"}},
                                                         ui::Handle<std::string>{std::string{"neutral"}}))}}},
-                              .selection = ui::Selection::Multiple,
+                              .selectionMode = ui::Selection::Multiple,
                               .onActivate = {ui::set(editing, ui::row("id")), ui::open(edit)},
                               .empty = {ui::emptyState({.title = "No bookmarks yet",
                                                         .text = "Save a link with New bookmark.",
@@ -218,7 +218,7 @@ ui::Screen tagsScreen() {
                                    {.name = "count",
                                     .label = "Bookmarks",
                                     .cell = {ui::text({.text = ui::row("bookmarkCount")})}}},
-                       .selection = ui::Selection::Single})
+                       .selectionMode = ui::Selection::Single})
                       .id(picked)
                       .a11y("Tags")
                       .testId("tags")},

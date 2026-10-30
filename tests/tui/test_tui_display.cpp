@@ -131,6 +131,21 @@ TEST_CASE("tui steps: one row per step with its state's mark", "[tui][display]")
     CHECK(steps->probeText().empty());
 }
 
+// Mutation: draw the unlabelled indicator as the row-per-step list (it then has four rows, not one).
+TEST_CASE("tui steps: unlabelled, the marks sit in one row joined to the width", "[tui][display]") {
+    Harness harness{30, 5};
+    auto const steps = harness.make<StepsImpl>(nullptr);
+    steps->setSteps({{.label = "Plan", .state = ui::StepState::Done},
+                     {.label = "Build", .state = ui::StepState::Active},
+                     {.label = "Ship", .state = ui::StepState::Pending},
+                     {.label = "Undo", .state = ui::StepState::Failed}});
+    steps->setCurrent(1);
+    steps->setLabelled(false);
+    CHECK(harness.draw() == Rows{"[x]──────[>]──────[ ]──────[!]"});
+    CHECK(steps->naturalSize().height == 1);
+    CHECK(steps->probeText() == "Build");
+}
+
 // Mutation: put each value right after its own caption (the values then do not line up).
 TEST_CASE("tui key-value: the values line up after the widest caption", "[tui][display]") {
     Harness harness{30, 3};
@@ -157,4 +172,89 @@ TEST_CASE("tui empty state: title, text and an action that Enter and a click on 
     harness.focus(*empty);
     CHECK(harness.key(core::tui::KeyCode::Enter) == core::tui::EventResult::Handled);
     CHECK(actions == 2);
+}
+
+// Mutation: draw `_text` whatever the runs (the strong run is not bold).
+TEST_CASE("tui banner: a banner's runs draw on its row, a strong run bold", "[tui][display]") {
+    Harness harness{40, 3};
+    auto const banner = harness.make<BannerImpl>(nullptr);
+    banner->setTone(ui::Tone::Err);
+    banner->setSpans({{.text = "Refused.", .strong = true}, {.text = " 3 left"}});
+    CHECK(harness.draw() == Rows{"Refused. 3 left"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.bold);
+    CHECK_FALSE(buffer.at(0, 10).style.bold);
+    CHECK(banner->probeText() == "Refused. 3 left");
+}
+
+// Mutation: ignore the placement (the stacked pair takes one row).
+TEST_CASE("tui key-value: a stacked pair takes two rows, and a toned value is bold in its tone", "[tui][display]") {
+    Harness harness{30, 5};
+    auto const kv = harness.make<KeyValueImpl>(nullptr);
+    kv->setCaptionPlacement(ui::CaptionPlacement::Above);
+    kv->setItems({{.label = "Serial", .spans = {{.text = "D-9", .mono = true}}},
+                  {.label = "Containers", .value = "180 needed", .tone = ui::Tone::Err}});
+    CHECK(harness.draw() == Rows{"Serial", "D-9", "Containers", "180 needed"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(3, 0).style.bold);
+    CHECK(buffer.at(3, 0).style.fg == harness.screen().theme().error.fg);
+    CHECK_FALSE(buffer.at(1, 0).style.bold);
+    CHECK(kv->probeText() == "Serial: D-9\nContainers: 180 needed");
+}
+
+// Mutation: draw an outline badge in brackets (it then reads as a filled one).
+TEST_CASE("tui badge: an outline badge is drawn in parentheses", "[tui][display]") {
+    Harness harness{20, 1};
+    auto const badge = harness.make<BadgeImpl>(nullptr);
+    badge->setTone(ui::Tone::Err);
+    badge->setText("STAT");
+    badge->setStyle(ui::BadgeStyle::Outline);
+    CHECK(harness.draw() == Rows{"(STAT)"});
+}
+
+// Mutation: ignore the style (the link is drawn as the bracketed button after the text, and the stretched button
+// stays on the text's row).
+TEST_CASE("tui banner: a button action is bracketed, a stretched one is on its own row", "[tui][display]") {
+    Harness harness{40, 3};
+    auto const banner = harness.make<BannerImpl>(nullptr);
+    int actions = 0;
+    banner->setText("Run 4 is overdue");
+    banner->setActionLabel("Open run");
+    banner->setOnAction([&] { ++actions; });
+    banner->setActionStyle(ui::BannerActionStyle::Button, false);
+    CHECK(harness.draw() == Rows{"Run 4 is overdue  [ Open run ]"});
+    banner->setActionStyle(ui::BannerActionStyle::Button, true);
+    CHECK(harness.draw() == Rows{"Run 4 is overdue", "[ Open run ]"});
+    static_cast<void>(harness.click({.x = 3, .y = 1}));
+    CHECK(actions == 1);
+    static_cast<void>(harness.click({.x = 3, .y = 0}));
+    CHECK(actions == 1);
+}
+
+// Mutation: draw the link without the underline, or fire on any cell of the row.
+TEST_CASE("tui banner: a link action is underlined inside its sentence and a click on it runs the action",
+          "[tui][display]") {
+    Harness harness{50, 2};
+    auto const banner = harness.make<BannerImpl>(nullptr);
+    int actions = 0;
+    banner->setSpans(
+        {{.text = "1 field needs attention: "}, {.text = "Containers per pull", .action = true}, {.text = "."}});
+    banner->setActionLabel("Containers per pull");
+    banner->setOnAction([&] { ++actions; });
+    banner->setActionStyle(ui::BannerActionStyle::Link, false);
+    CHECK(harness.draw() == Rows{"1 field needs attention: Containers per pull."});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 25).style.underline);
+    CHECK_FALSE(buffer.at(0, 5).style.underline);
+    CHECK_FALSE(buffer.at(0, 44).style.underline);
+    static_cast<void>(harness.click({.x = 30, .y = 0}));
+    CHECK(actions == 1);
+    static_cast<void>(harness.click({.x = 5, .y = 0}));
+    CHECK(actions == 1);
+
+    auto const plain = harness.make<BannerImpl>(nullptr);
+    plain->setText("Offline");
+    plain->setActionLabel("Retry");
+    plain->setActionStyle(ui::BannerActionStyle::Link, false);
+    CHECK(plain->naturalSize().width == 13);
 }

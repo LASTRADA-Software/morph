@@ -15,6 +15,12 @@ namespace morph::qt_quick {
 Backend::Backend(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
     : _context{std::make_unique<detail::Context>(engine, host, std::move(options))} {}
 
+std::string Backend::widthClass() const { return _context->widthClass(); }
+
+void Backend::setOnWidthClass(std::function<void(std::string const&)> onWidthClass) {
+    _context->setOnWidthClass(std::move(onWidthClass));
+}
+
 Backend::~Backend() = default;
 
 QQuickItem* Backend::itemOf(ui::Widget const& widget) noexcept {
@@ -77,8 +83,8 @@ std::unique_ptr<ui::SelectWidget> Backend::createSelect(ui::ContainerWidget* par
     return std::make_unique<detail::SelectImpl>(*_context, parent, style);
 }
 
-std::unique_ptr<ui::MenuWidget> Backend::createMenu(ui::ContainerWidget* parent) {
-    return std::make_unique<detail::MenuImpl>(*_context, parent);
+std::unique_ptr<ui::MenuWidget> Backend::createMenu(ui::ContainerWidget* parent, ui::MenuStyle style) {
+    return std::make_unique<detail::MenuImpl>(*_context, parent, style);
 }
 
 std::unique_ptr<ui::StackWidget> Backend::createStack(ui::ContainerWidget* parent, ui::Axis axis) {
@@ -165,6 +171,10 @@ std::unique_ptr<ui::KeyValueWidget> Backend::createKeyValue(ui::ContainerWidget*
 
 std::unique_ptr<ui::EmptyStateWidget> Backend::createEmptyState(ui::ContainerWidget* parent) {
     return std::make_unique<detail::EmptyStateImpl>(*_context, parent);
+}
+
+std::unique_ptr<ui::ChartWidget> Backend::createChart(ui::ContainerWidget* parent) {
+    return std::make_unique<detail::ChartImpl>(*_context, parent);
 }
 
 std::unique_ptr<ui::DrawerWidget> Backend::createDrawer(ui::ContainerWidget* parent, ui::Side side) {

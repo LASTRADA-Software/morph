@@ -5,11 +5,14 @@
 #include <QQmlProperty>
 #include <QQuickItem>
 #include <QRegularExpression>
+#include <QStringList>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <morph/ui/date_pattern.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -50,7 +53,32 @@ void exposeShownOption(QObject const* comboBox) {
 TextImpl::TextImpl(Context& context, ui::ContainerWidget* parent)
     : FieldItemWidget{context, QStringLiteral("MorphText"), parent} {}
 
-void TextImpl::setText(std::string_view text) { write("text", toQString(text)); }
+void TextImpl::setText(std::string_view text) {
+    write("runs", QVariantList{});
+    write("text", toQString(text));
+}
+
+void TextImpl::setDescription(std::string_view description) {
+    static_cast<void>(description);
+    throw std::logic_error{"morph::qt_quick: a text is not described"};
+}
+
+void TextImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
+    write("text", toQString(ui::spansText(spans)));
+    write("runs", runsOf(spans));
+}
+
+QVariantList runsOf(std::vector<ui::TextSpan> const& spans) {
+    QVariantList runs;
+    for (ui::TextSpan const& span : spans) {
+        runs.append(QVariantMap{{QStringLiteral("text"), toQString(span.text).toHtmlEscaped()},
+                                {QStringLiteral("strong"), span.strong},
+                                {QStringLiteral("mono"), span.mono},
+                                {QStringLiteral("tone"), static_cast<int>(span.tone)},
+                                {QStringLiteral("action"), span.action}});
+    }
+    return runs;
+}
 
 void TextImpl::setRole(ui::TextRole role) { write("role", static_cast<int>(role)); }
 
@@ -100,11 +128,44 @@ void TextInputImpl::setUnit(std::string_view unit) {
     write("unit", toQString(unit));
 }
 
+// MorphTextArea declares no prefix.
+void TextInputImpl::setPrefix(std::string_view prefix) {
+    if (_multiline) {
+        throw std::logic_error{"morph::qt_quick: a multiline text input shows no prefix"};
+    }
+    write("prefix", toQString(prefix));
+}
+
+// MorphTextInput's and MorphTextArea's `mono`.
+void TextInputImpl::setMono(bool mono) { write("mono", mono); }
+
+// MorphTextInput's `textAlign`; an end-aligned field also draws its digits at one width each.
+void TextInputImpl::setAlign(ui::Align align) {
+    if (_multiline) {
+        throw std::logic_error{"morph::qt_quick: a multiline text input's text starts at the leading edge"};
+    }
+    Qt::AlignmentFlag textAlign = Qt::AlignLeft;
+    if (align == ui::Align::End) {
+        textAlign = Qt::AlignRight;
+    } else if (align == ui::Align::Center) {
+        textAlign = Qt::AlignHCenter;
+    }
+    write("textAlign", static_cast<int>(textAlign));
+    write("tabularFigures", align == ui::Align::End);
+}
+
 void TextInputImpl::setDecimals(int decimals) {
     if (_multiline) {
         throw std::logic_error{"morph::qt_quick: a multiline text input takes no places"};
     }
     write("decimals", decimals);
+}
+
+void TextInputImpl::setEmphasis(ui::InputEmphasis emphasis) {
+    if (_multiline) {
+        throw std::logic_error{"morph::qt_quick: a multiline text input takes no emphasis"};
+    }
+    write("prominent", emphasis == ui::InputEmphasis::Prominent);
 }
 
 void TextInputImpl::setIcon(std::string_view icon) {
@@ -119,7 +180,12 @@ void TextInputImpl::setOnChange(std::function<void(std::string)> onChange) {
     relay().on(QStringLiteral("change"), textHandler(std::move(onChange)));
 }
 
+// The field reads `submits` to decide whether Enter stops at it; a multiline input, which never submits, declares no
+// such property, so it is not written there.
 void TextInputImpl::setOnSubmit(std::function<void(std::string)> onSubmit) {
+    if (!_multiline) {
+        write("submits", static_cast<bool>(onSubmit));
+    }
     relay().on(QStringLiteral("submit"), textHandler(std::move(onSubmit)));
 }
 
@@ -189,7 +255,8 @@ bool CheckboxImpl::checked() const {
 
 SelectImpl::SelectImpl(Context& context, ui::ContainerWidget* parent, ui::SelectStyle style)
     : FieldItemWidget{context, QStringLiteral("MorphSelect"), parent,
-                      QVariantMap{{QStringLiteral("radio"), style == ui::SelectStyle::Radio}}} {
+                      QVariantMap{{QStringLiteral("radio"), style == ui::SelectStyle::Radio},
+                                  {QStringLiteral("segmented"), style == ui::SelectStyle::Segmented}}} {
     if (style == ui::SelectStyle::Dropdown) {
         exposeShownOption(part("control"));
     }
@@ -263,7 +330,11 @@ std::string SelectImpl::shownText() const {
 
 // ── DateTimeInput ─────────────────────────────────────────────────────────
 
-QString formatDateTime(morph::time::DateTime const& instant, ui::DateMode mode, int offsetMinutes) {
+QString formatDateTime(morph::time::DateTime const& instant, ui::DateMode mode, int offsetMinutes,
+                       std::string_view pattern) {
+    if (!pattern.empty()) {
+        return toQString(ui::formatDate(pattern, instant + std::chrono::minutes{offsetMinutes}, offsetMinutes));
+    }
     auto const local = instant.value + std::chrono::minutes{offsetMinutes};
     auto const day = std::chrono::floor<std::chrono::days>(local);
     std::chrono::year_month_day const date{day};
@@ -280,7 +351,11 @@ QString formatDateTime(morph::time::DateTime const& instant, ui::DateMode mode, 
     return text;
 }
 
-std::optional<morph::time::DateTime> parseDateTime(QString const& text, ui::DateMode mode, int offsetMinutes) {
+std::optional<morph::time::DateTime> parseDateTime(QString const& text, ui::DateMode mode, int offsetMinutes,
+                                                   std::string_view pattern) {
+    if (!pattern.empty()) {
+        return ui::parseDate(pattern, toUtf8(text.trimmed()), offsetMinutes);
+    }
     static QRegularExpression const dateOnly{QStringLiteral(R"(^\s*(\d{4})-(\d{2})-(\d{2})\s*$)")};
     static QRegularExpression const withTime{QStringLiteral(R"(^\s*(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})\s*$)")};
     QRegularExpressionMatch const match = (mode == ui::DateMode::DateTime ? withTime : dateOnly).match(text);
@@ -322,7 +397,7 @@ DateTimeImpl::DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::Da
             }
             return;
         }
-        std::optional<morph::time::DateTime> const parsed = parseDateTime(text, _mode, _offsetMinutes);
+        std::optional<morph::time::DateTime> const parsed = parseDateTime(text, _mode, _offsetMinutes, _pattern);
         if (!parsed) {
             // Text that names no instant is not a request: the field shows its value again. Forced, because the
             // user's text may already read the same as the held value, and the held value stays for the next edit.
@@ -330,10 +405,47 @@ DateTimeImpl::DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::Da
             return;
         }
         _shown = text;
+        show(text);
         if (_onChange) {
             _onChange(morph::time::Timestamp{*parsed});
         }
     });
+    relay().on(QStringLiteral("pick"), [this](QVariant const& payload) { picked(payload); });
+}
+
+void DateTimeImpl::setPattern(std::string_view pattern) {
+    _pattern = std::string{pattern};
+    write("pattern", toQString(pattern));
+}
+
+void DateTimeImpl::picked(QVariant const& day) {
+    QVariantList const parts = day.toList();
+    if (parts.size() != 3) {
+        return;
+    }
+    std::chrono::year_month_day const date{std::chrono::year{parts.at(0).toInt()},
+                                           std::chrono::month{parts.at(1).toUInt() + 1},
+                                           std::chrono::day{parts.at(2).toUInt()}};
+    if (!date.ok()) {
+        return;
+    }
+    // The time of day the field holds, in the display zone; midnight for an empty or unreadable field.
+    std::chrono::minutes timeOfDay{0};
+    if (_mode == ui::DateMode::DateTime) {
+        if (auto const held = parseDateTime(_shown, _mode, _offsetMinutes, _pattern)) {
+            auto const local = held->value + std::chrono::minutes{_offsetMinutes};
+            timeOfDay = std::chrono::floor<std::chrono::minutes>(local - std::chrono::floor<std::chrono::days>(local));
+        }
+    }
+    auto const local = std::chrono::sys_days{date} + timeOfDay;
+    morph::time::DateTime const instant{
+        std::chrono::time_point_cast<std::chrono::milliseconds>(local - std::chrono::minutes{_offsetMinutes})};
+    QString const text = formatDateTime(instant, _mode, _offsetMinutes, _pattern);
+    _shown = text;
+    show(text, true);
+    if (_onChange) {
+        _onChange(morph::time::Timestamp{instant});
+    }
 }
 
 void DateTimeImpl::show(QString const& text, bool force) const {
@@ -341,12 +453,23 @@ void DateTimeImpl::show(QString const& text, bool force) const {
     if (control != nullptr && (force || control->property("text").toString() != text)) {
         control->setProperty("text", text);
     }
+    // A JavaScript null, not an empty QVariant: QML reads that as undefined, which the calendar's null checks let
+    // through.
+    QVariant chosen = QVariant::fromValue(nullptr);
+    if (auto const instant = text.isEmpty() ? std::nullopt : parseDateTime(text, _mode, _offsetMinutes, _pattern)) {
+        std::chrono::year_month_day const date{
+            std::chrono::floor<std::chrono::days>(instant->value + std::chrono::minutes{_offsetMinutes})};
+        chosen = QVariantMap{{QStringLiteral("year"), static_cast<int>(date.year())},
+                             {QStringLiteral("month"), static_cast<int>(static_cast<unsigned>(date.month())) - 1},
+                             {QStringLiteral("day"), static_cast<int>(static_cast<unsigned>(date.day()))}};
+    }
+    write("chosen", chosen);
 }
 
 void DateTimeImpl::setValue(std::optional<morph::time::Timestamp> const& value) {
     QString text;
     if (value && value->value) {
-        text = formatDateTime(*value->value, _mode, _offsetMinutes);
+        text = formatDateTime(*value->value, _mode, _offsetMinutes, _pattern);
     }
     _shown = text;
     show(text);

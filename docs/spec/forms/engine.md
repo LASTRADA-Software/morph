@@ -257,19 +257,23 @@ before it.
 | Object | `Panel` of its members' cells |
 | ObjectArray | a `forEach` of row panels, each with Remove, and an Add button |
 
-- **A cell** is the label, the control (which marks a required field, live) and the help text, visible while the
-  field is. The cell owns the caption, and the control owns the required mark and the unit: the mark is the
+- **A cell** is the label and the control (which marks a required field, live, and describes itself with the help),
+  visible while the field is. The cell owns the caption, and the control owns the required mark and the unit: the mark is the
   control's alone, so a required field shows it once on every backend, and the control is told the field's label
-  with `showLabel` false, so it draws no second caption. Each control carries the view tree's field state: read-only, required, and the field's error as its
-  one message. Test ids: `field_<path>` on the control, `label_<path>`, `cell_<path>`, `unit_<path>`,
+  with `showLabel` false, so it draws no second caption. Each control carries the view tree's field state: read-only, required, the field's error as its
+  one message, and the help as its `description`, which the control draws under itself and assistive technology
+  reads as its description, so the help is tied to the control on every kit. A control an `Overrides::Render` draws
+  need not read the field state, and an Object's panel and an ObjectArray's rows are not one control, so for those
+  the cell draws the help as a muted text under the control. Test ids: `field_<path>` on the control, `label_<path>`, `cell_<path>`, `unit_<path>`,
   `add_<path>`, `remove_<path>#<key>`, `form_title`, `form_submit`, `form_status`, `form_result`.
 - **Where the caption goes** is `FormViewOptions::fieldLayout` (`forms::FieldLayout`, in
   `forms/engine/field_layout.hpp` so the authoring API names it without the engine). `Stacked`, the default, is the
-  column above: label, control, help. `Inline` makes the cell a row centred across (`align: center`, gap step 3): the
+  column above: label, control. `Inline` makes the cell a row centred across (`align: center`, gap step 3): the
   label at `fixed(inlineLabelWidth)` (default 16 units) and the control in a column that stretches, so the control
   fills the rest of the line; a Boolean, whose checkbox carries its label, gets a spacer of the label's width in the
-  label's place, so its box lines up with the other controls. A field with help is a column of that row and a second
-  row, the help indented by a spacer of the label's width; `cell_<path>` is on the column then. An Object's panel and
+  label's place, so its box lines up with the other controls. The control's column already starts at the label's width, so its
+  description lines up under it; a field whose help the cell draws (an override's) is a column of that row and a
+  second row, the help indented by a spacer of the label's width, with `cell_<path>` on the column. An Object's panel and
   an ObjectArray's rows stay stacked, and their members follow the form's layout. `formView` throws
   `std::invalid_argument` for an `inlineLabelWidth` below 1. While a field shows an error, an inline label centres on
   the control and its message together: centring on the control alone needs a baseline the view tree does not carry.

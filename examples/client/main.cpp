@@ -4,10 +4,11 @@
 // in-process (`--app NAME`), on the frontend `ui::selectFrontend` picks (`--ui=qt|tui`, `MORPH_UI`, or the first
 // usable). `--screen ID` picks the first screen; `--exit-after-mount` quits once it mounted, with 0 when it mounted
 // without a problem and 1 otherwise. `--grab FILE.png` (Qt Quick only) sizes the window 1280×900, saves what it draws
-// once the first screen mounted, and quits as `--exit-after-mount` does. `--dev`, or `MORPH_UI_DEV=1`, turns
-// development mode on (spec 6 §21): the screens reload when the server's documents change, and Ctrl+Shift+I opens the
-// inspector on Qt Quick.
+// once the first screen mounted, and quits as `--exit-after-mount` does; `--grab-size WIDTHxHEIGHT` sizes it
+// otherwise. `--dev`, or `MORPH_UI_DEV=1`, turns development mode on (spec 6 §21): the screens reload when the
+// server's documents change, and Ctrl+Shift+I opens the inspector on Qt Quick.
 
+#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -25,12 +26,15 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 #include "local_apps.hpp"
 
 #if MORPH_CLIENT_HAS_QT_QUICK
+#include <QCoreApplication>
+#include <QEvent>
 #include <QImage>
 #include <QQuickWindow>
 #include <QString>
@@ -57,6 +61,8 @@ constexpr std::chrono::milliseconds kGrabSettle{1000};
 /// `--grab`: where the window's image goes, and the window, once the Qt Quick frontend made it.
 struct Grab {
     std::string path;
+    int width = 1280;
+    int height = 900;
 #if MORPH_CLIENT_HAS_QT_QUICK
     QQuickWindow* window = nullptr;
 #endif
@@ -88,6 +94,47 @@ std::optional<std::string> takeGrab(std::vector<std::string>& args) {
     return path;
 }
 
+/// Takes `--grab-size WIDTHxHEIGHT` (or `--grab-size=WIDTHxHEIGHT`) out of @p args into @p grab.
+/// @return Whether the size, when given, reads as two positive numbers.
+bool takeGrabSize(std::vector<std::string>& args, Grab& grab) {
+    for (std::size_t index = 1; index < args.size();) {
+        std::string_view const arg = args.at(index);
+        if (arg == "--") {
+            break;
+        }
+        std::string size;
+        if (arg == "--grab-size" && index + 1 < args.size()) {
+            size = args.at(index + 1);
+            args.erase(args.begin() + static_cast<std::ptrdiff_t>(index),
+                       args.begin() + static_cast<std::ptrdiff_t>(index) + 2);
+        } else if (arg.starts_with("--grab-size=")) {
+            size = std::string{arg.substr(12)};
+            args.erase(args.begin() + static_cast<std::ptrdiff_t>(index));
+        } else if (arg == "--grab-size") {
+            return false;
+        } else {
+            ++index;
+            continue;
+        }
+        std::size_t const cross = size.find('x');
+        if (cross == std::string::npos) {
+            return false;
+        }
+        std::span<char const> const all{size};
+        std::span<char const> const widthText = all.first(cross);
+        std::span<char const> const heightText = all.subspan(cross + 1);
+        auto const [widthEnd, widthError] =
+            std::from_chars(widthText.data(), std::to_address(widthText.end()), grab.width);
+        auto const [heightEnd, heightError] =
+            std::from_chars(heightText.data(), std::to_address(heightText.end()), grab.height);
+        if (widthError != std::errc{} || heightError != std::errc{} || widthEnd != std::to_address(widthText.end()) ||
+            heightEnd != std::to_address(heightText.end()) || grab.width <= 0 || grab.height <= 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// Saves the window's image to the grab's file; reports why not, and answers whether it did.
 bool saveGrab(Grab const& grab) {
 #if MORPH_CLIENT_HAS_QT_QUICK
@@ -95,6 +142,11 @@ bool saveGrab(Grab const& grab) {
         std::cerr << "client: --grab draws the Qt Quick window, and this frontend made none\n";
         return false;
     }
+    // The offscreen window's pointer rests at its origin, over whatever sits there; leaving the window clears every
+    // hover, so no tooltip is drawn over the grab.
+    QEvent leave{QEvent::Leave};
+    QCoreApplication::sendEvent(grab.window, &leave);
+    QCoreApplication::processEvents();
     QImage const image = grab.window->grabWindow();
     if (image.isNull()) {
         std::cerr << "client: --grab: the window gave no image\n";
@@ -205,6 +257,10 @@ int run(int argc, char** argv) {
         std::cerr << "client: --grab needs the file to write\n";
         return 2;
     }
+    if (!takeGrabSize(args, *grab)) {
+        std::cerr << "client: --grab-size takes WIDTHxHEIGHT, such as 390x844\n";
+        return 2;
+    }
 #ifdef MORPH_CLIENT_DEFAULT_APP
     // A build with no command line, such as the browser's, opens its default application.
     if (args.size() <= 1) {
@@ -230,12 +286,11 @@ int run(int argc, char** argv) {
     ShellFactory const factory{.source = source->get(), .args = &*clientArgs, .grab = grab};
     std::vector<ui::FrontendOption> built;
 #if MORPH_CLIENT_HAS_QT_QUICK
-    morph::qt_quick::FrontendConfig qtConfig{
-        .mountShell = factory, .components = nullptr, .title = "morph", .onWidthClass = {}};
+    morph::qt_quick::FrontendConfig qtConfig{.mountShell = factory, .components = nullptr, .title = "morph"};
     qtConfig.devTools = clientArgs->dev ? ui::DevelopmentTools::On : ui::DevelopmentTools::Off;
     if (!grab->path.empty()) {
         qtConfig.onEngine = [grab](QQmlEngine& /*engine*/, QQuickWindow& window) {
-            window.resize(1280, 900);
+            window.resize(grab->width, grab->height);
             grab->window = &window;
         };
     }

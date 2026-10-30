@@ -104,7 +104,7 @@ TEST_CASE("qt_quick components: a bundle component receives its props and report
     std::vector<ComponentFailure> reported;
     Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
     components.addBundle("Chart", kChart, digestOf(kChart));
-    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
     Shown const shown = show(scene, CustomRequest{.name = "Chart", .props = {"title", "limit", "live", "zoom"}});
     REQUIRE(shown.custom != nullptr);
     shown.custom->setTextProp("title", "Trend");
@@ -142,7 +142,7 @@ TEST_CASE("qt_quick components: a component that cannot be loaded leaves the fal
                        writeFile(dir, QStringLiteral("Old.qml"), "import QtQuick\nItem { property var host }\n"));
     components.addBundle("NoLimit", "import QtQuick\nItem { property string title }\n",
                          digestOf("import QtQuick\nItem { property string title }\n"));
-    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
 
     struct Expectation {
         CustomRequest request;
@@ -191,7 +191,7 @@ TEST_CASE("qt_quick components: a host component loads into the backend's engine
         "Grid", 3,
         writeFile(dir, QStringLiteral("Grid.qml"),
                   "import QtQuick\nItem { property var host; property string title; implicitWidth: 5 }\n"));
-    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
     Shown const shown = show(scene, CustomRequest{.name = "Grid", .props = {"title"}, .minVersion = 3});
     REQUIRE(shown.custom != nullptr);
     CHECK(qmlEngine(&Scene::itemOf(*shown.custom)) == &scene.engine());
@@ -220,7 +220,7 @@ TEST_CASE("qt_quick components: a restyle maps a kind to a component that declar
     CHECK_FALSE(components.restyle(probeEngine, "button", "Nowhere").has_value());
     REQUIRE(components.restyle(probeEngine, "button", "BrandButton").has_value());
 
-    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
     auto button = scene.backend().createButton(nullptr);
     button->setLabel("Pay");
     int clicks = 0;
@@ -257,7 +257,7 @@ TEST_CASE("qt_quick components: a textArea restyle is what a multi-line input is
     CHECK(refused.error().reason.contains("assign"));
     REQUIRE(components.restyle(probeEngine, "textArea", "BrandArea").has_value());
 
-    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
     auto area = scene.backend().createTextInput(nullptr, ui::TextInputMode::Multiline);
     auto line = scene.backend().createTextInput(nullptr, ui::TextInputMode::SingleLine);
     std::vector<std::string> edits;
@@ -297,7 +297,7 @@ TEST_CASE("qt_quick components: a tableRow restyle draws every row's background,
     CHECK(refused.error().reason.contains("alternate"));
     REQUIRE(components.restyle(probeEngine, "tableRow", "BrandRow").has_value());
 
-    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
     auto table = scene.backend().createTable(nullptr);
     table->setColumns({{.label = "Name"}});
     std::vector<std::unique_ptr<ui::StackWidget>> rows;
@@ -363,7 +363,7 @@ TEST_CASE("qt_quick components: a tableHeader restyle draws the table's header b
     CHECK(refused.error().reason.contains("scheme"));
     REQUIRE(components.restyle(probeEngine, "tableHeader", "BrandHeader").has_value());
 
-    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
     auto table = scene.backend().createTable(nullptr);
     table->setColumns({{.label = "Name"}});
     scene.settle();
@@ -399,7 +399,7 @@ TEST_CASE("qt_quick components: a scrollBar restyle is the bar a scroll area att
     CHECK(column.error().reason == "`column` is a layout kind and is not restyled");
     REQUIRE(components.restyle(probeEngine, "scrollBar", "BrandBar").has_value());
 
-    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
     auto scroll = scene.backend().createScroll(nullptr, ui::Axis::Vertical);
     std::vector<std::unique_ptr<ui::TextWidget>> lines;
     for (int line = 0; line < 60; ++line) {
@@ -456,7 +456,7 @@ TEST_CASE("qt_quick components: a splitterHandle restyle is every handle between
         double const panes = Scene::itemOf(*left).implicitWidth() + Scene::itemOf(*right).implicitWidth();
         return std::pair{handle->property("brand").toBool(), item.implicitWidth() - panes};
     };
-    Scene restyled{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene restyled{morph::qt_quick::BackendOptions{.components = &components}};
     CHECK(extentOf(restyled) == std::pair{true, 12.0});
     Scene stock;
     CHECK(extentOf(stock) == std::pair{false, 6.0});
@@ -471,7 +471,7 @@ TEST_CASE(
     std::vector<ComponentFailure> reported;
     Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
     components.addBundle("Chart", kChart, digestOf(kChart));
-    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
     std::vector<std::pair<std::string, std::string>> events;
     // The props are appended one at a time: copying a `CustomProp` out of a braced initializer list makes GCC 15 at
     // -O2 report the `std::function` inside a `Prop` as maybe uninitialized.
@@ -517,7 +517,7 @@ TEST_CASE("qt_quick components: a write of a property the item does not declare 
           "[qt_quick]") {
     std::vector<ComponentFailure> reported;
     Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
-    Scene scene{morph::qt_quick::BackendOptions{.components = &components, .onWidthClass = {}}};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
     std::unique_ptr<ui::TextWidget> const text = scene.backend().createText(nullptr);
     detail::ItemBase const* const base = detail::baseOf(*text);
     REQUIRE(base != nullptr);
@@ -533,6 +533,22 @@ TEST_CASE("qt_quick components: a write of a property the item does not declare 
     CHECK(reported.size() == 1);
 }
 
+// Mutation: write `submits` on every text input (the multi-line one reports the write it refuses).
+TEST_CASE("qt_quick components: a submit handler on a multi-line input writes nothing it does not declare",
+          "[qt_quick]") {
+    std::vector<ComponentFailure> reported;
+    Components components{[&reported](ComponentFailure const& failure) { reported.push_back(failure); }};
+    Scene scene{morph::qt_quick::BackendOptions{.components = &components}};
+    std::unique_ptr<ui::TextInputWidget> const area =
+        scene.backend().createTextInput(nullptr, ui::TextInputMode::Multiline);
+    area->setOnSubmit([](std::string const&) {});
+    std::unique_ptr<ui::TextInputWidget> const line =
+        scene.backend().createTextInput(nullptr, ui::TextInputMode::SingleLine);
+    line->setOnSubmit([](std::string const&) {});
+    scene.settle();
+    CHECK(reported.empty());
+}
+
 // Mutation: drop `footer` from MorphDialog (a restyle without it is accepted, and C++ finds nowhere for the actions).
 TEST_CASE("qt_quick components: a dialog restyle without the footer part is refused, naming it", "[qt_quick]") {
     Components components;
@@ -542,10 +558,13 @@ TEST_CASE("qt_quick components: a dialog restyle without the footer part is refu
         "BareDialog", 1,
         writeFile(dir, QStringLiteral("BareDialog.qml"),
                   "import QtQuick\nimport MorphUi\nMorphWidget { property string title; property bool programmatic;"
+                  " property bool sheet; property string dismissLabel;"
                   " readonly property Item content: null; readonly property bool shown: false;"
                   " function show(open: bool) {} function dismiss() {} }\n"));
     QQmlEngine probeEngine;
     auto refused = components.restyle(probeEngine, "dialog", "BareDialog");
     REQUIRE_FALSE(refused.has_value());
-    CHECK(refused.error().reason == "restyle of `dialog`: BareDialog does not declare footer, footerChanged");
+    CHECK(refused.error().reason ==
+          "restyle of `dialog`: BareDialog does not declare description, descriptionChanged, descriptionRuns, "
+          "descriptionRunsChanged, footer, footerChanged");
 }

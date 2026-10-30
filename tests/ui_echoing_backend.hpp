@@ -7,6 +7,7 @@
 #include <morph/ui/testing/recording_backend.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -38,6 +39,8 @@ public:
     void setRequired(bool required) override { _inner->setRequired(required); }
     void setErrors(std::vector<std::string> const& errors) override { _inner->setErrors(errors); }
     void setStale(bool stale) override { _inner->setStale(stale); }
+    void setDescription(std::string_view description) override { _inner->setDescription(description); }
+    void setTone(::morph::ui::Tone tone) override { _inner->setTone(tone); }
     void setOptions(std::vector<::morph::ui::SelectOption> const& options) override {
         _inner->setOptions(options);
         if (auto const echo = _onSelect; echo && !options.empty()) {
@@ -85,9 +88,10 @@ public:
         created();
         return std::make_unique<EchoingSelect>(_recording.createSelect(parent, style));
     }
-    std::unique_ptr<::morph::ui::MenuWidget> createMenu(::morph::ui::ContainerWidget* parent) override {
+    std::unique_ptr<::morph::ui::MenuWidget> createMenu(::morph::ui::ContainerWidget* parent,
+                                                        ::morph::ui::MenuStyle style) override {
         created();
-        return _recording.createMenu(parent);
+        return _recording.createMenu(parent, style);
     }
     std::unique_ptr<::morph::ui::StackWidget> createStack(::morph::ui::ContainerWidget* parent,
                                                           ::morph::ui::Axis axis) override {
@@ -174,6 +178,10 @@ public:
         created();
         return _recording.createEmptyState(parent);
     }
+    std::unique_ptr<::morph::ui::ChartWidget> createChart(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createChart(parent);
+    }
     std::unique_ptr<::morph::ui::CollapsibleWidget> createCollapsible(::morph::ui::ContainerWidget* parent) override {
         created();
         return _recording.createCollapsible(parent);
@@ -191,6 +199,10 @@ public:
                                                                 ::morph::ui::Axis axis) override {
         created();
         return _recording.createSplitter(parent, axis);
+    }
+    [[nodiscard]] std::string widthClass() const override { return _recording.widthClass(); }
+    void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) override {
+        _recording.setOnWidthClass(std::move(onWidthClass));
     }
 
 private:

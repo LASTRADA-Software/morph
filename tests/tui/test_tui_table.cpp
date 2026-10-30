@@ -12,6 +12,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "tui/container_widgets.hpp"
@@ -95,7 +96,8 @@ TEST_CASE("tui table: Space toggles rows in Multiple mode, Enter activates", "[t
     Fruit fruit{harness, ui::SelectionMode::Multiple};
     std::vector<std::vector<ui::Key>> selections;
     std::vector<ui::Key> activated;
-    fruit.table->setOnSelectionChange([&](std::vector<ui::Key> keys) { selections.push_back(std::move(keys)); });
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
     fruit.table->setOnActivate([&](ui::Key activatedKey) { activated.push_back(std::move(activatedKey)); });
     harness.focus(*fruit.table);
     CHECK(harness.draw().at(1) == " >apple 3");
@@ -114,7 +116,8 @@ TEST_CASE("tui table: Single mode selects one row; setSelection marks rows witho
     Harness harness{30, 4};
     Fruit fruit{harness, ui::SelectionMode::Single};
     std::vector<std::vector<ui::Key>> selections;
-    fruit.table->setOnSelectionChange([&](std::vector<ui::Key> keys) { selections.push_back(std::move(keys)); });
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
     fruit.table->setSelection({key(2)});
     CHECK(harness.draw() == Rows{"  Name  Qty", "  apple 3", "* kiwi  12"});
     CHECK(selections.empty());
@@ -173,12 +176,30 @@ TEST_CASE("tui table: a label wider than its column is cut at the column's edge"
     CHECK(harness.draw() == Rows{"  Qua Name"});
 }
 
+// Mutation: leave a column's `wrap` unread (the cell is cut at the column's edge with no ellipsis), or elide every
+// column (the wrapping column's cell ends in an ellipsis too).
+TEST_CASE("tui table: a text cell of a column that does not wrap ends in an ellipsis where it is cut",
+          "[tui][table][columns]") {
+    Harness harness{30, 3};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Assay", .width = ui::Sizing::fixed(6), .wrap = false},
+                       {.label = "Note", .width = ui::Sizing::fixed(6)}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    auto const assay = harness.make<TextImpl>(row.get());
+    assay->setText("99.4 % LC");
+    auto const note = harness.make<TextImpl>(row.get());
+    note->setText("99.4 % LC");
+    table->setRowKey(*row, key(1));
+    CHECK(harness.draw() == Rows{"  Assay  Note", "  99.4 … 99.4 %"});
+}
+
 TEST_CASE("tui table: a Multiple-mode user change reports exactly the existing rows selected",
           "[tui][table][selection]") {
     Harness harness{30, 6};
     Fruit fruit{harness, ui::SelectionMode::Multiple};
     std::vector<std::vector<ui::Key>> selections;
-    fruit.table->setOnSelectionChange([&](std::vector<ui::Key> keys) { selections.push_back(std::move(keys)); });
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
     fruit.table->setSelection({key(2), key(9)});
     CHECK(fruit.table->markedRows() == Positions{1});
     harness.focus(*fruit.table);
@@ -204,7 +225,8 @@ TEST_CASE("tui table: a removed row is unmarked and marked again when it returns
     Fruit fruit{harness, ui::SelectionMode::Single};
     int reports = 0;
     int activations = 0;
-    fruit.table->setOnSelectionChange([&](std::vector<ui::Key> const& /*keys*/) { ++reports; });
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> const& /*keys*/, ui::SelectionChange /*change*/) { ++reports; });
     fruit.table->setOnActivate([&](ui::Key const& /*key*/) { ++activations; });
     fruit.table->setSelection({key(2)});
     CHECK(fruit.table->markedRows() == Positions{1});
@@ -251,7 +273,7 @@ TEST_CASE("tui table: a removed cursor row hands the cursor to its neighbour", "
     CHECK(harness.draw() == Rows{"  Name  Qty", " >apple 3"});
 }
 
-TEST_CASE("tui table: a click selects a row, toggles it in Multiple mode, and a double click activates",
+TEST_CASE("tui table: a click selects only its row, a Ctrl-click toggles one, and a double click activates",
           "[tui][table][click]") {
     Harness harness{30, 5};
     std::vector<std::vector<ui::Key>> selections;
@@ -259,7 +281,8 @@ TEST_CASE("tui table: a click selects a row, toggles it in Multiple mode, and a 
 
     SECTION("Single") {
         Fruit fruit{harness, ui::SelectionMode::Single};
-        fruit.table->setOnSelectionChange([&](std::vector<ui::Key> keys) { selections.push_back(std::move(keys)); });
+        fruit.table->setOnSelectionChange(
+            [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
         fruit.table->setOnActivate([&](ui::Key activatedKey) { activated.push_back(std::move(activatedKey)); });
         static_cast<void>(harness.draw());
         CHECK(harness.click({.x = 0, .y = 0}) == EventResult::Handled);  // the header selects nothing
@@ -281,21 +304,29 @@ TEST_CASE("tui table: a click selects a row, toggles it in Multiple mode, and a 
     }
     SECTION("Multiple") {
         Fruit fruit{harness, ui::SelectionMode::Multiple};
-        fruit.table->setOnSelectionChange([&](std::vector<ui::Key> keys) { selections.push_back(std::move(keys)); });
+        fruit.table->setOnSelectionChange(
+            [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
         fruit.table->setOnActivate([&](ui::Key activatedKey) { activated.push_back(std::move(activatedKey)); });
         static_cast<void>(harness.draw());
         CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Handled);
         CHECK(harness.click({.x = 3, .y = 2}) == EventResult::Handled);
-        CHECK(selections == std::vector<std::vector<ui::Key>>{{key(1)}, {key(1), key(2)}});
+        CHECK(selections == std::vector<std::vector<ui::Key>>{{key(1)}, {key(2)}});
         CHECK(activated.empty());
         CHECK(harness.click({.x = 3, .y = 2}) == EventResult::Handled);
         CHECK(activated == std::vector<ui::Key>{key(2)});
         CHECK(selections.size() == 2);
-        CHECK(harness.draw() == Rows{"  Name  Qty", "* apple 3", "*>kiwi  12"});
+        CHECK(harness.draw() == Rows{"  Name  Qty", "  apple 3", "*>kiwi  12"});
+        // Two quick Ctrl-clicks toggle a row in and out; neither is half of a double click.
+        CHECK(harness.click({.x = 3, .y = 1}, core::tui::Modifier::Ctrl) == EventResult::Handled);
+        CHECK(harness.click({.x = 3, .y = 1}, core::tui::Modifier::Ctrl) == EventResult::Handled);
+        CHECK(selections.at(2) == std::vector<ui::Key>{key(2), key(1)});
+        CHECK(selections.at(3) == std::vector<ui::Key>{key(2)});
+        CHECK(activated.size() == 1);
     }
     SECTION("None") {
         Fruit fruit{harness, ui::SelectionMode::None};
-        fruit.table->setOnSelectionChange([&](std::vector<ui::Key> keys) { selections.push_back(std::move(keys)); });
+        fruit.table->setOnSelectionChange(
+            [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
         fruit.table->setOnActivate([&](ui::Key activatedKey) { activated.push_back(std::move(activatedKey)); });
         static_cast<void>(harness.draw());
         CHECK(harness.click({.x = 3, .y = 2}) == EventResult::Handled);
@@ -312,7 +343,8 @@ TEST_CASE("tui table: two clicks on a row far apart in time are two clicks, not 
     Fruit fruit{harness, ui::SelectionMode::Multiple};
     std::vector<std::vector<ui::Key>> selections;
     int activations = 0;
-    fruit.table->setOnSelectionChange([&](std::vector<ui::Key> keys) { selections.push_back(std::move(keys)); });
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
     fruit.table->setOnActivate([&](ui::Key const& /*key*/) { ++activations; });
     auto now = std::chrono::steady_clock::time_point{};
     harness.context().now = [&now] { return now; };
@@ -320,7 +352,8 @@ TEST_CASE("tui table: two clicks on a row far apart in time are two clicks, not 
     CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Handled);
     now += std::chrono::milliseconds{501};
     CHECK(harness.click({.x = 3, .y = 1}) == EventResult::Handled);
-    CHECK(selections == std::vector<std::vector<ui::Key>>{{key(1)}, {}});
+    // The second click selects what the first did, so it reports nothing.
+    CHECK(selections == std::vector<std::vector<ui::Key>>{{key(1)}});
     CHECK(activations == 0);
     // Within the double-click time, measured on the same clock, the second click activates.
     now += std::chrono::milliseconds{1000};
@@ -352,7 +385,8 @@ TEST_CASE("tui table: Space and Enter in a None table select nothing; Enter stil
     Fruit fruit{harness, ui::SelectionMode::None};
     int reports = 0;
     std::vector<ui::Key> activated;
-    fruit.table->setOnSelectionChange([&](std::vector<ui::Key> const& /*keys*/) { ++reports; });
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> const& /*keys*/, ui::SelectionChange /*change*/) { ++reports; });
     fruit.table->setOnActivate([&](ui::Key activatedKey) { activated.push_back(std::move(activatedKey)); });
     harness.focus(*fruit.table);
     CHECK(harness.type(" ") == EventResult::Handled);
@@ -375,7 +409,8 @@ TEST_CASE("tui table: a table taller than its area scrolls its rows to keep the 
     fruit.addRow(harness, key(3), "fig", "7");
     fruit.addRow(harness, key(4), "plum", "1");
     std::vector<std::vector<ui::Key>> selections;
-    fruit.table->setOnSelectionChange([&](std::vector<ui::Key> keys) { selections.push_back(std::move(keys)); });
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
     harness.focus(*fruit.table);
     CHECK(harness.draw() == Rows{"  Name  Qty", " >apple 3", "  kiwi  12"});
     static_cast<void>(harness.key(KeyCode::Down));
@@ -449,7 +484,8 @@ TEST_CASE("tui table: a table inside a disabled container two levels up takes no
         Fruit fruit{harness, ui::SelectionMode::Multiple, inner.get()};
         fruit.addRow(harness, key(3), "fig", "7");  // one row more than there is room for, so the wheel can scroll
         int calls = 0;
-        fruit.table->setOnSelectionChange([&](std::vector<ui::Key> const& /*keys*/) { ++calls; });
+        fruit.table->setOnSelectionChange(
+            [&](std::vector<ui::Key> const& /*keys*/, ui::SelectionChange /*change*/) { ++calls; });
         fruit.table->setOnActivate([&](ui::Key const& /*key*/) { ++calls; });
         static_cast<void>(harness.draw());
         harness.focus(*fruit.table);
@@ -479,7 +515,8 @@ TEST_CASE("tui table: a disabled row is neither selected nor activated", "[tui][
     Harness harness{30, 4};
     Fruit fruit{harness, ui::SelectionMode::Single};
     int calls = 0;
-    fruit.table->setOnSelectionChange([&](std::vector<ui::Key> const& /*keys*/) { ++calls; });
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> const& /*keys*/, ui::SelectionChange /*change*/) { ++calls; });
     fruit.table->setOnActivate([&](ui::Key const& /*key*/) { ++calls; });
     fruit.rows.at(0)->setEnabled(false);
     static_cast<void>(harness.draw());
@@ -505,7 +542,7 @@ TEST_CASE("tui table: a table handler may destroy its own table", "[tui][table][
     // The table is destroyed alone, before its rows, as a handler destroying it would leave them.
     auto fruit = std::make_unique<Fruit>(harness, ui::SelectionMode::Single, column.get());
     auto const destroyOnSelection = [&] {
-        fruit->table->setOnSelectionChange([&](std::vector<ui::Key> const& /*keys*/) {
+        fruit->table->setOnSelectionChange([&](std::vector<ui::Key> const& /*keys*/, ui::SelectionChange /*change*/) {
             fruit->table.reset();
             ++selections;
         });
@@ -574,7 +611,8 @@ TEST_CASE("tui table: no table handler runs after its table was destroyed", "[tu
     int calls = 0;
     {
         Fruit fruit{harness, ui::SelectionMode::Single};
-        fruit.table->setOnSelectionChange([&](std::vector<ui::Key> const& /*keys*/) { ++calls; });
+        fruit.table->setOnSelectionChange(
+            [&](std::vector<ui::Key> const& /*keys*/, ui::SelectionChange /*change*/) { ++calls; });
         fruit.table->setOnActivate([&](ui::Key const& /*key*/) { ++calls; });
         static_cast<void>(harness.draw());
         harness.focus(*fruit.table);
@@ -673,4 +711,152 @@ TEST_CASE("tui table: a toned row's cells draw in the tone's style", "[tui][tabl
     static_cast<void>(harness.draw());
     CHECK_FALSE(harness.screen().renderedBuffer().at(1, 2).style.fg == theme.error.fg);
     CHECK_THROWS_AS(fruit.table->setRowTone(*fruit.cells.at(0), ui::Tone::Ok), std::logic_error);
+}
+
+namespace {
+
+/// A table of two fixed columns @p fixed wide and a stretch column headed `Analyte`, with one row.
+struct Overfull {
+    Overfull(Harness& harness, int fixed) : table{harness.make<TableImpl>(nullptr)} {
+        table->setColumns({{.label = "Sample", .width = ui::Sizing::fixed(fixed)},
+                           {.label = "Lot", .width = ui::Sizing::fixed(fixed)},
+                           {.label = "Analyte", .width = ui::Sizing::stretch(1)}});
+        row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+        for (auto const* const text : {"S-1", "L-1", "Assay"}) {
+            cells.push_back(harness.make<TextImpl>(row.get()));
+            cells.back()->setText(text);
+        }
+        table->setRowKey(*row, key(1));
+    }
+    ~Overfull() {
+        cells.clear();
+        row.reset();
+    }
+    Overfull(Overfull const&) = delete;
+    Overfull& operator=(Overfull const&) = delete;
+    Overfull(Overfull&&) = delete;
+    Overfull& operator=(Overfull&&) = delete;
+
+    std::unique_ptr<TableImpl> table;
+    std::unique_ptr<StackImpl> row;
+    std::vector<std::unique_ptr<TextImpl>> cells;
+};
+
+}  // namespace
+
+// Mutation: drop the header minimum in TableImpl::columnWidths (the stretch column gets what is left, 6 columns, and
+// its header is cut to `Analyt`; with less room, `Lot` is squeezed to nothing).
+TEST_CASE("tui table: no column is squeezed below its header, and an overfull table is cut at its edge",
+          "[tui][table][columns]") {
+    {
+        // The stretch column is floored at its header; the overflow that makes comes from the last fixed column.
+        Harness harness{30, 3};
+        Overfull const table{harness, 10};
+        CHECK(harness.draw() == Rows{"  Sample     Lot       Analyte", "  S-1        L-1       Assay"});
+    }
+    {
+        // Two fixed columns of 20 give way down to their headers, and the stretch column keeps its own.
+        Harness harness{30, 3};
+        Overfull const table{harness, 20};
+        CHECK(harness.draw() == Rows{"  Sample           Lot Analyte", "  S-1              L-1 Assay"});
+    }
+    {
+        // Narrower than the headers together: the columns past the edge are cut, not drawn at width 0.
+        Harness harness{12, 3};
+        Overfull const table{harness, 20};
+        CHECK(harness.draw() == Rows{"  Sample Lot", "  S-1    L-1"});
+    }
+}
+
+// Mutation: place a table row's cells by the row's own alignment (the short cell sits on the first line).
+TEST_CASE("tui table: a one-line cell beside a three-line cell is drawn on the middle line", "[tui][table]") {
+    Harness harness{30, 5};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name"}, {.label = "Notes"}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    auto const name = harness.make<TextImpl>(row.get());
+    name->setText("pH");
+    auto const notes = harness.make<TextImpl>(row.get());
+    notes->setText("one\ntwo\nthree");
+    table->setRowKey(*row, key(1));
+    CHECK(harness.draw() == Rows{"  Name Notes", "       one", "  pH   two", "       three"});
+}
+
+// Mutation: place every cell at its column's start (the digits start the column, and the header does too).
+TEST_CASE("tui table: an end column draws its text and its header label at its end", "[tui][table][columns]") {
+    Harness harness{30, 3};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name"}, {.label = "Area", .width = ui::Sizing::fixed(12), .align = ui::Align::End}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    auto const name = harness.make<TextImpl>(row.get());
+    name->setText("pH");
+    auto const area = harness.make<TextImpl>(row.get());
+    area->setText("0.21");
+    table->setRowKey(*row, key(1));
+    // The gutter's 2 cells, `Name` 4, a gap, then the 12-cell column: its last four cells hold the digits.
+    CHECK(harness.draw() == Rows{"  Name         Area", "  pH           0.21"});
+}
+
+// Mutation: ignore Shift with an arrow (the cursor moves, nothing is selected).
+TEST_CASE("tui table: Shift+Down twice from the first row selects the first three rows", "[tui][table][selection]") {
+    Harness harness{30, 5};
+    Fruit fruit{harness, ui::SelectionMode::Multiple};
+    fruit.addRow(harness, key(3), "lime", "4");
+    std::vector<std::pair<std::vector<ui::Key>, ui::SelectionChange>> reports;
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange change) { reports.emplace_back(std::move(keys), change); });
+    harness.focus(*fruit.table);
+    static_cast<void>(harness.draw());
+    CHECK(harness.key(KeyCode::Down, core::tui::Modifier::Shift) == EventResult::Handled);
+    CHECK(harness.key(KeyCode::Down, core::tui::Modifier::Shift) == EventResult::Handled);
+    REQUIRE(reports.size() == 2);
+    CHECK(reports.back().first == std::vector<ui::Key>{key(1), key(2), key(3)});
+    CHECK(reports.back().second == ui::SelectionChange::Replace);
+    CHECK(fruit.table->markedRows() == Positions{0, 1, 2});
+}
+
+// Mutation: draw the header without its box (the header line starts with the column's label).
+TEST_CASE("tui table: the select column's header box shows a partial selection, and a click on it selects every row",
+          "[tui][table][selection]") {
+    Harness harness{30, 4};
+    Fruit fruit{harness, ui::SelectionMode::Multiple};
+    fruit.table->setSelectColumn(true);
+    std::vector<std::pair<std::vector<ui::Key>, ui::SelectionChange>> reports;
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange change) { reports.emplace_back(std::move(keys), change); });
+    fruit.table->setSelection({key(1)});
+    CHECK(harness.draw() == Rows{"[-]  Name  Qty", "[x]  apple 3", "[ ]  kiwi  12"});
+    CHECK(harness.click({.x = 1, .y = 0}) == EventResult::Handled);
+    REQUIRE(reports.size() == 1);
+    CHECK(reports.back().first == std::vector<ui::Key>{key(1), key(2)});
+    CHECK(reports.back().second == ui::SelectionChange::Extend);
+    CHECK(harness.draw().front() == "[x]  Name  Qty");
+    // A row's box is a Ctrl-click on its row.
+    CHECK(harness.click({.x = 1, .y = 1}) == EventResult::Handled);
+    CHECK(reports.back().first == std::vector<ui::Key>{key(2)});
+    CHECK(harness.draw() == Rows{"[-]  Name  Qty", "[ ]> apple 3", "[x]  kiwi  12"});
+}
+
+// Mutation: drop the mark from `headerText` (the header reads `Name` alone).
+TEST_CASE("tui table: the sorted column's header shows its direction, and a click on a sortable header asks to sort",
+          "[tui][table][sort]") {
+    Harness harness{30, 3};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name", .sortable = true}, {.label = "Qty", .width = ui::Sizing::fixed(5)}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    auto const name = harness.make<TextImpl>(row.get());
+    name->setText("apple");
+    auto const quantity = harness.make<TextImpl>(row.get());
+    quantity->setText("3");
+    table->setRowKey(*row, key(1));
+    std::vector<std::size_t> asked;
+    table->setOnSort([&asked](std::size_t column) { asked.push_back(column); });
+    // A sortable header keeps room for its mark, so the columns stay where they are when the sort comes.
+    CHECK(harness.draw() == Rows{"  Name   Qty", "  apple  3"});
+    table->setSort(ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending});
+    CHECK(harness.draw() == Rows{"  Name ▼ Qty", "  apple  3"});
+    CHECK(asked.empty());
+    CHECK(harness.click({.x = 3, .y = 0}) == EventResult::Handled);
+    CHECK(harness.click({.x = 9, .y = 0}) == EventResult::Handled);
+    CHECK(asked == std::vector<std::size_t>{0});
 }

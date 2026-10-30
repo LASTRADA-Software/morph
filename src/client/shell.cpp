@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -14,6 +15,7 @@
 #include <morph/client/shell.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/reactive/scheduler.hpp>
+#include <morph/reactive/signal.hpp>
 #include <morph/ui/dev_reload.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/explorer.hpp>
@@ -21,6 +23,7 @@
 #include <morph/ui/inspector.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/navigator.hpp>
 #include <morph/ui/route_history.hpp>
 #include <morph/ui/service_client.hpp>
 #include <morph/ui/shell_frame.hpp>
@@ -45,22 +48,37 @@ constexpr std::chrono::seconds kDevPollEvery{1};
 // The explorer's screen id, and the host screen it names.
 constexpr std::string_view kExplorer = "explorer";
 
-/// The library's document host, with `navigate` handed to the shell.
+/// The library's document host, with `navigate` and a screen that closed itself handed to the shell, and the call of a
+/// navigation that mounted nothing settled by it.
 class Host final : public ui::DocumentScreenHost {
 public:
     Host(ui::Session& session, ui::Dispatcher& dispatcher, ui::DocumentScreenHostOptions options,
-         std::function<void(std::string, ui::ParamMap)> navigate)
-        : DocumentScreenHost{session, dispatcher, std::move(options)}, _navigate{std::move(navigate)} {}
+         std::function<void(ui::NavigateRequest)> navigate, std::function<void(ui::ScreenHandle&)> closed)
+        : DocumentScreenHost{session, dispatcher, std::move(options)},
+          _navigate{std::move(navigate)},
+          _closed{std::move(closed)} {}
 
     void onNavigate(std::string_view screenId, ui::ParamMap const& params) override {
-        _navigate(std::string{screenId}, params);
+        _navigate(ui::NavigateRequest{
+            .screen = std::string{screenId}, .route = {}, .params = ui::Value{params}, .as = {}, .call = false});
     }
 
-    using DocumentScreenHost::onNavigate;
+    void onNavigate(ui::NavigateRequest const& request) override { _navigate(request); }
+
+    void onScreenClosed(ui::ScreenHandle& screen) override { _closed(screen); }
+
+    using DocumentScreenHost::settleCall;
 
 private:
-    std::function<void(std::string, ui::ParamMap)> _navigate;
+    std::function<void(ui::NavigateRequest)> _navigate;
+    std::function<void(ui::ScreenHandle&)> _closed;
 };
+
+/// A navigation's params, as a record.
+ui::ParamMap paramsOf(ui::NavigateRequest const& request) {
+    ui::ValueRecord const* const params = request.params.asRecord();
+    return params == nullptr ? ui::ParamMap{} : *params;
+}
 
 // notify's role ("info", "success", "warning", "error"; empty for the default) as a Tone, matching Banner::tone's
 // own default for an unknown or empty role.
@@ -109,10 +127,14 @@ public:
 
     ~Shell() override {
         *_alive = false;
+        _backend->setOnWidthClass({});
         // The head row's own mount first, since it is built from the Workspace's data and lives in the ShellFrame;
-        // then the tabs, then the frame they sit in.
+        // then the tabs, then the app document's root the tabs read, then the frame they sit in. The root goes before
+        // the document host, whose interpreter runs its onUnmount.
         resetHead();
+        _badges.reset();
         _workspace.reset();
+        _appRoot.reset();
         _frame.reset();
     }
     Shell(Shell const&) = delete;
@@ -154,6 +176,7 @@ public:
         sessionOptions.developmentTools = _options.dev ? ui::DevelopmentTools::On : ui::DevelopmentTools::Off;
         sessionOptions.watcher = source.watcher();
         _session = std::make_unique<ui::Session>(_context->runtime(), std::move(sessionOptions));
+        followWidthClass();
         listen(source);
         showPermitted();
         ui::DocumentScreenHostOptions hostOptions;
@@ -178,20 +201,12 @@ public:
         hostOptions.application = _application.get();
         hostOptions.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         _host = std::make_unique<Host>(
-            *_session, source.dispatcher(), std::move(hostOptions), [this](std::string screenId, ui::ParamMap params) {
-                // A navigation a sign-in asks for waits for the catalog the sign-in reloads, which lists the screen.
-                if (_reloading) {
-                    _pending = std::pair{std::move(screenId), std::move(params)};
-                    return;
+            *_session, source.dispatcher(), std::move(hostOptions),
+            [this](ui::NavigateRequest request) { navigate(std::move(request)); },
+            [this](ui::ScreenHandle& screen) {
+                if (_workspace) {
+                    _workspace->screenClosed(screen);
                 }
-                // Posted: the current screen is replaced, which must not happen inside
-                // the handler of one of its own elements.
-                _context->executor().post([alive = std::weak_ptr<bool>{_alive}, this, screenId = std::move(screenId),
-                                           params = std::move(params)] {
-                    if (auto const live = alive.lock(); live != nullptr && *live) {
-                        mount(screenId, params);
-                    }
-                });
             });
         _hosts.add(std::string{kExplorer}, [this](ui::ParamMap const& params, ui::ContainerWidget& page) {
             static_cast<void>(params);
@@ -220,6 +235,23 @@ public:
                 });
             });
         }
+    }
+
+    /// Writes the backend's width class into the session before the first mount, then each change of it, so every
+    /// `{"env": "widthClass"}` in every tab follows the window.
+    void followWidthClass() {
+        _session->setEnvironmentValue("widthClass", ui::Value{_backend->widthClass()});
+        _backend->setOnWidthClass([this, alive = std::weak_ptr<bool>{_alive}](std::string const& widthClass) {
+            if (auto const live = alive.lock(); live != nullptr && *live && _session) {
+                _session->setEnvironmentValue("widthClass", ui::Value{widthClass});
+                if (_workspace) {
+                    _workspace->setWidthClass(widthClass);
+                }
+                if (_frame) {
+                    _frame->setCompact(compactFrame(widthClass));
+                }
+            }
+        });
     }
 
     void inspectFocused(std::function<void(ui::Inspector&)> const& visit) override {
@@ -286,6 +318,9 @@ private:
             _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, done = std::move(done)] {
                 if (auto const live = alive.lock(); live != nullptr && *live) {
                     unmount();
+                    // After the screens that read it, and before the session changes hands; its counts go first.
+                    _badges.reset();
+                    _appRoot.reset();
                     _source->signOut(done);
                 }
             });
@@ -296,7 +331,9 @@ private:
     // session's catalog gets a new frame. Every tab of the old one is closed.
     void buildFrame() {
         resetHead();
+        _badges.reset();
         _workspace.reset();
+        _appRoot.reset();
         _frame.reset();
         ui::CatalogReply const* const catalog = _source->catalogReply();
         std::vector<ui::CatalogEntry> entries;
@@ -330,6 +367,7 @@ private:
         };
         frame.onSignOut = [this] { signOut(); };
         _frame = std::make_unique<ui::ShellFrame>(*_backend, nullptr, std::move(frame));
+        _frame->setCompact(compactFrame(_backend->widthClass()));
         // Re-wired on every rebuild, since _frame is replaced here but _application is not: the sink must
         // dereference _frame at call time, never capture it directly, so it keeps working across a rebuild.
         _application->setNotifySink([this](std::string const& text, std::string const& role) {
@@ -359,10 +397,71 @@ private:
             return ui::WorkspaceScreen{};
         };
         tabs.onChanged = [this] { showActiveTitle(); };
+        tabs.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         tabs.hosts = &_hosts;
         // The shell mounts the head row itself, in its top bar: an in-page head would show it a second time.
         _workspace = std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs),
                                                      &_frame->page(), ui::HeadPlacement::External);
+        mountApp();
+        followBadges();
+    }
+
+    // The frame is compact below `expanded`: with its sidebar, an 80-unit `medium` window would leave the page
+    // narrower than any `compact` one, and without it the page is nearly the window.
+    [[nodiscard]] static bool compactFrame(std::string_view widthClass) { return widthClass != "expanded"; }
+
+    // The app document's navigation counts, copied onto the navigator's entries as they change: made after the root
+    // and the frame, and destroyed before either goes. A count for a screen the navigator does not list is reported
+    // once.
+    void followBadges() {
+        if (_appRoot == nullptr) {
+            return;
+        }
+        _badged.clear();
+        _badges = std::make_unique<reactive::Effect>(_context->runtime(), [this] {
+            std::vector<ui::NavigationBadge> const badges = _appRoot->navigationBadges().get();
+            _context->runtime().untracked([this, &badges] { showBadges(badges); });
+        });
+    }
+
+    // Puts each screen's first visible count on its entry, and takes away the counts no longer given.
+    void showBadges(std::vector<ui::NavigationBadge> const& badges) {
+        ui::Navigator& navigator = _frame->navigator();
+        // A signed-out frame's navigator lists nothing, and its counts are not a mistake of the document's.
+        bool const listing = !navigator.menuEntries().empty();
+        std::set<std::string, std::less<>> shown;
+        for (ui::NavigationBadge const& badge : badges) {
+            if (!shown.insert(badge.screen).second) {
+                continue;
+            }
+            bool const listed =
+                navigator.setBadge(badge.screen, ui::NavigatorBadge{.text = badge.text, .tone = badge.tone});
+            if (!listed && listing && _unlistedBadges.insert(badge.screen).second) {
+                problem("the app document's navigation counts " + badge.screen +
+                        ", which the navigator does not list");
+            }
+        }
+        for (std::string const& screenId : _badged) {
+            if (!shown.contains(screenId)) {
+                navigator.setBadge(screenId, std::nullopt);
+            }
+        }
+        _badged = std::move(shown);
+    }
+
+    // The app document's root for the frame just built, before its first tab: every screen's `app.*` reads it. A
+    // refused one is reported, and the screens mount without it.
+    void mountApp() {
+        if (!_appDocument) {
+            return;
+        }
+        auto root = _host->mountApp(_appDocument);
+        if (!root) {
+            problem("the app document: " + root.error().reason);
+            return;
+        }
+        _appRoot = std::move(*root);
+        _frame->setPrincipalInHead(_appRoot->principalPlacement() == ui::PrincipalPlacement::Head);
     }
 
     // The sidebar and the top bar, with the principal, while the shell is signed in; the page alone otherwise.
@@ -396,13 +495,49 @@ private:
             return;
         }
         _headTab = active;
-        _head.emplace(_context->runtime(), *_backend, _workspace->headRowForActive(), &_frame->headSlot());
+        _pageInset.reset();
+        _titleSpans.reset();
+        _headShown.reset();
+        _headLayout.reset();
+        ui::HeadParts parts = _workspace->headPartsForActive();
+        _headEyebrow.emplace(_context->runtime(), *_backend, std::move(parts.eyebrow), &_frame->headEyebrowSlot());
+        _headLead.emplace(_context->runtime(), *_backend, std::move(parts.lead), &_frame->headLeadSlot());
+        _headInline.emplace(_context->runtime(), *_backend, std::move(parts.inlineLead), &_frame->headInlineSlot());
+        _head.emplace(_context->runtime(), *_backend, std::move(parts.trail), &_frame->headSlot());
+        // The head's slots show while the active tab's head shows anything; the frame cannot tell from the rows
+        // they hold.
+        _headShown = std::make_unique<reactive::Effect>(
+            _context->runtime(), [this] { _frame->setHeadShown(_workspace->activeHeadShown()); });
+        // How the head lays out follows the screen's own state, which a width change can flip: where the lead sits,
+        // whether the head is one line to centre, whether the page continues the head's block, and the surfaces the
+        // screen asks for.
+        _headLayout = std::make_unique<reactive::Effect>(_context->runtime(), [this] {
+            _frame->setLeadInline(_workspace->activeLeadPlacement() == ui::LeadPlacement::Inline);
+            _frame->setHeadOneLine(_workspace->activeHeadOneLine());
+            _frame->setHeadJoined(_workspace->activeHeadJoined());
+            _frame->setHeadSurface(_workspace->activeHeadSurface());
+            _frame->setPageSurface(_workspace->activePageSurface());
+        });
+        // The page is inset unless the shown screen insets itself, and follows a width change or a state change of
+        // the screen.
+        _pageInset = std::make_unique<reactive::Effect>(
+            _context->runtime(), [this] { _frame->setPageInset(_workspace->activePageInset()); });
+        // The title's runs follow the screen's state, which a callback on the tab's caption does not hear.
+        _titleSpans = std::make_unique<reactive::Effect>(
+            _context->runtime(), [this] { _frame->setTitleSpans(_workspace->activeTitleSpans()); });
     }
 
     // The head row's own mount and its comparison key, always reset together: resetting one without the other would
     // leave the guard above comparing against a tab id from a Workspace instance that no longer exists.
     void resetHead() {
+        _pageInset.reset();
+        _titleSpans.reset();
+        _headShown.reset();
+        _headLayout.reset();
         _head.reset();
+        _headInline.reset();
+        _headLead.reset();
+        _headEyebrow.reset();
         _headTab.reset();
     }
 
@@ -465,7 +600,9 @@ private:
     // is.
     void reloadThen(bool signingIn, std::function<void(std::function<void(bool)>)> const& change) {
         _reloading = true;
-        _pending.reset();
+        if (std::optional<ui::NavigateRequest> const dropped = std::exchange(_pending, std::nullopt)) {
+            settle(*dropped);
+        }
         change([this, signingIn, alive = std::weak_ptr<bool>{_alive}](bool loaded) {
             // Posted, even when the reload answered at once: the document that signed in may still ask to navigate
             // in the same handler, and that navigation is what this mounts.
@@ -499,7 +636,7 @@ private:
                     return;
                 }
                 if (pending) {
-                    mount(pending->first, pending->second);
+                    open(*pending);
                     return;
                 }
                 // A screen that signed in in place, and is still listed, stays as it is, unless it is a public login
@@ -512,8 +649,75 @@ private:
         });
     }
 
-    // Opens a screen as a tab, or focuses the tab that already shows it.
-    void mount(std::string const& screenId, ui::ParamMap const& params) {
+    // A document's navigation. One a sign-in asks for waits for the catalog the sign-in reloads, which lists the
+    // screen, and one that replaces it mounts nothing. Otherwise it is posted: the current screen is replaced, which
+    // must not happen inside the handler of one of its own elements.
+    void navigate(ui::NavigateRequest request) {
+        if (_reloading) {
+            if (_pending) {
+                settle(*_pending);
+            }
+            _pending = std::move(request);
+            return;
+        }
+        _context->executor().post([alive = std::weak_ptr<bool>{_alive}, this, request = std::move(request)] {
+            if (auto const live = alive.lock(); live != nullptr && *live) {
+                open(request);
+            }
+        });
+    }
+
+    // Opens what a document's navigation asks for: a document screen as a dialog or a drawer over the tabs when `as`
+    // says so, anything else as a tab. A host screen and `as: window` open as a tab, which is reported once. A call
+    // whose navigation mounted no document screen (a focused tab, a refused mount, a host screen) is cancelled, so
+    // its opener is answered and no later mount answers it.
+    void open(ui::NavigateRequest const& request) {
+        ui::ParamMap const params = paramsOf(request);
+        bool const overlay = request.as == "dialog" || request.as == "drawer";
+        bool const hostScreen = isHostScreen(request.screen);
+        if (overlay && !hostScreen && _workspace) {
+            _message.reset();
+            if (auto const shown = _workspace->openOverlay(request); !shown) {
+                problem("Cannot open " + shown.error().screenId + ": " + shown.error().reason);
+                settle(request);
+            }
+            return;
+        }
+        if (overlay && _hostAsOverlay.insert(request.screen).second) {
+            problem(request.screen + " is a host screen: it opens as a tab, not as a " + request.as);
+        }
+        if (request.as == "window" && !_windowReported) {
+            _windowReported = true;
+            problem("`as: window` opens a tab: this client has one window");
+        }
+        bool const mounted = mount(request.screen, params);
+        if (!mounted || hostScreen) {
+            settle(request);
+        }
+    }
+
+    // Cancels the call of a navigation that mounted no document screen; one that filed none is left alone.
+    void settle(ui::NavigateRequest const& request) {
+        if (request.call && _host) {
+            _host->settleCall(request.screen, paramsOf(request));
+        }
+    }
+
+    // Whether the catalog names a host screen for @p screenId, as the explorer is.
+    [[nodiscard]] bool isHostScreen(std::string_view screenId) const {
+        if (screenId == kExplorer) {
+            return true;
+        }
+        ui::CatalogReply const* const catalog = _source == nullptr ? nullptr : _source->catalogReply();
+        if (catalog == nullptr) {
+            return false;
+        }
+        auto const entry = std::ranges::find(catalog->entries, screenId, &ui::CatalogEntry::id);
+        return entry != catalog->entries.end() && entry->host.has_value() && !entry->host->empty();
+    }
+
+    // Opens a screen as a tab, or focuses the tab that already shows it; answers whether a screen was mounted.
+    bool mount(std::string const& screenId, ui::ParamMap const& params) {
         _message.reset();
         if (!_workspace) {
             buildFrame();
@@ -524,10 +728,10 @@ private:
             _signedIn = true;
             showSignedIn();
         }
-        auto const opened = _workspace->open(screenId, params);
+        auto const opened = _workspace->openTab(screenId, params);
         if (!opened) {
             show("Cannot open " + opened.error().screenId + ": " + opened.error().reason);
-            return;
+            return false;
         }
         if (_routes) {
             auto const route = _host->routeOf(screenId, params);
@@ -536,6 +740,7 @@ private:
         if (_options.onMounted) {
             _options.onMounted(screenId);
         }
+        return opened->mounted;
     }
 
     // Opens the route the history held at start, once the catalog lists its screen.
@@ -590,6 +795,7 @@ private:
                     ui::MountedScreen{.screenId = tabs.at(index).screenId, .handle = _workspace->handleOf(index)});
             }
         }
+        reloadApp(changed);
         ui::ReloadOutcome const outcome = ui::reloadDocuments(
             changed, *_source->bundle(), ui::LoadOptions{.catalog = _source->catalog()}, _documents, *_host, mounted);
         for (ui::Refusal const& refusal : outcome.refused) {
@@ -598,6 +804,25 @@ private:
         if (_options.onReloaded) {
             _options.onReloaded(outcome.remounted);
         }
+    }
+
+    // A changed app document is loaded and reported; the mounted root keeps the old one, and the new one is mounted
+    // at the next frame build, since remounting the root would reset the state every open screen reads.
+    void reloadApp(std::vector<std::string> const& changed) {
+        if (std::ranges::find(changed, ui::kAppFile) == changed.end()) {
+            return;
+        }
+        auto const text = _source->bundle()->documents.find(ui::kAppFile);
+        if (text == _source->bundle()->documents.end()) {
+            return;
+        }
+        auto loaded = ui::loadDocumentText(text->second, ui::LoadOptions{.catalog = _source->catalog()});
+        if (!loaded) {
+            problem("reload refused: " + loaded.error().message());
+            return;
+        }
+        _appDocument = std::make_shared<ui::Document const>(std::move(*loaded));
+        problem("the app document changed; it takes effect at the next sign-in or sign-out");
     }
 
     void unmount() {
@@ -619,9 +844,14 @@ private:
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
     Source* _source = nullptr;
     bool _reloading = false;
-    std::optional<std::pair<std::string, ui::ParamMap>> _pending;
+    // The navigation a sign-in asked for, held until the catalog it reloads is current.
+    std::optional<ui::NavigateRequest> _pending;
+    // The host screens a navigation asked for as a dialog or drawer, each reported once, and whether `as: window`
+    // was.
+    std::set<std::string, std::less<>> _hostAsOverlay;
+    bool _windowReported = false;
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _documents;
-    // The app document, which the explorer reads its uses from.
+    // The app document: mounted as the session's root scope with each frame, and read by the explorer.
     std::shared_ptr<ui::Document const> _appDocument;
     // The documents the explorer generates for "Try it", by their screen ids.
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _generated;
@@ -633,11 +863,33 @@ private:
     std::unique_ptr<Host> _host;
     std::unique_ptr<ui::ShellFrame> _frame;
     std::unique_ptr<ui::Workspace> _workspace;
+    // The app document's root for the current frame; destroyed after the tabs that read it.
+    std::unique_ptr<ui::AppRoot> _appRoot;
+    // Copies the root's navigation counts onto the frame's navigator; goes before either.
+    std::unique_ptr<reactive::Effect> _badges;
+    // The screens whose entries hold a count now, and those a count named that the navigator does not list, each
+    // reported once.
+    std::set<std::string, std::less<>> _badged;
+    std::set<std::string, std::less<>> _unlistedBadges;
     std::optional<ui::Mounted> _message;
     // The active tab's head row, mounted into the frame's top-bar slot; reset together with its own comparison key
     // (never one without the other) ahead of _workspace, since both are built from the Workspace's own data and
     // mounted into the ShellFrame.
     std::optional<ui::Mounted> _head;
+    // The eyebrow of the head, mounted beside `_head`, the trail.
+    std::optional<ui::Mounted> _headEyebrow;
+    // The lead of the head, mounted beside `_head`, the trail.
+    std::optional<ui::Mounted> _headLead;
+    // The lead of the head while it sits on the title's line, mounted beside `_head`.
+    std::optional<ui::Mounted> _headInline;
+    // Shows the frame's head slots while the active tab's head has content; goes with `_head`.
+    std::unique_ptr<reactive::Effect> _headShown;
+    // Lays the frame's head out for the active screen (lead place, one line, joined, surface); goes with `_head`.
+    std::unique_ptr<reactive::Effect> _headLayout;
+    // Insets the frame's page unless the active screen does; goes with `_head`.
+    std::unique_ptr<reactive::Effect> _pageInset;
+    // Shows the frame's title as the active tab's runs; goes with `_head`.
+    std::unique_ptr<reactive::Effect> _titleSpans;
     std::optional<ui::WorkspaceTabId> _headTab;
     // Whether a sign-in or sign-out has reloaded the catalog, and whether the session is now signed in.
     bool _changed = false;

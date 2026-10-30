@@ -13,6 +13,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "qt_quick/context.hpp"
@@ -34,6 +35,9 @@ public:
     ItemBase(Context& context, QString const& type, ui::ContainerWidget* parent, QVariantMap initial = {});
     /// Takes an item already made and appends it to @p parent, or to the backend's roots when it is null.
     ItemBase(Context& context, Context::Made made, ui::ContainerWidget* parent);
+    /// Makes the item of @p type and appends it to @p container: a part a widget that is not a container owns, such as
+    /// a list entry's content.
+    ItemBase(Context& context, QString const& type, ContainerCore& container);
     virtual ~ItemBase();
     ItemBase(ItemBase const&) = delete;
     ItemBase& operator=(ItemBase const&) = delete;
@@ -203,6 +207,7 @@ public:
     ItemWidget(Context& context, QString const& type, ui::ContainerWidget* parent, QVariantMap initial = {})
         : ItemBase{context, type, parent, std::move(initial)} {}
     ItemWidget(Context& context, Context::Made made, ui::ContainerWidget* parent) : ItemBase{context, made, parent} {}
+    ItemWidget(Context& context, QString const& type, ContainerCore& container) : ItemBase{context, type, container} {}
 
     void setVisible(bool visible) override { showVisible(visible); }
     void setEnabled(bool enabled) override { showEnabled(enabled); }
@@ -233,6 +238,8 @@ public:
     void setRequired(bool required) override { this->write("required", required); }
     void setErrors(std::vector<std::string> const& errors) override;
     void setStale(bool stale) override { this->write("stale", stale); }
+    void setDescription(std::string_view description) override { this->write("description", toQString(description)); }
+    void setTone(ui::Tone tone) override { this->write("tone", static_cast<int>(tone)); }
 
 protected:
     /// The field's label as `caption`, and `labelShown`: what `setCaption` writes for the kinds that have one.
@@ -250,11 +257,21 @@ void FieldItemWidget<Interface>::setErrors(std::vector<std::string> const& error
     this->write("errors", toStringList(errors));
 }
 
+/// Writes what a container reports when its content does not fit its width as a warning of the `morph.layout`
+/// category: where it is, how much it needs and has, and the child that is wider than it, when one is. @p payload is
+/// the map the container's QML fires: `where`, `need`, `have`, `child` and `table`.
+void reportOverflow(QVariant const& payload);
+
 /// A container whose children go in the item its `content` property names.
 template <class Interface>
 class ContainerItemWidget : public ItemWidget<Interface>, public ContainerCore {
 public:
-    using ItemWidget<Interface>::ItemWidget;
+    /// Makes the item as @p arguments say, and hears the container's report that its content does not fit.
+    template <class... Arguments>
+    explicit ContainerItemWidget(Arguments&&... arguments)
+        : ItemWidget<Interface>{std::forward<Arguments>(arguments)...} {
+        this->relay().on(QStringLiteral("overflow"), &reportOverflow);
+    }
     ~ContainerItemWidget() override = default;
     ContainerItemWidget(ContainerItemWidget const&) = delete;
     ContainerItemWidget& operator=(ContainerItemWidget const&) = delete;

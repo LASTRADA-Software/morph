@@ -38,8 +38,10 @@ MorphField {
             leftPadding: Theme.spaceOf(3)
             rightPadding: Theme.spaceOf(3)
             background: MorphInputBackground {
+                tone: root.shownTone
                 scheme: root.scheme
                 focused: pathField.activeFocus
+                readOnly: root.readOnly
             }
             readOnly: true
             text: root.path

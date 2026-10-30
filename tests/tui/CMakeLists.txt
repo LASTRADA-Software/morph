@@ -4,6 +4,7 @@ add_executable(morph_tui_tests
     test_tui_conformance.cpp
     test_tui_chord.cpp
     test_tui_display.cpp
+    test_tui_chart.cpp
     test_tui_regions.cpp
     test_tui_containers.cpp
     test_tui_fields.cpp
@@ -17,6 +18,7 @@ add_executable(morph_tui_tests
     test_tui_frontend.cpp
     test_tui_forms.cpp
     test_tui_explorer.cpp
+    test_tui_shell_frame.cpp
 )
 
 target_link_libraries(morph_tui_tests

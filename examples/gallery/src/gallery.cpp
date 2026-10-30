@@ -115,7 +115,7 @@ ui::Screen homeScreen() {
                        {.key = ui::row(&Fact::id),
                         .columns = {{.name = "label", .label = "Label", .cell = ui::text({.text = ui::row("label")})},
                                     {.name = "value", .label = "Value", .cell = ui::text({.text = ui::row("value")})}},
-                        .selection = ui::Selection::Single})
+                        .selectionMode = ui::Selection::Single})
                  .a11y("Facts")
                  .testId("facts"),
              ui::keyValue(facts.value())});
@@ -127,7 +127,19 @@ ui::Screen homeScreen() {
                                  ui::obj({{"name", "two"}, {"label", "Look"}}),
                                  ui::obj({{"name", "three"}, {"label", "Close"}})}),
                        1),
+             ui::chart({.summary = "Three readings, rising from 1 to 4, the last above the target of 3",
+                        .series = {{.points = ui::list({ui::obj({{"day", "Mon"}, {"reading", std::int64_t{1}}}),
+                                                        ui::obj({{"day", "Tue"}, {"reading", std::int64_t{2}}}),
+                                                        ui::obj({{"day", "Wed"}, {"reading", std::int64_t{4}}})}),
+                                    .y = [](ui::AnyHandle const& point) { return point.at("reading"); },
+                                    .xLabel = [](ui::AnyHandle const& point) { return point.at("day"); }}},
+                        .lines = {{.value = std::int64_t{3}, .label = "Target", .style = ui::LineStyle::Dashed}},
+                        .yLabel = "Readings"})
+                 .sizing(ui::stretch(), ui::fixed(6))
+                 .testId("chart"),
              ui::emptyState({.title = "Nothing here", .text = "An empty state"}),
+             ui::group({ui::text({.text = "A labelled set of inputs"})},
+                       {.label = "Group", .required = true, .description = "A group's description"}),
              ui::collapsible({ui::text({.text = "Inside"})}, {.title = "More", .open = checked}),
              ui::dropZone({ui::text({.text = "Drop files here"})}, {.onDrop = ui::set(picked, "dropped")}),
              ui::customize(density), ui::custom(swatch).a11y("Swatch")});

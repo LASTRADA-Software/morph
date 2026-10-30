@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <chrono>
@@ -131,6 +132,25 @@ TEST_CASE("tui fields: a unit is drawn muted at the right edge before the marks,
     CHECK(rows.front().ends_with("1234567  kg*"));  // the cursor's cell, then the gap before the unit
     auto const multiline = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::Multiline);
     CHECK_THROWS_AS(multiline->setUnit("kg"), std::logic_error);
+}
+
+// Mutation: draw the text from the start (the end-aligned text does not reach the last cell), or drop the prefix.
+TEST_CASE("tui fields: an end-aligned text ends at the field's last cell, and a prefix sits in its first",
+          "[tui][fields]") {
+    Harness harness{10, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const value = harness.make<TextInputImpl>(column.get(), ui::TextInputMode::SingleLine);
+    value->setText("0.21");
+    value->setAlign(ui::Align::End);
+    value->setMono(true);
+    auto const window = harness.make<TextInputImpl>(column.get(), ui::TextInputMode::SingleLine);
+    window->setText("7");
+    window->setPrefix("±");
+    CHECK(harness.draw() == Rows{"      0.21", "± 7"});
+    auto const multiline = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::Multiline);
+    CHECK_THROWS_AS(multiline->setPrefix("±"), std::logic_error);
+    CHECK_THROWS_AS(multiline->setAlign(ui::Align::End), std::logic_error);
+    CHECK(window->accessibleDescription() == "±");
 }
 
 // Mutation: ignore `shown` in setCaption (no caption row is drawn).
@@ -991,4 +1011,84 @@ TEST_CASE("tui fields: a commit handler may destroy the panel whose title took t
     CHECK(toggles == 0);
     CHECK(harness.screen().focusedComponent() == nullptr);
     CHECK(harness.draw() == Rows{"2026-05-05"});
+}
+
+// Mutation: paint the `*` on the control again (row 1 then ends in `*`).
+TEST_CASE("tui fields: a captioned required input draws its mark after the caption, not on the control",
+          "[tui][fields]") {
+    Harness harness{30, 3};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    input->setCaption("Meaning", true);
+    input->setRequired(true);
+    Rows const rows = harness.draw();
+    REQUIRE_FALSE(rows.empty());
+    CHECK(rows.at(0) == "Meaning *");
+    CHECK(
+        std::ranges::none_of(rows.begin() + 1, rows.end(), [](std::string const& row) { return row.contains('*'); }));
+    CHECK(harness.screen().renderedBuffer().at(0, 8).style.fg == harness.screen().theme().error.fg);
+    // Without a caption the mark stays at the control's right edge.
+    input->setCaption("", false);
+    Rows const bare = harness.draw();
+    REQUIRE_FALSE(bare.empty());
+    CHECK(bare.at(0).ends_with('*'));
+}
+
+// Mutation: leave the tone out of the control's marks (the control row then ends in no `!`).
+TEST_CASE(
+    "tui fields: a description takes the row under the control, in the tone's style, and a toned err field "
+    "is marked",
+    "[tui][fields]") {
+    Harness harness{30, 2};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    input->setText("0.31");
+    input->setDescription("Out of spec");
+    input->setTone(ui::Tone::Err);
+    Rows const rows = harness.draw();
+    REQUIRE(rows.size() == 2);
+    CHECK(rows.at(0).ends_with('!'));
+    CHECK(rows.at(1) == "Out of spec");
+    CHECK(harness.screen().renderedBuffer().at(1, 0).style.fg == harness.screen().theme().error.fg);
+    CHECK(input->accessibleDescription() == "Out of spec");
+    input->setErrors({"Not a number"});
+    CHECK(input->accessibleDescription() == "Not a number\nOut of spec");
+    CHECK(input->hoverText() == "Not a number\nOut of spec");
+}
+
+// Mutation: ignore the pattern in shownOf (the field then shows `2026-10-24 09:41`).
+TEST_CASE("tui fields: a date input with a pattern shows and reads in it", "[tui][fields]") {
+    Harness harness{40, 2};
+    auto const field = harness.make<DateTimeInputImpl>(nullptr, ui::DateMode::DateTime, 0);
+    std::vector<std::optional<Timestamp>> changes;
+    field->setOnChange([&](std::optional<Timestamp> value) { changes.push_back(value); });
+    field->setPattern("dd-MMM-yyyy HH:mm");
+    field->setValue(Timestamp{at(2026, 10, 24, 9, 41)});
+    CHECK(harness.draw() == Rows{"24-Oct-2026 09:41"});
+    harness.focus(*field);
+    field->setValue(std::nullopt);
+    static_cast<void>(harness.type("25-Oct-2026 10:00"));
+    static_cast<void>(harness.key(KeyCode::Enter));
+    REQUIRE_FALSE(changes.empty());
+    CHECK(changes.back()->value == at(2026, 10, 25, 10, 0));
+    CHECK(harness.draw() == Rows{"25-Oct-2026 10:00"});
+}
+
+// Mutation: leave `_prominent` out of paintField's call (the text is not bold).
+TEST_CASE("tui fields: a prominent input draws its text bold", "[tui][fields]") {
+    Harness harness{30, 1};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    input->setEmphasis(ui::InputEmphasis::Prominent);
+    input->setText("S-123");
+    CHECK(harness.draw() == Rows{"S-123"});
+    CHECK(harness.screen().renderedBuffer().at(0, 0).style.bold);
+}
+
+// A field narrower than a text it was given draws the text's first cells. core-cpp's `InputField` puts the cursor at
+// the end of a programmatic text and scrolls to it, so today the field shows the text's tail; the case is expected to
+// fail until the field is told to show the start, and starts failing the build when it does not any more.
+TEST_CASE("tui fields: a field narrower than a text it was given draws the text's first cells",
+          "[tui][fields][!shouldfail]") {
+    Harness harness{10, 1};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    input->setText("Ease, finished product of a lot of letters");
+    CHECK(harness.draw() == Rows{"Ease, fini"});
 }
