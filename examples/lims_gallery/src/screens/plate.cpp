@@ -451,7 +451,7 @@ ui::Node legend() {
 ui::Node sourceRow(Plate const& plate) {
     auto const sample = ui::row("n");
     return ui::row({ui::text({.text = "⋮⋮", .role = "muted"}),
-               {ui::text({.text = "⋮⋮", .role = "muted"}), ui::text({.text = fullId(sample)}).sizing(ui::stretch()),
+                    ui::text({.text = fullId(sample), .role = "mono"}).sizing(ui::stretch()),
                     ui::button({.label = "Assign…",
                                 .onClick = openAssign(plate,
                                                       ui::coalesce({ui::call("first", {plate.emptySelected}),
@@ -707,8 +707,7 @@ ui::Node compactLayout(Plate const& plate) {
         rows.push_back(rowSection(plate, row));
     }
     return ui::column(
-        {layout::muted(ui::format("ELISA, host cell protein · {0} samples to place", {plate.toPlaceCount}))
-             .testId("to-place-count"),
+        {layout::muted(ui::format("{0} samples to place", {plate.toPlaceCount})).testId("to-place-count"),
          ui::row({autoFill(plate).sizing(ui::stretch()), saveLayout(plate).sizing(ui::stretch())}, {.gap = 1}),
          ui::column(rows, {.gap = 1}), assignDialog(plate)},
         {.gap = 2});

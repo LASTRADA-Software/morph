@@ -185,6 +185,6 @@ TEST_CASE("plate, compact: the wells listed by row, empty wells as one line a ru
     CHECK(screen.waitFor([&screen] { return runLines(screen, "A").at(2) == "Sample S-26-104301"; }));
     CHECK(runLines(screen, "A").at(3) == "Empty, 5 wells");
     CHECK(screen.prop("Collapsible", "row-A", "title") == "Row A · 1 standard, 2 controls, 1 sample, 8 empty");
-    CHECK(screen.text("to-place-count") == "ELISA, host cell protein · 13 samples to place");
+    CHECK(screen.text("to-place-count") == "13 samples to place");
     screen.requireNoProblems();
 }
