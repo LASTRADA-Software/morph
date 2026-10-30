@@ -709,7 +709,7 @@ ui::Node compactLayout(Plate const& plate) {
     return ui::column(
         {layout::muted(ui::format("{0} samples to place", {plate.toPlaceCount})).testId("to-place-count"),
          ui::row({autoFill(plate).sizing(ui::stretch()), saveLayout(plate).sizing(ui::stretch())}, {.gap = 1}),
-         ui::column(rows, {.gap = 1}), assignDialog(plate)},
+         ui::column(rows, {.divided = true}), assignDialog(plate)},
         {.gap = 2});
 }
 

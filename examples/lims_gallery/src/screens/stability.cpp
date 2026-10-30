@@ -534,11 +534,13 @@ ui::Node reviewStep(Study const& study) {
 
 // The wizard: Continue on Conditions focuses the per-pull field while the lot cannot cover the pulls, and shows the
 // banner that says why.
-ui::Node wizard(Study const& study, bool compact, ui::Node const& conditionsStep, ui::Nodes const& extra) {
+ui::StepperParts wizard(Study const& study, bool compact, ui::Node const& conditionsStep, ui::Nodes const& extra) {
     Flag const hasTests = Count{study.testCount} > 0;
-    return ui::stepper(
+    return ui::stepperParts(
         {.step = study.step,
-         .steps = {{.label = kSteps.at(0), .children = productStep(study, compact)},
+         .steps = {{.label = kSteps.at(0),
+                    .children = productStep(study, compact),
+                    .continueLabel = "Continue to tests"},
                    {.label = kSteps.at(1),
                     .children = conditionsStep,
                     .canContinue = study.enough,
@@ -551,6 +553,7 @@ ui::Node wizard(Study const& study, bool compact, ui::Node const& conditionsStep
          .onFinish = ui::notify("Study STB-2026-014 is signed and created; its pulls are booked"),
          .extra = extra,
          .labelled = !compact,
+         .continueStretches = compact,
          .testIdPrefix = std::string{}});
 }
 
@@ -580,10 +583,11 @@ ui::Node expandedConditions(Study const& study) {
 }
 
 ui::Node expandedLayout(Study const& study) {
-    return ui::pinned(wizard(study, false, expandedConditions(study),
-                             ui::button({.label = "Save draft",
-                                         .emphasis = ButtonEmphasis::Ghost,
-                                         .onClick = ui::notify("The study draft is saved")})));
+    auto const parts = wizard(study, false, expandedConditions(study),
+                              ui::button({.label = "Save draft",
+                                          .emphasis = ButtonEmphasis::Ghost,
+                                          .onClick = ui::notify("The study draft is saved")}));
+    return ui::pinned({parts.body}, {.top = {parts.indicator}, .bottom = {parts.footer}});
 }
 
 // ── Compact: one condition at a time, every field kept ───────────────────────────────────────────────────────────
@@ -595,32 +599,37 @@ ui::Node conditionSection(Study const& study) {
         boxes.push_back(monthBox(study, point, true));
     }
     auto const rowId = ui::row("id");
-    return ui::collapsible(
+    // A panel reports whether it is collapsed, so the open one is the row's id while the section is not.
+    return ui::panel(
         {ui::grid(boxes, {.gap = 1, .columns = 3})},
         {.title = ui::format("{0} · {1} pulls", {ui::row("climate"), ui::call("count", {ui::row("points")})}),
-         .open = ui::eq(study.openCondition, rowId),
+         .collapsible = true,
+         .collapsed = ui::ne(study.openCondition, rowId),
          .onToggle = ui::set(study.openCondition,
-                             ui::cond(ui::Handle<bool>{ui::event()}, ui::AnyHandle{rowId}, ui::AnyHandle{""}))});
+                             ui::cond(ui::Handle<bool>{ui::event()}, ui::AnyHandle{""}, ui::AnyHandle{rowId}))});
 }
 
 ui::Node compactConditions(Study const& study) {
-    return ui::column(
-        {attention(study, true), startField(study),
-         ui::grid({windowField(study), perPullField(study, true)}, {.gap = 2, .columns = 2}),
-         ui::forEach(study.conditions, {.key = ui::row("id"), .gap = 1},
-                     [&study](ui::DeclScope&) { return ui::Nodes{conditionSection(study)}; })
-             .testId("conditions"),
-         addCondition(study),
-         ui::collapsible({summary(study)},
-                         {.title = ui::format("Summary · first pull {0}", {study.firstDate}), .open = false})
-             .testId("summary-section")},
-        {.gap = 2});
+    return ui::column({attention(study, true), startField(study),
+                       ui::grid({windowField(study), perPullField(study, true)}, {.gap = 2, .columns = 2}),
+                       ui::forEach(study.conditions, {.key = ui::row("id"), .gap = 1},
+                                   [&study](ui::DeclScope&) { return ui::Nodes{conditionSection(study)}; })
+                           .testId("conditions"),
+                       addCondition(study),
+                       ui::panel({summary(study)}, {.title = ui::format("Summary · first pull {0}", {study.firstDate}),
+                                                    .collapsible = true,
+                                                    .collapsed = true})
+                           .testId("summary-section")},
+                      {.gap = 2});
 }
 
 ui::Node compactLayout(Study const& study) {
-    return ui::pinned({ui::column({layout::muted(ui::format("Step {0} of 4 · Paracetamol 500 mg", {study.step + 1})),
-                                   wizard(study, true, compactConditions(study), {})},
-                                  {.gap = 2})});
+    auto const parts = wizard(study, true, compactConditions(study), {});
+    return ui::pinned(
+        {parts.body},
+        {.top = ui::Nodes{layout::muted(ui::format("Step {0} of 4 · Paracetamol 500 mg", {study.step + 1})),
+                          parts.indicator},
+         .bottom = {parts.footer}});
 }
 
 }  // namespace

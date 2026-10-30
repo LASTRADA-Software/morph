@@ -99,17 +99,28 @@ TEST_CASE("stability, compact: one condition open at a time, every field kept", 
     CHECK_FALSE(screen.shows("Table", "matrix"));
     CHECK(screen.find("Column", "conditions").has_value());
     CHECK(screen.text("shell_title") == "Conditions and timepoints");
-    CHECK(screen.backend().find("Collapsible", "title", "25 °C / 60 % RH · 8 pulls").has_value());
-    CHECK(screen.backend().find("Collapsible", "title", "40 °C / 75 % RH · 3 pulls").has_value());
-    CHECK(screen.prop("Collapsible", "summary-section", "title") == "Summary · first pull 03-Dec-2026");
+    CHECK(screen.backend().find("Panel", "title", "25 °C / 60 % RH · 8 pulls").has_value());
+    CHECK(screen.backend().find("Panel", "title", "40 °C / 75 % RH · 3 pulls").has_value());
+    CHECK(screen.prop("Panel", "summary-section", "title") == "Summary · first pull 03-Dec-2026");
     CHECK(screen.prop("TextInput", "per-pull", "errors") == "[180 units needed\\, 150 in stock for lot L-26-0381.]");
     // The units sit inside the inputs, not in their captions.
     CHECK(screen.prop("TextInput", "per-pull", "unit") == "units");
     CHECK(screen.prop("TextInput", "window", "unit") == "days");
     CHECK(screen.prop("TextInput", "window", "prefix") == "±");
+    // A section is a collapsible panel, which reports whether it is collapsed: opening the second closes the first.
+    auto const first = screen.backend().find("Panel", "title", "25 °C / 60 % RH · 8 pulls");
+    auto const second = screen.backend().find("Panel", "title", "40 °C / 75 % RH · 3 pulls");
+    REQUIRE((first && second));
+    CHECK(screen.backend().prop(*first, "collapsed") == "false");
+    CHECK(screen.backend().prop(*second, "collapsed") == "true");
+    screen.backend().collapse(*second, false);
+    CHECK(screen.waitFor([&] {
+        return screen.backend().prop(*second, "collapsed") == "false" &&
+               screen.backend().prop(*first, "collapsed") == "true";
+    }));
     screen.click("add-condition");
     CHECK(screen.waitFor(
-        [&screen] { return screen.backend().find("Collapsible", "title", "5 °C ± 3 °C · 0 pulls").has_value(); }));
+        [&screen] { return screen.backend().find("Panel", "title", "5 °C ± 3 °C · 0 pulls").has_value(); }));
     CHECK(screen.prop("Button", "add-condition", "enabled") == "false");
     screen.requireNoProblems();
 }
