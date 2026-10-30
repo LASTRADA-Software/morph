@@ -661,6 +661,9 @@ TEST_CASE("qt_quick theme: a bundle's icon set draws the icons it names, and a n
     missing->setIcon("sparkle");
     auto again = scene.backend().createBadge(nullptr);
     again->setIcon("sparkle");
+    // A framework name the set lacks is drawn by the control itself and is not reported.
+    auto chevron = scene.backend().createBadge(nullptr);
+    chevron->setIcon("nav.back");
     scene.settle();
 
     auto iconOf = [](ui::Widget const& widget, char const* name) {
