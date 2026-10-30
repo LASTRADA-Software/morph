@@ -28,6 +28,7 @@
 #include <QVariantList>
 #include <QtLogging>
 #include <algorithm>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cmath>
@@ -1901,3 +1902,54 @@ TEST_CASE(
     CHECK(node->text(QAccessible::Name) == QStringLiteral("Record type"));
     QAccessible::setActive(wasActive);
 }
+
+namespace {
+
+/// The first item named @p name under @p root, depth first; null when there is none.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+QQuickItem* firstNamed(QQuickItem const& root, QString const& name) {
+    for (QQuickItem* const child : root.childItems()) {
+        if (child->objectName() == name) {
+            return child;
+        }
+        if (QQuickItem* const found = firstNamed(*child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+/// A theme property read as a number.
+qreal themeNumber(Scene& scene, char const* property) {
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    return theme->property(property).toReal();
+}
+
+}  // namespace
+
+// Mutation: keep the style's vertical padding around the box (+12 px), or keep the indicator at `unitHeight` on
+// compact.
+TEST_CASE("qt_quick widgets: a check box has no padding of its own, and its box is half the touch height on compact",
+          "[qt_quick]") {
+    Scene scene;
+    auto box = scene.backend().createCheckbox(nullptr);
+    box->setLabel("Agree");
+    scene.settle();
+    QQuickItem const& control = Scene::controlOf(*box);
+    QQuickItem const* const indicator = firstNamed(control, QStringLiteral("boxIndicator"));
+    REQUIRE(indicator != nullptr);
+    qreal const unit = themeNumber(scene, "unitHeight");
+    qreal const line = control.property("implicitContentHeight").toReal();
+    CHECK(control.height() == Catch::Approx(std::max(line, unit)).margin(0.5));
+    CHECK(indicator->height() == Catch::Approx(unit).margin(0.5));
+
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme->setProperty("touchTargets", true));
+    scene.settle();
+    qreal const half = themeNumber(scene, "touchHeight") / 2;
+    CHECK(indicator->height() == Catch::Approx(half).margin(0.5));
+    CHECK(indicator->width() == Catch::Approx(half).margin(0.5));
+    CHECK(control.height() >= themeNumber(scene, "targetHeight") - 0.5);
+}
+

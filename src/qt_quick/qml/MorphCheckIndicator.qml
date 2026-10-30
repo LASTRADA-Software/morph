@@ -19,8 +19,10 @@ Rectangle {
 
     readonly property bool marked: checked || partial
 
-    implicitWidth: Theme.unitHeight
-    implicitHeight: Theme.unitHeight
+    // The box is a unit tall, and half the touch height on compact, where its row is a touch target.
+    readonly property real extent: Theme.touchTargets ? Theme.touchHeight / 2 : Theme.unitHeight
+    implicitWidth: root.extent
+    implicitHeight: root.extent
     radius: Theme.radiusControl / 2
     color: marked ? scheme.accent : scheme.controlSurface
     border.width: focused ? 2 : 1

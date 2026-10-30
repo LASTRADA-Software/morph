@@ -20,9 +20,11 @@ MorphField {
         font: Theme.bodyFont
         id: box
         width: root.controlWidth
-        // A touch target while the window is compact; the indicator keeps its size.
-        implicitHeight: Math.max(implicitContentHeight + topPadding + bottomPadding,
-                                 implicitIndicatorHeight + topPadding + bottomPadding,
+        // No vertical padding of its own: the box is as tall as its label's line or its indicator, and the container's
+        // gap spaces the rows. A touch target while the window is compact.
+        topPadding: 0
+        bottomPadding: 0
+        implicitHeight: Math.max(implicitContentHeight, implicitIndicatorHeight,
                                  Theme.touchTargets ? Theme.targetHeight : 0)
         text: root.label
         palette.windowText: root.scheme.text
