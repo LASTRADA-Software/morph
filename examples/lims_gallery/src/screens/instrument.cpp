@@ -306,7 +306,10 @@ ui::Node recordTabs(Instrument const& instrument, ui::Node const& overview) {
                      {.id = "maintenance", .label = "Maintenance", .children = undrawn("Maintenance")},
                      {.id = "bookings", .label = "Bookings", .children = bookingsTable(instrument)},
                      {.id = "audit", .label = "Audit trail", .children = undrawn("Audit trail")}},
-                    {.selected = instrument.tab, .onChoose = ui::set(instrument.tab, ui::event())})
+                    {.selected = instrument.tab,
+                     .onChoose = ui::set(instrument.tab, ui::event()),
+                     .inset = 4,
+                     .stripSurface = "bar"})
         .testId("tabs");
 }
 
@@ -327,7 +330,8 @@ ui::Node expandedLayout(Instrument const& instrument) {
              // The design's 320 px column, in the frontend's character widths.
              .sizing(ui::fixed(44))},
         {.gap = 2, .align = Align::Start});
-    return ui::column({recordTabs(instrument, overview), dialogs(instrument)}, {.gap = 2});
+    // The root is the page's edge: the strip sits in the head's white block, and the tabs inset their own pages.
+    return ui::column({recordTabs(instrument, overview), dialogs(instrument)}, {.gap = 0, .pageEdge = true});
 }
 
 // Compact stacks every section: the details as label-over-value pairs, the rest folded.
@@ -375,7 +379,10 @@ ui::Node compactLayout(Instrument const& instrument) {
                             instrument.eventsOpen)
                         .testId("events-section")},
                    {.gap = 2});
-    return ui::column({actions, recordTabs(instrument, overview), dialogs(instrument)}, {.gap = 2});
+    // The actions sit in the head's white block, above the strip.
+    return ui::column({ui::column({actions}, {.padding = ui::padding(2, 4)}).surface("bar"),
+                       recordTabs(instrument, overview), dialogs(instrument)},
+                      {.gap = 0, .pageEdge = true});
 }
 
 }  // namespace

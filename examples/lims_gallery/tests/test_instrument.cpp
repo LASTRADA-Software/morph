@@ -51,6 +51,9 @@ TEST_CASE("instrument, expanded: the head's status and actions, the overflow men
           "Take out of service…;description=needs reason]");
     CHECK_FALSE(screen.find("Menu", "more").has_value());
     CHECK(screen.find("Tabs", "tabs").has_value());
+    // The strip sits in the head's white block: it spans the page on the `bar` surface, its tabs inset by a step.
+    CHECK(screen.prop("Tabs", "tabs", "inset") == "4");
+    CHECK(screen.prop("Tabs", "tabs", "stripSurface") == "bar");
     CHECK(screen.shows("Panel", "details"));
     CHECK(screen.find("Column", "qualification").has_value());
     CHECK(screen.prop("Progress", "booking-elapsed", "value") == "0.29");
@@ -95,6 +98,9 @@ TEST_CASE("instrument, compact: stacked sections, actions in the page, the secti
     CHECK(screen.prop("Badge", "head_status_2", "text") == "Calibration due in 3 days");
     CHECK_FALSE(screen.shows("Button", "head_action_book"));
     CHECK(screen.shows("Button", "book"));
+    // The actions row sits in a `bar` column with the strip, which is inset too.
+    CHECK(screen.backend().find("Column", "surface", "bar").has_value());
+    CHECK(screen.prop("Tabs", "tabs", "inset") == "4");
     CHECK(screen.shows("Button", "maintenance"));
     // Compact hides the head's menu entries, so the head draws no menu and the page's follows the large buttons.
     CHECK_FALSE(screen.find("Menu", "head_menu").has_value());
