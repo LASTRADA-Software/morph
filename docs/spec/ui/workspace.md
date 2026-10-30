@@ -252,10 +252,12 @@ A name with no factory refuses the mount with `no host screen `<name>` is regist
 ## Navigator and pins
 
 `ui::Navigator` (`include/morph/ui/navigator.hpp`) lists the catalog for a person to open screens from.
-- **Grouping.** Entries are grouped by module, then group, in the order each first appears. Each group has a
-  heading in the `Overline` text role, `navigator_group_<module>/<group>`, and each entry is a row as wide as the
-  navigator, `nav_row_<id>`, holding a list item (`ButtonStyle::Item`) that stretches, `nav_<id>`, and a badge,
-  `nav_badge_<id>`, hidden until the entry has a count. The search shows and hides the row.
+- **Grouping.** Entries are grouped by module, then group, in the order each first appears. The navigator's root is
+  a column with a gap of step 3 holding the search, the pins and the groups, so a hidden pin row or group takes no
+  gap. Each group is a column of its own, `navigator_group_<module>/<group>_section`, gap step 1, holding a heading in
+  the `Overline` text role, `navigator_group_<module>/<group>`, and then its entries. Each entry is a row as wide as the
+  navigator, `nav_row_<id>`, holding a list item (`ButtonStyle::Item`) that stretches, `nav_<id>`, and a badge, `nav_badge_<id>`, hidden until
+  the entry has a count. The search hides a row, and hides a group's column when no row of it shows.
 - **Counts.** `setBadge(id, NavigatorBadge{text, tone})` shows a count at the end of a screen's entry, and
   `setBadge(id, std::nullopt)` takes it away; `badgeOf(id)` answers it. The entry stays one button to assistive
   technology: its accessible name carries the count, "Review, 4", and is its title again without one. A screen the
