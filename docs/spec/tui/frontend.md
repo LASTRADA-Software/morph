@@ -148,8 +148,9 @@ each child's minimum, and then the stack overflows and clips. A grid places cell
 row-major in equal columns, or in columns its tracks size: `layout::planGrid` gives each track to `distribute` as a
 stack item, a content track's natural width its widest cell that spans only it. A wrapping row
 (`setWrap`) fills lines with `layout::planWrap`: each child's basis is its natural extent, a Fixed child's amount, or a
-Stretch child's minimum, and a child starts a new line when its basis and a gap do not fit after those on the line;
-each line is solved by `distribute`, and a line with no Stretch child places its spare length by `justify`. A line is as
+Stretch child's minimum (no more than its natural extent when it has one), and a child starts a new line when its basis
+and a gap do not fit after those on the line; each line is solved by `distribute`, a Stretch child's minimum there being
+its basis, and a line with no Stretch child places its spare length by `justify`. A line is as
 tall as its tallest child and lines are `stepCells(gap, Vertical)` apart, so step 1 is a column between children and no
 row between lines. The row's natural height is its lines' at the width it was last drawn at: a change of width asks for
 another frame. Several roots share the screen as a column, in the order they were made: each takes the

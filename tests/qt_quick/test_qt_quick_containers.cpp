@@ -1481,3 +1481,42 @@ TEST_CASE(
     REQUIRE(none != nullptr);
     CHECK_FALSE(none->isVisible());
 }
+
+// A lead with no minimum of its own, as the workspace builds it for a shell, leaves a short lead and a short trail on
+// the title's line in a compact bar: the lead block's 32 units are capped at its natural width. Mutation: give the
+// lead row the 32-unit minimum (Scan drops to a second line at 330 px).
+TEST_CASE("qt_quick containers: a compact shell head with a short lead keeps its trail on the title's line",
+          "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setCompact(true);
+    frame.setTitle("Overview");
+    frame.setHeadShown(true);
+    ui::Badge badge{.tone = ui::Tone::Ok, .text = "Connected"};
+    badge.common.testId = "lead_badge";
+    ui::Row leadRow{.children = {ui::badge(std::move(badge))}, .gap = 1};
+    leadRow.wrap = true;
+    leadRow.align = ui::Align::Center;
+    leadRow.common.layout.width = ui::Sizing::stretch();
+    ui::Button scan{.label = "Scan"};
+    scan.common.testId = "head_scan";
+    ui::Mounted const leadMount{scene.runtime(), scene.backend(), ui::row(std::move(leadRow)), &frame.headLeadSlot()};
+    ui::Mounted const trailMount{scene.runtime(), scene.backend(),
+                                 ui::row(ui::Row{.children = {ui::button(std::move(scan))}, .gap = 1}),
+                                 &frame.headSlot()};
+    scene.window().resize(330, 600);
+    scene.settle();
+    auto const rectOf = [](char const* testId) {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        QQuickItem const* const item = widget->item();
+        REQUIRE(item != nullptr);
+        return QRectF{item->mapToScene(QPointF{0, 0}), QSizeF{item->width(), item->height()}};
+    };
+    QRectF const title = rectOf("shell_title");
+    QRectF const scanAt = rectOf("head_scan");
+    INFO("the title at " << title.y() << ", Scan at " << scanAt.y());
+    CHECK(scanAt.y() < title.bottom());
+    CHECK(scanAt.right() <= 330.0);
+}

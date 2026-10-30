@@ -551,6 +551,19 @@ TEST_CASE("tui::layout::planWrap gives a stretch item its line's spare length, a
     CHECK(narrow.placed.at(1) == layout::WrapPlaced{.line = 1, .x = 0, .width = 12});
 }
 
+// Mutation: leave the stretch item's minimum uncapped on its line: its 32 columns push the fixed item out of the 20.
+TEST_CASE("tui::layout::planWrap caps a stretch item's minimum at its natural extent on the line it fills",
+          "[tui][layout]") {
+    std::vector<layout::Item> const items{
+        {.sizing = Sizing::stretch(), .natural = 9, .minimum = 32},
+        {.sizing = Sizing::fixed(4), .natural = 4},
+    };
+    auto const plan = layout::planWrap(items, {.length = 20, .gap = 1});
+    CHECK(plan.lines == 1);
+    CHECK(plan.placed.at(0) == layout::WrapPlaced{.line = 0, .x = 0, .width = 15});
+    CHECK(plan.placed.at(1) == layout::WrapPlaced{.line = 0, .x = 16, .width = 4});
+}
+
 TEST_CASE("tui::layout::planWrap seats an overwide item alone, and an empty item takes no gap", "[tui][layout]") {
     SECTION("an item wider than the line sits alone at the line's length") {
         std::vector<layout::Item> const items{contentItem(5), contentItem(50), contentItem(5)};

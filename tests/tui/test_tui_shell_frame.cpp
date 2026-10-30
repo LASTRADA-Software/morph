@@ -120,3 +120,23 @@ TEST_CASE("tui shell frame: the head shares the title's line where it fits, and 
         CHECK((actions == title) == together);
     }
 }
+
+// Control: give the lead the in-page head's 32-unit minimum (the head's trail then wraps under the title).
+TEST_CASE("tui shell frame: a short lead and a short trail stay on the title's line in a narrow bar", "[tui][shell]") {
+    FramedPage page{40};
+    ui::Text badge{.text = std::string{"Connected"}};
+    ui::Row lead{.children = {ui::text(std::move(badge))}, .gap = 1};
+    lead.common.layout.width = ui::Sizing::stretch();
+    ui::Text scan{.text = std::string{"SCAN"}};
+    ui::Mounted const leadMount{page.runtime, page.backend, ui::row(std::move(lead)), &page.frame->headLeadSlot()};
+    ui::Mounted const trailMount{page.runtime, page.backend, ui::text(std::move(scan)), &page.frame->headSlot()};
+    page.frame->setHeadShown(true);
+    static_cast<void>(page.loop.runUntilIdle());
+    page.backend.fit();
+    page.screen.draw();
+    std::size_t const title = rowOf(page.screen, "Review");
+    std::size_t const scanRow = rowOf(page.screen, "SCAN");
+    REQUIRE(title != std::string::npos);
+    REQUIRE(scanRow != std::string::npos);
+    CHECK(scanRow == title);
+}

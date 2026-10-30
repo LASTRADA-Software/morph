@@ -1192,3 +1192,28 @@ TEST_CASE("workspace: openOverlay refuses an `as` that is no overlay, a host scr
     CHECK(harness.backend.all("Dialog").empty());
     CHECK(harness.backend.all("Drawer").empty());
 }
+
+// Mutation: restore the lead's minimum in `headPartsForActive` (its layout reads `min=32`), or drop it from the
+// in-page head's lead.
+TEST_CASE("workspace: the lead built for a shell has no minimum width, and the in-page head's lead keeps it",
+          "[ui][workspace]") {
+    using morph::ui::Mounted;
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("headed", {}) == 0U);
+    harness.settle();
+    int const inPage = harness.byTestId("Row", "head_lead");
+    CHECK(harness.backend.prop(inPage, "layout") == "stretch(1) min=32/content");
+    morph::ui::HeadParts parts = shell.headPartsForActive();
+    Mounted const lead{harness.runtime, harness.backend, std::move(parts.lead)};
+    harness.settle();
+    int shellLead = -1;
+    for (int const row : harness.backend.all("Row")) {
+        if (row != inPage && harness.backend.prop(row, "testId") == "head_lead") {
+            shellLead = row;
+        }
+    }
+    REQUIRE(shellLead != -1);
+    CHECK(harness.backend.prop(shellLead, "layout") == "stretch(1)/content");
+}

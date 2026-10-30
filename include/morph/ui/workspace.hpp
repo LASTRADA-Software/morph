@@ -352,7 +352,11 @@ public:
     [[nodiscard]] HeadParts headPartsForActive() const {
         std::optional<WorkspaceTabId> const tab = _model->active().peek();
         if (tab) {
-            return HeadParts{.lead = ui::row(buildHeadLead(*tab)), .trail = ui::row(buildHeadTrail(*tab))};
+            // A host places the lead beside the title and gives it the minimum width it wants, so the lead has none
+            // of its own: with one, a lead's natural width would never be less than it.
+            Row lead = buildHeadLead(*tab);
+            lead.common.layout.minWidth.reset();
+            return HeadParts{.lead = ui::row(std::move(lead)), .trail = ui::row(buildHeadTrail(*tab))};
         }
         Row lead{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
         lead.common.testId = "head_lead";

@@ -240,7 +240,11 @@ void placeLine(std::span<Item const> items, std::span<std::size_t const> members
     for (std::size_t const member : members) {
         if (bases.data()[member] > 0) {
             Item item = itemAt(items, member);
-            if (!isStretch(item.sizing)) {
+            if (isStretch(item.sizing)) {
+                // The line was filled by the item's basis, which is capped at its natural extent. Raising its share to
+                // the uncapped minimum would take the room from the items after it.
+                item.minimum = std::min(item.minimum, bases.data()[member]);
+            } else {
                 item.sizing = ui::Sizing::fixed(bases.data()[member]);
                 item.minimum = 0;
                 item.maximum = std::numeric_limits<int>::max();
