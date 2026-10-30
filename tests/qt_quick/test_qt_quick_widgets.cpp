@@ -34,6 +34,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/reactive/signal.hpp>
@@ -2229,4 +2230,131 @@ TEST_CASE("qt_quick widgets: a text area's first line sits where a single-line i
     CHECK(textTop(areaControl, true) == Catch::Approx(textTop(inputControl, false)).margin(1.0));
     // And with the stock inset, the area's text is as far in as the input's.
     CHECK(textInset(areaControl) == Catch::Approx(textInset(inputControl)));
+}
+
+namespace {
+
+/// A selected item button whose content is a stretching title and a badge, under @p surface.
+struct SelectedEntry {
+    std::unique_ptr<ui::ButtonWidget> button;
+    std::unique_ptr<ui::StackWidget> row;
+    std::unique_ptr<ui::TextWidget> title;
+    std::unique_ptr<ui::BadgeWidget> badge;
+};
+
+SelectedEntry makeSelectedEntry(Scene& scene, ui::ContainerWidget* parent, std::string_view surface) {
+    SelectedEntry entry;
+    entry.button = scene.backend().createButton(parent);
+    entry.button->setStyle(ui::ButtonStyle::Item);
+    entry.button->setLabel("Instrument 3");
+    entry.button->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::content()});
+    if (!surface.empty()) {
+        entry.button->setSurface(surface);
+    }
+    entry.row = scene.backend().createStack(&entry.button->content(), ui::Axis::Horizontal);
+    entry.row->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::content()});
+    entry.title = scene.backend().createText(entry.row.get());
+    entry.title->setText("Instrument 3");
+    entry.title->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::content()});
+    entry.badge = scene.backend().createBadge(entry.row.get());
+    entry.badge->setText("12");
+    entry.button->setSelected(true);
+    return entry;
+}
+
+/// The colour the title text is drawn in: the first visible Text of @p root showing @p text.
+QColor drawnColor(QQuickItem& root, QString const& text) {
+    for (QQuickItem const* const candidate : Scene::itemsOf(root, "QQuickText")) {
+        if (candidate->isVisible() && candidate->property("text").toString() == text) {
+            return candidate->property("color").value<QColor>();
+        }
+    }
+    FAIL("no visible text " << text.toStdString());
+    return {};
+}
+
+/// The `Button` inside a MorphButton.
+QQuickItem& buttonControl(ui::Widget const& widget) {
+    auto* const control = qobject_cast<QQuickItem*>(base(widget).part("focusTarget"));
+    REQUIRE(control != nullptr);
+    return *control;
+}
+
+/// The 3 px accent bar of an item's background, or nothing.
+QQuickItem* accentBar(QQuickItem& control) {
+    auto* const background = control.property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    for (QQuickItem* const child : background->childItems()) {
+        if (child->width() == 3.0 && child->objectName().isEmpty()) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Mutation: hand the content the button's own `scheme` (the content's text stays the scheme's text while selected
+// under accent), or draw the background under the button's label only (the badge lies outside it).
+TEST_CASE("qt_quick widgets: a selected item with content is marked across it, in the accent under accent",
+          "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(300), .height = ui::Sizing::content()});
+    auto entry = makeSelectedEntry(scene, column.get(), "");
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto* const scheme = theme->property("themeScheme").value<QObject*>();
+    REQUIRE(scheme != nullptr);
+    QQuickItem& control = buttonControl(*entry.button);
+    auto* const background = control.property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    CHECK(background->width() == Catch::Approx(control.width()));
+    QQuickItem const& badge = Scene::itemOf(*entry.badge);
+    CHECK(badge.mapToScene(QPointF{badge.width(), 0}).x() <=
+          background->mapToScene(QPointF{background->width(), 0}).x() + 0.5);
+    QQuickItem const* const bar = accentBar(control);
+    REQUIRE(bar != nullptr);
+    CHECK(bar->isVisible());
+    auto const accent = scheme->property("accent").value<QColor>();
+    auto const text = scheme->property("text").value<QColor>();
+    REQUIRE(accent != text);
+    QQuickItem& root = Scene::itemOf(*entry.button);
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == accent);
+    // Deselected, the text returns to the scheme's text with nothing adopted again.
+    entry.button->setSelected(false);
+    scene.settle();
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == text);
+    entry.button->setSelected(true);
+    scene.settle();
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == accent);
+}
+
+// Mutation: ignore `listSelectionFill` in the content's scheme (the label stays the accent) or in the background (the
+// bar shows).
+TEST_CASE("qt_quick widgets: on a surface whose list selection is fill, a selected item has no bar and a text label",
+          "[qt_quick]") {
+    Scene scene;
+    auto const fillTokens = ui::parseTokens(R"({"list": {"selection": {"$type": "keyword", "$value": "fill"}}})");
+    REQUIRE(fillTokens);
+    auto const fillResolved = ui::resolveTokens({&*fillTokens});
+    REQUIRE(fillResolved);
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"sidebar", ui::themeValues(*fillResolved)}};
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), surfaces).empty());
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(300), .height = ui::Sizing::content()});
+    auto entry = makeSelectedEntry(scene, column.get(), "sidebar");
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
+    REQUIRE(sidebar != nullptr);
+    QQuickItem& control = buttonControl(*entry.button);
+    QQuickItem const* const bar = accentBar(control);
+    REQUIRE(bar != nullptr);
+    CHECK_FALSE(bar->isVisible());
+    QQuickItem& root = Scene::itemOf(*entry.button);
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == sidebar->property("text").value<QColor>());
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) != sidebar->property("accent").value<QColor>());
 }

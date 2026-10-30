@@ -35,6 +35,13 @@ MorphWidget {
     property bool hasContent: false
     // Where C++ puts an item's content.
     readonly property Item content: contentColumn
+    // Whether a selected item is marked in the accent (a bar and an accent label) and not by a fill alone.
+    readonly property bool accentSelection: root.style === 1 && root.selected && !root.scheme.listSelectionFill
+    // The scheme an item's content draws in: the button's, except that its text role follows the selection, so a
+    // selected item's content reads as its label does. Made with the content, since only an item with content has
+    // anything to hand it.
+    property MorphScheme contentSchemeMade: null
+    readonly property MorphScheme contentScheme: contentSchemeMade ?? root.scheme
     readonly property bool ghost: emphasis === 3
     readonly property color fill: emphasis === 1 ? root.scheme.accent
                                  : emphasis === 2 ? root.scheme.error
@@ -81,10 +88,58 @@ MorphWidget {
     }
     onHasContentChanged: {
         if (root.hasContent) {
+            if (root.contentSchemeMade === null)
+                root.contentSchemeMade = contentSchemeComponent.createObject(root) as MorphScheme
             button.contentItem = contentColumn
             // Inside the button, above its background: the column is declared before the button, so left a child of
             // the widget it would be painted under the button's fill.
             contentColumn.parent = button
+        }
+    }
+
+    Component {
+        id: contentSchemeComponent
+
+        MorphScheme {
+            surface: root.scheme.surface
+            text: root.accentSelection ? root.scheme.accent : root.scheme.text
+            muted: root.scheme.muted
+            accent: root.scheme.accent
+            focus: root.scheme.focus
+            selection: root.scheme.selection
+            border: root.scheme.border
+            neutral: root.scheme.neutral
+            neutralBg: root.scheme.neutralBg
+            neutralBorder: root.scheme.neutralBorder
+            neutralDot: root.scheme.neutralDot
+            hover: root.scheme.hover
+            track: root.scheme.track
+            controlSurface: root.scheme.controlSurface
+            controlBorder: root.scheme.controlBorder
+            divider: root.scheme.divider
+            borderDashed: root.scheme.borderDashed
+            listSelectionFill: root.scheme.listSelectionFill
+            error: root.scheme.error
+            success: root.scheme.success
+            info: root.scheme.info
+            warn: root.scheme.warn
+            successBg: root.scheme.successBg
+            successBorder: root.scheme.successBorder
+            successDot: root.scheme.successDot
+            warnBg: root.scheme.warnBg
+            warnBorder: root.scheme.warnBorder
+            warnDot: root.scheme.warnDot
+            errorBg: root.scheme.errorBg
+            errorBorder: root.scheme.errorBorder
+            errorDot: root.scheme.errorDot
+            infoBg: root.scheme.infoBg
+            infoBorder: root.scheme.infoBorder
+            infoDot: root.scheme.infoDot
+            tableHeader: root.scheme.tableHeader
+            chart1: root.scheme.chart1
+            chart2: root.scheme.chart2
+            chart3: root.scheme.chart3
+            chart4: root.scheme.chart4
         }
     }
 
@@ -102,7 +157,7 @@ MorphWidget {
             spacing: Theme.spaceOf(2)
 
             Image {
-                source: Theme.iconSourceIn(root.icon, root.selected ? root.scheme.accent : root.scheme.text)
+                source: Theme.iconSourceIn(root.icon, root.accentSelection ? root.scheme.accent : root.scheme.text)
                 visible: root.icon !== "" && source.toString() !== ""
                 Layout.preferredWidth: Theme.bodyPixels
                 Layout.preferredHeight: Theme.bodyPixels
@@ -111,7 +166,7 @@ MorphWidget {
                 textFormat: Text.PlainText
                 text: root.label
                 font: Theme.bodyFont
-                color: root.selected ? root.scheme.accent : root.scheme.text
+                color: root.accentSelection ? root.scheme.accent : root.scheme.text
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignLeft
                 verticalAlignment: Text.AlignVCenter

@@ -130,6 +130,9 @@ QtObject {
     property color divider: "#dcdce0"
     // Whether outlines are stroked in dashes: `border.style`.
     property bool borderDashed: false
+    // Whether a selected list item is drawn as a plain fill, with its label in the text colour and no accent bar:
+    // `list.selection`.
+    property bool listSelectionFill: false
     property color surface: "#ffffff"
     property color border: "#c7c7cc"
     property color selection: "#cfe3ff"
@@ -297,6 +300,7 @@ QtObject {
         controlBorder: theme.controlBorder
         divider: theme.divider
         borderDashed: theme.borderDashed
+        listSelectionFill: theme.listSelectionFill
         error: theme.error
         success: theme.success
         info: theme.info
@@ -337,6 +341,7 @@ QtObject {
         controlBorder: theme.controlBorder
         divider: theme.divider
         borderDashed: theme.borderDashed
+        listSelectionFill: theme.listSelectionFill
         error: theme.error
         success: theme.success
         info: theme.info
@@ -377,6 +382,7 @@ QtObject {
         controlBorder: theme.controlBorder
         divider: theme.divider
         borderDashed: theme.borderDashed
+        listSelectionFill: theme.listSelectionFill
         error: theme.error
         success: theme.success
         info: theme.info
@@ -416,6 +422,7 @@ QtObject {
         controlSurface: "#2a3040"
         controlBorder: "#3a4152"
         divider: "#2f3646"
+        listSelectionFill: theme.listSelectionFill
         error: theme.error
         success: theme.success
         info: theme.info
@@ -456,6 +463,7 @@ QtObject {
         controlBorder: theme.controlBorder
         divider: theme.divider
         borderDashed: theme.borderDashed
+        listSelectionFill: theme.listSelectionFill
         error: theme.error
         success: theme.success
         info: theme.info
@@ -495,6 +503,7 @@ QtObject {
         controlSurface: theme.controlSurface
         controlBorder: theme.controlBorder
         divider: theme.divider
+        listSelectionFill: theme.listSelectionFill
         error: theme.error
         success: theme.success
         info: theme.info
@@ -537,6 +546,7 @@ QtObject {
         controlBorder: theme.barScheme.controlBorder
         divider: theme.barScheme.divider
         borderDashed: theme.barScheme.borderDashed
+        listSelectionFill: theme.barScheme.listSelectionFill
         error: theme.barScheme.error
         success: theme.barScheme.success
         info: theme.barScheme.info
