@@ -1206,7 +1206,8 @@ public:
     }
 };
 
-/// @brief A fake `StackWidget`, of kind `Column` or `Row`: properties `gap`, `align`, `justify`, `wrap`, `divided`.
+/// @brief A fake `StackWidget`, of kind `Column` or `Row`: properties `gap`, `align`, `justify`, `wrap`, `divided`,
+/// `padding`.
 class FakeStack final : public FakeContainer<StackWidget> {
 public:
     using FakeContainer<StackWidget>::FakeContainer;
@@ -1215,6 +1216,7 @@ public:
     void setJustify(Justify justify) override { set("justify", formatJustify(justify)); }
     void setWrap(bool wrap) override { set("wrap", wrap ? "true" : "false"); }
     void setDivided(bool divided) override { set("divided", divided ? "true" : "false"); }
+    void setPadding(int padding) override { set("padding", std::to_string(padding)); }
 };
 
 /// @brief A fake `GridWidget`: properties `columns`, `tracks`, `gap`, `align`, and `span` on a child.
@@ -1330,6 +1332,7 @@ public:
     void setSelected(std::size_t index) override { set("selected", std::to_string(index)); }
     void setOnSelect(std::function<void(std::size_t)> onSelect) override { callbacks().index = std::move(onSelect); }
     void setBarShown(bool shown) override { set("barShown", shown ? "true" : "false"); }
+    void setMoreLabel(std::string_view label) override { set("moreLabel", formatText(label)); }
 };
 
 /// @brief A fake overlay's footer: a `Footer` child, made when it is first asked for, so an overlay that never shows
@@ -1429,7 +1432,7 @@ public:
     void setLabel(std::string_view label) override { set("label", formatText(label)); }
 };
 
-/// @brief A fake `StepsWidget`: properties `steps` (`[label:State,…]`), `current` (a position, or `none`).
+/// @brief A fake `StepsWidget`: properties `steps` (`[label:State,…]`), `current` (a position, or `none`), `labelled`.
 class FakeSteps final : public FakeLeaf<StepsWidget> {
 public:
     using FakeLeaf<StepsWidget>::FakeLeaf;
@@ -1440,6 +1443,7 @@ public:
     void setCurrent(std::optional<std::size_t> index) override {
         set("current", index.has_value() ? std::to_string(*index) : std::string{"none"});
     }
+    void setLabelled(bool labelled) override { set("labelled", labelled ? "true" : "false"); }
 };
 
 /// @brief Formats free text inside a chart property: also escapes `,`, `[`, `]`, `;`, `@` and `|`, the separators

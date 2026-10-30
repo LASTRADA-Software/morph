@@ -433,6 +433,11 @@ public:
     ///        that cannot spare a row for a rule draws none: the terminal's lines are already apart.
     /// @param divided Always true: a stack that is not divided is never told.
     virtual void setDivided(bool divided) = 0;
+
+    /// @brief Insets the children from the stack's edges on every side. The mount calls it once, before the stack's
+    ///        first child, and only for a stack that has padding. The stack's natural size includes the inset.
+    /// @param padding The spacing step, 0 to `kMaxSpacingStep`.
+    virtual void setPadding(int padding) = 0;
 };
 
 /// @brief Children laid out row-major in columns.
@@ -539,6 +544,11 @@ public:
     ///        its strip.
     /// @param shown Whether the strip is drawn.
     virtual void setBarShown(bool shown) = 0;
+
+    /// @brief Sets the label of the menu that holds the tabs that do not fit in the bar. A frontend that scrolls or
+    ///        marks its tabs instead stores it and draws nothing from it.
+    /// @param label The label, UTF-8.
+    virtual void setMoreLabel(std::string_view label) = 0;
 };
 
 /// @brief A modal overlay around its children, with a focus trap while open. A new dialog is closed.
@@ -910,6 +920,11 @@ public:
     /// @brief Highlights one step.
     /// @param index The step's position; `nullopt` or a position past the last highlights none.
     virtual void setCurrent(std::optional<std::size_t> index) = 0;
+
+    /// @brief Chooses whether the labels are drawn; unlabelled, only the marks are, and the labels still name the
+    ///        steps and the indicator.
+    /// @param labelled Whether the labels are drawn.
+    virtual void setLabelled(bool labelled) = 0;
 };
 
 /// @brief Captions beside, or above, their values. A toned value is drawn in the tone's colour and the strong weight;

@@ -314,6 +314,8 @@ public:
     void setSelected(std::size_t index) override;
     void setOnSelect(std::function<void(std::size_t)> onSelect) override;
     void setBarShown(bool shown) override;
+    /// Stored, not drawn: the markers reach every tab.
+    void setMoreLabel(std::string_view label) override { _moreLabel = label; }
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return _barShown; }
     [[nodiscard]] bool focusesOnPress() const override { return false; }
@@ -329,6 +331,8 @@ private:
     [[nodiscard]] int labelsWidth(std::size_t first, std::size_t last) const;
     void scrollToSelected(int width);
     void select(std::size_t index);
+
+    std::string _moreLabel = "More";
 
     // The columns a painted label or marker covers, and what a click there chooses: a label its own tab, a marker
     // the tab before or after the highlighted one (`step` -1 or 1).

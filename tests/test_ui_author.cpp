@@ -324,15 +324,24 @@ TEST_CASE("handles read fields by member pointer below a name", "[ui][author]") 
     CHECK(text(ui::row(&author_test::Partial::shown)) == R"({"row":"shown"})");
 }
 
-// Mutation: leave the scroll at its content height in pinned (the scroll loses its sizing).
-TEST_CASE("pinned writes a stretching column around a stretching scroll, with its bars outside it", "[ui][author]") {
+// Mutation: write the bars as plain children of the column again (no bar column, surface or padding).
+TEST_CASE(
+    "pinned writes a divided column around a stretching scroll, with each bar a padded column on the bar surface",
+    "[ui][author]") {
     ui::Node const node = ui::pinned(ui::text({.text = "body"}),
                                      {.top = ui::text({.text = "head"}), .bottom = ui::text({.text = "bar"})});
-    CHECK(text(node) ==
-          R"({"kind":"column","children":[{"kind":"text","text":"head"},)"
-          R"({"kind":"scroll","children":[{"kind":"text","text":"body"}],)"
-          R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}},)"
-          R"({"kind":"text","text":"bar"}],"sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}})");
+    CHECK(
+        text(node) ==
+        R"({"kind":"column","children":[{"kind":"column","children":[{"kind":"text","text":"head"}],"padding":2,"surface":"bar"},)"
+        R"({"kind":"scroll","children":[{"kind":"text","text":"body"}],)"
+        R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}},)"
+        R"({"kind":"column","children":[{"kind":"text","text":"bar"}],"padding":2,"surface":"bar"}],"divided":true,)"
+        R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}})");
+    ui::Node const bare = ui::pinned(ui::text({.text = "body"}), {.bottom = ui::text({.text = "bar"}), .surface = ""});
+    CHECK(text(bare) == R"({"kind":"column","children":[{"kind":"scroll","children":[{"kind":"text","text":"body"}],)"
+                        R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}},)"
+                        R"({"kind":"column","children":[{"kind":"text","text":"bar"}],"padding":2}],"divided":true,)"
+                        R"("sizing":{"lit":{"width":{"stretch":1},"height":{"stretch":1}}}})");
 }
 
 // Mutation: drop the focus from a blocked step's commands in stepper (the blocking field is not focused).
@@ -374,6 +383,39 @@ TEST_CASE("stepper writes a wizard over screen state; Continue moves one step, o
     CHECK(morph::ui::testing::readJson(*mounted, R"({"ref":"attempted"})") == "true");
     // A step that names its blocking field keeps Continue enabled, so the click can show the field.
     CHECK(h.backend.prop(h.byTestId("Button", "w-continue"), "enabled") != "false");
+}
+
+TEST_CASE("stepper writes the same document by default, and its parts are the pieces of it", "[ui][author]") {
+    auto const step = ui::Handle<std::int64_t>{ui::ref<std::int64_t>("step")};
+    ui::StepperOptions options{.step = step,
+                               .steps = {{.label = "One", .children = ui::text({.text = "one"})},
+                                         {.label = "Two", .children = ui::text({.text = "two"})}},
+                               .onFinish = ui::notify("done")};
+    auto const whole = ui::stepper(options);
+    auto const parts = ui::stepperParts(options);
+    // The column holds the parts in order; reordering them fails this.
+    CHECK(text(whole) == text(ui::column({parts.indicator, parts.body, parts.footer}, {.gap = 2})));
+    CHECK(text(parts.indicator).starts_with(R"({"kind":"steps","items":{"list":[{"obj":{"label":"One")"));
+    CHECK_FALSE(text(parts.indicator).contains("labelled"));
+    CHECK(text(parts.body).starts_with(R"({"kind":"switch")"));
+    CHECK(text(parts.footer).starts_with(R"({"kind":"row")"));
+    CHECK(text(parts.footer).contains(R"("kind":"spacer")"));
+    CHECK(text(parts.footer).contains(R"({"if":[{"fn":"eq","args":[{"ref":"step"},1]},"Finish","Continue"]})"));
+
+    // Unlabelled keeps the labels and says so.
+    options.labelled = false;
+    auto const unlabelled = ui::stepperParts(options);
+    CHECK(text(unlabelled.indicator).contains(R"("label":"One")"));
+    CHECK(text(unlabelled.indicator).contains(R"("labelled":false)"));
+
+    // A step's own Continue text is part of Continue's condition, and a stretching Continue has no spacer.
+    options.labelled = {};
+    options.steps.front().continueLabel = "Continue to tests";
+    options.continueStretches = true;
+    auto const stretched = ui::stepperParts(options);
+    CHECK(text(stretched.footer).contains("Continue to tests"));
+    CHECK_FALSE(text(stretched.footer).contains(R"("kind":"spacer")"));
+    CHECK(text(stretched.footer).contains(R"("width":{"stretch":1})"));
 }
 
 TEST_CASE("the library and reading forms have builders", "[ui][author]") {

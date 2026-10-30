@@ -430,6 +430,45 @@ QtObject {
         chart3: theme.chart3
         chart4: theme.chart4
     }
+    readonly property MorphScheme barScheme: MorphScheme {
+        surface: theme.surface
+        text: theme.text
+        muted: theme.muted
+        accent: theme.accent
+        focus: theme.focus
+        selection: theme.selection
+        border: theme.border
+        neutral: theme.neutral
+        neutralBg: theme.neutralBg
+        neutralBorder: theme.neutralBorder
+        neutralDot: theme.neutralDot
+        hover: theme.hover
+        track: theme.track
+        controlSurface: theme.controlSurface
+        controlBorder: theme.controlBorder
+        divider: theme.divider
+        error: theme.error
+        success: theme.success
+        info: theme.info
+        warn: theme.warn
+        successBg: theme.successBg
+        successBorder: theme.successBorder
+        successDot: theme.successDot
+        warnBg: theme.warnBg
+        warnBorder: theme.warnBorder
+        warnDot: theme.warnDot
+        errorBg: theme.errorBg
+        errorBorder: theme.errorBorder
+        errorDot: theme.errorDot
+        infoBg: theme.infoBg
+        infoBorder: theme.infoBorder
+        infoDot: theme.infoDot
+        tableHeader: theme.tableHeader
+        chart1: theme.chart1
+        chart2: theme.chart2
+        chart3: theme.chart3
+        chart4: theme.chart4
+    }
     property var extraSchemes: ({})
     readonly property Component schemeComponent: Component {
         MorphScheme {}
@@ -448,6 +487,8 @@ QtObject {
             return sidebarScheme
         case "toolbar":
             return toolbarScheme
+        case "bar":
+            return barScheme
         default:
             if (!(name in extraSchemes))
                 extraSchemes[name] = schemeComponent.createObject(theme) as MorphScheme
@@ -462,7 +503,7 @@ QtObject {
 
     // Whether a surface name is one the theme draws a background for.
     function draws(name: string): bool {
-        return name === "page" || name === "card" || name === "sidebar" || name === "toolbar" || (name in extraSchemes)
+        return name === "page" || name === "card" || name === "sidebar" || name === "toolbar" || name === "bar" || (name in extraSchemes)
     }
 
     // A text role's colour: Normal, Muted, Heading, Error, Success.

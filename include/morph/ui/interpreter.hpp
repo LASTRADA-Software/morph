@@ -7697,7 +7697,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                         .gap = gap,
                         .align = alignOf(node.name("align")),
                         .justify = justifyOf(node.name("justify")),
-                        .divided = node.flag("divided")};
+                        .divided = node.flag("divided"),
+                        .padding = static_cast<int>(onceInt("padding", 0))};
             commonOf(node, ctx, element, spec.common);
             return ui::column(std::move(spec));
         }
@@ -7705,7 +7706,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                  .gap = gap,
                  .align = alignOf(node.name("align")),
                  .justify = justifyOf(node.name("justify")),
-                 .wrap = node.flag("wrap")};
+                 .wrap = node.flag("wrap"),
+                 .padding = static_cast<int>(onceInt("padding", 0))};
         commonOf(node, ctx, element, spec.common);
         return ui::row(std::move(spec));
     }
@@ -7832,6 +7834,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                 std::int64_t const index = intOf(evalIn(*scope, bindings.get(), expr), -1);
                 return index < 0 ? std::nullopt : std::optional<std::size_t>{static_cast<std::size_t>(index)};
             });
+        spec.labelled = bindProp<bool>(ctx, node.prop("labelled"), true, boolOf);
         commonOf(node, ctx, element, spec.common);
         return ui::steps(std::move(spec));
     }
@@ -8574,6 +8577,7 @@ inline Node ScreenCore::lowerTabs(DocNode const& node, LowerCtx const& ctx, Elem
         spec.tabs.push_back(Tab{.label = bindProp<std::string>(ctx, tab->prop("label"), std::string{}, stringOf),
                                 .node = nodes.empty() ? Node{} : lowerAll(nodes, ctx)});
     }
+    spec.moreLabel = bindProp<std::string>(ctx, node.prop("moreLabel"), std::string{"More"}, stringOf);
     ExprPtr const selected = node.prop("selected");
     Commands const* const onChoose = node.event("onChoose");
     bool const controlled = selected && (selected->kind != ExprKind::Literal || !selected->literal.isNull());

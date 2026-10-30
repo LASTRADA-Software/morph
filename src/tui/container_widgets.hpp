@@ -32,6 +32,7 @@ public:
     void setAlign(ui::Align align) override;
     void setJustify(ui::Justify justify) override;
     void setWrap(bool wrap) override;
+    void setPadding(int padding) override;
     /// Draws no rule: a rule would take a row of its own and double a list's height, and its lines are already apart.
     void setDivided(bool divided) override { static_cast<void>(divided); }
     [[nodiscard]] ui::Axis axis() const noexcept { return _axis; }
@@ -53,8 +54,13 @@ private:
         std::vector<int> lineHeights;
     };
     [[nodiscard]] WrappedLines wrappedLines(int width) const;
+    /// The natural size and the children's places inside the padding.
+    [[nodiscard]] ::core::tui::Size innerNaturalSize() const;
+    [[nodiscard]] std::vector<::core::tui::Rect> innerAreas(::core::tui::Size size) const;
 
     ui::Axis _axis;
+    int _paddingRows = 0;
+    int _paddingColumns = 0;
     int _gap = 0;
     int _gapStep = 0;
     bool _wrap = false;

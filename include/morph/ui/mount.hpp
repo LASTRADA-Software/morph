@@ -631,13 +631,16 @@ private:
     // costs no call.
     Widget& mountStack(reactive::Scope& scope, Axis axis, std::vector<Node> const& children, int gap,
                        Common const& common, ContainerWidget* parent, Align align = Align::Stretch,
-                       Justify justify = Justify::Start, bool wrap = false, bool divided = false) {
+                       Justify justify = Justify::Start, bool wrap = false, bool divided = false, int padding = 0) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, axis));
         if (wrap) {
             widget.setWrap(true);
         }
         if (divided) {
             widget.setDivided(true);
+        }
+        if (spacingStep(padding) != 0) {
+            widget.setPadding(spacingStep(padding));
         }
         applyCommon(scope, widget, common);
         widget.setGap(spacingStep(gap));
@@ -951,7 +954,7 @@ private:
 
     Widget& mountKind(reactive::Scope& scope, Column const& spec, ContainerWidget* parent) {
         return mountStack(scope, Axis::Vertical, spec.children, spec.gap, spec.common, parent, spec.align,
-                          spec.justify, false, spec.divided);
+                          spec.justify, false, spec.divided, spec.padding);
     }
 
     Widget& mountKind(reactive::Scope& scope, Row const& spec, ContainerWidget* parent) {
@@ -960,7 +963,7 @@ private:
                 "morph::ui: a row's tone, label and heading are a table row's; this row is not in a table"};
         }
         return mountStack(scope, Axis::Horizontal, spec.children, spec.gap, spec.common, parent, spec.align,
-                          spec.justify, spec.wrap);
+                          spec.justify, spec.wrap, false, spec.padding);
     }
 
     Widget& mountKind(reactive::Scope& scope, Grid const& spec, ContainerWidget* parent) {
@@ -1080,6 +1083,9 @@ private:
                                                           ? Prop<std::vector<std::string>>(std::move(labelsOf))
                                                           : Prop<std::vector<std::string>>(labelsOf());
         bind(scope, labels, [&widget](std::vector<std::string> const& shown) { widget.setTabs(shown); });
+        if (spec.moreLabel.isBound() || spec.moreLabel.constant() != "More") {
+            bind(scope, spec.moreLabel, [&widget](std::string const& label) { widget.setMoreLabel(label); });
+        }
         auto& pageScope = scope.child();
         auto& pages = scope.make<Pages>();
         pages.pageSlots.resize(spec.tabs.size(), nullptr);
@@ -1737,6 +1743,9 @@ private:
         applyCommon(scope, widget, spec.common);
         bind(scope, spec.items, [&widget](std::vector<Step> const& steps) { widget.setSteps(steps); });
         bind(scope, spec.current, [&widget](std::optional<std::size_t> index) { widget.setCurrent(index); });
+        if (spec.labelled.isBound() || !spec.labelled.constant()) {
+            bind(scope, spec.labelled, [&widget](bool labelled) { widget.setLabelled(labelled); });
+        }
         return widget;
     }
 

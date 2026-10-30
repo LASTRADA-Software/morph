@@ -268,6 +268,8 @@ public:
     StepsImpl(Context& context, ui::ContainerWidget* parent);
     void setSteps(std::vector<ui::Step> const& steps) override;
     void setCurrent(std::optional<std::size_t> index) override;
+    void setLabelled(bool labelled) override;
+    [[nodiscard]] std::string shownText() const override;
 };
 
 class ChartImpl final : public ItemWidget<ui::ChartWidget> {
@@ -314,6 +316,7 @@ public:
     void setJustify(ui::Justify justify) override;
     void setWrap(bool wrap) override;
     void setDivided(bool divided) override;
+    void setPadding(int padding) override;
 
 protected:
     /// A wrapping row places its children itself, again whenever one's size or visibility changes.
@@ -390,6 +393,7 @@ public:
     void setSelected(std::size_t index) override;
     void setOnSelect(std::function<void(std::size_t)> onSelect) override;
     void setBarShown(bool shown) override;
+    void setMoreLabel(std::string_view label) override;
     /// The highlighted tab, or -1.
     [[nodiscard]] int highlighted() const;
     /// The highlighted tab's caption; empty when none is highlighted.
@@ -606,6 +610,7 @@ public:
     void setWrap(bool wrap) override { static_cast<void>(wrap); }
     /// As `setAlign`.
     void setDivided(bool divided) override { static_cast<void>(divided); }
+    void setPadding(int padding) override { static_cast<void>(padding); }
     /// Its key, once the table was told it.
     [[nodiscard]] std::optional<ui::Key> const& key() const noexcept { return _key; }
     void setKey(ui::Key key);

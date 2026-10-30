@@ -310,7 +310,32 @@ void StepsImpl::setCurrent(std::optional<std::size_t> index) {
     refresh();
 }
 
+void StepsImpl::setLabelled(bool labelled) {
+    _labelled = labelled;
+    refresh();
+}
+
+namespace {
+
+// A step's mark, three cells wide.
+std::string_view stepMark(ui::StepState state) {
+    if (state == ui::StepState::Active) {
+        return "[>]";
+    }
+    if (state == ui::StepState::Done) {
+        return "[x]";
+    }
+    return state == ui::StepState::Failed ? "[!]" : "[ ]";
+}
+
+}  // namespace
+
 ::core::tui::Size StepsImpl::naturalSize() const {
+    if (!_labelled) {
+        // Three cells per mark and at least two of connector between neighbours.
+        auto const count = static_cast<int>(_steps.size());
+        return {.width = count == 0 ? 0 : count * 3 + (count - 1) * 2, .height = count == 0 ? 0 : 1};
+    }
     int widest = 0;
     for (auto const& step : _steps) {
         widest = std::max(widest, displayWidth(step.label) + 4);
@@ -324,6 +349,34 @@ std::string StepsImpl::probeText() const {
 
 void StepsImpl::paint(::core::tui::Canvas& canvas) {
     auto const& theme = canvas.theme();
+    if (!_labelled) {
+        // The marks in one row, the spare width shared among the connectors; a connector after a done step is
+        // accented.
+        auto const count = static_cast<int>(_steps.size());
+        if (count == 0 || canvas.height() < 1) {
+            return;
+        }
+        int const spare = std::max(canvas.width() - count * 3, 0);
+        int const gaps = std::max(count - 1, 1);
+        int column = 0;
+        for (int index = 0; index < count; ++index) {
+            auto const& step = _steps.at(static_cast<std::size_t>(index));
+            canvas.putString(0, column, std::string{stepMark(step.state)},
+                             stepStyle(theme, step.state, _current == static_cast<std::size_t>(index)));
+            column += 3;
+            if (index + 1 < count) {
+                int const length = spare / gaps + (index < spare % gaps ? 1 : 0);
+                std::string line;
+                for (int cell = 0; cell < length; ++cell) {
+                    line += "─";
+                }
+                canvas.putString(0, column, line,
+                                 step.state == ui::StepState::Done ? theme.textAccent : theme.textMuted);
+                column += length;
+            }
+        }
+        return;
+    }
     for (std::size_t index = 0; index < _steps.size() && static_cast<int>(index) < canvas.height(); ++index) {
         auto const& step = _steps.at(index);
         std::string_view mark = "[ ] ";

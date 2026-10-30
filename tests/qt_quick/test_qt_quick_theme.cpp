@@ -1339,7 +1339,8 @@ TEST_CASE("qt_quick theme: every built-in scheme sets every colour role MorphSch
     auto* const probe = made.value<QObject*>();
     REQUIRE(probe != nullptr);
     int roles = 0;
-    for (char const* const name : {"themeScheme", "pageScheme", "cardScheme", "sidebarScheme", "toolbarScheme"}) {
+    for (char const* const name :
+         {"themeScheme", "pageScheme", "cardScheme", "sidebarScheme", "toolbarScheme", "barScheme"}) {
         auto* const scheme = theme->property(name).value<QObject*>();
         REQUIRE(scheme != nullptr);
         QMetaObject const* const meta = probe->metaObject();
@@ -1354,8 +1355,8 @@ TEST_CASE("qt_quick theme: every built-in scheme sets every colour role MorphSch
                   probe->property(property.name()).value<QColor>());
         }
     }
-    // Five schemes, each with every role: more than the roles of any one.
-    CHECK(roles >= 5 * 35);
+    // Six schemes, each with every role: more than the roles of any one.
+    CHECK(roles >= 6 * 35);
 }
 
 namespace {

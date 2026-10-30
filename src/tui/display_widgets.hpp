@@ -135,12 +135,13 @@ private:
 };
 
 /// Steps: one row per step, its state as `[ ]` pending, `[>]` active, `[x]` done or `[!]` failed, the current one
-/// accented.
+/// accented. Unlabelled, the marks sit in one row joined by `─` that fills the width.
 class StepsImpl final : public TuiWidget<ui::StepsWidget> {
 public:
     explicit StepsImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
     void setSteps(std::vector<ui::Step> const& steps) override;
     void setCurrent(std::optional<std::size_t> index) override;
+    void setLabelled(bool labelled) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     /// The current step's label.
     [[nodiscard]] std::string probeText() const override;
@@ -149,6 +150,7 @@ public:
 private:
     std::vector<ui::Step> _steps;
     std::optional<std::size_t> _current;
+    bool _labelled = true;
 };
 
 /// Chart: points plotted in character cells. A gutter at the left holds the reference lines' labels when three or more

@@ -852,8 +852,9 @@ inline constexpr std::array<KeySpec, 14> kHeadToolKeys = {{{"id", Shape::Name, {
                                                            {"enabled", Shape::Condition}}};
 /// @brief The keys of `column` and `row`; `wrap` is a row's and `divided` a column's, each read on the other only to
 ///        refuse it.
-inline constexpr std::array<KeySpec, 6> kContainerKeys = {{{"children", Shape::Nodes},
+inline constexpr std::array<KeySpec, 7> kContainerKeys = {{{"children", Shape::Nodes},
                                                            {"gap", Shape::Expr},
+                                                           {"padding", Shape::Expr},
                                                            {"align", Shape::Text},
                                                            {"justify", Shape::Text},
                                                            {"wrap", Shape::Flag},
@@ -885,8 +886,10 @@ inline constexpr std::array<KeySpec, 3> kSwitchKeys = {
 inline constexpr std::array<KeySpec, 2> kCaseKeys = {
     {{"when", Shape::Expr, {}, kRequired}, {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `tabs`.
-inline constexpr std::array<KeySpec, 3> kTabsKeys = {
-    {{"tabs", Shape::Parts, "tab"}, {"selected", Shape::Expr}, {"onChoose", Shape::Commands}}};
+inline constexpr std::array<KeySpec, 4> kTabsKeys = {{{"tabs", Shape::Parts, "tab"},
+                                                      {"selected", Shape::Expr},
+                                                      {"onChoose", Shape::Commands},
+                                                      {"moreLabel", Shape::Expr}}};
 /// @brief The keys of a `tabs` page part.
 inline constexpr std::array<KeySpec, 3> kTabKeys = {
     {{"id", Shape::Name}, {"label", Shape::Expr}, {"children", Shape::Nodes}}};
@@ -1024,7 +1027,8 @@ inline constexpr std::array<KeySpec, 8> kBadgeKeys = {{{"tone", Shape::Expr},
 /// @brief The keys of `progress`.
 inline constexpr std::array<KeySpec, 2> kProgressKeys = {{{"value", Shape::Expr}, {"label", Shape::Expr}}};
 /// @brief The keys of `steps`.
-inline constexpr std::array<KeySpec, 2> kStepsKeys = {{{"items", Shape::Expr}, {"current", Shape::Expr}}};
+inline constexpr std::array<KeySpec, 3> kStepsKeys = {
+    {{"items", Shape::Expr}, {"current", Shape::Expr}, {"labelled", Shape::Condition}}};
 /// @brief The keys of `keyValue`.
 inline constexpr std::array<KeySpec, 2> kKeyValueKeys = {{{"items", Shape::Expr}, {"fieldLayout", Shape::Text}}};
 /// @brief The keys of `emptyState`.

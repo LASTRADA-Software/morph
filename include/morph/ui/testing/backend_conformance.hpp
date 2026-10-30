@@ -1732,6 +1732,21 @@ private:
     return checks.result();
 }
 
+/// @brief Case: an unlabelled steps indicator still names its current step.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> unlabelledStepsNameTheirCurrentStep(ConformanceProbe& probe) {
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::steps({.items = std::vector<Step>{{.label = "Product", .state = StepState::Done},
+                                                             {.label = "Conditions", .state = StepState::Active}},
+                                  .current = std::optional<std::size_t>{1},
+                                  .labelled = false})};
+    probe.settle();
+    Checks checks;
+    checks.text("an unlabelled steps indicator", "Conditions", probe.textOf(view.root()));
+    return checks.result();
+}
+
 /// @brief Reads where the layout cases' widgets are drawn, and fails a case whose probe reads no geometry.
 class Geometry {
 public:
@@ -1823,6 +1838,38 @@ struct Measured {
     if (children.size() == 2) {
         geometry.near("the capped stretch child's width", 20, geometry.of(*children.at(0)).width);
         geometry.near("its stretch sibling's width", 40, geometry.of(*children.at(1)).width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a column's padding insets its children from every edge.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> paddingInsetsChildren(ConformanceProbe& probe) {
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        insideColumn(ui::column(Column{.children = {sizedText("a", {}), sizedText("b", {})}, .padding = 3}))};
+    Mounted const bare{probe.runtime(), probe.backend(),
+                       insideColumn(ui::column(Column{.children = {sizedText("a", {}), sizedText("b", {})}}))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const padded = measured(probe, view);
+    Measured const plain = measured(probe, bare);
+    checks.that(padded.children.size() == 2 && plain.children.size() == 2 && padded.container != nullptr &&
+                    plain.container != nullptr,
+                "both columns hold two children");
+    if (padded.children.size() == 2 && plain.children.size() == 2 && padded.container != nullptr &&
+        plain.container != nullptr) {
+        WidgetBounds const box = geometry.of(*padded.container);
+        WidgetBounds const first = geometry.of(*padded.children.at(0));
+        WidgetBounds const bareBox = geometry.of(*plain.container);
+        WidgetBounds const bareFirst = geometry.of(*plain.children.at(0));
+        checks.that(first.x > box.x, "a padded column's child starts inside its left edge");
+        checks.that(bareFirst.x == bareBox.x, "an unpadded column's child starts at its left edge");
+        checks.that(bareFirst.y == bareBox.y, "an unpadded column's child starts at its top edge");
+        checks.that(first.x + first.width < box.x + box.width, "a padded column's child ends inside its right edge");
+        checks.that(box.height > bareBox.height, "a padded column is taller than the same column unpadded");
     }
     return checks.result();
 }
@@ -3024,7 +3071,7 @@ struct WrappingRow {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 24> const cases{{
+    static std::array<ConformanceCase, 25> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3062,6 +3109,7 @@ struct WrappingRow {
          .run = detail::smallButtonIsNarrower},
         {.name = "a column with wrap: false keeps its cells to one line",
          .run = detail::noWrapColumnKeepsCellsToOneLine},
+        {.name = "a column's padding insets its children", .run = detail::paddingInsetsChildren},
     }};
     return cases;
 }
@@ -3072,7 +3120,7 @@ struct WrappingRow {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 54> const cases{{
+    static std::array<ConformanceCase, 55> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -3152,6 +3200,8 @@ struct WrappingRow {
          .run = detail::segmentedSelectTakesArrows},
         {.name = "a list entry's content is the entry's: one click, wherever it lands",
          .run = detail::entryContentIsTheEntrys},
+        {.name = "an unlabelled steps indicator still names its current step",
+         .run = detail::unlabelledStepsNameTheirCurrentStep},
     }};
     return cases;
 }

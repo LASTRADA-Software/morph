@@ -734,6 +734,8 @@ struct Column {
     /// @brief Whether a 1 px rule in the theme's divider colour is drawn between each two shown children, centred in
     ///        the gap; set once. The terminal draws none.
     bool divided = false;
+    /// @brief The inset of the children from every edge: a spacing step, 0 to `kMaxSpacingStep`; set once.
+    int padding = 0;
 };
 
 /// @brief Children laid out left to right.
@@ -760,6 +762,8 @@ struct Row {
     /// @brief Whether children that do not fit on one line continue on the next, as a flex row with `wrap` does;
     ///        set once. A table row never wraps.
     bool wrap = false;
+    /// @brief The inset of the children from every edge: a spacing step, 0 to `kMaxSpacingStep`; set once.
+    int padding = 0;
 };
 
 /// @brief One cell of a `Grid`.
@@ -871,6 +875,8 @@ struct Tabs {
     Prop<std::size_t> selected;
     /// @brief Called with the index the user picked, and with the page still shown when a picked page fails to mount.
     std::function<void(std::size_t)> onSelect;
+    /// @brief The label of the menu that holds the tabs that do not fit in the bar, where a frontend has one.
+    Prop<std::string> moreLabel = std::string{"More"};
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };
@@ -1273,6 +1279,9 @@ struct Steps {
     Prop<std::vector<Step>> items;
     /// @brief The step to highlight, by position; `nullopt` or a position past the last highlights none.
     Prop<std::optional<std::size_t>> current;
+    /// @brief Whether the indicator draws the steps' labels; unlabelled, it draws only the marks and connectors, and
+    ///        each step keeps its label as its accessible name.
+    Prop<bool> labelled = true;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };

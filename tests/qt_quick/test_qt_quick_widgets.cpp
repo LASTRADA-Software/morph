@@ -18,6 +18,7 @@
 #include <QPointF>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QQmlProperty>
 #include <QQuickItem>
 #include <QString>
 #include <QStringList>
@@ -26,6 +27,7 @@
 #include <QVariant>
 #include <QVariantList>
 #include <QtLogging>
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cmath>
@@ -1635,4 +1637,113 @@ TEST_CASE("qt_quick widgets: a date input with a pattern shows, reads and picks 
     REQUIRE(changes.size() == 2);
     CHECK(base(*input).shownText() == "26-Oct-2026 10:00");
     CHECK(changes.back()->value->toIso8601() == "2026-10-26T10:00:00.000Z");
+}
+
+namespace {
+
+// The items named @p name below @p root in the visual tree, in the order the model made them, left to right.
+void collectNamed(QQuickItem& item, QString const& name, QList<QQuickItem*>& found) {
+    for (QQuickItem* const child : item.childItems()) {
+        if (child->objectName() == name && child->isVisible()) {
+            found.append(child);
+        }
+        collectNamed(*child, name, found);
+    }
+}
+
+QList<QQuickItem*> namedItems(QQuickItem& root, char const* name) {
+    QList<QQuickItem*> found;
+    collectNamed(root, QString::fromUtf8(name), found);
+    std::ranges::sort(found, [](QQuickItem const* left, QQuickItem const* right) {
+        return left->mapToScene(QPointF{}).x() < right->mapToScene(QPointF{}).x();
+    });
+    return found;
+}
+
+QColor colorOf(QObject& item, char const* property) {
+    return QQmlProperty{&item, QString::fromUtf8(property)}.read().value<QColor>();
+}
+
+}  // namespace
+
+TEST_CASE("qt_quick widgets: steps are numbered circles joined by connectors that share the width", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 200);
+    auto steps = scene.backend().createSteps(nullptr);
+    steps->setSteps({{.label = "Product", .state = ui::StepState::Done},
+                     {.label = "Conditions", .state = ui::StepState::Active},
+                     {.label = "Tests", .state = ui::StepState::Pending},
+                     {.label = "Review", .state = ui::StepState::Pending}});
+    steps->setCurrent(1);
+    steps->setLabelled(false);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QColor const accent = theme->property("accent").value<QColor>();
+    QColor const controlBorder = theme->property("controlBorder").value<QColor>();
+    QQuickItem& indicator = Scene::itemOf(*steps);
+
+    auto const circles = namedItems(indicator, "circle");
+    REQUIRE(circles.size() == 4);
+    int filled = 0;
+    int accentOutlined = 0;
+    int plainOutlined = 0;
+    for (QQuickItem* const circle : circles) {
+        if (colorOf(*circle, "color") == accent) {
+            ++filled;
+        }
+        QColor const outline = colorOf(*circle, "border.color");
+        accentOutlined += outline == accent ? 1 : 0;
+        plainOutlined += outline == controlBorder ? 1 : 0;
+    }
+    // The done circle is filled and outlined in the accent; the current one is outlined in it with an empty fill.
+    CHECK(filled == 1);
+    CHECK(accentOutlined == 2);
+    CHECK(plainOutlined == 2);
+    auto const marks = namedItems(indicator, "mark");
+    REQUIRE(marks.size() == 4);
+    CHECK(marks.at(1)->property("text").toString() == QStringLiteral("2"));
+    CHECK(colorOf(*marks.at(1), "color") == accent);
+    CHECK(marks.at(0)->property("text").toString() == QStringLiteral("✓"));
+
+    auto const connectors = namedItems(indicator, "connector");
+    REQUIRE(connectors.size() == 3);
+    CHECK(connectors.at(0)->width() > 0);
+    CHECK(std::abs(connectors.at(0)->width() - connectors.at(1)->width()) <= 1.0);
+    CHECK(std::abs(connectors.at(1)->width() - connectors.at(2)->width()) <= 1.0);
+    CHECK(colorOf(*connectors.at(0), "color") == accent);
+    CHECK(colorOf(*connectors.at(1), "color") == controlBorder);
+    // The connectors take the spare width, so the last circle ends where the indicator does.
+    QQuickItem const& last = *circles.back();
+    double const lastRight = last.mapToItem(&indicator, QPointF{last.width(), 0}).x();
+    CHECK(std::abs(lastRight - indicator.width()) < 1.0);
+}
+
+TEST_CASE("qt_quick widgets: an unlabelled steps indicator names each step by its label and state", "[qt_quick]") {
+    Scene scene;
+    auto steps = scene.backend().createSteps(nullptr);
+    steps->setSteps({{.label = "Product", .state = ui::StepState::Done},
+                     {.label = "Conditions", .state = ui::StepState::Active},
+                     {.label = "Tests", .state = ui::StepState::Pending}});
+    steps->setCurrent(1);
+    steps->setLabelled(false);
+    scene.settle();
+    auto const cells = namedItems(Scene::itemOf(*steps), "step");
+    REQUIRE(cells.size() == 3);
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface const* const done = QAccessible::queryAccessibleInterface(cells.at(0));
+    QAccessibleInterface const* const current = QAccessible::queryAccessibleInterface(cells.at(1));
+    QAccessibleInterface const* const upcoming = QAccessible::queryAccessibleInterface(cells.at(2));
+    REQUIRE(done != nullptr);
+    REQUIRE(current != nullptr);
+    REQUIRE(upcoming != nullptr);
+    CHECK(done->text(QAccessible::Name) == QStringLiteral("Product, done"));
+    CHECK(current->text(QAccessible::Name) == QStringLiteral("Conditions, current"));
+    CHECK(upcoming->text(QAccessible::Name) == QStringLiteral("Tests"));
+    QAccessibleInterface const* const list = QAccessible::queryAccessibleInterface(&Scene::itemOf(*steps));
+    REQUIRE(list != nullptr);
+    CHECK(list->text(QAccessible::Name) == QStringLiteral("Conditions"));
+    CHECK(list->role() == QAccessible::List);
+    QAccessible::setActive(wasActive);
 }

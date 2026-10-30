@@ -41,6 +41,8 @@ void StackImpl::setWrap(bool wrap) {
 
 void StackImpl::setDivided(bool divided) { write("divided", divided); }
 
+void StackImpl::setPadding(int padding) { write("padding", padding); }
+
 namespace {
 
 // Has the container's `place` run again whenever a cell's implicit size or visibility changes. The container's item is
@@ -180,6 +182,8 @@ void TabsImpl::setOnSelect(std::function<void(std::size_t)> onSelect) {
 }
 
 void TabsImpl::setBarShown(bool shown) { write("barShown", shown); }
+
+void TabsImpl::setMoreLabel(std::string_view label) { write("moreLabel", toQString(label)); }
 
 void SlotImpl::setScrollable(bool scrollable) { write("scrollable", scrollable); }
 

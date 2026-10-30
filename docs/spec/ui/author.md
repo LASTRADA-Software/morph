@@ -148,12 +148,19 @@ takes its series as `ChartSeries{label, points, y, x, xLabel, tone, note, joined
 `PointExpression`, a function from the point's element (`row()`) to an expression, and its lines as
 `ReferenceLine{value, label, tone, style}` with a `LineStyle`. Children come first, as a `Nodes` list (`{a, b}`, or one node),
 options second. `tabs(tabs, TabsOptions{.selected, .onChoose})` takes `Tab{id, label, children}` pages.
-`pinned(content, PinnedOptions{.top, .bottom})` writes the bar-that-stays-in-view idiom: a column sized to stretch
-both ways holding `top`, a vertical `scroll` sized to stretch both ways around `content`, and `bottom`.
+`pinned(content, PinnedOptions{.top, .bottom, .surface})` writes the bar-that-stays-in-view idiom: a `divided` column
+sized to stretch both ways holding the top bar, a vertical `scroll` sized to stretch both ways around `content`, and
+the bottom bar. A bar is a `column` of its list with `padding: 2` on `surface` (default the built-in `bar`; an empty
+`surface` writes the column with none); an empty list leaves its bar out.
 `stepper(StepperOptions{.step, .steps, .backLabel, .continueLabel, .finishLabel, .onFinish, .extra, .labelled,
-.testIdPrefix})` writes a wizard over screen state, with no node of its own: a column of a `steps` indicator built from
-the steps' labels and `step`, a `switch` on `step` with one case per step, and a footer row of Back, a spacer, `extra`
-and Continue. Each `StepperStep{label, children, canContinue, blocking, onBlocked}` gives what Continue does there:
+.continueStretches, .testIdPrefix})` writes a wizard over screen state, with no node of its own: a column of a `steps`
+indicator built from the steps' labels and `step`, a `switch` on `step` with one case per step, and a footer row of
+Back, a spacer, `extra` and Continue. `labelled` is a condition (absent: labelled); unlabelled, the steps keep their
+labels and the indicator draws only the marks. `continueStretches` drops the spacer and lets Continue take the
+footer's spare width. `stepperParts(options)` returns the same three nodes as `StepperParts{indicator, body, footer}`,
+for a screen that places them itself, such as in `pinned`'s bars; `stepper` is the column of them. Each
+`StepperStep{label, children, canContinue, blocking, onBlocked, continueLabel}` (`continueLabel`: Continue's text
+while that step is current, else `continueLabel` of the options, or `finishLabel` on the last) gives what Continue does there:
 while `canContinue` holds (absent: always), it sets `step` one on, or runs `onFinish` on the last step; otherwise it
 runs `onBlocked` and focuses `blocking`, which may be declared in the step's own case. On a step that cannot
 continue and names no `blocking` element, Continue is disabled, since a click would do nothing. Continue's commands are one
@@ -198,7 +205,7 @@ expression of one),
 - **`textInput`** takes `TextInputOptions{value, label, placeholder, mode, icon, unit, emphasis, prefix, mono, align,
   commitOn, onChange, onCommit, onSubmit}`; `prefix` is an expression, and `mono` and `align` (`Align::Start`,
   `Center`, `End`; absent writes no key) are written only when given.
-- **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, columns, tracks, align, justify, wrap, divided}`; an
+- **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, padding (a column or row), columns, tracks, align, justify, wrap, divided}`; an
   absent `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` and `tracks`
   (`GridTrack{width, align}`, each key written only when given) are the grid's, and
   a grid's `justify` is written so the loader refuses it rather than dropped. `wrap` is a row's: the children

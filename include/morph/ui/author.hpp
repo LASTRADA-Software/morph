@@ -3813,6 +3813,9 @@ struct ContainerOptions {
     /// @brief Whether a column draws a rule between its children. Only a `column` has it; the loader refuses it on a
     ///        `row`.
     bool divided = false;
+    /// @brief The inset of the children from every edge of a `column` or `row`: a spacing step, 0 to
+    ///        `kMaxSpacingStep`. Not on a grid.
+    AnyHandle padding;
 };
 
 namespace detail {
@@ -3824,7 +3827,7 @@ namespace detail {
 /// @return The node.
 [[nodiscard]] inline Node stackNode(char const* kind, Nodes const& children, ContainerOptions const& options) {
     NodeWriter node{kind};
-    node.put("children", children).put("gap", options.gap);
+    node.put("children", children).put("gap", options.gap).put("padding", options.padding);
     if (options.align) {
         node.text("align", alignName(*options.align));
     }
@@ -3970,28 +3973,35 @@ struct PinnedOptions {
     Nodes top;
     /// @brief The nodes below the content, which stay at the bottom, such as a bar of actions; none when empty.
     Nodes bottom;
+    /// @brief The surface each bar is drawn on; empty draws the bars on the surface around them.
+    std::string surface = "bar";
 };
 
-/// @brief Content that scrolls between bars that stay in view: a column that stretches both ways, holding `top`, a
-///        vertical `scroll` that stretches in height around @p content, and `bottom`. The scroll takes the column's
-///        spare height, so the bars stay at the column's ends however long the content is. Use it as a screen's root,
-///        which the workspace then lets fill the page.
+/// @brief Content that scrolls between bars that stay in view: a divided column that stretches both ways, holding the
+///        top bar, a vertical `scroll` that stretches in height around @p content, and the bottom bar. A bar is a
+///        `column` of its nodes inset by a spacing step of 2, drawn on `PinnedOptions::surface` (the built-in `bar`:
+///        the theme's surface colour with no border), so a rule separates it from the content; an empty list leaves
+///        its bar out. The scroll takes the column's spare height, so the bars stay at the column's ends however
+///        long the content is. Use it as a screen's root, which the workspace then lets fill the page.
 /// @param content The content that scrolls.
 /// @param options The bars.
 /// @return The column.
 [[nodiscard]] inline Node pinned(Nodes const& content, PinnedOptions const& options = {}) {
     std::vector<Node> children;
-    Json const top = options.top.json();
-    Json const bottom = options.bottom.json();
-    // Each bar node carries its list's catalog facts, so the column names every model and action they do.
-    for (Json const& node : std::get<Json::array_t>(top.data)) {
-        children.emplace_back(node, options.top.facts());
+    // Each bar carries its list's catalog facts, so the column names every model and action it does.
+    auto const bar = [&options](Nodes const& nodes) {
+        Node const node = column(nodes, {.padding = 2});
+        return options.surface.empty() ? node : node.surface(options.surface);
+    };
+    auto const present = [](Nodes const& nodes) { return !std::get<Json::array_t>(nodes.json().data).empty(); };
+    if (present(options.top)) {
+        children.push_back(bar(options.top));
     }
     children.push_back(scroll(content).sizing(stretch(), stretch()));
-    for (Json const& node : std::get<Json::array_t>(bottom.data)) {
-        children.emplace_back(node, options.bottom.facts());
+    if (present(options.bottom)) {
+        children.push_back(bar(options.bottom));
     }
-    return column(Nodes{children}).sizing(stretch(), stretch());
+    return column(Nodes{children}, {.divided = true}).sizing(stretch(), stretch());
 }
 
 /// @brief A scope's builder: declares on the scope and returns the nodes that read it.
@@ -4071,6 +4081,8 @@ struct TabsOptions {
     AnyHandle selected;
     /// @brief Commands run when the user picks a tab, with the tab's id as `event`.
     Commands onChoose;
+    /// @brief The label of the menu that holds the tabs that do not fit in the bar; absent: `More`.
+    AnyHandle moreLabel;
 };
 
 /// @brief A `tabs` node.
@@ -4094,6 +4106,7 @@ struct TabsOptions {
     return node.raw("tabs", std::move(parts))
         .put("selected", options.selected)
         .put("onChoose", options.onChoose)
+        .put("moreLabel", options.moreLabel)
         .done();
 }
 
@@ -4744,11 +4757,14 @@ struct BadgeOptions {
 }
 
 /// @brief A `steps` node.
-/// @param items   The steps, `[{label, state}]`.
-/// @param current The current step.
+/// @param items    The steps, `[{label, state}]`.
+/// @param current  The current step.
+/// @param labelled Whether the labels are drawn, a condition; absent draws them. Unlabelled, the steps still carry
+///                 their labels as accessible names.
 /// @return The node.
-[[nodiscard]] inline Node steps(AnyHandle const& items, AnyHandle const& current = {}) {
-    return detail::NodeWriter{"steps"}.put("items", items).put("current", current).done();
+[[nodiscard]] inline Node steps(AnyHandle const& items, AnyHandle const& current = {},
+                                AnyHandle const& labelled = {}) {
+    return detail::NodeWriter{"steps"}.put("items", items).put("current", current).put("labelled", labelled).done();
 }
 
 /// @brief One step of a `stepper`.
@@ -4764,6 +4780,9 @@ struct StepperStep {
     std::optional<Element> blocking;
     /// @brief Commands Continue runs while the step cannot continue, before it focuses `blocking`.
     Commands onBlocked;
+    /// @brief Continue's text while this step is the current one; absent, the options' `continueLabel`, or
+    ///        `finishLabel` on the last step.
+    std::optional<std::string> continueLabel;
 };
 
 /// @brief Options of a `stepper`.
@@ -4782,22 +4801,34 @@ struct StepperOptions {
     Commands onFinish;
     /// @brief Footer nodes between Back and Continue, such as a Save draft button.
     Nodes extra;
-    /// @brief Whether the indicator shows the steps' labels, or only their marks.
-    bool labelled = true;
+    /// @brief Whether the indicator shows the steps' labels, or only their marks, a condition; absent shows them.
+    AnyHandle labelled;
+    /// @brief Whether Continue stretches to the footer's spare width, with no spacer before the extra nodes.
+    bool continueStretches = false;
     /// @brief When given, the indicator, Back and Continue take the test ids `<prefix>steps`, `<prefix>back` and
     ///        `<prefix>continue`; an empty prefix gives `steps`, `back` and `continue`.
     std::optional<std::string> testIdPrefix;
 };
 
-/// @brief A wizard over screen state: a `column` of a `steps` indicator, a `switch` on `step` with one case per step,
-///        and a footer row of Back, a spacer, `extra` and Continue. Back moves one step back and is disabled on the
-///        first; Continue moves one step on, or runs `onFinish` on the last, while the step's `canContinue` holds,
-///        and otherwise runs its `onBlocked` and focuses its `blocking` element. On a step that cannot continue and
-///        has no `blocking` element, Continue is disabled. Every part is a node of ui/1; the
-///        helper writes the JSON a screen would write by hand.
+/// @brief The parts of a `stepper`, for a screen that places them itself, such as in the bars of `pinned`.
+struct StepperParts {
+    /// @brief The `steps` indicator.
+    Node indicator;
+    /// @brief The `switch` on the step, one case per step.
+    Node body;
+    /// @brief The footer row: Back, a spacer unless Continue stretches, the extra nodes and Continue.
+    Node footer;
+};
+
+/// @brief The parts of a wizard over screen state: a `steps` indicator built from the steps' labels and `step`, a
+///        `switch` on `step` with one case per step, and a footer row of Back, a spacer, `extra` and Continue. Back
+///        moves one step back and is disabled on the first; Continue moves one step on, or runs `onFinish` on the
+///        last, while the step's `canContinue` holds, and otherwise runs its `onBlocked` and focuses its `blocking`
+///        element. On a step that cannot continue and has no `blocking` element, Continue is disabled. Every part is
+///        a node of ui/1; the helper writes the JSON a screen would write by hand.
 /// @param options The step state, the steps and the footer.
-/// @return The column.
-[[nodiscard]] inline Node stepper(StepperOptions const& options) {
+/// @return The three parts.
+[[nodiscard]] inline StepperParts stepperParts(StepperOptions const& options) {
     using Label = Handle<std::string>;
     std::vector<AnyHandle> items;
     std::vector<Case> cases;
@@ -4806,11 +4837,13 @@ struct StepperOptions {
     std::optional<Handle<bool>> enabled;
     auto const last = static_cast<std::int64_t>(options.steps.size()) - 1;
     std::int64_t index = 0;
+    bool anyContinueLabel = false;
     for (StepperStep const& step : options.steps) {
         Label const state = cond(options.step > index, Label{"done"},
                                  cond(eq(options.step, index), Label{"active"}, Label{"pending"}));
-        items.push_back(obj({{"label", options.labelled ? step.label : std::string{}}, {"state", state}}));
+        items.push_back(obj({{"label", step.label}, {"state", state}}));
         cases.emplace_back(AnyHandle{index}, step.children);
+        anyContinueLabel = anyContinueLabel || step.continueLabel.has_value();
         Commands const moveOn = index == last ? options.onFinish : Commands{set(options.step, options.step + 1)};
         Commands blocked;
         if (step.blocking && !step.onBlocked.empty()) {
@@ -4839,23 +4872,45 @@ struct StepperOptions {
         continueCommands =
             Commands{ifThen(eq(options.step, at), onSteps.at(static_cast<std::size_t>(at)), continueCommands)};
     }
-    std::vector<Node> footer{
-        withId(button({.label = options.backLabel, .onClick = set(options.step, options.step - 1)})
-                   .enabled(options.step > 0),
-               "back"),
-        spacer().sizing(stretch())};
+    std::vector<Node> footer{withId(
+        button({.label = options.backLabel, .onClick = set(options.step, options.step - 1)}).enabled(options.step > 0),
+        "back")};
+    if (!options.continueStretches) {
+        footer.push_back(spacer().sizing(stretch()));
+    }
     Json const extra = options.extra.json();
     for (Json const& node : std::get<Json::array_t>(extra.data)) {
         footer.emplace_back(node, options.extra.facts());
     }
-    Node const next =
-        button({.label = cond(eq(options.step, last), Label{options.finishLabel}, Label{options.continueLabel}),
-                .emphasis = ButtonEmphasis::Primary,
-                .onClick = continueCommands});
+    // Continue's text: the last step's finish text, else the step's own, else the shared one.
+    Label continueText = cond(eq(options.step, last), Label{options.finishLabel}, Label{options.continueLabel});
+    if (anyContinueLabel) {
+        auto const textOf = [&](std::int64_t at) {
+            auto const& own = options.steps.at(static_cast<std::size_t>(at)).continueLabel;
+            return own ? *own : at == last ? options.finishLabel : options.continueLabel;
+        };
+        continueText = Label{textOf(last)};
+        for (auto at = last - 1; at >= 0; --at) {
+            continueText = cond(eq(options.step, at), Label{textOf(at)}, continueText);
+        }
+    }
+    Node next = button({.label = continueText, .emphasis = ButtonEmphasis::Primary, .onClick = continueCommands});
+    if (options.continueStretches) {
+        next = next.sizing(stretch(), content());
+    }
     footer.push_back(withId(enabled ? next.enabled(*enabled) : next, "continue"));
-    return column({withId(steps(list(items), options.step), "steps"), switchOn(options.step, cases),
-                   row(Nodes{footer}, {.gap = 1})},
-                  {.gap = 2});
+    return {.indicator = withId(steps(list(items), options.step, options.labelled), "steps"),
+            .body = switchOn(options.step, cases),
+            .footer = row(Nodes{footer}, {.gap = 1})};
+}
+
+/// @brief A wizard over screen state: a `column` of the parts of `stepperParts`, the indicator, the step's body and
+///        the footer.
+/// @param options The step state, the steps and the footer.
+/// @return The column.
+[[nodiscard]] inline Node stepper(StepperOptions const& options) {
+    StepperParts const parts = stepperParts(options);
+    return column({parts.indicator, parts.body, parts.footer}, {.gap = 2});
 }
 
 /// @brief An expression read once per point of a chart's series, from the point's element (`{"row": ""}`).

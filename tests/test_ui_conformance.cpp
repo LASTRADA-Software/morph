@@ -145,6 +145,9 @@ public:
         if (kind == "Chart") {
             return unescape(_backend.prop(widgetId, "summary"));
         }
+        if (kind == "Steps") {
+            return currentStepLabel(widgetId);
+        }
         return unescape(
             _backend.prop(widgetId, kind == "Button" || kind == "Checkbox" || kind == "Menu" ? "label" : "text"));
     }
@@ -296,6 +299,22 @@ private:
         return index < labels.size() ? unescape(labels.at(index)) : std::string{};
     }
 
+    // The label of a steps indicator's current step: the entries read `label:State`.
+    [[nodiscard]] std::string currentStepLabel(int stepsId) const {
+        std::string const current = _backend.prop(stepsId, "current");
+        std::size_t index = 0;
+        char const* const first = current.data();
+        if (std::from_chars(first, std::next(first, std::ssize(current)), index).ec != std::errc{}) {
+            return {};
+        }
+        std::vector<std::string> const entries = listItems(_backend.prop(stepsId, "steps"));
+        if (index >= entries.size()) {
+            return {};
+        }
+        std::string const& entry = entries.at(index);
+        return unescape(entry.substr(0, entry.rfind(':')));
+    }
+
     Fault _fault;
     morph::testing::StepExecutor _owner;
     morph::testing::EchoingBackend _echoing;
@@ -353,7 +372,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 54);
+    REQUIRE(cases.size() == 55);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);

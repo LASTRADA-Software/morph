@@ -287,13 +287,13 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)`; a dropdown's list opens under the field, at the field's start when it fits in the window, else ending at the field's end, and always inside the window | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
 | `MenuWidget` | `setItems(entries)`, `setTrigger(MenuTrigger{label, icon, emphasis})` (a button-style menu's); a popup opens under its control, at the control's start when it fits in the window, else ending at the control's end, and always inside the window | `setOnActivate(path)` |
-| `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)`, `setWrap(bool)`, `setDivided(bool)` | — |
+| `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)`, `setWrap(bool)`, `setDivided(bool)`, `setPadding(int)` (once, before any child, only for a padded stack; the stack's natural size includes the inset) | — |
 | `GridWidget` | `setColumns` (at least one), `setTracks(tracks)` (at least one, in place of `setColumns`), `setGap`, `setSpan(child, span)`, `setAlign(Align)` | — |
 | `SpacerWidget` | — | — |
 | `PanelWidget` | `setTitle`, `setHeader(Widget&)` (shown beside the title, called at most once), `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
 | `ScrollWidget` | — | — |
 | `SlotWidget` | `setScrollable(scrollable)` (a new slot does not scroll) | — |
-| `TabsWidget` | `setTabs(labels)` (may be called again; a call with the same number of labels replaces the captions and keeps the highlight, the shown page and the keyboard focus), `setSelected(index)` (past the last highlights none), `setBarShown(shown)` (whether the strip of tab buttons is drawn; the selected page shows either way, and a new tabs widget shows its strip) | `setOnSelect(index)` |
+| `TabsWidget` | `setTabs(labels)` (may be called again; a call with the same number of labels replaces the captions and keeps the highlight, the shown page and the keyboard focus), `setSelected(index)` (past the last highlights none), `setBarShown(shown)` (whether the strip of tab buttons is drawn; the selected page shows either way, and a new tabs widget shows its strip), `setMoreLabel(label)` (the label of the menu that holds the tabs that do not fit in the bar; a frontend that does not draw one stores it) | `setOnSelect(index)` |
 | `DialogWidget` | `setOpen`, `setTitle`, `setDescription` (a line under the title in the head, not scrolled with the content, and the overlay's accessible description), `footer()`, `setSheet`, `setDismissLabel` (called only when the document binds or sets them) | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `ToastWidget` | `show(text, tone)` (one call: shows the message and restarts the dismiss interval regardless of whether the toast is already on-screen) | — |
 | `BusyWidget` | `setActive`, `setLabel` | — |
@@ -304,7 +304,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `BannerWidget` | `setTone`, `setText`, `setSpans`, `setActionLabel`, `setDismissible` (once) | `setOnAction`, `setOnDismiss` |
 | `BadgeWidget` | `setTone`, `setText`, `setIcon` (once), `setStyle` (once, only for `Outline`), `setShape` (once, only for `Round`), `setMono` (once, only for `true`) | `setOnRemove(onRemove, label)`: only for a removable badge, which then draws a remove control after its text (the framework icon `close`) named `label`, and takes the focus; Delete, Backspace, Enter or Space on it, or a click on its control, calls `onRemove`. A badge without it takes no focus |
 | `ProgressWidget` | `setValue(optional<double>)`, `setLabel` | — |
-| `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)` | — |
+| `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)`, `setLabelled(bool)` (pure; the mount calls it only when the document gives `labelled`) | — |
 | `KeyValueWidget` | `setItems(vector<KeyValueItem>)`, `setCaptionPlacement` (once, only for `Above`) | — |
 | `EmptyStateWidget` | `setTitle`, `setText`, `setIcon` (once), `setActionLabel` | `setOnAction` |
 | `ChartWidget` | `setData(ChartData)`, at mount and on every change (`view_tree.md`, Chart data); it takes no focus | — |
@@ -404,7 +404,7 @@ The headless reference backend and the test double for everything above the cont
   `a11yRole`, `testId`, `tooltip`, `surface` and `keys` when their setters run; text and the six
   inputs record `readonly`, `required`, `errors`, `stale`, `description` and `tone`; and each kind its own: `text`, `spans`, `role` (Text); `label`, `emphasis`, `icon`, `style`, `selected` (Button); `mode`, `text`, `placeholder`,
   `unit`, `decimals`, `icon`, `emphasis`, `caption`, `captionShown` (TextInput); `label`, `checked` (Checkbox); `style` (`Dropdown`, `Radio` or `Segmented`), `options`, `selected` (Select, where
-  `selected` is the option it marks, else `none`); `items` (Menu, as below), and a button-style menu's `style=Button` (at creation), `label`, `icon` and `emphasis`; `gap`, `align`, `justify` (Column, Row); `columns`,
+  `selected` is the option it marks, else `none`); `items` (Menu, as below), and a button-style menu's `style=Button` (at creation), `label`, `icon` and `emphasis`; `gap`, `align`, `justify`, `padding` (Column, Row); `columns`,
   `tracks` (each width, then `;align=` where it is not `start`), `gap`, `align`, and `span` on a child (Grid); `title`, `padding`, `collapsible`, `collapsed` (Panel);
   `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title`, `description` (Dialog); `active`, `label` (Busy);
   `columns` (each `label:width`, then `;align=` and `;valign=` for a place other than the default),

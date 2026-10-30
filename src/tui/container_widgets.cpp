@@ -31,6 +31,12 @@ void StackImpl::setGap(int gap) {
     refresh();
 }
 
+void StackImpl::setPadding(int padding) {
+    _paddingRows = layout::stepCells(padding, ui::Axis::Vertical);
+    _paddingColumns = layout::stepCells(padding, ui::Axis::Horizontal);
+    refresh();
+}
+
 void StackImpl::setWrap(bool wrap) {
     _wrap = wrap;
     refresh();
@@ -77,6 +83,11 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
 }
 
 ::core::tui::Size StackImpl::naturalSize() const {
+    auto const inner = innerNaturalSize();
+    return {.width = inner.width + (2 * _paddingColumns), .height = inner.height + (2 * _paddingRows)};
+}
+
+::core::tui::Size StackImpl::innerNaturalSize() const {
     if (_wrap && _axis == ui::Axis::Horizontal && _extents.empty()) {
         // One line is the natural width; the height is that of the lines at the width the row was last drawn at.
         auto const oneLine = stackNaturalSize(children(), _axis, _gap);
@@ -105,6 +116,17 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
 }
 
 std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) const {
+    auto const inside =
+        layout::pad({.x = 0, .y = 0, .width = size.width, .height = size.height}, _paddingRows, _paddingColumns);
+    auto areas = innerAreas({.width = inside.width, .height = inside.height});
+    for (auto& area : areas) {
+        area.x += inside.x;
+        area.y += inside.y;
+    }
+    return areas;
+}
+
+std::vector<::core::tui::Rect> StackImpl::innerAreas(::core::tui::Size size) const {
     if (_wrap && _axis == ui::Axis::Horizontal && _extents.empty()) {
         WrappedLines const lines = wrappedLines(size.width);
         int const rowGap = layout::stepCells(_gapStep, ui::Axis::Vertical);
@@ -146,9 +168,10 @@ std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) con
 }
 
 void StackImpl::paint(::core::tui::Canvas& canvas) {
-    if (_wrap && canvas.size().width != _drawnWidth) {
+    int const innerWidth = std::max(canvas.size().width - (2 * _paddingColumns), 0);
+    if (_wrap && innerWidth != _drawnWidth) {
         // The row's height follows its width, so its container lays it out again at the next frame.
-        _drawnWidth = canvas.size().width;
+        _drawnWidth = innerWidth;
         refresh();
     }
     placeChildren(childAreas(canvas.size()));
@@ -477,14 +500,16 @@ std::vector<::core::tui::Rect> PanelImpl::childAreas(::core::tui::Size size) con
 void PanelImpl::paint(::core::tui::Canvas& canvas) {
     auto const& theme = canvas.theme();
     auto const& style = hasFocus() ? theme.buttonFocused : theme.textNormal;
+    // The title is bold, as a collapsible's is.
+    auto const& titleStyle = hasFocus() ? theme.buttonFocused : theme.textBold;
     if (_collapsed) {
-        canvas.putString(0, 0, heading(), style);
+        canvas.putString(0, 0, heading(), titleStyle);
         placeChildren(childAreas(canvas.size()));
         return;
     }
     canvas.drawBox(canvas.area(), ::core::tui::BorderStyle::Single, style);
     auto title = canvas.subcanvas({.x = 2, .y = 0, .width = std::max(0, canvas.width() - 4), .height = 1});
-    title.putString(0, 0, heading(), style);
+    title.putString(0, 0, heading(), titleStyle);
     placeChildren(childAreas(canvas.size()));
 }
 

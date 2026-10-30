@@ -11,6 +11,9 @@ MorphWidget {
     // 0 vertical, 1 horizontal; fixed at creation.
     property int axis: 0
     property int gap: 0
+    // A spacing step the children are inset by on every side.
+    property int padding: 0
+    readonly property real inset: Theme.spaceOf(root.padding)
     // Across the axis (a `ui::Align` index, which C++ also writes on each child as its `crossAlign`) and along it
     // (a `ui::Justify` index: 0 start, 1 center, 2 end, 3 between).
     property int align: 0
@@ -26,14 +29,17 @@ MorphWidget {
     // Under `between` the layout's spacing comes from the stack's length, so its implicit length along the axis would
     // feed that length back to a parent that sizes the stack from it, growing on every pass; the stack's own natural
     // length is the children's and the gaps' instead.
-    implicitWidth: root.wrap ? root.wrappedNaturalWidth
-                             : root.axis === 1 && root.between ? root.naturalLength : layout.implicitWidth
-    implicitHeight: root.wrap ? free.implicitHeight
-                              : root.axis === 0 && root.between ? root.naturalLength : layout.implicitHeight
+    implicitWidth: 2 * root.inset + (root.wrap ? root.wrappedNaturalWidth
+                                                : root.axis === 1 && root.between ? root.naturalLength
+                                                                                  : layout.implicitWidth)
+    implicitHeight: 2 * root.inset + (root.wrap ? free.implicitHeight
+                                                : root.axis === 0 && root.between ? root.naturalLength
+                                                                                  : layout.implicitHeight)
 
     onWidthChanged: place()
     onWrapChanged: place()
     onGapChanged: place()
+    onPaddingChanged: place()
     onAlignChanged: place()
     onJustifyChanged: place()
 
@@ -77,7 +83,7 @@ MorphWidget {
         if (count < 2)
             return root.gapLength
         const used = root.shownLengths.reduce((sum, length) => sum + length, 0)
-        const length = root.axis === 0 ? root.height : root.width
+        const length = (root.axis === 0 ? root.height : root.width) - 2 * root.inset
         return Math.max(root.gapLength, (length - used) / (count - 1))
     }
 
@@ -147,7 +153,7 @@ MorphWidget {
 
     // The same, at most the row's width.
     function basisOf(cell: Item): real {
-        return Math.min(root.naturalBasisOf(cell), root.width)
+        return Math.min(root.naturalBasisOf(cell), root.width - 2 * root.inset)
     }
 
     // Lays a wrapping row out: children fill lines in order, a child starting a new line when its basis, and a gap,
@@ -160,6 +166,7 @@ MorphWidget {
         if (!root.wrap)
             return
         const space = Theme.spaceOf(root.gap)
+        const lineWidth = root.width - 2 * root.inset
         const cells = []
         for (let i = 0; i < free.children.length; ++i) {
             const cell = free.children[i]
@@ -168,7 +175,7 @@ MorphWidget {
             const basis = root.basisOf(cell)
             cells.push({"item": cell, "basis": basis, "width": basis})
         }
-        if (root.width <= 0) {
+        if (lineWidth <= 0) {
             free.implicitHeight = 0
             return
         }
@@ -177,7 +184,7 @@ MorphWidget {
         let line = null
         for (const placed of cells) {
             const gap = line !== null && line.used > 0 && placed.basis > 0 ? space : 0
-            if (line === null || (placed.basis > 0 && line.used > 0 && line.used + gap + placed.basis > root.width)) {
+            if (line === null || (placed.basis > 0 && line.used > 0 && line.used + gap + placed.basis > lineWidth)) {
                 line = {"cells": [], "used": 0}
                 lines.push(line)
             }
@@ -188,7 +195,7 @@ MorphWidget {
         let y = 0
         for (let l = 0; l < lines.length; ++l) {
             const members = lines[l].cells
-            let spare = Math.max(0, root.width - lines[l].used)
+            let spare = Math.max(0, lineWidth - lines[l].used)
             // The stretch children share the spare width; one that reaches its maximum leaves the rest to the others.
             let open = members.filter(m => (m.item as MorphWidget) && (m.item as MorphWidget).widthKind === 2
                                            && m.basis > 0)
@@ -281,6 +288,7 @@ MorphWidget {
     Item {
         id: free
         anchors.fill: parent
+        anchors.margins: root.inset
         visible: root.wrap
         onChildrenChanged: root.place()
     }
@@ -288,10 +296,10 @@ MorphWidget {
     GridLayout {
         id: layout
         visible: !root.wrap
-        x: root.axis === 1 && root.packed ? root.leadOf(root.width - width) : 0
-        y: root.axis === 0 && root.packed ? root.leadOf(root.height - height) : 0
-        width: root.axis === 1 && root.packed ? implicitWidth : root.width
-        height: root.axis === 0 && root.packed ? implicitHeight : root.height
+        x: root.inset + (root.axis === 1 && root.packed ? root.leadOf(root.width - 2 * root.inset - width) : 0)
+        y: root.inset + (root.axis === 0 && root.packed ? root.leadOf(root.height - 2 * root.inset - height) : 0)
+        width: root.axis === 1 && root.packed ? implicitWidth : root.width - 2 * root.inset
+        height: root.axis === 0 && root.packed ? implicitHeight : root.height - 2 * root.inset
         flow: root.axis === 0 ? GridLayout.TopToBottom : GridLayout.LeftToRight
         rowSpacing: root.axis === 0 && root.between ? root.betweenSpacing : root.gapLength
         columnSpacing: root.axis === 1 && root.between ? root.betweenSpacing : root.gapLength

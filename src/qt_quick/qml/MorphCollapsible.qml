@@ -12,7 +12,7 @@ MorphWidget {
     property string title: ""
     property bool open: true
     readonly property Item content: body
-    readonly property Item headerArea: headerSlot
+    readonly property Item headerArea: header.slot
 
     // Whether a shown body child stretches down; the body then takes the spare height, else a filler does, which keeps
     // the body under the header instead of centred in the spare height.
@@ -24,7 +24,7 @@ MorphWidget {
         return false
     }
 
-    focusTarget: toggle
+    focusTarget: header.toggle
     implicitWidth: column.implicitWidth
     implicitHeight: column.implicitHeight
 
@@ -32,27 +32,15 @@ MorphWidget {
         id: column
         anchors.fill: parent
 
-        RowLayout {
-            ToolButton {
-                font: Theme.bodyFont
-                id: toggle
-                objectName: "toggle"
-                readonly property string chevron: root.open ? "nav.collapse" : "nav.expand"
-                icon.source: Theme.iconSource(chevron)
-                icon.color: "transparent"
-                text: (icon.source.toString() !== "" ? "" : root.open ? "▾ " : "▸ ") + root.title
-                contentItem: MorphPlainContent {
-                    control: toggle
-                    color: toggle.palette.windowText
-                }
-                onClicked: {
-                    root.open = !root.open
-                    root.fire("toggle", root.open)
-                }
-            }
-
-            RowLayout {
-                id: headerSlot
+        MorphSectionHeader {
+            id: header
+            Layout.fillWidth: true
+            title: root.title
+            open: root.open
+            scheme: root.scheme
+            onToggled: {
+                root.open = !root.open
+                root.fire("toggle", root.open)
             }
         }
 

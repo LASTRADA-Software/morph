@@ -131,6 +131,21 @@ TEST_CASE("tui steps: one row per step with its state's mark", "[tui][display]")
     CHECK(steps->probeText().empty());
 }
 
+// Mutation: draw the unlabelled indicator as the row-per-step list (it then has four rows, not one).
+TEST_CASE("tui steps: unlabelled, the marks sit in one row joined to the width", "[tui][display]") {
+    Harness harness{30, 5};
+    auto const steps = harness.make<StepsImpl>(nullptr);
+    steps->setSteps({{.label = "Plan", .state = ui::StepState::Done},
+                     {.label = "Build", .state = ui::StepState::Active},
+                     {.label = "Ship", .state = ui::StepState::Pending},
+                     {.label = "Undo", .state = ui::StepState::Failed}});
+    steps->setCurrent(1);
+    steps->setLabelled(false);
+    CHECK(harness.draw() == Rows{"[x]──────[>]──────[ ]──────[!]"});
+    CHECK(steps->naturalSize().height == 1);
+    CHECK(steps->probeText() == "Build");
+}
+
 // Mutation: put each value right after its own caption (the values then do not line up).
 TEST_CASE("tui key-value: the values line up after the widest caption", "[tui][display]") {
     Harness harness{30, 3};

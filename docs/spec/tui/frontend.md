@@ -83,12 +83,12 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Checkbox | `[x] label` | Space, click; Enter passes on |
 | Select | radio: a row per option, `(•)` marking; dropdown: `[label ▾]` opening a list overlay; segmented: one row of the options, each padded by a space and joined by `│`, the marked one in the list's selected-item style | Enter, Space, click; arrows in the list; Left and Right on a segmented one, and a click on a segment |
 | Menu | one level of entries as a list, `>` on an entry with a submenu, the mark of a checkable one, its chord, its description muted; a separator a `─` row the cursor skips. Button style: `[label ▾]`, or an icon-only trigger's glyph (`[⋯]` for `more`) or else its accessible name | Right, Enter, Space or a click opens a submenu; Left or Backspace goes up; choosing a leaf shows the top again. Button style: Enter, Space, Down or a click opens the entries as a list overlay, which drills into submenus the same way; a choice, Esc or the focus leaving closes it and gives the focus back to the trigger |
-| Stack, Slot | children along an axis, a spacing step apart; a scrollable slot whose shown children keep their content height is a viewport over them that follows the focus, as Scroll is, and takes the focus itself while nothing inside can | a scrolling slot: arrows, PageUp/PageDown, Home/End, wheel |
+| Stack, Slot | children along an axis, a spacing step apart, inset by the stack's padding mapped to cells as a panel's is; a scrollable slot whose shown children keep their content height is a viewport over them that follows the focus, as Scroll is, and takes the focus itself while nothing inside can | a scrolling slot: arrows, PageUp/PageDown, Home/End, wheel |
 | Grid | equal columns, or columns sized by their tracks; cells row-major, spans | — |
 | Spacer | nothing; stretches in a stack | — |
 | Panel | a box with a title; a collapsible one folds to its title line | Enter, Space, click on the title |
 | Scroll | a viewport that follows the focus | arrows, PageUp/PageDown, Home/End, wheel |
-| Tabs | a one-row bar over the page slots, with no blank row under it (a terminal row costs more than the separation earns); a bar narrower than its labels draws whole labels from a first visible one, which painting moves so the highlighted label fits, with `‹` at the start and `›` at the end while labels are cut there; a hidden bar gives its row to the pages and takes no focus | Left, Right, click on a label; a click on `‹` or `›` selects the previous or next tab |
+| Tabs | a one-row bar over the page slots, with no blank row under it (a terminal row costs more than the separation earns); a bar narrower than its labels draws whole labels from a first visible one, which painting moves so the highlighted label fits, with `‹` at the start and `›` at the end while labels are cut there; a hidden bar gives its row to the pages and takes no focus; `moreLabel` is stored and not drawn, since the markers already reach every tab | Left, Right, click on a label; a click on `‹` or `›` selects the previous or next tab |
 | Dialog | a centred box over everything; a description given as runs draws them on the description's row, as a text draws runs; its footer is the box's bottom row, its children against the right edge, one cell apart, and stays last when the content mounts again. As a sheet the box fills the viewport, its top row draws `[dismissLabel]` before the title, and its footer takes the box's last rows under content that fills the rest | Esc dismisses; a press on a sheet's `[dismissLabel]` dismisses as Esc does |
 | Drawer | a box against its side, the screen's height; its footer as a dialog's | Esc dismisses |
 | Busy | a spinner and its label while active | — |
@@ -99,12 +99,12 @@ Every `ui::IViewBackend` factory makes a widget whose view is a `core::tui::Comp
 | Banner | its text in its tone (spans as a text's, on the one row, a strong run bold, a toned run in its tone's foreground), `[ action ]`, `[x]` when dismissible | Enter runs the action; Esc or Delete dismisses; a click on either |
 | Badge | `[text]` in its tone, `(text)` when outlined, a framework icon's glyph before the text; a removable one `[text ×]`, inverse while focused | a removable one: Delete, Backspace, Enter or Space while focused, or a click on the `×`, removes it; a click elsewhere on it focuses it |
 | Progress | `[####......] 40%` and the label; `<=>` when indeterminate | — |
-| Steps | a row per step: `[ ]` pending, `[>]` active, `[x]` done, `[!]` failed; the current one accented | — |
+| Steps | a row per step: `[ ]` pending, `[>]` active, `[x]` done, `[!]` failed; the current one accented; unlabelled, the marks in one row joined by `─` that fills the width | — |
 | KeyValue | captions, then the values lined up after the widest; stacked, each pair two rows, the caption muted over its value, with no rule, since a rule would cost a row per pair and the muted caption already separates them. A toned value draws in its tone's style, bold; a value with spans draws them as a text's | — |
 | EmptyState | the title, the explanation, `[ action ]` | Enter, click on the action |
 | Chart | points in cells, below; its summary, muted and wrapped, when smaller than 20 by 5 cells; content size 40 by 8 | — |
 | Splitter | the panes and a handle between each two | dragging a handle; the release reports every size |
-| Collapsible | `▾ title` with the header beside it, the body below while open | Enter, Space, click on the title; the header stays live while closed |
+| Collapsible | `▾ title` (the title bold) with the header beside it, the body below while open | Enter, Space, click on the title; the header stays live while closed |
 | DropZone | a dashed frame around its children | a paste while it has the focus is a drop (see below) |
 
 **A chart in cells.** The plot fills the widget below `yLabel` (its own row, when given) and above the points'

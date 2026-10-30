@@ -3,9 +3,12 @@
 // The containers on the real Qt Quick engine: children in order, moves that keep the moved item, and what each
 // container kind shows and reports.
 
+#include <QAccessible>
+#include <QAccessibleInterface>
 #include <QColor>
 #include <QFont>
 #include <QFontInfo>
+#include <QImage>
 #include <QMetaObject>
 #include <QPointF>
 #include <QQuickItem>
@@ -152,9 +155,9 @@ TEST_CASE("qt_quick containers: a collapsible panel reports the state the user a
     auto inside = scene.backend().createButton(panel.get());
     scene.settle();
     CHECK(Scene::itemOf(*inside).isVisible());
-    QList<QQuickItem*> const buttons = Scene::itemsOf(Scene::itemOf(*panel), "QQuickToolButton");
-    REQUIRE(buttons.size() == 1);
-    scene.click(*buttons.at(0));
+    auto* const toggle = Scene::itemOf(*panel).findChild<QQuickItem*>(QStringLiteral("toggle"));
+    REQUIRE(toggle != nullptr);
+    scene.click(*toggle);
     CHECK(toggles == std::vector<bool>{true});
     CHECK_FALSE(Scene::itemOf(*inside).isVisible());
     panel->setCollapsed(false);
@@ -232,9 +235,9 @@ QRectF settledButton(Scene& scene, ui::TabsWidget& tabs, qsizetype index) {
 
 }  // namespace
 
-// Mutation: drop the positionViewAtIndex call in MorphTabs (the tab chosen before the first layout stays past the
-// window's right edge).
-TEST_CASE("qt_quick containers: a narrow tab bar keeps the chosen tab wholly in view", "[qt_quick]") {
+// Mutation: leave every tab in the bar (the last tab lies past the window's right edge), or never show More.
+TEST_CASE("qt_quick containers: a narrow tab bar keeps every tab reachable, the chosen one named in More",
+          "[qt_quick]") {
     std::vector<std::string> const labels{"Overview",    "Calibration", "Maintenance", "Bookings",
                                           "Audit trail", "Documents",   "Training"};
     for (bool const beforeLayout : {true, false}) {
@@ -250,10 +253,21 @@ TEST_CASE("qt_quick containers: a narrow tab bar keeps the chosen tab wholly in 
             scene.settle();
             tabs->setSelected(6);
         }
-        QRectF const chosen = settledButton(scene, *tabs, 6);
-        INFO("x " << chosen.x() << " width " << chosen.width());
-        CHECK(chosen.x() >= -0.5);
-        CHECK(chosen.x() + chosen.width() <= 360.5);
+        static_cast<void>(settledButton(scene, *tabs, 6));
+        QList<QQuickItem*> const buttons = Scene::itemsOf(Scene::itemOf(*tabs), "QQuickTabButton");
+        REQUIRE(buttons.size() == 7);
+        for (QQuickItem const* const button : buttons) {
+            if (button->isVisible()) {
+                QRectF const where{button->mapToScene(QPointF{0, 0}), QSizeF{button->width(), button->height()}};
+                CHECK(where.x() >= -0.5);
+                CHECK(where.right() <= 360.5);
+            }
+        }
+        auto const* const more = Scene::itemOf(*tabs).findChild<QQuickItem*>(QStringLiteral("more"));
+        REQUIRE(more != nullptr);
+        CHECK(more->isVisible());
+        CHECK(buttons.at(6)->isVisible() == false);
+        CHECK(more->property("text").toString() == QStringLiteral("Training \u25be"));
     }
 }
 
@@ -334,6 +348,39 @@ TEST_CASE("qt_quick containers: a splitter takes its panes through the split vie
     CHECK(resized.empty());
 }
 
+// A bar `pinned` writes is a padded column on the `bar` surface in a divided column: it is filled with the surface
+// colour and a hairline in the divider colour separates it from the content.
+TEST_CASE("qt_quick containers: a pinned bar is drawn on the bar surface with a rule above it", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 300);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    theme->setProperty("surface", QColor{"#fafad2"});
+    theme->setProperty("divider", QColor{"#ff0000"});
+    auto root = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    root->setDivided(true);
+    auto content = scene.backend().createSpacer(root.get());
+    content->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    auto withSurface = scene.backend().createStack(root.get(), ui::Axis::Vertical);
+    withSurface->setSurface("bar");
+    withSurface->setPadding(2);
+    auto bar = scene.backend().createText(withSurface.get());
+    bar->setText("bar");
+    scene.settle();
+    QQuickItem const& barItem = Scene::itemOf(*withSurface);
+    QImage const image = scene.window().grabWindow();
+    auto const edge = barItem.mapToScene(QPointF{});
+    int const x = static_cast<int>(edge.x()) + 380;
+    int const y = static_cast<int>(edge.y());
+    CHECK(barItem.height() > 0);
+    CHECK(image.pixelColor(x, y + 4) == QColor{"#fafad2"});
+    CHECK(image.pixelColor(x, y - 1) == QColor{"#ff0000"});
+    // The same bar with no surface reads the page colour.
+    withSurface->setSurface("");
+    scene.settle();
+    CHECK(scene.window().grabWindow().pixelColor(x, y + 4) != QColor{"#fafad2"});
+}
+
 TEST_CASE("qt_quick containers: a collapsible section keeps its header usable while closed", "[qt_quick]") {
     Scene scene;
     auto section = scene.backend().createCollapsible(nullptr);
@@ -372,26 +419,116 @@ TEST_CASE("qt_quick containers: a panel's header sits beside its title and stays
     CHECK(Scene::itemOf(*header).isVisible());
 }
 
-TEST_CASE("qt_quick containers: a panel with no title, no header and no collapse control shows no divider",
+namespace {
+
+// Visible items 1 px tall and wider than a pixel, lying between two heights in the window, whatever their names.
+int rulesBetween(QQuickItem const& root, double top, double bottom) {
+    int found = 0;
+    for (QQuickItem const* const item : root.findChildren<QQuickItem*>()) {
+        double const y = item->mapToScene(QPointF{0, 0}).y();
+        if (item->isVisible() && item->height() >= 0.5 && item->height() <= 1.5 && item->width() > 1.5 &&
+            y >= top - 0.5 && y <= bottom - 0.5) {
+            ++found;
+        }
+    }
+    return found;
+}
+
+QQuickItem& named(QQuickItem& root, char const* name) {
+    auto* const found = root.findChild<QQuickItem*>(QString::fromUtf8(name));
+    REQUIRE(found != nullptr);
+    return *found;
+}
+
+}  // namespace
+
+TEST_CASE("qt_quick containers: a panel with no title, no header and no collapse control shows no header row",
           "[qt_quick]") {
     Scene scene;
     auto panel = scene.backend().createPanel(nullptr);
     auto content = scene.backend().createButton(panel.get());
     scene.settle();
-    auto const* const divider = Scene::itemOf(*panel).findChild<QQuickItem*>(QStringLiteral("divider"));
-    REQUIRE(divider != nullptr);
-    CHECK_FALSE(divider->isVisible());
+    CHECK_FALSE(named(Scene::itemOf(*panel), "title").isVisible());
 }
 
-TEST_CASE("qt_quick containers: a panel with only a title shows its header row and a divider", "[qt_quick]") {
+// Mutation: put the rule under the panel's header back.
+TEST_CASE("qt_quick containers: a titled panel draws no rule between its header and its content", "[qt_quick]") {
     Scene scene;
     auto panel = scene.backend().createPanel(nullptr);
     panel->setTitle("More");
+    panel->setPadding(2);
+    panel->setCollapsible(true);
     auto content = scene.backend().createButton(panel.get());
     scene.settle();
-    auto const* const divider = Scene::itemOf(*panel).findChild<QQuickItem*>(QStringLiteral("divider"));
-    REQUIRE(divider != nullptr);
-    CHECK(divider->isVisible());
+    QQuickItem& item = Scene::itemOf(*panel);
+    QQuickItem& title = named(item, "title");
+    CHECK(title.isVisible());
+    double const headerBottom = named(item, "toggle").mapToScene(QPointF{0, named(item, "toggle").height()}).y();
+    double const contentTop = Scene::itemOf(*content).mapToScene(QPointF{0, 0}).y();
+    CHECK(contentTop >= headerBottom);
+    CHECK(rulesBetween(item, headerBottom - 0.5, contentTop) == 0);
+}
+
+// Mutation: inset the header by the panel's padding above (it then does not start at the frame's top).
+TEST_CASE("qt_quick containers: a collapsible panel's header starts at the frame's top", "[qt_quick]") {
+    Scene scene;
+    auto panel = scene.backend().createPanel(nullptr);
+    panel->setTitle("More");
+    panel->setPadding(3);
+    panel->setCollapsible(true);
+    auto content = scene.backend().createButton(panel.get());
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*panel);
+    double const frameTop = named(item, "frame").mapToScene(QPointF{0, 0}).y();
+    double const headerTop = named(item, "toggle").mapToScene(QPointF{0, 0}).y();
+    CHECK(std::abs(headerTop - (frameTop + 1)) < 0.5);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    CHECK(named(item, "toggle").height() >= theme->property("targetHeight").toDouble() - 0.5);
+}
+
+// Mutation: the old toggle, a ToolButton in the body font with no least height, indented by its own padding.
+TEST_CASE("qt_quick containers: a collapsible's header is a tall strong row flush with its content", "[qt_quick]") {
+    Scene scene;
+    auto section = scene.backend().createCollapsible(nullptr);
+    section->setTitle("Section");
+    auto content = scene.backend().createText(section.get());
+    content->setText("body");
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*section);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    QQuickItem& toggle = named(item, "toggle");
+    CHECK(toggle.height() >= theme->property("targetHeight").toDouble() - 0.5);
+    QQuickItem& title = named(item, "title");
+    CHECK(title.property("font").value<QFont>().weight() >= QFont::DemiBold);
+    CHECK(std::abs(title.mapToScene(QPointF{0, 0}).x() - Scene::itemOf(*content).mapToScene(QPointF{0, 0}).x()) < 1.0);
+}
+
+TEST_CASE("qt_quick containers: a section header is a button that reports whether it is expanded", "[qt_quick]") {
+    Scene scene;
+    auto section = scene.backend().createCollapsible(nullptr);
+    section->setTitle("Section");
+    auto content = scene.backend().createText(section.get());
+    content->setText("body");
+    std::vector<bool> toggles;
+    section->setOnToggle([&toggles](bool open) { toggles.push_back(open); });
+    scene.settle();
+    QQuickItem& toggle = named(Scene::itemOf(*section), "toggle");
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface* const node = QAccessible::queryAccessibleInterface(&toggle);
+    REQUIRE(node != nullptr);
+    CHECK(node->role() == QAccessible::Button);
+    CHECK(node->text(QAccessible::Name) == QStringLiteral("Section"));
+    CHECK(node->state().expandable);
+    CHECK(node->state().expanded);
+    scene.click(toggle);
+    CHECK(toggles == std::vector<bool>{false});
+    CHECK_FALSE(QAccessible::queryAccessibleInterface(&toggle)->state().expanded);
+    toggle.forceActiveFocus();
+    scene.key(Qt::Key_Space);
+    CHECK(toggles == std::vector<bool>{false, true});
+    CHECK(QAccessible::queryAccessibleInterface(&toggle)->state().expanded);
+    QAccessible::setActive(wasActive);
 }
 
 TEST_CASE("qt_quick containers: a drop zone takes a drop whole or refuses it whole", "[qt_quick]") {
@@ -1096,5 +1233,87 @@ TEST_CASE("qt_quick containers: a divided column draws a divider rule in each ga
         CHECK(rules.at(0)->y() >= first.y() + first.height() - 0.5);
         CHECK(rules.at(0)->y() + 1 <= second.y() + 0.5);
         CHECK(rules.at(0)->property("color").value<QColor>() == QColor{QStringLiteral("#dcdce0")});
+    }
+}
+
+// Mutation: leave the tabs in the bar (the last lies past the bar's edge), hide More, make More a tab button, or
+// choose by position among the shown tabs only.
+TEST_CASE("qt_quick containers: tabs that do not fit go into a More menu that chooses them", "[qt_quick]") {
+    std::vector<std::string> const labels{"Overview", "Calibration", "Maintenance", "Bookings", "Audit trail"};
+    Scene scene;
+    scene.window().resize(390, 400);
+    auto tabs = scene.backend().createTabs(nullptr);
+    tabs->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    tabs->setTabs(labels);
+    std::vector<std::size_t> picks;
+    tabs->setOnSelect([&picks](std::size_t index) { picks.push_back(index); });
+    tabs->setSelected(0);
+    static_cast<void>(settledButton(scene, *tabs, 0));
+    QQuickItem& root = Scene::itemOf(*tabs);
+    QList<QQuickItem*> const buttons = Scene::itemsOf(root, "QQuickTabButton");
+    auto* const bar = Scene::itemsOf(root, "QQuickTabBar").at(0);
+    REQUIRE(buttons.size() == 5);
+    CHECK(bar->property("count").toInt() == 5);
+    int shown = 0;
+    for (QQuickItem const* const button : buttons) {
+        if (!button->isVisible()) {
+            continue;
+        }
+        ++shown;
+        CHECK(button->mapToItem(bar, QPointF{button->width(), 0}).x() <= bar->width() + 0.5);
+    }
+    CHECK(shown < 5);
+    CHECK(shown > 0);
+    auto* const more = root.findChild<QQuickItem*>(QStringLiteral("more"));
+    REQUIRE(more != nullptr);
+    CHECK(more->isVisible());
+    CHECK(more->property("text").toString() == QStringLiteral("More \u25be"));
+    CHECK(bar->property("currentIndex").toInt() == 0);
+
+    // The last tab is in the menu; choosing it asks for it by its own index.
+    scene.click(*more);
+    scene.settle();
+    auto* const popup = root.findChild<QObject*>(QStringLiteral("moreMenu"));
+    REQUIRE(popup != nullptr);
+    CHECK(popup->property("visible").toBool());
+    QQuickItem* entry = nullptr;
+    auto const* const menuContent = popup->property("contentItem").value<QQuickItem*>();
+    REQUIRE(menuContent != nullptr);
+    for (QQuickItem* const candidate : menuContent->childItems()) {
+        if (candidate->objectName() == QStringLiteral("moreEntry") &&
+            candidate->property("text").toString() == QStringLiteral("Audit trail")) {
+            entry = candidate;
+        }
+    }
+    REQUIRE(entry != nullptr);
+    scene.click(*entry);
+    scene.settle();
+    CHECK(picks == std::vector<std::size_t>{4});
+    tabs->setSelected(4);
+    static_cast<void>(settledButton(scene, *tabs, 4));
+    CHECK(more->property("text").toString() == QStringLiteral("Audit trail \u25be"));
+    CHECK(Scene::itemsOf(root, "QQuickTabButton").size() == 5);
+    int shownAfter = 0;
+    for (QQuickItem const* const button : Scene::itemsOf(root, "QQuickTabButton")) {
+        shownAfter += button->isVisible() ? 1 : 0;
+    }
+    CHECK(shownAfter == shown);
+
+    // Right on the last shown tab moves the focus to More.
+    QQuickItem* last = nullptr;
+    for (QQuickItem* const button : buttons) {
+        last = button->isVisible() ? button : last;
+    }
+    REQUIRE(last != nullptr);
+    last->forceActiveFocus();
+    scene.key(Qt::Key_Right);
+    CHECK(scene.window().activeFocusItem() == more);
+
+    // A wide window brings every tab back and hides More.
+    scene.window().resize(1000, 400);
+    static_cast<void>(settledButton(scene, *tabs, 0));
+    CHECK_FALSE(more->isVisible());
+    for (QQuickItem const* const button : Scene::itemsOf(root, "QQuickTabButton")) {
+        CHECK(button->isVisible());
     }
 }

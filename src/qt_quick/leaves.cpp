@@ -321,6 +321,10 @@ void StepsImpl::setCurrent(std::optional<std::size_t> index) {
     write("current", index ? static_cast<int>(*index) : -1);
 }
 
+void StepsImpl::setLabelled(bool labelled) { write("labelled", labelled); }
+
+std::string StepsImpl::shownText() const { return toUtf8(read("currentLabel").toString()); }
+
 ChartImpl::ChartImpl(Context& context, ui::ContainerWidget* parent)
     : ItemWidget{context, QStringLiteral("MorphChart"), parent} {}
 
