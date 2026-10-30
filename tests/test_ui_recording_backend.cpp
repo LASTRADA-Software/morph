@@ -724,3 +724,11 @@ TEST_CASE("recording backend: a bleeding layout and a tabs node's page inset are
     tabs->setPageInset(0);
     CHECK(backend.dump().contains("Tabs#2 inset=4 pageInset=0"));
 }
+
+// Mutation: leave `setPassesBleed` unrecorded, or record it under another name.
+TEST_CASE("recording backend: a holder column records that it passes bleed on", "[ui][backend]") {
+    RecordingBackend backend;
+    auto holder = backend.createStack(nullptr, ui::Axis::Vertical);
+    holder->setPassesBleed(true);
+    CHECK(backend.dump().contains("passesBleed=true"));
+}

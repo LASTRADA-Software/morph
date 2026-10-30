@@ -888,3 +888,23 @@ TEST_CASE("tui containers: a bleeding child of a padded column starts at the col
     bleeding->setLayout({.bleed = true});
     CHECK(harness.draw() == Rows{"  xy", "ab"});
 }
+
+// Mutation: do not widen a holder over the panel's inner span (the bleeding child is cut at the padding), or do not
+// pad the holder's other children by the panel's padding (the sibling sits at the frame's edge).
+TEST_CASE("tui containers: a bleeding child of a holder column reaches its panel's inner edges", "[tui][containers]") {
+    Harness harness{12, 6};
+    auto const panel = harness.make<PanelImpl>(nullptr);
+    // Step 4: two columns either side of the content.
+    panel->setPadding(4);
+    auto const holder = harness.make<StackImpl>(panel.get(), ui::Axis::Vertical);
+    holder->setPassesBleed(true);
+    auto const bleeding = harness.make<TextImpl>(holder.get());
+    bleeding->setText("ab");
+    bleeding->setLayout({.bleed = true});
+    auto const inside = harness.make<TextImpl>(holder.get());
+    inside->setText("xy");
+    Rows const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 4);
+    CHECK(drawn.at(2).starts_with("│ab"));
+    CHECK(drawn.at(3).starts_with("│  xy"));
+}

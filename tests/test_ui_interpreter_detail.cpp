@@ -608,3 +608,26 @@ TEST_CASE(
     // A single child is lowered unwrapped, so a gap has nothing to space.
     CHECK_FALSE(dumpOf("panel", "", 1).contains("Column#"));
 }
+
+// Mutation: drop the flag from `lowerAll`'s column (the panel's column records no `passesBleed`), or set it on a
+// column the document wrote.
+TEST_CASE(
+    "interpreter: a panel's or a tab's list of children lowers to a holder column, and a written column is not one",
+    "[ui][interpreter][layout]") {
+    auto const dumpOf = [](std::string const& view) {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": )" + view + " }");
+        return h.backend.dump();
+    };
+    std::string const two = R"("children": [{ "kind": "text", "text": "a" }, { "kind": "text", "text": "b" }])";
+    for (std::string const& kind : {"panel", "tabs"}) {
+        std::string const view = kind == "panel" ? R"({ "kind": "panel", )" + two + " }"
+                                                 : R"({ "kind": "tabs", "tabs": [{ "label": "A", )" + two + " }] }";
+        std::string const dump = dumpOf(view);
+        INFO(kind << ":\n" << dump);
+        CHECK(dump.contains("passesBleed=true"));
+    }
+    CHECK_FALSE(
+        dumpOf(R"({ "kind": "panel", "children": [{ "kind": "text", "text": "a" }] })").contains("passesBleed"));
+    CHECK_FALSE(dumpOf(R"({ "kind": "column", )" + two + " }").contains("passesBleed"));
+}

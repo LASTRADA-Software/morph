@@ -46,6 +46,8 @@ void StackImpl::setSelected(bool selected) {
     write("selected", selected);
 }
 
+void StackImpl::setPassesBleed(bool passes) { write("passesBleed", passes); }
+
 void StackImpl::setPadding(ui::Padding padding) {
     write("paddingV", padding.vertical);
     write("paddingH", padding.horizontal);

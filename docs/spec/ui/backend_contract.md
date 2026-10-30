@@ -289,7 +289,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
 | `SelectWidget` | `setOptions`, `setSelected(optional<Key>)`, `setCaption(label, shown)`; a dropdown's list opens under the field, at the field's start when it fits in the window, else ending at the field's end, and always inside the window | `setOnSelect(Key)`, `setOnOpen()` (optional, see below) |
 | `MenuWidget` | `setItems(entries)`, `setTrigger(MenuTrigger{label, icon, emphasis})` (a button-style menu's); a popup opens under its control, at the control's start when it fits in the window, else ending at the control's end, and always inside the window | `setOnActivate(path)` |
-| `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)`, `setWrap(bool)`, `setDivided(bool)`, `setPadding(Padding)` (the vertical step above and below, the horizontal step at the sides; once, before any child, only for a padded stack; the stack's natural size includes the inset), `setSelected(bool)` (only for a stack that gives `selected`, at mount and on every change: while true the stack draws the accent's 3 px bar at its leading edge, down its height, over its surface and under its children, inside its leading padding; the first call, possibly false, marks the stack selectable, so a backend that reserves room for the bar reserves it from then on whether or not the stack is selected; a table's row view takes the call as a no-op) | — |
+| `StackWidget` | `setGap`, `setAlign(Align)`, `setJustify(Justify)`, `setWrap(bool)`, `setDivided(bool)`, `setPadding(Padding)` (the vertical step above and below, the horizontal step at the sides; once, before any child, only for a padded stack; the stack's natural size includes the inset), `setPassesBleed(bool)` (only with true, once before the first child, for the column the interpreter inserts around a list of nodes: a child of the stack that bleeds reaches past the padding of the stack's own container, a panel's or a tab page's, as if the child were that container's; a table's row view ignores it), `setSelected(bool)` (only for a stack that gives `selected`, at mount and on every change: while true the stack draws the accent's 3 px bar at its leading edge, down its height, over its surface and under its children, inside its leading padding; the first call, possibly false, marks the stack selectable, so a backend that reserves room for the bar reserves it from then on whether or not the stack is selected; a table's row view takes the call as a no-op) | — |
 | `GridWidget` | `setColumns` (at least one), `setTracks(tracks)` (at least one, in place of `setColumns`), `setGap`, `setSpan(child, span)`, `setAlign(Align)` | — |
 | `SpacerWidget` | — | — |
 | `PanelWidget` | `setTitle`, `setHeader(Widget&)` (shown beside the title, called at most once), `setPadding`, `setCollapsible`, `setCollapsed` | `setOnToggle(collapsed)`, with the state the user asked for |
@@ -551,6 +551,10 @@ the container it measures inside another, since a root fills the window or scree
     (the row's width less 12 and a step) at 40 units, and sits alone at the row's width, the fixed text below it,
     at 20: a stretch child's basis is its minimum width. A stretch text of two characters with `minWidth: 20` shares
     a line with a `fixed(12)` text in a 30-unit row: a minimum is a basis only up to the child's natural width.
+
+Two cases follow the numbered list: a panel padded by 5 steps whose content is a holder column of a bleeding child and
+a sibling (the column the interpreter makes for two or more nodes) lays the bleeding child from the frame's inner left
+edge to its inner right edge, and the sibling inside the padding.
 
 ### The probe
 

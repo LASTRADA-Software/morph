@@ -783,6 +783,11 @@ struct Column {
     ///        leading edge, over its surface and under its children, and takes the `Grouping` accessibility role.
     ///        Disengaged when none was given. The mount refuses it on a table's row view.
     std::optional<Prop<bool>> selected;
+    /// @brief Whether the column is the holder the interpreter makes for a list of nodes (a panel's, a tab page's, a
+    ///        scroll's children). A holder is transparent to `bleed`: its children reach past the padding of the
+    ///        container the document names, not past the holder's own. The mount calls
+    ///        `StackWidget::setPassesBleed(true)` for a holder, before its first child; set once.
+    bool holder = false;
 };
 
 /// @brief Children laid out left to right.

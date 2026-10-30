@@ -40,6 +40,10 @@ public:
     void setSelected(bool selected) override;
     /// Draws no rule: a rule would take a row of its own and double a list's height, and its lines are already apart.
     void setDivided(bool divided) override { static_cast<void>(divided); }
+    /// The stack pads its children by its container's `bleedColumns` besides its own padding, and a child that bleeds
+    /// takes the stack's full width: the container lays the stack out over its whole span, past its padding.
+    void setPassesBleed(bool passes) override;
+    [[nodiscard]] bool passesBleed() const noexcept override { return _passesBleed; }
     [[nodiscard]] ui::Axis axis() const noexcept { return _axis; }
     /// The gap in cells along the axis: the spacing step `setGap` was given, mapped by `layout::stepCells`.
     [[nodiscard]] int gap() const noexcept { return _gap; }
@@ -74,6 +78,7 @@ private:
     /// Whether the stack was told `setSelected`, and what it was told last.
     bool _selectable = false;
     bool _selected = false;
+    bool _passesBleed = false;
     int _gap = 0;
     int _gapStep = 0;
     bool _wrap = false;
@@ -145,6 +150,7 @@ public:
         return !_collapsed || &child == _header;
     }
     [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
+    [[nodiscard]] int bleedColumns() const override { return _paddingColumns; }
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void activate() override;

@@ -120,6 +120,9 @@ public:
     [[nodiscard]] virtual ::core::tui::Size naturalSize() const = 0;
     /// Whether keyboard focus may land here (and, while actionable, does).
     [[nodiscard]] virtual bool wantsFocus() const { return false; }
+    /// Whether this is a holder: a stack transparent to `bleed`, which its container lays out over the span its
+    /// children bleed to, and which pads its children by that container's `bleedColumns` itself.
+    [[nodiscard]] virtual bool passesBleed() const noexcept { return false; }
     /// Whether a press on this widget moves the focus to it; by default, whenever it wants the focus at all.
     /// Whether a press on the widget is its own (it then takes the moves and the release that follow).
     [[nodiscard]] virtual bool takesPress() const { return wantsFocus(); }
@@ -276,6 +279,9 @@ public:
     /// around the container reads to find a widget it should bring into view. A container that does not say returns
     /// an empty list.
     [[nodiscard]] virtual std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const;
+    /// The columns of padding a bleeding child, or a holder's, reaches past: the padding this container's content is
+    /// inset by. A container whose children are not inset returns 0.
+    [[nodiscard]] virtual int bleedColumns() const { return 0; }
     /// Gives each of `children()` its area from @p areas, in order; a child past the end gets none.
     void placeChildren(std::span<::core::tui::Rect const> areas) const;
 
@@ -577,8 +583,9 @@ struct StackSpec {
 /// columns; a child past the last extent takes its natural extent.
 [[nodiscard]] std::vector<::core::tui::Rect> stackAreas(std::span<WidgetBase* const> children, ::core::tui::Rect area,
                                                         StackSpec const& spec);
-/// Widens the area of each shown child whose layout says `bleed` to @p span, the container's full width at the sides
-/// its padding leaves; the child's place down the container is unchanged. @p areas has one area per child, in order.
+/// Widens the area of each shown child whose layout says `bleed`, and of each shown holder (`passesBleed`), to @p
+/// span, the container's full width at the sides its padding leaves; the child's place down the container is
+/// unchanged. @p areas has one area per child, in order.
 void bleedAreas(std::span<WidgetBase* const> children, std::vector<::core::tui::Rect>& areas, ::core::tui::Rect span);
 /// Places @p children inside @p area (in the container's coordinates) as `stackAreas` says. Hidden children get an
 /// empty area, so they neither render nor take a click (see `forgetDrawnBounds`).
