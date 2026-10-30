@@ -1221,8 +1221,9 @@ TEST_CASE("qt_quick containers: the shell's top bar insets its controls and cent
     };
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
+    // The compact form pads the line's ends by step 1.
     qreal gap = 0;
-    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, gap), Q_ARG(int, 3)));
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, gap), Q_ARG(int, 1)));
     QRectF const bar = rectOf("shell_topbar");
     QRectF const menu = rectOf("shell_nav_menu");
     QRectF const actionAt = rectOf("inset_action");
@@ -1562,4 +1563,54 @@ TEST_CASE("qt_quick containers: a pinned bar spans the page when the shell leave
     CHECK(barAt.x() == 0.0);
     CHECK(barAt.width() == 390.0);
     CHECK(buttonAt.x() - barAt.x() == step);
+}
+
+namespace {
+
+// A compact signed-in shell frame on a 390 px window whose theme draws icon-only buttons square.
+struct CompactFrame {
+    explicit CompactFrame(Scene& scene) {
+        auto const tokens = ui::parseTokens(R"({"shape": {"iconOnly": {"$type": "keyword", "$value": "square"}}})");
+        REQUIRE(tokens);
+        auto const resolved = ui::resolveTokens({&*tokens});
+        REQUIRE(resolved);
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+        ui::ShellFrameOptions options;
+        options.applicationName = "App";
+        options.navigator.entries = {ui::CatalogEntry{.id = "lims.review", .title = "Review", .group = "Lab"}};
+        frame = std::make_unique<ui::ShellFrame>(scene.backend(), nullptr, std::move(options));
+        frame->showSignedIn(true);
+        frame->setCompact(true);
+        frame->setTitle("Review");
+        scene.window().resize(390, 600);
+        scene.settle();
+    }
+
+    std::unique_ptr<ui::ShellFrame> frame;
+};
+
+}  // namespace
+
+// Control: leave the compact gaps at steps 3 and 3 (the menu square starts at 12 px, and the title at 68).
+TEST_CASE("qt_quick containers: the compact top line starts its menu square a step 1 in and the title a step 2 after",
+          "[qt_quick]") {
+    Scene scene;
+    CompactFrame compact{scene};
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal stepOne = 0.0;
+    qreal stepTwo = 0.0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, stepOne), Q_ARG(int, 1)));
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, stepTwo), Q_ARG(int, 2)));
+    qreal const target = theme->property("targetHeight").toReal();
+    detail::ItemBase const* const menu = detail::findWidget(QStringLiteral("shell_nav_menu"));
+    REQUIRE(menu != nullptr);
+    QQuickItem const& menuItem = *menu->item();
+    QQuickItem const& title = *textItemOf("shell_title", QStringLiteral("Review"));
+    INFO("menu at " << menuItem.mapToScene(QPointF{0, 0}).x() << " wide " << menuItem.width() << ", title at "
+                    << title.mapToScene(QPointF{0, 0}).x());
+    CHECK(menuItem.mapToScene(QPointF{0, 0}).x() == stepOne);
+    CHECK(menuItem.width() == target);
+    CHECK(menuItem.height() == target);
+    CHECK(title.mapToScene(QPointF{0, 0}).x() == stepOne + target + stepTwo);
 }

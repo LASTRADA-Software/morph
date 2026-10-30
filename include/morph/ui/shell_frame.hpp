@@ -269,6 +269,10 @@ public:
     /// @param compact Whether the frame is compact.
     void setCompact(bool compact) {
         _compact = compact;
+        // The compact top line is tighter: a touch-sized menu square beside the title leaves no room for the full
+        // steps, so the line's ends take step 1 and its items step 2 apart.
+        _topLine->setGap(compact ? 1 : 3);
+        _topMain->setGap(compact ? 2 : 3);
         showChrome();
     }
 

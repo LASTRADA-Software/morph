@@ -295,3 +295,23 @@ TEST_CASE("shell frame: the navigator's group headings are overlines", "[ui][she
     int const heading = backend.find("Text", "testId", "navigator_group_/Library").value();
     CHECK(backend.prop(heading, "role") == "Overline");
 }
+
+// Mutation: leave the gaps alone (the compact top line keeps steps 3 and 3).
+TEST_CASE("shell frame: the compact top line pads its ends by step 1 and spaces its items by step 2", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const line = backend.find("Row", "testId", "shell_topbar_line").value();
+    int const main = backend.find("Row", "testId", "shell_topbar_main").value();
+    CHECK(backend.prop(line, "gap") == "3");
+    CHECK(backend.prop(main, "gap") == "3");
+
+    frame.setCompact(true);
+    CHECK(backend.prop(line, "gap") == "1");
+    CHECK(backend.prop(main, "gap") == "2");
+
+    frame.setCompact(false);
+    CHECK(backend.prop(line, "gap") == "3");
+    CHECK(backend.prop(main, "gap") == "3");
+}

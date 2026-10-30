@@ -101,7 +101,7 @@ std::size_t rowOf(core::tui::Screen const& screen, std::string const& text) {
 // Control: the old two-line bar, whose head line is below the title's at every width.
 TEST_CASE("tui shell frame: the head shares the title's line where it fits, and wraps under it where it does not",
           "[tui][shell]") {
-    for (auto const [columns, together] : {std::pair{100, true}, std::pair{40, false}}) {
+    for (auto const [columns, together] : {std::pair{100, true}, std::pair{30, false}}) {
         FramedPage page{columns};
         ui::Text lead{.text = std::string{"a subtitle of some length"}};
         ui::Text trail{.text = std::string{"ACTIONS"}};
