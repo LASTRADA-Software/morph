@@ -502,26 +502,25 @@ SelectionLine selectionLine(Plate const& plate) {
 
 ui::Node selectionBar(Plate const& plate) {
     auto const selection = selectionLine(plate);
-    return ui::panel(
-               {ui::row(
-                   {ui::text({.text = selection.text, .spans = selection.spans}).testId("selected"),
-                    // The count keeps its natural width, so a narrow bar wraps between its items, never inside the
-                    // range.
-                    ui::spacer().sizing(ui::stretch()), layout::muted("Fill with"),
-                    ui::select({.options = ui::list({ui::obj({{"key", "order"}, {"label", "Samples, in order"}})}),
-                                .selected = plate.fill,
-                                .label = "Fill with",
-                                .onChoose = ui::set(plate.fill, ui::event())})
-                        .sizing(ui::fixed(22))
-                        .testId("fill"),
-                    ui::button({.label = "Apply", .onClick = fillWells(plate, plate.emptySelected)})
-                        .enabled(Count{ui::call("count", {plate.emptySelected})} > 0 && Count{plate.toPlaceCount} > 0)
-                        .testId("apply"),
-                    ui::button(
-                        {.label = "Clear wells", .emphasis = ButtonEmphasis::Ghost, .onClick = clearWells(plate)})
-                        .testId("clear-wells")},
-                   {.gap = 1, .align = Align::Center, .wrap = true})},
-               {.padding = 1})
+    // The fill controls are one group pushed to the bar's end, so the bar never breaks between them.
+    auto const fillGroup =
+        ui::row({layout::muted("Fill with"),
+                 ui::select({.options = ui::list({ui::obj({{"key", "order"}, {"label", "Samples, in order"}})}),
+                             .selected = plate.fill,
+                             .label = "Fill with",
+                             .onChoose = ui::set(plate.fill, ui::event())})
+                     .sizing(ui::fixed(18))
+                     .testId("fill"),
+                 ui::button({.label = "Apply", .onClick = fillWells(plate, plate.emptySelected)})
+                     .enabled(Count{ui::call("count", {plate.emptySelected})} > 0 && Count{plate.toPlaceCount} > 0)
+                     .testId("apply"),
+                 ui::button({.label = "Clear wells", .emphasis = ButtonEmphasis::Ghost, .onClick = clearWells(plate)})
+                     .testId("clear-wells")},
+                {.gap = 1, .align = Align::Center});
+    return ui::panel({ui::row({ui::text({.text = selection.text, .spans = selection.spans}).testId("selected"),
+                               ui::spacer().sizing(ui::stretch()), fillGroup},
+                              {.gap = 1, .align = Align::Center})},
+                     {.padding = 1})
         .surface("selected")
         .visible(Count{ui::call("count", {plate.selection})} > 0)
         .a11y("Selected wells")
@@ -559,7 +558,7 @@ void declareHead(ui::Scope& screen, Plate const& plate) {
         .options = ui::list({ui::obj({{"key", "hcp96"}, {"label", "Template: HCP 96, 8 standards"}})}),
         .selected = plate.layoutTemplate,
         .onChoose = {ui::set(plate.layoutTemplate, ui::event())},
-        .width = 30,
+        .width = 24,
         .visible = !plate.compact});
     screen.action({.id = "autoFill",
                    .label = "Auto-fill samples",
@@ -629,7 +628,7 @@ ui::AnyHandle rowWells(Plate const& plate, std::size_t row) {
         if (well.kind != Kind::Sample) {
             wells.push_back(ui::obj({{"name", well.name},
                                      {"text", well.description},
-                                     {"label", well.label},
+                                     {"label", well.kind == Kind::Standard ? "STD" : well.label},
                                      {"surface", well.surface},
                                      {"run", well.name}}));
             continue;
@@ -702,10 +701,13 @@ ui::AnyHandle rowTitle(Plate const& plate, std::size_t row) {
 ui::Node rowSection(Plate const& plate, std::size_t row) {
     auto const runs = ui::runs(rowWells(plate, row), "well", [](ui::AnyHandle const& well) { return well.at("run"); });
     auto const name = ui::AnyHandle{kRowNames.at(row)};
+    // An empty leading child gives the divided column a rule under the row's title, as the design draws.
     return ui::collapsible(
-               {ui::forEach(runs, {.key = ui::row("first.name"), .gap = 1, .divided = true},
-                            [&plate](ui::DeclScope&) { return ui::Nodes{runLine(plate)}; })
-                    .testId(std::string{"lines-"} + kRowNames.at(row))},
+               {ui::column({ui::spacer().sizing(ui::fixed(0), ui::fixed(0)),
+                            ui::forEach(runs, {.key = ui::row("first.name"), .gap = 1, .divided = true},
+                                        [&plate](ui::DeclScope&) { return ui::Nodes{runLine(plate)}; })
+                                .testId(std::string{"lines-"} + kRowNames.at(row))},
+                           {.gap = 1, .divided = true})},
                {.title = rowTitle(plate, row),
                 .open = ui::eq(plate.openRow, name),
                 .onToggle = ui::set(plate.openRow, ui::cond(ui::Handle<bool>{ui::event()}, name, ui::AnyHandle{""}))})
