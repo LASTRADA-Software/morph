@@ -149,6 +149,8 @@ TEST_CASE("shell frame: the head shares the title's wrapping line, its slots sho
     CHECK(backend.prop(main, "justify") == "end");
     REQUIRE(backend.children(main).size() == 3);
     CHECK(backend.children(main).at(0) == menu);
+    int const trail = backend.find("Row", "testId", "shell_head_trail").value();
+    int const principal = backend.find("Text", "testId", "shell_head_principal").value();
     int const block = backend.children(main).at(1);
     CHECK(backend.prop(block, "layout") == "stretch(1) min=32/content");
     int const titleLine = backend.find("Row", "testId", "shell_title_line").value();
@@ -156,7 +158,12 @@ TEST_CASE("shell frame: the head shares the title's wrapping line, its slots sho
     CHECK(backend.children(block) == std::vector<int>{eyebrow, titleLine, lead});
     CHECK(backend.prop(titleLine, "wrap") == "true");
     CHECK(backend.children(titleLine) == std::vector<int>{title, inlineSlot});
-    CHECK(backend.children(main).at(2) == slot);
+    // The trail is a wrapping row of the slot and the principal: an empty slot takes no gap before the principal.
+    CHECK(backend.children(main).at(2) == trail);
+    CHECK(backend.prop(trail, "wrap") == "true");
+    CHECK(backend.children(trail) == std::vector<int>{slot, principal});
+    std::vector<int> const lineChildren = backend.children(backend.find("Row", "testId", "shell_topbar_line").value());
+    CHECK(std::ranges::find(lineChildren, principal) == lineChildren.end());
     // The pad spacers are outside the wrapping row, so every line of it is padded at both ends.
     CHECK(within(backend, backend.find("Row", "testId", "shell_topbar_line").value(), main));
     CHECK_FALSE(backend.hasProp(backend.find("Row", "testId", "shell_topbar_line").value(), "wrap"));
@@ -404,13 +411,8 @@ TEST_CASE("shell frame: the principal can sit in the top bar instead of the side
     CHECK(backend.prop(headPrincipal, "text") == "Dr. A. Meyer");
     CHECK(backend.prop(headPrincipal, "visible") == "true");
     CHECK(backend.prop(sidebarPrincipal, "visible") == "false");
-    int const line = backend.find("Row", "testId", "shell_topbar_line").value();
-    int const main = backend.find("Row", "testId", "shell_topbar_main").value();
-    std::vector<int> const lineChildren = backend.children(line);
-    auto const at = [&lineChildren](int widget) {
-        return std::ranges::find(lineChildren, widget) - lineChildren.begin();
-    };
-    CHECK(at(headPrincipal) == at(main) + 1);
+    int const trail = backend.find("Row", "testId", "shell_head_trail").value();
+    CHECK(backend.children(trail).back() == headPrincipal);
 
     frame.setCompact(true);
     CHECK(backend.prop(headPrincipal, "visible") == "false");
@@ -429,4 +431,40 @@ TEST_CASE("shell frame: the page area is drawn on the surface the screen asks fo
     CHECK(backend.prop(page, "surface") == "plainPage");
     frame.setPageSurface("");
     CHECK(backend.prop(page, "surface") == "page");
+}
+
+// Mutation: show the trail whatever its children do, or leave the principal's visibility to `showChrome` alone.
+TEST_CASE(
+    "shell frame: the head's trail shows while the head or the principal does, and the principal follows its name",
+    "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const trail = backend.find("Row", "testId", "shell_head_trail").value();
+    int const principal = backend.find("Text", "testId", "shell_head_principal").value();
+    CHECK(backend.prop(trail, "visible") == "false");
+
+    frame.setHeadShown(true);
+    CHECK(backend.prop(trail, "visible") == "true");
+    CHECK(backend.prop(principal, "visible") == "false");
+    frame.setHeadShown(false);
+    CHECK(backend.prop(trail, "visible") == "false");
+
+    // Signing in again runs the chrome with the previous name still set, and the name arrives after it.
+    frame.setPrincipalInHead(true);
+    frame.setPrincipal("alice");
+    CHECK(backend.prop(principal, "visible") == "true");
+    CHECK(backend.prop(trail, "visible") == "true");
+    frame.setPrincipal("");
+    frame.showSignedIn(false);
+    frame.showSignedIn(true);
+    CHECK(backend.prop(principal, "visible") == "false");
+    CHECK(backend.prop(trail, "visible") == "false");
+    frame.setPrincipal("bob");
+    CHECK(backend.prop(principal, "visible") == "true");
+
+    frame.setCompact(true);
+    CHECK(backend.prop(principal, "visible") == "false");
+    CHECK(backend.prop(trail, "visible") == "false");
 }

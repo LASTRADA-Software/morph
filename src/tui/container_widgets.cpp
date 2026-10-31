@@ -101,7 +101,22 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
 ::core::tui::Size StackImpl::innerNaturalSize() const {
     if (_wrap && _axis == ui::Axis::Horizontal && _extents.empty()) {
         // One line is the natural width; the height is that of the lines at the width the row was last drawn at.
-        auto const oneLine = stackNaturalSize(children(), _axis, _gap);
+        // A child with no width takes no gap, as `planWrap` places it, so a shown but empty child does not widen the
+        // row.
+        int total = 0;
+        int tallest = 0;
+        int sharing = 0;
+        for (WidgetBase const* const child : children()) {
+            if (!child->shown()) {
+                continue;
+            }
+            ::core::tui::Size const natural = requestedSize(*child);
+            total += natural.width;
+            tallest = std::max(tallest, natural.height);
+            sharing += natural.width > 0 ? 1 : 0;
+        }
+        total += sharing > 1 ? _gap * (sharing - 1) : 0;
+        ::core::tui::Size const oneLine{.width = total, .height = tallest};
         if (_drawnWidth <= 0) {
             return oneLine;
         }

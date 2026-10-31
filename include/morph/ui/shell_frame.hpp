@@ -46,11 +46,11 @@ struct ShellFrameOptions {
 /// application's name and a `Navigator`, and the main column holding the top bar (surface `toolbar`) above the page
 /// (surface `page`), where the client places the workspace. The top bar is one line that wraps only when it is out of
 /// room: the shown screen's title with the active head's lead (subtitle and badges) under it, and the head's trail
-/// (tools and actions) at the trailing edge, dropping to a line of its own where it does not fit. The principal and a
-/// sign-out button sit at the sidebar's foot. Signed out, the sidebar and the top bar are hidden and the page is all
-/// there is. Compact (`setCompact(true)`), the sidebar is hidden and the top bar starts with a navigation menu over
-/// the navigator's entries, ending with the principal's sign-out entry, so the page has nearly the whole window.
-/// Neither copyable nor movable; owned by the owner thread of its backend.
+/// (tools and actions, then the principal while it sits in the head) at the trailing edge, dropping to a line of its
+/// own where it does not fit. The principal and a sign-out button sit at the sidebar's foot. Signed out, the sidebar
+/// and the top bar are hidden and the page is all there is. Compact (`setCompact(true)`), the sidebar is hidden and
+/// the top bar starts with a navigation menu over the navigator's entries, ending with the principal's sign-out entry,
+/// so the page has nearly the whole window. Neither copyable nor movable; owned by the owner thread of its backend.
 class ShellFrame {
 public:
     /// @brief The frame, appended to @p parent.
@@ -83,8 +83,9 @@ public:
           _title{backend.createText(_titleLine.get())},
           _headInline{backend.createStack(_titleLine.get(), Axis::Horizontal)},
           _headLead{backend.createStack(_leadBlock.get(), Axis::Vertical)},
-          _headSlot{backend.createStack(_topMain.get(), Axis::Horizontal)},
-          _topPrincipal{backend.createText(_topLine.get())},
+          _trail{wrappingRow(backend, _topMain.get())},
+          _headSlot{backend.createStack(_trail.get(), Axis::Horizontal)},
+          _topPrincipal{backend.createText(_trail.get())},
           _topEnd{backend.createSpacer(_topLine.get())},
           _page{backend.createStack(_main.get(), Axis::Vertical)},
           _top{backend.createSpacer(_page.get())},
@@ -175,6 +176,13 @@ public:
         _headLead->setVisible(false);
         _headInline->setTestId("shell_head_inline");
         _headInline->setVisible(false);
+        // The trail: the head's actions, then the principal, as one wrapping row that stands where the actions did.
+        // A wrapping row gives no gap to an item with no width, so a shown slot with nothing mounted in it leaves no
+        // space before the principal; the principal wraps under the actions where the two do not fit one line.
+        _trail->setGap(3);
+        _trail->setAlign(Align::Center);
+        _trail->setTestId("shell_head_trail");
+        _trail->setVisible(false);
         _headSlot->setTestId("shell_head");
         _headSlot->setVisible(false);
         _topPrincipal->setRole(TextRole::Muted);
@@ -224,8 +232,8 @@ public:
     [[nodiscard]] ContainerWidget& headInlineSlot() noexcept { return *_headInline; }
 
     /// @brief The container a client mounts the active head's trail into: at the trailing edge of the top bar's
-    ///        line, which wraps under the title where the trail does not fit beside it, shown only while
-    ///        `setHeadShown(true)`.
+    ///        line, followed by the principal while it sits in the head, as one wrapping row that drops under the
+    ///        title where it does not fit beside it. Shown only while `setHeadShown(true)`.
     /// @return It.
     [[nodiscard]] ContainerWidget& headSlot() noexcept { return *_headSlot; }
 
@@ -238,6 +246,7 @@ public:
         _headLead->setVisible(shown);
         _headSlot->setVisible(shown);
         showLeadPlace();
+        showTrail();
     }
 
     /// @brief Shows the head's lead on the title's line (`headInlineSlot()`), or hides that slot. The slot is a
@@ -278,7 +287,8 @@ public:
     ///        `page` does.
     void setPageSurface(std::string_view surface) { _page->setSurface(surface.empty() ? "page" : surface); }
 
-    /// @brief Moves the principal from the sidebar's foot to the top bar's trailing end. Compact, the head draws
+    /// @brief Moves the principal from the sidebar's foot to the end of the head's trail, centred on its actions.
+    /// Compact, the head draws
     ///        none and the navigation menu's sign-out entry stays described by the principal.
     /// @param inHead Whether the principal sits in the top bar. A new frame has it in the sidebar.
     void setPrincipalInHead(bool inHead) {
@@ -318,6 +328,7 @@ public:
         _topPrincipal->setText(principal);
         _principalName = std::string{principal};
         showNavEntries();
+        showTrail();
     }
 
     /// @brief Shows or hides the sidebar and the top bar: signed out, the page is all there is.
@@ -395,7 +406,16 @@ private:
         _topBar->setVisible(_signedIn);
         _navMenu->setVisible(_compact);
         _principal->setVisible(!_principalInHead);
-        _topPrincipal->setVisible(_principalInHead && !_compact && !_principalName.empty());
+        showTrail();
+    }
+
+    // What the trail holds shows: the principal while it sits in the head, the frame is expanded and there is a name,
+    // the slot while the head shows, and the row while either does. Every call that changes one of those ends here,
+    // so no stale visibility outlives it.
+    void showTrail() {
+        bool const principalShown = _principalInHead && !_compact && !_principalName.empty();
+        _topPrincipal->setVisible(principalShown);
+        _trail->setVisible(_headShown || principalShown);
     }
 
     // Whether the inline lead shows: see setLeadInline.
@@ -443,6 +463,8 @@ private:
     std::unique_ptr<TextWidget> _title;
     std::unique_ptr<StackWidget> _headInline;
     std::unique_ptr<StackWidget> _headLead;
+    // The head's actions and the principal, a wrapping row: declared before both so it is their parent.
+    std::unique_ptr<StackWidget> _trail;
     std::unique_ptr<StackWidget> _headSlot;
     std::unique_ptr<TextWidget> _topPrincipal;
     std::unique_ptr<SpacerWidget> _topEnd;

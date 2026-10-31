@@ -207,3 +207,40 @@ TEST_CASE("tui shell frame: an inline lead too wide for the title's row wraps un
     CHECK(rowOf(page.screen, "ACTION") == title);
     CHECK(rowOf(page.screen, "SUBTITLE") > title);
 }
+
+// Control: the principal outside the trail, in the top line after it (it is then not after the action's last cell
+// by the trail's gap, and with an empty slot the gap before it shows).
+TEST_CASE("tui shell frame: the principal is drawn on the trail's row after the action, with no gap for an empty slot",
+          "[tui][shell]") {
+    FramedPage page{160};
+    page.frame->setPrincipalInHead(true);
+    page.frame->setPrincipal("DrMeyer");
+    ui::Text action{.text = std::string{"ACTIONS"}};
+    ui::Mounted const trailMount{page.runtime, page.backend, ui::text(std::move(action)), &page.frame->headSlot()};
+    page.frame->setHeadShown(true);
+    static_cast<void>(page.loop.runUntilIdle());
+    page.backend.fit();
+    page.screen.draw();
+    std::size_t const title = rowOf(page.screen, "Review");
+    REQUIRE(title != std::string::npos);
+    REQUIRE(rowOf(page.screen, "ACTIONS") == title);
+    REQUIRE(rowOf(page.screen, "DrMeyer") == title);
+    std::string const row = rowsOf(page.screen).at(title);
+    CHECK(row.find("ACTIONS") < row.find("DrMeyer"));
+
+    // Nothing mounted in a shown slot: the principal starts where the trail does, and where it does with the slot
+    // hidden.
+    FramedPage empty{160};
+    empty.frame->setPrincipalInHead(true);
+    empty.frame->setPrincipal("DrMeyer");
+    empty.frame->setHeadShown(true);
+    static_cast<void>(empty.loop.runUntilIdle());
+    empty.backend.fit();
+    empty.screen.draw();
+    std::size_t const shownAt = rowsOf(empty.screen).at(rowOf(empty.screen, "DrMeyer")).find("DrMeyer");
+    empty.frame->setHeadShown(false);
+    static_cast<void>(empty.loop.runUntilIdle());
+    empty.backend.fit();
+    empty.screen.draw();
+    CHECK(rowsOf(empty.screen).at(rowOf(empty.screen, "DrMeyer")).find("DrMeyer") == shownAt);
+}

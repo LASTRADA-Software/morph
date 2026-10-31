@@ -565,6 +565,10 @@ TEST_CASE("Client shell: an inline lead mounts beside the title, and the app doc
         CHECK(propOf(backend, "Text", "shell_head_principal", "text") == "Dr. A. Meyer");
         CHECK(propOf(backend, "Text", "shell_head_principal", "visible") == "true");
         CHECK(propOf(backend, "Text", "shell_principal", "visible") == "false");
+        // It ends the head's trail, which shows with it.
+        int const trail = backend.find("Row", "testId", "shell_head_trail").value();
+        CHECK(backend.children(trail).back() == backend.find("Text", "testId", "shell_head_principal").value());
+        CHECK(propOf(backend, "Row", "shell_head_trail", "visible") == "true");
 
         auto const plain = backend.find("Button", "testId", "nav_probe.plain");
         REQUIRE(plain.has_value());

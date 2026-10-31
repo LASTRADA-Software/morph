@@ -2242,3 +2242,74 @@ TEST_CASE("qt_quick containers: an open collapsible panel's content starts at it
     double const titleBottom = title.mapToScene(QPointF{0, title.height()}).y();
     CHECK(Scene::itemOf(*body).mapToScene(QPointF{0, 0}).y() - titleBottom == Catch::Approx(5.0).margin(0.5));
 }
+
+namespace {
+
+// The rectangle of the widget with @p testId in scene coordinates.
+QRectF sceneRectOf(char const* testId) {
+    detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+    REQUIRE(widget != nullptr);
+    QQuickItem const* const item = widget->item();
+    REQUIRE(item != nullptr);
+    return QRectF{item->mapToScene(QPointF{0, 0}), QSizeF{item->width(), item->height()}};
+}
+
+}  // namespace
+
+// The principal is the last item of the head's trail: it is level with the actions, on whichever line the trail is,
+// and the two wrap as one block. Mutation: put the principal back in the top line beside the trail (it is centred on
+// the whole line, below the button), or make the trail a non-wrapping row (an empty slot shifts the principal by a
+// gap).
+TEST_CASE("qt_quick containers: the principal ends the head's trail, centred on its actions", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setTitle("Instrument");
+    frame.setPrincipalInHead(true);
+    frame.setPrincipal("Dr. A. Meyer");
+    frame.setHeadShown(true);
+    ui::Text eyebrow{.text = std::string{"Equipment"}};
+    ui::Text lead{.text = std::string{"A long enough lead to make the head taller than its actions"}};
+    ui::Button action{.label = "Log maintenance"};
+    action.common.testId = "principal_action";
+    ui::Mounted const eyebrowMount{scene.runtime(), scene.backend(), ui::text(std::move(eyebrow)),
+                                   &frame.headEyebrowSlot()};
+    ui::Mounted const leadMount{scene.runtime(), scene.backend(), ui::text(std::move(lead)), &frame.headLeadSlot()};
+    ui::Mounted const trailMount{scene.runtime(), scene.backend(),
+                                 ui::row(ui::Row{.children = {ui::button(std::move(action))}, .gap = 1}),
+                                 &frame.headSlot()};
+    bool sawTogether = false;
+    bool sawWrapped = false;
+    // Down to where the trail itself no longer fits beside the sidebar: alone on a line narrower than itself it wraps
+    // inside, and the principal goes under the action by design.
+    for (int width = 1000; width >= 460; width -= 10) {
+        scene.window().resize(width, 600);
+        scene.settle();
+        QRectF const title = sceneRectOf("shell_title");
+        QRectF const button = sceneRectOf("principal_action");
+        QRectF const principal = sceneRectOf("shell_head_principal");
+        INFO("width " << width << ": the title " << title.y() << ".." << title.bottom() << ", the action at "
+                      << button.center().y() << ", the principal at " << principal.center().y());
+        CHECK(std::abs(principal.center().y() - button.center().y()) < 1.5);
+        (button.y() < title.bottom() ? sawTogether : sawWrapped) = true;
+    }
+    CHECK(sawTogether);
+    CHECK(sawWrapped);
+}
+
+// Mutation: make the trail a non-wrapping row (the empty shown slot then puts a gap before the principal).
+TEST_CASE("qt_quick containers: an empty head slot leaves no gap before the principal", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setTitle("Instrument");
+    frame.setPrincipalInHead(true);
+    frame.setPrincipal("Dr. A. Meyer");
+    frame.setHeadShown(true);
+    scene.window().resize(1000, 600);
+    scene.settle();
+    QRectF const trail = sceneRectOf("shell_head_trail");
+    QRectF const principal = sceneRectOf("shell_head_principal");
+    INFO("the trail at " << trail.left() << ", the principal at " << principal.left());
+    CHECK(principal.left() == Catch::Approx(trail.left()).margin(0.5));
+}
