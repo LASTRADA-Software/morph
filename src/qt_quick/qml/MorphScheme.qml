@@ -10,6 +10,11 @@ QtObject {
     property color accent: "#1565c0"
     property color focus: "#1565c0"
     property color selection: "#cfe3ff"
+    // The text of a selected list item: `color.selectionText`, when the surface has one (`hasSelectionText`), and the
+    // surface's text colour when not.
+    property color selectionText: "#1d1d1f"
+    property bool hasSelectionText: false
+    readonly property color selectedText: hasSelectionText ? selectionText : text
     property color border: "#c7c7cc"
     // The neutral tone's text, fill, outline and marker: `color.neutral` and its `.bg`, `.border` and `.dot`.
     property color neutral: "#6e6e73"

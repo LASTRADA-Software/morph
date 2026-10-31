@@ -35,8 +35,8 @@ MorphWidget {
     property bool hasContent: false
     // Where C++ puts an item's content.
     readonly property Item content: contentColumn
-    // Whether a selected item is marked in the accent (a bar and an accent label) and not by a fill alone.
-    readonly property bool accentSelection: root.style === 1 && root.selected && !root.scheme.listSelectionFill
+    // Whether this is a selected item: its label, icon and content draw in the scheme's selection text.
+    readonly property bool itemSelected: root.style === 1 && root.selected
     // The scheme an item's content draws in: the button's, except that its text role follows the selection, so a
     // selected item's content reads as its label does. Made with the content, since only an item with content has
     // anything to hand it.
@@ -102,11 +102,13 @@ MorphWidget {
 
         MorphScheme {
             surface: root.scheme.surface
-            text: root.accentSelection ? root.scheme.accent : root.scheme.text
+            text: root.itemSelected ? root.scheme.selectedText : root.scheme.text
             muted: root.scheme.muted
             accent: root.scheme.accent
             focus: root.scheme.focus
             selection: root.scheme.selection
+            selectionText: root.scheme.selectionText
+            hasSelectionText: root.scheme.hasSelectionText
             border: root.scheme.border
             neutral: root.scheme.neutral
             neutralBg: root.scheme.neutralBg
@@ -157,7 +159,7 @@ MorphWidget {
             spacing: Theme.spaceOf(2)
 
             Image {
-                source: Theme.iconSourceIn(root.icon, root.accentSelection ? root.scheme.accent : root.scheme.text)
+                source: Theme.iconSourceIn(root.icon, root.itemSelected ? root.scheme.selectedText : root.scheme.text)
                 visible: root.icon !== "" && source.toString() !== ""
                 Layout.preferredWidth: Theme.bodyPixels
                 Layout.preferredHeight: Theme.bodyPixels
@@ -166,7 +168,7 @@ MorphWidget {
                 textFormat: Text.PlainText
                 text: root.label
                 font: Theme.bodyFont
-                color: root.accentSelection ? root.scheme.accent : root.scheme.text
+                color: root.itemSelected ? root.scheme.selectedText : root.scheme.text
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignLeft
                 verticalAlignment: Text.AlignVCenter

@@ -136,6 +136,9 @@ QtObject {
     property color surface: "#ffffff"
     property color border: "#c7c7cc"
     property color selection: "#cfe3ff"
+    // The text of a selected list item and whether the theme sets one: `color.selectionText`.
+    property color selectionText: "#1d1d1f"
+    property bool hasSelectionText: false
     property color accent: "#1565c0"
     property color focus: "#1565c0"
     // A tone's fill, outline and marker: `color.<ok|warn|err|info>.<bg|border|dot>`.
@@ -303,6 +306,8 @@ QtObject {
         accent: theme.accent
         focus: theme.focus
         selection: theme.selection
+        selectionText: theme.selectionText
+        hasSelectionText: theme.hasSelectionText
         border: theme.border
         neutral: theme.neutral
         neutralBg: theme.neutralBg
@@ -344,6 +349,8 @@ QtObject {
         accent: theme.accent
         focus: theme.focus
         selection: theme.selection
+        selectionText: theme.selectionText
+        hasSelectionText: theme.hasSelectionText
         border: theme.border
         neutral: theme.neutral
         neutralBg: theme.neutralBg
@@ -385,6 +392,8 @@ QtObject {
         accent: theme.accent
         focus: theme.focus
         selection: theme.selection
+        selectionText: theme.selectionText
+        hasSelectionText: theme.hasSelectionText
         border: theme.border
         neutral: theme.neutral
         neutralBg: theme.neutralBg
@@ -466,6 +475,8 @@ QtObject {
         accent: theme.accent
         focus: theme.focus
         selection: theme.selection
+        selectionText: theme.selectionText
+        hasSelectionText: theme.hasSelectionText
         border: "#e3e5ea"
         neutral: theme.neutral
         neutralBg: theme.neutralBg
@@ -507,6 +518,8 @@ QtObject {
         accent: theme.accent
         focus: theme.focus
         selection: theme.selection
+        selectionText: theme.selectionText
+        hasSelectionText: theme.hasSelectionText
         border: theme.border
         neutral: theme.neutral
         neutralBg: theme.neutralBg
@@ -549,6 +562,8 @@ QtObject {
         accent: theme.barScheme.accent
         focus: theme.barScheme.focus
         selection: theme.barScheme.selection
+        selectionText: theme.barScheme.selectionText
+        hasSelectionText: theme.barScheme.hasSelectionText
         border: theme.barScheme.border
         neutral: theme.barScheme.neutral
         neutralBg: theme.barScheme.neutralBg

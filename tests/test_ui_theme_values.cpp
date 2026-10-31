@@ -364,17 +364,36 @@ TEST_CASE("ui theme values: a weight that is neither a number nor a known name i
     CHECK(ui::detail::weightOf(json("true")) == std::nullopt);
 }
 
-// Mutation: give `elevation.dialog` a default (an unset theme then carries a shadow that stands in for the card's), or
-// leave it out of `kThemeTokens`.
-TEST_CASE("ui theme values: the dialog shadow is absent until a theme sets it", "[ui][theme]") {
+// Mutation: give `color.selectionText` or `elevation.dialog` a default (an unset theme then carries a value that
+// stands in for the surface's text or the card's shadow), or leave either out of `kThemeTokens`.
+TEST_CASE("ui theme values: the selection text and the dialog shadow are absent until a theme sets them",
+          "[ui][theme]") {
     ui::ThemeValues const none = ui::themeValues();
+    CHECK_FALSE(none.colors.contains("color.selectionText"));
     CHECK_FALSE(none.shadows.contains("elevation.dialog"));
     CHECK(none.shadows.contains("elevation.card"));
+    CHECK(std::ranges::any_of(ui::kThemeTokens, [](auto const& spec) { return spec.path == "color.selectionText"; }));
     CHECK(std::ranges::any_of(ui::kThemeTokens, [](auto const& spec) { return spec.path == "elevation.dialog"; }));
 
     auto const set = valuesOf(
-        R"({"elevation": {"dialog": {"$type": "shadow", "$value": {"color": "#00000014", "offsetX": {"value": 0, "unit": "px"},)"
+        R"({"color": {"selectionText": {"$type": "color", "$value": "#112233"}},)"
+        R"( "elevation": {"dialog": {"$type": "shadow", "$value": {"color": "#00000014", "offsetX": {"value": 0, "unit": "px"},)"
         R"( "offsetY": {"value": 4, "unit": "px"}, "blur": {"value": 8, "unit": "px"}, "spread": {"value": 0, "unit": "px"}}}}})");
+    REQUIRE(set.colors.contains("color.selectionText"));
+    CHECK(set.colors.at("color.selectionText").hex() == "#112233");
     REQUIRE(set.shadows.contains("elevation.dialog"));
     CHECK(set.shadows.at("elevation.dialog").offsetY == 4.0);
+}
+
+// Mutation: leave `color.selectionText` out of the contrast rule's fills.
+TEST_CASE("ui theme values: a selection text that cannot be read on the selection colour is reported", "[ui][theme]") {
+    auto const pale = ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color",
+        "selection": {"$value": "#ffffff"}, "selectionText": {"$value": "#eeeeee"}}})"));
+    CHECK(std::ranges::any_of(pale, [](std::string const& line) {
+        return line.starts_with("color.selection: color.selectionText is ") && line.ends_with(":1 on it, below 4.5:1");
+    }));
+    CHECK(ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color",
+        "selection": {"$value": "#ffffff"}, "selectionText": {"$value": "#101010"}}})"))
+              .empty());
+    CHECK(ui::themeContrastProblems(ui::themeValues()).empty());
 }

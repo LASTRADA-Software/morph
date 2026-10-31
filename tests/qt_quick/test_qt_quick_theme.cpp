@@ -1327,6 +1327,8 @@ TEST_CASE("qt_quick theme: the dark sidebar's search field and pin buttons use t
 TEST_CASE("qt_quick theme: every built-in scheme sets every colour role MorphScheme declares", "[qt_quick]") {
     Scene scene;
     ui::ThemeValues values = ui::themeValues();
+    // Set, so that the schemes that follow the theme's selection text have a value to differ from the default.
+    values.colors.insert_or_assign("color.selectionText", ui::Rgba{});
     std::uint8_t step = 0;
     for (auto& [path, color] : values.colors) {
         step = static_cast<std::uint8_t>(step + 7);
@@ -1351,6 +1353,10 @@ TEST_CASE("qt_quick theme: every built-in scheme sets every colour role MorphSch
         for (int index = 0; index < meta->propertyCount(); ++index) {
             QMetaProperty const property = meta->property(index);
             if (property.metaType() != QMetaType::fromType<QColor>()) {
+                continue;
+            }
+            // The built-in sidebar keeps no selection text of its own to differ: its palette is its own.
+            if (std::string_view{name} == "sidebarScheme" && std::string_view{property.name()} == "selectionText") {
                 continue;
             }
             ++roles;
@@ -1787,6 +1793,7 @@ TEST_CASE("qt_quick theme: the input inset reaches the Theme singleton", "[qt_qu
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
     CHECK(theme->property("inputPaddingX").toReal() == 10.0);
 }
+
 namespace {
 
 /// The resolved values of one token document.
@@ -1798,13 +1805,82 @@ ui::ThemeValues valuesOfDocument(std::string_view document) {
     return ui::themeValues(*resolved);
 }
 
+constexpr std::string_view kSelectionTextToken =
+    R"({"color": {"selectionText": {"$type": "color", "$value": "#fefefe"}}})";
+
 QObject& themeSingleton(Scene& scene) {
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
     REQUIRE(theme != nullptr);
     return *theme;
 }
 
+QObject& builtinScheme(QObject const& theme, char const* name) {
+    auto* const scheme = theme.property(name).value<QObject*>();
+    REQUIRE(scheme != nullptr);
+    return *scheme;
+}
+
 }  // namespace
+
+// Mutation: leave the surface's `hasSelectionText` unwritten (the sidebar keeps no selection text), or write the
+// colour but not the flag.
+TEST_CASE("qt_quick theme: a declared sidebar surface's selection text reaches its scheme", "[qt_quick]") {
+    Scene scene;
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{
+        {"sidebar", valuesOfDocument(kSelectionTextToken)}};
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), surfaces).empty());
+    QObject const& sidebar = builtinScheme(themeSingleton(scene), "sidebarScheme");
+    CHECK(sidebar.property("hasSelectionText").toBool());
+    CHECK(sidebar.property("selectionText").value<QColor>() == QColor{"#fefefe"});
+    CHECK(sidebar.property("selectedText").value<QColor>() == QColor{"#fefefe"});
+}
+
+// Mutation: leave `selectionText` out of the built-in schemes' bindings, or bind the sidebar to the theme's.
+TEST_CASE("qt_quick theme: a base selection text reaches the built-in surfaces but not the built-in sidebar",
+          "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), valuesOfDocument(kSelectionTextToken)).empty());
+    QObject const& theme = themeSingleton(scene);
+    CHECK(theme.property("hasSelectionText").toBool());
+    for (char const* const name :
+         {"themeScheme", "pageScheme", "cardScheme", "toolbarScheme", "barScheme", "toolbarJoinedScheme"}) {
+        INFO(name);
+        CHECK(builtinScheme(theme, name).property("selectedText").value<QColor>() == QColor{"#fefefe"});
+    }
+    QObject const& sidebar = builtinScheme(theme, "sidebarScheme");
+    CHECK_FALSE(sidebar.property("hasSelectionText").toBool());
+    CHECK(sidebar.property("selectedText").value<QColor>() == sidebar.property("text").value<QColor>());
+}
+
+// Mutation: make `selectedText` the (default) selectionText colour regardless of the flag.
+TEST_CASE("qt_quick theme: a theme that sets no selection text selects in the surface's text", "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    QObject const& theme = themeSingleton(scene);
+    CHECK_FALSE(theme.property("hasSelectionText").toBool());
+    QObject const& own = builtinScheme(theme, "themeScheme");
+    CHECK(own.property("selectedText").value<QColor>() == own.property("text").value<QColor>());
+}
+
+// Mutation: write `hasSelectionText` only when the token is present (a re-apply keeps the earlier flag).
+TEST_CASE("qt_quick theme: a re-apply that drops the selection text restores the text colour", "[qt_quick]") {
+    Scene scene;
+    std::map<std::string, ui::ThemeValues, std::less<>> const declared{
+        {"sidebar", valuesOfDocument(kSelectionTextToken)}};
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), valuesOfDocument(kSelectionTextToken), declared).empty());
+    QObject const& theme = themeSingleton(scene);
+    QObject const& sidebar = builtinScheme(theme, "sidebarScheme");
+    REQUIRE(sidebar.property("hasSelectionText").toBool());
+    REQUIRE(theme.property("hasSelectionText").toBool());
+    // The same surface is still declared, now without the token.
+    std::map<std::string, ui::ThemeValues, std::less<>> const without{{"sidebar", ui::themeValues()}};
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), without).empty());
+    CHECK_FALSE(sidebar.property("hasSelectionText").toBool());
+    CHECK(sidebar.property("selectedText").value<QColor>() == sidebar.property("text").value<QColor>());
+    CHECK_FALSE(theme.property("hasSelectionText").toBool());
+    CHECK(builtinScheme(theme, "cardScheme").property("selectedText").value<QColor>() ==
+          builtinScheme(theme, "cardScheme").property("text").value<QColor>());
+}
 
 constexpr std::string_view kDialogShadowToken =
     R"({"elevation": {"dialog": {"$type": "shadow", "$value": {"color": "#11223344", "offsetX": {"value": 1, "unit": "px"},)"
@@ -1818,7 +1894,7 @@ constexpr std::string_view kCardShadowToken =
 TEST_CASE("qt_quick theme: elevation.dialog reaches the dialog's shadow and leaves the card's", "[qt_quick]") {
     Scene scene;
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), valuesOfDocument(kDialogShadowToken)).empty());
-    QObject& theme = themeSingleton(scene);
+    QObject const& theme = themeSingleton(scene);
     CHECK(theme.property("hasDialogShadow").toBool());
     CHECK(theme.property("dialogShadowOffsetY").toReal() == 7.0);
     CHECK(theme.property("dialogShadowShownOffsetY").toReal() == 7.0);
@@ -1830,7 +1906,7 @@ TEST_CASE("qt_quick theme: elevation.dialog reaches the dialog's shadow and leav
 TEST_CASE("qt_quick theme: while elevation.dialog is unset the dialog's shadow is the card's", "[qt_quick]") {
     Scene scene;
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), valuesOfDocument(kCardShadowToken)).empty());
-    QObject& theme = themeSingleton(scene);
+    QObject const& theme = themeSingleton(scene);
     CHECK_FALSE(theme.property("hasDialogShadow").toBool());
     CHECK(theme.property("dialogShadowShownOffsetY").toReal() == 5.0);
     CHECK(theme.property("dialogShadowShownBlur").toReal() == 3.0);
@@ -1842,7 +1918,7 @@ TEST_CASE("qt_quick theme: a re-apply that drops elevation.dialog returns the di
           "[qt_quick]") {
     Scene scene;
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), valuesOfDocument(kDialogShadowToken)).empty());
-    QObject& theme = themeSingleton(scene);
+    QObject const& theme = themeSingleton(scene);
     REQUIRE(theme.property("hasDialogShadow").toBool());
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
     CHECK_FALSE(theme.property("hasDialogShadow").toBool());

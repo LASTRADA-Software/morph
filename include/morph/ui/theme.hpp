@@ -1196,7 +1196,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 71> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 72> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1221,6 +1221,10 @@ inline constexpr std::array<ThemeTokenSpec, 71> kThemeTokens = {{
     // The dim over the window behind a modal dialog or drawer.
     {.path = "color.scrim", .kind = ThemeTokenKind::Color, .color = "#0000004d", .number = 0.0},
     {.path = "color.selection", .kind = ThemeTokenKind::Color, .color = "#cfe3ff", .number = 0.0},
+    // The text of a selected list item, read per surface. Empty: while a theme does not set it, a selected item's
+    // text is the surface's `color.text`, which is the first colour to follow another; the token is absent from
+    // `ThemeValues` until set.
+    {.path = "color.selectionText", .kind = ThemeTokenKind::Color, .color = "", .number = 0.0},
     {.path = "color.ok", .kind = ThemeTokenKind::Color, .color = "#2e7d32", .number = 0.0},
     {.path = "color.ok.bg", .kind = ThemeTokenKind::Color, .color = "#e8f5e9", .number = 0.0},
     {.path = "color.ok.border", .kind = ThemeTokenKind::Color, .color = "#a5d6a7", .number = 0.0},
@@ -1333,8 +1337,9 @@ inline constexpr std::array<ThemeTokenSpec, 71> kThemeTokens = {{
      .family = "",
      .stroke = "",
      .keyword = "shown"},
-    // How a selected list item is marked, read per surface: the selection colour with an accent bar and an accent
-    // label (`accent`), or the selection colour alone with the label in the surface's text colour (`fill`).
+    // How a selected list item is marked, read per surface: the selection colour with a 3 px accent bar at the
+    // leading edge (`accent`), or the selection colour alone (`fill`). The item's text is `color.selectionText`
+    // either way.
     {.path = "list.selection",
      .kind = ThemeTokenKind::Keyword,
      .color = "",
@@ -1492,6 +1497,10 @@ inline void fillValue(ThemeValues& values, ThemeTokenSpec const& spec, Token con
     switch (spec.kind) {
         case ThemeTokenKind::Color: {
             auto const color = typedValue(token, "color", [](Json const& value) { return colorOf(value); });
+            // A colour with no default follows another colour and is left out until the theme sets it.
+            if (!color && spec.color.empty()) {
+                break;
+            }
             values.colors.insert_or_assign(path, color.value_or(hexColor(spec.color).value_or(Rgba{})));
             break;
         }
@@ -1742,9 +1751,9 @@ namespace detail {
 /// @brief The fills text lies on, and the text colours that must stay readable on them.
 ///
 /// `color.text` must hold 4.5:1 and `color.muted` 3:1 on `color.hover`, `color.selection`, `color.track` and
-/// `color.controlSurface`. Muted gets 3:1 because the framework's own defaults hold that and not 4.5:1; the check
-/// catches a fill that makes text disappear, not one that merely restyles it. A translucent fill is composited over
-/// `color.surface` first.
+/// `color.controlSurface`. A theme that sets `color.selectionText` must hold it 4.5:1 on `color.selection`. Muted gets
+/// 3:1 because the framework's own defaults hold that and not 4.5:1; the check catches a fill that makes text
+/// disappear, not one that merely restyles it. A translucent fill is composited over `color.surface` first.
 /// @param values The theme's values.
 /// @return One sentence per text colour and fill that fall short, such as `color.hover: color.text is 1.50:1 on it,
 ///         below 4.5:1`; empty when every pair holds.
@@ -1764,24 +1773,25 @@ namespace detail {
         return found == values.colors.end() ? std::nullopt : std::optional<Rgba>{found->second};
     };
     auto const surface = colorAt("color.surface").value_or(Rgba{});
-    for (std::string_view const fillPath : kFills) {
+    auto const check = [&](std::string_view fillPath, TextRule const& text) {
         auto const fill = colorAt(fillPath);
-        if (!fill) {
-            continue;
+        auto const color = colorAt(text.path);
+        if (!fill || !color) {
+            return;
         }
         Rgba const under = detail::over(*fill, detail::over(surface, Rgba{}));
+        double const ratio = detail::contrastRatio(detail::over(*color, under), under);
+        if (ratio < text.minimum) {
+            problems.push_back(
+                std::format("{}: {} is {:.2f}:1 on it, below {}:1", fillPath, text.path, ratio, text.label));
+        }
+    };
+    for (std::string_view const fillPath : kFills) {
         for (TextRule const& text : kTexts) {
-            auto const color = colorAt(text.path);
-            if (!color) {
-                continue;
-            }
-            double const ratio = detail::contrastRatio(detail::over(*color, under), under);
-            if (ratio < text.minimum) {
-                problems.push_back(
-                    std::format("{}: {} is {:.2f}:1 on it, below {}:1", fillPath, text.path, ratio, text.label));
-            }
+            check(fillPath, text);
         }
     }
+    check("color.selection", {.path = "color.selectionText", .minimum = 4.5, .label = "4.5"});
     return problems;
 }
 

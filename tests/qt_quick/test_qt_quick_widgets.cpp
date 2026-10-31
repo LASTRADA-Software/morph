@@ -35,6 +35,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <map>
 #include <memory>
 #include <morph/qt_quick/theme.hpp>
@@ -2295,9 +2296,9 @@ QQuickItem* accentBar(QQuickItem& control) {
 
 }  // namespace
 
-// Mutation: hand the content the button's own `scheme` (the content's text stays the scheme's text while selected
-// under accent), or draw the background under the button's label only (the badge lies outside it).
-TEST_CASE("qt_quick widgets: a selected item with content is marked across it, in the accent under accent",
+// Mutation: draw the selected item's text in the accent (the content's text is the accent while selected), or draw
+// the background under the button's label only (the badge lies outside it).
+TEST_CASE("qt_quick widgets: a selected item with content is marked across it, and keeps its text colour under accent",
           "[qt_quick]") {
     Scene scene;
     auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
@@ -2322,14 +2323,15 @@ TEST_CASE("qt_quick widgets: a selected item with content is marked across it, i
     auto const text = scheme->property("text").value<QColor>();
     REQUIRE(accent != text);
     QQuickItem& root = Scene::itemOf(*entry.button);
-    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == accent);
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == text);
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) != accent);
     // Deselected, the text returns to the scheme's text with nothing adopted again.
     entry.button->setSelected(false);
     scene.settle();
     CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == text);
     entry.button->setSelected(true);
     scene.settle();
-    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == accent);
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == text);
 }
 
 // Mutation: ignore `listSelectionFill` in the content's scheme (the label stays the accent) or in the background (the
@@ -2486,4 +2488,80 @@ TEST_CASE("qt_quick widgets: a text that wraps asks for no more than its widest 
     text->setRole(ui::TextRole::Mono);
     scene.settle();
     CHECK(item.property("wrapMinimumWidth").toDouble() == Catch::Approx(item.implicitWidth()));
+}
+
+namespace {
+
+/// Applies a `sidebar` surface that sets `color.selectionText` to @p selectionText under the `list.selection` look
+/// @p look, and returns the sidebar scheme.
+QObject& applySidebarSelectionText(Scene& scene, std::string_view look, std::string_view selectionText) {
+    auto const tokens =
+        ui::parseTokens(std::format(R"({{"list": {{"selection": {{"$type": "keyword", "$value": "{}"}}}},)"
+                                    R"( "color": {{"selectionText": {{"$type": "color", "$value": "{}"}}}}}})",
+                                    look, selectionText));
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"sidebar", ui::themeValues(*resolved)}};
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), surfaces).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto* const sidebar = theme->property("sidebarScheme").value<QObject*>();
+    REQUIRE(sidebar != nullptr);
+    return *sidebar;
+}
+
+}  // namespace
+
+// Mutation: read the scheme's `text` for the selected content (the colour stays the surface's text), or ignore
+// `listSelectionFill` for the selection text (a bar-less item keeps `text`).
+TEST_CASE("qt_quick widgets: a selected item's content draws in the surface's selection text, under fill",
+          "[qt_quick]") {
+    Scene scene;
+    QObject const& sidebar = applySidebarSelectionText(scene, "fill", "#fefefe");
+    REQUIRE(sidebar.property("hasSelectionText").toBool());
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(300), .height = ui::Sizing::content()});
+    auto entry = makeSelectedEntry(scene, column.get(), "sidebar");
+    scene.settle();
+    QQuickItem& control = buttonControl(*entry.button);
+    QQuickItem const* const bar = accentBar(control);
+    REQUIRE(bar != nullptr);
+    CHECK_FALSE(bar->isVisible());
+    QQuickItem& root = Scene::itemOf(*entry.button);
+    auto const selectionText = QColor{QStringLiteral("#fefefe")};
+    auto const text = sidebar.property("text").value<QColor>();
+    REQUIRE(selectionText != text);
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == selectionText);
+    entry.button->setSelected(false);
+    scene.settle();
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == text);
+    entry.button->setSelected(true);
+    scene.settle();
+    CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == selectionText);
+}
+
+// Mutation: leave the label on the scheme's `text` while selected (only the content follows), or keep the accent for
+// the label under accent.
+TEST_CASE("qt_quick widgets: a selected item's own label draws in the selection text, under accent and fill",
+          "[qt_quick]") {
+    for (std::string_view const look : {"accent", "fill"}) {
+        Scene scene;
+        QObject const& sidebar = applySidebarSelectionText(scene, look, "#fefefe");
+        auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+        column->setLayout({.width = ui::Sizing::fixed(300), .height = ui::Sizing::content()});
+        auto button = scene.backend().createButton(column.get());
+        button->setStyle(ui::ButtonStyle::Item);
+        button->setLabel("Instrument 3");
+        button->setSurface("sidebar");
+        button->setSelected(true);
+        scene.settle();
+        QQuickItem& root = Scene::itemOf(*button);
+        INFO(look);
+        CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == QColor{QStringLiteral("#fefefe")});
+        CHECK(drawnColor(root, QStringLiteral("Instrument 3")) != sidebar.property("accent").value<QColor>());
+        button->setSelected(false);
+        scene.settle();
+        CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == sidebar.property("text").value<QColor>());
+    }
 }
