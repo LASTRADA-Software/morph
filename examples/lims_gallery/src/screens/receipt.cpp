@@ -226,18 +226,21 @@ ui::Node notices(Receipt const& receipt) {
         {.gap = 1});
 }
 
-ui::Node temperatureField(Receipt const& receipt) {
+// The required range sits under the field on the expanded layout, and in the caption on the phone, which has no room
+// for a line under the field.
+ui::Node temperatureField(Receipt const& receipt, bool compact) {
     auto const errors =
         ui::cond(receipt.inRange, ui::AnyHandle{std::vector<std::string>{}},
                  ui::AnyHandle{std::vector<std::string>{"Outside 2–8 °C: reject the sample or record a "
                                                         "deviation."}});
-    return layout::captioned(ui::textInput({.value = receipt.temperature,
-                                            .label = "Temperature on arrival",
-                                            .unit = "°C",
-                                            .onChange = ui::set(receipt.temperature, ui::event())}))
+    return layout::captioned(
+               ui::textInput({.value = receipt.temperature,
+                              .label = compact ? "Temperature on arrival · 2–8 °C" : "Temperature on arrival",
+                              .unit = "°C",
+                              .onChange = ui::set(receipt.temperature, ui::event())}))
         .required(true)
         .errors(errors)
-        .description("Required range 2–8 °C")
+        .description(compact ? "" : "Required range 2–8 °C")
         .testId("temperature");
 }
 
@@ -312,7 +315,7 @@ ui::Node sampleHeading(Receipt const& receipt) {
     auto const sampleId = receipt.sample.at("id");
     auto const heading = ui::text({.text = ui::format("Sample {0}", {sampleId}),
                                    .spans = whileSampled(receipt, ui::spans({"Sample ", ui::mono(sampleId)})),
-                                   .role = "heading"})
+                                   .role = "section"})
                              .testId("sample-id");
     return ui::row({heading, layout::tag(receipt.sample.at("status"), "neutral")},
                    {.gap = 1, .align = Align::Center, .wrap = true});
@@ -345,15 +348,15 @@ ui::Node sampleCard(Receipt const& receipt) {
                {ui::column(
                    {ui::column({ui::row({sampleHeading(receipt), ui::spacer().sizing(ui::stretch()), lotLine},
                                         {.gap = 1, .align = Align::Center}),
-                                ui::grid({type, temperatureField(receipt), receivedAtField(receipt),
+                                ui::grid({type, temperatureField(receipt, false), receivedAtField(receipt),
                                           locationField(receipt), containersField(receipt), courierField(receipt)},
-                                         {.gap = 2, .columns = 2, .align = Align::Start}),
+                                         {.gap = 2, .columns = 3, .align = Align::Start}),
                                 conditions(receipt, false), noteField(receipt)},
                                {.gap = 2}),
                     // A rule above the decisions separates them from the form.
                     ui::row({rejectButton(receipt, "Reject sample…"), receiveButton(receipt, "Receive and scan next")},
                             {.gap = 1, .justify = Justify::Between})},
-                   {.gap = 2, .divided = true})},
+                   {.gap = 6, .divided = true})},
                {.padding = 3})
         .visible(ui::engaged(receipt.sample))
         .testId("sample");
@@ -426,7 +429,7 @@ ui::Node expandedLayout(Receipt const& receipt) {
         ui::panel({sessionTable(receipt, true), rejectionLine(receipt).testId("last-rejection")},
                   {.title = "This session", .padding = 2})
             // Wide enough for the table's three columns beside the sample card on the 785 px page the sidebar leaves.
-            .sizing(ui::fixed(34))
+            .sizing(ui::fixed(30))
             .testId("session-panel");
     return ui::pinned(
         ui::column({ui::row({left, session}, {.gap = 2, .align = Align::Start}), rejectDialog(receipt)}));
@@ -440,7 +443,7 @@ ui::Node compactLayout(Receipt const& receipt) {
                               .spans = whileSampled(receipt, ui::spans({receipt.sample.at("type"), " · Lot ",
                                                                         ui::mono(receipt.sample.at("lot"))})),
                               .role = "muted"}),
-                    temperatureField(receipt), receivedAtField(receipt), locationField(receipt),
+                    temperatureField(receipt, true), receivedAtField(receipt), locationField(receipt),
                     ui::grid({containersField(receipt), courierField(receipt)}, {.gap = 2, .columns = 2}),
                     conditions(receipt, true), noteField(receipt)},
                    {.gap = 2})
