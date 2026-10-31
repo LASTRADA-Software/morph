@@ -45,18 +45,37 @@ MorphWidget {
                                                 : root.axis === 0 && root.between ? root.naturalLength
                                                                                   : layout.implicitHeight)
 
-    // The widest a wrapping row's child ever needs: a wrapping row can be as narrow as that.
-    readonly property real widestBasis: {
+    // The widest a wrapping row's child ever needs: a wrapping row can be as narrow as that. A child that can be
+    // narrower than its basis (a text that wraps, a stack of them) counts as that.
+    readonly property real widestMinimum: {
         let widest = 0
         for (let i = 0; i < free.children.length; ++i) {
             const cell = free.children[i]
             if (cell.visible)
-                widest = Math.max(widest, root.naturalBasisOf(cell))
+                widest = Math.max(widest, root.minimumBasisOf(cell))
         }
         return widest
     }
+    // How narrow the stack can be laid out: a wrapping row, as narrow as its widest child; a column, the same; a row
+    // that does not wrap, its children side by side.
+    shrinkWidth: 2 * root.insetX + (root.wrap ? root.widestMinimum : root.shrunkContent)
+    readonly property real shrunkContent: {
+        let along = 0
+        let across = 0
+        let shown = 0
+        for (const object of layout.children) {
+            const child = object as Item
+            if (!child || !child.visible)
+                continue
+            const least = root.minimumBasisOf(child)
+            along += least
+            across = Math.max(across, least)
+            ++shown
+        }
+        return root.axis === 1 ? along + root.gapLength * Math.max(0, shown - 1) : across
+    }
     // The content's minimum across the width, and the width there is inside the padding.
-    needWidth: root.wrap ? root.widestBasis : root.axis === 1 && root.between ? root.naturalLength
+    needWidth: root.wrap ? root.widestMinimum : root.axis === 1 && root.between ? root.naturalLength
                                                                        : layout.Layout.minimumWidth
     haveWidth: root.width - 2 * root.insetX
     contentMinimumWidth: 2 * root.insetX + root.needWidth
@@ -70,7 +89,7 @@ MorphWidget {
             const child = object as MorphWidget
             if (!child || !child.visible)
                 continue
-            const least = root.wrap ? root.naturalBasisOf(child) : child.Layout.minimumWidth
+            const least = root.wrap ? root.minimumBasisOf(child) : child.Layout.minimumWidth
             if (least > widest) {
                 widest = least
                 found = child.objectName
@@ -198,7 +217,14 @@ MorphWidget {
         return basis
     }
 
-    // The same, at most the row's width.
+    // A child's basis or, where it can be narrower, the narrowest it can be.
+    function minimumBasisOf(cell: Item): real {
+        const basis = root.naturalBasisOf(cell)
+        const widget = cell as MorphWidget
+        return widget && widget.shrinkWidth >= 0 ? Math.min(basis, widget.shrinkWidth) : basis
+    }
+
+    // The same as the basis, at most the row's width.
     function basisOf(cell: Item): real {
         return Math.min(root.naturalBasisOf(cell), root.width - 2 * root.insetX)
     }

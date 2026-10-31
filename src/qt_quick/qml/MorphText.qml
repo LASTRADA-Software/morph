@@ -48,6 +48,27 @@ MorphField {
                                          (widest, line) => Math.max(widest, root.advanceOf(metrics, line)), 0) +
                                      root.wrapSlack) +
                    (root.required ? root.markerRoom : 0)
+    // The narrowest this text can be laid out: a text that wraps breaks only between words, so it can be as narrow as
+    // its widest word, each measured in its own face (a run may be strong or mono); a text on one line is as wide as it
+    // is. Read from advances for the reason `implicitWidth` is, and in the same fonts, so it follows them.
+    readonly property real wrapMinimumWidth: {
+        if (root.oneLine)
+            return root.implicitWidth
+        let widest = 0
+        if (root.hasRuns) {
+            for (const run of root.runs) {
+                const face = run.mono ? monoMetrics : run.strong ? strongMetrics : metrics
+                for (const word of run.text.split(/\s+/))
+                    widest = Math.max(widest, root.advanceOf(face, word))
+            }
+        } else {
+            for (const word of root.text.split(/\s+/))
+                widest = Math.max(widest, root.advanceOf(metrics, word))
+        }
+        return widest + root.wrapSlack + (root.required ? root.markerRoom : 0)
+    }
+    shrinkWidth: root.wrapMinimumWidth
+
     // The width of a line in a face. Reading the face's height makes every binding that measures through here depend
     // on the font: a method call alone registers no dependency, so a text whose role is set after its text would keep
     // the width of the font it was first measured in. The height is never negative.
@@ -71,6 +92,17 @@ MorphField {
     FontMetrics {
         id: metrics
         font: label.font
+    }
+
+    // The faces a run can switch to.
+    FontMetrics {
+        id: strongMetrics
+        font: Theme.strongFont
+    }
+
+    FontMetrics {
+        id: monoMetrics
+        font: Theme.monoFont
     }
 
     Label {

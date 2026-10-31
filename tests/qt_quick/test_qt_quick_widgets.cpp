@@ -12,6 +12,7 @@
 #include <QDateTime>
 #include <QFont>
 #include <QFontInfo>
+#include <QFontMetricsF>
 #include <QList>
 #include <QMessageLogContext>
 #include <QObject>
@@ -2452,4 +2453,37 @@ TEST_CASE("qt_quick widgets: a check box sits at its column's edge and its label
     CHECK(content->property("leftPadding").toDouble() == Catch::Approx(indicator->width() + step).margin(0.5));
     CHECK(labelItem.property("leftPadding").toDouble() == Catch::Approx(0.0));
     CHECK(labelItem.property("spacing").toDouble() == Catch::Approx(step));
+}
+
+// Mutation: report the whole line as the minimum (a plain text of 300 px asks for 300), or count only the body face
+// (a run in the strong face is measured too narrow).
+TEST_CASE("qt_quick widgets: a text that wraps asks for no more than its widest word", "[qt_quick]") {
+    Scene scene;
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto const text = scene.backend().createText(row.get());
+    text->setText("ELISA, host cell protein");
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*text);
+    auto const widthOf = [&text](QString const& word) {
+        return QFontMetricsF{Scene::controlOf(*text).property("font").value<QFont>()}.horizontalAdvance(word);
+    };
+    double const slack = item.property("wrapSlack").toDouble();
+    double widest = 0;
+    for (QString const& word :
+         {QStringLiteral("ELISA,"), QStringLiteral("host"), QStringLiteral("cell"), QStringLiteral("protein")}) {
+        widest = std::max(widest, widthOf(word));
+    }
+    CHECK(item.property("wrapMinimumWidth").toDouble() == Catch::Approx(widest + slack));
+    CHECK(item.property("wrapMinimumWidth").toDouble() < item.implicitWidth() / 2);
+
+    // Set after the text, a role of another face moves it.
+    double const regular = item.property("wrapMinimumWidth").toDouble();
+    text->setRole(ui::TextRole::Heading);
+    scene.settle();
+    CHECK(item.property("wrapMinimumWidth").toDouble() > regular);
+
+    // A mono text is one line: its minimum is its width.
+    text->setRole(ui::TextRole::Mono);
+    scene.settle();
+    CHECK(item.property("wrapMinimumWidth").toDouble() == Catch::Approx(item.implicitWidth()));
 }

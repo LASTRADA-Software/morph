@@ -2171,6 +2171,50 @@ TEST_CASE("qt_quick containers: a tab page fills the page area, pads itself, and
     CHECK(bar->mapToItem(&item, QPointF{bar->width(), 0}).x() == Catch::Approx(item.width()).margin(0.5));
 }
 
+// Mutation: count a text's whole line as the narrowest it can be (the row's minimum is 300 px and one warning is
+// written), or count a button as shrinkable (a row of rigid children stops reporting).
+TEST_CASE("qt_quick containers: a wrapping row counts a text that can wrap as no wider than its widest word",
+          "[qt_quick]") {
+    LayoutWatch const watch;
+    Scene scene;
+    scene.window().resize(150, 300);
+    auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    row->setWrap(true);
+    row->setTestId("wrapping");
+    auto text = scene.backend().createText(row.get());
+    text->setText("Approving needs your signature and a second reviewer");
+    auto button = scene.backend().createButton(row.get());
+    button->setLabel("Go");
+    button->setLayout({.width = ui::Sizing::fixed(8)});
+    scene.settle();
+    QTest::qWait(150);
+    QQuickItem const& rowItem = Scene::itemOf(*row);
+    QQuickItem const& textItem = Scene::itemOf(*text);
+    REQUIRE(textItem.implicitWidth() > 250);
+    double const minimum = rowItem.property("contentMinimumWidth").toDouble();
+    INFO("minimum " << minimum << ", text " << textItem.implicitWidth());
+    CHECK(minimum >= textItem.property("wrapMinimumWidth").toDouble() - 0.5);
+    CHECK(minimum < 150);
+    CHECK(textItem.width() == Catch::Approx(150.0).margin(1.0));
+    CHECK(Scene::controlOf(*text).property("lineCount").toInt() >= 2);
+    CHECK(layoutWarnings().isEmpty());
+
+    // Children that cannot shrink still count in full, and are still reported.
+    layoutWarnings().clear();
+    Scene rigid;
+    rigid.window().resize(100, 300);
+    auto buttons = rigid.backend().createStack(nullptr, ui::Axis::Horizontal);
+    buttons->setWrap(true);
+    buttons->setTestId("rigid");
+    auto wide = rigid.backend().createButton(buttons.get());
+    wide->setLabel("A button wider than the window");
+    wide->setLayout({.width = ui::Sizing::fixed(20)});
+    rigid.settle();
+    QTest::qWait(150);
+    CHECK(Scene::itemOf(*buttons).property("contentMinimumWidth").toDouble() > 100);
+    CHECK(layoutWarnings().size() == 1);
+}
+
 // Mutation: leave the panel's padding above the content and the layout's spacing under the header (the content
 // starts 13 px below the header's foot).
 TEST_CASE("qt_quick containers: an open collapsible panel's content starts at its header's foot", "[qt_quick]") {

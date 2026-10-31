@@ -42,6 +42,10 @@ Item {
     // False for a widget whose container places it at a width of its own choosing (a table's cell, at its column's),
     // which must not be pushed wider by its content.
     property bool honoursContentMinimum: true
+    // The narrowest the widget can be laid out without losing content, in pixels: a text that wraps can be as narrow as
+    // its widest word. -1 for a widget that cannot be narrower than its natural width (a button, a fixed-width input).
+    // A wrapping row counts each child by the lesser of its basis and this.
+    property real shrinkWidth: -1
     property int minWidthUnits: -1
     property int maxWidthUnits: -1
     property int minHeightUnits: -1
