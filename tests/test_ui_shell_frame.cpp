@@ -468,3 +468,17 @@ TEST_CASE(
     CHECK(backend.prop(principal, "visible") == "false");
     CHECK(backend.prop(trail, "visible") == "false");
 }
+
+// Mutation: leave the bar's gap at step 2 compact.
+TEST_CASE("shell frame: the compact top bar pads above and below its line by step 1", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const bar = backend.find("Column", "testId", "shell_topbar").value();
+    CHECK(backend.prop(bar, "gap") == "2");
+    frame.setCompact(true);
+    CHECK(backend.prop(bar, "gap") == "1");
+    frame.setCompact(false);
+    CHECK(backend.prop(bar, "gap") == "2");
+}

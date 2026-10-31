@@ -2313,3 +2313,41 @@ TEST_CASE("qt_quick containers: an empty head slot leaves no gap before the prin
     INFO("the trail at " << trail.left() << ", the principal at " << principal.left());
     CHECK(principal.left() == Catch::Approx(trail.left()).margin(0.5));
 }
+
+namespace {
+
+// One step of the theme's spacing scale.
+qreal themeStep(Scene& scene, int step) {
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal length = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, length), Q_ARG(int, step)));
+    return length;
+}
+
+}  // namespace
+
+// The compact bar is the touch target plus step 1 above and below. Mutation: leave the bar's gap at step 2 compact
+// (the bar is 16 px taller).
+TEST_CASE("qt_quick containers: the compact top bar is one touch target tall plus step 1 each side", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setCompact(true);
+    frame.setTitle("Console");
+    frame.setHeadShown(true);
+    ui::Button scan{.label = {}, .icon = "scan"};
+    scan.emphasis = ui::ButtonEmphasis::Ghost;
+    scan.common.testId = "bar_scan";
+    ui::Mounted const trailMount{scene.runtime(), scene.backend(),
+                                 ui::row(ui::Row{.children = {ui::button(std::move(scan))}, .gap = 1}),
+                                 &frame.headSlot()};
+    scene.window().resize(390, 600);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal const touch = theme->property("touchHeight").toReal();
+    QRectF const bar = sceneRectOf("shell_topbar");
+    INFO("the bar is " << bar.height() << " px, a touch target " << touch);
+    CHECK(bar.height() == Catch::Approx(touch + (2 * themeStep(scene, 1))).margin(0.5));
+}
