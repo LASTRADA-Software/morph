@@ -6,24 +6,37 @@ side branches, each in its own worktree, and is rebased onto `feat/lims-gallery`
 The live tracker is `status/STATUS.md` in this folder, published as a phone-friendly page (see "The status board"
 below). It lists every lane, its commits, the decisions and the follow-ups; read it first.
 
-## Resume here
+## Resume here (paused 2026-10-31)
 
 Everything below this section is older history; this section is current.
 
-`feat/lims-gallery` (PR #1045) holds batches A to J: batch I (lanes I-Q, I-V, I-S) with lane T's clang-tidy fixes and
-lane W's CI fixes, lane J-F's re-fit of the screens to the 785 px page beside the 1000 px sidebar, and batch J (lanes
-J-C, J-B, J-A) verified by lane V: no build warnings, every ctest, GCC `-Wshadow`, Qt 6.8.1 qmllint and Qt Quick
-tests, clang-tidy 22 over the whole diff, clang-format 22, the coverage allowlist, Doxygen, every example's render
-smoke (which now fails on any layout overflow) and a TUI mount.
+| Branch | Worktree | Holds | State |
+|---|---|---|---|
+| `feat/lims-gallery` (PR #1045) | — | batches A–J, verified locally (`300cee8c1`) | pushed; CI failed 8 jobs (see below) |
+| `lg-ks` | `../morph-lims-e3` | `300cee8c1` + lane K-S's 10 screen-fix commits | done, 5237/5237 tests |
+| `lg-k-design` | `../morph-lims-e2` | `lg-ks` + the batch K design + this tracker | design written, reviewed, **not yet revised** |
+| `lg-ci7` | `../morph-lims-e1` | `300cee8c1` + one WIP commit of lane CI (partial clang-tidy fixes) | WIP, unverified, may not compile |
 
-The design specs are `docs/superpowers/specs/2026-10-30-lims-gallery-batch-{i,j}-design.md`; lane briefs and the
-comparison reports that drove batch J are in `handoff/`.
+CI on `300cee8c1` (run 41146136081, WASM 41146136019) failed: Application ladder, Build & deploy WASM demo,
+Linux / Qt6 WebSockets, Linux / clang-coverage, Linux / gcc-release, Windows / cl-debug, Windows / clangcl-debug,
+clang-tidy-diff.
 
-Next steps:
-1. Compare the grabs after batch J with the mockups (two reviewers, grabs signed in with `--user "Dr. A. Meyer"`).
-   Any remaining gap that needs the framework becomes another batch on this branch; write the "After batch J" section
-   of `visual-review.md` from that comparison.
-2. Drive PR #1045's CI to green, then merge once no known gaps remain.
+Grab with `QT_FORCE_STDERR_LOGGING=1`: without it Qt sends its warnings to the system journal when stderr is not a
+terminal, and an empty log proves nothing.
+
+Next steps, in order:
+1. Finish lane CI from `lg-ci7` (brief: `handoff/lane-ci-brief.md`): diagnose all 8 jobs from their logs, fix real
+   defects, record evidence for runner or flaky failures. Squash the WIP commit into real commits.
+2. Revise `docs/superpowers/specs/2026-10-31-lims-gallery-batch-k-design.md` with its review
+   (`handoff/batch-k-review.md`: 2 blockers, 4 should-fixes) and the user's answers: selected text defaults to the
+   text colour; narrow the samples and plate actions (keep the principal); keep the calendar button; both dialog
+   rules in the divider colour; a new `elevation.dialog` (consider following `elevation.card`). Also investigate four
+   leftovers from K-S: instrument 390's panel header-to-content gap (~43 px vs 30), console 390's dark head (60 vs
+   52 px), audit 390's Export PDF inset (8 vs 16 px), samples 390's Register flush to the head's edge.
+3. Implement batch K's lanes (K-A, K-B, K-C) on Sonnet from `lg-ks`; rules in `handoff/lane-common-brief.md`.
+4. Fold K + CI fixes, verify every check, re-grab (with `--user "Dr. A. Meyer"` and `QT_FORCE_STDERR_LOGGING=1`),
+   compare with the mockups (two reviewers; the after-J reports are `handoff/after-j-findings-{A,B}.md`).
+5. Push to `feat/lims-gallery`, drive CI green, merge once no known gaps remain.
 
 ## Branches
 

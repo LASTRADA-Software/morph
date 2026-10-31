@@ -192,3 +192,12 @@
 {"logged": "2026-10-30 22:54:39", "event": "done", "task": "J.B"}
 {"logged": "2026-10-31 00:03:49", "event": "done", "task": "J.A"}
 {"logged": "2026-10-31 00:03:49", "event": "start", "task": "J.V", "title": "Lane V: verify the fold", "group": "J"}
+{"logged": "2026-10-31 00:43:29", "event": "done", "task": "J.V"}
+{"logged": "2026-10-31 00:43:29", "event": "start", "task": "J.R", "title": "Compare after batch J", "group": "J"}
+{"logged": "2026-10-31 00:47:54", "event": "done", "task": "J.R"}
+{"logged": "2026-10-31 00:47:54", "event": "start", "task": "K.S", "title": "Lane K-S: screen fixes", "group": "K"}
+{"logged": "2026-10-31 00:47:54", "event": "start", "task": "K.D", "title": "Batch K design", "group": "K"}
+{"logged": "2026-10-31 09:00:41", "event": "done", "task": "K.S"}
+{"logged": "2026-10-31 09:00:41", "event": "done", "task": "K.D"}
+{"logged": "2026-10-31 09:00:41", "event": "start", "task": "K.DV", "title": "Revise batch K design", "group": "K"}
+{"logged": "2026-10-31 09:00:41", "event": "start", "task": "K.CI", "title": "Lane CI: PR #1045", "group": "K"}
