@@ -332,28 +332,28 @@ TEST_CASE("ui theme values: the keyword, dimension and stroke checks skip tokens
     CHECK_FALSE(ui::detail::dimensionProblem(set).has_value());
     CHECK_FALSE(ui::detail::strokeProblem(set).has_value());
 
-    set["shape.iconOnly"] = {"color", json(R"("#000000")")};
-    set["input.paddingX"] = {"color", json(R"("#000000")")};
-    set["border.style"] = {"color", json(R"("#000000")")};
+    set["shape.iconOnly"] = {.type = "color", .value = json(R"("#000000")")};
+    set["input.paddingX"] = {.type = "color", .value = json(R"("#000000")")};
+    set["border.style"] = {.type = "color", .value = json(R"("#000000")")};
     CHECK_FALSE(ui::detail::keywordProblem(set).has_value());
     CHECK_FALSE(ui::detail::dimensionProblem(set).has_value());
     CHECK_FALSE(ui::detail::strokeProblem(set).has_value());
 
-    set["shape.iconOnly"] = {"keyword", json("3")};
-    set["border.style"] = {"strokeStyle", json("3")};
+    set["shape.iconOnly"] = {.type = "keyword", .value = json("3")};
+    set["border.style"] = {.type = "strokeStyle", .value = json("3")};
     CHECK(ui::detail::keywordProblem(set).has_value());
     CHECK(ui::detail::strokeProblem(set).has_value());
 
-    set["shape.iconOnly"] = {"keyword", json(R"("square")")};
-    set["border.style"] = {"strokeStyle", json(R"("dashed")")};
+    set["shape.iconOnly"] = {.type = "keyword", .value = json(R"("square")")};
+    set["border.style"] = {.type = "strokeStyle", .value = json(R"("dashed")")};
     CHECK_FALSE(ui::detail::keywordProblem(set).has_value());
     CHECK_FALSE(ui::detail::strokeProblem(set).has_value());
 
-    set["input.paddingX"] = {"dimension", json(R"({"value": 4, "unit": "px"})")};
+    set["input.paddingX"] = {.type = "dimension", .value = json(R"({"value": 4, "unit": "px"})")};
     CHECK_FALSE(ui::detail::dimensionProblem(set).has_value());
-    set["input.paddingX"] = {"dimension", json(R"("4px")")};
+    set["input.paddingX"] = {.type = "dimension", .value = json(R"("4px")")};
     CHECK_FALSE(ui::detail::dimensionProblem(set).has_value());
-    set["input.paddingX"] = {"dimension", json(R"({"value": -4, "unit": "px"})")};
+    set["input.paddingX"] = {.type = "dimension", .value = json(R"({"value": -4, "unit": "px"})")};
     CHECK(ui::detail::dimensionProblem(set).has_value());
 }
 

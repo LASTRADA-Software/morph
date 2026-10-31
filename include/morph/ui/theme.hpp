@@ -460,8 +460,8 @@ inline std::optional<double> weightOf(Json const& value) {
     static constexpr std::array<double, 18> kValues = {100, 100, 200, 200, 300, 400, 400, 400, 500,
                                                        600, 600, 700, 800, 800, 900, 900, 950, 950};
     for (std::size_t i = 0; i < kFontWeights.size(); ++i) {
-        if (kFontWeights[i] == *name) {
-            return kValues[i];
+        if (kFontWeights.at(i) == *name) {
+            return kValues.at(i);
         }
     }
     return std::nullopt;
