@@ -260,7 +260,7 @@ ui::Node matrix(Study const& study) {
     for (Timepoint const& point : kTimepoints) {
         columns.push_back(ui::TableColumn{.name = std::string{"m"} + point.header,
                                           .label = point.header,
-                                          .width = ui::fixed(3),
+                                          .width = ui::fixed(2),
                                           .align = Align::Center,
                                           .cell = monthBox(study, point, false)});
     }
@@ -590,12 +590,13 @@ ui::Node expandedConditions(Study const& study) {
                                 .testId("template"),
                             addCondition(study)},
                            {.gap = 1, .align = Align::Center}),
-                   matrix(study), layout::muted("T0 is tested once, from the long-term condition.")},
+                   // The table runs to the card's edges, its header band and rules with it.
+                   matrix(study).bleed(), layout::muted("T0 is tested once, from the long-term condition.")},
                   {.padding = 2});
     auto const aside = ui::panel({summary(study)}, {.title = "Summary", .padding = 2})
-                           // The design's summary is 25% of its 1000 px page; 27 units is that share of the 785 px
-                           // page the sidebar leaves.
-                           .sizing(ui::fixed(27))
+                           // The summary takes under a quarter of the page, which leaves the conditions' labels
+                           // room for one line.
+                           .sizing(ui::fixed(26))
                            .a11y("Summary");
     return ui::row(
         {ui::column({attention(study, false), fields, conditions}, {.gap = 2}).sizing(ui::stretch()), aside},
