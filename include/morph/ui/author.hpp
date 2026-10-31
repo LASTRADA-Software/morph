@@ -4079,7 +4079,8 @@ namespace detail {
 /// @return The condition; absent when a node has none, which always shows, or when the list is empty.
 [[nodiscard]] inline AnyHandle anyShown(Nodes const& nodes) {
     AnyHandle shown;
-    for (Json const& item : std::get<Json::array_t>(nodes.json().data)) {
+    Json const list = nodes.json();
+    for (Json const& item : std::get<Json::array_t>(list.data)) {
         auto const& members = std::get<Json::object_t>(item.data);
         auto const* const found = members.find("visible");
         if (found == members.end()) {
