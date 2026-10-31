@@ -566,15 +566,15 @@ ui::Node dueCell() {
 ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::string const& testId) {
     std::vector<ui::TableColumn> const columns{
         {.name = "id", .label = "Sample", .width = ui::fixed(11), .role = "mono"},
-        {.name = "test", .label = "Test", .width = ui::stretch(), .wrap = false},
+        {.name = "test", .label = "Test", .width = ui::content(), .wrap = false},
         {.name = "priority",
          .label = "Priority",
-         .width = ui::fixed(7),
+         .width = ui::fixed(6),
          .cell = layout::tag(ui::row("priority"), ui::row("priorityTone"))},
-        {.name = "due", .label = "Due", .width = ui::fixed(12), .cell = dueCell(), .wrap = false},
+        {.name = "due", .label = "Due", .width = ui::fixed(11), .cell = dueCell(), .wrap = false},
         {.name = "status",
          .label = "Status",
-         .width = ui::fixed(9),
+         .width = ui::fixed(8),
          .cell = layout::tag(ui::row("status"), ui::row("statusTone"))}};
     // The sample in the pane is the table's selection: the id of the row at `current`, and a click on a row makes it
     // current.
@@ -595,6 +595,7 @@ ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::s
                     ui::call("first", {ui::map(picked, "entry",
                                                [](ui::AnyHandle const& entry) { return entry.at("index"); })})),
                 .onActivate = ui::set(console.current, ui::row("index"))})
+        .bleed()
         .a11y("Worklist")
         .testId(testId);
 }
@@ -617,7 +618,9 @@ ui::Node worklistTabs(Console const& console) {
                      {.label = "On hold 18",
                       .children = {worklistTable(console, heldSamples(console), "on-hold"),
                                    layout::muted("The 2 on hold from today's worklist, of 18.")}},
-                     {.label = "Review 4", .children = {reviewList()}}})
+                     {.label = "Review 4", .children = {reviewList()}}},
+                    // The strip and each page are padded, and the table bleeds past the padding to the pane's edges.
+                    {.inset = 2})
         .testId("worklist-tabs");
 }
 
@@ -670,7 +673,7 @@ ui::Node resultLine(Console const& console) {
              .sizing(ui::fixed(12))
              .testId("pane-result"),
          // A fixed width, wide enough for "Out of spec", keeps the result inputs of every line in one column.
-         layout::tag(evaluation.label, evaluation.tone).sizing(ui::fixed(11)).testId("pane-evaluation")},
+         layout::tag(evaluation.label, evaluation.tone).sizing(ui::fixed(10)).testId("pane-evaluation")},
         {.gap = 1, .align = Align::Center});
 }
 
@@ -791,9 +794,10 @@ ui::Node samplePane(Console const& console) {
 constexpr int kExpandedMinHeight = 40;
 
 ui::Node expandedLayout(Console const& console) {
-    // The sample pane takes 38 of 98 units beside the worklist, which leaves the worklist's Test column room. The
+    // The sample pane takes 39 of 98 units beside the worklist: room for an analyte's label on one line. The
+    // worklist's Test column keeps its full text and the table clips its last column, Status, as the design does. The
     // splitter takes the page's height under the charts.
-    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{60, 38}};
+    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{59, 39}};
     return ui::column(
                {alert(false), kpis(false),
                 ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
@@ -801,7 +805,7 @@ ui::Node expandedLayout(Console const& console) {
                         {.gap = 1, .align = Align::Start}),
                 // The two panes are one card: the splitter fills a panel with no padding, and each pane pads itself.
                 ui::panel(
-                    {ui::splitter({ui::column({worklistTabs(console)}, {.padding = 2}),
+                    {ui::splitter({worklistTabs(console),
                                    // The pane scrolls on its own: its results and chain of custody may be
                                    // taller than what the window leaves the splitter.
                                    ui::column({ui::scroll({samplePane(console)}).sizing(ui::stretch(), ui::stretch())},
