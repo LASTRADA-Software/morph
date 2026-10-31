@@ -40,6 +40,7 @@ TEST_CASE("review, expanded: the queue beside the worksheet, its flagged results
     CHECK(screen.text("sheet-title") == "Assay and impurities · Paracetamol 500 mg");
     CHECK(screen.prop("Select", "show", "options") == "[\"all\":All 7,\"flagged\":Flagged 2]");
     CHECK(screen.backend().find("Badge", "text", "Out of trend").has_value());
+    CHECK(screen.backend().find("Text", "text", "−0.7 % vs. last 5 lots").has_value());
     CHECK(screen.prop("Tabs", "record-tabs", "tabs") == "[Results,Previous lots,Audit trail · 3,Comments · 1]");
     CHECK_FALSE(screen.shows("Banner", "self-review"));
     CHECK(screen.prop("Button", "approve", "enabled") == "true");
@@ -76,9 +77,9 @@ TEST_CASE("review: the splitter's sizes reach the splitter", "[lims-gallery]") {
     auto const written = lims_gallery::reviewScreen().write();
     REQUIRE(written.has_value());
     auto const text = written.value_or(morph::ui::author::Emitted{}).text;
-    CHECK(text.contains(R"("sizes":{"lit":[20,83]})"));
+    CHECK(text.contains(R"("sizes":{"lit":[21,82]})"));
     GalleryScreen screen{kScreen, "expanded"};
-    CHECK(screen.prop("Splitter", "split", "sizes") == "[20,83]");
+    CHECK(screen.prop("Splitter", "split", "sizes") == "[21,82]");
 }
 
 // The review's `navigate` asks for a dialog, and the generic client draws one over the review: no tab is added. The
@@ -119,8 +120,11 @@ TEST_CASE("review, compact: the worksheet as its own page, the queue behind it",
     screen.requireNoProblems();
     CHECK_FALSE(screen.find("Splitter", "split").has_value());
     CHECK(screen.prop("Button", "back", "label") == "‹ Awaiting review · 4");
-    CHECK(screen.prop("Tabs", "record-tabs", "tabs") == "[Results,Previous,Audit 3,Comments 1]");
+    CHECK(screen.prop("Tabs", "record-tabs", "tabs") == "[Results,Prior lots,Audit 3,Comments 1]");
     CHECK(screen.find("Column", "results").has_value());
+    // The phone's cards keep the evaluation's whole text.
+    CHECK(screen.backend().find("Badge", "text", "Out of spec: above 0.20").has_value());
+    CHECK(screen.backend().find("Badge", "text", "Out of trend: −0.7 % vs. last 5 lots").has_value());
     // The out-of-specification result's card has the tint its table row has.
     CHECK(screen.backend().find("Column", "surface", "outOfSpec").has_value());
     screen.click("back");

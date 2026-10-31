@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "lims_gallery/lims_gallery.hpp"
@@ -127,7 +128,7 @@ constexpr std::array<Result, 11> kResults{{
      .value = "0.21 %",
      .spec = "≤ 0.20 %",
      .previous = "0.09 %",
-     .evaluation = "Out of spec",
+     .evaluation = "Out of spec: above 0.20",
      .tone = "err",
      .change = "0.12 → 0.21 · integration corrected",
      .flagged = true},
@@ -138,7 +139,7 @@ constexpr std::array<Result, 11> kResults{{
      .value = "99.4 % LC",
      .spec = "95.0–105.0",
      .previous = "100.1 % LC",
-     .evaluation = "Out of trend",
+     .evaluation = "Out of trend: −0.7 % vs. last 5 lots",
      .tone = "warn",
      .change = "—",
      .flagged = true},
@@ -312,6 +313,12 @@ ui::AnyHandle resultList() {
     std::vector<ui::AnyHandle> items;
     items.reserve(kResults.size());
     for (Result const& result : kResults) {
+        // The table's cell shows the verdict as a tag and the rest of the text under it, which wraps in the column's
+        // width; the phone's card shows the whole text as the tag.
+        std::string_view const text{result.evaluation};
+        auto const colon = text.find(": ");
+        std::string const verdict{text.substr(0, colon)};
+        std::string const note{colon == std::string_view::npos ? std::string_view{} : text.substr(colon + 2)};
         items.push_back(ui::obj({{"sheet", result.sheet},
                                  {"key", result.key},
                                  {"sample", result.sample},
@@ -320,6 +327,8 @@ ui::AnyHandle resultList() {
                                  {"spec", result.spec},
                                  {"previous", result.previous},
                                  {"evaluation", result.evaluation},
+                                 {"verdict", verdict},
+                                 {"note", note},
                                  {"tone", result.tone},
                                  {"change", result.change},
                                  {"flagged", result.flagged}}));
@@ -526,16 +535,19 @@ ui::Node resultTable(Review const& review) {
         {.name = "analyte", .label = "Analyte", .width = ui::content(), .wrap = false},
         {.name = "value",
          .label = "Result",
-         .width = ui::fixed(9),
+         .width = ui::fixed(8),
          .align = Align::End,
          .cell = ui::text({.text = ui::row("value"), .spans = ui::spans({ui::strong(ui::row("value"))})}),
          .wrap = false},
         {.name = "spec", .label = "Spec.", .width = ui::content(), .wrap = false},
-        {.name = "previous", .label = "Previous", .width = ui::content(), .align = Align::End, .wrap = false},
+        {.name = "previous", .label = "Prior lot", .width = ui::content(), .align = Align::End, .wrap = false},
         {.name = "evaluation",
          .label = "Evaluation",
-         .width = ui::content(),
-         .cell = layout::tag(ui::row("evaluation"), ui::row("tone"))},
+         .width = ui::fixed(10),
+         .cell =
+             ui::column({layout::tag(ui::row("verdict"), ui::row("tone")),
+                         layout::muted(ui::row("note")).sizing(ui::stretch()).visible(!ui::isEmpty(ui::row("note")))},
+                        {.gap = 0})},
         {.name = "change",
          .label = "Change",
          .width = ui::stretch(),
@@ -639,12 +651,13 @@ ui::Node recordTabs(Review const& review, bool compact) {
     // A line of room above the comment's caption, which sits close under the cards otherwise.
     auto const room = ui::spacer().sizing(ui::fixed(1), ui::fixed(1));
     // The phone's banners sit in the page that scrolls with the results; the expanded ones sit above the tabs.
-    ui::Nodes resultsPage{showChoice(review, compact), compact ? resultRows(review) : resultTable(review),
-                          commentCards(review), room, reviewComment(review)};
+    ui::Nodes resultsPage{showChoice(review, compact), resultTable(review), commentCards(review), room,
+                          reviewComment(review)};
     if (compact) {
-        resultsPage = ui::Nodes{selfBanner(review),   signedBanner(review), showChoice(review, true),
-                                resultRows(review),   commentCards(review), room,
-                                reviewComment(review)};
+        // The comments have their own tab on the phone, so the results page goes straight to the comment field.
+        resultsPage =
+            ui::Nodes{selfBanner(review),   signedBanner(review), showChoice(review, true), resultRows(review), room,
+                      reviewComment(review)};
     }
     ui::TabsOptions options;
     // A tab's page scrolls itself, so with `pageInset: 0` a compact page's own padding lies inside the scroll, and a
@@ -657,7 +670,7 @@ ui::Node recordTabs(Review const& review, bool compact) {
     };
     std::vector<ui::Tab> const tabs{
         {.label = "Results", .children = page(resultsPage)},
-        {.label = compact ? "Previous" : "Previous lots", .children = page(ui::Nodes{lotTable(review)})},
+        {.label = compact ? "Prior lots" : "Previous lots", .children = page(ui::Nodes{lotTable(review)})},
         {.label = ui::format(compact ? "Audit {0}" : "Audit trail · {0}", {review.auditCount}),
          .children = page(ui::Nodes{auditList(review)})},
         {.label = ui::format(compact ? "Comments {0}" : "Comments · {0}", {review.commentCount}),
@@ -795,20 +808,20 @@ ui::Node worksheetPane(Review const& review) {
         {ui::column({sheetHead(review, false), selfBanner(review), signedBanner(review), recordTabs(review, false)},
                     {.gap = 2})},
         {.bottom = ui::row({returnButton(review, "Return to analyst…"), rejectButton(review, "Reject…"),
-                            // The note takes the room the buttons leave and wraps within it, so a narrow pane never
-                            // pushes Approve past its edge.
+                            // The spacer takes the room the buttons leave, so the note sits beside Approve.
+                            ui::spacer().sizing(ui::stretch()),
                             layout::muted(ui::cond(review.self, Text{"Another reviewer must approve"},
                                                    Text{"Approving needs your signature"}))
-                                .sizing(ui::stretch())
                                 .testId("approve-note"),
                             approveButton(review, "Approve and sign…")},
                            {.gap = 1, .align = Align::Center})});
 }
 
 ui::Node expandedLayout(Review const& review) {
-    // The queue takes a fifth of the page, 20 of 103 units, which leaves the worksheet the room its results
-    // table and its decisions need. The splitter takes the page's height, so each pane reaches the page's bottom.
-    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{20, 83}};
+    // The queue takes a fifth of the page, 21 of 103 units: room for its title, search placeholder and ages on
+    // one line, and the worksheet keeps what its results table and its decisions need. The splitter takes the page's
+    // height, so each pane reaches the page's bottom.
+    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{21, 82}};
     return ui::column({ui::splitter({queuePane(review).surface("pane"), worksheetPane(review).surface("pane")},
                                     ui::AnyHandle{"horizontal"}, sizes)
                            .sizing(ui::stretch(), ui::stretch())
