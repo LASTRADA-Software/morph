@@ -322,3 +322,44 @@ TEST_CASE("ui theme values: an input's inner padding defaults to 8 and a negativ
     REQUIRE(refused.has_value());
     CHECK(refused->contains("input.paddingX: must not be negative"));
 }
+
+// Mutation: treat a token of another type as the keyword (a colour at `shape.iconOnly` is then reported), or let a
+// non-string value through as a valid name.
+TEST_CASE("ui theme values: the keyword, dimension and stroke checks skip tokens of other types and refuse non-names",
+          "[ui][theme]") {
+    ui::TokenSet set;
+    CHECK_FALSE(ui::detail::keywordProblem(set).has_value());
+    CHECK_FALSE(ui::detail::dimensionProblem(set).has_value());
+    CHECK_FALSE(ui::detail::strokeProblem(set).has_value());
+
+    set["shape.iconOnly"] = {"color", json(R"("#000000")")};
+    set["input.paddingX"] = {"color", json(R"("#000000")")};
+    set["border.style"] = {"color", json(R"("#000000")")};
+    CHECK_FALSE(ui::detail::keywordProblem(set).has_value());
+    CHECK_FALSE(ui::detail::dimensionProblem(set).has_value());
+    CHECK_FALSE(ui::detail::strokeProblem(set).has_value());
+
+    set["shape.iconOnly"] = {"keyword", json("3")};
+    set["border.style"] = {"strokeStyle", json("3")};
+    CHECK(ui::detail::keywordProblem(set).has_value());
+    CHECK(ui::detail::strokeProblem(set).has_value());
+
+    set["shape.iconOnly"] = {"keyword", json(R"("square")")};
+    set["border.style"] = {"strokeStyle", json(R"("dashed")")};
+    CHECK_FALSE(ui::detail::keywordProblem(set).has_value());
+    CHECK_FALSE(ui::detail::strokeProblem(set).has_value());
+
+    set["input.paddingX"] = {"dimension", json(R"({"value": 4, "unit": "px"})")};
+    CHECK_FALSE(ui::detail::dimensionProblem(set).has_value());
+    set["input.paddingX"] = {"dimension", json(R"("4px")")};
+    CHECK_FALSE(ui::detail::dimensionProblem(set).has_value());
+    set["input.paddingX"] = {"dimension", json(R"({"value": -4, "unit": "px"})")};
+    CHECK(ui::detail::dimensionProblem(set).has_value());
+}
+
+// Mutation: read a non-string, non-number weight as a number.
+TEST_CASE("ui theme values: a weight that is neither a number nor a known name is refused", "[ui][theme]") {
+    CHECK(ui::detail::weightOf(json(R"("bold")")) == 700.0);
+    CHECK(ui::detail::weightOf(json(R"("heavier")")) == std::nullopt);
+    CHECK(ui::detail::weightOf(json("true")) == std::nullopt);
+}

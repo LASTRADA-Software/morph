@@ -4,6 +4,7 @@
 // kinds, the row helpers `patch` and `optimistic` are built on, and BridgeDispatcher's refusal of an `evaluate` query
 // it has no evaluator for.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <cstdint>
@@ -18,6 +19,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -630,4 +632,21 @@ TEST_CASE(
     CHECK_FALSE(
         dumpOf(R"({ "kind": "panel", "children": [{ "kind": "text", "text": "a" }] })").contains("passesBleed"));
     CHECK_FALSE(dumpOf(R"({ "kind": "column", )" + two + " }").contains("passesBleed"));
+}
+
+// Mutation: skip either report (the diagnostics for the item's spans stay empty), or draw the dropped run.
+TEST_CASE("interpreter: a key-value item's spans report a dropped run and a run of an unknown tone, once each",
+          "[ui][interpreter]") {
+    ui::testing::Harness h;
+    auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t",
+        "state": { "runs": { "init": { "lit": [ { "text": "x" }, null, { "text": "y", "tone": "loud" } ] } } },
+        "view": { "kind": "keyValue", "testId": "kv",
+          "items": { "list": [ { "obj": { "label": "A", "spans": { "ref": "runs" } } } ] } } })");
+    auto const reasons = [&h](std::string_view part) {
+        return std::ranges::count_if(h.diagnostics, [part](ui::Refusal const& refusal) {
+            return refusal.path == "/view/items" && refusal.reason.contains(part);
+        });
+    };
+    CHECK(reasons("dropped") == 1);
+    CHECK(reasons("drawn untoned") == 1);
 }

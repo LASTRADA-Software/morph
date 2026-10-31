@@ -460,7 +460,9 @@
     { "name": "get with a non-string path", "expr": { "get": { "ref": "x" }, "path": 5 }, "reason": "`get` reads a `path`", "at": "/path" },
     { "name": "get with a malformed path", "expr": { "get": { "ref": "x" }, "path": "a..b" }, "reason": "empty segment", "at": "/path" },
     { "name": "get with a stray key", "expr": { "get": { "ref": "x" }, "path": "a", "as": "y" }, "reason": "does not belong", "at": "/as" },
-    { "name": "sqrt without places", "expr": { "fn": "sqrt", "args": [2] }, "reason": "`sqrt` takes 2 to 3 arguments, not 1", "at": "" }
+    { "name": "sqrt without places", "expr": { "fn": "sqrt", "args": [2] }, "reason": "`sqrt` takes 2 to 3 arguments, not 1", "at": "" },
+    { "name": "a get whose source is a list", "expr": { "get": [1, 2], "path": "a" }, "reason": "a list is written", "at": "/get" },
+    { "name": "a sort whose order is a list", "expr": { "sort": { "lit": [1] }, "as": "x", "by": { "ref": "x" }, "order": [1] }, "reason": "a list is written", "at": "/order" }
   ],
   "check": [
     { "name": "an int literal", "expr": 1, "type": "int" },
@@ -557,6 +559,10 @@
     { "name": "an error in a map source", "expr": { "map": { "fn": "not", "args": [1] }, "as": "x", "to": 1 }, "reason": "argument 1", "at": "/map/args/0" },
     { "name": "an error in a map body", "expr": { "map": { "lit": [1] }, "as": "x", "to": { "fn": "not", "args": [1] } }, "reason": "argument 1", "at": "/to/args/0" },
     { "name": "an error in a condition", "expr": { "if": [{ "fn": "not", "args": [1] }, 1, 2] }, "reason": "argument 1", "at": "/if/0/args/0" },
-    { "name": "an error in a nested argument", "expr": { "fn": "not", "args": [{ "fn": "not", "args": [1] }] }, "reason": "argument 1", "at": "/args/0/args/0" }
+    { "name": "an error in a nested argument", "expr": { "fn": "not", "args": [{ "fn": "not", "args": [1] }] }, "reason": "argument 1", "at": "/args/0/args/0" },
+    { "name": "a get whose source cannot be typed", "expr": { "get": { "fn": "length", "args": [1] }, "path": "a" }, "reason": "argument 1 of `length`", "at": "/get/args/0" },
+    { "name": "a sort whose order is a number", "expr": { "sort": { "lit": [1] }, "as": "x", "by": { "ref": "x" }, "order": 1 }, "reason": "the `order` of `sort` is", "at": "/order" },
+    { "name": "a sort whose order cannot be typed", "expr": { "sort": { "lit": [1] }, "as": "x", "by": { "ref": "x" }, "order": { "fn": "length", "args": [1] } }, "reason": "argument 1 of `length`", "at": "/order/args/0" },
+    { "name": "dateAdd with a literal unit it does not know", "expr": { "fn": "dateAdd", "args": ["2026-11-03", 1, "fortnights"] }, "reason": "the unit is", "at": "/args/2" }
   ]
 }

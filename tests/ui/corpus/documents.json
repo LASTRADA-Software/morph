@@ -298,7 +298,17 @@
     { "name": "a lead placed at the end and a head surface", "doc": { "vocab": "ui/1", "id": "t", "leadPlacement": "end", "headSurface": { "if": [ { "fn": "eq", "args": [ { "env": "widthClass" }, "compact" ] }, "darkHead", null ] }, "subtitle": "x", "view": { "kind": "text", "text": "x" } } },
     { "name": "a computed lead placement", "doc": { "vocab": "ui/1", "id": "t", "leadPlacement": { "if": [ { "fn": "eq", "args": [ { "env": "widthClass" }, "compact" ] }, "below", "inline" ] }, "view": { "kind": "text", "text": "x" } } },
     { "name": "an icon-only head action", "doc": { "vocab": "ui/1", "id": "t", "actions": [ { "id": "scan", "label": "Scan", "icon": "scan", "iconOnly": true, "onClick": [] } ], "view": { "kind": "text", "text": "x" } } },
-    { "name": "the app document places the principal in the head", "doc": { "vocab": "ui/1", "id": "app", "principalPlacement": "head" } }
+    { "name": "the app document places the principal in the head", "doc": { "vocab": "ui/1", "id": "app", "principalPlacement": "head" } },
+    {"name": "a run with the info tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"list": [{"obj": {"text": "a", "tone": "info"}}]}}}},
+    {"name": "a literal run with the info tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"lit": [{"text": "a", "tone": "info"}]}}}},
+    {"name": "a run with the ok tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"list": [{"obj": {"text": "a", "tone": "ok"}}]}}}},
+    {"name": "a literal run with the ok tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"lit": [{"text": "a", "tone": "ok"}]}}}},
+    {"name": "a run with the warn tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"list": [{"obj": {"text": "a", "tone": "warn"}}]}}}},
+    {"name": "a literal run with the warn tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"lit": [{"text": "a", "tone": "warn"}]}}}},
+    {"name": "a run with the err tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"list": [{"obj": {"text": "a", "tone": "err"}}]}}}},
+    {"name": "a literal run with the err tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"lit": [{"text": "a", "tone": "err"}]}}}},
+    {"name": "a run with the neutral tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"list": [{"obj": {"text": "a", "tone": "neutral"}}]}}}},
+    {"name": "a literal run with the neutral tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"lit": [{"text": "a", "tone": "neutral"}]}}}}
   ],
   "invalid": [
     { "name": "not an object", "raw": [1], "at": "", "reason": "a document is a JSON object" },
@@ -737,6 +747,19 @@
     { "name": "a head surface on the app document", "doc": { "id": "app", "headSurface": "darkHead" }, "at": "/headSurface", "reason": "is a screen's; the app document has none" },
     { "name": "a principal placement on a screen", "doc": { "principalPlacement": "head" }, "at": "/principalPlacement", "reason": "is the app document's; a screen has none" },
     { "name": "an unknown principal placement", "doc": { "id": "app", "principalPlacement": "side" }, "at": "/principalPlacement", "reason": "is not one of the values of `principalPlacement`" },
-    { "name": "an icon-only action without an icon", "doc": { "actions": [ { "id": "scan", "label": "Scan", "iconOnly": true, "onClick": [] } ] }, "at": "/actions/0/iconOnly", "reason": "an icon-only action names its `icon`" }
+    { "name": "an icon-only action without an icon", "doc": { "actions": [ { "id": "scan", "label": "Scan", "iconOnly": true, "onClick": [] } ] }, "at": "/actions/0/iconOnly", "reason": "an icon-only action names its `icon`" },
+    {"name": "a run record with a tone that is not one", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"list": [{"obj": {"text": "a", "tone": "loud"}}]}}}, "at": "/view/spans/list/0/obj/tone", "reason": "a run's `tone` is neutral"},
+    {"name": "a run record with a tone that is a number", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"list": [{"obj": {"text": "a", "tone": 5}}]}}}, "at": "/view/spans/list/0/obj/tone", "reason": "a run's `tone` is neutral"},
+    {"name": "a run record with a flag that is not a boolean", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"list": [{"obj": {"text": "a", "strong": "yes"}}]}}}, "at": "/view/spans/list/0/obj/strong", "reason": "a run's `strong` is true or false"},
+    {"name": "a run record with a key it does not take", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"list": [{"obj": {"text": "a", "bold": true}}]}}}, "at": "/view/spans/list/0/obj/bold", "reason": "a run takes"},
+    {"name": "a run record without text", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"list": [{"obj": {"strong": true}}]}}}, "at": "/view/spans/list/0", "reason": "gives its `text`"},
+    {"name": "a literal run with a tone that is not one", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"lit": [{"text": "a", "tone": "loud"}]}}}, "at": "/view/spans", "reason": "a run's `tone` is neutral"},
+    {"name": "a literal run with a flag that is not a boolean", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"lit": [{"text": "a", "mono": "yes"}]}}}, "at": "/view/spans", "reason": "a run's `mono` is true or false"},
+    {"name": "a literal run with a key it does not take", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"lit": [{"text": "a", "bold": true}]}}}, "at": "/view/spans", "reason": "a run takes"},
+    {"name": "a literal run without text", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"lit": [{"strong": true}]}}}, "at": "/view/spans", "reason": "gives its `text`"},
+    {"name": "a tabs inset below zero", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "tabs", "inset": -1, "tabs": [{"id": "a", "label": "A", "children": []}]}}, "at": "/view/inset", "reason": "`inset` is a literal spacing step"},
+    {"name": "a padding list with a name for a step", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "column", "padding": {"lit": ["a", 2]}, "children": []}}, "at": "/view/padding", "reason": "a `padding` list is two spacing steps"},
+    {"name": "a padding list with a negative step", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "column", "padding": {"lit": [-1, 2]}, "children": []}}, "at": "/view/padding", "reason": "a `padding` list is two spacing steps"},
+    {"name": "a lead placed by a number", "doc": {"leadPlacement": 5}, "at": "/leadPlacement", "reason": "`leadPlacement` is `below`, `inline` or `end`"}
   ]
 }
