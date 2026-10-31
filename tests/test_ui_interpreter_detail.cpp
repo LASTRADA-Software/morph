@@ -650,3 +650,97 @@ TEST_CASE("interpreter: a key-value item's spans report a dropped run and a run 
     CHECK(reasons("dropped") == 1);
     CHECK(reasons("drawn untoned") == 1);
 }
+
+namespace {
+
+// A switch whose case, and whose default, hold two texts; `on` picks which of them mounts.
+std::string twoTextSwitch(bool matching) {
+    std::string const texts = R"([{ "kind": "text", "text": "a" }, { "kind": "text", "text": "b" }])";
+    return R"({ "kind": "switch", "on": )" + std::string{matching ? "1" : "9"} +
+           R"(, "cases": [{ "when": 1, "children": )" + texts + R"( }], "default": )" + texts + " }";
+}
+
+std::size_t indentOf(std::string const& line) { return line.find_first_not_of(' '); }
+
+// The gaps of the columns that hold a text directly, in document order: the holders of a case or a default.
+std::vector<std::string> holderGaps(std::string const& dump) {
+    std::vector<std::string> lines;
+    for (std::size_t at = 0; at < dump.size();) {
+        std::size_t const stop = dump.find('\n', at);
+        lines.push_back(dump.substr(at, stop == std::string::npos ? std::string::npos : stop - at));
+        at = stop == std::string::npos ? dump.size() : stop + 1;
+    }
+    std::vector<std::string> gaps;
+    for (std::size_t at = 0; at < lines.size(); ++at) {
+        std::size_t const depth = indentOf(lines.at(at));
+        if (depth == std::string::npos || lines.at(at).substr(depth, 7) != "Column#") {
+            continue;
+        }
+        bool holdsText = false;
+        for (std::size_t next = at + 1; next < lines.size() && indentOf(lines.at(next)) > depth; ++next) {
+            holdsText =
+                holdsText || (indentOf(lines.at(next)) == depth + 2 && lines.at(next).substr(depth + 2, 5) == "Text#");
+        }
+        if (holdsText) {
+            std::size_t const gap = lines.at(at).find("gap=");
+            gaps.push_back(lines.at(at).substr(gap, lines.at(at).find(' ', gap) - gap));
+        }
+    }
+    return gaps;
+}
+
+std::string dumpOfView(std::string const& view) {
+    ui::testing::Harness h;
+    auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": )" + view + " }");
+    return h.backend.dump();
+}
+
+using Gaps = std::vector<std::string>;
+
+}  // namespace
+
+// Mutation: pass no gap to the case's holder or to the default's `lowerAll` (the holders record gap=0), or leave the
+// gap in the context for every kind (a row's or a grid cell's case then takes the grandparent's gap).
+TEST_CASE("interpreter: a switch case and a default take the gap of the vertical list the switch sits in",
+          "[ui][interpreter][layout]") {
+    auto const column = [](std::string const& inside) {
+        return R"({ "kind": "column", "gap": 2, "children": [)" + inside + "] }";
+    };
+    auto const gapsOf = [](std::string const& view) {
+        std::string const dump = dumpOfView(view);
+        INFO(dump);
+        return holderGaps(dump);
+    };
+    SECTION("a column's case") { CHECK(gapsOf(column(twoTextSwitch(true))) == Gaps{"gap=2"}); }
+    SECTION("a column's default") { CHECK(gapsOf(column(twoTextSwitch(false))) == Gaps{"gap=2"}); }
+    SECTION("a panel's content, whose gap is the panel's") {
+        CHECK(gapsOf(R"({ "kind": "panel", "gap": 4, "children": [)" + twoTextSwitch(true) + "] }") == Gaps{"gap=4"});
+    }
+    SECTION("a switch in a case of another switch keeps the gap") {
+        std::string const outer = R"({ "kind": "switch", "on": 1, "cases": [{ "when": 1, "children": [)" +
+                                  twoTextSwitch(true) + R"(, { "kind": "text", "text": "c" }] }] })";
+        CHECK(gapsOf(column(outer)) == Gaps{"gap=2", "gap=2"});
+    }
+    SECTION("a dialog's body takes the body's gap") {
+        CHECK(gapsOf(R"({ "kind": "dialog", "open": true, "children": [)" + twoTextSwitch(true) + "] }") ==
+              Gaps{"gap=3"});
+    }
+    SECTION("a drawer's body takes the body's gap") {
+        CHECK(gapsOf(R"({ "kind": "drawer", "open": true, "gap": 1, "children": [)" + twoTextSwitch(true) + "] }") ==
+              Gaps{"gap=1"});
+    }
+    SECTION("a switch in a row stays a gap-0 column") {
+        CHECK(gapsOf(column(R"({ "kind": "row", "gap": 2, "children": [)" + twoTextSwitch(true) + "] }")) ==
+              Gaps{"gap=0"});
+    }
+    SECTION("a switch in a grid cell stays a gap-0 column") {
+        CHECK(gapsOf(column(R"({ "kind": "grid", "columns": 1, "children": [)" + twoTextSwitch(true) + "] }")) ==
+              Gaps{"gap=0"});
+    }
+    SECTION("a switch in a column inside a case takes that column's gap") {
+        std::string const inner = R"({ "kind": "column", "gap": 1, "children": [)" + twoTextSwitch(true) + "] }";
+        std::string const outer =
+            R"({ "kind": "switch", "on": 1, "cases": [{ "when": 1, "children": [)" + inner + "] }] }";
+        CHECK(gapsOf(column(outer)) == Gaps{"gap=1"});
+    }
+}

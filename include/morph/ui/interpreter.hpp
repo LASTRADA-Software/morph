@@ -2215,6 +2215,9 @@ struct LowerCtx {
     std::shared_ptr<Bindings const> bindings;
     /// @brief The innermost boundary.
     std::shared_ptr<BoundaryRuntime> boundary;
+    /// @brief The spacing step of the vertical list whose node is being lowered; 0 where the node sits in no such
+    ///        list. Only a `switch` reads it, so its cases space their nodes as the list around the switch does.
+    int listGap = 0;
 };
 
 /// @brief An `actionButton` part, lowered in the scope of the list it belongs to: what a screen's head shows and
@@ -6911,13 +6914,15 @@ inline void collectIds(DocNode const& node, std::set<std::string, std::less<>>& 
 
 // NOLINTNEXTLINE(misc-no-recursion): lowering a node lowers its children, which come back through here.
 inline Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx, int gap) {
+    LowerCtx listCtx = ctx;
+    listCtx.listGap = gap;
     if (nodes.size() == 1) {
-        return lower(*nodes.front(), ctx);
+        return lower(*nodes.front(), listCtx);
     }
     std::vector<Node> children;
     children.reserve(nodes.size());
     for (DocNodePtr const& child : nodes) {
-        children.push_back(lower(*child, ctx));
+        children.push_back(lower(*child, listCtx));
     }
     Column holder = listColumn(std::move(children), gap);
     // The column is the mount's, not the document's: a child that bleeds reaches past the padding of the container
@@ -6992,6 +6997,13 @@ inline Node ScreenCore::lower(DocNode const& node, LowerCtx const& ctx) {
             std::erase_if(loweredNodes, [](LoweredNode const& entry) { return entry.scope.expired(); });
         }
         loweredNodes.push_back(LoweredNode{.node = &node, .scope = ctx.scope, .bindings = ctx.bindings});
+    }
+    // Only a switch reads the gap of the list around it; every other kind's children are held by a holder that sets
+    // their gap, so none sees its grandparent's.
+    if (ctx.listGap != 0 && node.kind != "switch") {
+        LowerCtx plain = ctx;
+        plain.listGap = 0;
+        return lowerKind(node, plain, elementFor(*ctx.scope, node));
     }
     return lowerKind(node, ctx, elementFor(*ctx.scope, node));
 }
@@ -7442,10 +7454,12 @@ inline std::vector<BadgeModel> ScreenCore::lowerBadgeParts(std::span<DocNodePtr 
 inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     std::string_view const kind = node.kind;
     FormatContext const& format = session.formatting();
-    auto children = [&](std::string_view key) {
+    auto children = [&](std::string_view key, int gap = 0) {
+        LowerCtx listCtx = ctx;
+        listCtx.listGap = gap;
         std::vector<Node> out;
         for (DocNodePtr const& child : node.nodes(key)) {
-            out.push_back(lower(*child, ctx));
+            out.push_back(lower(*child, listCtx));
         }
         return out;
     };
@@ -7833,7 +7847,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                                  gap);
         }
         if (kind == "column") {
-            Column spec{.children = children("children"),
+            Column spec{.children = children("children", gap),
                         .gap = gap,
                         .align = alignOf(node.name("align")),
                         .justify = justifyOf(node.name("justify")),
@@ -8605,7 +8619,8 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
             }
             declare(*inner, node.scope ? &*node.scope : nullptr, content, lists);
             element->inner.set(inner.get());
-            LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
+            LowerCtx const innerCtx{
+                .scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary, .listGap = bodyGap};
             std::vector<Node> children;
             children.reserve(content.size());
             for (DocNode const* const child : content) {
@@ -8681,20 +8696,21 @@ inline Node ScreenCore::lowerSwitch(DocNode const& node, LowerCtx const& ctx) {
         spec.cases.push_back(SwitchCase{
             .key = Key{index++},
             .node = lazy(
-                [this, ctx, casePart]() -> Node {
+                [this, ctx, casePart, caseGap = ctx.listGap]() -> Node {
                     auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
                     std::vector<DocNode const*> content;
                     for (DocNodePtr const& child : casePart->nodes("children")) {
                         content.push_back(child.get());
                     }
                     declare(*inner, casePart->scope ? &*casePart->scope : nullptr, content, {});
-                    LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary};
+                    LowerCtx const innerCtx{
+                        .scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary, .listGap = caseGap};
                     std::vector<Node> children;
                     children.reserve(content.size());
                     for (DocNode const* const child : content) {
                         children.push_back(lower(*child, innerCtx));
                     }
-                    return holding(std::move(children), inner);
+                    return holding(std::move(children), inner, {}, caseGap);
                 },
                 caseHints)});
     }
@@ -8709,7 +8725,7 @@ inline Node ScreenCore::lowerSwitch(DocNode const& node, LowerCtx const& ctx) {
             return Key{std::int64_t{-1}};
         });
     auto const fallback = node.nodes("default");
-    spec.fallback = fallback.empty() ? Node{} : lowerAll(fallback, ctx);
+    spec.fallback = fallback.empty() ? Node{} : lowerAll(fallback, ctx, ctx.listGap);
     commonOf(node, ctx, nullptr, spec.common);
     return ui::switchOf(std::move(spec));
 }
@@ -9807,10 +9823,12 @@ inline Node ScreenCore::lowerArranged(DocNode const& node, LowerCtx const& ctx, 
     }
     auto order = [this, point, declared] { return arrangedOrder(prefs.get().at(point), declared); };
     auto key = [](Value const& childId) { return keyOf(childId); };
-    auto view = [this, ctx, declared](reactive::Signal<Value> const& row) -> Node {
+    LowerCtx childCtx = ctx;
+    childCtx.listGap = axis == Axis::Vertical ? gap : 0;
+    auto view = [this, childCtx, declared](reactive::Signal<Value> const& row) -> Node {
         // The order lists only declared ids, so the lookup always finds the child.
         auto const found = std::ranges::find(declared, textOf(row.peek(), session.formatting()), &DocNode::id);
-        return lower(**found, ctx);
+        return lower(**found, childCtx);
     };
     ForEach spec{
         .model = std::make_shared<TypedForEach<Value> const>(std::move(order), std::move(key), std::move(view)),

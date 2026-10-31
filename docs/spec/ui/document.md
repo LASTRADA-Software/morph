@@ -245,7 +245,7 @@ value that is not a string is reported once at the node's `surface` path and dra
 `"content"`, `{"lit": {"fixed": n}}` or `{"lit": {"stretch": w}}` — or both dimensions as a record of them, one
 left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {"stretch": 1}}}`. A node's sizing means the
 same inside a `switch` case, an overlay or a row as at the root: the content's stretch reaches the container it is
-mounted in. **Text and the inputs** also take `readonly`, `required`, `stale`
+mounted in, and several nodes in a case or a default are spaced as the vertical list around the switch spaces its nodes. **Text and the inputs** also take `readonly`, `required`, `stale`
 (conditions) and `errors`. **The six inputs** also take `description`, a line drawn under the control and announced
 as its accessible description, and `tone` (`ok`, `warn`, `err`, `info`; `neutral` or `null` for none), an evaluation
 of the value that outlines the control and colours the description and, unlike `errors`, does not make the value
