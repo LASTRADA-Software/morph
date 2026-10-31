@@ -24,6 +24,11 @@ MorphField {
         // gap spaces the rows. A touch target while the window is compact.
         topPadding: 0
         bottomPadding: 0
+        // The box starts at the widget's edge and its label follows it by a step, so a column of check boxes lines up
+        // with the labels above it; the indicator draws its focus ring inside its own extent.
+        leftPadding: 0
+        rightPadding: 0
+        spacing: Theme.spaceOf(2)
         implicitHeight: Math.max(implicitContentHeight, implicitIndicatorHeight,
                                  Theme.touchTargets ? Theme.targetHeight : 0)
         text: root.label

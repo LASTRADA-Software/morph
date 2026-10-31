@@ -2427,3 +2427,29 @@ TEST_CASE("qt_quick widgets: a Section text measures a width when the theme name
     CHECK(theme->property("fontFamilies").toStringList().isEmpty());
     CHECK(Scene::itemOf(*text).implicitWidth() > 50);
 }
+
+// Mutation: leave the check box's side padding and spacing to the Basic style (the box sits 6 px in, and its label
+// follows it by 6).
+TEST_CASE("qt_quick widgets: a check box sits at its column's edge and its label a step after it", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const heading = scene.backend().createText(column.get());
+    heading->setText("Condition on receipt");
+    auto const box = scene.backend().createCheckbox(column.get());
+    box->setLabel("Intact");
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*box);
+    auto const* const indicator = item.findChild<QQuickItem*>(QStringLiteral("boxIndicator"));
+    REQUIRE(indicator != nullptr);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    double const step = theme->property("space").value<QList<qreal>>().at(2);
+    QQuickItem const& headingItem = Scene::itemOf(*heading);
+    CHECK(indicator->mapToItem(&headingItem, QPointF{0, 0}).x() == Catch::Approx(0.0).margin(0.5));
+    QQuickItem const& labelItem = Scene::controlOf(*box);
+    auto const* const content = labelItem.property("contentItem").value<QQuickItem*>();
+    REQUIRE(content != nullptr);
+    CHECK(content->property("leftPadding").toDouble() == Catch::Approx(indicator->width() + step).margin(0.5));
+    CHECK(labelItem.property("leftPadding").toDouble() == Catch::Approx(0.0));
+    CHECK(labelItem.property("spacing").toDouble() == Catch::Approx(step));
+}
