@@ -924,3 +924,36 @@ TEMPLATE_TEST_CASE("qt_quick overlays: both rules draw the card's divider", "[qt
         CHECK(rule->property("color").value<QColor>() == QColor{0x77, 0x88, 0x99});
     }
 }
+
+// Mutation: read the card's shadow (the dialog's shadow is the transparent card colour), or read the dialog's shadow
+// without the card fallback.
+TEMPLATE_TEST_CASE("qt_quick overlays: the shadow is elevation.dialog, and the card's while it is unset", "[qt_quick]",
+                   ui::DialogWidget, ui::DrawerWidget) {
+    ui::ThemeShadow const flat{.color = ui::Rgba{}, .offsetX = 0, .offsetY = 0, .blur = 0, .spread = 0};
+    ui::ThemeShadow const lifted{.color = ui::Rgba{.r = 0x10, .g = 0x20, .b = 0x30, .a = 0x40},
+                                 .offsetX = 0,
+                                 .offsetY = 6,
+                                 .blur = 12,
+                                 .spread = 0};
+    {
+        Scene scene;
+        ui::ThemeValues values = ui::themeValues();
+        values.shadows.insert_or_assign("elevation.card", flat);
+        values.shadows.insert_or_assign("elevation.dialog", lifted);
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+        auto const overlay = openedOverlay<TestType>(scene);
+        QQuickItem const* const shadow = namedIn(*scene.window().contentItem(), QStringLiteral("dialogShadow"));
+        REQUIRE(shadow != nullptr);
+        CHECK(shadow->property("color").value<QColor>() == QColor{0x10, 0x20, 0x30, 0x40});
+    }
+    {
+        Scene scene;
+        ui::ThemeValues values = ui::themeValues();
+        values.shadows.insert_or_assign("elevation.card", lifted);
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+        auto const overlay = openedOverlay<TestType>(scene);
+        QQuickItem const* const shadow = namedIn(*scene.window().contentItem(), QStringLiteral("dialogShadow"));
+        REQUIRE(shadow != nullptr);
+        CHECK(shadow->property("color").value<QColor>() == QColor{0x10, 0x20, 0x30, 0x40});
+    }
+}

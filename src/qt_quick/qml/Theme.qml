@@ -264,6 +264,20 @@ QtObject {
     property real cardShadowBlur: 10
     property real cardShadowSpread: 0
 
+    // The shadow under a dialog and a drawer: `elevation.dialog`, when the theme sets one (`hasDialogShadow`).
+    property color dialogShadowColor: "#14000000"
+    property real dialogShadowOffsetX: 0
+    property real dialogShadowOffsetY: 2
+    property real dialogShadowBlur: 10
+    property real dialogShadowSpread: 0
+    property bool hasDialogShadow: false
+    // What a dialog and a drawer draw: their own shadow, or the card's while the theme sets none.
+    readonly property color dialogShadowShownColor: hasDialogShadow ? dialogShadowColor : cardShadowColor
+    readonly property real dialogShadowShownOffsetX: hasDialogShadow ? dialogShadowOffsetX : cardShadowOffsetX
+    readonly property real dialogShadowShownOffsetY: hasDialogShadow ? dialogShadowOffsetY : cardShadowOffsetY
+    readonly property real dialogShadowShownBlur: hasDialogShadow ? dialogShadowBlur : cardShadowBlur
+    readonly property real dialogShadowShownSpread: hasDialogShadow ? dialogShadowSpread : cardShadowSpread
+
     // A popup's shadow: `elevation.popup`.
     property color popupShadowColor: "#24000000"
     property real popupShadowOffsetX: 0

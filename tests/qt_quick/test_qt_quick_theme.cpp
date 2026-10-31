@@ -1787,3 +1787,64 @@ TEST_CASE("qt_quick theme: the input inset reaches the Theme singleton", "[qt_qu
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
     CHECK(theme->property("inputPaddingX").toReal() == 10.0);
 }
+namespace {
+
+/// The resolved values of one token document.
+ui::ThemeValues valuesOfDocument(std::string_view document) {
+    auto const tokens = ui::parseTokens(document);
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    return ui::themeValues(*resolved);
+}
+
+QObject& themeSingleton(Scene& scene) {
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    return *theme;
+}
+
+}  // namespace
+
+constexpr std::string_view kDialogShadowToken =
+    R"({"elevation": {"dialog": {"$type": "shadow", "$value": {"color": "#11223344", "offsetX": {"value": 1, "unit": "px"},)"
+    R"( "offsetY": {"value": 7, "unit": "px"}, "blur": {"value": 9, "unit": "px"}, "spread": {"value": 0, "unit": "px"}}}}})";
+
+constexpr std::string_view kCardShadowToken =
+    R"({"elevation": {"card": {"$type": "shadow", "$value": {"color": "#55667788", "offsetX": {"value": 0, "unit": "px"},)"
+    R"( "offsetY": {"value": 5, "unit": "px"}, "blur": {"value": 3, "unit": "px"}, "spread": {"value": 0, "unit": "px"}}}}})";
+
+// Mutation: write the dialog shadow onto the card's properties, or never set `hasDialogShadow`.
+TEST_CASE("qt_quick theme: elevation.dialog reaches the dialog's shadow and leaves the card's", "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), valuesOfDocument(kDialogShadowToken)).empty());
+    QObject& theme = themeSingleton(scene);
+    CHECK(theme.property("hasDialogShadow").toBool());
+    CHECK(theme.property("dialogShadowOffsetY").toReal() == 7.0);
+    CHECK(theme.property("dialogShadowShownOffsetY").toReal() == 7.0);
+    CHECK(theme.property("dialogShadowShownColor").value<QColor>() == QColor::fromRgb(0x11, 0x22, 0x33, 0x44));
+    CHECK(theme.property("cardShadowOffsetY").toReal() == 2.0);
+}
+
+// Mutation: read `dialogShadow*` unconditionally for the shown shadow (an unset dialog shadow draws nothing).
+TEST_CASE("qt_quick theme: while elevation.dialog is unset the dialog's shadow is the card's", "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), valuesOfDocument(kCardShadowToken)).empty());
+    QObject& theme = themeSingleton(scene);
+    CHECK_FALSE(theme.property("hasDialogShadow").toBool());
+    CHECK(theme.property("dialogShadowShownOffsetY").toReal() == 5.0);
+    CHECK(theme.property("dialogShadowShownBlur").toReal() == 3.0);
+    CHECK(theme.property("dialogShadowShownColor").value<QColor>() == QColor::fromRgb(0x55, 0x66, 0x77, 0x88));
+}
+
+// Mutation: write `hasDialogShadow` only when the token is present.
+TEST_CASE("qt_quick theme: a re-apply that drops elevation.dialog returns the dialog to the card's shadow",
+          "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), valuesOfDocument(kDialogShadowToken)).empty());
+    QObject& theme = themeSingleton(scene);
+    REQUIRE(theme.property("hasDialogShadow").toBool());
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    CHECK_FALSE(theme.property("hasDialogShadow").toBool());
+    CHECK(theme.property("dialogShadowShownOffsetY").toReal() == theme.property("cardShadowOffsetY").toReal());
+}

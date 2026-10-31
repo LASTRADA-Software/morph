@@ -248,10 +248,14 @@ void setShadow(QObject& theme, ui::ThemeValues const& values, std::string_view p
     }
 }
 
-// The card's and the popup's shadows and the spacing steps, which only a complete set of steps replaces.
+// The card's, the dialog's and the popup's shadows and the spacing steps, which only a complete set of steps replaces.
 void setShadowAndSpace(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
     setShadow(theme, values, "elevation.card", "card", unset);
     setShadow(theme, values, "elevation.popup", "popup", unset);
+    setShadow(theme, values, "elevation.dialog", "dialog", unset);
+    if (!theme.setProperty("hasDialogShadow", values.shadows.contains("elevation.dialog"))) {
+        unset.emplace_back("hasDialogShadow");
+    }
     QList<qreal> space;
     for (int step = 0; step <= ui::kMaxSpacingStep; ++step) {
         auto const found = values.dimensions.find("space." + std::to_string(step));

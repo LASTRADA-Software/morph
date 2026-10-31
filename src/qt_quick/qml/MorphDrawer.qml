@@ -104,14 +104,15 @@ MorphWidget {
             // Square: the drawer lies against the window's edge.
 
             Rectangle {
+                objectName: "dialogShadow"
                 anchors.fill: parent
-                anchors.leftMargin: Theme.cardShadowOffsetX - Theme.cardShadowSpread
-                anchors.rightMargin: -Theme.cardShadowOffsetX - Theme.cardShadowSpread
-                anchors.topMargin: Theme.cardShadowOffsetY - Theme.cardShadowSpread
-                anchors.bottomMargin: -Theme.cardShadowOffsetY - Theme.cardShadowSpread
+                anchors.leftMargin: Theme.dialogShadowShownOffsetX - Theme.dialogShadowShownSpread
+                anchors.rightMargin: -Theme.dialogShadowShownOffsetX - Theme.dialogShadowShownSpread
+                anchors.topMargin: Theme.dialogShadowShownOffsetY - Theme.dialogShadowShownSpread
+                anchors.bottomMargin: -Theme.dialogShadowShownOffsetY - Theme.dialogShadowShownSpread
                 z: -1
-                radius: parent.radius + Theme.cardShadowBlur / 4
-                color: Theme.cardShadowColor
+                radius: parent.radius + Theme.dialogShadowShownBlur / 4
+                color: Theme.dialogShadowShownColor
             }
         }
 

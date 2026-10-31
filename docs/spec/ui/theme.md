@@ -199,7 +199,8 @@ built in nor in the theme draws nothing and changes no colour.
 | `font.overline.case` (`none`): how the `overline` text role draws. `none` draws it as `section` (body size, strong, muted); `uppercase` draws it at the small size, strong, muted, in capitals, letter-spaced by `0.05 × Theme.smallPixels`. The text is written as it reads and the frontend draws the capitals, so the accessible name stays as written. The terminal draws it bold and muted, as written, whatever the token | keyword: `none` or `uppercase`; any other value is refused as `font.overline.case: only none and uppercase are drawn` |
 | `collapsible.marker` (`shown`): whether a collapsible section's header and a collapsible panel's header draw their ▸/▾ chevron (`shown`) or not (`none`). With `none` the header keeps everything else: it is still the whole row's toggle, at least a touch target tall, with its role, its name and its expanded state, so the state stays where assistive technology reads it. Read once for the whole theme. The terminal reads no theme token and keeps its `▸ `/`▾ ` heading | keyword: `shown` or `none`; any other value is refused as `collapsible.marker: only shown and none are drawn` |
 | `list.selection` (`accent`): how a selected list item (an item-style button: the navigator's entries, menus drawn as lists, a document's list items) is marked. `accent` draws the selection colour, a 3 px accent bar at the leading edge and the label in the accent; `fill` draws the selection colour and the label in the surface's text colour, with no bar. Read per surface, as `border.style` is, so one surface (the sidebar) can fill while the rest keep the bar; a surface that does not set it keeps the theme's, the built-in sidebar and bar included. The terminal marks a selected item by inverting it and reads no theme token | keyword: `accent` or `fill`; any other value is refused as `list.selection: only accent and fill are drawn` |
-| `elevation.card` (`#00000014`, offsets 0 and 2, blur 10, spread 0) | shadow; of a list of layers, the first |
+| `elevation.card` (`#00000014`, offsets 0 and 2, blur 10, spread 0): the shadow under a panel that names no surface and under a `card` surface | shadow; of a list of layers, the first |
+| `elevation.dialog`: the shadow under a dialog and a drawer. No default: while a theme does not set it, a dialog and a drawer draw `elevation.card`'s value | shadow, as `elevation.card` |
 | `elevation.popup` (`#00000024`, offsets 0 and 8, blur 24, spread 0): a menu's, a dropdown's and a date picker's shadow | shadow, as `elevation.card` |
 
 `themeValues(resolved)` gives every path of the set the theme's value when the theme has it with the set's type, and
@@ -242,6 +243,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `iconOnlySquare` (true for `square`) | `shape.iconOnly` |
 | `overlineCaps` (true for `uppercase`) | `font.overline.case` |
 | `collapsibleMarker` (true for `shown`) | `collapsible.marker` |
+| `dialogShadowColor`, `dialogShadowOffsetX`, `dialogShadowOffsetY`, `dialogShadowBlur`, `dialogShadowSpread`, `hasDialogShadow` (`dialogShadowShown*` read these, or the card's while none is set) | `elevation.dialog` |
 | `listSelectionFill` (true for `fill`; a role of every scheme, written for each surface from its own resolved values) | `list.selection` |
 | `inputPaddingX` | `input.paddingX` |
 

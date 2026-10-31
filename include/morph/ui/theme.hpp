@@ -1196,7 +1196,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 70> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 71> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1277,6 +1277,13 @@ inline constexpr std::array<ThemeTokenSpec, 70> kThemeTokens = {{
      .color = "",
      .number = 0.0,
      .shadow = {.color = "#00000014", .offsetX = 0.0, .offsetY = 2.0, .blur = 10.0, .spread = 0.0}},
+    // The shadow under a dialog and a drawer. Empty: while a theme does not set it, a dialog and a drawer draw
+    // `elevation.card`'s value, and the token is absent from `ThemeValues`.
+    {.path = "elevation.dialog",
+     .kind = ThemeTokenKind::Shadow,
+     .color = "",
+     .number = 0.0,
+     .shadow = {.color = "", .offsetX = 0.0, .offsetY = 0.0, .blur = 0.0, .spread = 0.0}},
     // A popup's shadow: a menu, a dropdown, a date picker.
     {.path = "elevation.popup",
      .kind = ThemeTokenKind::Shadow,
@@ -1490,6 +1497,10 @@ inline void fillValue(ThemeValues& values, ThemeTokenSpec const& spec, Token con
         }
         case ThemeTokenKind::Shadow: {
             auto const shadow = typedValue(token, "shadow", [](Json const& value) { return shadowOf(value); });
+            // A shadow with no default follows another shadow and is left out until the theme sets it.
+            if (!shadow && spec.shadow.color.empty()) {
+                break;
+            }
             values.shadows.insert_or_assign(
                 path, shadow.value_or(ThemeShadow{.color = hexColor(spec.shadow.color).value_or(Rgba{}),
                                                   .offsetX = spec.shadow.offsetX,

@@ -363,3 +363,18 @@ TEST_CASE("ui theme values: a weight that is neither a number nor a known name i
     CHECK(ui::detail::weightOf(json(R"("heavier")")) == std::nullopt);
     CHECK(ui::detail::weightOf(json("true")) == std::nullopt);
 }
+
+// Mutation: give `elevation.dialog` a default (an unset theme then carries a shadow that stands in for the card's), or
+// leave it out of `kThemeTokens`.
+TEST_CASE("ui theme values: the dialog shadow is absent until a theme sets it", "[ui][theme]") {
+    ui::ThemeValues const none = ui::themeValues();
+    CHECK_FALSE(none.shadows.contains("elevation.dialog"));
+    CHECK(none.shadows.contains("elevation.card"));
+    CHECK(std::ranges::any_of(ui::kThemeTokens, [](auto const& spec) { return spec.path == "elevation.dialog"; }));
+
+    auto const set = valuesOf(
+        R"({"elevation": {"dialog": {"$type": "shadow", "$value": {"color": "#00000014", "offsetX": {"value": 0, "unit": "px"},)"
+        R"( "offsetY": {"value": 4, "unit": "px"}, "blur": {"value": 8, "unit": "px"}, "spread": {"value": 0, "unit": "px"}}}}})");
+    REQUIRE(set.shadows.contains("elevation.dialog"));
+    CHECK(set.shadows.at("elevation.dialog").offsetY == 4.0);
+}
