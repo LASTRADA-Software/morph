@@ -2314,6 +2314,43 @@ TEST_CASE("qt_quick containers: an empty head slot leaves no gap before the prin
     CHECK(principal.left() == Catch::Approx(trail.left()).margin(0.5));
 }
 
+// An inline lead that is wider than the block beside the head's trail wraps inside it instead of running past it, and
+// the trail keeps the title's line. Mutation: leave the inline copy content-sized (its right edge is past the
+// block's).
+TEST_CASE("qt_quick containers: an inline lead wider than its block wraps inside it", "[qt_quick]") {
+    LayoutWatch const watch;
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setTitle("Plate");
+    frame.setLeadInline(true);
+    frame.setHeadShown(true);
+    ui::Text subtitle{.text = std::string{"ELISA, host cell protein worksheet WS-2026-0415 and more"}};
+    subtitle.role = ui::TextRole::Muted;
+    subtitle.common.testId = "frame_subtitle";
+    ui::Row lead{.children = {ui::text(std::move(subtitle))}, .gap = 1};
+    lead.wrap = true;
+    lead.common.layout.width = ui::Sizing::stretch();
+    ui::Mounted const leadMount{scene.runtime(), scene.backend(), ui::row(std::move(lead)), &frame.headInlineSlot()};
+    ui::Row actions{.children = {}, .gap = 1};
+    for (char const* const label : {"Template: HCP 96, 8 standards", "Auto-fill samples", "Save layout"}) {
+        actions.children.push_back(ui::button(ui::Button{.label = std::string{label}}));
+    }
+    ui::Mounted const trailMount{scene.runtime(), scene.backend(), ui::row(std::move(actions)), &frame.headSlot()};
+    bool wrapped = false;
+    for (int width = 1000; width >= 700; width -= 25) {
+        scene.window().resize(width, 600);
+        scene.settle();
+        QRectF const line = sceneRectOf("shell_title_line");
+        QRectF const text = sceneRectOf("frame_subtitle");
+        INFO("width " << width << ": the title line ends at " << line.right() << ", the subtitle at " << text.right());
+        CHECK(text.right() <= line.right() + 0.5);
+        wrapped = wrapped || text.height() > 25.0;
+    }
+    CHECK(wrapped);
+    CHECK(layoutWarnings().empty());
+}
+
 namespace {
 
 // One step of the theme's spacing scale.
