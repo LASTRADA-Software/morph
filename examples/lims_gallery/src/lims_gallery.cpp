@@ -68,9 +68,16 @@ constexpr char const* kThemeBase = R"({
   "table": { "$type": "dimension", "cellPaddingY": { "$value": { "value": 6, "unit": "px" } } },
   "radius": { "$type": "dimension",
     "control": { "$value": { "value": 6, "unit": "px" } }, "card": { "$value": { "value": 6, "unit": "px" } } },
-  "elevation": { "popup": { "$type": "shadow", "$value": { "color": "#14181F24",
-    "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 8, "unit": "px" },
-    "blur": { "value": 24, "unit": "px" }, "spread": { "value": 0, "unit": "px" } } } }
+  "elevation": { "$type": "shadow",
+    "card": { "$value": { "color": "#00000000",
+      "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 0, "unit": "px" },
+      "blur": { "value": 0, "unit": "px" }, "spread": { "value": 0, "unit": "px" } } },
+    "dialog": { "$value": { "color": "#00000014",
+      "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 2, "unit": "px" },
+      "blur": { "value": 10, "unit": "px" }, "spread": { "value": 0, "unit": "px" } } },
+    "popup": { "$value": { "color": "#14181F24",
+      "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 8, "unit": "px" },
+      "blur": { "value": 24, "unit": "px" }, "spread": { "value": 0, "unit": "px" } } } }
 })";
 
 // A bar that acts on selected rows: the accent's pale tint.
@@ -136,7 +143,8 @@ constexpr char const* kDarkHeadSurface = R"({
 constexpr char const* kSidebarSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#1F2430" }, "text": { "$value": "#C9CCD6" },
              "muted": { "$value": "#7D8396" }, "accent": { "$value": "#4C8DFF" },
-             "selection": { "$value": "#2B3038" }, "border": { "$value": "#2F3646" },
+             "selection": { "$value": "#2B3038" }, "selectionText": { "$value": "#FFFFFF" },
+             "border": { "$value": "#2F3646" },
              "neutral": { "$root": { "$value": "#7D8396" }, "bg": { "$value": "#7D839626" },
                           "border": { "$value": "#7D8396" }, "dot": { "$value": "#7D8396" } },
              "hover": { "$value": "#FFFFFF14" }, "track": { "$value": "#2F3646" },
