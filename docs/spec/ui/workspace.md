@@ -118,7 +118,7 @@ open tab, which is when a host settles the navigation's call rather than leave i
 
 With `HeadPlacement::InPage`, the default, the shell mounts a row over the handle's `head()` above each tab's
 screen, in its page: one wrapping row (`head`, gap 2, `align: start`, `justify: end`) of a lead and a trail. The lead (`head_lead`) is a
-row of gap 1 that wraps, `align: center`, and stretches from `kHeadLeadMinimum` (32) units: the subtitle (muted; the screen's `subtitleSpans` as the text's runs when it gives them, else its plain subtitle as one run) and the badges, whose holder wraps too, so they sit beside one another while they fit and wrap under one another where they do not. (A wrapping row holding a wrapping row is sized from its children's one-line widths, so the width a row was last laid out at never feeds back into the width it asks for.) The trail (`head_trail`) is a row of gap 1:
+row of gap 1 that wraps, `align: center`, and stretches from `kHeadLeadMinimum` (32) units: the subtitle (muted; the screen's `subtitleSpans` as the text's runs when it gives them, else its plain subtitle as one run) and the badges, whose holder wraps too, so they sit beside one another while they fit and wrap under one another where they do not. (A wrapping row holding a wrapping row is sized from its children's one-line widths, so the width a row was last laid out at never feeds back into the width it asks for.) The trail (`head_trail`) is a row of gap 1 that wraps, so a part with nothing in it takes no gap after the last action:
 the tools, the actions as buttons and the head's own menu. Where the trail fits beside the lead (32 units, or its natural width where that is less), the lead takes
 the rest of the width; where it does not, the trail drops to a line of its own at the trailing edge. The test ids are
 `head`, `head_lead`, `head_trail`, `head_subtitle`, `head_status_<n>` (the badge's place among the visible
@@ -164,7 +164,7 @@ head's place (`Below` with no active tab), `activeHeadOneLine()` of whether the 
 title (`true` with no active tab), `activeHeadJoined()` of whether the page continues the head's block (the screen's
 `headJoined`, and the page not inset: two tabs inset it), and `activeHeadSurface()` of the surface the screen asks the
 top bar to be drawn on (empty with none); `activePageSurface()` is the same read of the surface it asks the page area
-to be drawn on (empty with none or with no active tab). A trail button of an `actionButton` with `iconOnly` has an empty label, and the
+to be drawn on (empty with none or with no active tab). `activeHeadTrailEndsFramed()` is a tracked read of whether the trail's last element is a button that draws a frame: the last visible action when it is neither icon-only nor ghost, and no head menu follows (the menu is an icon button); the shell tells the frame, which keeps such a button step 4 from a compact bar's edge. A trail button of an `actionButton` with `iconOnly` has an empty label, and the
 action's label as its accessible name and tooltip. The head's eyebrow (`HeadParts::eyebrow`, `head_eyebrow`) is the screen's `eyebrowSpans` as the muted text's runs when
 it gives them, else its plain `eyebrow` as one run, hidden while there is none; a shell draws it above the title, and
 the in-page head draws it as a line above the head row (`head_block`, a column of the eyebrow and `head`). A head with

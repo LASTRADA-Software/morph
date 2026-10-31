@@ -405,6 +405,24 @@ public:
         return !(eyebrowHasContent(*tab) || leadUnderTitle);
     }
 
+    /// @brief Whether the active tab's head trail ends in a button that draws a frame, so a compact top bar can keep
+    ///        it clear of the window's edge. A tracked read.
+    /// @return Whether the trail's last element is a framed button: the last visible action that is not icon-only
+    ///         and not ghost. A head menu, drawn as an icon button after the actions, ends the trail unframed.
+    ///         `false` with no active tab and with no action.
+    [[nodiscard]] bool activeHeadTrailEndsFramed() const {
+        std::optional<WorkspaceTabId> const tab = _model->active().get();
+        if (!tab || !headMenuOf(*tab).empty()) {
+            return false;
+        }
+        ScreenHead const* const head = headOf(*tab);
+        if (head == nullptr) {
+            return false;
+        }
+        std::vector<HeadAction> const actions = head->actions().get();
+        return !actions.empty() && !actions.back().iconOnly && actions.back().emphasis != ButtonEmphasis::Ghost;
+    }
+
     /// @brief Whether the active tab's page continues the head's block: the screen's shown root says so
     ///        (`ScreenHead::headJoined`) and the page is not inset, which two tabs or more force. A tracked read.
     /// @return Whether the head is joined to the page.
@@ -1030,6 +1048,9 @@ private:
             return head == nullptr ? std::vector<HeadAction>{} : head->actions().get();
         };
         Row row{.children = {}, .gap = 1, .common = {}, .tone = std::nullopt};
+        // Wrapping, so a part with nothing in it (no tools, no menu) takes no gap: a non-wrapping row would leave one
+        // after the last action, short of the edge by a step.
+        row.wrap = true;
         row.common.testId = "head_trail";
         row.common.visible = Prop<bool>{[this, tab] { return trailHasContent(tab); }};
         row.align = Align::Center;

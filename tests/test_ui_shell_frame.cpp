@@ -482,3 +482,30 @@ TEST_CASE("shell frame: the compact top bar pads above and below its line by ste
     frame.setCompact(false);
     CHECK(backend.prop(bar, "gap") == "2");
 }
+
+// Mutation: a no-op `setTrailEndInset`, or show the inset expanded.
+TEST_CASE("shell frame: a trail end inset shows only compact", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const inset = backend.find("Row", "testId", "shell_trail_end_inset").value();
+    int const line = backend.find("Row", "testId", "shell_topbar_line").value();
+    int const main = backend.find("Row", "testId", "shell_topbar_main").value();
+    std::vector<int> const lineChildren = backend.children(line);
+    auto const at = [&lineChildren](int widget) {
+        return std::ranges::find(lineChildren, widget) - lineChildren.begin();
+    };
+    CHECK(at(inset) == at(main) + 1);
+    CHECK(backend.prop(inset, "visible") == "false");
+
+    frame.setTrailEndInset(true);
+    CHECK(backend.prop(inset, "visible") == "false");
+    frame.setCompact(true);
+    CHECK(backend.prop(inset, "visible") == "true");
+    frame.setTrailEndInset(false);
+    CHECK(backend.prop(inset, "visible") == "false");
+    frame.setTrailEndInset(true);
+    frame.setCompact(false);
+    CHECK(backend.prop(inset, "visible") == "false");
+}

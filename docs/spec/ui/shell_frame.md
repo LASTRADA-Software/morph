@@ -25,6 +25,7 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 | a row that wraps, gap 3 (compact: 2), `align: start` (`center` while the head is one line), `justify: end`, stretch | `shell_topbar_main` | the navigation menu (`shell_nav_menu`, shown only in [the compact form](#the-compact-form)); a lead block, a column that stretches from `kShellHeadLeadMinimum` (32) units, holding the eyebrow slot (`shell_head_eyebrow`), the title line (`shell_title_line`, a row that wraps, gap 2, centred) and the lead slot (`shell_head_lead`), in that order; the title line holds the shown screen's title (`shell_title`, a heading) and the inline lead slot (`shell_head_inline`, hidden unless the lead is inline); then the trail (`shell_head_trail`). Every line of it is padded at both ends by the pad spacers |
 | a row that wraps, gap 3, `align: center`, content-sized, hidden unless the head or the principal shows | `shell_head_trail` | the trail slot (`shell_head`), then the principal: the two wrap as one block, and a wrapping row gives no gap to an item with no width, so a shown slot with nothing mounted leaves no space before the principal |
 | a text, muted, hidden unless the principal sits in the head | `shell_head_principal` | the principal, the trail's last item (`setPrincipalInHead`), centred on the actions on whichever line the trail is |
+| a row, gap 2, of two zero-width spacers, shown only compact and only while the trail ends framed | `shell_trail_end_inset` | the top line's item after the wrapping row: with the line's gap on either side it adds step 3 after the trail (`setTrailEndInset`) |
 | a column, surface `page` (or the one `setPageSurface` names), stretch × stretch | `shell_page` | the page: zero-sized spacers above and either side of the content, each a gap of step 4 away, so the content is padded by step 4; the spacers hide while `setPageInset(false)`, and a hidden spacer takes no gap, so the content then fills the page |
 
 - `page()` is the content container, where the client places the workspace.
@@ -89,7 +90,10 @@ screen's entry checked) and opens the entry chosen through `Navigator::choose`, 
 would; with a sign-out handler the menu ends with a separator and a "Sign out" entry described by the principal, which calls `onSignOut` and opens no screen; the frame sets it again whenever the navigator says its entries changed or the principal does. The compact top bar is tighter: it pads its line by step 1 above and below, which makes it one touch target and
 step 1 each side (52 px with 44 px targets), the line's ends are padded by step 1 and its items are step 2 apart, so a
 touch-sized menu square beside the title leaves the title room. On the terminal steps 1 and 2 are both no rows, so the
-bar's rows do not change. `setCompact(false)` shows the sidebar
+bar's rows do not change. A button that draws a frame at the trail's end
+would stand too close to the edge at step 1, so `setTrailEndInset(true)` adds step 3 after the trail and the
+frame stands step 4 from the edge; the client says it from the head's last action (`Workspace::activeHeadTrailEndsFramed`),
+and a ghost or icon-only button, whose frame is invisible, keeps step 1. The expanded bar needs no inset. `setCompact(false)` shows the sidebar
 again, restores the bar's step 2 and the line's steps 3 and 3, and hides the menu; `compact()` answers the form, and a new frame is not compact. The form
 and the sign-in state combine: signed out, the sidebar and the top bar stay hidden in either form. The frame does not
 decide when to be compact; the generic client's rule is in [`client/client.md`](../client/client.md#the-shell). A

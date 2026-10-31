@@ -2351,3 +2351,30 @@ TEST_CASE("qt_quick containers: the compact top bar is one touch target tall plu
     INFO("the bar is " << bar.height() << " px, a touch target " << touch);
     CHECK(bar.height() == Catch::Approx(touch + (2 * themeStep(scene, 1))).margin(0.5));
 }
+
+// A framed button at the compact bar's end stands step 4 from the edge, an unframed one step 1. Mutation: no end
+// inset (the framed button is step 1 from the edge).
+TEST_CASE("qt_quick containers: a framed button ends the compact bar step 4 from its edge", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setCompact(true);
+    frame.setTitle("Audit");
+    frame.setHeadShown(true);
+    ui::Button primary{.label = "Export PDF"};
+    primary.emphasis = ui::ButtonEmphasis::Primary;
+    primary.common.testId = "end_primary";
+    ui::Mounted const trailMount{scene.runtime(), scene.backend(),
+                                 ui::row(ui::Row{.children = {ui::button(std::move(primary))}, .gap = 1}),
+                                 &frame.headSlot()};
+    scene.window().resize(390, 600);
+    frame.setTrailEndInset(true);
+    scene.settle();
+    QRectF const bar = sceneRectOf("shell_topbar");
+    QRectF const button = sceneRectOf("end_primary");
+    INFO("the bar ends at " << bar.right() << ", the button at " << button.right());
+    CHECK(bar.right() - button.right() == Catch::Approx(themeStep(scene, 4)).margin(0.5));
+    frame.setTrailEndInset(false);
+    scene.settle();
+    CHECK(bar.right() - sceneRectOf("end_primary").right() == Catch::Approx(themeStep(scene, 1)).margin(0.5));
+}

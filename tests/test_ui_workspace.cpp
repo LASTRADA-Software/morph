@@ -132,6 +132,19 @@ constexpr std::string_view kLeadPlaced = R"({
     { "kind": "button", "testId": "wide", "label": "wide", "onClick": [ { "set": "compact", "value": false } ] }
   ] } })";
 
+/// A screen whose head ends in a primary action, then a ghost icon-only one shown while `moreShown`.
+constexpr std::string_view kTrailEnd = R"({
+  "vocab": "ui/1", "id": "trailend", "title": "Audit",
+  "actions": [
+    { "id": "export", "label": "Export", "emphasis": "primary", "onClick": [] },
+    { "id": "more", "label": "More", "icon": "more", "iconOnly": true, "emphasis": "ghost",
+      "visible": { "ref": "moreShown" }, "onClick": [] }
+  ],
+  "state": { "moreShown": { "init": true } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "hideMore", "label": "hide", "onClick": [ { "set": "moreShown", "value": false } ] }
+  ] } })";
+
 /// A screen whose head has only a menu: an entry, a separator, an entry shown while `retireShown`, and a submenu.
 constexpr std::string_view kMenued = R"({
   "vocab": "ui/1", "id": "menued", "title": "Instrument", "menuLabel": "More instrument actions",
@@ -280,6 +293,7 @@ private:
             {"eyebrowonly", loadOrFail(kEyebrowOnly, morph::ui::testing::corpusCatalog())},
             {"edgeroot", loadOrFail(kEdgeRoot, morph::ui::testing::corpusCatalog())},
             {"leadplaced", loadOrFail(kLeadPlaced, morph::ui::testing::corpusCatalog())},
+            {"trailend", loadOrFail(kTrailEnd, morph::ui::testing::corpusCatalog())},
             {"menued", loadOrFail(kMenued, morph::ui::testing::corpusCatalog())},
             {"tooled", loadOrFail(kTooled, morph::ui::testing::corpusCatalog())},
             {"asker", loadOrFail(kAsker, morph::ui::testing::corpusCatalog())},
@@ -1087,7 +1101,7 @@ TEST_CASE("workspace: the in-page head is a wrapping line of a lead that stretch
     CHECK(harness.backend.prop(lead, "wrap") == "true");
     REQUIRE(harness.backend.children(lead).size() == 2);
     CHECK(harness.backend.prop(harness.backend.children(lead).at(1), "wrap") == "true");
-    CHECK_FALSE(harness.backend.hasProp(trail, "wrap"));
+    CHECK(harness.backend.prop(trail, "wrap") == "true");
 }
 
 namespace {
@@ -1397,6 +1411,8 @@ TEST_CASE("workspace: the lead is built once per place and shown only in the pla
     std::vector<int> const trailParts = backend.children(trailRow);
     REQUIRE(trailParts.size() == 4);
     CHECK(trailParts.at(1) == end);
+    // Wrapping: a part with nothing in it takes no gap after the last action.
+    CHECK(backend.prop(trailRow, "wrap") == "true");
     for (int const copy : {end, inlined}) {
         CHECK_FALSE(backend.prop(copy, "layout").contains("stretch"));
         CHECK_FALSE(backend.prop(copy, "layout").contains("min"));
@@ -1489,4 +1505,23 @@ TEST_CASE("workspace: activePageSurface follows the active screen's pageSurface"
     REQUIRE(shell.open("headed", {}) == 1U);
     harness.settle();
     CHECK(shell.activePageSurface().empty());
+}
+
+// Mutation: answer from the first action, ignore the emphasis or the icon-only flag, or read the last action
+// untracked.
+TEST_CASE("workspace: the head's trail ends framed when its last visible action draws a frame", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog(), nullptr, morph::ui::HeadPlacement::External};
+    CHECK_FALSE(shell.activeHeadTrailEndsFramed());
+    REQUIRE(shell.open("trailend", {}) == 0U);
+    harness.settle();
+    CHECK_FALSE(shell.activeHeadTrailEndsFramed());
+    harness.backend.click(harness.byTestId("Button", "hideMore"));
+    harness.settle();
+    CHECK(shell.activeHeadTrailEndsFramed());
+    // A plain action draws a frame, so a head whose last action is one ends framed.
+    REQUIRE(shell.open("headed", {}) == 1U);
+    harness.settle();
+    CHECK(shell.activeHeadTrailEndsFramed());
 }

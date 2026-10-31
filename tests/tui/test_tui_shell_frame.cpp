@@ -244,3 +244,28 @@ TEST_CASE("tui shell frame: the principal is drawn on the trail's row after the 
     empty.screen.draw();
     CHECK(rowsOf(empty.screen).at(rowOf(empty.screen, "DrMeyer")).find("DrMeyer") == shownAt);
 }
+
+// Control: map step 1 to a row (the compact bar's title would move down from row 0), or draw the end inset as a
+// column of its own (the action leaves the title's row at 40 columns).
+TEST_CASE("tui shell frame: the compact bar's padding is no row, and the end inset keeps the trail on the title's row",
+          "[tui][shell]") {
+    FramedPage page{40};
+    CHECK(page.backend.widthClass() == "compact");
+    ui::Text action{.text = std::string{"SCAN"}};
+    ui::Mounted const trailMount{page.runtime, page.backend, ui::text(std::move(action)), &page.frame->headSlot()};
+    page.frame->setHeadShown(true);
+    static_cast<void>(page.loop.runUntilIdle());
+    page.backend.fit();
+    page.screen.draw();
+    std::size_t const title = rowOf(page.screen, "Review");
+    CHECK(title == 0);
+    std::string const before = rowsOf(page.screen).at(title);
+
+    page.frame->setTrailEndInset(true);
+    static_cast<void>(page.loop.runUntilIdle());
+    page.backend.fit();
+    page.screen.draw();
+    REQUIRE(rowOf(page.screen, "SCAN") == title);
+    std::string const after = rowsOf(page.screen).at(title);
+    CHECK(after.find("SCAN") < before.find("SCAN"));
+}

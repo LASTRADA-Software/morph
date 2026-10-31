@@ -86,6 +86,9 @@ public:
           _trail{wrappingRow(backend, _topMain.get())},
           _headSlot{backend.createStack(_trail.get(), Axis::Horizontal)},
           _topPrincipal{backend.createText(_trail.get())},
+          _trailInset{backend.createStack(_topLine.get(), Axis::Horizontal)},
+          _trailInsetStart{backend.createSpacer(_trailInset.get())},
+          _trailInsetEnd{backend.createSpacer(_trailInset.get())},
           _topEnd{backend.createSpacer(_topLine.get())},
           _page{backend.createStack(_main.get(), Axis::Vertical)},
           _top{backend.createSpacer(_page.get())},
@@ -188,6 +191,13 @@ public:
         _topPrincipal->setRole(TextRole::Muted);
         _topPrincipal->setTestId("shell_head_principal");
         _topPrincipal->setVisible(false);
+        // Two empty items a gap apart: with the line's gap on either side they add step 3 after the trail. The
+        // compact line's end pad is step 1, which is too close for a button that draws a frame.
+        _trailInset->setGap(2);
+        _trailInset->setTestId("shell_trail_end_inset");
+        _trailInset->setVisible(false);
+        _trailInsetStart->setLayout({.width = Sizing::fixed(0), .height = {}});
+        _trailInsetEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
 
         // The page is padded by spacing step 4: zero-sized spacers above and either side, each a gap away.
         _page->setSurface("page");
@@ -356,6 +366,15 @@ public:
         showChrome();
     }
 
+    /// @brief Tells the frame whether the head's last action draws a frame. Compact, the bar's end pad is step 1,
+    ///        which is the whole inset a button without a frame needs; a button that draws one stands step 4 from the
+    ///        edge, so the bar adds step 3 after the trail. The expanded bar's step-3 end pad already matches.
+    /// @param endsFramed Whether the trail ends in a framed button. A new frame has no inset.
+    void setTrailEndInset(bool endsFramed) {
+        _trailEndFramed = endsFramed;
+        showTrail();
+    }
+
     /// @brief Whether the frame has its compact form.
     /// @return It.
     [[nodiscard]] bool compact() const noexcept { return _compact; }
@@ -418,6 +437,7 @@ private:
         bool const principalShown = _principalInHead && !_compact && !_principalName.empty();
         _topPrincipal->setVisible(principalShown);
         _trail->setVisible(_headShown || principalShown);
+        _trailInset->setVisible(_compact && _trailEndFramed);
     }
 
     // Whether the inline lead shows: see setLeadInline.
@@ -469,6 +489,9 @@ private:
     std::unique_ptr<StackWidget> _trail;
     std::unique_ptr<StackWidget> _headSlot;
     std::unique_ptr<TextWidget> _topPrincipal;
+    std::unique_ptr<StackWidget> _trailInset;
+    std::unique_ptr<SpacerWidget> _trailInsetStart;
+    std::unique_ptr<SpacerWidget> _trailInsetEnd;
     std::unique_ptr<SpacerWidget> _topEnd;
     std::unique_ptr<StackWidget> _page;
     std::unique_ptr<SpacerWidget> _top;
@@ -488,6 +511,7 @@ private:
     bool _leadInline = false;
     bool _headJoined = false;
     bool _principalInHead = false;
+    bool _trailEndFramed = false;
 };
 
 }  // namespace morph::ui
