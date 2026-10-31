@@ -1,8 +1,8 @@
 # Visual review: the screens against their mockups
 
 Every screen was grabbed on Qt Quick at 1000×830 and 390×844, and at narrower and shorter sizes where something
-clipped (`morph_examples_client --app lims-gallery --user "Dr. A. Meyer" --screen lims-gallery.<id> --grab-size WxH --grab FILE`;
-`--user` signs the session in, so the head shows the principal). Each
+clipped (`QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen morph_examples_client --app lims-gallery --user "Dr. A. Meyer" --screen lims-gallery.<id> --grab-size WxH --grab FILE`;
+`--user` signs the session in, so the head shows the principal; `QT_FORCE_STDERR_LOGGING=1` keeps Qt's warnings on stderr, where an empty log means no warning, not a log that went to the system journal). Each
 was compared with its mockup rendered in headless Firefox. Hover, open menus and tab switches can't be grabbed;
 those findings come from the user running the app and are traced to the code.
 
