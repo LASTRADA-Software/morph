@@ -363,14 +363,14 @@ ui::Commands confirmChange(Change const& change) {
                                   {change.sample, change.analyte, change.after, change.unit}))};
 }
 
-ui::Node reasonField(Change const& change) {
+ui::Node reasonField(Change const& change, char const* label = "Reason") {
     auto const reasons = ui::list({ui::obj({{"key", "integration"}, {"label", "Integration corrected"}}),
                                    ui::obj({{"key", "transcription"}, {"label", "Transcription error"}}),
                                    ui::obj({{"key", "calculation"}, {"label", "Calculation corrected"}}),
                                    ui::obj({{"key", "other"}, {"label", "Other"}})});
     return layout::captioned(ui::select({.options = reasons,
                                          .selected = change.reason,
-                                         .label = "Reason",
+                                         .label = label,
                                          .onChoose = ui::set(change.reason, ui::event())}))
         .required(true)
         .testId("reason");
@@ -570,7 +570,8 @@ ui::AnyHandle currentSample(Worksheet const& sheet) {
 // The reason asked for inline, under the result it is about.
 ui::Node inlineReason(Worksheet const& sheet) {
     Change const& change = sheet.change;
-    return ui::column({reasonField(change), commentField(change),
+    // A line of room above the field's caption keeps it off the evaluation line.
+    return ui::column({reasonField(change, "Reason for change"), commentField(change),
                        ui::row({ui::button({.label = "Undo change", .onClick = undoChange(sheet)}).testId("undo"),
                                 ui::button({.label = "Confirm change",
                                             .emphasis = ButtonEmphasis::Primary,
@@ -578,7 +579,7 @@ ui::Node inlineReason(Worksheet const& sheet) {
                                     .enabled(canConfirm(change))
                                     .testId("confirm")},
                                {.gap = 1})},
-                      {.gap = 2})
+                      {.gap = 2, .padding = ui::padding(2, 0)})
         .visible(change.open && ui::eq(change.id, ui::row("id")))
         .testId("inline-reason");
 }
