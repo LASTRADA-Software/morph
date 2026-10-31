@@ -315,6 +315,14 @@ ui::AnyHandle priorityTone(ui::AnyHandle const& priority) {
                     ui::cond(ui::eq(priority, "Urgent"), Text{"warn"}, Text{"neutral"}));
 }
 
+// The urgent priorities are outlined tags; the routine one is a muted word, so the tags that matter stand out.
+ui::Node priorityCell() {
+    auto const priority = ui::row("priority");
+    Flag const routine = ui::eq(priority, "Routine");
+    return ui::row({layout::outlineTag(priority, priorityTone(priority)).visible(!routine),
+                    layout::muted(priority).visible(routine)});
+}
+
 ui::Node specCell() {
     auto const spec = ui::row("spec");
     return ui::row({layout::tag(spec, ui::row("specTone")).visible(!ui::isEmpty(spec)),
@@ -451,21 +459,21 @@ void declareTools(ui::Scope& screen, Samples const& list) {
                                       .value = list.search,
                                       .placeholder = "Sample, lot or product",
                                       .onChange = {ui::set(list.search, ui::event())},
-                                      .width = 30,
+                                      .width = 23,
                                       .visible = !list.compact});
     screen.tool(ui::HeadSelectOptions{.id = "status",
                                       .label = "Status",
                                       .options = statusOptions(),
                                       .selected = list.status,
                                       .onChoose = {ui::set(list.status, ui::event())},
-                                      .width = 19,
+                                      .width = 17,
                                       .visible = !list.compact});
     screen.tool(ui::HeadSelectOptions{.id = "priority",
                                       .label = "Priority",
                                       .options = priorityOptions(),
                                       .selected = list.priority,
                                       .onChoose = {ui::set(list.priority, ui::event())},
-                                      .width = 18,
+                                      .width = 16,
                                       .visible = !list.compact});
 }
 
@@ -509,17 +517,14 @@ ui::Node samplesTable(Samples const& list) {
                     {{.name = "id", .label = "Sample", .width = ui::fixed(11), .role = "mono", .sortable = true},
                      {.name = "product",
                       .label = "Product · lot",
-                      .width = ui::stretch(2),
+                      .width = ui::stretch(6),
                       .cell = ui::text(
                           {.text = lotLine,
                            .spans = ui::cond(
                                ui::isEmpty(ui::row("lot")), ui::AnyHandle{ui::spans({ui::row("product")})},
                                ui::AnyHandle{ui::spans({ui::row("product"), " · ", ui::mono(ui::row("lot"))})})})},
-                     {.name = "tests", .label = "Tests", .width = ui::stretch(2)},
-                     {.name = "priority",
-                      .label = "Priority",
-                      .width = ui::fixed(7),
-                      .cell = layout::outlineTag(ui::row("priority"), priorityTone(ui::row("priority")))},
+                     {.name = "tests", .label = "Tests", .width = ui::stretch(4)},
+                     {.name = "priority", .label = "Priority", .width = ui::fixed(6), .cell = priorityCell()},
                      {.name = "status",
                       .label = "Status",
                       .width = ui::fixed(10),
@@ -691,13 +696,14 @@ ui::Node compactLayout(Samples const& list) {
         ui::cond(ui::eq(list.priority, "any"), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1});
     // The search, Filters and Sort stay at the top of the phone screen in the head's block, and the bulk bar at the
     // bottom, while the cards scroll between them.
-    auto const controls = ui::Nodes{
-        searchField(list),
-        ui::row({ui::button({.label = ui::format("Filters · {0}", {active}), .onClick = ui::open(list.filtersDrawer)})
-                     .sizing(ui::stretch())
-                     .testId("open-filters"),
-                 sortChoice(list).sizing(ui::stretch())},
-                {.gap = 1})};
+    auto const controls = ui::Nodes{ui::column(
+        {searchField(list),
+         ui::row({ui::button({.label = ui::format("Filters · {0}", {active}), .onClick = ui::open(list.filtersDrawer)})
+                      .sizing(ui::stretch())
+                      .testId("open-filters"),
+                  sortChoice(list).sizing(ui::stretch())},
+                 {.gap = 1})},
+        {.gap = 2})};
     return ui::pinned(
         ui::column({ui::panel({ui::forEach(ui::slice(cardOrder(list), std::int64_t{0}, list.cardCount),
                                            {.key = ui::row("id"), .gap = 0, .divided = true},
