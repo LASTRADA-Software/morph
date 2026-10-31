@@ -155,7 +155,7 @@ and the placement), so a hidden copy is in neither the layout nor the accessibil
 | Place | Part | Test ids | Size |
 |---|---|---|---|
 | `below` | `HeadParts::lead` | `head_lead`, `head_subtitle`, `head_status_<n>` | stretches from the 32-unit minimum (in the page); no minimum for a shell |
-| `inline` | `HeadParts::inlineLead` | `head_lead_inline`, `head_subtitle_inline`, `head_status_inline_<n>` | content-sized: no stretch, no minimum |
+| `inline` | `HeadParts::inlineLead` | `head_lead_inline`, `head_subtitle_inline`, `head_status_inline_<n>` | stretches, with no minimum: it fills the width the title line gives it, so its subtitle wraps there |
 | `end` | inside `HeadParts::trail`, between the tools and the actions | `head_lead_end`, `head_subtitle_end`, `head_status_end_<n>` | content-sized |
 
 A lead at the `end` counts as trail content. In the page (`HeadPlacement::InPage`) the tab bar carries the title, so

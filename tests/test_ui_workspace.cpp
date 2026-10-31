@@ -1407,16 +1407,16 @@ TEST_CASE("workspace: the lead is built once per place and shown only in the pla
     CHECK(backend.prop(end, "visible") == "true");
     CHECK(backend.prop(below, "visible") == "false");
     CHECK(backend.prop(inlined, "visible") == "false");
-    // Between the tools and the actions, content-sized: no stretch and no minimum.
+    // Between the tools and the actions, content-sized: no stretch and no minimum. The inline copy stretches, with no
+    // minimum, so that it fills the title line's slot and its text wraps there.
     std::vector<int> const trailParts = backend.children(trailRow);
     REQUIRE(trailParts.size() == 4);
     CHECK(trailParts.at(1) == end);
     // Wrapping: a part with nothing in it takes no gap after the last action.
     CHECK(backend.prop(trailRow, "wrap") == "true");
-    for (int const copy : {end, inlined}) {
-        CHECK_FALSE(backend.prop(copy, "layout").contains("stretch"));
-        CHECK_FALSE(backend.prop(copy, "layout").contains("min"));
-    }
+    CHECK_FALSE(backend.prop(end, "layout").contains("stretch"));
+    CHECK_FALSE(backend.prop(end, "layout").contains("min"));
+    CHECK(backend.prop(inlined, "layout") == "stretch(1)/content");
     CHECK(backend.prop(harness.byTestId("Text", "head_subtitle_end"), "visible") == "true");
     CHECK(backend.prop(harness.byTestId("Badge", "head_status_end_0"), "text") == "Draft");
     CHECK(backend.prop(below, "layout") == "stretch(1)/content");

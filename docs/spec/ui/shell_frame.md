@@ -37,7 +37,8 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
   lead block's 32 units (or its natural width where that is less), it drops to a line of its own at the trailing edge.
 - `headInlineSlot()` is the container a client mounts the head's inline lead into (`HeadParts::inlineLead`), on the
   title line right after the title. `setLeadInline(true)` shows the slot and changes no sizing: the slot is
-  content-sized and the lead block always stretches from its 32-unit minimum. The lead follows the title while both fit
+  content-sized and the lead block always stretches from its 32-unit minimum. The inline lead the workspace builds
+  stretches to fill what the title line gives it, so its subtitle wraps inside that width when it is still too narrow. The lead follows the title while both fit
   the block and wraps to a line under the title when they do not, so the trail wraps only when the block's minimum and
   the trail do not fit together; the spare width lies after the lead, before the trail. `setLeadInline(false)` hides
   the slot.

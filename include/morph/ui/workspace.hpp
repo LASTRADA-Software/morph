@@ -981,8 +981,10 @@ private:
     // holder wraps too. It stretches from `kHeadLeadMinimum` units, so a trail beside it leaves it at least that much
     // before the trail wraps to a line of its own.
     //
-    // It is built once per place and shown only while the head's placement is that place. The `Below` copy stretches;
-    // the others are content-sized, so the frame's slot, not the lead, holds the spare width.
+    // It is built once per place and shown only while the head's placement is that place. The `Below` copy stretches
+    // from its minimum. The `Inline` copy stretches with none, so it fills what the title's line gives it and its
+    // subtitle wraps there, while the frame's slot, still content-sized, holds the spare width. The `End` copy is
+    // content-sized, in the trail.
     [[nodiscard]] Row buildHeadLead(WorkspaceTabId tab, LeadPlacement place) const {
         std::string const suffix = idSuffix(place);
         auto const subtitle = [this, tab] {
@@ -1000,6 +1002,8 @@ private:
         if (place == LeadPlacement::Below) {
             row.common.layout.width = Sizing::stretch();
             row.common.layout.minWidth = kHeadLeadMinimum;
+        } else if (place == LeadPlacement::Inline) {
+            row.common.layout.width = Sizing::stretch();
         }
         row.common.visible =
             Prop<bool>{[this, tab, place] { return leadHasContent(tab) && leadPlacementOf(tab) == place; }};
