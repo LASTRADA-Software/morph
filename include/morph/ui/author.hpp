@@ -1302,7 +1302,12 @@ template <typename E = Any>
 /// @param count How many; absent takes the rest.
 /// @return The slice.
 [[nodiscard]] inline AnyHandle slice(AnyHandle const& list, AnyHandle const& start, AnyHandle const& count = {}) {
-    std::vector<AnyHandle> args{list, start};
+    // push_back into a reserved vector, not a braced list: GCC 15 at -O3 misreads the list's two-element copy
+    // followed by a push_back as a write past the end.
+    std::vector<AnyHandle> args;
+    args.reserve(3);
+    args.push_back(list);
+    args.push_back(start);
     if (count.present()) {
         args.push_back(count);
     }
