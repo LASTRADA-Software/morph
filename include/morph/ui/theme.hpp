@@ -459,11 +459,12 @@ inline std::optional<double> weightOf(Json const& value) {
     // The weights DTCG gives its names, in the order of `kFontWeights`.
     static constexpr std::array<double, 18> kValues = {100, 100, 200, 200, 300, 400, 400, 400, 500,
                                                        600, 600, 700, 800, 800, 900, 900, 950, 950};
-    auto const* const found = std::ranges::find(kFontWeights, *name);
-    if (found == kFontWeights.end()) {
-        return std::nullopt;
+    for (std::size_t i = 0; i < kFontWeights.size(); ++i) {
+        if (kFontWeights[i] == *name) {
+            return kValues[i];
+        }
     }
-    return kValues.at(static_cast<std::size_t>(found - kFontWeights.begin()));
+    return std::nullopt;
 }
 
 inline std::optional<std::string> checkTokenValue(std::string_view type, Json const& value) {

@@ -620,7 +620,7 @@ TEST_CASE(
         return h.backend.dump();
     };
     std::string const two = R"("children": [{ "kind": "text", "text": "a" }, { "kind": "text", "text": "b" }])";
-    for (std::string const& kind : {"panel", "tabs"}) {
+    for (std::string const kind : {"panel", "tabs"}) {
         std::string const view = kind == "panel" ? R"({ "kind": "panel", )" + two + " }"
                                                  : R"({ "kind": "tabs", "tabs": [{ "label": "A", )" + two + " }] }";
         std::string const dump = dumpOf(view);

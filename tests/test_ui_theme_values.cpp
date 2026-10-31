@@ -155,7 +155,7 @@ TEST_CASE("ui theme values: a surface's border style is solid or dashed, and any
     };
     auto const refused = ui::checkTheme(index, files);
     REQUIRE(refused.has_value());
-    CHECK(refused->find("border.style: only solid and dashed are drawn") != std::string::npos);
+    CHECK(refused->contains("border.style: only solid and dashed are drawn"));
     index.surfaces.clear();
     CHECK_FALSE(ui::checkTheme(index, files).has_value());
 }
@@ -188,7 +188,7 @@ TEST_CASE("ui theme values: a keyword is one of the names its spec lists, and an
     };
     auto const refused = ui::checkTheme(index, files);
     REQUIRE(refused.has_value());
-    CHECK(refused->find("shape.iconOnly: only default and square are drawn") != std::string::npos);
+    CHECK(refused->contains("shape.iconOnly: only default and square are drawn"));
     index.surfaces.clear();
     CHECK_FALSE(ui::checkTheme(index, files).has_value());
     CHECK(ui::unreadThemeTokens(index, files).empty());
@@ -201,7 +201,7 @@ TEST_CASE("ui theme values: text that cannot be read on a fill is reported", "[u
     // The gallery's neutral text colour used as the hover fill: dark text on a dark fill.
     auto const dark = ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color",
         "text": {"$value": "#1C1E21"}, "hover": {"$value": "#363C46"}}})"));
-    REQUIRE(dark.size() >= 1);
+    REQUIRE_FALSE(dark.empty());
     CHECK(dark.front().starts_with("color.hover: color.text is 1.5"));
     CHECK(dark.front().ends_with(":1 on it, below 4.5:1"));
 
@@ -266,7 +266,7 @@ TEST_CASE("ui theme values: a collapsible's marker is shown or none, and any oth
     };
     auto const refused = ui::checkTheme(index, files);
     REQUIRE(refused.has_value());
-    CHECK(refused->find("collapsible.marker: only shown and none are drawn") != std::string::npos);
+    CHECK(refused->contains("collapsible.marker: only shown and none are drawn"));
     index.surfaces.clear();
     CHECK_FALSE(ui::checkTheme(index, files).has_value());
     CHECK(ui::unreadThemeTokens(index, files).empty());
@@ -298,7 +298,7 @@ TEST_CASE("ui theme values: a list selection is accent or fill, and any other is
     };
     auto const refused = ui::checkTheme(index, files);
     REQUIRE(refused.has_value());
-    CHECK(refused->find("list.selection: only accent and fill are drawn") != std::string::npos);
+    CHECK(refused->contains("list.selection: only accent and fill are drawn"));
     index.surfaces.clear();
     CHECK_FALSE(ui::checkTheme(index, files).has_value());
 }
@@ -320,5 +320,5 @@ TEST_CASE("ui theme values: an input's inner padding defaults to 8 and a negativ
     };
     auto const refused = ui::checkTheme(index, files);
     REQUIRE(refused.has_value());
-    CHECK(refused->find("input.paddingX: must not be negative") != std::string::npos);
+    CHECK(refused->contains("input.paddingX: must not be negative"));
 }
