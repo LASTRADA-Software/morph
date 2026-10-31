@@ -2170,3 +2170,31 @@ TEST_CASE("qt_quick containers: a tab page fills the page area, pads itself, and
     CHECK(bar->isVisible());
     CHECK(bar->mapToItem(&item, QPointF{bar->width(), 0}).x() == Catch::Approx(item.width()).margin(0.5));
 }
+
+// Mutation: leave the panel's padding above the content and the layout's spacing under the header (the content
+// starts 13 px below the header's foot).
+TEST_CASE("qt_quick containers: an open collapsible panel's content starts at its header's foot", "[qt_quick]") {
+    Scene scene;
+    auto panel = scene.backend().createPanel(nullptr);
+    panel->setTitle("Current booking");
+    panel->setPadding(2);
+    panel->setCollapsible(true);
+    auto content = scene.backend().createText(panel.get());
+    content->setText("body");
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*panel);
+    QQuickItem const& toggle = named(item, "toggle");
+    double const headerBottom = toggle.mapToScene(QPointF{0, toggle.height()}).y();
+    CHECK(Scene::itemOf(*content).mapToScene(QPointF{0, 0}).y() == Catch::Approx(headerBottom).margin(0.5));
+
+    // A panel that does not fold keeps the layout's spacing under its title.
+    auto plain = scene.backend().createPanel(nullptr);
+    plain->setTitle("Plain");
+    plain->setPadding(2);
+    auto body = scene.backend().createText(plain.get());
+    body->setText("body");
+    scene.settle();
+    QQuickItem const& title = named(Scene::itemOf(*plain), "title");
+    double const titleBottom = title.mapToScene(QPointF{0, title.height()}).y();
+    CHECK(Scene::itemOf(*body).mapToScene(QPointF{0, 0}).y() - titleBottom == Catch::Approx(5.0).margin(0.5));
+}

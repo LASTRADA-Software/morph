@@ -30,6 +30,9 @@ MorphWidget {
     // Whether the content is hidden, so the panel is its header row alone.
     readonly property bool folded: root.collapsible && root.collapsed
     readonly property bool headerRowShown: root.title !== "" || root.collapsible || headerArea.children.length > 0
+    // Whether the content follows a foldable header: that row is a touch target tall already, so the content starts at
+    // its foot, with no padding or spacing between them.
+    readonly property bool followsHeader: root.headerRowShown && root.collapsible
 
     implicitWidth: frame.implicitWidth
     implicitHeight: frame.implicitHeight
@@ -44,7 +47,7 @@ MorphWidget {
         anchors.fill: parent
         implicitWidth: inner.implicitWidth + 2 * Theme.spaceOf(root.padding) + 2
         implicitHeight: inner.implicitHeight + Theme.spaceOf(root.padding) *
-                        (root.folded ? 0 : root.headerRowShown && root.collapsible ? 1 : 2) + 2
+                        (root.folded ? 0 : root.followsHeader ? 1 : 2) + 2
         // A panel that names no surface fills itself as a card. One that names a surface the theme draws leaves the
         // fill to the widget, which draws that surface behind the frame, so the frame is not drawn twice.
         color: root.surface === "" ? Theme.cardScheme.surface
@@ -72,11 +75,11 @@ MorphWidget {
             anchors.fill: parent
             anchors.leftMargin: Theme.spaceOf(root.padding) + 1
             anchors.rightMargin: Theme.spaceOf(root.padding) + 1
-            // A foldable panel's header is flush with the frame's top; its content has the padding above it.
-            anchors.topMargin: (root.headerRowShown && root.collapsible ? 0 : Theme.spaceOf(root.padding)) + 1
+            // A foldable panel's header is flush with the frame's top.
+            anchors.topMargin: (root.followsHeader ? 0 : Theme.spaceOf(root.padding)) + 1
             // A folded panel is its header row inside the frame: no padding below it and no spacing to the hidden content.
             anchors.bottomMargin: (root.folded ? 0 : Theme.spaceOf(root.padding)) + 1
-            spacing: root.folded ? 0 : 5  // the layout's default
+            spacing: root.folded || root.followsHeader ? 0 : 5  // the layout's default otherwise
 
             MorphSectionHeader {
                 id: header
@@ -100,7 +103,6 @@ MorphWidget {
                 // What a bleeding child reaches past: the panel's padding, so it ends at the frame's inner edges.
                 readonly property real childBleedInset: Theme.spaceOf(root.padding)
                 visible: !root.collapsible || !root.collapsed
-                Layout.topMargin: root.headerRowShown && root.collapsible ? Theme.spaceOf(root.padding) : 0
                 Layout.fillWidth: true
                 Layout.fillHeight: root.contentStretches
             }
