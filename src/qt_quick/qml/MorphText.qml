@@ -29,8 +29,7 @@ MorphField {
     defaultRole: Accessible.StaticText
     // A one-line text cut short of its text with an ellipsis, by the label's font: the label itself is told about
     // each line it lays out, which keeps it from eliding.
-    readonly property string fitted: root.oneLine ? metrics.elidedText(root.text, Qt.ElideRight, root.controlWidth)
-                                                  : root.text
+    readonly property string fitted: root.oneLine ? root.elideOf(root.text) : root.text
     // Whether the text is shown cut short.
     readonly property bool elided: root.fitted !== root.text
     // A one-line text asks for the width of its whole text, not of what it shows, so a column sized by its widest cell
@@ -43,12 +42,23 @@ MorphField {
     // break its last word: a text asks for the advance plus this.
     readonly property real wrapSlack: 1
     // A text has no caption, so this is the field's width with the mark that follows the text.
-    implicitWidth: (root.oneLine ? metrics.advanceWidth(root.text)
+    implicitWidth: (root.oneLine ? root.advanceOf(metrics, root.text)
                     : root.hasRuns ? label.implicitWidth
                                    : root.text.split("\n").reduce(
-                                         (widest, line) => Math.max(widest, metrics.advanceWidth(line)), 0) +
+                                         (widest, line) => Math.max(widest, root.advanceOf(metrics, line)), 0) +
                                      root.wrapSlack) +
                    (root.required ? root.markerRoom : 0)
+    // The width of a line in a face. Reading the face's height makes every binding that measures through here depend
+    // on the font: a method call alone registers no dependency, so a text whose role is set after its text would keep
+    // the width of the font it was first measured in. The height is never negative.
+    function advanceOf(face: FontMetrics, line: string): real {
+        return face.height < 0 ? 0 : face.advanceWidth(line)
+    }
+
+    // The text cut to the width with an ellipsis, by the label's current font.
+    function elideOf(line: string): string {
+        return metrics.height < 0 ? line : metrics.elidedText(line, Qt.ElideRight, root.controlWidth)
+    }
     // While the text is elided, its full text is the tooltip, unless the node gives its own.
     tooltipText: root.tooltip !== "" ? root.tooltip : root.elided ? root.text : ""
     control: label

@@ -2358,3 +2358,72 @@ TEST_CASE("qt_quick widgets: on a surface whose list selection is fill, a select
     CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == sidebar->property("text").value<QColor>());
     CHECK(drawnColor(root, QStringLiteral("Instrument 3")) != sidebar->property("accent").value<QColor>());
 }
+
+// Mutation: measure the text with `metrics.advanceWidth` alone, so the width does not follow a font that changes
+// after the text is set (the Section text keeps its regular-weight width and wraps).
+TEST_CASE("qt_quick widgets: a text whose role is set after its text is as wide as its own font needs", "[qt_quick]") {
+    for (auto const role : {ui::TextRole::Section, ui::TextRole::Heading}) {
+        Scene scene;
+        auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+        auto const text = scene.backend().createText(row.get());
+        text->setText("System suitability");
+        text->setRole(role);
+        scene.settle();
+        QQuickItem const& label = Scene::controlOf(*text);
+        INFO("role " << static_cast<int>(role) << ", width " << Scene::itemOf(*text).width());
+        CHECK(label.property("lineCount").toInt() == 1);
+        CHECK(Scene::itemOf(*text).implicitWidth() >= label.property("contentWidth").toDouble());
+    }
+}
+
+TEST_CASE("qt_quick widgets: a text follows a body size the theme changes after it is mounted", "[qt_quick]") {
+    Scene scene;
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto const text = scene.backend().createText(row.get());
+    text->setText("System suitability");
+    scene.settle();
+    double const before = Scene::itemOf(*text).implicitWidth();
+    auto const tokens = ui::parseTokens(
+        R"({"font": {"size": {"$type": "dimension", "body": {"$value": {"value": 22, "unit": "px"}}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    scene.settle();
+    CHECK(Scene::itemOf(*text).implicitWidth() > before + 10);
+    CHECK(Scene::controlOf(*text).property("lineCount").toInt() == 1);
+}
+
+// Mutation: leave `fitted` to the text and the width alone (a one-line text whose role is set after its text keeps the
+// cut it was first given, and draws past its width in its larger font).
+TEST_CASE("qt_quick widgets: a one-line text whose role is set after its text elides by its own font", "[qt_quick]") {
+    Scene scene;
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto const text = scene.backend().createText(row.get());
+    text->setLayout({.width = ui::Sizing::fixed(15)});
+    text->setText("System suitability");
+    QQuickItem& item = Scene::itemOf(*text);
+    item.setProperty("singleLine", true);
+    scene.settle();
+    REQUIRE_FALSE(item.property("elided").toBool());
+    text->setRole(ui::TextRole::Heading);
+    scene.settle();
+    INFO("width " << item.width() << ", fitted " << item.property("fitted").toString().toStdString());
+    CHECK(item.property("elided").toBool());
+    CHECK(item.property("fitted").toString().endsWith(QStringLiteral("\u2026")));
+    CHECK(Scene::controlOf(*text).property("lineCount").toInt() == 1);
+}
+
+// Mutation: gate the measure on `pixelSize > 0` (the platform's strong font has a point size, so this is 0).
+TEST_CASE("qt_quick widgets: a Section text measures a width when the theme names no font family", "[qt_quick]") {
+    Scene scene;
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto const text = scene.backend().createText(row.get());
+    text->setText("System suitability");
+    text->setRole(ui::TextRole::Section);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("fontFamilies").toStringList().isEmpty());
+    CHECK(Scene::itemOf(*text).implicitWidth() > 50);
+}
