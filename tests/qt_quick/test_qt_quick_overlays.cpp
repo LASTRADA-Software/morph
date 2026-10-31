@@ -14,6 +14,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <map>
 #include <memory>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/ui/backend.hpp>
@@ -877,4 +878,49 @@ TEMPLATE_TEST_CASE(
     REQUIRE(popupContent != nullptr);
     CHECK(bottom(Scene::itemOf(*cancel)) == Catch::Approx(bottom(*popupContent)).margin(0.6));
     CHECK(popup->property("bottomPadding").toReal() == Catch::Approx(step));
+}
+
+namespace {
+
+template <typename Overlay>
+std::unique_ptr<Overlay> openedOverlay(Scene& scene) {
+    std::unique_ptr<Overlay> overlay;
+    if constexpr (std::is_same_v<Overlay, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(nullptr);
+    } else {
+        overlay = scene.backend().createDrawer(nullptr, ui::Side::End);
+    }
+    overlay->setTitle("Change");
+    overlay->setDescription("Why it changes");
+    auto const body = scene.backend().createText(overlay.get());
+    body->setText("Body");
+    auto const save = scene.backend().createButton(&overlay->footer());
+    save->setLabel("Save");
+    overlay->setOpen(true);
+    scene.settle();
+    return overlay;
+}
+
+}  // namespace
+
+// Mutation: draw the head's rule in the border colour, or the footer's in the theme-level divider while a card
+// surface redefines its own.
+TEMPLATE_TEST_CASE("qt_quick overlays: both rules draw the card's divider", "[qt_quick]", ui::DialogWidget,
+                   ui::DrawerWidget) {
+    Scene scene;
+    ui::ThemeValues values = ui::themeValues();
+    values.colors.insert_or_assign("color.divider", ui::Rgba{.r = 0x11, .g = 0x22, .b = 0x33, .a = 0xff});
+    values.colors.insert_or_assign("color.border", ui::Rgba{.r = 0x44, .g = 0x55, .b = 0x66, .a = 0xff});
+    ui::ThemeValues card = ui::themeValues();
+    card.colors.insert_or_assign("color.divider", ui::Rgba{.r = 0x77, .g = 0x88, .b = 0x99, .a = 0xff});
+    card.colors.insert_or_assign("color.border", ui::Rgba{.r = 0x44, .g = 0x55, .b = 0x66, .a = 0xff});
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"card", card}};
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values, surfaces).empty());
+    auto const overlay = openedOverlay<TestType>(scene);
+    for (char const* const name : {"headRule", "footerRule"}) {
+        INFO(name);
+        QQuickItem const* const rule = namedIn(*scene.window().contentItem(), QString::fromLatin1(name));
+        REQUIRE(rule != nullptr);
+        CHECK(rule->property("color").value<QColor>() == QColor{0x77, 0x88, 0x99});
+    }
 }

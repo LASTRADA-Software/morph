@@ -149,7 +149,7 @@ MorphWidget {
                 id: headRule
                 objectName: "headRule"
                 visible: root.description !== ""
-                color: Theme.cardScheme.border
+                color: Theme.cardScheme.divider
                 implicitHeight: 1
                 Layout.fillWidth: true
                 Layout.leftMargin: -drawer.leftPadding
@@ -188,7 +188,7 @@ MorphWidget {
                 id: footerRule
                 objectName: "footerRule"
                 visible: footerArea.visible
-                color: Theme.divider
+                color: Theme.cardScheme.divider
                 implicitHeight: 1
                 Layout.fillWidth: true
                 Layout.leftMargin: -drawer.leftPadding
