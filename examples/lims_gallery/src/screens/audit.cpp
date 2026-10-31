@@ -269,8 +269,7 @@ ui::Node facetsPanel(Audit const& audit) {
                 ui::column(facetFields(audit), {.gap = 3})},
                {.gap = 2, .padding = ui::padding(3, 3)})
         .surface("bar")
-        // The design's rail is 22% of its 1000 px page; 22 units is the same share of the 785 px page the sidebar
-        // leaves.
+        // Wide enough for a date and time in the From and To fields; the trail beside it takes the rest.
         .sizing(ui::fixed(22))
         .a11y("Filters")
         .testId("facets");
@@ -283,8 +282,14 @@ ui::Node chip(ui::AnyHandle const& label, std::string const& removeName, ui::Com
     return ui::badge({.text = label, .onRemove = remove, .removeLabel = removeName}).visible(shown);
 }
 
+// How many entries the filters leave, and the zone the times are in; the pager counts the same entries.
+ui::Node entriesNote(Audit const& audit) {
+    return layout::muted(ui::format("{0} entries · times in CEST (UTC+2)", {ui::count(audit.shown)}))
+        .testId("entries-note");
+}
+
 ui::Node chips(Audit const& audit) {
-    std::vector<ui::Node> row{layout::muted("57 entries · times in CEST (UTC+2)")};
+    std::vector<ui::Node> row;
     for (std::vector<Facet> const* const group : {&audit.types, &audit.actions}) {
         for (Facet const& facet : *group) {
             row.push_back(
@@ -299,7 +304,9 @@ ui::Node chips(Audit const& audit) {
     row.push_back(chip(ui::format("{0} – {1}", {end(audit.from), end(audit.until)}), "Remove dates",
                        {ui::set(audit.from, std::string{}), ui::set(audit.until, std::string{})}, audit.dated)
                       .testId("chip-dates"));
-    return ui::row(row, {.gap = 1, .align = Align::Center, .wrap = true}).testId("chips");
+    // The note sits above the chips, so the date range's chip stays on the chips' line.
+    return ui::column({entriesNote(audit), ui::row(row, {.gap = 1, .align = Align::Center, .wrap = true})}, {.gap = 1})
+        .testId("chips");
 }
 
 // ── The trail ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -338,11 +345,11 @@ ui::Node trailTable(Audit const& audit) {
                                       ui::text({.text = ui::row("detail")}).visible(!ui::isEmpty(ui::row("detail")))},
                                      {.gap = 0})},
                      {.name = "field", .label = "Field", .width = ui::fixed(8)},
-                     {.name = "old", .label = "Old value", .width = ui::stretch(2), .cell = oldValue(ui::row("old"))},
-                     {.name = "new", .label = "New value", .width = ui::stretch(2), .cell = newValue(ui::row("new"))},
+                     {.name = "old", .label = "Old value", .width = ui::stretch(3), .cell = oldValue(ui::row("old"))},
+                     {.name = "new", .label = "New value", .width = ui::stretch(4), .cell = newValue(ui::row("new"))},
                      {.name = "reason",
                       .label = "Reason",
-                      .width = ui::stretch(3),
+                      .width = ui::stretch(5),
                       .cell = ui::text({.text = ui::cond(noReason, ui::AnyHandle{"—"}, reason),
                                         .role = ui::cond(noReason, Text{"muted"}, Text{"normal"})})}},
                 .pageSize = std::int64_t{25},
@@ -437,7 +444,7 @@ ui::Node compactLayout(Audit const& audit) {
               ui::button({.label = "Export CSV", .onClick = ui::notify("Exporting the audit trail as CSV")})
                   .sizing(ui::stretch())},
              {.gap = 1}),
-         layout::muted("57 entries · times in CEST (UTC+2)")},
+         entriesNote(audit)},
         {.gap = 2, .padding = ui::padding(2, 4)});
     return ui::column(
                {actions,
@@ -446,10 +453,13 @@ ui::Node compactLayout(Audit const& audit) {
                             [](ui::DeclScope&) { return ui::Nodes{entryCard()}; })
                     .testId("entries"),
                 ui::column(noEntries(audit), {.padding = 4}).visible(ui::isEmpty(audit.shown)),
+                // The button stays in view and is disabled once the list shows every entry.
                 ui::column({ui::button({.label = "Load 25 more", .onClick = ui::set(audit.listed, audit.listed + 25)})
+                                .enabled(audit.listed < ui::Handle<std::int64_t>{ui::call("count", {audit.shown})})
+                                .sizing(ui::stretch())
                                 .testId("load-more")},
                            {.padding = 4})
-                    .visible(audit.listed < ui::Handle<std::int64_t>{ui::call("count", {audit.shown})}),
+                    .visible(!ui::isEmpty(audit.shown)),
                 filtersDrawer(audit)},
                {.divided = true, .pageEdge = true, .headJoined = true})
         .surface("bar");
