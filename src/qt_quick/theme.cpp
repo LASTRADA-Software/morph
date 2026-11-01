@@ -80,6 +80,13 @@ constexpr std::array<std::pair<std::string_view, char const*>, 44> kColorPropert
     {"color.disabled.border", "disabledBorder"},
 }};
 
+/// The colour tokens that have no default, with the `Theme` flag that tells whether the theme sets each.
+constexpr std::array<std::pair<std::string_view, char const*>, 3> kOptionalColors = {{
+    {"color.selectionText", "hasSelectionText"},
+    {"color.dialogRule", "hasDialogRule"},
+    {"color.placeholder", "hasPlaceholder"},
+}};
+
 /// The scheme property each colour token of a surface sets.
 constexpr std::array<std::pair<std::string_view, char const*>, 39> kSchemeProperties = {{
     {"color.surface", "surface"},
@@ -154,6 +161,16 @@ bool keywordIs(ui::ThemeValues const& values, std::string_view path, std::string
     return found != values.keywords.end() && found->second == name;
 }
 
+// For each colour with no default, whether the theme set it; a flag the theme has no property for is added to
+// @p unset.
+void setOptionalColorFlags(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
+    for (auto const& [path, flag] : kOptionalColors) {
+        if (!theme.setProperty(flag, values.colors.contains(path))) {
+            unset.emplace_back(flag);
+        }
+    }
+}
+
 // The colours, the stale opacity, the background and the dimensions; each property that would not take its value
 // is added to @p unset.
 void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
@@ -183,15 +200,7 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     if (!theme.setProperty("listSelectionFill", keywordIs(values, "list.selection", "fill"))) {
         unset.emplace_back("listSelectionFill");
     }
-    if (!theme.setProperty("hasSelectionText", values.colors.contains("color.selectionText"))) {
-        unset.emplace_back("hasSelectionText");
-    }
-    if (!theme.setProperty("hasDialogRule", values.colors.contains("color.dialogRule"))) {
-        unset.emplace_back("hasDialogRule");
-    }
-    if (!theme.setProperty("hasPlaceholder", values.colors.contains("color.placeholder"))) {
-        unset.emplace_back("hasPlaceholder");
-    }
+    setOptionalColorFlags(theme, values, unset);
     if (!theme.setProperty("overlineCaps", keywordIs(values, "font.overline.case", "uppercase"))) {
         unset.emplace_back("overlineCaps");
     }
