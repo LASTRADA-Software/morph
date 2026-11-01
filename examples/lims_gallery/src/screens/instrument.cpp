@@ -250,7 +250,7 @@ ui::Node detailsCard() {
                                        detail("Location", "QC lab 2, bench 4"), detail("Owner", "Dr. Anna Meyer"),
                                        detail("Software", "CDS 3.4.1, validated 14-Mar-2026"),
                                        detail("Methods", "Assay and impurities, dissolution")}))},
-               {.title = "Details", .padding = 2})
+               {.title = "Details", .padding = 3})
         .testId("details");
 }
 
@@ -331,11 +331,11 @@ ui::Node dialogs(Instrument const& instrument) {
 
 ui::Node expandedLayout(Instrument const& instrument) {
     auto const overview = ui::row(
-        {ui::column({detailsCard(), ui::panel({eventList(instrument)}, {.title = "Recent events", .padding = 2})},
+        {ui::column({detailsCard(), ui::panel({eventList(instrument)}, {.title = "Recent events", .padding = 3})},
                     {.gap = 2})
              .sizing(ui::stretch(2)),
-         ui::column({ui::panel({qualificationList()}, {.title = "Qualification", .padding = 2}),
-                     ui::panel({currentBooking(false)}, {.title = "Current booking", .padding = 2})},
+         ui::column({ui::panel({qualificationList()}, {.title = "Qualification", .padding = 3}),
+                     ui::panel({currentBooking(false)}, {.title = "Current booking", .padding = 3})},
                     {.gap = 2})
              // A third of the page, as the design draws it (320 of its 1000 px).
              .sizing(ui::stretch(1))},
