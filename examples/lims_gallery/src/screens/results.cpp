@@ -506,11 +506,11 @@ Flag canSubmit(Worksheet const& sheet) {
 }
 
 ui::Commands submit(Worksheet const& sheet) {
-    return {ui::set(sheet.change.open, false),
-            ui::notify(
-                ui::cond(ui::eq(sheet.outOfSpec, std::int64_t{0}), Text{"WS-2026-0412 is submitted for review."},
-                         Text{"WS-2026-0412 is submitted for review; investigation OOS-2026-031 is opened."}),
-                ui::Role::Success)};
+    return {
+        ui::set(sheet.change.open, false),
+        ui::notify(ui::cond(ui::eq(sheet.outOfSpec, std::int64_t{0}), Text{"WS-2026-0412 is submitted for review."},
+                            Text{"WS-2026-0412 is submitted for review; investigation OOS-2026-031 is opened."}),
+                   ui::Role::Success)};
 }
 
 ui::Node saveButton() {
