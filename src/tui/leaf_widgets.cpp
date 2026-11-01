@@ -109,8 +109,8 @@ std::string elidedLine(std::string_view line, int width) {
     return std::string{line.substr(0, kept)} + "…";
 }
 
-// @p runs laid end to end on one line of @p width cells: a line break reads as a space, and the run the width ends in is
-// cut with an ellipsis, so the runs after it are dropped.
+// @p runs laid end to end on one line of @p width cells: a line break reads as a space, and the run the width ends in
+// is cut with an ellipsis, so the runs after it are dropped.
 std::vector<ui::TextSpan> elidedRuns(std::vector<ui::TextSpan> runs, int width) {
     int room = width;
     for (std::size_t index = 0; index < runs.size(); ++index) {

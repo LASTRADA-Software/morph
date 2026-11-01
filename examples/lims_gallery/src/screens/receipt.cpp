@@ -233,11 +233,10 @@ ui::Node temperatureField(Receipt const& receipt, bool compact) {
         ui::cond(receipt.inRange, ui::AnyHandle{std::vector<std::string>{}},
                  ui::AnyHandle{std::vector<std::string>{"Outside 2–8 °C: reject the sample or record a "
                                                         "deviation."}});
-    return layout::captioned(
-               ui::textInput({.value = receipt.temperature,
-                              .label = "Temperature on arrival",
-                              .unit = "°C",
-                              .onChange = ui::set(receipt.temperature, ui::event())}))
+    return layout::captioned(ui::textInput({.value = receipt.temperature,
+                                            .label = "Temperature on arrival",
+                                            .unit = "°C",
+                                            .onChange = ui::set(receipt.temperature, ui::event())}))
         .required(true)
         .errors(errors)
         .description(compact ? "" : "Required range 2–8 °C")

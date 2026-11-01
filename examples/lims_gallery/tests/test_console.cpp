@@ -28,7 +28,8 @@ TEST_CASE("console, expanded: navigation, alert, figures, chart, instruments and
     CHECK(screen.shows("Banner", "alert"));
     // The Test column takes its text whole and Status, last, takes what is left, so the table does not scroll.
     CHECK(screen.prop("Table", "worklist", "columns").value_or("none") ==
-          "[Sample:fixed(11),Test:content;wrap=false,Priority:fixed(7),Due:fixed(12);wrap=false,Status:stretch(1);shrink=true]");
+          "[Sample:fixed(11),Test:content;wrap=false,Priority:fixed(7),Due:fixed(12);wrap=false,Status:stretch(1);"
+          "shrink=true]");
     // The operator stays with its number when the label wraps: the space between them does not break.
     CHECK(screen.backend().find("Text", "text", "Impurity A · ≤\u00a00.10").has_value());
     // The banner's lead phrase is a strong run.
