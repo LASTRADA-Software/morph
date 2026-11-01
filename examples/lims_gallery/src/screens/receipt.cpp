@@ -425,12 +425,12 @@ ui::Node rejectDialog(Receipt const& receipt) {
 ui::Node expandedLayout(Receipt const& receipt) {
     auto const left = ui::column({scanField(receipt, false), notices(receipt), sampleCard(receipt)}, {.gap = 2})
                           .sizing(ui::stretch());
-    auto const session = ui::panel({sessionTable(receipt, true), rejectionLine(receipt).testId("last-rejection")},
-                                   {.title = "This session", .padding = 2})
-                             // The design's 300 px pane; on the 785 px page the sidebar leaves, the sample card keeps
-                             // what its fields need beside it.
-                             .sizing(ui::fixed(39))
-                             .testId("session-panel");
+    auto const session =
+        ui::panel({sessionTable(receipt, true), rejectionLine(receipt).testId("last-rejection")},
+                  {.title = "This session", .padding = 2})
+            // Wide enough for the table's three columns beside the sample card on the 785 px page the sidebar leaves.
+            .sizing(ui::fixed(31))
+            .testId("session-panel");
     return ui::pinned(
         ui::column({ui::row({left, session}, {.gap = 2, .align = Align::Start}), rejectDialog(receipt)}));
 }
