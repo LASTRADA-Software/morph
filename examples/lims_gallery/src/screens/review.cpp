@@ -478,8 +478,10 @@ ui::AnyHandle filteredQueue(Review const& review) {
     });
 }
 
-ui::Node queueTitle(Review const& review) {
-    return ui::text({.text = ui::format("Awaiting review · {0}", {review.waiting}), .role = "heading"})
+// The pane beside the worksheet is narrow, so its title is a section's size and stays on one line.
+ui::Node queueTitle(Review const& review, bool compact) {
+    return ui::text({.text = ui::format("Awaiting review · {0}", {review.waiting}),
+                     .role = compact ? "heading" : "section"})
         .testId("queue-title");
 }
 
@@ -494,7 +496,7 @@ ui::Node queueSearch(Review const& review) {
 // The queue beside the worksheet: its head is padded, and its entries span the pane edge to edge, divided, so an
 // entry's tint and selection bar reach the pane's edges.
 ui::Node queuePane(Review const& review) {
-    return ui::column({ui::column({queueTitle(review), queueSearch(review)}, {.gap = 2, .padding = 3}),
+    return ui::column({ui::column({queueTitle(review, false), queueSearch(review)}, {.gap = 2, .padding = 3}),
                        ui::forEach(filteredQueue(review), {.key = ui::row("id"), .gap = 0, .divided = true},
                                    [&review](ui::DeclScope&) { return ui::Nodes{queueEntry(review)}; })
                            .testId("queue")},
@@ -503,7 +505,7 @@ ui::Node queuePane(Review const& review) {
 
 // The phone's queue, a page of its own: its entries sit inside the page's inset.
 ui::Node compactQueue(Review const& review) {
-    return ui::column({queueTitle(review), queueSearch(review),
+    return ui::column({queueTitle(review, true), queueSearch(review),
                        ui::forEach(filteredQueue(review), {.key = ui::row("id"), .gap = 3},
                                    [&review](ui::DeclScope&) { return ui::Nodes{queueEntry(review)}; })
                            .testId("queue")},
@@ -535,7 +537,7 @@ ui::Node resultTable(Review const& review) {
         {.name = "analyte", .label = "Analyte", .width = ui::content(), .wrap = false},
         {.name = "value",
          .label = "Result",
-         .width = ui::fixed(8),
+         .width = ui::content(),
          .align = Align::End,
          .cell = ui::text({.text = ui::row("value"), .spans = ui::spans({ui::strong(ui::row("value"))})}),
          .wrap = false},
@@ -818,9 +820,9 @@ ui::Node worksheetPane(Review const& review) {
 }
 
 ui::Node expandedLayout(Review const& review) {
-    // The queue takes a fifth of the page, 21 of 103 units: room for its title, search placeholder and ages on
-    // one line, and the worksheet keeps what its results table and its decisions need. The splitter takes the page's
-    // height, so each pane reaches the page's bottom.
+    // The queue takes a fifth of the page, 21 of 103 units: the worksheet keeps what its results table needs, about
+    // 580 px, and a wider queue would make that table scroll sideways. The splitter takes the page's height, so each
+    // pane reaches the page's bottom.
     auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{21, 82}};
     return ui::column({ui::splitter({queuePane(review).surface("pane"), worksheetPane(review).surface("pane")},
                                     ui::AnyHandle{"horizontal"}, sizes)

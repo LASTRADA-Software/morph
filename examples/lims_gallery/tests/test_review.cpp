@@ -44,6 +44,10 @@ TEST_CASE("review, expanded: the queue beside the worksheet, its flagged results
     CHECK(screen.prop("Tabs", "record-tabs", "tabs") == "[Results,Previous lots,Audit trail · 3,Comments · 1]");
     CHECK_FALSE(screen.shows("Banner", "self-review"));
     CHECK(screen.prop("Button", "approve", "enabled") == "true");
+    // The Result column is as wide as its widest value, "99.4 % LC", so the value is not split from its unit.
+    CHECK(screen.prop("Table", "results", "columns").value_or("none") ==
+          "[Sample:fixed(11),Analyte:content;wrap=false,Result:content;align=end;wrap=false,Spec.:content;wrap=false,"
+          "Prior lot:content;align=end;wrap=false,Evaluation:fixed(10),Change:stretch(1);wrap=false]");
 }
 
 TEST_CASE("review: self-review is blocked with its reason", "[lims-gallery]") {
