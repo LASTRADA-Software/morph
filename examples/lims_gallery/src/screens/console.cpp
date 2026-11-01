@@ -678,7 +678,7 @@ ui::Node resultLine(Console const& console) {
          // The unit is its own column beside the input, so the inputs of every line end at one edge.
          layout::muted(ui::row("unit")).sizing(ui::fixed(5)),
          // A fixed width, wide enough for "Out of spec", keeps the result inputs of every line in one column.
-         layout::tag(evaluation.label, evaluation.tone).sizing(ui::fixed(9)).testId("pane-evaluation")},
+         layout::tag(evaluation.label, evaluation.tone).sizing(ui::fixed(10)).testId("pane-evaluation")},
         {.gap = 1, .align = Align::Center});
 }
 
