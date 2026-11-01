@@ -271,7 +271,7 @@ ui::Node qualificationList() {
             {.gap = 1, .align = Align::Center});
     };
     return ui::column({stage("IQ", "12-Jan-2025"), stage("OQ", "14-Jan-2025"), stage("PQ", "next 14-Jan-2027")},
-                      {.gap = 1})
+                      {.gap = 2, .divided = true})
         .testId("qualification");
 }
 
