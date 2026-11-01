@@ -214,7 +214,7 @@ MorphWidget {
                 id: headRule
                 objectName: "headRule"
                 visible: root.description !== "" || root.sheet
-                color: Theme.cardScheme.divider
+                color: Theme.dialogRuleShown
                 implicitHeight: 1
                 Layout.fillWidth: true
                 Layout.leftMargin: -popup.leftPadding
@@ -254,7 +254,7 @@ MorphWidget {
                 id: footerRule
                 objectName: "footerRule"
                 visible: footerArea.visible
-                color: Theme.cardScheme.divider
+                color: Theme.dialogRuleShown
                 implicitHeight: 1
                 Layout.fillWidth: true
                 Layout.leftMargin: -popup.leftPadding

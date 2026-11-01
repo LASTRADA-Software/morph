@@ -378,6 +378,9 @@ TEST_CASE("ui theme values: a weight that is neither a number nor a known name i
 TEST_CASE("ui theme values: the selection text and the dialog shadow are absent until a theme sets them",
           "[ui][theme]") {
     ui::ThemeValues const none = ui::themeValues();
+    // The dialog's rules stand in for the divider, and are absent too.
+    CHECK_FALSE(none.colors.contains("color.dialogRule"));
+    CHECK(std::ranges::any_of(ui::kThemeTokens, [](auto const& spec) { return spec.path == "color.dialogRule"; }));
     CHECK_FALSE(none.colors.contains("color.selectionText"));
     CHECK_FALSE(none.shadows.contains("elevation.dialog"));
     CHECK(none.shadows.contains("elevation.card"));

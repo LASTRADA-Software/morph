@@ -204,8 +204,9 @@ TEST_CASE("theme: a missing token takes its default; an unknown path is ignored"
     CHECK(values.dimensions.at("space.2") == 8.0);
     CHECK(values.colors.size() + values.numbers.size() + values.dimensions.size() + values.shadows.size() +
               values.families.size() + values.strokes.size() + values.keywords.size() ==
-          // `color.selectionText` and `elevation.dialog` are left out while the theme does not set them.
-          morph::ui::kThemeTokens.size() - 2);
+          // `color.selectionText`, `color.dialogRule` and `elevation.dialog` are left out while the theme does not set
+          // them.
+          morph::ui::kThemeTokens.size() - 3);
 
     // A path of the set with another type keeps the default.
     TokenSet const wrong = parsed(R"({"color": {"text": {"$type": "number", "$value": 3}}})");

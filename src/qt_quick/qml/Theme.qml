@@ -147,6 +147,12 @@ QtObject {
     // The text of a selected list item and whether the theme sets one: `color.selectionText`.
     property color selectionText: "#1d1d1f"
     property bool hasSelectionText: false
+    // The rules of a dialog and a drawer and whether the theme sets them: `color.dialogRule`.
+    property color dialogRule: "#dcdce0"
+    property bool hasDialogRule: false
+    // What a dialog and a drawer draw their rules in: their own colour, or the card surface's divider while the theme
+    // sets none.
+    readonly property color dialogRuleShown: hasDialogRule ? dialogRule : cardScheme.divider
     property color accent: "#1565c0"
     property color focus: "#1565c0"
     // A tone's fill, outline and marker: `color.<ok|warn|err|info>.<bg|border|dot>`.

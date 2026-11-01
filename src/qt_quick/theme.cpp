@@ -33,7 +33,7 @@ namespace morph::qt_quick {
 namespace {
 
 /// The `Theme` property each colour token of the set sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 42> kColorProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 43> kColorProperties = {{
     {"color.text", "text"},
     {"color.muted", "muted"},
     {"color.err", "error"},
@@ -73,6 +73,7 @@ constexpr std::array<std::pair<std::string_view, char const*>, 42> kColorPropert
     {"color.chart.4", "chart4"},
     {"color.selectionText", "selectionText"},
     {"color.scrim", "scrim"},
+    {"color.dialogRule", "dialogRule"},
     {"color.disabled.text", "disabledText"},
     {"color.disabled.bg", "disabledFill"},
     {"color.disabled.border", "disabledBorder"},
@@ -182,6 +183,9 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     }
     if (!theme.setProperty("hasSelectionText", values.colors.contains("color.selectionText"))) {
         unset.emplace_back("hasSelectionText");
+    }
+    if (!theme.setProperty("hasDialogRule", values.colors.contains("color.dialogRule"))) {
+        unset.emplace_back("hasDialogRule");
     }
     if (!theme.setProperty("overlineCaps", keywordIs(values, "font.overline.case", "uppercase"))) {
         unset.emplace_back("overlineCaps");

@@ -925,6 +925,30 @@ TEMPLATE_TEST_CASE("qt_quick overlays: both rules draw the card's divider", "[qt
     }
 }
 
+// Mutation: draw the rules in the divider whatever the token, or read the token whether or not it is set (an unset
+// theme draws the default grey, not the card's divider).
+TEMPLATE_TEST_CASE("qt_quick overlays: the rules are color.dialogRule, and the card's divider while it is unset",
+                   "[qt_quick]", ui::DialogWidget, ui::DrawerWidget) {
+    for (bool const set : {false, true}) {
+        INFO("token set: " << set);
+        Scene scene;
+        ui::ThemeValues values = ui::themeValues();
+        values.colors.insert_or_assign("color.divider", ui::Rgba{.r = 0x11, .g = 0x22, .b = 0x33, .a = 0xff});
+        if (set) {
+            values.colors.insert_or_assign("color.dialogRule", ui::Rgba{.r = 0xE6, .g = 0xE9, .b = 0xED, .a = 0xff});
+        }
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+        auto const overlay = openedOverlay<TestType>(scene);
+        for (char const* const name : {"headRule", "footerRule"}) {
+            INFO(name);
+            QQuickItem const* const rule = namedIn(*scene.window().contentItem(), QString::fromLatin1(name));
+            REQUIRE(rule != nullptr);
+            CHECK(rule->property("color").value<QColor>() ==
+                  (set ? QColor{0xE6, 0xE9, 0xED} : QColor{0x11, 0x22, 0x33}));
+        }
+    }
+}
+
 // Mutation: draw the shadow as one rectangle (the layers are one, with no blur), give every layer the colour's full
 // alpha (the composite then exceeds it), or split the strength evenly over the layers (the outermost layer's alpha is
 // 1/16 of the shadow's).
