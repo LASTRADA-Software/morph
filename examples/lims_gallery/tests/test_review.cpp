@@ -39,15 +39,15 @@ TEST_CASE("review, expanded: the queue beside the worksheet, its flagged results
     CHECK(screen.backend().prop(queueEntry(screen, "WS-2026-0412 · 2 h 10 min"), "selected") == "true");
     CHECK(screen.text("sheet-title") == "Assay and impurities · Paracetamol 500 mg");
     CHECK(screen.prop("Select", "show", "options") == "[\"all\":All 7,\"flagged\":Flagged 2]");
-    CHECK(screen.backend().find("Badge", "text", "Out of trend").has_value());
-    CHECK(screen.backend().find("Text", "text", "−0.7 % vs. last 5 lots").has_value());
+    CHECK(screen.backend().find("Badge", "text", "Out of trend: −0.7 % vs. last 5 lots").has_value());
     CHECK(screen.prop("Tabs", "record-tabs", "tabs") == "[Results,Previous lots,Audit trail · 3,Comments · 1]");
     CHECK_FALSE(screen.shows("Banner", "self-review"));
     CHECK(screen.prop("Button", "approve", "enabled") == "true");
     // The Result column is as wide as its widest value, "99.4 % LC", so the value is not split from its unit.
     CHECK(screen.prop("Table", "results", "columns").value_or("none") ==
           "[Sample:fixed(11),Analyte:stretch(1);wrap=false;shrink=true,Result:content;align=end;wrap=false,"
-          "Spec.:stretch(1);wrap=false;shrink=true,Prior lot:content;align=end;wrap=false,Evaluation:fixed(10),"
+          "Spec.:stretch(1);wrap=false;shrink=true,Prior "
+          "lot:content;align=end;wrap=false,Evaluation:stretch(3);wrap=false;shrink=true,"
           "Change:stretch(1);wrap=false;shrink=true]");
 }
 

@@ -313,12 +313,6 @@ ui::AnyHandle resultList() {
     std::vector<ui::AnyHandle> items;
     items.reserve(kResults.size());
     for (Result const& result : kResults) {
-        // The table's cell shows the verdict as a tag and the rest of the text under it, which wraps in the column's
-        // width; the phone's card shows the whole text as the tag.
-        std::string_view const text{result.evaluation};
-        auto const colon = text.find(": ");
-        std::string const verdict{text.substr(0, colon)};
-        std::string const note{colon == std::string_view::npos ? std::string_view{} : text.substr(colon + 2)};
         items.push_back(ui::obj({{"sheet", result.sheet},
                                  {"key", result.key},
                                  {"sample", result.sample},
@@ -327,8 +321,6 @@ ui::AnyHandle resultList() {
                                  {"spec", result.spec},
                                  {"previous", result.previous},
                                  {"evaluation", result.evaluation},
-                                 {"verdict", verdict},
-                                 {"note", note},
                                  {"tone", result.tone},
                                  {"change", result.change},
                                  {"flagged", result.flagged}}));
@@ -543,11 +535,10 @@ ui::Node resultTable(Review const& review) {
         {.name = "previous", .label = "Prior lot", .width = ui::content(), .align = Align::End, .wrap = false},
         {.name = "evaluation",
          .label = "Evaluation",
-         .width = ui::fixed(10),
-         .cell =
-             ui::column({layout::tag(ui::row("verdict"), ui::row("tone")),
-                         layout::muted(ui::row("note")).sizing(ui::stretch()).visible(!ui::isEmpty(ui::row("note")))},
-                        {.gap = 0})},
+         .width = ui::stretch(3),
+         .cell = layout::tag(ui::row("evaluation"), ui::row("tone")),
+         .wrap = false,
+         .shrink = true},
         {.name = "change",
          .label = "Change",
          .width = ui::stretch(),
