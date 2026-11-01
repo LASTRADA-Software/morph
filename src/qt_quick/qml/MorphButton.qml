@@ -4,10 +4,11 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// A button: a click, Space or Enter activates it. A list item (`style` 1) is the same button drawn as a line of a
-// list: as wide as its line, its label at the start, unframed, and marked while `selected`. An item with content
-// draws it in place of its label, inside the `Button`, so a press anywhere on it is the button's; the label still
-// names it.
+// A button: a click, Space or Enter activates it. While disabled it draws in the theme's disabled colours: a push
+// button on the disabled fill and outline, a ghost button unframed, and every caption in the disabled text. A list
+// item (`style` 1) is the same button drawn as a line of a list: as wide as its line, its label at the start,
+// unframed, and marked while `selected`. An item with content draws it in place of its label, inside the `Button`,
+// so a press anywhere on it is the button's; the label still names it.
 MorphWidget {
     id: root
 
@@ -67,17 +68,17 @@ MorphWidget {
                                               : button.implicitWidth
     implicitHeight: button.implicitHeight
 
-    // The caption's font: the body face, strong for a filled button; a small button draws a strong caption in the
+    // The caption's font: the body face, strong (at `Theme.buttonWeight`) for a filled button; a small button draws a strong caption in the
     // small step, and a mono one in the mono role's face.
     readonly property bool strongCaption: root.small || root.squared
                                           || !(root.emphasis === 0 || root.emphasis === 4 || root.ghost)
     readonly property font captionFont: {
         if (root.small || root.mono) {
             const pixels = root.small ? Theme.smallPixels : root.mono ? Theme.monoPixels : Theme.bodyPixels
-            const weight = root.strongCaption ? Theme.strongWeight : Font.Normal
+            const weight = root.strongCaption ? Theme.buttonWeight : Font.Normal
             return root.mono ? Theme.monoFontOf(pixels, weight) : Theme.fontOf(pixels, weight)
         }
-        return root.strongCaption ? Theme.strongFont : Theme.bodyFont
+        return root.strongCaption ? Theme.buttonFont : Theme.bodyFont
     }
 
     // An item's content: the icon, then the label at the start of the line, in the accent while selected. The push
@@ -184,7 +185,8 @@ MorphWidget {
         text: root.label
         leftPadding: root.ghost || root.small || root.squared ? Theme.spaceOf(1) : root.style === 1 ? Theme.spaceOf(3) : Theme.spaceOf(4)
         rightPadding: leftPadding
-        palette.buttonText: root.emphasis === 4 ? root.scheme.error
+        palette.buttonText: !root.enabled ? Theme.disabledText
+                            : root.emphasis === 4 ? root.scheme.error
                             : root.ghost ? root.scheme.accent
                             : root.emphasis === 0 ? root.scheme.text : "white"
         font: root.captionFont
@@ -210,6 +212,7 @@ MorphWidget {
             hovered: button.hovered
             pressed: button.down
             focused: button.visualFocus
+            disabled: !root.enabled
         }
         Accessible.ignored: true
         onClicked: root.fire("click", undefined)

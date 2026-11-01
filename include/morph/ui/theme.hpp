@@ -1196,7 +1196,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 72> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 76> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1220,6 +1220,11 @@ inline constexpr std::array<ThemeTokenSpec, 72> kThemeTokens = {{
     {.path = "color.divider", .kind = ThemeTokenKind::Color, .color = "#dcdce0", .number = 0.0},
     // The dim over the window behind a modal dialog or drawer.
     {.path = "color.scrim", .kind = ThemeTokenKind::Color, .color = "#0000004d", .number = 0.0},
+    // A disabled button: its caption, its fill and its outline. Global, read by every surface: a disabled control
+    // draws the same grey whatever it sits on.
+    {.path = "color.disabled.text", .kind = ThemeTokenKind::Color, .color = "#8e8e93", .number = 0.0},
+    {.path = "color.disabled.bg", .kind = ThemeTokenKind::Color, .color = "#f2f2f7", .number = 0.0},
+    {.path = "color.disabled.border", .kind = ThemeTokenKind::Color, .color = "#e5e5ea", .number = 0.0},
     {.path = "color.selection", .kind = ThemeTokenKind::Color, .color = "#cfe3ff", .number = 0.0},
     // The text of a selected list item, read per surface. Empty: while a theme does not set it, a selected item's
     // text is the surface's `color.text`, which is the first colour to follow another; the token is absent from
@@ -1267,6 +1272,8 @@ inline constexpr std::array<ThemeTokenSpec, 72> kThemeTokens = {{
     {.path = "font.size.display", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     // The weight of every strong font: a section, a header, a heading, a strong text.
     {.path = "font.weight.strong", .kind = ThemeTokenKind::FontWeight, .color = "", .number = 700.0},
+    // The weight of a button's caption where it is drawn strong: a filled button, a small one, a square one.
+    {.path = "font.weight.button", .kind = ThemeTokenKind::FontWeight, .color = "", .number = 700.0},
     // A table cell's and a header label's inset on each axis.
     {.path = "table.cellPaddingX", .kind = ThemeTokenKind::Dimension, .color = "", .number = 8.0},
     {.path = "table.cellPaddingY", .kind = ThemeTokenKind::Dimension, .color = "", .number = 4.0},

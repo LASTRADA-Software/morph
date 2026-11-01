@@ -32,7 +32,7 @@ namespace morph::qt_quick {
 namespace {
 
 /// The `Theme` property each colour token of the set sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 39> kColorProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 42> kColorProperties = {{
     {"color.text", "text"},
     {"color.muted", "muted"},
     {"color.err", "error"},
@@ -72,6 +72,9 @@ constexpr std::array<std::pair<std::string_view, char const*>, 39> kColorPropert
     {"color.chart.4", "chart4"},
     {"color.selectionText", "selectionText"},
     {"color.scrim", "scrim"},
+    {"color.disabled.text", "disabledText"},
+    {"color.disabled.bg", "disabledFill"},
+    {"color.disabled.border", "disabledBorder"},
 }};
 
 /// The scheme property each colour token of a surface sets.
@@ -185,6 +188,10 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     if (auto const weight = values.numbers.find("font.weight.strong");
         weight != values.numbers.end() && !theme.setProperty("strongWeight", static_cast<int>(weight->second))) {
         unset.emplace_back("strongWeight");
+    }
+    if (auto const weight = values.numbers.find("font.weight.button");
+        weight != values.numbers.end() && !theme.setProperty("buttonWeight", static_cast<int>(weight->second))) {
+        unset.emplace_back("buttonWeight");
     }
     if (auto const background = values.colors.find("color.background"); background != values.colors.end()) {
         ui::Rgba const& color = background->second;

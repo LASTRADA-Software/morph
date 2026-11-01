@@ -25,6 +25,9 @@ Rectangle {
     property bool selected: false
     // A ghost button: no border or fill, no accent-bar "current" concept, just the hover tint on hover or press.
     property bool ghost: false
+    // A disabled button: the theme's disabled fill and outline for a push button, nothing under a ghost button, and an
+    // item as it is (the caption alone goes grey); no hover or press shading.
+    property bool disabled: false
     // The outline's colour while it is not focused: the border, or the error colour's for a danger outlined button.
     property color borderColor: scheme.controlBorder
     property bool round: false
@@ -33,7 +36,7 @@ Rectangle {
     // A square button for a glyph: no least width, and the control's own corners.
     property bool square: false
     // Whether the outline is stroked in dashes: the surface's `border.style`, for a button that has an outline.
-    readonly property bool dashed: scheme.borderDashed && !filled && !item && !ghost
+    readonly property bool dashed: scheme.borderDashed && !filled && !item && !ghost && !disabled
 
     implicitHeight: Theme.targetHeight
     implicitWidth: ghost || compact || square ? 0 : Theme.unitWidth * 8
@@ -41,11 +44,12 @@ Rectangle {
     // The fill a push button shades while hovered or pressed: the tint while selected, unless the button is filled.
     readonly property color restFill: selected && !filled ? Qt.alpha(scheme.accent, 0.12) : fill
 
-    color: item ? (selected ? scheme.selection : hovered || pressed ? scheme.hover : "transparent")
+    color: disabled && !item ? (ghost ? "transparent" : Theme.disabledFill)
+         : item ? (selected ? scheme.selection : hovered || pressed ? scheme.hover : "transparent")
                 : ghost ? (hovered || pressed ? scheme.hover : "transparent")
                         : pressed ? Qt.darker(restFill, 1.12) : hovered ? Qt.darker(restFill, 1.05) : restFill
-    border.width: focused ? 2 : filled || item || ghost || dashed ? 0 : 1
-    border.color: focused ? scheme.focus : borderColor
+    border.width: focused ? 2 : filled && disabled ? 1 : filled || item || ghost || dashed ? 0 : 1
+    border.color: focused ? scheme.focus : disabled && !item && !ghost ? Theme.disabledBorder : borderColor
 
     MorphDashedOutline {
         objectName: "dashedOutline"

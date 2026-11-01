@@ -1842,6 +1842,86 @@ TEST_CASE(
     CHECK(normal.weight() != font.weight());
 }
 
+// Mutation: drop the `!root.enabled` branch of MorphButton's `palette.buttonText` (the label keeps the enabled
+// colour), or `disabled` from MorphButtonBackground (the fill and outline stay the enabled ones).
+TEST_CASE("qt_quick widgets: a disabled button draws in the theme's disabled colours, whatever its emphasis",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(600, 200);
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    struct Case {
+        ui::ButtonEmphasis emphasis;
+        bool framed;
+    };
+    std::vector<std::unique_ptr<ui::ButtonWidget>> enabled;
+    std::vector<std::unique_ptr<ui::ButtonWidget>> disabled;
+    std::vector<Case> const cases{{.emphasis = ui::ButtonEmphasis::Normal, .framed = true},
+                                  {.emphasis = ui::ButtonEmphasis::Primary, .framed = true},
+                                  {.emphasis = ui::ButtonEmphasis::Danger, .framed = true},
+                                  {.emphasis = ui::ButtonEmphasis::DangerOutline, .framed = true},
+                                  {.emphasis = ui::ButtonEmphasis::Ghost, .framed = false}};
+    for (Case const& one : cases) {
+        for (bool const off : {false, true}) {
+            auto button = scene.backend().createButton(row.get());
+            button->setLabel("Load 25 more");
+            button->setEmphasis(one.emphasis);
+            button->setEnabled(!off);
+            (off ? disabled : enabled).push_back(std::move(button));
+        }
+    }
+    scene.settle();
+    QObject const* const theme = themeOf(scene);
+    auto const disabledText = theme->property("disabledText").value<QColor>();
+    auto const disabledFill = theme->property("disabledFill").value<QColor>();
+    auto const disabledBorder = theme->property("disabledBorder").value<QColor>();
+    auto const labelColor = [](ui::ButtonWidget& button) {
+        QList<QQuickItem*> const texts = Scene::itemsOf(Scene::itemOf(button), "QQuickText");
+        REQUIRE_FALSE(texts.isEmpty());
+        return texts.front()->property("color").value<QColor>();
+    };
+    for (std::size_t index = 0; index < cases.size(); ++index) {
+        INFO("emphasis " << index);
+        CHECK(labelColor(*disabled.at(index)) == disabledText);
+        CHECK(labelColor(*enabled.at(index)) != disabledText);
+        QQuickItem const& background = controlBackground(Scene::itemOf(*disabled.at(index)));
+        if (cases.at(index).framed) {
+            CHECK(background.property("color").value<QColor>() == disabledFill);
+            CHECK(background.property("border").value<QObject*>()->property("color").value<QColor>() ==
+                  disabledBorder);
+        } else {
+            CHECK(background.property("color").value<QColor>().alpha() == 0);
+        }
+    }
+}
+
+// Mutation: read `Theme.strongWeight` for a filled caption again (the weight stays 700 whatever the token).
+TEST_CASE("qt_quick widgets: a filled button's caption takes font.weight.button, apart from the strong weight",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 200);
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    auto const save = scene.backend().createButton(row.get());
+    save->setLabel("Save");
+    save->setEmphasis(ui::ButtonEmphasis::Primary);
+    auto const heading = scene.backend().createText(row.get());
+    heading->setText("Heading");
+    heading->setRole(ui::TextRole::Heading);
+    auto const tokens = ui::parseTokens(
+        R"({"font": {"weight": {"$type": "fontWeight", "button": {"$value": 500}, "strong": {"$value": 800}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    scene.settle();
+    QObject const* const theme = themeOf(scene);
+    CHECK(theme->property("buttonWeight").toInt() == 500);
+    CHECK(theme->property("strongWeight").toInt() == 800);
+    QList<QQuickItem*> const texts = Scene::itemsOf(Scene::itemOf(*save), "QQuickText");
+    REQUIRE_FALSE(texts.isEmpty());
+    CHECK(static_cast<int>(texts.front()->property("font").value<QFont>().weight()) == 500);
+    CHECK(static_cast<int>(Scene::controlOf(*heading).property("font").value<QFont>().weight()) == 800);
+}
+
 // Mutation: ignore `Theme.iconOnlySquare` in the menu's trigger.
 TEST_CASE("qt_quick widgets: under shape.iconOnly an icon-only menu trigger is square, and otherwise is not",
           "[qt_quick]") {

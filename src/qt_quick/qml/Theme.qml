@@ -68,6 +68,9 @@ QtObject {
     // `strongWeight`.
     readonly property font strongFont: fontFamilies.length > 0 ? fontOf(bodyPixels, strongWeight)
                                                                : boldOf(platformMetrics.font)
+    // A strong button caption at the body size, at `buttonWeight`.
+    readonly property font buttonFont: fontFamilies.length > 0 ? fontOf(bodyPixels, buttonWeight)
+                                                               : weightedOf(platformMetrics.font, buttonWeight)
     // A heading: the families at the heading size, strong.
     readonly property font headingFont: fontOf(headingPixels, strongWeight)
     // The small size, regular and strong: a table header (strong), a footnote, a timestamp, a tag.
@@ -123,6 +126,11 @@ QtObject {
     property color track: "#e5e5ea"
     // The dim behind a modal dialog or drawer: `color.scrim`.
     property color scrim: "#4d000000"
+    // A disabled button's caption, fill and outline: `color.disabled.text`, `color.disabled.bg`,
+    // `color.disabled.border`.
+    property color disabledText: "#8e8e93"
+    property color disabledFill: "#f2f2f7"
+    property color disabledBorder: "#e5e5ea"
     // A control's fill and outline, and the rule between rows: `color.controlSurface`, `color.controlBorder`,
     // `color.divider`.
     property color controlSurface: "#ffffff"
@@ -188,6 +196,8 @@ QtObject {
     property real displaySize: 0
     // The weight of every strong font: `font.weight.strong`.
     property int strongWeight: Font.Bold
+    // The weight of a button's strong caption: `font.weight.button`.
+    property int buttonWeight: Font.Bold
     // Whether an icon-only push button or menu trigger that gives no shape is drawn square: `shape.iconOnly`.
     property bool iconOnlySquare: false
     // Whether a collapsible section's and a collapsible panel's header draws its chevron: `collapsible.marker`.
@@ -207,9 +217,13 @@ QtObject {
 
     // @p base in bold, at its own size: a pixel size, or else a point size, whichever it was given in.
     function boldOf(base: font): font {
+        return weightedOf(base, strongWeight)
+    }
+    // @p base at @p weight, at its own size.
+    function weightedOf(base: font, weight: int): font {
         const spec = {
             family: base.family,
-            weight: strongWeight
+            weight: weight
         }
         if (base.pixelSize > 0)
             spec.pixelSize = base.pixelSize

@@ -181,6 +181,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `color.scrim` (`#0000004d`, black at 30 %): the dim over the window behind a modal dialog or drawer; a sheet draws none | colour |
 | `color.track` (`#e5e5ea`): the unfilled part of a progress bar, and the segmented select's track | colour |
 | `color.table.header` (transparent) | colour |
+| `color.disabled.text` (`#8e8e93`), `color.disabled.bg` (`#f2f2f7`), `color.disabled.border` (`#e5e5ea`): a disabled button's caption and icon, fill and outline. Read once for the whole theme, not per surface. The terminal draws a disabled button dim and reads no token | colour |
 | `input.paddingX` (8): the inner inset of every input on each side, the distance from a text input's, a text area's, a date input's or a select's border to its text (and to its prefix, icon and unit); a negative value is refused by `checkTheme` as `input.paddingX: must not be negative`. The terminal pads its inputs by cells and reads no dimension | dimension, in px |
 | `table.cellPaddingX` (8), `table.cellPaddingY` (4): the inset of a table cell and of a header label on each axis; a row is as tall as its tallest cell plus twice the vertical inset, and at least `Theme.targetHeight − 8`. The terminal keeps its one-column gap between cells and no vertical padding | dimension, in px |
 | `color.chart.1` … `color.chart.4` (`#0072b2`, `#c25400`, `#00805e`, `#a8508a`): a chart's series colours, in drawing order | colour |
@@ -192,6 +193,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3) | dimension, in px |
 | `font.size.small` (0: the body size ×0.85, rounded): a table header's label, the `small` text role; `font.size.caption` (0: ×0.92, rounded): a field's caption above its control; `font.size.mono` (0: the body size): the `mono` role; `font.size.display` (0: ×1.7, rounded): the `display` role. Each derives from the body size, none from another new token, so what a theme leaves unset never depends on what else it sets | dimension, in px |
 | `font.weight.strong` (700): the weight of every strong font (`strongFont`, `headingFont`, the table header, a section, a strong run) | font weight: a number from 1 to 1000 or a DTCG weight name (`semi-bold` is 600), read into `ThemeValues::numbers` |
+| `font.weight.button` (700): the weight of a button's strong caption (a filled, small or square button); `font.weight.strong` stays the weight of every other strong font | font weight, as `font.weight.strong` |
 | `font.family` (none: the platform font) | font family: a name, or a list of names in order of preference |
 | `font.mono` (none: the platform's fixed-pitch font), the family of the `mono` text role: a sibling of `font.family`, as the set keeps one spelling per path | font family, as `font.family` |
 | `border.style` (`solid`): how the outline of a button, a badge and an input is stroked on a surface, `solid` or `dashed`; read per surface, so one surface (an empty plate well) can draw dashed controls while the rest draw solid | stroke style: `solid` or `dashed`, read into `ThemeValues::strokes`; any other value is refused by `checkTheme` as `border.style: only solid and dashed are drawn` |
@@ -237,6 +239,8 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `tableCellPaddingX`, `tableCellPaddingY` | `table.cellPaddingX`, `table.cellPaddingY` |
 | `smallSize`, `captionSize`, `monoSize`, `displaySize` | `font.size.small`, `font.size.caption`, `font.size.mono`, `font.size.display` |
 | `strongWeight` | `font.weight.strong` |
+| `buttonWeight` | `font.weight.button` |
+| `disabledText`, `disabledFill`, `disabledBorder` | `color.disabled.text`, `color.disabled.bg`, `color.disabled.border` |
 | `cardShadowColor`, `cardShadowOffsetX`, `cardShadowOffsetY`, `cardShadowBlur`, `cardShadowSpread` | `elevation.card` |
 | `popupShadowColor`, `popupShadowOffsetX`, `popupShadowOffsetY`, `popupShadowBlur`, `popupShadowSpread` | `elevation.popup` |
 | `fontFamilies` | `font.family` |

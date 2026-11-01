@@ -229,6 +229,15 @@ TEST_CASE("ui theme values: the type steps and the strong weight have defaults, 
         CHECK(defaults.dimensions.at(std::string{path}) == 0.0);
     }
     CHECK(defaults.numbers.at("font.weight.strong") == 700.0);
+    CHECK(defaults.numbers.at("font.weight.button") == 700.0);
+    CHECK(defaults.colors.at("color.disabled.text").hex() == "#8e8e93");
+    CHECK(defaults.colors.at("color.disabled.bg").hex() == "#f2f2f7");
+    CHECK(defaults.colors.at("color.disabled.border").hex() == "#e5e5ea");
+    CHECK(valuesOf(R"({"font": {"weight": {"button": {"$type": "fontWeight", "$value": "medium"}}}})")
+              .numbers.at("font.weight.button") == 500.0);
+    CHECK(valuesOf(R"({"color": {"disabled": {"bg": {"$type": "color", "$value": "#eef0f3"}}}})")
+              .colors.at("color.disabled.bg")
+              .hex() == "#eef0f3");
 
     CHECK(valuesOf(R"({"font": {"weight": {"strong": {"$type": "fontWeight", "$value": "semi-bold"}}}})")
               .numbers.at("font.weight.strong") == 600.0);
