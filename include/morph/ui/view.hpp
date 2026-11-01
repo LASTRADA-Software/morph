@@ -367,10 +367,12 @@ struct Sizing {
         Content,  ///< As much as the content needs.
         Fixed,    ///< Exactly `amount` units.
         Stretch,  ///< A share of the leftover space, weighted by `amount`.
+        Percent,  ///< `amount` percent of the container's width inside its padding; a width along a row or for a
+                  ///< horizontal splitter's pane only. Gaps and a splitter's handles are not taken off first.
     };
     /// @brief The rule.
     Kind kind = Kind::Content;
-    /// @brief Units for `Fixed`, weight for `Stretch`, unused for `Content`.
+    /// @brief Units for `Fixed`, weight for `Stretch`, a share from 1 to 100 for `Percent`, unused for `Content`.
     int amount = 0;
 
     /// @brief Size to the content.
@@ -387,6 +389,15 @@ struct Sizing {
     /// @return The sizing.
     [[nodiscard]] static constexpr Sizing stretch(int weight = 1) noexcept {
         return {.kind = Kind::Stretch, .amount = weight};
+    }
+
+    /// @brief A share of the container's width, which a node's bounds clamp as they do every sizing: a pane is
+    ///        usually a percent with a `maxWidth`. Only a width along a row that does not wrap and a horizontal
+    ///        splitter's pane take one; the mount refuses it anywhere else.
+    /// @param percent The share, 1 to 100.
+    /// @return The sizing.
+    [[nodiscard]] static constexpr Sizing percent(int percent) noexcept {
+        return {.kind = Kind::Percent, .amount = percent};
     }
 
     /// @brief Memberwise equality.

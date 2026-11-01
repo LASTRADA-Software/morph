@@ -12,6 +12,8 @@
 #include <numeric>
 #include <optional>
 #include <ranges>
+#include <set>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -233,6 +235,7 @@ public:
             [&](auto const& spec) -> Widget* {
                 if constexpr (requires { spec.common.layout.alignSelf; }) {
                     checkPlacement(spec.common, parent);
+                    checkShare(spec.common, parent);
                 }
                 return &this->mountKind(scope, spec, parent);
             },
@@ -500,6 +503,42 @@ private:
         };
         check(hints.width, hints.minWidth, hints.maxWidth, "width");
         check(hints.height, hints.minHeight, hints.maxHeight, "height");
+        if (hints.width.kind == Sizing::Kind::Percent && (hints.width.amount < 1 || hints.width.amount > 100)) {
+            refuse("a percent width outside 1 to 100");
+        }
+        if (hints.height.kind == Sizing::Kind::Percent) {
+            refuse("a percent height; a percent sizes a width");
+        }
+    }
+
+    // The loader's rule for `percent`, for a view tree built in C++: a share of its container's width is a width along
+    // a row that does not wrap, a horizontal `forEach` that does not wrap, or a horizontal splitter's pane.
+    void checkShare(Common const& common, ContainerWidget const* parent) const {
+        if (common.layout.width.kind == Sizing::Kind::Percent && !_shareParents.contains(parent)) {
+            std::string const named = common.testId.empty() ? std::string{} : " (node `" + common.testId + "`)";
+            throw std::logic_error{
+                "morph::ui::mount: `percent` sizes a width along a row or a horizontal splitter; "
+                "nothing here takes a share" +
+                named};
+        }
+    }
+
+    // A grid track's or a table column's width is no share.
+    static void checkNoShare(std::span<GridTrack const> tracks) {
+        if (std::ranges::any_of(tracks,
+                                [](GridTrack const& track) { return track.width.kind == Sizing::Kind::Percent; })) {
+            throw std::logic_error{
+                "morph::ui::mount: a grid track is sized by the grid; `percent` sizes a width "
+                "along a row or a horizontal splitter"};
+        }
+    }
+    static void checkNoShare(std::span<TableColumn const> columns) {
+        if (std::ranges::any_of(
+                columns, [](TableColumn const& column) { return column.width.kind == Sizing::Kind::Percent; })) {
+            throw std::logic_error{
+                "morph::ui::mount: a table column is sized by the table; `percent` sizes a width "
+                "along a row or a horizontal splitter"};
+        }
     }
 
     // A dialog or a drawer is sized by the frontend, not by its container: Stretch sizing on one would silently
@@ -516,6 +555,10 @@ private:
         };
         if (hints.width.kind == Sizing::Kind::Stretch) {
             refuse("width");
+        }
+        if (hints.width.kind == Sizing::Kind::Percent) {
+            throw std::logic_error{"morph::ui::mount: a " + std::string{kind} +
+                                   " is sized by the frontend, not by its container; its width takes no share"};
         }
         if (hints.height.kind == Sizing::Kind::Stretch) {
             refuse("height");
@@ -579,6 +622,22 @@ private:
 
     using FocusMap = std::multimap<std::string, Widget*, std::less<>>;
 
+    // A container whose children may be sized by a share of its width, registered while it is mounted.
+    struct ShareParent {
+        ShareParent(std::set<ContainerWidget const*>& owner, ContainerWidget const* added)
+            : parents{&owner}, parent{added} {
+            parents->insert(parent);
+        }
+        ShareParent(ShareParent const&) = delete;
+        ShareParent& operator=(ShareParent const&) = delete;
+        ShareParent(ShareParent&&) = delete;
+        ShareParent& operator=(ShareParent&&) = delete;
+        ~ShareParent() { parents->erase(parent); }
+
+        std::set<ContainerWidget const*>* parents;
+        ContainerWidget const* parent;
+    };
+
     // A widget's entry in the focus map, owned by the widget's scope after the widget, so it leaves the map before
     // the widget is destroyed.
     struct Focusable {
@@ -636,6 +695,9 @@ private:
         StackWidget& widget = scope.adopt(_backend->createStack(parent, axis));
         if (holder) {
             widget.setPassesBleed(true);
+        }
+        if (axis == Axis::Horizontal && !wrap && dynamic_cast<TableWidget const*>(parent) == nullptr) {
+            scope.make<ShareParent>(_shareParents, &widget);
         }
         if (wrap) {
             widget.setWrap(true);
@@ -991,6 +1053,7 @@ private:
     Widget& mountKind(reactive::Scope& scope, Grid const& spec, ContainerWidget* parent) {
         GridWidget& widget = scope.adopt(_backend->createGrid(parent));
         applyCommon(scope, widget, spec.common);
+        checkNoShare(spec.tracks);
         if (spec.tracks.empty()) {
             widget.setColumns(spec.columns);
         } else {
@@ -1329,6 +1392,9 @@ private:
 
     Widget& mountKind(reactive::Scope& scope, ForEach const& spec, ContainerWidget* parent) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, spec.axis));
+        if (spec.axis == Axis::Horizontal && !spec.wrap) {
+            scope.make<ShareParent>(_shareParents, &widget);
+        }
         if (spec.wrap && spec.axis == Axis::Horizontal) {
             widget.setWrap(true);
         }
@@ -1346,6 +1412,7 @@ private:
     Widget& mountKind(reactive::Scope& scope, Table const& spec, ContainerWidget* parent) {
         TableWidget& widget = scope.adopt(_backend->createTable(parent));
         applyCommon(scope, widget, spec.common);
+        checkNoShare(spec.columns);
         widget.setColumns(spec.columns);
         widget.setShowHeader(spec.showHeader);
         widget.setSelectionMode(spec.selectionMode);
@@ -1817,6 +1884,9 @@ private:
 
     Widget& mountKind(reactive::Scope& scope, Splitter const& spec, ContainerWidget* parent) {
         SplitterWidget& widget = scope.adopt(_backend->createSplitter(parent, spec.orientation));
+        if (spec.orientation == Axis::Horizontal) {
+            scope.make<ShareParent>(_shareParents, &widget);
+        }
         applyCommon(scope, widget, spec.common);
         mountChildren(scope, spec.children, widget);
         widget.setOnResize(inputEvent(
@@ -1949,6 +2019,8 @@ private:
     // The mounted widgets with a focus name. A multimap keeps equal names in insertion order, so the first mounted
     // is found first.
     FocusMap _focusable;
+    // The mounted containers that take a share of their width for a child's.
+    std::set<ContainerWidget const*> _shareParents;
 };
 
 }  // namespace detail

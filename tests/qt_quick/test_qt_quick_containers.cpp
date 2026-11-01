@@ -9,7 +9,9 @@
 #include <QFont>
 #include <QFontInfo>
 #include <QImage>
+#include <QMessageLogContext>
 #include <QMetaObject>
+#include <QPoint>
 #include <QPointF>
 #include <QQuickItem>
 #include <QRectF>
@@ -18,6 +20,7 @@
 #include <QStringList>
 #include <QTest>
 #include <QVariantList>
+#include <QtLogging>
 #include <algorithm>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -347,6 +350,172 @@ TEST_CASE("qt_quick containers: a splitter takes its panes through the split vie
     scene.settle();
     CHECK(containerCore(*splitter).children().size() == 1);
     CHECK(resized.empty());
+}
+
+namespace {
+
+/// Counts the "Binding loop" messages Qt prints while it is installed.
+class LoopWatch {
+public:
+    LoopWatch() : _previous{qInstallMessageHandler(&LoopWatch::handle)} {}
+    ~LoopWatch() { qInstallMessageHandler(_previous); }
+    LoopWatch(LoopWatch const&) = delete;
+    LoopWatch& operator=(LoopWatch const&) = delete;
+    LoopWatch(LoopWatch&&) = delete;
+    LoopWatch& operator=(LoopWatch&&) = delete;
+    [[nodiscard]] static int loops() noexcept { return counter(); }
+
+private:
+    static void handle(QtMsgType /*type*/, QMessageLogContext const& /*context*/, QString const& message) {
+        if (message.contains(QStringLiteral("Binding loop"))) {
+            ++counter();
+        }
+    }
+    static int& counter() noexcept {
+        static int count = 0;
+        return count;
+    }
+    QtMessageHandler _previous;
+};
+
+/// A row @p units wide holding a text of share @p percent and a text that stretches.
+struct ShareRow {
+    ShareRow(Scene& scene, int units, ui::LayoutHints share,
+             ui::LayoutHints sibling = {.width = ui::Sizing::stretch()})
+        : row{scene.backend().createStack(nullptr, ui::Axis::Horizontal)},
+          pane{scene.backend().createText(row.get())},
+          rest{scene.backend().createText(row.get())} {
+        row->setLayout({.width = ui::Sizing::fixed(units)});
+        pane->setText("pane");
+        pane->setLayout(share);
+        rest->setText("rest");
+        rest->setLayout(sibling);
+        scene.settle();
+    }
+    std::unique_ptr<ui::StackWidget> row;
+    std::unique_ptr<ui::TextWidget> pane;
+    std::unique_ptr<ui::TextWidget> rest;
+};
+
+}  // namespace
+
+// Mutation: read widthKind 3 as content in MorphWidget (the pane is its text's width), or drop `shareWidth` (-1).
+TEST_CASE("qt_quick containers: a percent child takes that share of its row's width inside the padding",
+          "[qt_quick][percent]") {
+    Scene scene;
+    ShareRow shared{scene, 100, {.width = ui::Sizing::percent(28)}};
+    QQuickItem const& row = Scene::itemOf(*shared.row);
+    CHECK(Scene::itemOf(*shared.pane).width() == Catch::Approx(0.28 * row.width()).margin(0.6));
+    shared.row->setLayout({.width = ui::Sizing::fixed(80)});
+    scene.settle();
+    CHECK(Scene::itemOf(*shared.pane).width() == Catch::Approx(0.28 * row.width()).margin(0.6));
+    // A padded row takes the share of the width inside the padding.
+    shared.row->setPadding(ui::Padding{0, 3});
+    scene.settle();
+    qreal const inset = Scene::itemOf(*shared.row).property("insetX").toReal();
+    CHECK(inset > 0);
+    CHECK(Scene::itemOf(*shared.pane).width() == Catch::Approx(0.28 * (row.width() - (2 * inset))).margin(0.6));
+}
+
+// Mutation: leave the minimum out of the percent child (the 900-wide sibling squeezes the share).
+TEST_CASE("qt_quick containers: a wide stretch sibling does not squeeze a percent child, and its maximum caps it",
+          "[qt_quick][percent]") {
+    Scene scene;
+    ShareRow shared{scene, 100, {.width = ui::Sizing::percent(28)}};
+    Scene::itemOf(*shared.rest).setImplicitWidth(900);
+    scene.settle();
+    CHECK(Scene::itemOf(*shared.pane).width() == Catch::Approx(0.28 * Scene::itemOf(*shared.row).width()).margin(0.6));
+    shared.pane->setLayout({.width = ui::Sizing::percent(28), .maxWidth = 10});
+    scene.settle();
+    qreal const unit = Scene::itemOf(*shared.row).width() / 100;
+    CHECK(Scene::itemOf(*shared.pane).width() == Catch::Approx(10 * unit).margin(0.6));
+}
+
+// Mutation: let a content-sized row's implicit width follow its shares (a `Binding loop` message).
+TEST_CASE("qt_quick containers: a share inside a content-sized row, or under justify between, makes no binding loop",
+          "[qt_quick][percent]") {
+    LoopWatch const watch;
+    int const before = LoopWatch::loops();
+    {
+        Scene scene;
+        auto outer = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+        outer->setLayout({.width = ui::Sizing::stretch()});
+        auto inner = scene.backend().createStack(outer.get(), ui::Axis::Horizontal);
+        inner->setJustify(ui::Justify::Between);
+        auto share = scene.backend().createText(inner.get());
+        share->setText("share");
+        share->setLayout({.width = ui::Sizing::percent(30)});
+        auto other = scene.backend().createText(inner.get());
+        other->setText("other");
+        scene.settle();
+        CHECK(std::isfinite(Scene::itemOf(*share).width()));
+        CHECK(std::isfinite(Scene::itemOf(*inner).width()));
+    }
+    {
+        Scene scene;
+        auto outer = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+        auto inner = scene.backend().createStack(outer.get(), ui::Axis::Horizontal);
+        auto share = scene.backend().createText(inner.get());
+        share->setText("share");
+        share->setLayout({.width = ui::Sizing::percent(30)});
+        auto sibling = scene.backend().createText(outer.get());
+        sibling->setText("sibling");
+        sibling->setLayout({.width = ui::Sizing::percent(30)});
+        scene.settle();
+        CHECK(std::isfinite(Scene::itemOf(*inner).width()));
+    }
+    CHECK(LoopWatch::loops() == before);
+}
+
+// Mutation: read the pane's kind as content in MorphSplitter.applyOwn (the first pane is its text's width).
+TEST_CASE("qt_quick containers: a splitter places a percent pane by the share, keeps a dragged size and holds bounds",
+          "[qt_quick][percent]") {
+    Scene scene;
+    auto splitter = scene.backend().createSplitter(nullptr, ui::Axis::Horizontal);
+    splitter->setLayout({.width = ui::Sizing::fixed(100), .height = ui::Sizing::fixed(10)});
+    auto queue = scene.backend().createText(splitter.get());
+    auto page = scene.backend().createText(splitter.get());
+    queue->setText("queue");
+    page->setText("page");
+    queue->setLayout({.width = ui::Sizing::percent(28)});
+    page->setLayout({.width = ui::Sizing::stretch()});
+    scene.settle();
+    QQuickItem& splitterItem = Scene::itemOf(*splitter);
+    QQuickItem const& queueItem = Scene::itemOf(*queue);
+    CHECK(queueItem.width() == Catch::Approx(0.28 * splitterItem.width()).margin(1.0));
+    splitter->setLayout({.width = ui::Sizing::fixed(80), .height = ui::Sizing::fixed(10)});
+    scene.settle();
+    CHECK(queueItem.width() == Catch::Approx(0.28 * splitterItem.width()).margin(1.0));
+    // After a drag the panes keep the sizes the user gave them.
+    qreal const dragged = queueItem.width();
+    splitterItem.setProperty("userSized", true);
+    splitter->setLayout({.width = ui::Sizing::fixed(60), .height = ui::Sizing::fixed(10)});
+    scene.settle();
+    CHECK(queueItem.width() == Catch::Approx(dragged).margin(1.0));
+}
+
+// Mutation: leave the SplitView bounds out of MorphWidget (the drag carries the pane past its maximum).
+TEST_CASE("qt_quick containers: a drag cannot take a splitter pane past its maximum", "[qt_quick][percent]") {
+    Scene scene;
+    auto splitter = scene.backend().createSplitter(nullptr, ui::Axis::Horizontal);
+    splitter->setLayout({.width = ui::Sizing::fixed(100), .height = ui::Sizing::fixed(10)});
+    auto queue = scene.backend().createText(splitter.get());
+    auto page = scene.backend().createText(splitter.get());
+    queue->setText("queue");
+    page->setText("page");
+    queue->setLayout({.width = ui::Sizing::percent(10), .maxWidth = 20});
+    page->setLayout({.width = ui::Sizing::stretch()});
+    scene.settle();
+    QQuickItem const& queueItem = Scene::itemOf(*queue);
+    qreal const unit = Scene::itemOf(*splitter).width() / 100;
+    QPoint const handle = queueItem.mapToScene(QPointF{queueItem.width() + 2, queueItem.height() / 2}).toPoint();
+    QTest::mousePress(&scene.window(), Qt::LeftButton, {}, handle);
+    QTest::mouseMove(&scene.window(), handle + QPoint{60, 0});
+    QTest::mouseMove(&scene.window(), handle + QPoint{200, 0});
+    QTest::mouseRelease(&scene.window(), Qt::LeftButton, {}, handle + QPoint{200, 0});
+    scene.settle();
+    CHECK(queueItem.width() > 10 * unit);
+    CHECK(queueItem.width() <= (20 * unit) + 0.6);
 }
 
 // A bar `pinned` writes is a padded column on the `bar` surface in a divided column: it is filled with the surface

@@ -184,8 +184,8 @@ expression of one),
 `a11y(name, role)`, `drag(payload)`, `drop(accepts, commands)`, `key(chord, commands)`, the bounds `minWidth(n)`,
 `maxWidth(n)`, `minHeight(n)`, `maxHeight(n)`, `alignSelf(Align)`, `bleed()` (the node's sides lie at its parent's edges, past the parent's horizontal padding; the parent is a column, a panel or a tab page), and the input decorations `readonly`, `required`, `errors`, `stale`.
 `sizing(width, height)` writes both dimensions as a record, a literal one when both are literal. The free helpers
-`content()`, `fixed(n)` and `stretch(w = 1)` answer literal sizings (`"content"`, `{"lit": {"fixed": n}}`,
-`{"lit": {"stretch": w}}`), which the loader checks; a record built with `obj` is evaluated at mount. `with(key, handle)` and
+`content()`, `fixed(n)`, `stretch(w = 1)` and `percent(n)` answer literal sizings (`"content"`, `{"lit": {"fixed": n}}`,
+`{"lit": {"stretch": w}}`, `{"lit": {"percent": n}}`; a percent sizes a width along a row or as a horizontal splitter's pane, usually with a `maxWidth`), which the loader checks; a record built with `obj` is evaluated at mount. `with(key, handle)` and
 `withText(key, text)` set any other key, and `Node{json}` wraps a node no builder spells.
 
 - **`badge`** takes its text, tone and icon, or `BadgeOptions{text, tone, icon, onRemove, removeLabel, style, shape,

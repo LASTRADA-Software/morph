@@ -1237,6 +1237,16 @@ template <typename T>
     return AnyHandle::raw(detail::constant(Value{ValueRecord{{"stretch", Value{std::int64_t{weight}}}}}));
 }
 
+/// @brief A share-of-the-row sizing, `{"lit": {"percent": n}}`: that part of the width of the row, or of the
+///        horizontal splitter, the node is in. It sizes a width only; the loader refuses it as a height and anywhere
+///        but a non-wrapping row's child or a horizontal splitter's pane. A pane is usually a percent with a
+///        `maxWidth`.
+/// @param percent The share, 1 to 100.
+/// @return The sizing, a constant the loader checks.
+[[nodiscard]] inline AnyHandle percent(int percent) {
+    return AnyHandle::raw(detail::constant(Value{ValueRecord{{"percent", Value{std::int64_t{percent}}}}}));
+}
+
 /// @brief `{"list": [...]}`: a list built from expressions.
 /// @param items The items.
 /// @return The list.
@@ -1994,8 +2004,8 @@ public:
     /// @return The node with it.
     [[nodiscard]] Node tooltip(AnyHandle const& text) const { return with("tooltip", text); }
 
-    /// @brief The width's sizing: `"content"`, `{"fixed": n}` or `{"stretch": w}`, such as `content()`, `fixed(n)`
-    ///        or `stretch()` give.
+    /// @brief The width's sizing: `"content"`, `{"fixed": n}`, `{"stretch": w}` or `{"percent": n}`, such as
+    ///        `content()`, `fixed(n)`, `stretch()` or `percent(n)` give.
     /// @param sizing The sizing.
     /// @return The node with it.
     [[nodiscard]] Node sizing(AnyHandle const& sizing) const { return with("sizing", sizing); }

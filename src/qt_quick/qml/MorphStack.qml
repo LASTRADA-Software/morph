@@ -37,10 +37,11 @@ MorphWidget {
 
     // Under `between` the layout's spacing comes from the stack's length, so its implicit length along the axis would
     // feed that length back to a parent that sizes the stack from it, growing on every pass; the stack's own natural
-    // length is the children's and the gaps' instead.
+    // length is the children's and the gaps' instead. The same holds while a child's width is a share of the stack's:
+    // the layout's implicit width sums the shares, which follow the width a parent derives from this one.
     implicitWidth: 2 * root.insetX + (root.wrap ? root.wrappedNaturalWidth
-                                                : root.axis === 1 && root.between ? root.naturalLength
-                                                                                  : layout.implicitWidth)
+                                                : root.axis === 1 && (root.between || root.hasShare)
+                                                  ? root.naturalLength : layout.implicitWidth)
     implicitHeight: 2 * root.insetY + (root.wrap ? free.implicitHeight
                                                 : root.axis === 0 && root.between ? root.naturalLength
                                                                                   : layout.implicitHeight)
@@ -125,17 +126,40 @@ MorphWidget {
     // spare length in the spacing: a layout given more length would hand it to the cells, not the gaps.
     readonly property bool packed: !root.stretchesAlong && root.justify !== 3
     readonly property bool between: !root.stretchesAlong && root.justify === 3
-    // The shown children's lengths along the axis, as the layout sizes a child that does not stretch.
-    readonly property var shownLengths: {
+    // The shown children's lengths along the axis, as the layout sizes a child that does not stretch. A child that is
+    // a share of the stack's width counts at that share, where the spare length is divided.
+    readonly property var shownLengths: root.lengthsOf(true)
+    // The same lengths with a share counted at the child's natural length, which does not follow this stack's width:
+    // what the stack asks its own parent for.
+    readonly property var naturalLengths: root.lengthsOf(false)
+    // Whether a shown child along a row is a share of the row's width.
+    readonly property bool hasShare: {
+        if (root.axis !== 1)
+            return false
+        for (const object of layout.children) {
+            const child = object as MorphWidget
+            if (child && child.visible && child.widthKind === 3)
+                return true
+        }
+        return false
+    }
+    function lengthsOf(useShare: bool): var {
         const lengths = []
         for (const object of layout.children) {
             // `children` is a list of QtObject; the Layout attached type needs an Item.
             const child = object as Item
             if (!child || !child.visible)
                 continue
-            const preferred = root.axis === 0 ? child.Layout.preferredHeight : child.Layout.preferredWidth
+            const widget = child as MorphWidget
+            const shared = root.axis === 1 && widget && widget.widthKind === 3
+            // A share's preferred width is not read for the natural length: it follows this stack's width, which a
+            // parent may derive from the natural length.
+            const preferred = shared && !useShare ? -1
+                              : root.axis === 0 ? child.Layout.preferredHeight : child.Layout.preferredWidth
             const implicit = root.axis === 0 ? child.implicitHeight : child.implicitWidth
-            const least = root.axis === 0 ? child.Layout.minimumHeight : child.Layout.minimumWidth
+            // A share's floor follows this stack's width, so the natural length reads the minimum without it.
+            const least = shared && !useShare ? widget.baseMinimumWidth
+                          : root.axis === 0 ? child.Layout.minimumHeight : child.Layout.minimumWidth
             const most = root.axis === 0 ? child.Layout.maximumHeight : child.Layout.maximumWidth
             lengths.push(Math.min(Math.max(preferred >= 0 ? preferred : implicit, least), most))
         }

@@ -11,7 +11,8 @@ Item {
 
     // The relay user actions are reported through: `host.fire(event, payload)` and `host.ask(question, payload)`.
     property var host: null
-    // Sizing per dimension: 0 content, 1 fixed (amount units), 2 stretch (amount is the weight).
+    // Sizing per dimension: 0 content, 1 fixed (amount units), 2 stretch (amount is the weight), 3 percent (amount is
+    // the share of the width inside the padding of the row or splitter the widget is in; a width only).
     property int widthKind: 0
     property int widthAmount: 0
     property int heightKind: 0
@@ -242,13 +243,36 @@ Item {
     }
     Layout.horizontalStretchFactor: widthKind === 2 ? widthAmount : -1
     Layout.verticalStretchFactor: heightKind === 2 ? heightAmount : -1
-    Layout.preferredWidth: widthKind === 1 ? widthAmount * Theme.unitWidth : -1
+    // A percent width is a share of the stack two levels up (the stack, its layout, this widget), read by its width and
+    // padding, never of the layout between them: in a row packed at its natural length the layout's width is its own
+    // implicit width, which includes this share.
+    readonly property real shareWidth: {
+        const stack = parent ? parent.parent : null
+        const room = stack && stack.insetX !== undefined ? stack.width - 2 * stack.insetX : -1
+        return widthKind === 3 && room >= 0 ? widthAmount / 100 * room : -1
+    }
+    // A percent child is not squeezed below its share by a wide sibling: its minimum is the share (held to its maximum).
+    // A share of a whole is left to give way, or a row of it beside anything else would grow without end, each width
+    // asking for the whole of the one before.
+    readonly property real shareFloor: {
+        if (widthKind !== 3 || widthAmount >= 100 || shareWidth < 0)
+            return -1
+        return maxWidthUnits >= 0 ? Math.min(shareWidth, maxWidthUnits * Theme.unitWidth) : shareWidth
+    }
+    // The least width without a share: the document's `minWidth`, else the content's minimum where it is honoured.
+    readonly property real baseMinimumWidth: minWidthUnits >= 0 ? minWidthUnits * Theme.unitWidth
+                                                               : honoursContentMinimum ? contentMinimumWidth : -1
+    Layout.preferredWidth: widthKind === 1 ? widthAmount * Theme.unitWidth : widthKind === 3 ? shareWidth : -1
     Layout.preferredHeight: heightKind === 1 ? heightAmount * Theme.unitHeight : -1
-    Layout.minimumWidth: minWidthUnits >= 0 ? minWidthUnits * Theme.unitWidth
-                                            : honoursContentMinimum ? contentMinimumWidth : -1
+    Layout.minimumWidth: Math.max(baseMinimumWidth, shareFloor)
     Layout.maximumWidth: maxWidthUnits >= 0 ? maxWidthUnits * Theme.unitWidth : -1
     Layout.minimumHeight: minHeightUnits >= 0 ? minHeightUnits * Theme.unitHeight : -1
     Layout.maximumHeight: maxHeightUnits >= 0 ? maxHeightUnits * Theme.unitHeight : -1
+    // A pane of a splitter is held within the bounds the document gives it, a drag included.
+    SplitView.minimumWidth: minWidthUnits >= 0 ? minWidthUnits * Theme.unitWidth : 0
+    SplitView.maximumWidth: maxWidthUnits >= 0 ? maxWidthUnits * Theme.unitWidth : Infinity
+    SplitView.minimumHeight: minHeightUnits >= 0 ? minHeightUnits * Theme.unitHeight : 0
+    SplitView.maximumHeight: maxHeightUnits >= 0 ? maxHeightUnits * Theme.unitHeight : Infinity
     Layout.columnSpan: columnSpan
     Layout.leftMargin: bleed ? -bleedInset : 0
     Layout.rightMargin: bleed ? -bleedInset : 0

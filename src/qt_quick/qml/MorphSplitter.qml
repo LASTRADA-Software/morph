@@ -26,12 +26,66 @@ MorphWidget {
         const along = root.axis === 0 ? root.heightKind : root.widthKind
         if (!given && (total <= 0 || along === 0))
             return
+        if (!given && root.axis === 1) {
+            root.applyOwn(panes, total)
+            return
+        }
         for (let i = 0; i < panes.length; ++i) {
             const size = given ? root.sizes[i] * root.unit : total / Math.max(1, panes.length)
+            // Sizes, or an equal share, leave no pane to fill; a pane that did before stops.
+            panes[i].SplitView.fillWidth = false
             if (root.axis === 0)
                 panes[i].SplitView.preferredHeight = size
             else
                 panes[i].SplitView.preferredWidth = size
+        }
+    }
+
+    // @p size held within the width bounds @p pane gives.
+    function boundedWidth(pane: var, size: real): real {
+        let bounded = size
+        if (pane.minWidthUnits >= 0)
+            bounded = Math.max(bounded, pane.minWidthUnits * root.unit)
+        if (pane.maxWidthUnits >= 0)
+            bounded = Math.min(bounded, pane.maxWidthUnits * root.unit)
+        return bounded
+    }
+
+    // Without sizes, a horizontal splitter places each pane by its own width: a fixed one in units, a percent one as a
+    // share of the splitter's width, and the rest, a content pane counting as a stretch of weight 1, share what is
+    // left by weight. The heaviest of those fills, so rounding never leaves a gap.
+    function applyOwn(panes: var, total: real) {
+        const fixedSize = []
+        const weightOf = []
+        let taken = Math.max(0, panes.length - 1) * root.handleExtent
+        let weights = 0
+        let heaviest = -1
+        let heaviestWeight = 0
+        for (let i = 0; i < panes.length; ++i) {
+            const kind = panes[i].widthKind ?? 0
+            const amount = panes[i].widthAmount ?? 0
+            if (kind === 1 || kind === 3) {
+                const size = root.boundedWidth(panes[i], kind === 1 ? amount * root.unit : amount / 100 * total)
+                fixedSize.push(size)
+                weightOf.push(0)
+                taken += size
+            } else {
+                const weight = kind === 2 ? Math.max(1, amount) : 1
+                fixedSize.push(-1)
+                weightOf.push(weight)
+                weights += weight
+                if (weight > heaviestWeight) {
+                    heaviest = i
+                    heaviestWeight = weight
+                }
+            }
+        }
+        const left = Math.max(0, total - taken)
+        for (let i = 0; i < panes.length; ++i) {
+            const size = fixedSize[i] >= 0 ? fixedSize[i]
+                                           : root.boundedWidth(panes[i], left * weightOf[i] / Math.max(1, weights))
+            panes[i].SplitView.fillWidth = i === heaviest
+            panes[i].SplitView.preferredWidth = size
         }
     }
 
@@ -85,6 +139,17 @@ MorphWidget {
         return [along, across]
     }
 
+    // What the panes' own sizing comes to; applying again when it changes keeps a pane sized by a late `setLayout`.
+    readonly property string paneSizing: {
+        const keys = []
+        for (const pane of split.contentChildren)
+            keys.push([pane.widthKind, pane.widthAmount, pane.minWidthUnits, pane.maxWidthUnits].join(","))
+        return keys.join(";")
+    }
+    onPaneSizingChanged: {
+        if (!root.userSized)
+            root.apply()
+    }
     onSizesChanged: apply()
     implicitWidth: root.axis === 0 ? paneExtents[1] : paneExtents[0]
     implicitHeight: root.axis === 0 ? paneExtents[0] : paneExtents[1]

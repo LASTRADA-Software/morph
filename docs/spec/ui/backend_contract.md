@@ -146,7 +146,13 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   not `multiple` refuses a drop of several files. A taken drop reaches `onDrop` with the paths in
   the order dropped.
 - **Splitters.** `setSizes` with an empty list, or with one whose length differs from the number of
-  panes, shares the space equally. A user's drag reaches `onResize` with every pane's size once the
+  panes, leaves each pane of a horizontal splitter to its own width sizing: `fixed(n)` is n units, `percent(n)` a
+  share of the splitter's width (the handles not taken off first), `stretch(w)` shares what is left by weight, and
+  `content` counts as `stretch(1)`, so panes that are all content, or all `stretch(1)`, share equally; a vertical
+  splitter shares its height equally. Every pane's bounds (`minWidth`/`maxWidth`, or the heights for a vertical
+  splitter) bound it on both frontends, a user's drag included, matching sizes or not. On the terminal a pane is at
+  least one cell. Until the user drags, the shares are applied again whenever the splitter's size changes; after a drag
+  the panes keep the sizes the user gave them. A user's drag reaches `onResize` with every pane's size once the
   user lets go.
 - A widget's destructor detaches it from its parent and frees its native resources. The mount
   destroys children before parents.
@@ -268,7 +274,11 @@ table scrolls sideways on Qt Quick, with a bar that shows while it can; on the t
 wraps is the document's choice (`wrap`, `minWidth`, a stretch). A container's minimum width is its content's: a stack
 or a panel is never laid out narrower than its padding and its children's minimums, so a row of content-sized children
 that cannot fit raises its column's minimum, and so on up to the first container whose width its parent does not
-choose (a page, a splitter's pane, a window root). A document's `minWidth` wins. A table, a scroll and every leaf take
+choose (a page, a splitter's pane, a window root). A document's `minWidth` wins. A child sized by a `percent` is placed as a fixed child is, on each
+frontend: on Qt Quick a stack's or a panel's content minimum still raises it, and on the terminal its bounds alone apply;
+only a `stretch` sibling takes the spare width, and in a row with none `justify` packs a percent child as it packs a
+fixed one. A percent child adds its natural width to its row's natural width, never its share, so the share a row hands
+out does not depend on the row's own natural width. A table, a scroll and every leaf take
 their own overflow; a table's cells are placed at their column's width and do not raise it. A badge's minimum is its
 natural width, so a stack that holds one is raised with it; only a table cell, which is not raised, is placed narrower. A page (a slot) whose
 content cannot be narrower than it scrolls sideways when it is scrollable, and a scrolling vertical `scroll` does too.
@@ -591,6 +601,9 @@ bleeding child from the node's left edge to its right edge, also when the page i
 A `fixed(20)` text "abc" with `TextAlign::End` draws its line against its width's end (its right edge within one unit
 of the widget's, its start more than 15 units in), and one with no alignment starts at the widget's left edge; the case
 reads `textExtentOf` for where the line is drawn.
+In a `fixed(60)` row a `percent(25)` child and a `stretch` sibling are 15 and 45 units wide, and 10 and 50 with a
+`maxWidth` of 10 on the first. In a `fixed(41)` horizontal splitter a `percent(50)` pane and a content pane are 20 and
+20 units, two content panes share equally, matching `sizes` place the panes, and a `stretch` pane capped at 8 is 8.
 
 ### The probe
 

@@ -242,7 +242,7 @@ node sits across its `row`'s, `column`'s, `grid` row's or `forEach`'s axis, in p
 string is a literal one: a value that names no surface draws as no surface does, `null` is no surface, and any other
 value that is not a string is reported once at the node's `surface` path and drawn as no surface), `a11y`
 (`{name, role}`), `drag` (`{payload}`), `drop` (`{accepts, onDrop}`) and `keys`. `sizing` is the width's —
-`"content"`, `{"lit": {"fixed": n}}` or `{"lit": {"stretch": w}}` — or both dimensions as a record of them, one
+`"content"`, `{"lit": {"fixed": n}}`, `{"lit": {"stretch": w}}` or `{"lit": {"percent": n}}` (n from 1 to 100: that share of the width inside the padding of the row or horizontal splitter the node is in, gaps and handles not taken off first, so a pane is usually a percent with a `maxWidth`) — or both dimensions as a record of them, one
 left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {"stretch": 1}}}`. A node's sizing means the
 same inside a `switch` case, an overlay or a row as at the root: the content's stretch reaches the container it is
 mounted in, and several nodes in a case or a default are spaced as the vertical list around the switch spaces its nodes. **Text and the inputs** also take `readonly`, `required`, `stale`
@@ -284,7 +284,7 @@ weight and face, so `{role: display, tone: err}` is a large red figure.
 | `keyValue` | `items` (a list of `{label, value, spans, tone}` records: `spans` as on `text`, shown in place of `value` by a client that knows them; `tone` (`ok`, `warn`, `err`, `info`; `neutral` or `null` for none) draws the value in the tone's colour and strong weight, and a name that is none of them is reported once and drawn as none), `fieldLayout` (`inline`, the default: each caption beside its value; `stacked`: each caption above it, as a `form`'s) | |
 | `emptyState` | `title`, `text`, `icon`, `action` | |
 | `chart` | `summary` (required: the text alternative), `series` (required, 1 to 4 parts `{points, y ⓘ, x ⓘ, xLabel ⓘ, tone ⓘ, note ⓘ, label, joined}`), `lines` (0 to 16 parts `{value, label, tone, style}`), `yMin`, `yMax`, `yPlaces` (a literal integer, 0 to 18), `yLabel`; see [Charts](#charts) | |
-| `splitter` | `orientation`, `sizes` (a list of integers in units, one per pane; a list of another length shares the space equally), `children` | |
+| `splitter` | `orientation`, `sizes` (a list of integers in units, one per pane; a list of another length places each pane of a horizontal splitter by its own `sizing` and a vertical splitter's equally), `children` (a pane's `minWidth`/`maxWidth` bound it; a pane is usually `percent(n)` with a `maxWidth`; a literal `sizes` that matches the panes places them, and a pane sized `fixed` or `percent` is then reported once as not used) | |
 | `collapsible` | `title`, `gap` (as a panel's, default 2), `open`, `header`, `children`, `onToggle` | |
 | `dropZone` | `accept`, `multiple`, `children`, `onDrop` | |
 | `customize` | `point` (required) | |
@@ -393,7 +393,13 @@ evaluated.
   minimum is no more than its maximum, and no bound is given on a `dialog` or `drawer` (an overlay is sized by the
   frontend, not by its container; a sheet is the window's size). On Qt Quick, that sizing caps the overlay at the window less a margin on each
   axis, and scrolls whatever content does not fit between the title and the footer, which both stay reachable.
-  There is also no bound on a `custom` node (which carries no common properties). A literal `sizing` is
+  There is also no bound on a `custom` node (which carries no common properties). A `percent` sizes a width along a row that does not wrap
+  or a horizontal splitter's pane only: the loader refuses a literal one as a height, on a node whose parent is a column, a grid, a wrapping
+  row, a panel, a scroll, a tab page or a vertical splitter, on the root, on a `dialog` or `drawer`, as a table column's or a grid track's `width`,
+  and with an amount outside 1 to 100 or not a whole number. A computed one that yields such an amount or a height is reported once and lowers
+  to content. A lone node in a row's holder (a `forEach` body) takes its share for the holder and fills it; a percent inside a `switch` case or an
+  overlay's content is reported ("size the `switch` or the overlay itself") and fills, and a percent among several nodes of one holder is reported
+  and takes its content size. A literal `sizing` is
   one of its forms, and a literal fixed amount lies inside its dimension's bounds (a fixed size has no room to
   bound); a `sizing` that is not literal (a `record`, `cond` or `obj` expression) is read at mount, and one that
   evaluates to none of the forms is reported once and lowers to content. A literal text `role` is one of its names; a computed one is read at mount, and one that evaluates to no role is

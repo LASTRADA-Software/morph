@@ -1889,6 +1889,119 @@ struct Measured {
     return checks.result();
 }
 
+/// @brief Case: along a row, a percent child takes that share of the row's width and its stretch sibling the rest.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> percentSharesItsRow(ConformanceProbe& probe) {
+    Row row{
+        .children = {sizedText("a", {.width = Sizing::percent(25)}), sizedText("b", {.width = Sizing::stretch()})}};
+    row.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the row holds two children");
+    if (children.size() == 2) {
+        geometry.near("the percent child's width", 15, geometry.of(*children.at(0)).width);
+        geometry.near("its stretch sibling's width", 45, geometry.of(*children.at(1)).width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a percent child's share stops at its maximum, and its stretch sibling takes the rest.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> percentClampedByMaximum(ConformanceProbe& probe) {
+    Row row{.children = {sizedText("a", {.width = Sizing::percent(25), .maxWidth = 10}),
+                         sizedText("b", {.width = Sizing::stretch()})}};
+    row.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the row holds two children");
+    if (children.size() == 2) {
+        geometry.near("the capped percent child's width", 10, geometry.of(*children.at(0)).width);
+        geometry.near("its stretch sibling's width", 50, geometry.of(*children.at(1)).width);
+    }
+    return checks.result();
+}
+
+/// @brief The panes of a splitter 41 units wide, which a case measures.
+/// @param probe The backend under test.
+/// @param panes The panes' texts and their layout hints.
+/// @param sizes The splitter's sizes; empty for none.
+/// @return The mount, to measure the splitter's panes in.
+[[nodiscard]] inline std::unique_ptr<Mounted> mountedSplitter(
+    ConformanceProbe& probe, std::vector<std::pair<std::string, LayoutHints>> const& panes, std::vector<int> sizes) {
+    Splitter split{.children = {}, .orientation = Axis::Horizontal};
+    for (auto const& [text, hints] : panes) {
+        split.children.push_back(sizedText(text, hints));
+    }
+    split.sizes = Prop<std::vector<int>>{std::move(sizes)};
+    split.common.layout = {.width = Sizing::fixed(41), .height = Sizing::fixed(5)};
+    auto view =
+        std::make_unique<Mounted>(probe.runtime(), probe.backend(), insideColumn(ui::splitter(std::move(split))));
+    probe.settle();
+    return view;
+}
+
+/// @brief Case: a horizontal splitter without matching sizes places each pane by its own width sizing, and matching
+///        sizes place them instead.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> splitterPlacesPanesBySizing(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    auto const widthsOf = [&](Mounted const& view) {
+        std::vector<Widget*> const panes = measured(probe, view).children;
+        std::vector<double> widths;
+        widths.reserve(panes.size());
+        for (Widget const* const pane : panes) {
+            widths.push_back(geometry.of(*pane).width);
+        }
+        return widths;
+    };
+    auto const share = mountedSplitter(probe, {{"a", {.width = Sizing::percent(50)}}, {"b", {}}}, {});
+    std::vector<double> const shares = widthsOf(*share);
+    checks.that(shares.size() == 2, "the splitter holds two panes");
+    if (shares.size() == 2) {
+        geometry.near("a percent(50) pane of a 41-unit splitter", 20, shares.at(0));
+        geometry.near("the content pane beside it", 20, shares.at(1));
+    }
+    auto const equal = mountedSplitter(probe, {{"a", {}}, {"b", {}}}, {});
+    std::vector<double> const halves = widthsOf(*equal);
+    checks.that(halves.size() == 2, "the second splitter holds two panes");
+    if (halves.size() == 2) {
+        geometry.near("two content panes share equally", halves.at(0), halves.at(1));
+    }
+    auto const given = mountedSplitter(probe, {{"a", {.width = Sizing::percent(50)}}, {"b", {}}}, {10, 30});
+    std::vector<double> const placed = widthsOf(*given);
+    checks.that(placed.size() == 2, "the third splitter holds two panes");
+    if (placed.size() == 2) {
+        geometry.near("a pane placed by matching sizes", 10, placed.at(0));
+    }
+    return checks.result();
+}
+
+/// @brief Case: a splitter's panes are held within their own width bounds.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> splitterHonoursPaneBounds(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    auto const view = mountedSplitter(
+        probe, {{"a", {.width = Sizing::stretch(), .maxWidth = 8}}, {"b", {.width = Sizing::stretch()}}}, {});
+    std::vector<Widget*> const panes = measured(probe, *view).children;
+    checks.that(panes.size() == 2, "the splitter holds two panes");
+    if (panes.size() == 2) {
+        geometry.near("a pane capped at 8", 8, geometry.of(*panes.at(0)).width);
+    }
+    return checks.result();
+}
+
 /// @brief Case: a column's padding insets its children from every edge.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -3268,7 +3381,7 @@ struct WrappingRow {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 31> const cases{{
+    static std::array<ConformanceCase, 35> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3318,6 +3431,12 @@ struct WrappingRow {
         {.name = "a bleeding child of a tab page reaches the tabs node's edges, also while the page scrolls",
          .run = detail::bleedingChildOfTabPageReachesNodeEdges},
         {.name = "an end-aligned text draws its line at the end of its width", .run = detail::textAlignEnd},
+        {.name = "a percent child takes its share of the row, and its stretch sibling the rest",
+         .run = detail::percentSharesItsRow},
+        {.name = "a percent child's share stops at its maximum", .run = detail::percentClampedByMaximum},
+        {.name = "a splitter without matching sizes places its panes by their own sizing",
+         .run = detail::splitterPlacesPanesBySizing},
+        {.name = "a splitter holds its panes within their width bounds", .run = detail::splitterHonoursPaneBounds},
     }};
     return cases;
 }

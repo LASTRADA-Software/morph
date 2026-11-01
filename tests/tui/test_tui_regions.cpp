@@ -112,6 +112,53 @@ TEST_CASE("tui splitter: sizes asked for are kept, the last pane taking the rest
     CHECK(splitter->extents() == std::vector<int>{9, 9, 11});
 }
 
+// Mutation: read Percent as Content in the splitter's placement (the first pane takes half the cells, not 28).
+TEST_CASE("tui splitter: a percent pane is that share of the splitter, its handle included, at least one cell",
+          "[tui][regions]") {
+    Harness harness{101, 2};
+    auto const splitter = harness.make<SplitterImpl>(nullptr, ui::Axis::Horizontal);
+    auto const queue = harness.make<TextImpl>(splitter.get());
+    auto const page = harness.make<TextImpl>(splitter.get());
+    queue->setLayout({.width = ui::Sizing::percent(28)});
+    static_cast<void>(harness.draw());
+    CHECK(splitter->extents() == std::vector<int>{28, 72});
+    queue->setLayout({.width = ui::Sizing::percent(1)});
+    static_cast<void>(harness.draw());
+    CHECK(splitter->extents().front() == 1);
+    // A share of nothing is still a cell.
+    Harness narrow{51, 2};
+    auto const small = narrow.make<SplitterImpl>(nullptr, ui::Axis::Horizontal);
+    auto const first = narrow.make<TextImpl>(small.get());
+    auto const second = narrow.make<TextImpl>(small.get());
+    first->setLayout({.width = ui::Sizing::percent(1)});
+    static_cast<void>(narrow.draw());
+    CHECK(small->extents() == std::vector<int>{1, 49});
+    static_cast<void>(second);
+    static_cast<void>(page);
+}
+
+// Mutation: leave the bounds out of SplitterImpl::layoutExtents or dragTo (the pane takes its share, and a drag passes
+// the maximum).
+TEST_CASE("tui splitter: a pane stays within its bounds, a drag included, and matching sizes still win",
+          "[tui][regions]") {
+    Harness harness{41, 2};
+    auto const splitter = harness.make<SplitterImpl>(nullptr, ui::Axis::Horizontal);
+    auto const left = harness.make<TextImpl>(splitter.get());
+    auto const right = harness.make<TextImpl>(splitter.get());
+    left->setLayout({.width = ui::Sizing::stretch(), .maxWidth = 10});
+    right->setLayout({.width = ui::Sizing::stretch()});
+    static_cast<void>(harness.draw());
+    CHECK(splitter->extents() == std::vector<int>{10, 30});
+    harness.sgr(report(0, {.x = 10, .y = 0}, 'M'));
+    harness.sgr(report(32, {.x = 20, .y = 0}, 'M'));
+    harness.sgr(report(0, {.x = 20, .y = 0}, 'm'));
+    static_cast<void>(harness.draw());
+    CHECK(splitter->extents() == std::vector<int>{10, 30});
+    splitter->setSizes({6, 34});
+    static_cast<void>(harness.draw());
+    CHECK(splitter->extents() == std::vector<int>{6, 34});
+}
+
 // Mutation: split the pasted text at every space (a path with an escaped space is then cut in two).
 TEST_CASE("tui drop zone: pasted paths, quoted, escaped or as file URIs", "[tui][regions]") {
     CHECK(parsePastedPaths("/a/b.csv") == Paths{"/a/b.csv"});

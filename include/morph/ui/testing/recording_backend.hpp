@@ -148,7 +148,7 @@ template <typename Special>
 
 /// @brief Formats one dimension's sizing.
 /// @param sizing The sizing.
-/// @return `content`, `fixed(n)` or `stretch(n)`.
+/// @return `content`, `fixed(n)`, `stretch(n)` or `percent(n)`.
 [[nodiscard]] inline std::string formatSizing(Sizing sizing) {
     switch (sizing.kind) {
         case Sizing::Kind::Content:
@@ -157,6 +157,8 @@ template <typename Special>
             return "fixed(" + std::to_string(sizing.amount) + ")";
         case Sizing::Kind::Stretch:
             return "stretch(" + std::to_string(sizing.amount) + ")";
+        case Sizing::Kind::Percent:
+            return "percent(" + std::to_string(sizing.amount) + ")";
         default:
             return "unknown";
     }

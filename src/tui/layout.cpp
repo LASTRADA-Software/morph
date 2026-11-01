@@ -48,10 +48,16 @@ int clampInto(int extent, Bounds bounds) noexcept {
 
 Bounds boundsOfItem(Item const& item) noexcept { return Bounds{.minimum = item.minimum, .maximum = item.maximum}; }
 
-/// What an item that does not stretch asks for.
-int requestOf(Item const& item) noexcept {
-    return clampInto(std::max(0, item.sizing.kind == ui::Sizing::Kind::Fixed ? item.sizing.amount : item.natural),
-                     boundsOfItem(item));
+/// What an item that does not stretch asks for along a track of @p length cells: its amount while Fixed, that share
+/// of the track rounded down while Percent, else its natural extent; clamped into its bounds.
+int requestOf(Item const& item, int length) noexcept {
+    int wanted = item.natural;
+    if (item.sizing.kind == ui::Sizing::Kind::Fixed) {
+        wanted = item.sizing.amount;
+    } else if (item.sizing.kind == ui::Sizing::Kind::Percent) {
+        wanted = static_cast<int>(Wide{std::max(0, length)} * std::clamp(item.sizing.amount, 0, 100) / 100);
+    }
+    return clampInto(std::max(0, wanted), boundsOfItem(item));
 }
 
 Wide gapsBetween(std::size_t count, int gap) noexcept {
@@ -158,7 +164,7 @@ std::vector<int> distribute(std::span<Item const> items, Track track) {
     sizes.reserve(items.size());
     Wide used = 0;
     for (auto const& item : items) {
-        sizes.push_back(isStretch(item.sizing) ? 0 : requestOf(item));
+        sizes.push_back(isStretch(item.sizing) ? 0 : requestOf(item, track.length));
         used += sizes.back();
     }
     Wide const gaps = gapsBetween(items.size(), std::max(0, track.gap));
@@ -228,7 +234,7 @@ int basisOf(Item const& item, int length) noexcept {
         int const wanted = item.natural > 0 ? std::min(item.minimum, item.natural) : item.minimum;
         return std::min({wanted, maximumOf(boundsOfItem(item)), std::max(0, length)});
     }
-    return std::min(requestOf(item), std::max(0, length));
+    return std::min(requestOf(item, length), std::max(0, length));
 }
 
 /// The value at `index`, checked.

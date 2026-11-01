@@ -44,8 +44,9 @@ struct Track {
     int gap = 0;     ///< Cells between two neighbours.
 };
 
-/// Extents along a stack's main axis, in item order. Fixed items get their amount and Content items their natural
-/// extent, each clamped into its bounds; Stretch items share what is left by weight (a weight below one counts as
+/// Extents along a stack's main axis, in item order. Fixed items get their amount, Percent items that share of the
+/// track's length (rounded down; the gaps are not taken off first) and Content items their natural extent, each
+/// clamped into its bounds; Stretch items share what is left by weight (a weight below one counts as
 /// one), the cells a division leaves over going one each to the first Stretch items. A share stops at its item's
 /// maximum and what it leaves goes to the Stretch items not capped, at most one pass per Stretch item; a share
 /// below its item's minimum is raised to it. An overflow is taken from the last item first, down to each item's

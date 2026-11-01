@@ -76,6 +76,8 @@ public:
 
 private:
     [[nodiscard]] std::vector<int> layoutExtents(int total) const;
+    [[nodiscard]] layout::Bounds boundsOfPane(WidgetBase const& pane) const;
+    [[nodiscard]] WidgetBase const* paneAt(std::size_t index) const;
     [[nodiscard]] int along(::core::tui::Point cell) const noexcept;
 
     ui::Axis _axis;

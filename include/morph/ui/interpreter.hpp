@@ -2668,6 +2668,12 @@ public:
     [[nodiscard]] LayoutHints nodeHints(DocNode const& node, std::set<std::string, std::less<>> const& own,
                                         LowerCtx const& ctx);
 
+    /// @brief Reports each child of an overlay's or a case's content that sizes itself by a share, once at @p path,
+    /// and
+    ///        makes it fill the holder instead.
+    /// @param children The content, lowered.
+    /// @param path     Where the report points.
+    void fillHolder(std::vector<Node>& children, std::string const& path);
     /// @brief The size request of a holder of @p content: the largest stretch of its children on each axis.
     ///
     /// A literal sizing is read as written and a computed one is evaluated once in the enclosing scope. A computed
@@ -6704,12 +6710,15 @@ inline constexpr std::string_view kSpanToneReason =
     return sizes;
 }
 
-/// @brief A sizing by its document form: `"content"`, `{"fixed": n}` or `{"stretch": w}`.
+/// @brief A sizing by its document form: `"content"`, `{"fixed": n}`, `{"stretch": w}` or `{"percent": n}`.
 /// @param value The value.
 /// @return The sizing.
 [[nodiscard]] inline Sizing sizingOf(Value const& value) {
     if (Value const* const fixed = value.field("fixed")) {
         return Sizing::fixed(static_cast<int>(intOf(*fixed, 0)));
+    }
+    if (Value const* const percent = value.field("percent")) {
+        return Sizing::percent(static_cast<int>(intOf(*percent, 1)));
     }
     if (Value const* const stretch = value.field("stretch")) {
         return Sizing::stretch(static_cast<int>(intOf(*stretch, 1)));
@@ -6717,7 +6726,8 @@ inline constexpr std::string_view kSpanToneReason =
     return Sizing::content();
 }
 
-/// @brief Whether a value is a sizing of one dimension: `"content"`, `{"fixed": n}` or `{"stretch": w}`.
+/// @brief Whether a value is a sizing of one dimension: `"content"`, `{"fixed": n}`, `{"stretch": w}` or
+///        `{"percent": n}` with n from 1 to 100.
 /// @param value The value.
 /// @return Whether `sizingOf` reads it as written rather than as content by default.
 [[nodiscard]] inline bool isSizing(Value const& value) {
@@ -6725,8 +6735,14 @@ inline constexpr std::string_view kSpanToneReason =
         return *text == "content";
     }
     ValueRecord const* const record = value.asRecord();
-    return record != nullptr && record->size() == 1 && (record->contains("fixed") || record->contains("stretch")) &&
-           record->begin()->second.asInt() != nullptr;
+    if (record == nullptr || record->size() != 1 || record->begin()->second.asInt() == nullptr) {
+        return false;
+    }
+    if (record->contains("percent")) {
+        std::int64_t const share = *record->begin()->second.asInt();
+        return share >= 1 && share <= 100;
+    }
+    return record->contains("fixed") || record->contains("stretch");
 }
 
 /// @brief An alignment by name, as the loader checked it: `start`, `center`, `end`, or stretch for none.
@@ -6814,6 +6830,12 @@ inline constexpr std::string_view kSpanToneReason =
     return out;
 }
 
+/// @brief What a percent sizes, as a refusal or a report says it.
+inline constexpr std::string_view kPercentPlaces =
+    "`percent` sizes a width along a row or a horizontal splitter; nothing here takes a share";
+/// @brief Why a percent inside a case or an overlay's content is not a share.
+inline constexpr std::string_view kPercentInHolder = "size the `switch` or the overlay itself; its content fills it";
+
 /// @brief The default spacing step between the children of a document panel or collapsible, the mockups' 8 px.
 inline constexpr int kPanelGap = 2;
 /// @brief The default spacing step between the children of a document dialog or drawer, the mockups' 12 px.
@@ -6837,8 +6859,27 @@ inline constexpr int kDialogGap = 3;
         node->kind);
 }
 
+/// @brief A node with its width sizing replaced; a node of a kind with no layout is returned as it is.
+/// @param node  The node.
+/// @param width The sizing.
+/// @return The node.
+[[nodiscard]] inline Node withWidth(Node const& node, Sizing width) {
+    if (!node) {
+        return node;
+    }
+    auto copy = std::make_shared<NodeData>(*node);
+    std::visit(
+        [&width](auto& spec) {
+            if constexpr (requires { spec.common.layout; }) {
+                spec.common.layout.width = width;
+            }
+        },
+        copy->kind);
+    return copy;
+}
+
 /// @brief The size request of a holder of @p sizings: a stretch by the largest weight where any is a stretch, and
-///        content otherwise.
+///        content otherwise (a share of a row is not a holder's: `listColumn` passes a lone child's on).
 /// @param sizings One dimension's sizing of each child.
 /// @return The holder's sizing.
 [[nodiscard]] inline Sizing holderSizing(std::span<Sizing const> sizings) {
@@ -6863,6 +6904,15 @@ inline constexpr int kDialogGap = 3;
         LayoutHints const hints = layoutHintsOf(child);
         widths.push_back(hints.width);
         heights.push_back(hints.height);
+    }
+    // A lone child's share of its row is the holder's, and the child fills the holder, so the share is taken once.
+    if (children.size() == 1 && widths.front().kind == Sizing::Kind::Percent) {
+        Sizing const share = widths.front();
+        children.front() = withWidth(children.front(), Sizing::stretch(1));
+        Column column{.children = std::move(children), .gap = gap};
+        column.common.layout.width = share;
+        column.common.layout.height = holderSizing(heights);
+        return column;
     }
     Column column{.children = std::move(children), .gap = gap};
     column.common.layout.width = holderSizing(widths);
@@ -6945,11 +6995,29 @@ inline Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx con
     for (DocNodePtr const& child : nodes) {
         children.push_back(lower(*child, listCtx));
     }
+    // Several nodes share a holder, and a share of a row is not a share of a holder: each is reported and takes its
+    // content size.
+    for (auto&& [child, written] : std::views::zip(children, nodes)) {
+        if (layoutHintsOf(child).width.kind == Sizing::Kind::Percent) {
+            report(written->path,
+                   "a percent among several nodes is a share of their holder; " + std::string{kPercentPlaces});
+            child = withWidth(child, Sizing::content());
+        }
+    }
     Column holder = listColumn(std::move(children), gap);
     // The column is the mount's, not the document's: a child that bleeds reaches past the padding of the container
     // the document names, so the column passes that padding on instead of hiding it.
     holder.holder = true;
     return ui::column(std::move(holder));
+}
+
+inline void ScreenCore::fillHolder(std::vector<Node>& children, std::string const& path) {
+    for (Node& child : children) {
+        if (layoutHintsOf(child).width.kind == Sizing::Kind::Percent) {
+            report(path, std::string{kPercentInHolder});
+            child = withWidth(child, Sizing::stretch(1));
+        }
+    }
 }
 
 inline LayoutHints ScreenCore::nodeHints(DocNode const& node, std::set<std::string, std::less<>> const& own,
@@ -7165,11 +7233,15 @@ inline void ScreenCore::layoutOf(DocNode const& node, LowerCtx const& ctx, Layou
                                   : isSizing(value);
         if (!valid) {
             report(sizing->path, "sizing is " + canonicalJson(value) +
-                                     "; a sizing is \"content\", {\"fixed\": n}, {\"stretch\": w}, or a record of "
-                                     "width and height of them");
+                                     "; a sizing is \"content\", {\"fixed\": n}, {\"stretch\": w}, {\"percent\": n} "
+                                     "with n from 1 to 100, or a record of width and height of them");
         } else if (record) {
             layout.width = width != nullptr ? sizingOf(*width) : Sizing::content();
             layout.height = height != nullptr ? sizingOf(*height) : Sizing::content();
+            if (layout.height.kind == Sizing::Kind::Percent) {
+                report(sizing->path, std::string{kPercentPlaces});
+                layout.height = Sizing::content();
+            }
         } else {
             layout.width = sizingOf(value);
         }
@@ -8102,6 +8174,22 @@ inline Node ScreenCore::lowerSplitter(DocNode const& node, LowerCtx const& ctx, 
             });
     }
     commonOf(node, ctx, element, spec.common);
+    // A literal `sizes` that matches the panes places them, so a pane's own width is not used.
+    if (ExprPtr const sizes = node.prop("sizes"); sizes && sizes->kind == ExprKind::Literal) {
+        std::optional<std::vector<int>> const given = splitterSizesOf(sizes->literal);
+        if (given && given->size() == spec.children.size()) {
+            for (std::size_t at = 0; at < spec.children.size(); ++at) {
+                // A stretch pane asks only to fill, which `sizes` leaves it to do; a fixed or percent pane names a
+                // size.
+                Sizing::Kind const kind = layoutHintsOf(spec.children.at(at)).width.kind;
+                if (spec.orientation == Axis::Horizontal &&
+                    (kind == Sizing::Kind::Fixed || kind == Sizing::Kind::Percent)) {
+                    report(sizes->path, "this splitter's `sizes` places its panes; pane " + std::to_string(at) +
+                                            "'s sizing is not used");
+                }
+            }
+        }
+    }
     return ui::splitter(std::move(spec));
 }
 
@@ -8760,6 +8848,7 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
                 keys.push_back(KeyBinding{
                     .chord = "Esc", .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); }});
             }
+            fillHolder(children, node.path);
             return holding(std::move(children), inner, std::move(keys), bodyGap);
         },
         bodyHints);
@@ -8829,6 +8918,7 @@ inline Node ScreenCore::lowerSwitch(DocNode const& node, LowerCtx const& ctx) {
                     for (DocNode const* const child : content) {
                         children.push_back(lower(*child, innerCtx));
                     }
+                    fillHolder(children, casePart->path);
                     return holding(std::move(children), inner, {}, caseGap);
                 },
                 caseHints)});

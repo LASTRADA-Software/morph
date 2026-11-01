@@ -305,6 +305,55 @@ TEST_CASE("ui::Mounted: alignSelf outside a row, column or grid throws, as the l
     CHECK_NOTHROW(ui::Mounted{runtime, backend, ui::row({.children = {placed()}})});
 }
 
+// Mutation: skip checkShare (the percent child of a column mounts), or leave the row out of the share parents (the
+// percent child of a row throws).
+TEST_CASE("ui::Mounted: a percent width is a row's or a horizontal splitter's pane only, as the loader refuses it",
+          "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto const shared = [](ui::LayoutHints layout) {
+        ui::Text text{.text = "x"};
+        text.common.layout = layout;
+        text.common.testId = "shared";
+        return ui::text(std::move(text));
+    };
+    ui::LayoutHints const share{.width = ui::Sizing::percent(30)};
+    CHECK_NOTHROW(ui::Mounted{runtime, backend, ui::row({.children = {shared(share)}})});
+    CHECK_NOTHROW(ui::Mounted{runtime, backend, ui::splitter({.children = {shared(share), shared({})}})});
+    auto const refused =
+        Catch::Matchers::ContainsSubstring("`percent` sizes a width along a row or a horizontal splitter");
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::column({.children = {shared(share)}})}), refused);
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::grid({.columns = 1, .cells = {{.node = shared(share)}}})}),
+                      refused);
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::row({.children = {shared(share)}, .wrap = true})}), refused);
+    CHECK_THROWS_WITH(
+        (ui::Mounted{runtime, backend,
+                     ui::splitter({.children = {shared(share), shared({})}, .orientation = ui::Axis::Vertical})}),
+        refused);
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, shared(share)}), refused);
+    CHECK_THROWS_WITH(
+        (ui::Mounted{runtime, backend, ui::row({.children = {shared({.height = ui::Sizing::percent(10)})}})}),
+        Catch::Matchers::ContainsSubstring("a percent height"));
+    CHECK_THROWS_WITH(
+        (ui::Mounted{runtime, backend, ui::row({.children = {shared({.width = ui::Sizing::percent(101)})}})}),
+        Catch::Matchers::ContainsSubstring("a percent width outside 1 to 100"));
+    ui::Dialog dialog{.open = true, .title = "D"};
+    dialog.common.layout.width = ui::Sizing::percent(20);
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::row({.children = {ui::dialog(dialog)}})}),
+                      Catch::Matchers::ContainsSubstring("its width takes no share"));
+    CHECK_THROWS_WITH(
+        (ui::Mounted{runtime, backend,
+                     ui::detail::makeNode(ui::Table{.columns = {{.label = "A", .width = ui::Sizing::percent(10)}}})}),
+        Catch::Matchers::ContainsSubstring("a table column is sized by the table"));
+    CHECK_THROWS_WITH(
+        (ui::Mounted{runtime, backend, ui::grid({.tracks = {{.width = ui::Sizing::percent(10)}}, .cells = {}})}),
+        Catch::Matchers::ContainsSubstring("a grid track is sized by the grid"));
+    // The share reaches the backend as written.
+    ui::Mounted const view{runtime, backend, ui::row({.children = {shared(share)}})};
+    CHECK(backend.prop(backend.find("Text", "testId", "shared").value(), "layout") == "percent(30)/content");
+}
+
 TEST_CASE("ui::Mounted: a binding calls its setter once per real change", "[ui]") {
     Owner owner;
     Runtime runtime{owner};

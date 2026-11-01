@@ -488,6 +488,18 @@ TEST_CASE("interpreter: a sizing is \"content\", or one fixed or stretch member 
     CHECK_FALSE(isSizing(Value{std::int64_t{3}}));
 }
 
+// Mutation: leave `percent` out of `sizingOf` (the share reads as content), or out of `isSizing` (it is reported).
+TEST_CASE("interpreter: a sizing may be a percent from 1 to 100", "[ui][interpreter]") {
+    using ui::detail::isSizing;
+    using ui::detail::sizingOf;
+    CHECK(isSizing(record({{"percent", Value{std::int64_t{28}}}})));
+    CHECK(isSizing(record({{"percent", Value{std::int64_t{100}}}})));
+    CHECK_FALSE(isSizing(record({{"percent", Value{std::int64_t{0}}}})));
+    CHECK_FALSE(isSizing(record({{"percent", Value{std::int64_t{101}}}})));
+    CHECK_FALSE(isSizing(record({{"percent", Value{"28"}}})));
+    CHECK(sizingOf(record({{"percent", Value{std::int64_t{28}}}})) == ui::Sizing::percent(28));
+}
+
 namespace {
 
 /// @brief The `layout=` of the widget a slot shows, the slot's direct child, from the backend's dump.
@@ -511,6 +523,97 @@ std::string slotChildLayout(std::string const& dump, std::string const& slot) {
 }
 
 }  // namespace
+
+// Mutation: leave `fillHolder` out (the case's percent node reaches the mount as a column's child and throws), or the
+// lone-child rule out of `listColumn` (the forEach row's holder keeps no share).
+TEST_CASE("interpreter: a share lowers to the backend, and a share inside a case or an overlay is reported and fills",
+          "[ui][interpreter][layout]") {
+    SECTION("a share in a row") {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "row", "children": [
+            { "kind": "text", "testId": "pane", "text": "a", "sizing": { "lit": { "percent": 28 } }, "maxWidth": 37 },
+            { "kind": "text", "text": "b", "sizing": { "lit": { "stretch": 1 } } } ] } })");
+        CHECK(h.backend.prop(h.byTestId("Text", "pane"), "layout") == "percent(28) max=37/content");
+        CHECK(h.diagnostics.empty());
+    }
+    SECTION("a computed share out of range is reported once and lowers to content") {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "state": { "share": { "init": 150 } },
+            "view": { "kind": "row", "children": [
+            { "kind": "text", "testId": "pane", "text": "a", "sizing": { "obj": { "percent": { "ref": "share" } } } } ] } })");
+        CHECK(h.backend.hasProp(h.byTestId("Text", "pane"), "layout") == false);
+        REQUIRE(h.diagnostics.size() == 1);
+        CHECK(h.diagnostics.front().reason.contains("{\"percent\": n}"));
+    }
+    SECTION("a computed percent height is reported once and lowers to content") {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "state": { "share": { "init": 10 } },
+            "view": { "kind": "row", "children": [
+            { "kind": "text", "testId": "pane", "text": "a",
+              "sizing": { "obj": { "height": { "obj": { "percent": { "ref": "share" } } } } } } ] } })");
+        CHECK_FALSE(h.backend.hasProp(h.byTestId("Text", "pane"), "layout"));
+        REQUIRE(h.diagnostics.size() == 1);
+        CHECK(h.diagnostics.front().reason.contains("`percent` sizes a width"));
+    }
+    SECTION("a switch sized as a share holds a case that fills it") {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "row", "children": [
+            { "kind": "switch", "on": 1, "sizing": { "lit": { "percent": 30 } }, "cases": [
+              { "when": 1, "children": [ { "kind": "text", "testId": "inside", "text": "a" } ] } ] },
+            { "kind": "spacer", "sizing": { "lit": { "stretch": 1 } } } ] } })");
+        CHECK(slotChildLayout(h.backend.dump(), "Slot") == "content/content");
+        CHECK(h.backend.dump().contains("layout=percent(30)/content"));
+        CHECK(h.diagnostics.empty());
+    }
+    SECTION("a case node that is a share is reported once and fills the case") {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "row", "children": [
+            { "kind": "switch", "on": 1, "cases": [
+              { "when": 1, "children": [ { "kind": "text", "testId": "inside", "text": "a",
+                                           "sizing": { "lit": { "percent": 30 } } } ] } ] } ] } })");
+        CHECK(h.backend.prop(h.byTestId("Text", "inside"), "layout") == "stretch(1)/content");
+        REQUIRE(h.diagnostics.size() == 1);
+        CHECK(h.diagnostics.front().reason.contains("size the `switch` or the overlay itself"));
+    }
+    SECTION("the lone node of a horizontal forEach's row gives its share to the row's holder and fills it") {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "row", "children": [
+            { "kind": "forEach", "rows": { "lit": [ 1, 2 ] }, "key": { "row": "" }, "axis": "horizontal", "children": [
+              { "kind": "text", "testId": "cell", "text": "a", "sizing": { "lit": { "percent": 30 } } } ] } ] } })");
+        CHECK(h.backend.dump().contains("layout=percent(30)/content"));
+        CHECK(h.backend.prop(h.byTestId("Text", "cell"), "layout") == "stretch(1)/content");
+        CHECK(h.diagnostics.empty());
+    }
+    SECTION("a share among several nodes of one holder is reported and takes its content size") {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "panel", "children": [
+            { "kind": "text", "testId": "pane", "text": "a", "sizing": { "obj": { "percent": 30 } } },
+            { "kind": "text", "text": "b" } ] } })");
+        CHECK_FALSE(h.backend.hasProp(h.byTestId("Text", "pane"), "layout"));
+        REQUIRE(h.diagnostics.size() == 1);
+        CHECK(h.diagnostics.front().reason.contains("a percent among several nodes is a share of their holder"));
+    }
+    SECTION("a splitter whose literal sizes place its panes reports a pane that has a sizing") {
+        ui::testing::Harness h;
+        auto screen =
+            h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "splitter", "orientation": "horizontal",
+            "sizes": { "lit": [ 10, 20 ] }, "children": [
+            { "kind": "text", "text": "a", "sizing": { "lit": { "percent": 30 } } },
+            { "kind": "text", "text": "b" } ] } })");
+        REQUIRE(h.diagnostics.size() == 1);
+        CHECK(h.diagnostics.front().reason.contains("pane 0's sizing is not used"));
+    }
+    SECTION("a splitter whose panes give no sizing, or whose sizes do not match, reports nothing") {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "column", "children": [
+            { "kind": "splitter", "orientation": "horizontal", "sizes": { "lit": [ 10, 20 ] }, "children": [
+              { "kind": "text", "text": "a" }, { "kind": "text", "text": "b" } ] },
+            { "kind": "splitter", "orientation": "horizontal", "sizes": { "lit": [ 10 ] }, "children": [
+              { "kind": "text", "text": "a", "sizing": { "lit": { "percent": 30 } } }, { "kind": "text", "text": "b" } ] }
+            ] } })");
+        CHECK(h.diagnostics.empty());
+    }
+}
 
 // A slot reads its direct child's sizing alone, and the node a `switch` mounts is that child; so the holder's own
 // sizing is what the checks read. Mutation: build `lazy` without the hints (the inner column still stretches, the

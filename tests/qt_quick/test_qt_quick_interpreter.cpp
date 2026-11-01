@@ -13,6 +13,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
@@ -939,4 +940,19 @@ TEST_CASE("qt_quick interpreter: a table's empty state is drawn while its rows a
     QQuickItem const* const table = QtHarness::widget("list").item();
     REQUIRE(table != nullptr);
     CHECK_FALSE(table->isVisible());
+}
+
+// Mutation: leave the share out of the switch's slot (it is its case's width), or let the case keep its own share (it
+// takes 30 % of the slot).
+TEST_CASE("qt_quick interpreter: a switch sized as a share of its row is that share, and its case fills it",
+          "[qt_quick][interpreter][percent]") {
+    QtHarness h;
+    auto screen = h.mount(R"({ "vocab": "ui/1", "id": "share", "view": { "kind": "row", "testId": "row",
+      "sizing": { "lit": { "fixed": 80 } }, "children": [
+        { "kind": "switch", "testId": "slot", "on": 1, "sizing": { "lit": { "percent": 30 } }, "cases": [
+          { "when": 1, "children": [ { "kind": "text", "testId": "inside", "text": "inside" } ] } ] },
+        { "kind": "spacer", "sizing": { "lit": { "stretch": 1 } } } ] } })");
+    qreal const row = QtHarness::widget("row").item()->width();
+    CHECK(QtHarness::widget("slot").item()->width() == Catch::Approx(0.3 * row).margin(0.7));
+    CHECK(QtHarness::widget("inside").item()->width() == Catch::Approx(0.3 * row).margin(0.7));
 }

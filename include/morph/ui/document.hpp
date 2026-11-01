@@ -3313,6 +3313,40 @@ private:
     // What `bleed` reaches past: the horizontal padding of the stack, panel or tab page that holds the node.
     static constexpr std::string_view kBleedPlaces = "`bleed` is a child's of a column, a panel or a tab";
 
+    // Whether the nodes under @p key of @p parent may be sized by a share of its width: a row that does not wrap, a
+    // splitter that is not literally vertical, and a `forEach` that is literally horizontal and does not wrap (its
+    // rows are the children of a row).
+    static bool takesPercent(DocNode const& parent, std::string_view key) {
+        // The content of a switch case or of an overlay is mounted into a holder that fills its slot: the interpreter
+        // reports a share there and makes the node fill, so the loader leaves it to the interpreter.
+        if (parent.kind == "case" || parent.kind == "switch" || parent.kind == "dialog" || parent.kind == "drawer") {
+            return true;
+        }
+        if (key != "children") {
+            return false;
+        }
+        if (parent.kind == "row") {
+            return !parent.flag("wrap");
+        }
+        if (parent.kind == "splitter") {
+            ExprPtr const orientation = parent.prop("orientation");
+            if (orientation != nullptr && orientation->kind == ExprKind::Literal) {
+                std::string const* const named = orientation->literal.asString();
+                return named == nullptr || *named != "vertical";
+            }
+            return true;
+        }
+        if (parent.kind == "forEach") {
+            ExprPtr const axis = parent.prop("axis");
+            if (axis == nullptr || axis->kind != ExprKind::Literal) {
+                return false;
+            }
+            std::string const* const named = axis->literal.asString();
+            return named != nullptr && *named == "horizontal" && !parent.flag("wrap");
+        }
+        return false;
+    }
+
     // A child that places itself sits in a row, a column, a grid or a `forEach`; any other parent (a panel, a dialog,
     // a tab page) has no cross axis to place it on.
     static void checkPlacements(DocNode const& parent) {
@@ -3326,6 +3360,9 @@ private:
                 }
                 if (child->flag("bleed") && (!bleeds || key != "children")) {
                     refuse(pointerAppend(child->path, "bleed"), std::string{kBleedPlaces});
+                }
+                if (hasPercentWidth(*child) && !takesPercent(parent, key)) {
+                    refuse(pointerAppend(child->path, "sizing"), std::string{kPercentPlaces});
                 }
             }
         }
@@ -3400,6 +3437,9 @@ private:
         }
         checkPlacements(node);
         checkTabBleed(node);
+        if (part && (node.kind == "column" || node.kind == "track")) {
+            checkNoPercentWidth(node);
+        }
         if (part && node.kind == "column") {
             checkColumnPart(node);
         } else if (part && node.kind == "track") {
@@ -4012,12 +4052,13 @@ private:
         }
     }
 
-    // A literal sizing of one dimension: `"content"`, `{"fixed": n}` (n of 0 or more) or `{"stretch": w}` (w of 1 or
-    // more). Answers the fixed amount, if it is one.
+    // A literal sizing of one dimension: `"content"`, `{"fixed": n}` (n of 0 or more), `{"stretch": w}` (w of 1 or
+    // more) or `{"percent": n}` (n from 1 to 100). Answers the fixed amount, if it is one.
     static std::optional<std::int64_t> sizingDimension(Value const& value, std::string const& path) {
         static constexpr std::string_view kForms =
-            "`sizing` is `\"content\"`, `{\"fixed\": n}`, `{\"stretch\": w}`, or a record of `width` and `height` "
-            "of them";
+            "`sizing` is `\"content\"`, `{\"fixed\": n}`, `{\"stretch\": w}`, `{\"percent\": n}` (n from 1 to 100), "
+            "or a "
+            "record of `width` and `height` of them";
         if (std::string const* const text = value.asString(); text != nullptr && *text == "content") {
             return std::nullopt;
         }
@@ -4031,9 +4072,45 @@ private:
             if (form == "stretch" && units != nullptr && *units >= 1) {
                 return std::nullopt;
             }
+            if (form == "percent" && units != nullptr && *units >= 1 && *units <= 100) {
+                return std::nullopt;
+            }
         }
         refuse(path, std::string{kForms});
     }
+
+    // Whether a literal sizing dimension is `{"percent": n}`.
+    static bool isPercent(Value const& value) {
+        ValueRecord const* const record = value.asRecord();
+        return record != nullptr && record->size() == 1 && record->begin()->first == "percent";
+    }
+
+    // Whether a literal `sizing` gives the node a percent width: as the single form, or as the `width` of a record.
+    static bool hasPercentWidth(DocNode const& node) {
+        ExprPtr const sizing = node.prop("sizing");
+        if (sizing == nullptr || sizing->kind != ExprKind::Literal) {
+            return false;
+        }
+        ValueRecord const* const record = sizing->literal.asRecord();
+        if (record != nullptr && (record->contains("width") || record->contains("height"))) {
+            auto const found = record->find("width");
+            return found != record->end() && isPercent(found->second);
+        }
+        return isPercent(sizing->literal);
+    }
+
+    // A table column's or a grid track's literal `width` is no share: a track is sized by the grid, a column by its
+    // table.
+    static void checkNoPercentWidth(DocNode const& node) {
+        ExprPtr const width = node.prop("width");
+        if (width != nullptr && width->kind == ExprKind::Literal && isPercent(width->literal)) {
+            refuse(width->path, std::string{kPercentPlaces});
+        }
+    }
+
+    // What a percent sizes: a width along a row or a horizontal splitter's pane.
+    static constexpr std::string_view kPercentPlaces =
+        "`percent` sizes a width along a row or a horizontal splitter; nothing here takes a share";
 
     // A node's size keys: each bound a literal integer of 0 or more, a minimum no more than its maximum, no bound on
     // an overlay or a custom node; and a literal `sizing` one of the forms the interpreter reads, with a fixed amount
@@ -4112,6 +4189,13 @@ private:
             return;
         }
         checkOverlaySizing(node, sizing);
+        if (ValueRecord const* const heights = sizing->literal.asRecord();
+            heights != nullptr && heights->contains("height") && isPercent(heights->at("height"))) {
+            refuse(sizing->path, std::string{kPercentPlaces});
+        }
+        if (hasPercentWidth(node) && (node.kind == "dialog" || node.kind == "drawer")) {
+            refuse(sizing->path, std::string{kPercentPlaces});
+        }
         std::optional<std::int64_t> width;
         std::optional<std::int64_t> height;
         ValueRecord const* const record = sizing->literal.asRecord();

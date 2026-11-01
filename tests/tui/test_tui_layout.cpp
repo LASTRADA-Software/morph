@@ -76,6 +76,34 @@ TEST_CASE("tui::layout::distribute", "[tui][layout]") {
     CHECK(layout::distribute(testCase.items, testCase.track) == testCase.expected);
 }
 
+// Mutation: read Percent as Content in requestOf (the first case gives its natural 5, not 30).
+TEST_CASE("tui::layout::distribute gives a percent item that share of the track", "[tui][layout]") {
+    auto const testCase = GENERATE(values<DistributeCase>({
+        {"a percent item beside a stretch one; the gap is not taken off first",
+         {{Sizing::percent(30), 5}, {Sizing::stretch(1), 0}},
+         {.length = 100, .gap = 2},
+         {30, 68}},
+        {"a percent item stops at its maximum",
+         {{Sizing::percent(30), 5, 0, 20}, {Sizing::stretch(1), 0}},
+         {.length = 100, .gap = 2},
+         {20, 78}},
+        {"a share is rounded down",
+         {{Sizing::percent(33), 5}, {Sizing::stretch(1), 0}},
+         {.length = 10, .gap = 0},
+         {3, 7}},
+        {"a share below the minimum is raised to it",
+         {{Sizing::percent(10), 5, 8}, {Sizing::stretch(1), 0}},
+         {.length = 40, .gap = 0},
+         {8, 32}},
+        {"two shares that do not fit shrink from the last",
+         {{Sizing::percent(70), 0}, {Sizing::percent(70), 0}},
+         {.length = 10, .gap = 0},
+         {7, 3}},
+    }));
+    INFO(testCase.name);
+    CHECK(layout::distribute(testCase.items, testCase.track) == testCase.expected);
+}
+
 // Mutation: drop the bounds in distribute (the capped item takes its whole share, the minimum shrinks away).
 TEST_CASE("tui::layout::distribute within bounds", "[tui][layout]") {
     auto const testCase = GENERATE(values<DistributeCase>({
@@ -374,7 +402,10 @@ private:
     std::uint64_t _state = 0;
 };
 
-int requestOf(layout::Item const& item) {
+int requestOf(layout::Item const& item, int length) {
+    if (item.sizing.kind == Sizing::Kind::Percent) {
+        return static_cast<int>(std::int64_t{std::max(0, length)} * item.sizing.amount / 100);
+    }
     return std::max(0, item.sizing.kind == Sizing::Kind::Fixed ? item.sizing.amount : item.natural);
 }
 
@@ -396,7 +427,7 @@ std::string distributeViolation(std::vector<layout::Item> const& items, layout::
         if (item.sizing.kind == Sizing::Kind::Stretch) {
             weights += std::max(1, item.sizing.amount);
         } else {
-            requested += requestOf(item);
+            requested += requestOf(item, track.length);
         }
     }
     auto const total = std::accumulate(sizes.begin(), sizes.end(), std::int64_t{0});
@@ -412,7 +443,7 @@ std::string distributeViolation(std::vector<layout::Item> const& items, layout::
     auto size = sizes.begin();
     for (auto const& item : items) {
         bool const stretches = item.sizing.kind == Sizing::Kind::Stretch;
-        int const asked = stretches ? 0 : requestOf(item);
+        int const asked = stretches ? 0 : requestOf(item, track.length);
         if (fits && stretches) {
             auto const share = (room - requested) * std::max(1, item.sizing.amount) / weights;
             if (*size != share && *size != share + 1) {
@@ -482,11 +513,14 @@ TEST_CASE("tui::layout::distribute holds its invariants on random input", "[tui]
     for (int round = 0; round < 5'000; ++round) {
         std::vector<layout::Item> items(static_cast<std::size_t>(draws.between(0, 8)));
         for (auto& item : items) {
-            int const which = draws.between(0, 2);
+            int const which = draws.between(0, 3);
             int const amount = draws.between(-3, 20);
             item.sizing = which == 0 ? Sizing::fixed(amount) : Sizing::stretch(amount);
             if (which == 1) {
                 item.sizing = Sizing::content();
+            }
+            if (which == 3) {
+                item.sizing = Sizing::percent(draws.between(1, 100));
             }
             item.natural = draws.between(-3, 20);
         }
