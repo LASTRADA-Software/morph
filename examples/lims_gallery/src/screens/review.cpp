@@ -643,11 +643,11 @@ ui::Node signedBanner(Review const& review);
 
 // The record's tabs, whose counts follow the selected worksheet; the reviewer's pick is kept across worksheets.
 ui::Node recordTabs(Review const& review, bool compact) {
-    // A line of room above the expanded comment's caption, which sits close under the cards otherwise; the phone's
-    // column gap is room enough.
-    auto const room = ui::spacer().sizing(ui::fixed(1), ui::fixed(1));
+    // The expanded comment cards sit 12 px from the table above and the comment field below, as the design draws
+    // them; the phone's column gap is room enough, and its results page has no cards.
+    auto const spaced = [](ui::Node const& cards) { return ui::column({cards}, {.padding = ui::padding(3, 0)}); };
     // The phone's banners sit in the page that scrolls with the results; the expanded ones sit above the tabs.
-    ui::Nodes resultsPage{showChoice(review, compact), resultTable(review), commentCards(review), room,
+    ui::Nodes resultsPage{showChoice(review, compact), resultTable(review), spaced(commentCards(review)),
                           reviewComment(review)};
     if (compact) {
         // The comments have their own tab on the phone, so the results page goes straight to the comment field.
