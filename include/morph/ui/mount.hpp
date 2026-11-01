@@ -853,6 +853,9 @@ private:
         if (spec.mono) {
             widget.setMono(true);
         }
+        if (spec.weight != 0) {
+            widget.setWeight(spec.weight);
+        }
         if (spec.selected.isBound() || spec.selected.constant()) {
             bind(scope, spec.selected, [&widget](bool selected) { widget.setSelected(selected); });
         }

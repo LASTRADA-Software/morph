@@ -207,9 +207,9 @@ expression of one),
   its title as runs beside `title`, and `Scope::eyebrow(line)` and `eyebrowSpans(runs)` its line above the title.
 - **`group`** takes its children and `GroupOptions{label, required, description, errors, gap}`.
 - **`button`** takes `ButtonOptions{label, icon, emphasis, onClick, onActivate, style, selected, children, shape,
-  size, mono}`: an absent `style` writes no key, and `selected`, a condition, is written as given: an item's current
+  size, mono, weight}`: an absent `style` writes no key, and `selected`, a condition, is written as given: an item's current
   entry, a push button pressed in. `shape` (`ControlShape::Round`), `size` (`ButtonSize::Small`) and `mono` are
-  written only when not the default.
+  written only when not the default; `weight` is a DTCG weight name (`"semi-bold"`), written only when not empty.
 - **`textInput`** takes `TextInputOptions{value, label, placeholder, mode, icon, unit, emphasis, prefix, mono, align,
   commitOn, onChange, onCommit, onSubmit}`; `prefix` is an expression, and `mono` and `align` (`Align::Start`,
   `Center`, `End`; absent writes no key) are written only when given.

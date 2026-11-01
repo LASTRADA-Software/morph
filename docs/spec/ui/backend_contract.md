@@ -214,7 +214,10 @@ body size; a badge takes no `Square`. `ButtonWidget::setSize(ButtonSize::Small)`
 dense: the least side padding, a strong label in the small type step, and the control height kept. `setMono(true)` on a
 button or a badge draws the label in the `mono` text role's face. The mount calls each once, and only for the
 non-default value. The terminal has no corners and only one face, so a round shape and `mono` draw nothing there; a small
-or square push button is `[S1]` where a normal one is `[ S1 ]`.
+or square push button is `[S1]` where a normal one is `[ S1 ]`. `ButtonWidget::setWeight(int)` draws the caption at a
+weight, 1 to 1000, in place of the weight the theme gives it (`font.weight.button` for a strong caption, normal
+otherwise); the mount calls it once, only for a nonzero weight. A backend with no weights draws a weight of 600 or
+more bold and a lighter one plain, whatever the emphasis does by default.
 
 **Button style and selection.** `ButtonWidget::setStyle(ButtonStyle)` makes a button an entry of a list (`Item`): it
 behaves as a push button (activation, enablement, tooltip, hover) and is drawn as a line, as wide as its line, its

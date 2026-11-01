@@ -32,6 +32,8 @@ MorphWidget {
     property bool small: false
     // Whether the caption is drawn in the mono face; set once.
     property bool mono: false
+    // The caption's weight in place of the theme's; 0 keeps the theme's. Set once.
+    property int captionWeight: 0
     // Set by C++ once an item has content: the content column becomes the button's content item.
     property bool hasContent: false
     // Where C++ puts an item's content.
@@ -75,9 +77,12 @@ MorphWidget {
     readonly property font captionFont: {
         if (root.small || root.mono) {
             const pixels = root.small ? Theme.smallPixels : root.mono ? Theme.monoPixels : Theme.bodyPixels
-            const weight = root.strongCaption ? Theme.buttonWeight : Font.Normal
+            const weight = root.captionWeight > 0 ? root.captionWeight
+                                                  : root.strongCaption ? Theme.buttonWeight : Font.Normal
             return root.mono ? Theme.monoFontOf(pixels, weight) : Theme.fontOf(pixels, weight)
         }
+        if (root.captionWeight > 0)
+            return Theme.fontOf(Theme.bodyPixels, root.captionWeight)
         return root.strongCaption ? Theme.buttonFont : Theme.bodyFont
     }
 

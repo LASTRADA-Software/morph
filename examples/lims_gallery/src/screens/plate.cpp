@@ -362,9 +362,11 @@ ui::Node withArrowKeys(ui::Node node, Plate const& plate, Well const& well) {
     return node;
 }
 
-// A well is a round, dense button in the mono face: a circle for a short label and a stadium for a longer one.
+// A well is a round, dense, semi-bold button in the mono face: a circle for a short label and a stadium for a longer
+// one.
 ui::ButtonOptions wellOptions(ui::AnyHandle const& label) {
-    return {.label = label, .shape = ControlShape::Round, .size = ButtonSize::Small, .mono = true};
+    return {
+        .label = label, .shape = ControlShape::Round, .size = ButtonSize::Small, .mono = true, .weight = "semi-bold"};
 }
 
 ui::Node templateWell(Plate const& plate, Well const& well) {

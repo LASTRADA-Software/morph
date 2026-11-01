@@ -935,6 +935,18 @@ TEST_CASE("interpreter control: a button's and a badge's shape, size and mono re
     CHECK_FALSE(h.backend.hasProp(plainTag, "mono"));
 }
 
+// Mutation: skip `setWeight` in the mount (the weight is not recorded), or read the name wrongly (`semi-bold` is not
+// 600).
+TEST_CASE("interpreter control: a button's weight name reaches the backend as a number, only when given",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "weights", "view": {"kind": "column", "children": [
+        {"kind": "button", "testId": "well", "label": "S1", "mono": true, "weight": "semi-bold"},
+        {"kind": "button", "testId": "plain", "label": "Save"}]}})");
+    CHECK(h.backend.prop(h.byTestId("Button", "well"), "weight") == "600");
+    CHECK_FALSE(h.backend.hasProp(h.byTestId("Button", "plain"), "weight"));
+}
+
 // Mutation: drop the unit's binding (no `unit` is recorded); drop the computed-mode check (the mount throws).
 TEST_CASE("interpreter control: a text input's unit is bound, and a computed multiline mode drops it with a report",
           "[ui][interpreter]") {

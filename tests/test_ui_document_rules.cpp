@@ -300,6 +300,13 @@ TEST_CASE("ui document rules: a state declared any keeps any beside its init", "
                            R"("state": {"s": {"type": "any", "init": 2}},)")) == "loads");
 }
 
+// Mutation: drop the weight check from checkButtonValues (a made-up name loads).
+TEST_CASE("ui document rules: a button's weight is a font weight name", "[ui][document]") {
+    CHECK(refusal(document(R"({"kind": "button", "label": "x", "weight": "semi-bold"})")) == "loads");
+    CHECK(refusal(document(R"({"kind": "button", "label": "x", "weight": "chunky"})")) ==
+          "/view/weight: `chunky` is not a font weight name, such as `semi-bold`");
+}
+
 // Mutation: drop "display" or "small" from the loader's list of roles (the document is refused).
 TEST_CASE("ui document rules: a text's role may be display or small, and no other new name", "[ui][document]") {
     CHECK(refusal(document(R"({"kind": "text", "text": "7", "role": "display"})")) == "loads");

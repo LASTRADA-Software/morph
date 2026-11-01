@@ -577,6 +577,9 @@ struct Button {
     ButtonSize size = ButtonSize::Normal;
     /// @brief Whether the caption is drawn in the `mono` text role's face; set once.
     bool mono = false;
+    /// @brief The weight of the caption, 1 to 1000; 0 keeps the theme's (`font.weight.button` for a strong caption,
+    ///        normal for the rest). Set once.
+    int weight = 0;
 };
 
 /// @brief An editable text field. The backend never reports its own `setText` back through `onChange`.

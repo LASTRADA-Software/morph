@@ -246,6 +246,11 @@ void ButtonImpl::setSize(ui::ButtonSize size) {
     refresh();
 }
 
+void ButtonImpl::setWeight(int weight) {
+    _bold = weight >= 600;
+    refresh();
+}
+
 void ButtonImpl::setSelected(bool selected) {
     _selected = selected;
     refresh();
@@ -308,6 +313,9 @@ void ButtonImpl::paint(::core::tui::Canvas& canvas) {
     }
     if (actionable() && (_emphasis == ui::ButtonEmphasis::Danger || _emphasis == ui::ButtonEmphasis::DangerOutline)) {
         style.fg = canvas.theme().error.fg;
+    }
+    if (_bold) {
+        style.bold = *_bold;
     }
     if (_style == ui::ButtonStyle::Item) {
         // An item is a line of a list: unbracketed and padded to its slot, so the selected and the focused one read as

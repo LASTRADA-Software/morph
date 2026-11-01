@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "bundle.hpp"
+#include "control_shape.hpp"
 #include "value.hpp"
 
 /// @file
@@ -456,13 +457,8 @@ inline std::optional<double> weightOf(Json const& value) {
     if (name == nullptr) {
         return std::nullopt;
     }
-    // The weights DTCG gives its names, in the order of `kFontWeights`.
-    static constexpr std::array<double, 18> kValues = {100, 100, 200, 200, 300, 400, 400, 400, 500,
-                                                       600, 600, 700, 800, 800, 900, 900, 950, 950};
-    for (std::size_t i = 0; i < kFontWeights.size(); ++i) {
-        if (kFontWeights.at(i) == *name) {
-            return kValues.at(i);
-        }
+    if (auto const weight = weightNamed(*name)) {
+        return static_cast<double>(*weight);
     }
     return std::nullopt;
 }

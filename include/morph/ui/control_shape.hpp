@@ -43,6 +43,41 @@ inline constexpr std::array<std::pair<std::string_view, ButtonSize>, 2> kButtonS
     {"small", ButtonSize::Small},
 }};
 
+/// @brief Every DTCG font weight name with its weight, in the order the standard lists them. A `weight` of a button
+///        and a theme's `fontWeight` token read the same names.
+inline constexpr std::array<std::pair<std::string_view, int>, 18> kWeightNames = {{
+    {"thin", 100},
+    {"hairline", 100},
+    {"extra-light", 200},
+    {"ultra-light", 200},
+    {"light", 300},
+    {"normal", 400},
+    {"regular", 400},
+    {"book", 400},
+    {"medium", 500},
+    {"semi-bold", 600},
+    {"demi-bold", 600},
+    {"bold", 700},
+    {"extra-bold", 800},
+    {"ultra-bold", 800},
+    {"black", 900},
+    {"heavy", 900},
+    {"extra-black", 950},
+    {"ultra-black", 950},
+}};
+
+/// @brief A font weight by its DTCG name.
+/// @param name The name, such as `semi-bold`.
+/// @return The weight, 100 to 950; `nullopt` for a name that is none.
+[[nodiscard]] constexpr std::optional<int> weightNamed(std::string_view name) noexcept {
+    for (auto const& [known, weight] : kWeightNames) {
+        if (known == name) {
+            return weight;
+        }
+    }
+    return std::nullopt;
+}
+
 /// @brief A shape by its document name.
 /// @param name The name, such as `round`.
 /// @return The shape; `nullopt` for a name that is none.

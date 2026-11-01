@@ -44,6 +44,24 @@ TEST_CASE("tui widgets: a small push button drops the spaces inside its brackets
     CHECK(harness.draw() == Rows{"[S1]", "[ S1 ]"});
 }
 
+// Mutation: ignore `setWeight` in ButtonImpl (the caption is not bold), or bold from 700 (the 600 caption is plain).
+TEST_CASE("tui widgets: a button weight of 600 or more draws its caption bold, a lighter one plain",
+          "[tui][widgets]") {
+    Harness harness{20, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const semi = harness.make<ButtonImpl>(column.get());
+    semi->setLabel("S1");
+    semi->setWeight(600);
+    auto const light = harness.make<ButtonImpl>(column.get());
+    light->setLabel("S2");
+    light->setEmphasis(ui::ButtonEmphasis::Primary);
+    light->setWeight(500);
+    static_cast<void>(harness.draw());
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 2).style.bold);
+    CHECK_FALSE(buffer.at(1, 2).style.bold);
+}
+
 TEST_CASE("tui widgets: a column renders its children top to bottom", "[tui][widgets]") {
     Harness harness{20, 4};
     auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);

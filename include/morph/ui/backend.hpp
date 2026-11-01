@@ -213,6 +213,12 @@ public:
     /// @param mono Whether to.
     virtual void setMono(bool mono) = 0;
 
+    /// @brief Draws the caption at a weight, in place of the theme's button weight. A new button draws the theme's;
+    ///        the mount calls it once, only for a nonzero weight. A backend with no weights draws a weight of 600 or
+    ///        more as bold and a lighter one plain.
+    /// @param weight The weight, 1 to 1000.
+    virtual void setWeight(int weight) = 0;
+
     /// @brief The entry's content: a container the button owns and draws as the entry in place of its label, which
     ///        then names it without being drawn. The mount asks for it only for an `Item` that has content. The entry
     ///        stays one button: one focus stop, and a click anywhere on its content is the button's.

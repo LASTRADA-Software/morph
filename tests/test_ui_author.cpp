@@ -600,6 +600,8 @@ TEST_CASE("a button's style and selection are written, and the loader takes them
 // Mutation: leave `shape`, `size` or `mono` out of button() or badge() (the key is not written, and the well is a
 // plain button).
 TEST_CASE("a button's and a badge's shape, size and mono are written only when given", "[ui][author]") {
+    CHECK(text(ui::button({.label = "S1", .weight = "semi-bold"}).json()) ==
+          R"({"kind":"button","weight":"semi-bold","label":"S1"})");
     CHECK(text(ui::button({.label = "S1",
                            .shape = morph::ui::ControlShape::Round,
                            .size = morph::ui::ButtonSize::Small,

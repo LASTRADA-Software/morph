@@ -119,6 +119,9 @@ void ButtonImpl::setSize(ui::ButtonSize size) { write("small", size == ui::Butto
 
 void ButtonImpl::setMono(bool mono) { write("mono", mono); }
 
+// MorphButton's `captionWeight`.
+void ButtonImpl::setWeight(int weight) { write("captionWeight", weight); }
+
 void ButtonImpl::setSelected(bool selected) {
     write("selectable", true);
     write("selected", selected);

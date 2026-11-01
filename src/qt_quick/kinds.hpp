@@ -178,6 +178,7 @@ public:
     void setStyle(ui::ButtonStyle style) override;
     void setShape(ui::ControlShape shape) override;
     void setSize(ui::ButtonSize size) override;
+    void setWeight(int weight) override;
     void setMono(bool mono) override;
     void setSelected(bool selected) override;
     /// The content, a `MorphSlot` in the button's `content` item, made the first time it is asked for.

@@ -106,6 +106,33 @@ TEST_CASE("qt_quick widgets: a text shows its text in its role, and a button's c
     CHECK(clicks == 2);
 }
 
+// Mutation: drop `captionWeight` from MorphButton's captionFont (the mono caption keeps the theme's button weight).
+TEST_CASE("qt_quick widgets: a button's weight replaces the theme's for its caption", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const plain = scene.backend().createButton(column.get());
+    plain->setLabel("A1");
+    plain->setMono(true);
+    plain->setSize(ui::ButtonSize::Small);
+    auto const weighted = scene.backend().createButton(column.get());
+    weighted->setLabel("A2");
+    weighted->setMono(true);
+    weighted->setSize(ui::ButtonSize::Small);
+    weighted->setWeight(300);
+    auto const normal = scene.backend().createButton(column.get());
+    normal->setLabel("A3");
+    normal->setWeight(300);
+    scene.settle();
+    auto const weightOf = [](ui::ButtonWidget& button) {
+        return Scene::itemOf(button).property("captionFont").value<QFont>().weight();
+    };
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(static_cast<int>(weightOf(*plain)) == theme->property("buttonWeight").toInt());
+    CHECK(static_cast<int>(weightOf(*weighted)) == 300);
+    CHECK(static_cast<int>(weightOf(*normal)) == 300);
+}
+
 // Mutation: never ask C++ from the HoverHandler (hovers stays 0).
 TEST_CASE("qt_quick widgets: the pointer coming to rest over a watched widget reaches its hover handler",
           "[qt_quick]") {

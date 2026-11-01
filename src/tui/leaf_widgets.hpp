@@ -76,6 +76,8 @@ public:
     void setSize(ui::ButtonSize size) override;
     /// Every face of a terminal is monospace, so a mono caption draws nothing new.
     void setMono(bool mono) override { static_cast<void>(mono); }
+    /// A weight of 600 or more draws the caption bold, and a lighter one plain, whatever the emphasis.
+    void setWeight(int weight) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] bool wantsFocus() const override { return true; }
     [[nodiscard]] std::string probeText() const override { return _label; }
@@ -96,6 +98,8 @@ private:
     ui::ButtonSize _size = ui::ButtonSize::Normal;
     bool _square = false;
     bool _selected = false;
+    // Set by `setWeight`: whether the caption is bold, over the emphasis's own.
+    std::optional<bool> _bold;
     std::unique_ptr<ContainerBase> _content;
 };
 

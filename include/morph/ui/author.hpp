@@ -3640,6 +3640,8 @@ struct ButtonOptions {
     ButtonSize size = ButtonSize::Normal;
     /// @brief Whether the caption is drawn in the `mono` text role's face.
     bool mono = false;
+    /// @brief The caption's weight by its DTCG name, such as `semi-bold`; empty writes no key, the theme's weight.
+    std::string_view weight;
 };
 
 /// @brief A `button` node.
@@ -3661,6 +3663,9 @@ struct ButtonOptions {
     }
     if (options.mono) {
         writer.flag("mono");
+    }
+    if (!options.weight.empty()) {
+        writer.text("weight", std::string{options.weight});
     }
     return std::move(writer)
         .put("label", options.label)

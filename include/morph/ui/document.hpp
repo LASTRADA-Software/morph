@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "control_shape.hpp"
 #include "expression.hpp"
 #include "value.hpp"
 
@@ -775,7 +776,7 @@ inline constexpr std::array<std::string_view, 3> kTransferValues = {"progress", 
 inline constexpr std::array<KeySpec, 3> kTextKeys = {
     {{"text", Shape::Expr}, {"spans", Shape::Expr}, {"role", Shape::Expr}}};
 /// @brief The keys of `button`.
-inline constexpr std::array<KeySpec, 11> kButtonKeys = {{{"label", Shape::Expr},
+inline constexpr std::array<KeySpec, 12> kButtonKeys = {{{"label", Shape::Expr},
                                                          {"icon", Shape::Expr},
                                                          {"emphasis", Shape::Text},
                                                          {"style", Shape::Text},
@@ -785,7 +786,8 @@ inline constexpr std::array<KeySpec, 11> kButtonKeys = {{{"label", Shape::Expr},
                                                          {"children", Shape::Nodes},
                                                          {"shape", Shape::Text},
                                                          {"size", Shape::Text},
-                                                         {"mono", Shape::Flag}}};
+                                                         {"mono", Shape::Flag},
+                                                         {"weight", Shape::Text}}};
 /// @brief The keys of `textInput`.
 inline constexpr std::array<KeySpec, 15> kTextInputKeys = {{{"value", Shape::Expr},
                                                             {"placeholder", Shape::Expr},
@@ -3802,6 +3804,10 @@ private:
         }
         static constexpr std::array<std::string_view, 2> kSizes = {"normal", "small"};
         checkChoice(node, "size", kSizes);
+        if (std::string_view const weight = node.name("weight"); !weight.empty() && !weightNamed(weight)) {
+            refuse(pointerAppend(node.path, "weight"),
+                   "`" + std::string{weight} + "` is not a font weight name, such as `semi-bold`");
+        }
         checkEntryContent(node);
     }
 

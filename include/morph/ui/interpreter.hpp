@@ -7617,6 +7617,7 @@ inline std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx
         spec.shape = shapeNamed(node.name("shape")).value_or(ControlShape::Default);
         spec.size = sizeNamed(node.name("size")).value_or(ButtonSize::Normal);
         spec.mono = node.flag("mono");
+        spec.weight = weightNamed(node.name("weight")).value_or(0);
         if (node.prop("selected")) {
             spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
             // An entry's content, drawn in place of its label: one node as it is, several in a column.

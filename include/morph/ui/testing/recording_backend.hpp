@@ -1031,6 +1031,7 @@ public:
     void setShape(ControlShape shape) override { set("shape", std::string{shapeName(shape)}); }
     void setSize(ButtonSize size) override { set("size", std::string{sizeName(size)}); }
     void setMono(bool mono) override { set("mono", formatBool(mono)); }
+    void setWeight(int weight) override { set("weight", std::to_string(weight)); }
 
 private:
     std::unique_ptr<FakeSlot> _content;
