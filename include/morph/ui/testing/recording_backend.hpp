@@ -1759,7 +1759,8 @@ public:
     /// @brief Records property `columns`, each as its escaped caption, a colon and its width, then `;align=` and
     ///        `;valign=` where the column's alignment is not the default (`Start` across, `Center` down), and
     ///        `;sortable=true` for a sortable column, which `RecordingBackend::clickHeader` reports, and
-    ///        `;wrap=false` for a column that keeps its text cells to one line.
+    ///        `;wrap=false` for a column that keeps its text cells to one line, and `;shrink=true` for a stretch
+    ///        column that may be narrower than its header.
     /// @param columns The columns, in order.
     void setColumns(std::vector<TableColumn> const& columns) override {
         _sortable.clear();
@@ -1779,6 +1780,9 @@ public:
                 }
                 if (!column.wrap) {
                     text += ";wrap=false";
+                }
+                if (column.shrink) {
+                    text += ";shrink=true";
                 }
                 return text;
             }));

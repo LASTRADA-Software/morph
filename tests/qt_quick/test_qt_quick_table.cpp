@@ -735,6 +735,59 @@ TEST_CASE("qt_quick table: a table wider than its area keeps every column and sc
     CHECK_FALSE(fitting->property("interactive").toBool());
 }
 
+namespace {
+
+// A table of two fixed columns of 20 units and a stretch column under a long header, 60 units wide, with one row.
+struct ShrinkTable {
+    ShrinkTable(Scene& scene, bool shrink) {
+        table = scene.backend().createTable(nullptr);
+        table->setLayout({.width = ui::Sizing::fixed(60), .height = {}});
+        table->setColumns(
+            {{.label = "Sample", .width = ui::Sizing::fixed(20)},
+             {.label = "Lot", .width = ui::Sizing::fixed(20)},
+             {.label = "A rather long analyte heading", .width = ui::Sizing::stretch(1), .shrink = shrink}});
+        row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+        table->setRowKey(*row, ui::Key{std::int64_t{1}});
+        for (auto const* const label : {"S-1", "L-1", "Assay"}) {
+            cells.push_back(scene.backend().createText(row.get()));
+            cells.back()->setText(label);
+        }
+        scene.settle();
+    }
+
+    std::unique_ptr<ui::TableWidget> table;
+    std::unique_ptr<ui::StackWidget> row;
+    std::vector<std::unique_ptr<ui::TextWidget>> cells;
+};
+
+}  // namespace
+
+// Mutation: leave `shrink` out of the column's floor in MorphTable.qml (the stretch column keeps its header's width
+// and the table scrolls), or let a column without `shrink` go under its header.
+TEST_CASE("qt_quick table: a stretch column that shrinks goes under its header, one that does not scrolls the table",
+          "[qt_quick]") {
+    Scene scene;
+    ShrinkTable const shrinking{scene, true};
+    QQuickItem const& item = Scene::itemOf(*shrinking.table);
+    QVariantList const widths = item.property("widths").toList();
+    REQUIRE(widths.size() == 3);
+    qreal const unit = units(scene).width();
+    CHECK(widths.at(2).toReal() >= 8 * unit - 0.5);
+    auto const* const flick = item.findChild<QQuickItem*>(QStringLiteral("hflick"));
+    REQUIRE(flick != nullptr);
+    CHECK_FALSE(flick->property("interactive").toBool());
+
+    Scene other;
+    ShrinkTable const keeping{other, false};
+    QQuickItem const& keepingItem = Scene::itemOf(*keeping.table);
+    QVariantList const kept = keepingItem.property("widths").toList();
+    REQUIRE(kept.size() == 3);
+    CHECK(kept.at(2).toReal() > widths.at(2).toReal() + unit);
+    auto const* const keepingFlick = keepingItem.findChild<QQuickItem*>(QStringLiteral("hflick"));
+    REQUIRE(keepingFlick != nullptr);
+    CHECK(keepingFlick->property("interactive").toBool());
+}
+
 // Mutation: size `flick` to its rows whether or not the table is virtualized (the table's rows overflow its height
 // and `flick` cannot scroll).
 TEST_CASE("qt_quick table: a virtualized table keeps the height it is given, and its rows scroll inside it",

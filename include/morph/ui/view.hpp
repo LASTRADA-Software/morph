@@ -1176,6 +1176,11 @@ struct TableColumn {
     /// @brief Whether the column's text cells may break across lines. With `false` each is drawn on one line and cut
     ///        at the column's width with an ellipsis, such as a value with its unit in a narrow column.
     bool wrap = true;
+    /// @brief Whether a `Stretch` column may be narrower than its header when the table is narrower than its columns
+    ///        need: it then gives up width down to a small floor and cuts its header and cells at its edge (an
+    ///        ellipsis where the backend draws one), where otherwise no column is narrower than its header and the
+    ///        table scrolls sideways instead. It reads as `false` on a column that does not stretch.
+    bool shrink = false;
 };
 
 /// @brief Keyed rows of cells under column headers. Each row's view is a `Row` whose children are the cells, one

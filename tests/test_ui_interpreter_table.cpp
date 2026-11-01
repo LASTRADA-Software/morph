@@ -81,6 +81,24 @@ TEST_CASE("table: a column's wrap: false reaches the view, and a column without 
     CHECK(h.backend.prop(table, "columns") == "[Sample:content,Area:content;wrap=false]");
 }
 
+// Mutation: leave `shrink` out of the column the interpreter lowers, or let it through on a column that does not
+// stretch (no report, and the view's column still shrinks).
+TEST_CASE("table: shrink reaches a stretch column and is reported on any other", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "shrinks",
+      "state": { "items": { "init": { "lit": [ { "id": "S-1", "area": "99.4 % LC" } ] } } },
+      "view": { "kind": "table", "rows": { "ref": "items" },
+                "columns": [ { "id": "id", "label": "Sample", "shrink": true },
+                             { "id": "area", "label": "Area", "width": { "lit": { "stretch": 1 } },
+                               "shrink": true } ] } })");
+    int const table = h.backend.all("Table").front();
+    CHECK(h.backend.prop(table, "columns") == "[Sample:content,Area:stretch(1);shrink=true]");
+    auto const reports = std::ranges::count_if(
+        h.diagnostics, [](ui::Refusal const& refusal) { return refusal.reason.contains("`shrink` lets a stretch"); });
+    CHECK(reports == 1);
+}
+
 TEST_CASE("table: a computed column's place that names none is reported once and takes the default",
           "[ui][interpreter]") {
     Harness h;

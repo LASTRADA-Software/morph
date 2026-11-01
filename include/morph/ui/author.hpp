@@ -4446,6 +4446,9 @@ struct TableColumn {
     /// @brief Whether the column's text cells may break across lines; `false` draws each on one line, cut at the
     ///        column's width with an ellipsis, and writes `wrap: false`.
     bool wrap = true;
+    /// @brief Whether a stretch column may be narrower than its header, cutting header and cells with an ellipsis,
+    ///        instead of the table scrolling sideways; writes `shrink: true`. It needs a stretch `width`.
+    bool shrink = false;
 };
 
 /// @brief Columns from cells alone, without ids or labels.
@@ -4570,6 +4573,9 @@ namespace detail {
     }
     if (!column.wrap) {
         detail::put(part, "wrap", false);
+    }
+    if (column.shrink) {
+        detail::put(part, "shrink", true);
     }
     if (column.sortBy.present()) {
         detail::put(part, "sortBy", column.sortBy.json());

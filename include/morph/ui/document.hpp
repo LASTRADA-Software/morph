@@ -970,7 +970,7 @@ inline constexpr std::array<KeySpec, 27> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"valign", Shape::Text},
                                                         {"empty", Shape::Nodes}}};
 /// @brief The keys of a `table` column part.
-inline constexpr std::array<KeySpec, 10> kColumnKeys = {{{"id", Shape::Name},
+inline constexpr std::array<KeySpec, 11> kColumnKeys = {{{"id", Shape::Name},
                                                          {"label", Shape::Expr},
                                                          {"width", Shape::Expr},
                                                          {"role", Shape::Expr},
@@ -978,6 +978,7 @@ inline constexpr std::array<KeySpec, 10> kColumnKeys = {{{"id", Shape::Name},
                                                          {"valign", Shape::Text},
                                                          {"sortable", Shape::Flag},
                                                          {"wrap", Shape::Flag},
+                                                         {"shrink", Shape::Flag},
                                                          {"sortBy", Shape::Expr, {}, kInner},
                                                          {"cell", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of a `table` group part: the value its rows are grouped by, and the heading drawn before each
@@ -3328,7 +3329,6 @@ private:
         }
     }
 
-    void checkElement(DocNode const& node, CheckContext const& outer, bool part) {
     // A tab page's padding is `pageInset`, else `inset`, both literal steps. A page of no padding has nothing for a
     // child's `bleed` to reach past, so the document is refused rather than the flag silently doing nothing; a step
     // that is computed is left to the mount.
@@ -3362,6 +3362,7 @@ private:
         }
     }
 
+    void checkElement(DocNode const& node, CheckContext const& outer, bool part) {
         KindSpec const* const spec = findKind(node.kind, part);
         CheckContext const inner = innerContext(node, outer);
         if (auto const found = _scopeOf.find(&node); found != _scopeOf.end()) {
@@ -3393,10 +3394,10 @@ private:
             }
         }
         checkPlacements(node);
-        if (part && node.kind == "column") {
         if (node.kind == "tabs") {
             checkTabBleed(node);
         }
+        if (part && node.kind == "column") {
             checkColumnPart(node);
         } else if (part && node.kind == "track") {
             checkCellPlace(node, "align");

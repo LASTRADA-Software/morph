@@ -47,6 +47,7 @@ void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
                                 {QStringLiteral("amount"), column.width.amount},
                                 {QStringLiteral("role"), static_cast<int>(column.role)},
                                 {QStringLiteral("wrap"), column.wrap},
+                                {QStringLiteral("shrink"), column.shrink},
                                 {QStringLiteral("align"), static_cast<int>(column.align)},
                                 {QStringLiteral("valign"), static_cast<int>(column.valign)},
                                 {QStringLiteral("sortable"), column.sortable}});

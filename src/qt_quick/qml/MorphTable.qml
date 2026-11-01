@@ -81,8 +81,9 @@ MorphWidget {
     // or the mono face's advance in a column whose role is mono, whatever its cells draw), a content column its widest
     // cell plus the padding. No column is narrower than its header: a content column is at least its header and its
     // widest cell, a stretch column at least its header (its cells are meant to take what is left, so they do not
-    // raise it), each with the padding a side and never under 8 units. A stretch column takes its share of what the others leave, and
-    // a share under its floor is the floor, the rest shared among the others. Columns wider in sum than the table
+    // raise it), each with the padding a side and never under 8 units. A stretch column that says `shrink` has the 8
+    // units alone as its floor, so it can be narrower than its header, which then elides. A stretch column takes its
+    // share of what the others leave, and a share under its floor is the floor, the rest shared among the others. Columns wider in sum than the table
     // scroll sideways (`hflick`).
     function columnWidths(total: real): var {
         const pad = 2 * Theme.tableCellPaddingX
@@ -105,7 +106,7 @@ MorphWidget {
             else
                 pending.push(i)
             out.push(w)
-            floors.push(header)
+            floors.push(column.kind === 2 && column.shrink === true ? 8 * Theme.unitWidth : header)
             used += w
         }
         let left = Math.max(0, total - used)

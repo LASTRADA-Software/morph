@@ -9093,13 +9093,20 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
             }
             columnRole = named.value_or(TextRole::Normal);
         }
+        bool const shrink = part->flag("shrink");
+        Sizing const sized = width ? sizingOf(once(ctx, width)) : Sizing::content();
+        if (shrink && sized.kind != Sizing::Kind::Stretch) {
+            report(part->path + "/shrink",
+                   "`shrink` lets a stretch column go narrower than its header; this column's width does not stretch");
+        }
         columns.push_back(TableColumn{.label = label ? textOf(once(ctx, label), format) : std::string{},
-                                      .width = width ? sizingOf(once(ctx, width)) : Sizing::content(),
+                                      .width = sized,
                                       .role = columnRole,
                                       .align = cellPlaceNamed(part->name("align")).value_or(Align::Start),
                                       .valign = cellPlaceNamed(part->name("valign")).value_or(tableValign),
                                       .sortable = part->flag("sortable"),
-                                      .wrap = part->flag("wrap", true)});
+                                      .wrap = part->flag("wrap", true),
+                                      .shrink = shrink && sized.kind == Sizing::Kind::Stretch});
         cells.push_back(part.get());
         fields.emplace_back(part->id);
         roles.push_back(columnRole);

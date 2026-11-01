@@ -575,7 +575,8 @@ ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::s
         {.name = "status",
          .label = "Status",
          .width = ui::stretch(),
-         .cell = layout::tag(ui::row("status"), ui::row("statusTone"))}};
+         .cell = layout::tag(ui::row("status"), ui::row("statusTone")),
+         .shrink = true}};
     // The sample in the pane is the table's selection: the id of the row at `current`, and a click on a row makes it
     // current.
     auto const atCurrent = ui::filter(rows, "entry", [&console](ui::AnyHandle const& entry) -> ui::AnyHandle {
