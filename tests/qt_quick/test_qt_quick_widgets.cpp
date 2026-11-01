@@ -2425,7 +2425,7 @@ TEST_CASE("qt_quick widgets: a one-line text whose role is set after its text el
     REQUIRE(unitWidth > 0);
     int const units = static_cast<int>(std::ceil((bodyWidth + 1) / unitWidth));
     INFO("body " << bodyWidth << ", heading " << headingWidth << ", " << units << " units of " << unitWidth);
-    REQUIRE(units * unitWidth + 2 < headingWidth);
+    REQUIRE((units * unitWidth) + 2 < headingWidth);
     auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
     auto const text = scene.backend().createText(row.get());
     text->setLayout({.width = ui::Sizing::fixed(units)});
