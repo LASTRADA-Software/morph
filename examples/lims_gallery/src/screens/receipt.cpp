@@ -430,7 +430,7 @@ ui::Node expandedLayout(Receipt const& receipt) {
         ui::panel({sessionTable(receipt, true), rejectionLine(receipt).testId("last-rejection")},
                   {.title = "This session", .padding = 2})
             // Wide enough for the table's three columns beside the sample card on the 785 px page the sidebar leaves.
-            .sizing(ui::fixed(30))
+            .sizing(ui::fixed(31))
             .testId("session-panel");
     return ui::pinned(
         ui::column({ui::row({left, session}, {.gap = 2, .align = Align::Start}), rejectDialog(receipt)}));
