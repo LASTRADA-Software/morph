@@ -3329,6 +3329,39 @@ private:
     }
 
     void checkElement(DocNode const& node, CheckContext const& outer, bool part) {
+    // A tab page's padding is `pageInset`, else `inset`, both literal steps. A page of no padding has nothing for a
+    // child's `bleed` to reach past, so the document is refused rather than the flag silently doing nothing; a step
+    // that is computed is left to the mount.
+    static void checkTabBleed(DocNode const& tabs) {
+        auto const step = [&tabs](std::string_view key) -> std::optional<std::int64_t> {
+            ExprPtr const expr = tabs.prop(key);
+            if (expr == nullptr) {
+                return std::nullopt;
+            }
+            std::int64_t const* const literal = expr->kind == ExprKind::Literal ? expr->literal.asInt() : nullptr;
+            return literal != nullptr ? std::optional<std::int64_t>{*literal} : std::optional<std::int64_t>{-1};
+        };
+        auto const page = step("pageInset");
+        auto const outer = step("inset");
+        std::int64_t const effective = page ? *page : (outer ? *outer : 0);
+        if (effective != 0) {
+            return;
+        }
+        for (DocNodePtr const& tab : tabs.partList("tabs")) {
+            auto const found = tab->children.find("children");
+            if (found == tab->children.end()) {
+                continue;
+            }
+            for (DocNodePtr const& child : found->second) {
+                if (child->flag("bleed")) {
+                    refuse(pointerAppend(child->path, "bleed"),
+                           "`bleed` reaches past the padding of the tab page, and this page has none: give the tabs "
+                           "a `pageInset`, or an `inset`, above 0");
+                }
+            }
+        }
+    }
+
         KindSpec const* const spec = findKind(node.kind, part);
         CheckContext const inner = innerContext(node, outer);
         if (auto const found = _scopeOf.find(&node); found != _scopeOf.end()) {
@@ -3361,6 +3394,9 @@ private:
         }
         checkPlacements(node);
         if (part && node.kind == "column") {
+        if (node.kind == "tabs") {
+            checkTabBleed(node);
+        }
             checkColumnPart(node);
         } else if (part && node.kind == "track") {
             checkCellPlace(node, "align");
