@@ -2776,7 +2776,28 @@ private:
     /// A table's sorted rows and the page of them it shows, by its `pageSize` and `page`.
     TableView tableView(ElementState const& element, Bindings const* bindings);
     void collect(DocNode const& node, RtScope& scope, std::vector<Commands const*>& commands);
+    /// The readers every kind's lowering shares, bound to one node.
+    class KindKit;
+    /// A column or a row. Its own function, so a deep document stacks only what this kind needs per level.
+    Node lowerStack(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A grid. Its own function, so a deep document stacks only what this kind needs per level.
+    Node lowerGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A panel. Its own function, so a deep document stacks only what this kind needs per level.
+    Node lowerPanel(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A splitter. Its own function, so a deep document stacks only what this kind needs per level.
+    Node lowerSplitter(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A collapsible section. Its own function, so a deep document stacks only what this kind needs per level.
+    Node lowerCollapsible(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A drop zone. Its own function, so a deep document stacks only what this kind needs per level.
+    Node lowerDropZone(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// The leaf-like kinds, from `text` to `menu`; empty for any other kind. They are lowered apart from the
+    /// containers so that a deep document does not stack their locals once per level: `lowerKind` recurses into
+    /// its children, and in an unoptimised build a frame holds every branch's locals at once.
+    std::optional<Node> lowerWidget(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// The display kinds, from `banner` to `emptyState`, apart from the containers for the same reason as
+    /// `lowerWidget`; empty for any other kind.
+    std::optional<Node> lowerDisplay(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerSwitch(DocNode const& node, LowerCtx const& ctx);
     Node lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element);
@@ -7451,106 +7472,137 @@ inline std::vector<BadgeModel> ScreenCore::lowerBadgeParts(std::span<DocNodePtr 
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of ui/1.
-inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
-    std::string_view const kind = node.kind;
-    FormatContext const& format = session.formatting();
-    auto children = [&](std::string_view key, int gap = 0) {
-        LowerCtx listCtx = ctx;
+class ScreenCore::KindKit {
+public:
+    KindKit(ScreenCore& core, DocNode const& node, LowerCtx const& ctx, ElementState* element)
+        : _core{core}, _node{node}, _ctx{ctx}, _element{element}, _format{core.session.formatting()} {}
+
+    // The children under @p key, each lowered with @p gap as the gap of the list around it.
+    std::vector<Node> children(std::string_view key, int gap = 0) const {
+        LowerCtx listCtx = _ctx;
         listCtx.listGap = gap;
         std::vector<Node> out;
-        for (DocNodePtr const& child : node.nodes(key)) {
-            out.push_back(lower(*child, listCtx));
+        for (DocNodePtr const& child : _node.nodes(key)) {
+            out.push_back(_core.lower(*child, listCtx));
         }
         return out;
-    };
-    auto child = [&](std::string_view key, int gap = 0) -> Node {
-        auto const nodes = node.nodes(key);
-        return nodes.empty() ? Node{} : lowerAll(nodes, ctx, gap);
-    };
-    auto onceInt = [&](std::string_view key, std::int64_t fallback) {
-        ExprPtr const expr = node.prop(key);
-        return expr ? intOf(once(ctx, expr), fallback) : fallback;
-    };
-    auto onceBool = [&](std::string_view key, bool fallback) {
-        ExprPtr const expr = node.prop(key);
-        return expr ? boolOf(once(ctx, expr), format) : fallback;
-    };
+    }
+
+    // The children under @p key as one node: none is empty, several share a holder that sets @p gap.
+    Node child(std::string_view key, int gap = 0) const {
+        auto const nodes = _node.nodes(key);
+        return nodes.empty() ? Node{} : _core.lowerAll(nodes, _ctx, gap);
+    }
+
+    std::int64_t onceInt(std::string_view key, std::int64_t fallback) const {
+        ExprPtr const expr = _node.prop(key);
+        return expr ? intOf(_core.once(_ctx, expr), fallback) : fallback;
+    }
+
+    bool onceBool(std::string_view key, bool fallback) const {
+        ExprPtr const expr = _node.prop(key);
+        return expr ? boolOf(_core.once(_ctx, expr), _format) : fallback;
+    }
+
     // A stack's padding: one step, or the loader-checked constant list of the vertical and the horizontal step. A
     // computed padding that yields a list is not a step: it is reported once and taken as 0.
-    auto stackPadding = [&]() -> Padding {
-        ExprPtr const expr = node.prop("padding");
+    Padding stackPadding() const {
+        ExprPtr const expr = _node.prop("padding");
         if (!expr) {
             return {};
         }
-        Value const value = once(ctx, expr);
+        Value const value = _core.once(_ctx, expr);
         if (ValueList const* const steps = value.asList()) {
             if (expr->kind == ExprKind::Literal && steps->size() == 2) {
                 return Padding{static_cast<int>(intOf(steps->at(0), 0)), static_cast<int>(intOf(steps->at(1), 0))};
             }
-            report(node.path + "/padding", "a computed `padding` is one spacing step, not a list; taken as 0");
+            _core.report(_node.path + "/padding", "a computed `padding` is one spacing step, not a list; taken as 0");
             return {};
         }
         return Padding{static_cast<int>(intOf(value, 0))};
-    };
-    auto onceText = [&](std::string_view key) {
-        ExprPtr const expr = node.prop(key);
-        return expr ? textOf(once(ctx, expr), format) : std::string{};
-    };
-    auto textProp = [&](std::string_view key) {
-        return bindProp<std::string>(ctx, node.prop(key), std::string{}, stringOf);
-    };
+    }
+
+    std::string onceText(std::string_view key) const {
+        ExprPtr const expr = _node.prop(key);
+        return expr ? textOf(_core.once(_ctx, expr), _format) : std::string{};
+    }
+
+    Prop<std::string> textProp(std::string_view key) const {
+        return _core.bindProp<std::string>(_ctx, _node.prop(key), std::string{}, stringOf);
+    }
+
     // A field shows no caption of its own, so its label is what names it to assistive technology. An `a11y` part
     // that gives a name was written for that purpose and wins; one that gives only a role leaves the label.
-    auto nameByLabel = [&](Common& common) {
-        bool const named = std::ranges::any_of(node.partList("a11y"),
+    void nameByLabel(Common& common) const {
+        bool const named = std::ranges::any_of(_node.partList("a11y"),
                                                [](DocNodePtr const& a11y) { return a11y->prop("name") != nullptr; });
-        if (node.prop("label") && !named) {
+        if (_node.prop("label") && !named) {
             common.a11y.name = textProp("label");
         }
-    };
+    }
+
     // A standalone input draws its label as a caption only when the document asks for it (`showLabel`).
-    auto captionOf = [&](auto& spec) {
-        if (node.prop("label")) {
+    template <typename Spec>
+    void captionOf(Spec& spec) const {
+        if (_node.prop("label")) {
             spec.label = textProp("label");
         }
-        spec.showLabel = node.flag("showLabel");
-    };
-    auto action = [&](std::string_view key) -> Action {
-        Commands const* const commands = node.event(key);
+        spec.showLabel = _node.flag("showLabel");
+    }
+
+    Action action(std::string_view key) const {
+        Commands const* const commands = _node.event(key);
         if (commands == nullptr) {
             return {};
         }
-        return [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
-    };
-    auto actionPart = [&]() {
+        return [core = &_core, ctx = _ctx, commands] { core->runEvent(commands, ctx, Value{}); };
+    }
+
+    ActionButton actionPart() const {
         ActionButton button;
-        for (DocNodePtr const& part : node.partList("action")) {
-            button.label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf);
+        for (DocNodePtr const& part : _node.partList("action")) {
+            button.label = _core.bindProp<std::string>(_ctx, part->prop("label"), std::string{}, stringOf);
             if (Commands const* const commands = part->event("onClick")) {
-                button.onClick = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
+                button.onClick = [core = &_core, ctx = _ctx, commands] { core->runEvent(commands, ctx, Value{}); };
             }
         }
         return button;
-    };
-    auto read = [element, this](std::string_view name) {
-        return [element, this, name = std::string{name}] { return elementValue(*element, name); };
-    };
+    }
 
+    // A reader of the element's value under @p name.
+    auto read(std::string_view name) const {
+        return [element = _element, core = &_core, name = std::string{name}] {
+            return core->elementValue(*element, name);
+        };
+    }
+
+private:
+    ScreenCore& _core;
+    DocNode const& _node;
+    LowerCtx const& _ctx;
+    ElementState* _element;
+    FormatContext const& _format;
+};
+
+inline std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    std::string_view const kind = node.kind;
+    FormatContext const& format = session.formatting();
+    KindKit const kit{*this, node, ctx, element};
     if (kind == "text") {
         Text spec{.role = roleProp(ctx, node.prop("role"))};
         // A text with spans shows them, so its `text`, an older client's fallback, is not lowered.
         if (ExprPtr const spans = node.prop("spans")) {
             spec.spans = spansProp(ctx, spans);
         } else {
-            spec.text = textProp("text");
+            spec.text = kit.textProp("text");
         }
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         return ui::text(std::move(spec));
     }
     if (kind == "button") {
-        Button spec{.label = textProp("label")};
-        spec.icon = onceText("icon");
+        Button spec{.label = kit.textProp("label")};
+        spec.icon = kit.onceText("icon");
         spec.emphasis = emphasisNamed(node.name("emphasis")).value_or(ButtonEmphasis::Normal);
         if (node.name("style") == "item") {
             spec.style = ButtonStyle::Item;
@@ -7561,7 +7613,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         if (node.prop("selected")) {
             spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
             // An entry's content, drawn in place of its label: one node as it is, several in a column.
-            if (std::vector<Node> content = children("children"); content.size() == 1) {
+            if (std::vector<Node> content = kit.children("children"); content.size() == 1) {
                 spec.child = std::move(content.front());
             } else if (!content.empty()) {
                 spec.child = ui::column(Column{.children = std::move(content)});
@@ -7615,8 +7667,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                 runEvent(onSubmit, ctx, Value{text});
             };
         }
-        spec.placeholder = textProp("placeholder");
-        std::string const mode = onceText("mode");
+        spec.placeholder = kit.textProp("placeholder");
+        std::string const mode = kit.onceText("mode");
         spec.mode = TextInputMode::SingleLine;
         if (mode == "multiline") {
             spec.mode = TextInputMode::Multiline;
@@ -7634,30 +7686,30 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         spec.mono = node.flag("mono");
         if (spec.mode != TextInputMode::Multiline) {
             spec.emphasis = node.name("emphasis") == "prominent" ? InputEmphasis::Prominent : InputEmphasis::Normal;
-            spec.icon = onceText("icon");
+            spec.icon = kit.onceText("icon");
             spec.align = alignOf(node.name("align"));
             if (spec.align == Align::Stretch) {
                 spec.align = Align::Start;
             }
             if (node.prop("unit")) {
-                spec.unit = textProp("unit");
+                spec.unit = kit.textProp("unit");
             }
             if (node.prop("prefix")) {
-                spec.prefix = textProp("prefix");
+                spec.prefix = kit.textProp("prefix");
             }
         }
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
-        nameByLabel(spec.common);
-        captionOf(spec);
+        kit.nameByLabel(spec.common);
+        kit.captionOf(spec);
         return ui::textInput(std::move(spec));
     }
     if (kind == "checkbox") {
-        Checkbox spec{.label = textProp("label"), .checked = slotProp<bool>([read = read("checked")] {
-                                                      Value const value = read();
-                                                      bool const* const flag = value.asBool();
-                                                      return flag != nullptr && *flag;
-                                                  })};
+        Checkbox spec{.label = kit.textProp("label"), .checked = slotProp<bool>([read = kit.read("checked")] {
+                                                          Value const value = read();
+                                                          bool const* const flag = value.asBool();
+                                                          return flag != nullptr && *flag;
+                                                      })};
         spec.onToggle = [this, ctx, element, onToggle = node.event("onToggle"),
                          onChange = node.event("onChange")](bool checked) {
             // A toggle is a check box's commit, so it touches the box.
@@ -7679,7 +7731,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         Select spec;
         spec.options = slotProp<std::vector<SelectOption>>(
             [this, element] { return selectOptions(element->rows->get(), session.formatting()); });
-        spec.selected = slotProp<std::optional<Key>>([read = read("selected")]() -> std::optional<Key> {
+        spec.selected = slotProp<std::optional<Key>>([read = kit.read("selected")]() -> std::optional<Key> {
             Value const selected = read();
             return selected.isNull() ? std::nullopt : std::optional<Key>{keyOf(selected)};
         });
@@ -7711,18 +7763,18 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         }
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
-        nameByLabel(spec.common);
-        captionOf(spec);
+        kit.nameByLabel(spec.common);
+        kit.captionOf(spec);
         return ui::select(std::move(spec));
     }
     if (kind == "slider") {
         Slider spec;
-        spec.value = slotProp<std::int64_t>([read = read("value"), element] {
+        spec.value = slotProp<std::int64_t>([read = kit.read("value"), element] {
             return intOf(element->bound != nullptr ? read() : element->draft.get(), 0);
         });
-        spec.minimum = onceInt("min", 0);
-        spec.maximum = onceInt("max", 100);
-        spec.step = onceInt("step", 1);
+        spec.minimum = kit.onceInt("min", 0);
+        spec.maximum = kit.onceInt("max", 100);
+        spec.step = kit.onceInt("step", 1);
         spec.onChange = [this, ctx, element, onChange = node.event("onChange")](std::int64_t value) {
             session.asUser([&] {
                 session.noteWrite();
@@ -7740,12 +7792,12 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         };
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
-        nameByLabel(spec.common);
+        kit.nameByLabel(spec.common);
         return ui::slider(std::move(spec));
     }
     if (kind == "dateTimeInput") {
         DateTimeInput spec;
-        DateMode const mode = onceText("mode") == "date" ? DateMode::Date : DateMode::DateTime;
+        DateMode const mode = kit.onceText("mode") == "date" ? DateMode::Date : DateMode::DateTime;
         std::optional<TypeKind> heldAtLoad;
         if (auto const found = _doc->dateValueKinds.find(&node); found != _doc->dateValueKinds.end()) {
             heldAtLoad = found->second;
@@ -7798,8 +7850,8 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         spec.pattern = mode == DateMode::Date ? now.datePattern : now.dateTimePattern;
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
-        nameByLabel(spec.common);
-        captionOf(spec);
+        kit.nameByLabel(spec.common);
+        kit.captionOf(spec);
         return ui::dateTimeInput(std::move(spec));
     }
     if (kind == "filePicker") {
@@ -7814,18 +7866,18 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
             });
             runEvent(onPick, ctx, Value{path});
         };
-        spec.mode = onceText("mode") == "save" ? FilePickerMode::Save : FilePickerMode::Open;
+        spec.mode = kit.onceText("mode") == "save" ? FilePickerMode::Save : FilePickerMode::Open;
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
-        nameByLabel(spec.common);
+        kit.nameByLabel(spec.common);
         return ui::filePicker(std::move(spec));
     }
     if (kind == "menu") {
         Menu spec{.items = menuItems(node.partList("items"), ctx)};
         if (node.name("style") == "button") {
             spec.style = MenuStyle::Button;
-            spec.label = textProp("label");
-            spec.icon = onceText("icon");
+            spec.label = kit.textProp("label");
+            spec.icon = kit.onceText("icon");
             if (node.name("emphasis") == "primary") {
                 spec.emphasis = ButtonEmphasis::Primary;
             } else if (node.name("emphasis") == "danger") {
@@ -7837,122 +7889,37 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         commonOf(node, ctx, element, spec.common);
         return ui::menu(std::move(spec));
     }
-    if (kind == "group") {
-        return lowerGroup(node, ctx, element, children("children"));
-    }
-    if (kind == "column" || kind == "row") {
-        int const gap = static_cast<int>(onceInt("gap", 0));
-        if (std::string const arrangement = arrangedBy(node.id); !arrangement.empty()) {
-            return lowerArranged(node, ctx, element, arrangement, kind == "column" ? Axis::Vertical : Axis::Horizontal,
-                                 gap);
-        }
-        if (kind == "column") {
-            Column spec{.children = children("children", gap),
-                        .gap = gap,
-                        .align = alignOf(node.name("align")),
-                        .justify = justifyOf(node.name("justify")),
-                        .divided = node.flag("divided"),
-                        .padding = stackPadding()};
-            if (node.prop("selected")) {
-                spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
-            }
-            commonOf(node, ctx, element, spec.common);
-            return ui::column(std::move(spec));
-        }
-        Row spec{.children = children("children"),
-                 .gap = gap,
-                 .align = alignOf(node.name("align")),
-                 .justify = justifyOf(node.name("justify")),
-                 .wrap = node.flag("wrap"),
-                 .divided = node.flag("divided"),
-                 .padding = stackPadding()};
-        if (node.prop("selected")) {
-            spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
-        }
-        commonOf(node, ctx, element, spec.common);
-        return ui::row(std::move(spec));
-    }
-    if (kind == "grid") {
-        Grid spec{.columns = static_cast<int>(onceInt("columns", 1)),
-                  .gap = static_cast<int>(onceInt("gap", 0)),
-                  .align = alignOf(node.name("align"))};
-        for (DocNodePtr const& track : node.partList("tracks")) {
-            ExprPtr const width = track->prop("width");
-            spec.tracks.push_back(GridTrack{.width = width ? sizingOf(once(ctx, width)) : Sizing::stretch(),
-                                            .align = cellPlaceNamed(track->name("align")).value_or(Align::Start)});
-        }
-        for (DocNodePtr const& cell : node.nodes("children")) {
-            ExprPtr const span = cell->prop("span");
-            spec.cells.push_back(
-                GridCell{.node = lower(*cell, ctx), .span = static_cast<int>(span ? intOf(once(ctx, span), 1) : 1)});
-        }
-        commonOf(node, ctx, element, spec.common);
-        return ui::grid(std::move(spec));
-    }
-    if (kind == "spacer") {
-        Spacer spec;
-        commonOf(node, ctx, element, spec.common);
-        return ui::spacer(std::move(spec));
-    }
-    if (kind == "panel") {
-        Panel spec{.title = textProp("title"), .padding = static_cast<int>(onceInt("padding", 0))};
-        spec.header = child("header");
-        spec.child = child("children", static_cast<int>(onceInt("gap", kPanelGap)));
-        spec.collapsible = onceBool("collapsible", false);
-        spec.collapsed = bindProp<bool>(ctx, node.prop("collapsed"), false, boolOf);
-        if (Commands const* const commands = node.event("onToggle")) {
-            spec.onToggle = [this, ctx, commands](bool collapsed) { runEvent(commands, ctx, Value{collapsed}); };
-        }
-        commonOf(node, ctx, element, spec.common);
-        return ui::panel(std::move(spec));
-    }
-    if (kind == "scroll") {
-        ExprPtr const axis = node.prop("axis");
-        Scroll spec{.child = child("children"), .axis = axis ? axisOf(once(ctx, axis)) : Axis::Vertical};
-        commonOf(node, ctx, element, spec.common);
-        return ui::scroll(std::move(spec));
-    }
-    if (kind == "switch") {
-        return lowerSwitch(node, ctx);
-    }
-    if (kind == "tabs") {
-        return lowerTabs(node, ctx, element);
-    }
-    if (kind == "dialog" || kind == "drawer") {
-        return lowerDialog(node, ctx, element);
-    }
-    if (kind == "busy") {
-        Busy spec{.active = bindProp<bool>(ctx, node.prop("active"), false, boolOf), .label = textProp("label")};
-        commonOf(node, ctx, element, spec.common);
-        return ui::busy(std::move(spec));
-    }
-    if (kind == "forEach" || kind == "table") {
-        return lowerRows(node, ctx, element);
-    }
+    return std::nullopt;
+}
+
+inline std::optional<Node> ScreenCore::lowerDisplay(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    std::string_view const kind = node.kind;
+    KindKit const kit{*this, node, ctx, element};
     if (kind == "banner") {
         Banner spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Info, toneOf)};
         if (ExprPtr const spans = node.prop("spans")) {
             spec.spans = spansProp(ctx, spans);
         } else {
-            spec.text = textProp("text");
+            spec.text = kit.textProp("text");
         }
-        spec.action = actionPart();
-        spec.dismissible = onceBool("dismissible", false);
-        spec.onDismiss = action("onDismiss");
+        spec.action = kit.actionPart();
+        spec.dismissible = kit.onceBool("dismissible", false);
+        spec.onDismiss = kit.action("onDismiss");
         spec.actionStyle = bannerActionStyleNamed(node.name("actionStyle")).value_or(BannerActionStyle::Ghost);
         spec.actionStretch = node.flag("actionStretch");
         commonOf(node, ctx, element, spec.common);
         return ui::banner(std::move(spec));
     }
     if (kind == "badge") {
-        Badge spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Neutral, toneOf), .text = textProp("text")};
-        spec.icon = onceText("icon");
+        Badge spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Neutral, toneOf),
+                   .text = kit.textProp("text")};
+        spec.icon = kit.onceText("icon");
         spec.style = node.name("style") == "outline" ? BadgeStyle::Outline : BadgeStyle::Filled;
         spec.shape = shapeNamed(node.name("shape")).value_or(ControlShape::Default);
         spec.mono = node.flag("mono");
         if (Commands const* const onRemove = node.event("onRemove")) {
             spec.onRemove = [this, ctx, onRemove] { runEvent(onRemove, ctx, Value{}); };
-            spec.removeLabel = textProp("removeLabel");
+            spec.removeLabel = kit.textProp("removeLabel");
         }
         commonOf(node, ctx, element, spec.common);
         return ui::badge(std::move(spec));
@@ -7970,7 +7937,7 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
                 }
                 return std::nullopt;
             });
-        spec.label = textProp("label");
+        spec.label = kit.textProp("label");
         commonOf(node, ctx, element, spec.common);
         return ui::progress(std::move(spec));
     }
@@ -8022,55 +7989,188 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         return ui::keyValue(std::move(spec));
     }
     if (kind == "emptyState") {
-        EmptyState spec{.title = textProp("title"), .text = textProp("text")};
-        spec.icon = onceText("icon");
-        spec.action = actionPart();
+        EmptyState spec{.title = kit.textProp("title"), .text = kit.textProp("text")};
+        spec.icon = kit.onceText("icon");
+        spec.action = kit.actionPart();
         commonOf(node, ctx, element, spec.common);
         return ui::emptyState(std::move(spec));
     }
-    if (kind == "splitter") {
-        ExprPtr const orientation = node.prop("orientation");
-        Splitter spec{.children = children("children"),
-                      .orientation = orientation && axisOf(once(ctx, orientation)) == Axis::Vertical
-                                         ? Axis::Vertical
-                                         : Axis::Horizontal};
-        // No `onResize`: a user's drag stays the splitter's own, and the document's sizes are where it starts.
-        if (ExprPtr const sizes = node.prop("sizes")) {
-            spec.sizes = bindProp<std::vector<int>>(
-                ctx, sizes, {}, [this, path = sizes->path](Value const& value, FormatContext const& /*format*/) {
-                    std::optional<std::vector<int>> parsed = splitterSizesOf(value);
-                    if (!parsed) {
-                        report(path,
-                               "sizes is " + canonicalJson(value) + "; sizes is a list of numbers, one per pane");
-                    }
-                    return std::move(parsed).value_or(std::vector<int>{});
-                });
+    return std::nullopt;
+}
+
+inline Node ScreenCore::lowerStack(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    std::string_view const kind = node.kind;
+    KindKit const kit{*this, node, ctx, element};
+    int const gap = static_cast<int>(kit.onceInt("gap", 0));
+    if (std::string const arrangement = arrangedBy(node.id); !arrangement.empty()) {
+        return lowerArranged(node, ctx, element, arrangement, kind == "column" ? Axis::Vertical : Axis::Horizontal,
+                             gap);
+    }
+    if (kind == "column") {
+        Column spec{.children = kit.children("children", gap),
+                    .gap = gap,
+                    .align = alignOf(node.name("align")),
+                    .justify = justifyOf(node.name("justify")),
+                    .divided = node.flag("divided"),
+                    .padding = kit.stackPadding()};
+        if (node.prop("selected")) {
+            spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
         }
         commonOf(node, ctx, element, spec.common);
-        return ui::splitter(std::move(spec));
+        return ui::column(std::move(spec));
+    }
+    Row spec{.children = kit.children("children"),
+             .gap = gap,
+             .align = alignOf(node.name("align")),
+             .justify = justifyOf(node.name("justify")),
+             .wrap = node.flag("wrap"),
+             .divided = node.flag("divided"),
+             .padding = kit.stackPadding()};
+    if (node.prop("selected")) {
+        spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
+    }
+    commonOf(node, ctx, element, spec.common);
+    return ui::row(std::move(spec));
+}
+
+inline Node ScreenCore::lowerGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    KindKit const kit{*this, node, ctx, element};
+    Grid spec{.columns = static_cast<int>(kit.onceInt("columns", 1)),
+              .gap = static_cast<int>(kit.onceInt("gap", 0)),
+              .align = alignOf(node.name("align"))};
+    for (DocNodePtr const& track : node.partList("tracks")) {
+        ExprPtr const width = track->prop("width");
+        spec.tracks.push_back(GridTrack{.width = width ? sizingOf(once(ctx, width)) : Sizing::stretch(),
+                                        .align = cellPlaceNamed(track->name("align")).value_or(Align::Start)});
+    }
+    for (DocNodePtr const& cell : node.nodes("children")) {
+        ExprPtr const span = cell->prop("span");
+        spec.cells.push_back(
+            GridCell{.node = lower(*cell, ctx), .span = static_cast<int>(span ? intOf(once(ctx, span), 1) : 1)});
+    }
+    commonOf(node, ctx, element, spec.common);
+    return ui::grid(std::move(spec));
+}
+
+inline Node ScreenCore::lowerPanel(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    KindKit const kit{*this, node, ctx, element};
+    Panel spec{.title = kit.textProp("title"), .padding = static_cast<int>(kit.onceInt("padding", 0))};
+    spec.header = kit.child("header");
+    spec.child = kit.child("children", static_cast<int>(kit.onceInt("gap", kPanelGap)));
+    spec.collapsible = kit.onceBool("collapsible", false);
+    spec.collapsed = bindProp<bool>(ctx, node.prop("collapsed"), false, boolOf);
+    if (Commands const* const commands = node.event("onToggle")) {
+        spec.onToggle = [this, ctx, commands](bool collapsed) { runEvent(commands, ctx, Value{collapsed}); };
+    }
+    commonOf(node, ctx, element, spec.common);
+    return ui::panel(std::move(spec));
+}
+
+inline Node ScreenCore::lowerSplitter(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    KindKit const kit{*this, node, ctx, element};
+    ExprPtr const orientation = node.prop("orientation");
+    Splitter spec{.children = kit.children("children"),
+                  .orientation = orientation && axisOf(once(ctx, orientation)) == Axis::Vertical ? Axis::Vertical
+                                                                                                 : Axis::Horizontal};
+    // No `onResize`: a user's drag stays the splitter's own, and the document's sizes are where it starts.
+    if (ExprPtr const sizes = node.prop("sizes")) {
+        spec.sizes = bindProp<std::vector<int>>(
+            ctx, sizes, {}, [this, path = sizes->path](Value const& value, FormatContext const& /*format*/) {
+                std::optional<std::vector<int>> parsed = splitterSizesOf(value);
+                if (!parsed) {
+                    report(path, "sizes is " + canonicalJson(value) + "; sizes is a list of numbers, one per pane");
+                }
+                return std::move(parsed).value_or(std::vector<int>{});
+            });
+    }
+    commonOf(node, ctx, element, spec.common);
+    return ui::splitter(std::move(spec));
+}
+
+inline Node ScreenCore::lowerCollapsible(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    KindKit const kit{*this, node, ctx, element};
+    Collapsible spec{.title = kit.textProp("title"), .open = bindProp<bool>(ctx, node.prop("open"), true, boolOf)};
+    if (Commands const* const commands = node.event("onToggle")) {
+        spec.onToggle = [this, ctx, commands](bool open) { runEvent(commands, ctx, Value{open}); };
+    }
+    spec.header = kit.child("header");
+    spec.child = kit.child("children", static_cast<int>(kit.onceInt("gap", kPanelGap)));
+    commonOf(node, ctx, element, spec.common);
+    return ui::collapsible(std::move(spec));
+}
+
+inline Node ScreenCore::lowerDropZone(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    KindKit const kit{*this, node, ctx, element};
+    DropZone spec;
+    spec.accept = stringsOf(node.prop("accept") ? once(ctx, node.prop("accept")) : Value{});
+    spec.multiple = kit.onceBool("multiple", false);
+    if (Commands const* const commands = node.event("onDrop")) {
+        spec.onDrop = [this, ctx, commands](std::vector<std::string> const& paths) {
+            runEvent(commands, ctx, listOfStrings(paths));
+        };
+    }
+    spec.child = kit.child("children");
+    commonOf(node, ctx, element, spec.common);
+    return ui::dropZone(std::move(spec));
+}
+
+inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    std::string_view const kind = node.kind;
+    KindKit const kit{*this, node, ctx, element};
+    if (std::optional<Node> widget = lowerWidget(node, ctx, element)) {
+        return std::move(*widget);
+    }
+    if (kind == "group") {
+        return lowerGroup(node, ctx, element, kit.children("children"));
+    }
+    if (kind == "column" || kind == "row") {
+        return lowerStack(node, ctx, element);
+    }
+    if (kind == "grid") {
+        return lowerGrid(node, ctx, element);
+    }
+    if (kind == "spacer") {
+        Spacer spec;
+        commonOf(node, ctx, element, spec.common);
+        return ui::spacer(std::move(spec));
+    }
+    if (kind == "panel") {
+        return lowerPanel(node, ctx, element);
+    }
+    if (kind == "scroll") {
+        ExprPtr const axis = node.prop("axis");
+        Scroll spec{.child = kit.child("children"), .axis = axis ? axisOf(once(ctx, axis)) : Axis::Vertical};
+        commonOf(node, ctx, element, spec.common);
+        return ui::scroll(std::move(spec));
+    }
+    if (kind == "switch") {
+        return lowerSwitch(node, ctx);
+    }
+    if (kind == "tabs") {
+        return lowerTabs(node, ctx, element);
+    }
+    if (kind == "dialog" || kind == "drawer") {
+        return lowerDialog(node, ctx, element);
+    }
+    if (kind == "busy") {
+        Busy spec{.active = bindProp<bool>(ctx, node.prop("active"), false, boolOf), .label = kit.textProp("label")};
+        commonOf(node, ctx, element, spec.common);
+        return ui::busy(std::move(spec));
+    }
+    if (kind == "forEach" || kind == "table") {
+        return lowerRows(node, ctx, element);
+    }
+    if (std::optional<Node> display = lowerDisplay(node, ctx, element)) {
+        return std::move(*display);
+    }
+    if (kind == "splitter") {
+        return lowerSplitter(node, ctx, element);
     }
     if (kind == "collapsible") {
-        Collapsible spec{.title = textProp("title"), .open = bindProp<bool>(ctx, node.prop("open"), true, boolOf)};
-        if (Commands const* const commands = node.event("onToggle")) {
-            spec.onToggle = [this, ctx, commands](bool open) { runEvent(commands, ctx, Value{open}); };
-        }
-        spec.header = child("header");
-        spec.child = child("children", static_cast<int>(onceInt("gap", kPanelGap)));
-        commonOf(node, ctx, element, spec.common);
-        return ui::collapsible(std::move(spec));
+        return lowerCollapsible(node, ctx, element);
     }
     if (kind == "dropZone") {
-        DropZone spec;
-        spec.accept = stringsOf(node.prop("accept") ? once(ctx, node.prop("accept")) : Value{});
-        spec.multiple = onceBool("multiple", false);
-        if (Commands const* const commands = node.event("onDrop")) {
-            spec.onDrop = [this, ctx, commands](std::vector<std::string> const& paths) {
-                runEvent(commands, ctx, listOfStrings(paths));
-            };
-        }
-        spec.child = child("children");
-        commonOf(node, ctx, element, spec.common);
-        return ui::dropZone(std::move(spec));
+        return lowerDropZone(node, ctx, element);
     }
     if (kind == "boundary") {
         return lowerBoundary(node, ctx);
