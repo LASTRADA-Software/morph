@@ -43,6 +43,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -511,7 +512,7 @@ TEST_CASE("qt_quick containers: a splitter whose stretch pane's implicit width f
             std::this_thread::sleep_for(std::chrono::milliseconds{100});
         }
         if (!settled.load()) {
-            std::fputs("watchdog: the splitter's layout did not settle in 60 s\n", stderr);
+            std::ignore = std::fputs("watchdog: the splitter's layout did not settle in 60 s\n", stderr);
             std::_Exit(3);
         }
     }};
@@ -530,9 +531,10 @@ TEST_CASE("qt_quick containers: a splitter whose stretch pane's implicit width f
         filler->setText("worksheet");
         QQuickItem& pane = Scene::itemOf(*worksheet);
         QQuickItem const& splitterItem = Scene::itemOf(*splitter);
-        QObject::connect(&splitterItem, &QQuickItem::widthChanged, &pane,
-                         [&pane, &splitterItem] { pane.setImplicitWidth(splitterItem.width() + 126); });
-        for (int width : {1215, 1000, 390, 1920}) {
+        // The connection lives as long as `pane`, which it is parented to.
+        std::ignore = QObject::connect(&splitterItem, &QQuickItem::widthChanged, &pane,
+                                       [&pane, &splitterItem] { pane.setImplicitWidth(splitterItem.width() + 126); });
+        for (int const width : {1215, 1000, 390, 1920}) {
             scene.window().resize(width, 700);
             scene.settle();
             CHECK(Scene::itemOf(*queue).width() > 0);

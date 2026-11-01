@@ -76,6 +76,10 @@ public:
 
 private:
     [[nodiscard]] std::vector<int> layoutExtents(int total) const;
+    [[nodiscard]] std::vector<int> extentsBySizing(int total) const;
+    [[nodiscard]] std::vector<int> extentsBySizes(int room) const;
+    static void evenOutShares(std::vector<layout::Item> const& items, std::vector<std::size_t> const& sharing,
+                              std::vector<int>& extents);
     [[nodiscard]] layout::Bounds boundsOfPane(WidgetBase const& pane) const;
     [[nodiscard]] WidgetBase const* paneAt(std::size_t index) const;
     [[nodiscard]] int along(::core::tui::Point cell) const noexcept;

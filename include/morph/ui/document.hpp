@@ -3437,23 +3437,28 @@ private:
         }
         checkPlacements(node);
         checkTabBleed(node);
-        if (part && (node.kind == "column" || node.kind == "track")) {
-            checkNoPercentWidth(node);
-        }
-        if (part && node.kind == "column") {
-            checkColumnPart(node);
-        } else if (part && node.kind == "track") {
-            checkCellPlace(node, "align");
-        } else if (part && isMenuEntry(node.kind)) {
-            checkMenuItem(node);
-        }
-        if (!part) {
+        if (part) {
+            checkPartNode(node);
+        } else {
             checkFlags(node);
             checkLayoutKeys(node);
             checkKindRules(node, outer);
             // An overlay's footer actions; a form's field components.
             checkActionButtons(node.partList("actions"), pointerAppend(node.path, "actions"));
             checkFieldComponents(node);
+        }
+    }
+
+    static void checkPartNode(DocNode const& node) {
+        if (node.kind == "column" || node.kind == "track") {
+            checkNoPercentWidth(node);
+        }
+        if (node.kind == "column") {
+            checkColumnPart(node);
+        } else if (node.kind == "track") {
+            checkCellPlace(node, "align");
+        } else if (isMenuEntry(node.kind)) {
+            checkMenuItem(node);
         }
     }
 
@@ -4182,6 +4187,17 @@ private:
         }
     }
 
+    // A literal `sizing` gives a percent as neither a height nor the width of an overlay.
+    static void checkPercentSizing(DocNode const& node, ExprPtr const& sizing) {
+        ValueRecord const* const record = sizing->literal.asRecord();
+        if (record != nullptr && record->contains("height") && isPercent(record->at("height"))) {
+            refuse(sizing->path, std::string{kPercentPlaces});
+        }
+        if (hasPercentWidth(node) && (node.kind == "dialog" || node.kind == "drawer")) {
+            refuse(sizing->path, std::string{kPercentPlaces});
+        }
+    }
+
     // A literal `sizing` is one of its forms, and a fixed amount lies inside its dimension's @p bounds.
     static void checkSizing(DocNode const& node, std::array<std::optional<std::int64_t>, 4> const& bounds) {
         ExprPtr const sizing = node.prop("sizing");
@@ -4189,13 +4205,7 @@ private:
             return;
         }
         checkOverlaySizing(node, sizing);
-        if (ValueRecord const* const heights = sizing->literal.asRecord();
-            heights != nullptr && heights->contains("height") && isPercent(heights->at("height"))) {
-            refuse(sizing->path, std::string{kPercentPlaces});
-        }
-        if (hasPercentWidth(node) && (node.kind == "dialog" || node.kind == "drawer")) {
-            refuse(sizing->path, std::string{kPercentPlaces});
-        }
+        checkPercentSizing(node, sizing);
         std::optional<std::int64_t> width;
         std::optional<std::int64_t> height;
         ValueRecord const* const record = sizing->literal.asRecord();

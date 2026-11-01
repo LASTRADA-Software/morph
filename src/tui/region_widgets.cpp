@@ -165,68 +165,82 @@ layout::Bounds SplitterImpl::boundsOfPane(WidgetBase const& pane) const {
 // handles included) and equally along a vertical one, each within its bounds and at least a cell.
 std::vector<int> SplitterImpl::layoutExtents(int total) const {
     auto const panes = children().size();
-    std::vector<int> extents(panes, 0);
     if (panes == 0) {
-        return extents;
+        return {};
     }
     int const handles = static_cast<int>(panes) - 1;
-    int const room = std::max(0, total - handles);
-    if (_sizes.size() != panes) {
-        std::vector<layout::Item> items;
-        items.reserve(panes);
-        std::vector<std::size_t> sharing;
-        bool stretches = false;
-        for (auto const* pane : children()) {
-            ui::Sizing sizing = ui::Sizing::stretch(1);
-            if (_axis == ui::Axis::Horizontal) {
-                sizing = pane->layout().width;
-                if (sizing.kind == ui::Sizing::Kind::Content) {
-                    sizing = ui::Sizing::stretch(1);
-                } else if (sizing.kind == ui::Sizing::Kind::Percent) {
-                    sizing =
-                        ui::Sizing::fixed(std::max(1, static_cast<int>(std::int64_t{total} * sizing.amount / 100)));
-                }
-            }
-            stretches = stretches || sizing.kind == ui::Sizing::Kind::Stretch;
-            if (sizing.kind == ui::Sizing::Kind::Stretch) {
-                sharing.push_back(items.size());
-            }
-            layout::Bounds const bounds = boundsOfPane(*pane);
-            items.push_back(layout::Item{.sizing = sizing, .minimum = bounds.minimum, .maximum = bounds.maximum});
-        }
-        extents = layout::distribute(items, layout::Track{.length = room, .gap = 0});
-        // Panes that share by an equal weight, and that no bound has moved, differ by the cells a division leaves
-        // over; the last takes them all.
-        if (sharing.size() > 1) {
-            int least = extents.at(sharing.front());
-            int most = least;
-            for (std::size_t const index : sharing) {
-                least = std::min(least, extents.at(index));
-                most = std::max(most, extents.at(index));
-            }
-            bool const equalWeights = std::ranges::all_of(sharing, [&](std::size_t index) {
-                layout::Item const& item = items.at(index);
-                return item.sizing.amount == items.at(sharing.front()).sizing.amount && item.minimum == 0 &&
-                       item.maximum == std::numeric_limits<int>::max();
-            });
-            if (equalWeights && most - least <= 1) {
-                int extra = 0;
-                for (std::size_t const index : sharing) {
-                    extra += extents.at(index) - least;
-                    extents.at(index) = least;
-                }
-                extents.at(sharing.back()) += extra;
+    return _sizes.size() != panes ? extentsBySizing(total) : extentsBySizes(std::max(0, total - handles));
+}
+
+// Each pane placed by its own sizing; @p total is the splitter's whole length, of which the handles take a cell each.
+std::vector<int> SplitterImpl::extentsBySizing(int total) const {
+    auto const panes = children().size();
+    int const room = std::max(0, total - (static_cast<int>(panes) - 1));
+    std::vector<layout::Item> items;
+    items.reserve(panes);
+    std::vector<std::size_t> sharing;
+    bool stretches = false;
+    for (auto const* pane : children()) {
+        ui::Sizing sizing = ui::Sizing::stretch(1);
+        if (_axis == ui::Axis::Horizontal) {
+            sizing = pane->layout().width;
+            if (sizing.kind == ui::Sizing::Kind::Content) {
+                sizing = ui::Sizing::stretch(1);
+            } else if (sizing.kind == ui::Sizing::Kind::Percent) {
+                sizing = ui::Sizing::fixed(std::max(1, static_cast<int>(std::int64_t{total} * sizing.amount / 100)));
             }
         }
-        for (int& extent : extents) {
-            extent = std::max(1, extent);
+        stretches = stretches || sizing.kind == ui::Sizing::Kind::Stretch;
+        if (sizing.kind == ui::Sizing::Kind::Stretch) {
+            sharing.push_back(items.size());
         }
-        // With no pane to stretch, the last takes what the others leave.
-        if (int const spare = room - std::accumulate(extents.begin(), extents.end(), 0); !stretches && spare > 0) {
-            extents.back() += spare;
-        }
-        return extents;
+        layout::Bounds const bounds = boundsOfPane(*pane);
+        items.push_back(layout::Item{.sizing = sizing, .minimum = bounds.minimum, .maximum = bounds.maximum});
     }
+    std::vector<int> extents = layout::distribute(items, layout::Track{.length = room, .gap = 0});
+    evenOutShares(items, sharing, extents);
+    for (int& extent : extents) {
+        extent = std::max(1, extent);
+    }
+    // With no pane to stretch, the last takes what the others leave.
+    if (int const spare = room - std::accumulate(extents.begin(), extents.end(), 0); !stretches && spare > 0) {
+        extents.back() += spare;
+    }
+    return extents;
+}
+
+// Panes that share by an equal weight, and that no bound has moved, differ by the cells a division leaves over; the
+// last takes them all.
+void SplitterImpl::evenOutShares(std::vector<layout::Item> const& items, std::vector<std::size_t> const& sharing,
+                                 std::vector<int>& extents) {
+    if (sharing.size() <= 1) {
+        return;
+    }
+    int least = extents.at(sharing.front());
+    int most = least;
+    for (std::size_t const index : sharing) {
+        least = std::min(least, extents.at(index));
+        most = std::max(most, extents.at(index));
+    }
+    bool const equalWeights = std::ranges::all_of(sharing, [&](std::size_t index) {
+        layout::Item const& item = items.at(index);
+        return item.sizing.amount == items.at(sharing.front()).sizing.amount && item.minimum == 0 &&
+               item.maximum == std::numeric_limits<int>::max();
+    });
+    if (equalWeights && most - least <= 1) {
+        int extra = 0;
+        for (std::size_t const index : sharing) {
+            extra += extents.at(index) - least;
+            extents.at(index) = least;
+        }
+        extents.at(sharing.back()) += extra;
+    }
+}
+
+// The sizes asked for, each within its pane's bounds, the last pane taking what is left.
+std::vector<int> SplitterImpl::extentsBySizes(int room) const {
+    auto const panes = children().size();
+    std::vector<int> extents(panes, 0);
     int used = 0;
     for (std::size_t index = 0; index + 1 < panes; ++index) {
         // Room is left for every pane after this one, a cell each.

@@ -81,12 +81,12 @@ TEST_CASE("review: returning a worksheet needs a reason, and takes it out of the
 // The queue is a share of the splitter, capped at the mockup's width; the worksheet takes the rest.
 TEST_CASE("review: the queue is a share of the splitter and the worksheet stretches", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
-    auto const queue = screen.find("Column", "queue-pane");
-    auto const worksheet = screen.find("Column", "worksheet-pane");
-    REQUIRE(queue.has_value());
-    REQUIRE(worksheet.has_value());
-    CHECK(screen.backend().prop(*queue, "layout").starts_with("percent(28) max=37/"));
-    CHECK(screen.backend().prop(*worksheet, "layout").starts_with("stretch(1)/"));
+    int const queue = screen.find("Column", "queue-pane").value_or(-1);
+    int const worksheet = screen.find("Column", "worksheet-pane").value_or(-1);
+    REQUIRE(queue >= 0);
+    REQUIRE(worksheet >= 0);
+    CHECK(screen.backend().prop(queue, "layout").starts_with("percent(28) max=37/"));
+    CHECK(screen.backend().prop(worksheet, "layout").starts_with("stretch(1)/"));
 }
 
 // The approval note ends at the Approve button.
