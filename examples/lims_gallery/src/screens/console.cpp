@@ -209,7 +209,7 @@ constexpr std::array<Analyte, 6> kAnalytes{{
      .places = 2,
      .low = -1,
      .high = 10,
-     .spec = "≤ 0.10",
+     .spec = "≤ 0.10",
      .impurity = true,
      .total = false},
     {.sample = "S-26-104170",
@@ -220,7 +220,7 @@ constexpr std::array<Analyte, 6> kAnalytes{{
      .places = 2,
      .low = -1,
      .high = 20,
-     .spec = "≤ 0.20",
+     .spec = "≤ 0.20",
      .impurity = true,
      .total = false},
     {.sample = "S-26-104170",
@@ -231,7 +231,7 @@ constexpr std::array<Analyte, 6> kAnalytes{{
      .places = 2,
      .low = -1,
      .high = 50,
-     .spec = "≤ 0.50",
+     .spec = "≤ 0.50",
      .impurity = false,
      .total = true},
     {.sample = "S-26-104198",
@@ -242,7 +242,7 @@ constexpr std::array<Analyte, 6> kAnalytes{{
      .places = 1,
      .low = -1,
      .high = 5,
-     .spec = "≤ 0.5",
+     .spec = "≤ 0.5",
      .impurity = false,
      .total = false},
     {.sample = "S-26-104176",
@@ -569,12 +569,12 @@ ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::s
         {.name = "test", .label = "Test", .width = ui::content(), .wrap = false},
         {.name = "priority",
          .label = "Priority",
-         .width = ui::fixed(6),
+         .width = ui::fixed(7),
          .cell = layout::tag(ui::row("priority"), ui::row("priorityTone"))},
-        {.name = "due", .label = "Due", .width = ui::fixed(11), .cell = dueCell(), .wrap = false},
+        {.name = "due", .label = "Due", .width = ui::fixed(12), .cell = dueCell(), .wrap = false},
         {.name = "status",
          .label = "Status",
-         .width = ui::fixed(8),
+         .width = ui::stretch(),
          .cell = layout::tag(ui::row("status"), ui::row("statusTone"))}};
     // The sample in the pane is the table's selection: the id of the row at `current`, and a click on a row makes it
     // current.
@@ -670,10 +670,10 @@ ui::Node resultLine(Console const& console) {
                         .align = morph::ui::Align::End,
                         .onCommit = enterResult(console)})
              .readonly(Flag{ui::row("total")})
-             .sizing(ui::fixed(12))
+             .sizing(ui::fixed(10))
              .testId("pane-result"),
          // A fixed width, wide enough for "Out of spec", keeps the result inputs of every line in one column.
-         layout::tag(evaluation.label, evaluation.tone).sizing(ui::fixed(10)).testId("pane-evaluation")},
+         layout::tag(evaluation.label, evaluation.tone).sizing(ui::fixed(9)).testId("pane-evaluation")},
         {.gap = 1, .align = Align::Center});
 }
 
@@ -794,10 +794,10 @@ ui::Node samplePane(Console const& console) {
 constexpr int kExpandedMinHeight = 40;
 
 ui::Node expandedLayout(Console const& console) {
-    // The sample pane takes 39 of 98 units beside the worklist: room for an analyte's label on one line. The
+    // The sample pane takes 38 of 98 units beside the worklist: room for an analyte's label on one line. The
     // worklist's Test column keeps its full text and the table clips its last column, Status, as the design does. The
     // splitter takes the page's height under the charts.
-    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{59, 39}};
+    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{60, 38}};
     return ui::column(
                {alert(false), kpis(false),
                 ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
