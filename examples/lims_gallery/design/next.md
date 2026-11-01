@@ -6,29 +6,27 @@ side branches, each in its own worktree, and is rebased onto `feat/lims-gallery`
 The live tracker is `status/STATUS.md` in this folder, published as a phone-friendly page (see "The status board"
 below). It lists every lane, its commits, the decisions and the follow-ups; read it first.
 
-## Resume here (paused 2026-11-01)
+## Resume here (2026-11-01, batch N running)
 
 Everything below this section is older history; this section is current.
 
 | Branch | Worktree | Holds | State |
 |---|---|---|---|
-| `feat/lims-gallery` (PR #1045) | `../morph-lims-e3` (`lg-ci8`) | batches A–K + CI fixes (`06ccb9072`) | pushed; last CI green except a runner shutdown (Qt6 WebSockets); rerun after a clang-tidy fix |
-| `lg-fold-l` | `../morph-lims-e1` | PR head + batch L lanes L-F (3), L-S (5), L-H (3) + a console pin fix (`f766b9932`) | build clean, all tests pass; **L-G not folded yet**; pushed as backup |
-| `lg-lf`, `lg-ls`, `lg-lh` | `../morph-lims-lf` / `../morph-lims-e2` | the batch L lanes on `c6957e257` | done, pushed |
-| `lg-lg` | `../morph-lims-lf` | lane L-G on `lg-lf` (upright face at weight 500, compact bar inset, dialog shadow blur, outlined tag) | see `status/STATUS.md`; pushed if it finished, otherwise resume from its worktree (brief `handoff/lane-lg-brief.md`) |
+| `feat/lims-gallery` (PR #1045) | `../morph-lims-e1` (`lg-fold-m`) | batches A–M, verified by lane V4 (all CI checks local-green, ui coverage 92.09%) | pushed |
+| `lg-nf` | `../morph-lims-lf` | batch N framework lane N-F (N3, N2, N1, N4, N5), from `a30f51c93` | in progress; brief `handoff/lane-nf-brief.md` |
+| `lg-ns` | `../morph-lims-e2` | batch N screen lane N-S (S1–S7), rebasing onto `lg-nf` | in progress; brief `handoff/lane-ns-brief.md` |
 
-Batch L comes from the after-K comparison (`handoff/after-k-findings-{A,B}.md`). Decision: the mockups are 1000 px
-pages without the gallery sidebar, so comparisons also grab at a 1215 px window (page about 1000 px).
+Batch N's design is `docs/superpowers/specs/2026-11-01-lims-gallery-batch-n-design.md` (reviewed twice; review in
+`handoff/batch-n-review.md`). Issues it fixes: #1073 (badge in a narrow cell), #1074 (table scroll bar). Batch M came
+from the after-L comparison (`handoff/after-l-findings-{A,B}.md`).
 
 Next steps, in order:
-1. Finish lane L-G if it did not; cherry-pick `lg-lf..lg-lg` onto `lg-fold-l`.
-2. Verify the fold: build, ctest, `-Wshadow`, Qt 6.8.1 qmllint and Qt Quick tests, clang-tidy 22 on the diff,
-   clang-format 22, allowlist hints, Doxygen, render smokes, coverage (floor 92% for `include/morph/ui`).
-   L-H did not run tidy, the allowlist check or Doxygen; L-F moved four allowlist hints by hand.
-3. Push to `feat/lims-gallery`, drive CI green.
-4. Re-grab every screen at 1000x830, 1215x830 and 390x844 (`--user "Dr. A. Meyer"`, `QT_FORCE_STDERR_LOGGING=1`),
-   compare with two reviewers, write "After batch K/L" in `visual-review.md`, and batch any remaining gap.
-5. Merge PR #1045 once no known gaps remain.
+1. Finish N-F and N-S (resume from their worktrees if a session ended; check `git status` there for uncommitted work).
+2. Fold `lg-nf` then `lg-ns` onto `feat/lims-gallery`; verify as lane V4 did (`handoff/lane-v4-brief.md`).
+3. Push, drive CI green (Qt6 WebSockets exit 143 is a runner shutdown: rerun).
+4. Re-grab every screen at 1000x830, 1215x830, 390x844 (and 1920x1080 for capped panes), compare with two reviewers,
+   batch any remaining gap.
+5. Merge PR #1045 once no known gaps remain, then remove the worktrees `../morph-lims-{e1,e2,e3,lf,gallery}`.
 
 ## Branches
 
