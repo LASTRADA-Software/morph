@@ -46,8 +46,8 @@ TEST_CASE("review, expanded: the queue beside the worksheet, its flagged results
     CHECK(screen.prop("Button", "approve", "enabled") == "true");
     // The Result column is as wide as its widest value, "99.4 % LC", so the value is not split from its unit.
     CHECK(screen.prop("Table", "results", "columns").value_or("none") ==
-          "[Sample:fixed(11),Analyte:stretch(1);wrap=false;shrink=true,Result:content;align=end;wrap=false,"
-          "Spec.:stretch(1);wrap=false;shrink=true,Prior "
+          "[Sample:fixed(11),Analyte:content;wrap=false,Result:content;align=end;wrap=false,"
+          "Spec.:content;wrap=false,Prior "
           "lot:content;align=end;wrap=false,Evaluation:stretch(3);wrap=false;shrink=true,"
           "Change:stretch(1);wrap=false;shrink=true]");
 }

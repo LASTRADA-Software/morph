@@ -524,14 +524,14 @@ ui::Node showChoice(Review const& review, bool compact) {
 ui::Node resultTable(Review const& review) {
     std::vector<ui::TableColumn> const columns{
         {.name = "sample", .label = "Sample", .width = ui::fixed(11), .role = "mono"},
-        {.name = "analyte", .label = "Analyte", .width = ui::stretch(), .wrap = false, .shrink = true},
+        {.name = "analyte", .label = "Analyte", .width = ui::content(), .wrap = false},
         {.name = "value",
          .label = "Result",
          .width = ui::content(),
          .align = Align::End,
          .cell = ui::text({.text = ui::row("value"), .spans = ui::spans({ui::strong(ui::row("value"))})}),
          .wrap = false},
-        {.name = "spec", .label = "Spec.", .width = ui::stretch(), .wrap = false, .shrink = true},
+        {.name = "spec", .label = "Spec.", .width = ui::content(), .wrap = false},
         {.name = "previous", .label = "Prior lot", .width = ui::content(), .align = Align::End, .wrap = false},
         {.name = "evaluation",
          .label = "Evaluation",
