@@ -161,8 +161,16 @@ TEST_CASE("results, compact: one sample at a time, the reason asked inline", "[l
     screen.click("next");
     CHECK(screen.waitFor(
         [&screen] { return screen.prop("Text", "shell_title", "spans") == "[Sample 2 of 2 · ,S-26-104170;mono]"; }));
-    screen.click("confirm");
-    CHECK(screen.waitFor([&screen] { return !screen.shows("Column", "inline-reason"); }));
+    // The compact layout has no Undo or Confirm: the filled-in reason and comment let Submit stand, and Submit
+    // settles the change.
+    CHECK_FALSE(screen.find("Button", "undo").has_value());
+    CHECK_FALSE(screen.find("Button", "confirm").has_value());
     CHECK(screen.prop("Button", "submit", "enabled") == "true");
+    screen.edit("comment", "");
+    CHECK(screen.waitFor([&screen] { return screen.prop("Button", "submit", "enabled") == "false"; }));
+    screen.edit("comment", "Reintegrated.");
+    CHECK(screen.waitFor([&screen] { return screen.prop("Button", "submit", "enabled") == "true"; }));
+    screen.click("submit");
+    CHECK(screen.waitFor([&screen] { return !screen.shows("Column", "inline-reason"); }));
     screen.requireNoProblems();
 }

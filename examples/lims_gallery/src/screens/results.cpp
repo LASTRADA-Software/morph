@@ -496,13 +496,21 @@ ui::AnyHandle outOfSpecMessage(Worksheet const& sheet) {
                                              {sheet.outOfSpec})}));
 }
 
-// Submitting waits for every result to be readable and every change to have its reason.
-Flag canSubmit(Worksheet const& sheet) { return !sheet.change.open && ui::eq(sheet.unreadable, std::int64_t{0}); }
+// Submitting waits for every result to be readable and every change to have its reason. The expanded layout asks for
+// the change to be confirmed or undone first; the compact one has neither button, so a change with its reason and
+// comment filled in already stands.
+Flag canSubmit(Worksheet const& sheet) {
+    Flag const settled =
+        ui::cond(ui::eq(sheet.width, "compact"), !sheet.change.open || canConfirm(sheet.change), !sheet.change.open);
+    return settled && ui::eq(sheet.unreadable, std::int64_t{0});
+}
 
 ui::Commands submit(Worksheet const& sheet) {
-    return ui::notify(ui::cond(ui::eq(sheet.outOfSpec, std::int64_t{0}), Text{"WS-2026-0412 is submitted for review."},
-                               Text{"WS-2026-0412 is submitted for review; investigation OOS-2026-031 is opened."}),
-                      ui::Role::Success);
+    return {ui::set(sheet.change.open, false),
+            ui::notify(
+                ui::cond(ui::eq(sheet.outOfSpec, std::int64_t{0}), Text{"WS-2026-0412 is submitted for review."},
+                         Text{"WS-2026-0412 is submitted for review; investigation OOS-2026-031 is opened."}),
+                ui::Role::Success)};
 }
 
 ui::Node saveButton() {
@@ -567,18 +575,11 @@ ui::AnyHandle currentSample(Worksheet const& sheet) {
     return sample;
 }
 
-// The reason asked for inline, under the result it is about.
+// The reason asked for inline, under the result it is about. It has no buttons of its own: Submit settles it.
 ui::Node inlineReason(Worksheet const& sheet) {
     Change const& change = sheet.change;
     // A line of room above the field's caption keeps it off the evaluation line.
-    return ui::column({reasonField(change, "Reason for change"), commentField(change),
-                       ui::row({ui::button({.label = "Undo change", .onClick = undoChange(sheet)}).testId("undo"),
-                                ui::button({.label = "Confirm change",
-                                            .emphasis = ButtonEmphasis::Primary,
-                                            .onClick = confirmChange(change)})
-                                    .enabled(canConfirm(change))
-                                    .testId("confirm")},
-                               {.gap = 1})},
+    return ui::column({reasonField(change, "Reason for change"), commentField(change)},
                       {.gap = 2, .padding = ui::padding(2, 0)})
         .visible(change.open && ui::eq(change.id, ui::row("id")))
         .testId("inline-reason");
