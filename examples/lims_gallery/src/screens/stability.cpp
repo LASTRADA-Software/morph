@@ -624,6 +624,7 @@ ui::Node conditionSection(Study const& study) {
     return ui::panel(
         {ui::grid(boxes, {.gap = 1, .columns = 3})},
         {.title = ui::format("{0} · {1} pulls", {ui::row("climate"), ui::call("count", {ui::row("points")})}),
+         .padding = 3,
          .collapsible = true,
          .collapsed = ui::ne(study.openCondition, rowId),
          .onToggle = ui::set(study.openCondition,
