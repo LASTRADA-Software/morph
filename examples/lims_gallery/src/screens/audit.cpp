@@ -289,7 +289,8 @@ ui::Node entriesNote(Audit const& audit) {
 }
 
 ui::Node chips(Audit const& audit) {
-    std::vector<ui::Node> row;
+    // The note leads the chips on their line while the page is wide enough, and the chips wrap under it otherwise.
+    std::vector<ui::Node> row{entriesNote(audit)};
     for (std::vector<Facet> const* const group : {&audit.types, &audit.actions}) {
         for (Facet const& facet : *group) {
             row.push_back(
@@ -308,8 +309,6 @@ ui::Node chips(Audit const& audit) {
     row.push_back(chip(span, "Remove dates", {ui::set(audit.from, std::string{}), ui::set(audit.until, std::string{})},
                        audit.dated)
                       .testId("chip-dates"));
-    // The note follows the chips on their line while the page is wide enough, and wraps under them otherwise.
-    row.push_back(entriesNote(audit));
     return ui::row(row, {.gap = 1, .align = Align::Center, .wrap = true}).testId("chips");
 }
 
