@@ -1989,7 +1989,7 @@ TEST_CASE("qt_quick theme: an input's placeholder is color.placeholder, and the 
                     set ? valuesOfDocument(R"({"color": {"placeholder": {"$type": "color", "$value": "#848587"}}})")
                         : ui::themeValues())
                     .empty());
-        QObject& theme = themeSingleton(scene);
+        QObject const& theme = themeSingleton(scene);
         auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
         auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
         auto area = scene.backend().createTextInput(column.get(), ui::TextInputMode::Multiline);
@@ -2010,8 +2010,8 @@ TEST_CASE("qt_quick theme: a declared surface sets its own placeholder", "[qt_qu
     std::map<std::string, ui::ThemeValues, std::less<>> const declared{
         {"sidebar", valuesOfDocument(R"({"color": {"placeholder": {"$type": "color", "$value": "#010203"}}})")}};
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), declared).empty());
-    QObject& theme = themeSingleton(scene);
-    QObject& sidebar = builtinScheme(theme, "sidebarScheme");
+    QObject const& theme = themeSingleton(scene);
+    QObject const& sidebar = builtinScheme(theme, "sidebarScheme");
     CHECK(sidebar.property("hasPlaceholder").toBool());
     CHECK(sidebar.property("placeholderText").value<QColor>() == QColor{"#010203"});
     CHECK_FALSE(builtinScheme(theme, "cardScheme").property("hasPlaceholder").toBool());
