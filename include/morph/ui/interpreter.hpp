@@ -7471,14 +7471,14 @@ inline std::vector<BadgeModel> ScreenCore::lowerBadgeParts(std::span<DocNodePtr 
     return badges;
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of ui/1.
+// The readers every kind's lowering shares, each bound to the node being lowered.
 class ScreenCore::KindKit {
 public:
     KindKit(ScreenCore& core, DocNode const& node, LowerCtx const& ctx, ElementState* element)
         : _core{core}, _node{node}, _ctx{ctx}, _element{element}, _format{core.session.formatting()} {}
 
     // The children under @p key, each lowered with @p gap as the gap of the list around it.
-    std::vector<Node> children(std::string_view key, int gap = 0) const {
+    [[nodiscard]] std::vector<Node> children(std::string_view key, int gap = 0) const {
         LowerCtx listCtx = _ctx;
         listCtx.listGap = gap;
         std::vector<Node> out;
@@ -7489,24 +7489,24 @@ public:
     }
 
     // The children under @p key as one node: none is empty, several share a holder that sets @p gap.
-    Node child(std::string_view key, int gap = 0) const {
+    [[nodiscard]] Node child(std::string_view key, int gap = 0) const {
         auto const nodes = _node.nodes(key);
         return nodes.empty() ? Node{} : _core.lowerAll(nodes, _ctx, gap);
     }
 
-    std::int64_t onceInt(std::string_view key, std::int64_t fallback) const {
+    [[nodiscard]] std::int64_t onceInt(std::string_view key, std::int64_t fallback) const {
         ExprPtr const expr = _node.prop(key);
         return expr ? intOf(_core.once(_ctx, expr), fallback) : fallback;
     }
 
-    bool onceBool(std::string_view key, bool fallback) const {
+    [[nodiscard]] bool onceBool(std::string_view key, bool fallback) const {
         ExprPtr const expr = _node.prop(key);
         return expr ? boolOf(_core.once(_ctx, expr), _format) : fallback;
     }
 
     // A stack's padding: one step, or the loader-checked constant list of the vertical and the horizontal step. A
     // computed padding that yields a list is not a step: it is reported once and taken as 0.
-    Padding stackPadding() const {
+    [[nodiscard]] Padding stackPadding() const {
         ExprPtr const expr = _node.prop("padding");
         if (!expr) {
             return {};
@@ -7522,12 +7522,12 @@ public:
         return Padding{static_cast<int>(intOf(value, 0))};
     }
 
-    std::string onceText(std::string_view key) const {
+    [[nodiscard]] std::string onceText(std::string_view key) const {
         ExprPtr const expr = _node.prop(key);
         return expr ? textOf(_core.once(_ctx, expr), _format) : std::string{};
     }
 
-    Prop<std::string> textProp(std::string_view key) const {
+    [[nodiscard]] Prop<std::string> textProp(std::string_view key) const {
         return _core.bindProp<std::string>(_ctx, _node.prop(key), std::string{}, stringOf);
     }
 
@@ -7550,7 +7550,7 @@ public:
         spec.showLabel = _node.flag("showLabel");
     }
 
-    Action action(std::string_view key) const {
+    [[nodiscard]] Action action(std::string_view key) const {
         Commands const* const commands = _node.event(key);
         if (commands == nullptr) {
             return {};
@@ -7558,7 +7558,7 @@ public:
         return [core = &_core, ctx = _ctx, commands] { core->runEvent(commands, ctx, Value{}); };
     }
 
-    ActionButton actionPart() const {
+    [[nodiscard]] ActionButton actionPart() const {
         ActionButton button;
         for (DocNodePtr const& part : _node.partList("action")) {
             button.label = _core.bindProp<std::string>(_ctx, part->prop("label"), std::string{}, stringOf);
@@ -7570,20 +7570,24 @@ public:
     }
 
     // A reader of the element's value under @p name.
-    auto read(std::string_view name) const {
+    [[nodiscard]] auto read(std::string_view name) const {
         return [element = _element, core = &_core, name = std::string{name}] {
             return core->elementValue(*element, name);
         };
     }
 
 private:
+    // NOLINTBEGIN(cppcoreguidelines-avoid-const-or-ref-data-members): the kit lives inside one lowering call, in
+    // which all four outlive it.
     ScreenCore& _core;
     DocNode const& _node;
     LowerCtx const& _ctx;
     ElementState* _element;
     FormatContext const& _format;
+    // NOLINTEND(cppcoreguidelines-avoid-const-or-ref-data-members)
 };
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of ui/1.
 inline std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     std::string_view const kind = node.kind;
     FormatContext const& format = session.formatting();
@@ -7892,6 +7896,7 @@ inline std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx
     return std::nullopt;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of ui/1.
 inline std::optional<Node> ScreenCore::lowerDisplay(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     std::string_view const kind = node.kind;
     KindKit const kit{*this, node, ctx, element};
@@ -8114,6 +8119,7 @@ inline Node ScreenCore::lowerDropZone(DocNode const& node, LowerCtx const& ctx, 
     return ui::dropZone(std::move(spec));
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of ui/1.
 inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     std::string_view const kind = node.kind;
     KindKit const kit{*this, node, ctx, element};
