@@ -329,7 +329,9 @@ private:
     std::shared_ptr<void> _fn;
     T (*_compute)(void*);
     EqualityPolicy _policy;
-    std::optional<T> _value;
+    // Initialised explicitly: GCC 15 at -O3 otherwise reports the optional<std::string> destructor as reading
+    // uninitialised memory when a Scope destroys a just-built Computed.
+    std::optional<T> _value = std::nullopt;
     // The latest computation's failure, or null after a success.
     std::exception_ptr _error;
     // Whether `_error` has not reached a reader yet.
