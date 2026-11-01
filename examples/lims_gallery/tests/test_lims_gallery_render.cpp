@@ -46,6 +46,13 @@ constexpr std::array<std::pair<std::string_view, std::pair<int, int>>, 2> kWindo
 constexpr int kProbeWidth = 390;
 constexpr int kProbeHeight = 844;
 
+// The review worksheet's window for the tag probe, in pixels: the width at which the mockups are drawn.
+constexpr int kTagProbeWidth = 1215;
+constexpr int kTagProbeHeight = 830;
+
+// The Evaluation tag of the worksheet's second flagged result, which carries the longest verdict.
+constexpr char const* kLongTag = "Out of trend: \u22120.7 % vs. last 5 lots";
+
 // How long a mount waits for the backend to report the class its window was resized to.
 constexpr int kResizeAttempts = 50;
 
@@ -88,6 +95,9 @@ struct WidthReport {
     double footerBottom = 0.0;
     double windowHeight = 0.0;
     double unitHeight = 0.0;
+    // The review probe: whether the longest Evaluation tag was found at 1215 px, and whether Qt Quick elided it.
+    bool tagFound = false;
+    bool tagElided = false;
 };
 
 // The first item under @p root whose object name is @p name, depth first.
@@ -98,6 +108,20 @@ QQuickItem* findItem(QQuickItem* root, QString const& name) {
     }
     for (QQuickItem* child : root->childItems()) {
         if (QQuickItem* const found = findItem(child, name); found != nullptr) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+// The first item under @p root that shows @p text and reports whether it is elided, depth first.
+// NOLINTNEXTLINE(misc-no-recursion): the walk follows the item tree to any depth.
+QQuickItem* findText(QQuickItem* root, QString const& text) {
+    if (root->property("text").toString() == text && root->property("truncated").isValid()) {
+        return root;
+    }
+    for (QQuickItem* child : root->childItems()) {
+        if (QQuickItem* const found = findText(child, text); found != nullptr) {
             return found;
         }
     }
@@ -134,6 +158,13 @@ public:
                 _report->expected.push_back(screen + "@" + std::string{width});
             }
         }
+        // The review page at the mockups' width, where its Evaluation tag is read, and at the desktop window's width,
+        // where the smoke's layout warning fails the run if the worksheet's table scrolls sideways.
+        _mounts.push_back(Mount{.screen = "lims-gallery.review",
+                                .width = "expanded",
+                                .pixels = {kTagProbeWidth, kTagProbeHeight},
+                                .tagProbe = true});
+        _report->expected.emplace_back("lims-gallery.review@expanded");
         // Last, so the window is left at the probe's size only after every other mount.
         _mounts.push_back(Mount{.screen = "lims-gallery.receipt", .width = "compact", .units = 0.0, .probe = true});
         _report->expected.emplace_back("lims-gallery.receipt@compact");
@@ -148,6 +179,7 @@ private:
         // The window's size in pixels, when the mount names one in place of a width in units.
         std::pair<int, int> pixels{0, 0};
         bool probe = false;
+        bool tagProbe = false;
     };
 
     void next() {
@@ -192,6 +224,9 @@ private:
             if (mount.probe) {
                 probe();
             }
+            if (mount.tagProbe) {
+                probeTag();
+            }
             next();
         });
     }
@@ -208,6 +243,15 @@ private:
         auto const* const theme =
             _shown->engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
         _report->unitHeight = theme != nullptr ? theme->property("unitHeight").toDouble() : 0.0;
+    }
+
+    // Reads whether the review worksheet's longest Evaluation tag is shown whole.
+    void probeTag() {
+        QQuickItem const* const tag = findText(_shown->window->contentItem(), QString::fromUtf8(kLongTag));
+        _report->tagFound = tag != nullptr;
+        if (tag != nullptr) {
+            _report->tagElided = tag->property("truncated").toBool();
+        }
     }
 
     // Runs @p action after @p delay, posted from the timer rather than run in it: the action replaces the timer,
@@ -292,4 +336,8 @@ TEST_CASE("lims gallery render smoke: every screen at both width classes, offscr
     CHECK(report.footerBottom <= report.windowHeight);
     // The page's padding is a few units.
     CHECK(report.footerBottom >= report.windowHeight - (4.0 * report.unitHeight));
+    // At 1215 px the review worksheet's Evaluation column keeps its longest tag whole: Analyte and Change give width
+    // before it does.
+    REQUIRE(report.tagFound);
+    CHECK_FALSE(report.tagElided);
 }
