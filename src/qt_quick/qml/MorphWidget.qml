@@ -243,12 +243,17 @@ Item {
     }
     Layout.horizontalStretchFactor: widthKind === 2 ? widthAmount : -1
     Layout.verticalStretchFactor: heightKind === 2 ? heightAmount : -1
+    // The width inside a stack's padding, or -1 for a parent that is not a stack. The parameter is untyped because only a
+    // stack declares `insetX`.
+    function roomOf(stack): real {
+        return stack.insetX !== undefined ? stack.width - 2 * stack.insetX : -1
+    }
     // A percent width is a share of the stack two levels up (the stack, its layout, this widget), read by its width and
     // padding, never of the layout between them: in a row packed at its natural length the layout's width is its own
     // implicit width, which includes this share.
     readonly property real shareWidth: {
         const stack = parent ? parent.parent : null
-        const room = stack && stack.insetX !== undefined ? stack.width - 2 * stack.insetX : -1
+        const room = stack ? root.roomOf(stack) : -1
         return widthKind === 3 && room >= 0 ? widthAmount / 100 * room : -1
     }
     // A percent child is not squeezed below its share by a wide sibling: its minimum is the share (held to its maximum).
