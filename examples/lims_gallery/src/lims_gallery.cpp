@@ -34,7 +34,7 @@ constexpr char const* kThemeIndex = R"({
 
 // Green is the accent. The status tones keep their meaning — err out of spec, warn out of trend or due, ok within
 // spec, info and neutral for workflow state — so a tone is never mistaken for the accent: an `ok` tag is a tinted
-// label, a primary button a filled one with its own text.
+// label, a primary button a filled one with its own text. A control is 30 px high, as in the designs.
 constexpr char const* kThemeBase = R"({
   "color": { "$type": "color",
     "accent": { "$value": "#17784A" }, "focus": { "$value": "#17784A" },
@@ -67,6 +67,7 @@ constexpr char const* kThemeBase = R"({
             "overline": { "case": { "$type": "keyword", "$value": "uppercase" } } },
   "shape": { "iconOnly": { "$type": "keyword", "$value": "square" } },
   "collapsible": { "marker": { "$type": "keyword", "$value": "none" } },
+  "control": { "$type": "dimension", "height": { "$value": { "value": 30, "unit": "px" } } },
   "table": { "$type": "dimension", "cellPaddingY": { "$value": { "value": 6, "unit": "px" } } },
   "head": { "$type": "dimension", "paddingY": { "$value": { "value": 12, "unit": "px" } } },
   "radius": { "$type": "dimension",
