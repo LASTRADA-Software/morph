@@ -255,7 +255,7 @@ ui::Node detailsCard() {
 }
 
 ui::Node eventList(Instrument const& instrument) {
-    return ui::forEach(instrument.events, {.key = ui::row("what"), .gap = 1, .divided = true},
+    return ui::forEach(instrument.events, {.key = ui::row("what"), .gap = 2, .divided = true},
                        [](ui::DeclScope& /*row*/) {
                            return ui::Nodes{ui::row({layout::muted(ui::row("when")).sizing(ui::fixed(15)),
                                                      ui::text({.text = ui::row("what")}).sizing(ui::stretch())},
@@ -333,13 +333,12 @@ ui::Node expandedLayout(Instrument const& instrument) {
     auto const overview = ui::row(
         {ui::column({detailsCard(), ui::panel({eventList(instrument)}, {.title = "Recent events", .padding = 2})},
                     {.gap = 2})
-             .sizing(ui::stretch()),
+             .sizing(ui::stretch(2)),
          ui::column({ui::panel({qualificationList()}, {.title = "Qualification", .padding = 2}),
                      ui::panel({currentBooking(false)}, {.title = "Current booking", .padding = 2})},
                     {.gap = 2})
-             // The design's column is 30% of its 1000 px page; 30 units is that share of the 785 px page the sidebar
-             // leaves.
-             .sizing(ui::fixed(30))},
+             // A third of the page, as the design draws it (320 of its 1000 px).
+             .sizing(ui::stretch(1))},
         {.gap = 2, .align = Align::Start});
     // The root is the page's edge: the strip sits in the head's white block, and the tabs inset their own pages.
     return ui::column({recordTabs(instrument, overview), dialogs(instrument)},
