@@ -21,13 +21,16 @@ public:
     void setText(std::string_view text) override;
     void setRole(ui::TextRole role) override;
     void setSpans(std::vector<ui::TextSpan> const& spans) override;
+    /// Places each line within the text's width. A table gives a text that has an alignment of its own the whole
+    /// column, so its lines are placed here rather than the text as a whole.
+    void setAlign(ui::TextAlign align) override;
+    [[nodiscard]] bool placedAcrossColumn() const override { return !_align.has_value(); }
     /// A text is not described; the mount never asks.
     void setDescription(std::string_view description) override;
     void setCaptionHint(std::string_view hint) override;
     /// The tone is the text's colour; the role keeps its weight.
     void setTone(ui::Tone tone) override;
     [[nodiscard]] std::string probeText() const override { return _text; }
-    [[nodiscard]] bool placedAcrossColumn() const override { return true; }
     /// Whether a line wider than the text is drawn cut with an ellipsis in its last cell, as a table sets it for a
     /// column that does not wrap. A mono text is always drawn so: an identifier is never broken across rows.
     void setElided(bool elided);
@@ -42,6 +45,7 @@ private:
     // The runs, while the text has spans; empty for a plain text.
     std::vector<ui::TextSpan> _runs;
     ui::TextRole _role = ui::TextRole::Normal;
+    std::optional<ui::TextAlign> _align;
     ui::Tone _tone = ui::Tone::Neutral;
     bool _elided = false;
 };

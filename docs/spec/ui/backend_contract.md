@@ -272,6 +272,13 @@ content wider than itself by 2 px or more (a smaller shortfall is layout roundin
 the `morph.layout` category. The terminal cuts the content at the container's edge and says nothing: it has no
 diagnostics channel that does not draw over the screen.
 
+**Text alignment.** `TextWidget::setAlign(TextAlign)` places each line of a text within the text's own width at its
+start, centre or end; a line is measured on its own, so a wrapped or multi-line text aligns every line. A text as wide
+as its content shows no difference. Under a right-to-left layout `Start` and `End` swap. A required text's mark
+follows the end of its last line where that line is drawn. A text that was told an alignment, `Start` included, keeps
+it in a table or grid cell: the track's `align` no longer places the text, and the cell is given the track's whole
+width so that the text's lines are placed by the text. A text told none is placed by its track as before.
+
 **Alignment.** All of the above is the default, `Align::Stretch` and `Justify::Start`; the mount calls `setAlign` and
 `setJustify` only for another value, as it does `setEmphasis`, so a screen that says nothing of alignment records
 nothing new. `StackWidget::setAlign(Align)` places every child across the axis, and a child's `alignSelf` (in its
@@ -302,7 +309,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `Widget` | `setVisible`, `setEnabled`, `setLayout(LayoutHints)`, `setDragKey(optional<Key>)`, `setAccessibleName`, `setAccessibleRole`, `setTestId`, `setTooltip`, `setSurface` (may be called again, and restyles the widget and everything inside it; empty is the theme's default), `focus()` | `setDropHandler(accepts, onDrop)`, `setKeys(chords, onChord)` (the chord pressed) |
 | `ContainerWidget` | `moveChild(child, index)` | — |
 | `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale`, `setDescription`, `setCaptionHint`, `setTone` (a text refuses `setDescription` and `setCaptionHint`; its tone is its colour, whatever its role) | — |
-| `TextWidget` | `setText`, `setRole`, `setSpans` | — |
+| `TextWidget` | `setText`, `setRole`, `setSpans`, `setAlign(TextAlign)` (once, only when the document gives an alignment) | — |
 | `ButtonWidget` | `setLabel`, `setEmphasis`, `setIcon` (once, for a button with an icon), `setStyle` (once, for an item), `setShape`, `setSize`, `setMono` (each once, only for a non-default value), `setSelected`, `content()` (an item's content, asked for only when it has some) | `setOnClick` (Enter, Space or a click) |
 | `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setPrefix` (the prefix shown, muted, at the leading edge inside the field, after the icon, and announced before the field's description; single-line and password only), `setMono` (once, only for `true`: the text and the placeholder in the `mono` role's face), `setAlign` (once, only for `Center` or `End`; single-line and password only: where the text sits; `End` draws digits at one width each), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only), `setIcon` (an icon of the theme's icon set, drawn at the leading edge; single-line and password only, called once), `setCaption(label, shown)` (the field's label, and whether the input draws it as a visible caption above its control), `setEmphasis` (once, only for `Prominent`: drawn as the focal control, on Qt Quick larger and outlined in the accent, on the terminal bold) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |
 | `CheckboxWidget` | `setLabel`, `setChecked` | `setOnToggle(bool)` |
@@ -576,6 +583,9 @@ a sibling (the column the interpreter makes for two or more nodes) lays the blee
 edge to its inner right edge, and the sibling inside the padding.
 A tabs node with a page inset of 5 steps and a page holding a holder column of a bleeding child and a sibling lays the
 bleeding child from the node's left edge to its right edge, also when the page is taller than the node and scrolls.
+A `fixed(20)` text "abc" with `TextAlign::End` draws its line against its width's end (its right edge within one unit
+of the widget's, its start more than 15 units in), and one with no alignment starts at the widget's left edge; the case
+reads `textExtentOf` for where the line is drawn.
 
 ### The probe
 
@@ -609,6 +619,7 @@ after it; its reading operations report what the widget shows now.
 | `expand(section, open)` | Opens or closes a collapsible section with its own control |
 | `dropFiles(zone, paths)` | Drops files from the operating system onto a drop zone |
 | `boundsOf(widget)` | Where the widget is drawn, in the backend's units, for the layout cases; none by default, for a probe that reads no geometry |
+| `textExtentOf(text)` | The box around the lines a Text draws, in the units `boundsOf` uses; none by default, and a layout case that reads it then fails as one that reads no bounds does |
 
 A case reaches widgets only through `Mounted::root()`, `childAt` and further roots it mounts, or
 through widgets it makes with `backend()` itself, so a probe needs no lookup by name.

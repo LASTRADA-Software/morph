@@ -41,6 +41,7 @@
 #include "button_style.hpp"
 #include "control_shape.hpp"
 #include "input_emphasis.hpp"
+#include "text_align.hpp"
 
 /// @file
 /// @brief Server-side authoring of UI documents (spec 5 §11): typed builders that write a screen's JSON, and the
@@ -522,6 +523,14 @@ inline void putSection(Json& object, std::string_view key, Json const& section) 
 /// @return `start`, `center`, `end` or `stretch`.
 [[nodiscard]] inline std::string alignName(Align align) {
     static constexpr std::array<char const*, 4> kNames = {"stretch", "start", "center", "end"};
+    return kNames.at(static_cast<std::size_t>(align));
+}
+
+/// @brief A text alignment's document name.
+/// @param align The alignment.
+/// @return `start`, `center` or `end`.
+[[nodiscard]] inline std::string textAlignName(TextAlign align) {
+    static constexpr std::array<char const*, 3> kNames = {"start", "center", "end"};
     return kNames.at(static_cast<std::size_t>(align));
 }
 
@@ -3600,19 +3609,25 @@ struct TextOptions {
     AnyHandle tone;
     /// @brief Whether the shown value is being recalculated.
     AnyHandle stale;
+    /// @brief Where each line sits within the text's width; unset keeps the start. It shows nothing on a text that
+    ///        is as wide as its content, so it belongs on a text that stretches or fills a table column.
+    std::optional<TextAlign> align;
 };
 
 /// @brief A `text` node.
 /// @param options The text.
 /// @return The node.
 [[nodiscard]] inline Node text(TextOptions const& options) {
-    return detail::NodeWriter{"text"}
-        .put("text", options.text)
+    detail::NodeWriter node{"text"};
+    node.put("text", options.text)
         .put("spans", options.spans)
         .put("role", options.role)
         .put("tone", options.tone)
-        .put("stale", options.stale)
-        .done();
+        .put("stale", options.stale);
+    if (options.align) {
+        node.text("align", detail::textAlignName(*options.align));
+    }
+    return node.done();
 }
 
 /// @brief Options of `button`.

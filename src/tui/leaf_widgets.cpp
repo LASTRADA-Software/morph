@@ -156,6 +156,11 @@ void TextImpl::setElided(bool elided) {
     }
 }
 
+void TextImpl::setAlign(ui::TextAlign align) {
+    _align = align;
+    refresh();
+}
+
 void TextImpl::setRole(ui::TextRole role) {
     _role = role;
     refresh();
@@ -181,11 +186,12 @@ void TextImpl::paintControl(::core::tui::Canvas& canvas) {
         // The tone is the colour; the role keeps its weight.
         style.fg = toneStyle(canvas.theme(), _tone).fg;
     }
+    ui::TextAlign const alignment = _align.value_or(ui::TextAlign::Start);
     if (!_runs.empty()) {
         if (_elided) {
             paintRuns(canvas, elidedRuns(_runs, canvas.width()), style, false);
         } else {
-            paintRuns(canvas, _runs, style, true);
+            paintRuns(canvas, _runs, style, true, 0, 0, alignment);
         }
     } else {
         bool const elide = _elided || _role == ui::TextRole::Mono;
@@ -194,7 +200,9 @@ void TextImpl::paintControl(::core::tui::Canvas& canvas) {
             if (row >= canvas.height()) {
                 break;
             }
-            canvas.putString(row, 0, elide ? elidedLine(line, canvas.width()) : std::string{line}, style);
+            std::string const shown = elide ? elidedLine(line, canvas.width()) : std::string{line};
+            int const column = alignedOffset(alignOfText(alignment), displayWidth(shown), canvas.width());
+            canvas.putString(row, column, shown, style);
             ++row;
         }
     }
@@ -204,7 +212,9 @@ void TextImpl::paintControl(::core::tui::Canvas& canvas) {
     auto const last = static_cast<int>(lines.size()) - 1;
     if (required() && last < canvas.height()) {
         int const mark = displayWidth(kRequiredMark);
-        canvas.putString(last, std::max(0, std::min(displayWidth(lines.back()), canvas.width() - mark)), kRequiredMark,
+        int const lineWidth = displayWidth(lines.back());
+        int const start = alignedOffset(alignOfText(alignment), lineWidth, canvas.width());
+        canvas.putString(last, std::max(0, std::min(start + lineWidth, canvas.width() - mark)), kRequiredMark,
                          canvas.theme().error);
     }
 }

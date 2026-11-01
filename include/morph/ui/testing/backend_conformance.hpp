@@ -200,6 +200,15 @@ public:
         static_cast<void>(widget);
         return std::nullopt;
     }
+
+    /// @brief Where a text's lines are drawn: the box around them, in the units `boundsOf` uses, from the top left of
+    ///        the window or screen. For the layout cases that place a text within its own width.
+    /// @param widget The text.
+    /// @return The box; `nullopt` when the probe reads none.
+    [[nodiscard]] virtual std::optional<WidgetBounds> textExtentOf(Widget const& widget) {
+        static_cast<void>(widget);
+        return std::nullopt;
+    }
 };
 
 /// @brief One scripted case.
@@ -1764,6 +1773,15 @@ public:
         return bounds.value_or(WidgetBounds{});
     }
 
+    /// @brief Where @p text draws its lines; zero, with the case failed, when the probe reads none.
+    /// @param text The text.
+    /// @return The box around its lines.
+    [[nodiscard]] WidgetBounds textOf(Widget const& text) {
+        std::optional<WidgetBounds> const bounds = _probe->textExtentOf(text);
+        _checks->that(bounds.has_value(), "the probe reads no bounds, so a layout case measures nothing");
+        return bounds.value_or(WidgetBounds{});
+    }
+
     /// @brief Checks that a length is what it should be, within one unit.
     /// @param what     What is measured, for the message.
     /// @param expected The length it should be.
@@ -1838,6 +1856,35 @@ struct Measured {
     if (children.size() == 2) {
         geometry.near("the capped stretch child's width", 20, geometry.of(*children.at(0)).width);
         geometry.near("its stretch sibling's width", 40, geometry.of(*children.at(1)).width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: an end-aligned text draws its line at the end of its width, a start-aligned one at the start.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> textAlignEnd(ConformanceProbe& probe) {
+    Text ended{.text = "abc", .align = TextAlign::End};
+    ended.common.layout = {.width = Sizing::fixed(20)};
+    Text started{.text = "abc"};
+    started.common.layout = {.width = Sizing::fixed(20)};
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        insideColumn(ui::column(Column{.children = {ui::text(std::move(ended)), ui::text(std::move(started))}}))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the column holds two texts");
+    if (children.size() == 2) {
+        WidgetBounds const box = geometry.of(*children.at(0));
+        WidgetBounds const ink = geometry.textOf(*children.at(0));
+        geometry.near("the end-aligned text's right edge", box.x + 20, ink.x + ink.width);
+        checks.that(ink.x - box.x > 15, "the end-aligned text starts " + std::to_string(ink.x - box.x) +
+                                            " units in, not near the end of its 20 units");
+        WidgetBounds const startBox = geometry.of(*children.at(1));
+        WidgetBounds const startInk = geometry.textOf(*children.at(1));
+        geometry.near("the start-aligned text's left edge", startBox.x, startInk.x);
     }
     return checks.result();
 }
@@ -3221,7 +3268,7 @@ struct WrappingRow {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 30> const cases{{
+    static std::array<ConformanceCase, 31> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3270,6 +3317,7 @@ struct WrappingRow {
          .run = detail::bleedingChildOfHeldPanelReachesFrame},
         {.name = "a bleeding child of a tab page reaches the tabs node's edges, also while the page scrolls",
          .run = detail::bleedingChildOfTabPageReachesNodeEdges},
+        {.name = "an end-aligned text draws its line at the end of its width", .run = detail::textAlignEnd},
     }};
     return cases;
 }

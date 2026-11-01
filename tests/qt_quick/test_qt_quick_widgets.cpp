@@ -14,11 +14,14 @@
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QFontMetricsF>
+#include <QImage>
 #include <QList>
 #include <QMessageLogContext>
 #include <QObject>
+#include <QPoint>
 #include <QPointF>
 #include <QQmlComponent>
+#include <QQmlContext>
 #include <QQmlEngine>
 #include <QQmlProperty>
 #include <QQuickItem>
@@ -104,6 +107,78 @@ TEST_CASE("qt_quick widgets: a text shows its text in its role, and a button's c
     button->focus();
     scene.key(Qt::Key_Return);
     CHECK(clicks == 2);
+}
+
+namespace {
+
+// The leftmost and rightmost columns of @p item, in its own pixels, that differ from the colour at its top left
+// corner; (-1, -1) when it draws nothing.
+std::pair<int, int> inkColumns(Scene& scene, QQuickItem const& item) {
+    QImage const image = scene.window().grabWindow();
+    QPoint const corner = item.mapToScene(QPointF{0, 0}).toPoint();
+    QColor const ground = image.pixelColor(corner.x(), corner.y());
+    int left = -1;
+    int right = -1;
+    for (int x = 0; x < static_cast<int>(item.width()); ++x) {
+        for (int y = 0; y < static_cast<int>(item.height()); ++y) {
+            if (image.pixelColor(corner.x() + x, corner.y() + y) != ground) {
+                left = left < 0 ? x : left;
+                right = x;
+                break;
+            }
+        }
+    }
+    return {left, right};
+}
+
+}  // namespace
+
+// Mutation: leave `setAlign` out of TextImpl (the ink then ends near the text's own width, about 200 px in).
+TEST_CASE("qt_quick widgets: a stretching text with an end alignment draws its line at the end of its width",
+          "[qt_quick][align]") {
+    Scene scene;
+    auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    row->setLayout({.width = ui::Sizing::fixed(80)});
+    auto note = scene.backend().createText(row.get());
+    note->setText("Approving needs your signature");
+    note->setLayout({.width = ui::Sizing::stretch()});
+    note->setAlign(ui::TextAlign::End);
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*note);
+    auto const [left, right] = inkColumns(scene, item);
+    qreal const width = item.width();
+    REQUIRE(left >= 0);
+    CHECK(right >= width - 3);
+    // The line is shorter than the width, so its ink starts well in from the start.
+    CHECK(left > width / 4);
+    CHECK(QQmlProperty(&item, QStringLiteral("textAlign")).read().toInt() == static_cast<int>(Qt::AlignRight));
+    CHECK(QQmlProperty(&item, QStringLiteral("ownAlign")).read().toBool());
+}
+
+// Mutation: have MorphText mirror nothing (the line then ends at the right under a right-to-left layout).
+TEST_CASE("qt_quick widgets: under a mirrored layout an end-aligned text starts at the left", "[qt_quick][align]") {
+    Scene scene;
+    auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    row->setLayout({.width = ui::Sizing::fixed(80)});
+    auto note = scene.backend().createText(row.get());
+    note->setText("Approving needs your signature");
+    note->setLayout({.width = ui::Sizing::stretch()});
+    note->setAlign(ui::TextAlign::End);
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*note);
+    // The item mirrors, and so does what is inside it: the label reads the item's layout direction.
+    QQmlContext* const context = QQmlEngine::contextForObject(&item);
+    QQmlProperty const mirrored{&item, QStringLiteral("LayoutMirroring.enabled"), context};
+    REQUIRE(mirrored.isValid());
+    REQUIRE(mirrored.write(true));
+    QQmlProperty const inherit{&item, QStringLiteral("LayoutMirroring.childrenInherit"), context};
+    REQUIRE(inherit.isValid());
+    REQUIRE(inherit.write(true));
+    scene.settle();
+    auto const [left, right] = inkColumns(scene, item);
+    REQUIRE(left >= 0);
+    CHECK(left <= 3);
+    CHECK(right < item.width() * 3 / 4);
 }
 
 // Mutation: drop `captionWeight` from MorphButton's captionFont (the mono caption keeps the theme's button weight).

@@ -62,6 +62,49 @@ TEST_CASE("tui widgets: a button weight of 600 or more draws its caption bold, a
     CHECK_FALSE(buffer.at(1, 2).style.bold);
 }
 
+// Mutation: ignore the alignment in TextImpl::paintControl (each line starts at cell 0).
+TEST_CASE("tui widgets: a text places each of its lines at its alignment within its width", "[tui][widgets][align]") {
+    Harness harness{20, 4};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const ended = harness.make<TextImpl>(column.get());
+    ended->setText("abc");
+    ended->setAlign(ui::TextAlign::End);
+    auto const centred = harness.make<TextImpl>(column.get());
+    centred->setText("abcd");
+    centred->setAlign(ui::TextAlign::Center);
+    auto const lines = harness.make<TextImpl>(column.get());
+    lines->setText("abcdef\nab");
+    lines->setAlign(ui::TextAlign::End);
+    CHECK(harness.draw() ==
+          Rows{"                 abc", "        abcd", "              abcdef", "                  ab"});
+}
+
+// Mutation: paint runs from column 0 whatever the alignment, or measure the line without its strong run.
+TEST_CASE("tui widgets: a text with runs is placed by the width of all its runs", "[tui][widgets][align]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const runs = harness.make<TextImpl>(column.get());
+    runs->setSpans(
+        {ui::TextSpan{.text = "a "}, ui::TextSpan{.text = "b", .strong = true}, ui::TextSpan{.text = " c"}});
+    runs->setAlign(ui::TextAlign::End);
+    auto const multi = harness.make<TextImpl>(column.get());
+    multi->setSpans({ui::TextSpan{.text = "xyz\nx"}});
+    multi->setAlign(ui::TextAlign::End);
+    // "a b c" is five cells wide, so it starts at cell 15.
+    CHECK(harness.draw() == Rows{"               a b c", "                 xyz", "                   x"});
+}
+
+// Mutation: place the required mark at the end of the unaligned text (cell 3, inside the aligned text's cells).
+TEST_CASE("tui widgets: a required text's mark follows its aligned text", "[tui][widgets][align]") {
+    Harness harness{20, 1};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const note = harness.make<TextImpl>(column.get());
+    note->setText("abc");
+    note->setRequired(true);
+    note->setAlign(ui::TextAlign::Center);
+    CHECK(harness.draw() == Rows{"        abc *"});
+}
+
 TEST_CASE("tui widgets: a column renders its children top to bottom", "[tui][widgets]") {
     Harness harness{20, 4};
     auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);

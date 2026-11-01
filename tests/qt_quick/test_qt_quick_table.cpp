@@ -165,6 +165,32 @@ TEST_CASE("qt_quick table: a fixed mono column holds its identifiers whole, and 
     CHECK(Scene::itemOf(*unwrapped).height() < Scene::itemOf(*wrapped).height());
 }
 
+// Mutation: write the column's alignment over a text that has its own (the start-aligned text becomes right-aligned).
+TEST_CASE("qt_quick table: a text with its own alignment keeps it in an end column", "[qt_quick][align]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(12)},
+                       {.label = "Area", .width = ui::Sizing::fixed(12), .align = ui::Align::End}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    auto name = scene.backend().createText(row.get());
+    name->setText("pH");
+    auto own = scene.backend().createText(row.get());
+    own->setText("0.21");
+    own->setAlign(ui::TextAlign::Start);
+    scene.settle();
+    CHECK(Scene::itemOf(*own).property("textAlign").toInt() == static_cast<int>(Qt::AlignLeft));
+    // The same cell without an alignment of its own takes its column's.
+    auto second = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*second, ui::Key{std::int64_t{2}});
+    auto secondName = scene.backend().createText(second.get());
+    secondName->setText("pH");
+    auto secondArea = scene.backend().createText(second.get());
+    secondArea->setText("0.21");
+    scene.settle();
+    CHECK(Scene::itemOf(*secondArea).property("textAlign").toInt() == static_cast<int>(Qt::AlignRight));
+}
+
 // Mutation: leave a text with spans out of `oneLine` (the runs wrap onto two lines whatever the column says), or leave
 // `fittedRuns` as the runs (the single line runs past the column's edge).
 TEST_CASE("qt_quick table: spans in a column without wrap keep one line and end in an ellipsis", "[qt_quick]") {

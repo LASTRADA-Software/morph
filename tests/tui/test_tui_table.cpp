@@ -814,6 +814,22 @@ TEST_CASE("tui table: an end column draws its text and its header label at its e
     CHECK(harness.draw() == Rows{"  Name         Area", "  pH           0.21"});
 }
 
+// Mutation: let the column place a text that has its own alignment (the start-aligned text moves to the column's end).
+TEST_CASE("tui table: a text with its own start alignment keeps the column's start in an end column",
+          "[tui][table][columns]") {
+    Harness harness{30, 3};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name"}, {.label = "Area", .width = ui::Sizing::fixed(12), .align = ui::Align::End}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    auto const name = harness.make<TextImpl>(row.get());
+    name->setText("pH");
+    auto const area = harness.make<TextImpl>(row.get());
+    area->setText("0.21");
+    area->setAlign(ui::TextAlign::Start);
+    table->setRowKey(*row, key(1));
+    CHECK(harness.draw() == Rows{"  Name         Area", "  pH   0.21"});
+}
+
 // Mutation: ignore Shift with an arrow (the cursor moves, nothing is selected).
 TEST_CASE("tui table: Shift+Down twice from the first row selects the first three rows", "[tui][table][selection]") {
     Harness harness{30, 5};

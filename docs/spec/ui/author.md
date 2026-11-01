@@ -202,7 +202,9 @@ expression of one),
   `styled(text, SpanStyle{.strong, .mono, .tone})` each a record run, and `spans({…})` the list (`list` under a name
   that reads at the call): `text({.spans = spans({"Lot ", mono(lot)}), .role = "muted"})`. `styled` is not `span`,
   which a node's `span` already means. A `text` also takes `tone`, its colour whatever its role:
-  `text({.text = "7", .role = "display", .tone = "err"})`. A dialog or drawer takes `descriptionSpans` beside
+  `text({.text = "7", .role = "display", .tone = "err"})`. `TextOptions::align` (a `std::optional<TextAlign>`, from
+  `text_align.hpp`) writes the `align` name and places each line within the text's width; it shows on a text that
+  stretches or fills a table column. A dialog or drawer takes `descriptionSpans` beside
   `description`, and `Scope::subtitleSpans(runs)` gives a screen's head its subtitle as runs beside `subtitle`, `Scope::titleSpans(runs)`
   its title as runs beside `title`, and `Scope::eyebrow(line)` and `eyebrowSpans(runs)` its line above the title.
 - **`group`** takes its children and `GroupOptions{label, required, description, errors, gap}`.

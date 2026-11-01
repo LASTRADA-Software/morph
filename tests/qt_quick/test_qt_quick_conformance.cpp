@@ -287,6 +287,43 @@ public:
                                          .height = item->height() / unitHeight};
     }
 
+    // In units: the Text's label, offset inside the item by its alignment within the label's width.
+    std::optional<ui::testing::WidgetBounds> textExtentOf(ui::Widget const& widget) override {
+        settle();
+        QQuickItem const* const item = base(widget).item();
+        auto* const theme =
+            _scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+        if (item == nullptr || theme == nullptr) {
+            return std::nullopt;
+        }
+        QQuickItem const* label = nullptr;
+        for (QQuickItem const* const child : item->findChildren<QQuickItem*>()) {
+            if (child->inherits("QQuickText") && child->property("text") == item->property("text")) {
+                label = child;
+                break;
+            }
+        }
+        if (label == nullptr) {
+            return std::nullopt;
+        }
+        qreal const unitWidth = theme->property("unitWidth").toReal();
+        qreal const unitHeight = theme->property("unitHeight").toReal();
+        qreal const content = label->property("contentWidth").toReal();
+        int const alignment = label->property("effectiveHorizontalAlignment").toInt();
+        qreal const spare = label->width() - content;
+        qreal shift = 0;
+        if (alignment == 2) {  // Text.AlignRight
+            shift = spare;
+        } else if (alignment == 4) {  // Text.AlignHCenter
+            shift = spare / 2;
+        }
+        QPointF const corner = label->mapToScene(QPointF{shift, 0});
+        return ui::testing::WidgetBounds{.x = corner.x() / unitWidth,
+                                         .y = corner.y() / unitHeight,
+                                         .width = content / unitWidth,
+                                         .height = label->height() / unitHeight};
+    }
+
 private:
     using Backend = morph::qt_quick::Backend;
 

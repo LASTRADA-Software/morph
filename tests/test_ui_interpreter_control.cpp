@@ -1047,6 +1047,23 @@ TEST_CASE("interpreter control: a prominent text input records its emphasis", "[
     CHECK(h.backend.prop(h.byTestId("TextInput", "scan"), "emphasis") == "Prominent");
 }
 
+// Mutation: drop the align in the text lowering (no `align` is recorded), or tell the backend only for `end` (the
+// explicit `start` below is then not recorded).
+TEST_CASE("interpreter control: a text's align reaches the backend only when the document gives one",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "aligned",
+      "view": {"kind": "column", "children": [
+        {"kind": "text", "testId": "end", "text": "a", "align": "end"},
+        {"kind": "text", "testId": "middle", "text": "b", "align": "center"},
+        {"kind": "text", "testId": "start", "text": "c", "align": "start"},
+        {"kind": "text", "testId": "none", "text": "d"}]}})");
+    CHECK(h.backend.prop(h.byTestId("Text", "end"), "align") == "End");
+    CHECK(h.backend.prop(h.byTestId("Text", "middle"), "align") == "Center");
+    CHECK(h.backend.prop(h.byTestId("Text", "start"), "align") == "Start");
+    CHECK_FALSE(h.backend.hasProp(h.byTestId("Text", "none"), "align"));
+}
+
 // Mutation: leave the mount's setSheet out for a bound `sheet` (no `sheet` property at all).
 TEST_CASE("interpreter control: a dialog's sheet follows the width class, and its dismiss label is sent",
           "[ui][interpreter]") {

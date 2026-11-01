@@ -87,6 +87,17 @@ QVariantList runsOf(std::vector<ui::TextSpan> const& spans) {
 
 void TextImpl::setRole(ui::TextRole role) { write("role", static_cast<int>(role)); }
 
+void TextImpl::setAlign(ui::TextAlign align) {
+    Qt::AlignmentFlag flag = Qt::AlignLeft;
+    if (align == ui::TextAlign::End) {
+        flag = Qt::AlignRight;
+    } else if (align == ui::TextAlign::Center) {
+        flag = Qt::AlignHCenter;
+    }
+    write("ownAlign", true);
+    write("textAlign", static_cast<int>(flag));
+}
+
 std::string TextImpl::shownText() const { return toUtf8(read("text").toString()); }
 
 // ── TextInput ─────────────────────────────────────────────────────────────

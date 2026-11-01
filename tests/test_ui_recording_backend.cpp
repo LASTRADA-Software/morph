@@ -596,6 +596,7 @@ TEST_CASE("RecordingBackend: every enumerator has its name, and a value outside 
     CHECK(enumName(static_cast<ui::StepState>(kOutside)) == "unknown");
     CHECK(ui::testing::detail::formatSizing({.kind = static_cast<ui::Sizing::Kind>(kOutside), .amount = 1}) ==
           "unknown");
+    CHECK(enumName(static_cast<ui::TextAlign>(kOutside)) == "Start");
     // NOLINTEND(clang-analyzer-optin.core.EnumCastOutOfRange)
 }
 

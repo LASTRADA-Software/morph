@@ -25,6 +25,7 @@
 #include "button_style.hpp"
 #include "control_shape.hpp"
 #include "input_emphasis.hpp"
+#include "text_align.hpp"
 
 /// @file
 /// @brief The toolkit-agnostic view tree: props, node kinds and their builders.
@@ -547,6 +548,9 @@ struct Text {
     Prop<std::vector<TextSpan>> spans;
     /// @brief The style.
     Prop<TextRole> role = TextRole::Normal;
+    /// @brief Where each line sits within the text's width; set once. Unset leaves a text in a table to its column's
+    ///        alignment; set, even to `Start`, it keeps its own. It shows nothing on a text as wide as its content.
+    std::optional<TextAlign> align;
     /// @brief Read-only, required, errors and stale.
     FieldState field{};
     /// @brief Visibility, enablement, layout, drag-and-drop.

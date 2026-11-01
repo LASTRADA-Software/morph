@@ -7603,6 +7603,9 @@ inline std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx
         } else {
             spec.text = kit.textProp("text");
         }
+        if (!node.name("align").empty()) {
+            spec.align = textAlignNamed(node.name("align"));
+        }
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         return ui::text(std::move(spec));

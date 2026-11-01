@@ -20,8 +20,10 @@ MorphField {
     property bool singleLine: false
     readonly property bool oneLine: root.hasRuns ? root.singleLine : (root.singleLine || root.role === 6)
     property int role: 0
-    // Where the text sits across the widget: a table sets it from its column's `align`.
+    // Where the text sits across the widget: a table sets it from its column's `align`, except for a text that has
+    // its own (`ownAlign`), which keeps what the document gave it.
     property int textAlign: Qt.AlignLeft
+    property bool ownAlign: false
     // Whether digits take one width each, so a column of numbers lines up.
     property bool tabularFigures: false
 
@@ -169,7 +171,12 @@ MorphField {
         property real lastLineY: 0
         onLineLaidOut: line => {
             if (line.isLast) {
-                label.lastLineEnd = line.x + line.implicitWidth
+                // The line is laid out at x 0 and moved by the alignment afterwards, so the end of an aligned line
+                // is the spare width further along.
+                const spare = Math.max(0, label.width - line.implicitWidth)
+                const shift = label.effectiveHorizontalAlignment === Text.AlignRight ? spare
+                              : label.effectiveHorizontalAlignment === Text.AlignHCenter ? spare / 2 : 0
+                label.lastLineEnd = line.x + line.implicitWidth + shift
                 label.lastLineY = line.y
             }
         }

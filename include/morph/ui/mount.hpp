@@ -825,6 +825,9 @@ private:
             bind(scope, spec.text, [&widget](std::string const& text) { widget.setText(text); });
         }
         bind(scope, spec.role, [&widget](TextRole role) { widget.setRole(role); });
+        if (spec.align) {
+            widget.setAlign(*spec.align);
+        }
         return widget;
     }
 

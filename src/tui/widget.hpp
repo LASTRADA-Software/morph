@@ -606,9 +606,12 @@ void bleedAreas(std::span<WidgetBase* const> children, std::vector<::core::tui::
 void arrangeStack(std::span<WidgetBase* const> children, ::core::tui::Rect area, StackSpec const& spec);
 /// Draws @p runs one after another from row @p row, column @p column, in @p style, a strong run bold; every cell is
 /// monospace already, so a mono run is drawn as the others. A run's '\n' starts the next row at column 0 while
-/// @p multiline, and is drawn as a space otherwise.
+/// @p multiline, and is drawn as a space otherwise. A @p align other than `Start` places each line, measured on its
+/// own, at the start, centre or end of the canvas's width, and takes the place of @p column.
 void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& runs, ::core::tui::Style const& style,
-               bool multiline, int row = 0, int column = 0);
+               bool multiline, int row = 0, int column = 0, ui::TextAlign align = ui::TextAlign::Start);
+/// The alignment a text's @p align names, as a container places a child.
+[[nodiscard]] ui::Align alignOfText(ui::TextAlign align) noexcept;
 /// Enter, or Space, with no modifier.
 [[nodiscard]] bool isActivation(::core::tui::KeyEvent const& key) noexcept;
 /// Appends the view of every focusable widget at or below @p root, depth first in `children()` order: Tab order.

@@ -834,8 +834,55 @@ std::vector<std::string_view> splitLines(std::string_view text) {
 
 int displayWidth(std::string_view text) { return ::core::tui::stringWidth(text); }
 
+ui::Align alignOfText(ui::TextAlign align) noexcept {
+    switch (align) {
+        case ui::TextAlign::Center:
+            return ui::Align::Center;
+        case ui::TextAlign::End:
+            return ui::Align::End;
+        case ui::TextAlign::Start:
+        default:
+            return ui::Align::Start;
+    }
+}
+
+namespace {
+
+// The width in cells of each line @p runs break into: a line break starts the next line while @p multiline, and is a
+// space otherwise.
+std::vector<int> runLineWidths(std::vector<ui::TextSpan> const& runs, bool multiline) {
+    std::vector<int> widths{0};
+    for (ui::TextSpan const& run : runs) {
+        bool first = true;
+        for (auto const line : splitLines(run.text)) {
+            if (!first) {
+                if (multiline) {
+                    widths.push_back(0);
+                } else {
+                    ++widths.back();
+                }
+            }
+            first = false;
+            widths.back() += displayWidth(line);
+        }
+    }
+    return widths;
+}
+
+}  // namespace
+
 void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& runs, ::core::tui::Style const& style,
-               bool multiline, int row, int column) {
+               bool multiline, int row, int column, ui::TextAlign align) {
+    std::vector<int> widths;
+    int const firstRow = row;
+    ui::Align const place = alignOfText(align);
+    auto const offsetOf = [&](int line) {
+        return alignedOffset(place, widths.at(static_cast<std::size_t>(line)), canvas.width());
+    };
+    if (align != ui::TextAlign::Start) {
+        widths = runLineWidths(runs, multiline);
+        column = offsetOf(0);
+    }
     for (ui::TextSpan const& run : runs) {
         ::core::tui::Style runStyle = style;
         runStyle.bold = style.bold || run.strong;
@@ -852,7 +899,7 @@ void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& run
             if (!first) {
                 if (multiline) {
                     ++row;
-                    column = 0;
+                    column = widths.empty() ? 0 : offsetOf(row - firstRow);
                 } else {
                     column += canvas.putString(row, column, " ", runStyle);
                 }

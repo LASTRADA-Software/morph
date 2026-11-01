@@ -168,6 +168,13 @@ public:
     ///        its characters. The mount calls it in place of `setText` for a text that has spans.
     /// @param spans The runs.
     virtual void setSpans(std::vector<TextSpan> const& spans) = 0;
+
+    /// @brief Places each line within the text's own width. A new text starts at the leading edge; the mount calls
+    ///        it once, only for a text whose document gives an alignment. Under a right-to-left layout `Start` and
+    ///        `End` swap. A text as wide as its content shows no difference. In a table, a text that has its own
+    ///        alignment keeps it over its column's.
+    /// @param align Where the lines sit.
+    virtual void setAlign(TextAlign align) = 0;
 };
 
 /// @brief A push button.

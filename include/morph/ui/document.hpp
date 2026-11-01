@@ -773,8 +773,8 @@ inline constexpr std::array<std::string_view, 3> kFormValues = {"ready", "body",
 inline constexpr std::array<std::string_view, 3> kTransferValues = {"progress", "pending", "error"};
 
 /// @brief The keys of `text`.
-inline constexpr std::array<KeySpec, 3> kTextKeys = {
-    {{"text", Shape::Expr}, {"spans", Shape::Expr}, {"role", Shape::Expr}}};
+inline constexpr std::array<KeySpec, 4> kTextKeys = {
+    {{"text", Shape::Expr}, {"spans", Shape::Expr}, {"role", Shape::Expr}, {"align", Shape::Text}}};
 /// @brief The keys of `button`.
 inline constexpr std::array<KeySpec, 12> kButtonKeys = {{{"label", Shape::Expr},
                                                          {"icon", Shape::Expr},
@@ -4173,6 +4173,8 @@ private:
     // A text's role and spans; a text carries no description, the line itself is the text.
     static void checkText(DocNode const& node) {
         checkTextRole(node);
+        static constexpr std::array<std::string_view, 3> kTextAligns = {"start", "center", "end"};
+        checkChoice(node, "align", kTextAligns);
         checkSpans(node.prop("spans"));
         if (node.prop("description") != nullptr) {
             refuse(pointerAppend(node.path, "description"), "a text is not described; put the line in the text");

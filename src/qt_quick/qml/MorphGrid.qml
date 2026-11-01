@@ -141,7 +141,7 @@ MorphWidget {
             const spare = room - width
             cell.x = xs[placed.column] + (across === 3 ? spare : across === 2 ? Math.floor(spare / 2) : 0)
             cell.width = width
-            if (cell.textAlign !== undefined)
+            if (cell.textAlign !== undefined && !cell.ownAlign)
                 cell.textAlign = across === 3 ? Qt.AlignRight : across === 2 ? Qt.AlignHCenter : Qt.AlignLeft
 
             const rowHeight = heights[placed.row]

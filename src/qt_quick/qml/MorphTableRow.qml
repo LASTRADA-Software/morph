@@ -96,7 +96,7 @@ MorphWidget {
                 cell.width = room
                 cell.x = x + inset
             }
-            if (cell.textAlign !== undefined)
+            if (cell.textAlign !== undefined && !cell.ownAlign)
                 cell.textAlign = across === 3 ? Qt.AlignRight : across === 2 ? Qt.AlignHCenter : Qt.AlignLeft
             if (cell.singleLine !== undefined)
                 cell.singleLine = i < root.columns.length && !root.columns[i].wrap

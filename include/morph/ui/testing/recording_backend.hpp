@@ -314,6 +314,21 @@ template <typename T, typename F>
     }
 }
 
+/// @brief A text alignment's name.
+/// @param align The alignment.
+/// @return The enumerator's name.
+[[nodiscard]] inline std::string enumName(TextAlign align) {
+    switch (align) {
+        case TextAlign::Center:
+            return "Center";
+        case TextAlign::End:
+            return "End";
+        case TextAlign::Start:
+        default:
+            return "Start";
+    }
+}
+
 /// @brief A text input mode's name.
 /// @param mode The mode.
 /// @return The enumerator's name.
@@ -972,12 +987,15 @@ public:
     void setTone(Tone tone) override { this->set("tone", enumName(tone)); }
 };
 
-/// @brief A fake `TextWidget`: properties `text`, `spans` (as `formatSpans` gives them), `role`, `tone`.
+/// @brief A fake `TextWidget`: properties `text`, `spans` (as `formatSpans` gives them), `role`, `align`, `tone`.
 class FakeText final : public FakeField<TextWidget> {
 public:
     using FakeField<TextWidget>::FakeField;
     void setText(std::string_view text) override { set("text", formatText(text)); }
     void setSpans(std::vector<TextSpan> const& spans) override { set("spans", formatSpans(spans)); }
+    /// @brief Records property `align`.
+    /// @param align The alignment.
+    void setAlign(TextAlign align) override { set("align", enumName(align)); }
     /// @brief Refuses a description: a text is not described.
     /// @param description The description, ignored.
     /// @throws std::logic_error always.

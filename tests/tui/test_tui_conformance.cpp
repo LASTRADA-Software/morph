@@ -29,6 +29,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "tui/chord.hpp"
@@ -38,6 +39,7 @@
 #include "tui/region_widgets.hpp"
 #include "tui/table_widget.hpp"
 #include "tui/widget.hpp"
+#include "tui_harness.hpp"
 
 namespace ui = morph::ui;
 using core::tui::KeyCode;
@@ -329,6 +331,29 @@ public:
         return ui::testing::WidgetBounds{.x = static_cast<double>(bounds.x),
                                          .y = static_cast<double>(bounds.y),
                                          .width = static_cast<double>(bounds.width),
+                                         .height = static_cast<double>(bounds.height)};
+    }
+
+    // In cells: the box around the non-blank cells the widget drew, read from the last frame.
+    std::optional<ui::testing::WidgetBounds> textExtentOf(ui::Widget const& widget) override {
+        settle();
+        auto const bounds = WidgetBase::of(widget).view().screenBounds();
+        std::vector<std::string> const rows = morph::tui::testing::rowsOf(_screen);
+        int left = bounds.x + bounds.width;
+        int right = bounds.x;
+        for (int row = bounds.y; row < bounds.y + bounds.height && std::cmp_less(row, rows.size()); ++row) {
+            std::string const& line = rows.at(static_cast<std::size_t>(row));
+            for (int column = bounds.x; column < bounds.x + bounds.width && std::cmp_less(column, line.size());
+                 ++column) {
+                if (line.at(static_cast<std::size_t>(column)) != ' ') {
+                    left = std::min(left, column);
+                    right = std::max(right, column + 1);
+                }
+            }
+        }
+        return ui::testing::WidgetBounds{.x = static_cast<double>(left),
+                                         .y = static_cast<double>(bounds.y),
+                                         .width = static_cast<double>(std::max(0, right - left)),
                                          .height = static_cast<double>(bounds.height)};
     }
 
