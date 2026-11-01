@@ -1033,6 +1033,21 @@ TEST_CASE("tui fields: a captioned required input draws its mark after the capti
     CHECK(bare.at(0).ends_with('*'));
 }
 
+// Mutation: drop `hint` from `paintFieldCaption` (row 0 ends at the mark), or draw it before the mark.
+TEST_CASE("tui fields: a caption's hint follows the required mark, and only while a caption is drawn",
+          "[tui][fields]") {
+    Harness harness{30, 3};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    input->setCaption("Temperature", true);
+    input->setRequired(true);
+    input->setCaptionHint("2-8 C");
+    Rows const rows = harness.draw();
+    REQUIRE_FALSE(rows.empty());
+    CHECK(rows.at(0) == "Temperature * · 2-8 C");
+    input->setCaption("", false);
+    CHECK(harness.draw().at(0).contains("·") == false);
+}
+
 // Mutation: leave the tone out of the control's marks (the control row then ends in no `!`).
 TEST_CASE(
     "tui fields: a description takes the row under the control, in the tone's style, and a toned err field "

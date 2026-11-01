@@ -994,7 +994,8 @@ TEST_CASE("ui::Mounted: two rows that fail in one run are one report, and neithe
     CHECK(backend.recording().dump() == "Column#1 gap=0\n");
 }
 
-// Mutation: drop the text's description check (a described text then mounts).
+// Mutation: drop the text's description or label hint check (a described or hinted text then mounts), or skip the
+// mount of `labelHint` (the input records no `captionHint`).
 TEST_CASE(
     "ui::Mounted: a C++ tree's text takes no description, a push button no content, and a text area "
     "no emphasis",
@@ -1006,6 +1007,10 @@ TEST_CASE(
     described.field.description = "a line";
     CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::text(described)}),
                       Catch::Matchers::ContainsSubstring("a text is not described"));
+    ui::Text hinted{.text = "x"};
+    hinted.field.labelHint = "a hint";
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::text(hinted)}),
+                      Catch::Matchers::ContainsSubstring("a text has no caption to hint after"));
     ui::Button push{.label = "Go"};
     push.child = ui::text({.text = "inside"});
     CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::button(push)}),
@@ -1024,6 +1029,10 @@ TEST_CASE(
     focal.emphasis = ui::InputEmphasis::Prominent;
     ui::Mounted const view{runtime, backend, ui::textInput(focal)};
     CHECK(backend.find("TextInput", "emphasis", "Prominent").has_value());
+    ui::TextInput captioned{};
+    captioned.field.labelHint = "range 2-8";
+    ui::Mounted const hintedView{runtime, backend, ui::textInput(captioned)};
+    CHECK(backend.find("TextInput", "captionHint", "range 2-8").has_value());
 }
 
 // Mutation: skip the tone in the mount (the text records none), or the spans (the run's tone is not recorded).

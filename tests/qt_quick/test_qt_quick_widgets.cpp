@@ -1576,6 +1576,44 @@ TEST_CASE("qt_quick widgets: a text input announces its unit after its descripti
     CHECK(declared == QStringLiteral("Required range 2–8 °C\n°C"));
 }
 
+// Mutation: leave `captionHint` out of MorphField (no label named "captionHint"), or place it before the mark (it
+// starts left of the mark's end).
+TEST_CASE("qt_quick widgets: a caption's hint follows its required mark, and only while a caption is drawn",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 200);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    // The hint arrives before the caption, as the mount applies a node's properties: it must still get its room.
+    input->setCaptionHint("2\u20138 \u00b0C");
+    input->setCaption("Temperature on arrival", true);
+    input->setRequired(true);
+    auto const bare = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    bare->setCaption("Temperature on arrival", false);
+    bare->setCaptionHint("2\u20138 \u00b0C");
+    scene.settle();
+    QQuickItem& field = Scene::itemOf(*input);
+    QQuickItem const* const mark = findNamed(field, QStringLiteral("requiredMark"));
+    QQuickItem const* const hint = findNamed(field, QStringLiteral("captionHint"));
+    REQUIRE(mark != nullptr);
+    REQUIRE(hint != nullptr);
+    CHECK(hint->isVisible());
+    CHECK(hint->property("text").toString() == QStringLiteral("\u00b7 2\u20138 \u00b0C"));
+    CHECK(hint->x() >= mark->x() + mark->width());
+    CHECK(std::abs(hint->y() - mark->y()) < 1);
+    CHECK(hint->x() + hint->width() <= field.width() + 1);
+    // It has room to draw whole: a width of zero would elide it to nothing.
+    CHECK(hint->width() > 0);
+    CHECK_FALSE(hint->property("truncated").toBool());
+    CHECK(hint->property("contentWidth").toDouble() > 0);
+    QQuickItem const* const hidden = findNamed(Scene::itemOf(*bare), QStringLiteral("captionHint"));
+    REQUIRE(hidden != nullptr);
+    CHECK_FALSE(hidden->isVisible());
+    input->setCaptionHint("");
+    scene.settle();
+    CHECK_FALSE(hint->isVisible());
+}
+
 // Mutation: map DangerOutline to Danger in ButtonImpl::setEmphasis (the fill then reads the error colour).
 TEST_CASE("qt_quick widgets: a danger outlined button, an outline badge, and a stretched segmented select",
           "[qt_quick]") {

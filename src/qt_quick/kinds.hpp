@@ -40,6 +40,7 @@ public:
     void setSpans(std::vector<ui::TextSpan> const& spans) override;
     /// A text is not described; the mount never asks.
     void setDescription(std::string_view description) override;
+    void setCaptionHint(std::string_view hint) override;
     [[nodiscard]] std::string shownText() const override;
 };
 

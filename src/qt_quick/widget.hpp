@@ -239,6 +239,7 @@ public:
     void setErrors(std::vector<std::string> const& errors) override;
     void setStale(bool stale) override { this->write("stale", stale); }
     void setDescription(std::string_view description) override { this->write("description", toQString(description)); }
+    void setCaptionHint(std::string_view hint) override { this->write("captionHint", toQString(hint)); }
     void setTone(ui::Tone tone) override { this->write("tone", static_cast<int>(tone)); }
 
 protected:

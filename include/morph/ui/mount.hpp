@@ -800,6 +800,9 @@ private:
             bind(scope, field.description,
                  [&widget](std::string const& description) { widget.setDescription(description); });
         }
+        if (field.labelHint.isBound() || !field.labelHint.constant().empty()) {
+            bind(scope, field.labelHint, [&widget](std::string const& hint) { widget.setCaptionHint(hint); });
+        }
         if (field.tone.isBound() || field.tone.constant() != Tone::Neutral) {
             bind(scope, field.tone, [&widget](Tone tone) { widget.setTone(tone); });
         }
@@ -808,6 +811,9 @@ private:
     Widget& mountKind(reactive::Scope& scope, Text const& spec, ContainerWidget* parent) {
         if (spec.field.description.isBound() || !spec.field.description.constant().empty()) {
             throw std::logic_error{"morph::ui: a text is not described; put the line in the text"};
+        }
+        if (spec.field.labelHint.isBound() || !spec.field.labelHint.constant().empty()) {
+            throw std::logic_error{"morph::ui: a text has no caption to hint after; put the hint in the text"};
         }
         TextWidget& widget = scope.adopt(_backend->createText(parent));
         applyCommon(scope, widget, spec.common);

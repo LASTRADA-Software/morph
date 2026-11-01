@@ -2155,6 +2155,12 @@ public:
     /// @return The node with it.
     [[nodiscard]] Node description(AnyHandle const& text) const { return with("description", text); }
 
+    /// @brief A hint drawn after an input's caption and its required mark, such as the range a value must lie in; a
+    ///        text refuses it, and an input that shows no caption draws none.
+    /// @param text The hint.
+    /// @return The node with it.
+    [[nodiscard]] Node labelHint(AnyHandle const& text) const { return with("labelHint", text); }
+
     /// @brief An evaluation of an input's value that does not make it invalid (`ok`, `warn`, `err`, `info`; `null`
     ///        for none): it outlines the input and colours its description. A text refuses it.
     /// @param tone The tone's name.

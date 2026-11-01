@@ -342,14 +342,17 @@ void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks);
 void paintFieldDescription(::core::tui::Canvas& canvas, std::string_view description, ui::Tone tone);
 /// The required mark drawn after a caption or a text's last line, a space before it.
 inline constexpr std::string_view kRequiredMark = " *";
+/// What follows a caption's required mark: a separator, then the hint.
+inline constexpr std::string_view kHintSeparator = " · ";
 /// Draws @p caption on the canvas's first row, followed by the required mark in the error style while @p required,
-/// and answers the canvas below it, where a captioned field draws its control; the whole canvas for an empty caption.
+/// then by @p hint after the separator, and answers the canvas below it, where a captioned field draws its control;
+/// the whole canvas for an empty caption.
 [[nodiscard]] ::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption,
-                                                    bool required = false);
-/// @p control grown by @p caption's row, and as wide as the caption and, while @p required, its mark need;
+                                                    bool required = false, std::string_view hint = {});
+/// @p control grown by @p caption's row, and as wide as the caption, its mark while @p required, and its hint need;
 /// @p control itself for an empty caption.
 [[nodiscard]] ::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption,
-                                                 bool required = false);
+                                                 bool required = false, std::string_view hint = {});
 
 /// Implements the Common setters of ui interface @p Interface over WidgetBase.
 ///
@@ -413,6 +416,10 @@ public:
     }
     void setDescription(std::string_view description) override {
         _description = std::string{description};
+        this->refresh();
+    }
+    void setCaptionHint(std::string_view hint) override {
+        _hint = std::string{hint};
         this->refresh();
     }
     void setTone(ui::Tone tone) override {
@@ -483,11 +490,11 @@ protected:
     [[nodiscard]] bool required() const noexcept { return _required; }
     /// Draws the caption, with the required mark after it, and answers the canvas left for the control.
     [[nodiscard]] ::core::tui::Canvas paintCaption(::core::tui::Canvas& canvas) const {
-        return detail::paintFieldCaption(canvas, _caption, _required);
+        return detail::paintFieldCaption(canvas, _caption, _required, _hint);
     }
     /// @p control grown by the caption and its mark.
     [[nodiscard]] ::core::tui::Size withCaption(::core::tui::Size control) const {
-        return detail::withFieldCaption(control, _caption, _required);
+        return detail::withFieldCaption(control, _caption, _required, _hint);
     }
     /// Takes the field's label as its caption while @p shown; otherwise the field draws none: what `setCaption`
     /// does for the kinds that have one.
@@ -522,6 +529,7 @@ private:
     std::vector<std::string> _errors;
     std::string _caption;
     std::string _description;
+    std::string _hint;
     ui::Tone _tone = ui::Tone::Neutral;
 };
 

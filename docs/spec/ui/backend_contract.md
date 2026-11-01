@@ -98,6 +98,9 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   face, and every run's text as its characters. The mount calls `setSpans` in place of `setText` for a node that has
   spans. Both are pure, so a backend cannot drop the emphasis silently. What a probe and assistive technology read
   of such a widget is the runs' text joined (`spansText`).
+- **Caption hint.** `setCaptionHint` shows a hint after the caption and its required mark, led by a middle dot, on
+  the caption's line and in its face; the caption elides first when the line is short, and the hint is drawn only
+  while the input shows a caption. A text refuses it.
 - **Description and tone.** `setDescription` shows a line under the control, after the messages, and makes it the
   control's accessible description after the messages (`aria-describedby`). `setTone` evaluates the value without
   making it invalid: the control is outlined in the tone and the description drawn in the tone's colour instead of
@@ -294,7 +297,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 |---|---|---|
 | `Widget` | `setVisible`, `setEnabled`, `setLayout(LayoutHints)`, `setDragKey(optional<Key>)`, `setAccessibleName`, `setAccessibleRole`, `setTestId`, `setTooltip`, `setSurface` (may be called again, and restyles the widget and everything inside it; empty is the theme's default), `focus()` | `setDropHandler(accepts, onDrop)`, `setKeys(chords, onChord)` (the chord pressed) |
 | `ContainerWidget` | `moveChild(child, index)` | — |
-| `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale`, `setDescription`, `setTone` (a text refuses `setDescription`; its tone is its colour, whatever its role) | — |
+| `FieldWidget` (base of Text and the six inputs) | `setReadOnly`, `setRequired`, `setErrors(messages)`, `setStale`, `setDescription`, `setCaptionHint`, `setTone` (a text refuses `setDescription` and `setCaptionHint`; its tone is its colour, whatever its role) | — |
 | `TextWidget` | `setText`, `setRole`, `setSpans` | — |
 | `ButtonWidget` | `setLabel`, `setEmphasis`, `setIcon` (once, for a button with an icon), `setStyle` (once, for an item), `setShape`, `setSize`, `setMono` (each once, only for a non-default value), `setSelected`, `content()` (an item's content, asked for only when it has some) | `setOnClick` (Enter, Space or a click) |
 | `TextInputWidget` | `setText` (with the text shown, it keeps the cursor), `setPlaceholder`, `setUnit` (the unit shown, muted, at the trailing edge inside the field; single-line and password only), `setPrefix` (the prefix shown, muted, at the leading edge inside the field, after the icon, and announced before the field's description; single-line and password only), `setMono` (once, only for `true`: the text and the placeholder in the `mono` role's face), `setAlign` (once, only for `Center` or `End`; single-line and password only: where the text sits; `End` draws digits at one width each), `setDecimals` (a number's entry places, for a backend or kit to read; single-line and password only), `setIcon` (an icon of the theme's icon set, drawn at the leading edge; single-line and password only, called once), `setCaption(label, shown)` (the field's label, and whether the input draws it as a visible caption above its control), `setEmphasis` (once, only for `Prominent`: drawn as the focal control, on Qt Quick larger and outlined in the accent, on the terminal bold) | `setOnChange` (the whole new text after each user edit), `setOnSubmit` (Enter in single-line mode), `setOnCommit` (Enter, before the submit, or focus leaving the field after an edit) |

@@ -139,6 +139,11 @@ void TextImpl::setDescription(std::string_view description) {
     throw std::logic_error{"morph::tui: a text is not described"};
 }
 
+void TextImpl::setCaptionHint(std::string_view hint) {
+    static_cast<void>(hint);
+    throw std::logic_error{"morph::tui: a text has no caption to hint after"};
+}
+
 void TextImpl::setTone(ui::Tone tone) {
     _tone = tone;
     refresh();

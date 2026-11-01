@@ -495,6 +495,9 @@ struct FieldState {
     /// @brief A line that describes the field, under its control and announced as its accessible description; empty
     ///        shows none. Not on a text.
     Prop<std::string> description;
+    /// @brief A hint drawn after the caption and its required mark, such as the range a value must lie in; empty
+    ///        shows none. Drawn only while the input shows a caption. Not on a text.
+    Prop<std::string> labelHint;
     /// @brief An evaluation of the value that does not make it invalid, drawn as the control's outline and the
     ///        description's colour; `Neutral` is none. On a text it is the text's colour.
     Prop<Tone> tone = Tone::Neutral;

@@ -63,6 +63,11 @@ void TextImpl::setDescription(std::string_view description) {
     throw std::logic_error{"morph::qt_quick: a text is not described"};
 }
 
+void TextImpl::setCaptionHint(std::string_view hint) {
+    static_cast<void>(hint);
+    throw std::logic_error{"morph::qt_quick: a text has no caption to hint after"};
+}
+
 void TextImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
     write("text", toQString(ui::spansText(spans)));
     write("runs", runsOf(spans));

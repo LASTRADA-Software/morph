@@ -361,6 +361,19 @@ TEST_CASE("ui document: an input takes a description and a tone, and a text take
     CHECK(text.error().reason == "a text is not described; put the line in the text");
 }
 
+// Mutation: drop `labelHint` from `kFieldKeys` (the input is refused it as unknown), or the text's refusal of it (the
+// text loads).
+TEST_CASE("ui document: an input takes a label hint, and a text refuses one", "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "d", "view": {"kind": "textInput", "label": "Temperature",
+        "required": true, "labelHint": "2–8 °C"}})")
+              .has_value());
+    auto const text = loadDocumentText(R"({"vocab": "ui/1", "id": "d", "view": {"kind": "text", "text": "x",
+        "labelHint": "y"}})");
+    REQUIRE_FALSE(text.has_value());
+    CHECK(text.error().path == "/view/labelHint");
+    CHECK(text.error().reason == "a text has no caption to hint after; put it in the text");
+}
+
 // Mutation: drop `tone` from the run keys (the first loads fail), drop the literal tone check (the pink run loads),
 // or drop `subtitleSpans` / `descriptionSpans` from their keys (the last two are refused as unknown).
 TEST_CASE("ui document: a run takes a tone, and a head's subtitle and an overlay's description take runs",

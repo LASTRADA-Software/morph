@@ -226,8 +226,8 @@ ui::Node notices(Receipt const& receipt) {
         {.gap = 1});
 }
 
-// The required range sits under the field on the expanded layout, and in the caption on the phone, which has no room
-// for a line under the field.
+// The required range sits under the field on the expanded layout, and after the caption and its required mark on the
+// phone, which has no room for a line under the field.
 ui::Node temperatureField(Receipt const& receipt, bool compact) {
     auto const errors =
         ui::cond(receipt.inRange, ui::AnyHandle{std::vector<std::string>{}},
@@ -235,12 +235,13 @@ ui::Node temperatureField(Receipt const& receipt, bool compact) {
                                                         "deviation."}});
     return layout::captioned(
                ui::textInput({.value = receipt.temperature,
-                              .label = compact ? "Temperature on arrival · 2–8 °C" : "Temperature on arrival",
+                              .label = "Temperature on arrival",
                               .unit = "°C",
                               .onChange = ui::set(receipt.temperature, ui::event())}))
         .required(true)
         .errors(errors)
         .description(compact ? "" : "Required range 2–8 °C")
+        .labelHint(compact ? "2–8 °C" : "")
         .testId("temperature");
 }
 

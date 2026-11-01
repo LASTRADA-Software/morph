@@ -739,13 +739,14 @@ inline constexpr std::array<KeySpec, 19> kCommonKeys = {{
     {"keys", Shape::Keys},
 }};
 
-/// @brief The input decorations text and the inputs take; a text refuses `description`.
-inline constexpr std::array<KeySpec, 6> kFieldKeys = {{
+/// @brief The input decorations text and the inputs take; a text refuses `description` and `labelHint`.
+inline constexpr std::array<KeySpec, 7> kFieldKeys = {{
     {"readonly", Shape::Condition},
     {"required", Shape::Condition},
     {"errors", Shape::Expr},
     {"stale", Shape::Condition},
     {"description", Shape::Expr},
+    {"labelHint", Shape::Expr},
     {"tone", Shape::Expr},
 }};
 
@@ -4131,6 +4132,9 @@ private:
         checkSpans(node.prop("spans"));
         if (node.prop("description") != nullptr) {
             refuse(pointerAppend(node.path, "description"), "a text is not described; put the line in the text");
+        }
+        if (node.prop("labelHint") != nullptr) {
+            refuse(pointerAppend(node.path, "labelHint"), "a text has no caption to hint after; put it in the text");
         }
     }
 

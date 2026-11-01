@@ -963,6 +963,10 @@ public:
     /// @param description The line.
     void setDescription(std::string_view description) override { this->set("description", formatText(description)); }
 
+    /// @brief Records property `captionHint`.
+    /// @param hint The hint.
+    void setCaptionHint(std::string_view hint) override { this->set("captionHint", formatText(hint)); }
+
     /// @brief Records property `tone`.
     /// @param tone The tone.
     void setTone(Tone tone) override { this->set("tone", enumName(tone)); }
@@ -980,6 +984,13 @@ public:
     void setDescription(std::string_view description) override {
         static_cast<void>(description);
         throw std::logic_error{"RecordingBackend: a text is not described"};
+    }
+    /// @brief Refuses a caption hint: a text has no caption.
+    /// @param hint The hint, ignored.
+    /// @throws std::logic_error always.
+    void setCaptionHint(std::string_view hint) override {
+        static_cast<void>(hint);
+        throw std::logic_error{"RecordingBackend: a text has no caption to hint after"};
     }
     void setRole(TextRole role) override { set("role", enumName(role)); }
 };

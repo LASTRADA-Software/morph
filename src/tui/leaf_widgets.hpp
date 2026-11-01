@@ -23,6 +23,7 @@ public:
     void setSpans(std::vector<ui::TextSpan> const& spans) override;
     /// A text is not described; the mount never asks.
     void setDescription(std::string_view description) override;
+    void setCaptionHint(std::string_view hint) override;
     /// The tone is the text's colour; the role keeps its weight.
     void setTone(ui::Tone tone) override;
     [[nodiscard]] std::string probeText() const override { return _text; }

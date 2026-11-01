@@ -249,8 +249,9 @@ mounted in, and several nodes in a case or a default are spaced as the vertical 
 (conditions) and `errors`. **The six inputs** also take `description`, a line drawn under the control and announced
 as its accessible description, and `tone` (`ok`, `warn`, `err`, `info`; `neutral` or `null` for none), an evaluation
 of the value that outlines the control and colours the description and, unlike `errors`, does not make the value
-invalid; a tone of no known name is reported once and drawn as none. A `text` refuses `description`: a text is not
-described, so the line goes in the text. A `text`'s `tone` is its colour, whatever its role: the role keeps the size,
+invalid; a tone of no known name is reported once and drawn as none. They take `labelHint` too, a hint drawn after the
+caption and its required mark ("Temperature on arrival * · 2–8 °C"), only while the input shows a caption. A `text`
+refuses `description` and `labelHint`: a text is not described and has no caption, so the line goes in the text. A `text`'s `tone` is its colour, whatever its role: the role keeps the size,
 weight and face, so `{role: display, tone: err}` is a large red figure.
 
 | Kind | Keys (a ⓘ key is in the node's own scope) | Element values beyond `visible`, `enabled`, `valid`, `errors`, `shownErrors` |

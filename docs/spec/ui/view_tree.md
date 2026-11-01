@@ -160,6 +160,7 @@ Text and the six inputs (TextInput, Checkbox, Select, DateTimeInput, Slider, Fil
 | `errors` | The messages shown with the field, in order. Which errors show, and when (spec 5's `shownErrors`), is decided before they reach this property |
 | `stale` | The value shown is the last known one while a newer one is computed |
 | `description` | A line that describes the field, drawn under its control after its messages, and announced as its accessible description after them. Not on a text: the mount refuses a `Text` that has one. A text's `tone` is its colour |
+| `labelHint` | A hint drawn after the field's caption and its required mark, such as the range a value must lie in; applied only when bound or not empty, and drawn only while the input shows a caption. Not on a text: the mount refuses a `Text` that has one |
 | `tone` | An evaluation of the value that does not make it invalid (`Tone`; `Neutral` is none): the control is outlined in the tone and the description drawn in its colour. A field with errors is drawn as `Err` whatever its tone. Not on a text |
 
 **Field chrome.** A TextInput, Select and DateTimeInput carry the field's `label` and `showLabel` (set once;

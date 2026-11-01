@@ -7299,6 +7299,9 @@ inline void ScreenCore::fieldOf(DocNode const& node, LowerCtx const& ctx, Elemen
     if (node.prop("description")) {
         field.description = bindProp<std::string>(ctx, node.prop("description"), std::string{}, stringOf);
     }
+    if (node.prop("labelHint")) {
+        field.labelHint = bindProp<std::string>(ctx, node.prop("labelHint"), std::string{}, stringOf);
+    }
     if (ExprPtr const tone = node.prop("tone")) {
         field.tone = slotProp<Tone>([this, scope = ctx.scope, bindings = ctx.bindings, tone] {
             Value const value = evalIn(*scope, bindings.get(), tone);

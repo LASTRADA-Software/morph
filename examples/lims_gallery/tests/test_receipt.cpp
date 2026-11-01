@@ -113,6 +113,8 @@ TEST_CASE("receipt, expanded: a scanned duplicate is reported, an unknown id ref
 
 TEST_CASE("receipt, expanded: a temperature out of range blocks receiving", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
+    CHECK(screen.prop("TextInput", "temperature", "description") == "Required range 2–8 °C");
+    CHECK(screen.prop("TextInput", "temperature", "captionHint").value_or("").empty());
     screen.edit("temperature", "9.1");
     CHECK(screen.waitFor([&screen] { return screen.prop("Button", "receive", "enabled") == "false"; }));
     CHECK(screen.prop("TextInput", "temperature", "errors") ==
@@ -141,6 +143,8 @@ TEST_CASE("receipt, compact: one column, every field kept, the session folded aw
     CHECK(screen.prop("Banner", "duplicate", "spans") ==
           "[Already received:;strong, ,S-26-104217;mono,\\, 09:07\\, J. Ruiz.]");
     CHECK(screen.find("TextInput", "temperature").has_value());
+    // The range follows the caption and its mark on the phone, which has no room for a line under the field.
+    CHECK(screen.prop("TextInput", "temperature", "captionHint") == "2–8 °C");
     CHECK(screen.backend().dump().contains(" · Lot ,L-26-0381;mono]"));
     CHECK(screen.find("Column", "conditions").has_value());
     CHECK(screen.prop("Collapsible", "session-panel", "title") == "This session · 13 scans");

@@ -24,6 +24,9 @@ MorphWidget {
     property Item control: null
     // The field's label, and whether the field draws it as a visible caption above the control.
     property string caption: ""
+    // A hint drawn after the caption and its required mark, in the caption's face and led by a middle dot; only while
+    // the caption is drawn.
+    property string captionHint: ""
     property bool labelShown: false
     readonly property real captionHeight: captionLabel.visible ? captionLabel.implicitHeight : 0
     // The required mark follows the caption while one is drawn; a kind whose control is text it lays out itself
@@ -35,6 +38,9 @@ MorphWidget {
     readonly property bool markerAfterCaption: captionHeight > 0
     // The room the mark takes on the line it follows: a space step, then the mark.
     readonly property real markerRoom: Theme.spaceOf(1) + marker.implicitWidth
+    // The room the hint takes after the caption and its mark: the hint's text and a step before it, at most half the
+    // field, so a long hint cannot push the caption out.
+    readonly property real hintRoom: hintLabel.visible ? Math.min(hintMetrics.advanceWidth + Theme.spaceOf(1), root.width / 2) : 0
     readonly property real controlWidth: width - (!required || markerAfterCaption ? 0
                                                   : markerFollowsText ? markerRoom : marker.implicitWidth)
     // The unit a kind shows beside its value, announced last, so a listener hears the value with its unit; and the
@@ -50,7 +56,9 @@ MorphWidget {
     }
 
     focusTarget: control ? control : root
-    implicitWidth: Math.max(captionLabel.visible ? captionLabel.implicitWidth + (required ? markerRoom : 0) : 0,
+    implicitWidth: Math.max(captionLabel.visible ? captionLabel.implicitWidth + (required ? markerRoom : 0)
+                                                   + (hintLabel.visible ? hintMetrics.advanceWidth + Theme.spaceOf(1) : 0)
+                                                 : 0,
                             (control ? control.implicitWidth : 0) + (!required || markerAfterCaption ? 0
                                                                      : markerFollowsText ? markerRoom
                                                                                          : marker.implicitWidth))
@@ -65,8 +73,8 @@ MorphWidget {
         font: Theme.captionFont
         id: captionLabel
         objectName: "caption"
-        // Elided short of the mark, so the mark stays visible after it.
-        width: root.width - (root.required ? root.markerRoom : 0)
+        // Elided short of the mark and the hint, so both stay visible after it.
+        width: Math.max(0, root.width - (root.required ? root.markerRoom : 0) - root.hintRoom)
         visible: root.labelShown && root.caption !== ""
         text: root.caption
         color: root.scheme.text
@@ -94,6 +102,26 @@ MorphWidget {
         visible: root.required
         text: "*"
         color: root.scheme.error
+    }
+
+    // The hint's own width: its label elides, so its implicit width follows the room it is given.
+    TextMetrics {
+        id: hintMetrics
+        font: Theme.captionFont
+        text: hintLabel.text
+    }
+
+    Label {
+        textFormat: Text.PlainText
+        font: Theme.captionFont
+        id: hintLabel
+        objectName: "captionHint"
+        x: captionLabel.contentWidth + (root.required ? root.markerRoom : 0) + Theme.spaceOf(1)
+        width: Math.max(0, root.hintRoom - Theme.spaceOf(1))
+        visible: root.captionHint !== "" && captionLabel.visible
+        text: "\u00b7 " + root.captionHint
+        color: root.scheme.text
+        elide: Text.ElideRight
     }
 
     Label {

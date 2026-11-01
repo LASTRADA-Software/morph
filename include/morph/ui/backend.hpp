@@ -139,6 +139,12 @@ public:
     /// @param description The line, UTF-8; empty shows none.
     virtual void setDescription(std::string_view description) = 0;
 
+    /// @brief Shows a hint after the field's caption and its required mark, such as the range a value must lie in
+    ///        ("Temperature on arrival * · 2-8 degrees"). It is drawn only while the input shows a caption. A text
+    ///        takes none: the mount never calls it on one, and a backend refuses it there.
+    /// @param hint The hint, UTF-8; empty shows none.
+    virtual void setCaptionHint(std::string_view hint) = 0;
+
     /// @brief Evaluates the value without making it invalid: outlines the control in the tone and draws the
     ///        description in the tone's colour. A field with errors is drawn as `Err` whatever its tone. A text
     ///        takes it as its colour, whatever its role.
