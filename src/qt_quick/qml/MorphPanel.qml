@@ -40,6 +40,7 @@ MorphWidget {
     haveWidth: inner.width
     contentMinimumWidth: 2 * Theme.spaceOf(root.padding) + 2 + root.needWidth
     overflowKind: "panel"
+    frameRadius: Theme.radiusCard
 
     Rectangle {
         id: frame

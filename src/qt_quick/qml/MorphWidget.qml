@@ -77,8 +77,12 @@ Item {
     // `accessibleName` and `accessibleRole` itself, and the root then presents no node of its own.
     property Item accessibleItem: null
     property string surface: ""
+    // The radius of a frame the widget draws over its own surface, or -1 when it draws none. The surface's fill
+    // takes it, so the fill does not show outside the frame's rounded corners.
+    property real frameRadius: -1
     // The corner radius of the surface's background.
-    readonly property real surfaceRadius: round ? height / 2 : surface === "card" ? Theme.radiusCard : 0
+    readonly property real surfaceRadius: round ? height / 2 : frameRadius >= 0 ? frameRadius
+                                          : surface === "card" ? Theme.radiusCard : 0
     // The colour roles this widget draws with: its own surface's scheme when it has a surface, else the one its
     // container passed down when it adopted it (the theme's at the roots).
     property MorphScheme inheritedScheme: Theme.themeScheme

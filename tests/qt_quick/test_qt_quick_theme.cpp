@@ -1508,6 +1508,49 @@ RedRuns redAlong(QImage const& image, int row, int first, int last) {
 
 }  // namespace
 
+namespace {
+
+// The colour of the pixel at (x, y) in the item's own coordinates, in the window's grabbed image.
+QColor pixelInItem(QImage const& image, QQuickItem const& item, qreal x, qreal y) {
+    QPointF const point = item.mapToScene(QPointF{x, y});
+    qreal const ratio = image.devicePixelRatio();
+    return image.pixelColor(static_cast<int>(point.x() * ratio), static_cast<int>(point.y() * ratio));
+}
+
+// Mounts a panel naming `surface` inside a stack that names `around` and checks that its fill stops at the frame's
+// rounded corners.
+void checkPanelFillIsRounded(std::string const& around, std::string const& surface, QColor const& fill) {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), wellSurfaces()).empty());
+    scene.window().resize(300, 200);
+    auto card = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    card->setSurface(around);
+    auto panel = scene.backend().createPanel(card.get());
+    panel->setSurface(surface);
+    panel->setPadding(3);
+    auto label = scene.backend().createText(panel.get());
+    label->setText("x");
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*panel);
+    QImage const image = scene.window().grabWindow();
+    INFO("surface " << surface);
+    CHECK(pixelInItem(image, item, item.width() / 2, item.height() / 2) == fill);
+    CHECK(pixelInItem(image, item, 1.0, 1.0) != fill);
+    CHECK(pixelInItem(image, item, item.width() - 2.0, item.height() - 2.0) != fill);
+}
+
+}  // namespace
+
+// Mutation: remove `frameRadius: Theme.radiusCard` from MorphPanel (the fill is square and shows outside the arc).
+TEST_CASE("qt_quick theme: a panel's surface fill follows its frame's rounded corners", "[qt_quick]") {
+    checkPanelFillIsRounded("card", "well", QColor{"#ffee88"});
+    {
+        Scene scene;
+        QColor const background = themeOf(scene)->property("background").value<QColor>();
+        checkPanelFillIsRounded("well", "page", background);
+    }
+}
+
 // Mutation: leave `radius: 0` on the surface's background in MorphWidget (the corner reads the surface's yellow).
 TEST_CASE("qt_quick theme: a round button draws its surface with its own shape", "[qt_quick]") {
     Scene scene;
