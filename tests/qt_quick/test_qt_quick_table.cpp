@@ -165,6 +165,35 @@ TEST_CASE("qt_quick table: a fixed mono column holds its identifiers whole, and 
     CHECK(Scene::itemOf(*unwrapped).height() < Scene::itemOf(*wrapped).height());
 }
 
+// Mutation: leave a text with spans out of `oneLine` (the runs wrap onto two lines whatever the column says), or leave
+// `fittedRuns` as the runs (the single line runs past the column's edge).
+TEST_CASE("qt_quick table: spans in a column without wrap keep one line and end in an ellipsis", "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "Narrow", .width = ui::Sizing::fixed(5), .wrap = false},
+                       {.label = "Roomy", .width = ui::Sizing::fixed(30), .wrap = false},
+                       {.label = "Wrapping", .width = ui::Sizing::fixed(5)}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    std::vector<ui::TextSpan> const spans{{.text = "99.4"}, {.text = " % LC", .strong = true}};
+    auto narrow = scene.backend().createText(row.get());
+    narrow->setSpans(spans);
+    auto roomy = scene.backend().createText(row.get());
+    roomy->setSpans(spans);
+    auto wrapping = scene.backend().createText(row.get());
+    wrapping->setSpans(spans);
+    scene.settle();
+    QQuickItem const& narrowItem = Scene::itemOf(*narrow);
+    CHECK(Scene::controlOf(*narrow).property("lineCount").toInt() == 1);
+    CHECK(narrowItem.property("elided").toBool());
+    CHECK(narrowItem.property("tooltipText").toString() == QStringLiteral("99.4 % LC"));
+    CHECK(Scene::controlOf(*narrow).property("contentWidth").toDouble() <= narrowItem.width() + 1);
+    CHECK(Scene::controlOf(*roomy).property("lineCount").toInt() == 1);
+    CHECK_FALSE(Scene::itemOf(*roomy).property("elided").toBool());
+    CHECK(Scene::controlOf(*wrapping).property("lineCount").toInt() > 1);
+    CHECK_FALSE(Scene::itemOf(*wrapping).property("elided").toBool());
+}
+
 TEST_CASE("qt_quick table: cells sit under their headers, and a hidden cell keeps its column", "[qt_quick]") {
     Scene scene;
     Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);

@@ -193,6 +193,23 @@ TEST_CASE("tui table: a text cell of a column that does not wrap ends in an elli
     CHECK(harness.draw() == Rows{"  Assay  Note", "  99.4 … 99.4 %"});
 }
 
+// Mutation: leave `_elided` unread for a text with spans (the runs draw to the column's edge with no ellipsis, and the
+// run after the cut one is not dropped).
+TEST_CASE("tui table: spans in a column that does not wrap share one row and end in an ellipsis where it is cut",
+          "[tui][table][columns]") {
+    Harness harness{30, 3};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Assay", .width = ui::Sizing::fixed(6), .wrap = false},
+                       {.label = "Note", .width = ui::Sizing::fixed(6)}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    auto const assay = harness.make<TextImpl>(row.get());
+    assay->setSpans({{.text = "99.4"}, {.text = " % LC", .strong = true}});
+    auto const note = harness.make<TextImpl>(row.get());
+    note->setText("ok");
+    table->setRowKey(*row, key(1));
+    CHECK(harness.draw() == Rows{"  Assay  Note", "  99.4 … ok"});
+}
+
 TEST_CASE("tui table: a Multiple-mode user change reports exactly the existing rows selected",
           "[tui][table][selection]") {
     Harness harness{30, 6};

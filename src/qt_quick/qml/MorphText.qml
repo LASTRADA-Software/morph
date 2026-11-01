@@ -14,10 +14,11 @@ MorphField {
     property var runs: []
     readonly property bool hasRuns: runs.length > 0
     // Whether the text is drawn on one line and elided at its end, as a table sets it for a column that does not wrap.
-    // A mono text is always one line: an identifier broken across lines reads as two. Runs are rich text, which is
-    // not elided, so they wrap with their sentence.
+    // A mono text is always one line: an identifier broken across lines reads as two, unless it has runs, which wrap
+    // with their sentence. Runs given `singleLine` draw on one line too; rich text cannot be elided by the label, so
+    // `fittedRuns` cuts them.
     property bool singleLine: false
-    readonly property bool oneLine: (singleLine || role === 6) && !hasRuns
+    readonly property bool oneLine: root.hasRuns ? root.singleLine : (root.singleLine || root.role === 6)
     property int role: 0
     // Where the text sits across the widget: a table sets it from its column's `align`.
     property int textAlign: Qt.AlignLeft
@@ -29,9 +30,13 @@ MorphField {
     defaultRole: Accessible.StaticText
     // A one-line text cut short of its text with an ellipsis, by the label's font: the label itself is told about
     // each line it lays out, which keeps it from eliding.
-    readonly property string fitted: root.oneLine ? root.elideOf(root.text) : root.text
+    readonly property string fitted: root.oneLine && !root.hasRuns ? root.elideOf(root.text) : root.text
+    // The runs of a one-line text, cut at the end with an ellipsis once they pass the width; other runs as they are.
+    readonly property var fittedRuns: root.oneLine && root.hasRuns ? root.elideRuns(root.runs) : root.runs
     // Whether the text is shown cut short.
-    readonly property bool elided: root.fitted !== root.text
+    readonly property bool elided: root.hasRuns ? root.fittedRuns.length !== root.runs.length
+                                                  || root.fittedRuns.some((run, i) => run.text !== root.runs[i].text)
+                                                : root.fitted !== root.text
     // A one-line text asks for the width of its whole text, not of what it shows, so a column sized by its widest cell
     // is not narrowed by the cut it makes in that cell. It reads the advance alone: the label's own width follows
     // `fitted`, which follows the width a layout derives from this one, and reading it would close that loop.
@@ -42,7 +47,7 @@ MorphField {
     // break its last word: a text asks for the advance plus this.
     readonly property real wrapSlack: 1
     // A text has no caption, so this is the field's width with the mark that follows the text.
-    implicitWidth: (root.oneLine ? root.advanceOf(metrics, root.text)
+    implicitWidth: (root.oneLine ? (root.hasRuns ? root.runsAdvance(root.runs) : root.advanceOf(metrics, root.text))
                     : root.hasRuns ? label.implicitWidth
                                    : root.text.split("\n").reduce(
                                          (widest, line) => Math.max(widest, root.advanceOf(metrics, line)), 0) +
@@ -74,6 +79,41 @@ MorphField {
     // the width of the font it was first measured in. The height is never negative.
     function advanceOf(face: FontMetrics, line: string): real {
         return face.height < 0 ? 0 : face.advanceWidth(line)
+    }
+
+    // A run's text as its characters: the runs carry it escaped for rich text.
+    function plainOf(escaped: string): string {
+        return escaped.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&amp;/g, "&")
+    }
+    function escapedOf(plain: string): string {
+        return plain.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    }
+    // The face a run is drawn in.
+    function faceOf(run: var): FontMetrics {
+        return run.mono ? monoMetrics : run.strong ? strongMetrics : metrics
+    }
+    // The width of the runs laid end to end on one line.
+    function runsAdvance(list: var): real {
+        return list.reduce((sum, run) => sum + root.advanceOf(root.faceOf(run), root.plainOf(run.text)), 0)
+    }
+    // The runs that fit the width on one line: the run the width ends in is cut with an ellipsis, in its own face, and
+    // the runs after it are dropped.
+    function elideRuns(list: var): var {
+        const kept = []
+        let room = root.controlWidth
+        for (const run of list) {
+            const face = root.faceOf(run)
+            const plain = root.plainOf(run.text)
+            const advance = root.advanceOf(face, plain)
+            if (advance <= room) {
+                kept.push(run)
+                room -= advance
+                continue
+            }
+            kept.push(Object.assign({}, run, {text: root.escapedOf(face.height < 0 ? plain : face.elidedText(plain, Qt.ElideRight, Math.max(room, 0)))}))
+            break
+        }
+        return kept
     }
 
     // The text cut to the width with an ellipsis, by the label's current font.
@@ -109,7 +149,7 @@ MorphField {
         id: label
         textFormat: root.hasRuns ? Text.RichText : Text.PlainText
         width: root.controlWidth
-        text: root.hasRuns ? root.runsHtml(root.runs) : root.fitted
+        text: root.hasRuns ? root.runsHtml(root.fittedRuns) : root.fitted
         wrapMode: root.oneLine ? Text.NoWrap : Text.Wrap
         horizontalAlignment: root.textAlign
         font: Theme.figuresOf(root.role === 2 ? Theme.headingFont

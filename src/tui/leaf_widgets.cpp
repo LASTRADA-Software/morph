@@ -109,6 +109,23 @@ std::string elidedLine(std::string_view line, int width) {
     return std::string{line.substr(0, kept)} + "…";
 }
 
+// @p runs laid end to end on one line of @p width cells: a line break reads as a space, and the run the width ends in is
+// cut with an ellipsis, so the runs after it are dropped.
+std::vector<ui::TextSpan> elidedRuns(std::vector<ui::TextSpan> runs, int width) {
+    int room = width;
+    for (std::size_t index = 0; index < runs.size(); ++index) {
+        std::ranges::replace(runs.at(index).text, '\n', ' ');
+        int const advance = displayWidth(runs.at(index).text);
+        if (advance > room) {
+            runs.at(index).text = elidedLine(runs.at(index).text, room);
+            runs.resize(index + 1);
+            break;
+        }
+        room -= advance;
+    }
+    return runs;
+}
+
 }  // namespace
 
 void TextImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
@@ -160,7 +177,11 @@ void TextImpl::paintControl(::core::tui::Canvas& canvas) {
         style.fg = toneStyle(canvas.theme(), _tone).fg;
     }
     if (!_runs.empty()) {
-        paintRuns(canvas, _runs, style, true);
+        if (_elided) {
+            paintRuns(canvas, elidedRuns(_runs, canvas.width()), style, false);
+        } else {
+            paintRuns(canvas, _runs, style, true);
+        }
     } else {
         bool const elide = _elided || _role == ui::TextRole::Mono;
         int row = 0;
