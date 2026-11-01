@@ -813,19 +813,20 @@ ui::Node worksheetPane(Review const& review) {
 }
 
 ui::Node expandedLayout(Review const& review) {
-    // Splitter sizes are absolute units, not shares, so the queue's 28 units (about 215 px) hold at every width and
-    // the worksheet takes the rest of the page. That is the most the queue can take on the 785 px page the sidebar
-    // leaves without the worksheet's table scrolling sideways, its Analyte, Spec. and Change columns already giving up
-    // width; an entry's id, age and tags still sit on their own lines. The splitter takes the page's height, so each
-    // pane reaches the page's bottom.
-    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{28, 75}};
-    return ui::column({ui::splitter({queuePane(review).surface("pane"), worksheetPane(review).surface("pane")},
-                                    ui::AnyHandle{"horizontal"}, sizes)
-                           .sizing(ui::stretch(), ui::stretch())
-                           .a11y("Queue and worksheet")
-                           .testId("split"),
-                       decisionDialog(review)},
-                      {.pageEdge = true})
+    // The queue is 28 % of the splitter, at most 37 units (about 280 px): 280 px on the 1000 px page beside the
+    // sidebar, and a share of the 785 px page small enough that the worksheet's table does not scroll sideways, its
+    // Analyte, Spec. and Change columns giving up width. The worksheet takes the rest. The splitter takes the page's
+    // height, so each pane reaches the page's bottom.
+    return ui::column(
+               {ui::splitter(
+                    {queuePane(review).surface("pane").sizing(ui::percent(28)).maxWidth(37).testId("queue-pane"),
+                     worksheetPane(review).surface("pane").sizing(ui::stretch()).testId("worksheet-pane")},
+                    ui::AnyHandle{"horizontal"})
+                    .sizing(ui::stretch(), ui::stretch())
+                    .a11y("Queue and worksheet")
+                    .testId("split"),
+                decisionDialog(review)},
+               {.pageEdge = true})
         .sizing(ui::stretch(), ui::stretch());
 }
 

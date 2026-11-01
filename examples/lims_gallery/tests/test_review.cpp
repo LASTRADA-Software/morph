@@ -39,6 +39,7 @@ TEST_CASE("review, expanded: the queue beside the worksheet, its flagged results
     CHECK(screen.backend().prop(queueEntry(screen, "WS-2026-0412 · 2 h 10 min"), "selected") == "true");
     CHECK(screen.text("sheet-title") == "Assay and impurities · Paracetamol 500 mg");
     CHECK(screen.prop("Select", "show", "options") == "[\"all\":All 7,\"flagged\":Flagged 2]");
+    // One tag carries the whole verdict, so a row is one line; the column elides it where it is short of room.
     CHECK(screen.backend().find("Badge", "text", "Out of trend: −0.7 % vs. last 5 lots").has_value());
     CHECK(screen.prop("Tabs", "record-tabs", "tabs") == "[Results,Previous lots,Audit trail · 3,Comments · 1]");
     CHECK_FALSE(screen.shows("Banner", "self-review"));
@@ -77,14 +78,15 @@ TEST_CASE("review: returning a worksheet needs a reason, and takes it out of the
     screen.requireNoProblems();
 }
 
-// `sizes` is written into the document and reaches the splitter.
-TEST_CASE("review: the splitter's sizes reach the splitter", "[lims-gallery]") {
-    auto const written = lims_gallery::reviewScreen().write();
-    REQUIRE(written.has_value());
-    auto const text = written.value_or(morph::ui::author::Emitted{}).text;
-    CHECK(text.contains(R"("sizes":{"lit":[28,75]})"));
+// The queue is a share of the splitter, capped at the mockup's width; the worksheet takes the rest.
+TEST_CASE("review: the queue is a share of the splitter and the worksheet stretches", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
-    CHECK(screen.prop("Splitter", "split", "sizes") == "[28,75]");
+    auto const queue = screen.find("Column", "queue-pane");
+    auto const worksheet = screen.find("Column", "worksheet-pane");
+    REQUIRE(queue.has_value());
+    REQUIRE(worksheet.has_value());
+    CHECK(screen.backend().prop(*queue, "layout").starts_with("percent(28) max=37/"));
+    CHECK(screen.backend().prop(*worksheet, "layout").starts_with("stretch(1)/"));
 }
 
 // The approval note ends at the Approve button.
