@@ -266,8 +266,30 @@ input cell (where the frontend can align an input's text), and the header's labe
 column and places its own content. Every cell keeps its own height and is placed down its row by its column's
 `valign`: at the top, centred (the default; rounded down on the terminal) or at the bottom, or, for `Stretch`, at
 the row's whole height. No column is squeezed below its header: a content column is at
-least its header, a stretch column takes what the others leave but never less than its header, and a fixed column
-keeps its width (a fixed column narrower than its header cuts the header). A table whose columns are wider than the
+least its header, a stretch column never less than its header (or, with `shrink`, its floor), and a fixed column
+keeps its width (a fixed column narrower than its header cuts the header). A hidden cell widens no column.
+
+A stretch column starts from its content, as a CSS table does, with an ellipsis where CSS overflows. It has a natural
+width `n` (the larger of its header and its widest shown cell), a least width `l` (`n` in a column that does not wrap;
+in one that wraps, the larger of its header and its cells' least widths, a text cell's being its widest word) and a floor
+`f` (its header, or with `shrink` a few characters: 8 units on Qt Quick, `min(header, 4)` cells on the terminal). With
+`L` the width left after the fixed and content columns and the gutter or lead, the stretch columns are:
+1. `L >= sum(n)`: each `n` plus its weighted share of the spare `L - sum(n)`; a weight shares only the spare.
+2. `sum(l) <= L < sum(n)`: each `l` plus the share `(n - l) * (L - sum(l)) / (sum(n) - sum(l))` of the room between its
+   widths; only a column with `n > l` narrows, and weights take no part.
+3. `sum(f) <= L < sum(l)`: each starts at `l`, and the deficit is taken from the columns with `shrink`, last first, each
+   down to `f`, then from the other stretch columns in the same order.
+4. `L < sum(f)`: each at `f`. Qt Quick then scrolls sideways once the columns are 1 px or more wider than the table;
+   the terminal takes the overflow from every column, last first, and cuts at the table's edge.
+
+The steps meet without a jump, so no column narrows as the table widens, and in steps 1 to 3 the stretch columns add up
+to `L` exactly. A table with one stretch column gives it `L`, as before. The widths follow the shown rows: a filter, a page
+or a toggle that changes them moves the stretch columns, as it moves the content columns. This replaces the rule that
+stretch columns share by weight whatever they hold, a deliberate behaviour change at 0.x; proportions that ignore the
+content can no longer be said, and a literal `percent` table column stays refused. The terminal cannot wrap, so a text
+cell its column cuts ends in an ellipsis in its last cell, on each line (on one joined line in a column that does not wrap);
+its least width is the widest word of a text cell in a wrapping column and the natural width of any other cell, so the
+terminal never narrows a container's text, which Qt Quick does. A table whose columns are wider than the
 table scrolls sideways on Qt Quick, with a bar that shows while it can; on the terminal the columns past its edge are cut and cannot be reached.
 
 **Content that does not fit.** A container does not shrink its children on its own: whether a text elides or a row

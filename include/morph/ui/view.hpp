@@ -1175,7 +1175,10 @@ struct ForEach {
 struct TableColumn {
     /// @brief The header caption.
     std::string label;
-    /// @brief The column's width request.
+    /// @brief The column's width request. A `Stretch` column starts from its content (the larger of its header and its
+    ///        widest shown cell) and its weight shares only the width the content leaves; a table too narrow for the
+    ///        content narrows its wrapping columns, then its `shrink` columns, last first, then the other stretch
+    ///        columns. A hidden cell widens no column.
     Sizing width = Sizing::content();
     /// @brief The text style of this column's default cell; `Normal` renders unchanged. Has no effect on the style of
     ///        a column's own `.cell`, or on a `Table` constructed directly without going through the interpreter. A
@@ -1197,7 +1200,8 @@ struct TableColumn {
     /// @brief Whether a `Stretch` column may be narrower than its header when the table is narrower than its columns
     ///        need: it then gives up width down to a small floor and cuts its header and cells at its edge (an
     ///        ellipsis where the backend draws one), where otherwise no column is narrower than its header and the
-    ///        table scrolls sideways instead. It reads as `false` on a column that does not stretch.
+    ///        table scrolls sideways instead. A `shrink` column also gives up its width before the other stretch
+    ///        columns do. It reads as `false` on a column that does not stretch.
     bool shrink = false;
 };
 

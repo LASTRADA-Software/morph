@@ -31,9 +31,21 @@ public:
     /// The tone is the text's colour; the role keeps its weight.
     void setTone(ui::Tone tone) override;
     [[nodiscard]] std::string probeText() const override { return _text; }
-    /// Whether a line wider than the text is drawn cut with an ellipsis in its last cell, as a table sets it for a
-    /// column that does not wrap. A mono text is always drawn so: an identifier is never broken across rows.
-    void setElided(bool elided);
+    /// How a line wider than the text is cut.
+    enum class Elision : std::uint8_t {
+        None,     ///< Cut at the edge with no mark.
+        OneLine,  ///< Drawn on one line, a line break read as a space, ending in an ellipsis where it is cut.
+        PerLine,  ///< Each line ends in an ellipsis in its last cell where it is cut.
+    };
+    /// Sets how a line wider than the text is cut. A table sets `OneLine` for a column that does not wrap, and
+    /// `PerLine` for one that does: the terminal cannot wrap, so a text cut at its column says so. A mono text is
+    /// always cut with an ellipsis on each line: an identifier is never broken across rows.
+    void setElided(Elision elision);
+    /// As `setElided`, `OneLine` for true and `None` for false.
+    void setElided(bool elided) { setElided(elided ? Elision::OneLine : Elision::None); }
+    /// The narrowest width that breaks no word: the widest run of non-blank characters of the text, and for a
+    /// required text the room of its mark after it; a mono text's natural width.
+    [[nodiscard]] int leastWidth() const;
 
 protected:
     [[nodiscard]] ::core::tui::Size controlSize() const override;
@@ -47,7 +59,7 @@ private:
     ui::TextRole _role = ui::TextRole::Normal;
     std::optional<ui::TextAlign> _align;
     ui::Tone _tone = ui::Tone::Neutral;
-    bool _elided = false;
+    Elision _elision = Elision::None;
 };
 
 /// Button: `[ label ]`, activated by Enter, Space or a click; a list item draws ` label` across its whole slot. A list

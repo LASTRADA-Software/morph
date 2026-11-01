@@ -363,12 +363,15 @@ void TableRowImpl::adopted(ItemBase& child) {
         return;
     }
     int const columnIndex = static_cast<int>(children().size()) - 1;
+    // A cell reports a change of its least or width-free natural width itself, through these.
+    child.offer("measuredBy", QVariant::fromValue<QObject*>(tableItem));
+    child.offer("measuredIndex", columnIndex);
     QObject::connect(cell, &QQuickItem::implicitWidthChanged, item(),
                      [tableRef = QPointer<QQuickItem>{tableItem}, columnIndex, cellRef = QPointer<QQuickItem>{cell}] {
                          if (tableRef != nullptr && cellRef != nullptr && cellRef->isVisible()) {
-                             QMetaObject::invokeMethod(tableRef, "reportCellWidth", Qt::DirectConnection,
+                             QMetaObject::invokeMethod(tableRef, "reportCell", Qt::DirectConnection,
                                                        Q_ARG(int, columnIndex),
-                                                       Q_ARG(qreal, cellRef->implicitWidth()));
+                                                       Q_ARG(QVariant, QVariant::fromValue(cellRef.data())));
                          }
                      });
     // A cell's visibility flipping can only be resolved by rescanning its own column: becoming hidden may drop

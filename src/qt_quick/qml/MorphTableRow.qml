@@ -57,7 +57,48 @@ MorphWidget {
     // A cell that draws text (`textAlign`) draws it at the column's start, centre or end unless it has an alignment of
     // its own (`ownAlign`), and an end column's digits are tabular so they line up across rows. In a column whose `wrap` is false it draws on one line, elided. Every cell keeps its own height, up to the row's, and sits at
     // the row's top, centre or bottom by its column's `valign`; `stretch` fills the row's height.
+    //
+    // Placing a cell can change the cell's implicit width (a nested table's follows its width), which reports to the
+    // table and changes `widths`, which asks to place again while this call is still running. A call made meanwhile
+    // only asks for another pass; the outer call makes it with `widths` read afresh, at most `kMaxPasses` in one call
+    // stack. A row still unsettled after that places once more from the event loop, so a follower that never settles
+    // cannot deepen the stack.
+    readonly property int kMaxPasses: 3
+    // Whether `place` is running, and whether it was called while it was. Private.
+    property bool placing: false
+    property bool placeAgain: false
+    // Test-only: how many passes `place` has made.
+    property int placePasses: 0
+    // Test-only: how many calls arrived while `place` was running and were held for another pass.
+    property int placeReentries: 0
     function place() {
+        if (root.placing) {
+            ++root.placeReentries
+            root.placeAgain = true
+            return
+        }
+        root.placing = true
+        if (root.table)
+            ++root.table.placing
+        let passes = 0
+        try {
+            do {
+                root.placeAgain = false
+                ++root.placePasses
+                root.placeOnce()
+                ++passes
+            } while (root.placeAgain && passes < root.kMaxPasses)
+        } finally {
+            root.placing = false
+            if (root.table)
+                --root.table.placing
+        }
+        if (root.placeAgain) {
+            root.placeAgain = false
+            Qt.callLater(root.place)
+        }
+    }
+    function placeOnce() {
         const inset = Theme.tableCellPaddingX
         const insetY = Theme.tableCellPaddingY
         if (root.heading) {

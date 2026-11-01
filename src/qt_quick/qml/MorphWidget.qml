@@ -47,6 +47,21 @@ Item {
     // its widest word. -1 for a widget that cannot be narrower than its natural width (a button, a fixed-width input).
     // A wrapping row counts each child by the lesser of its basis and this.
     property real shrinkWidth: -1
+    // The width the widget asks for however wide it is laid out, in pixels; -1 when it has none apart from its
+    // `implicitWidth`. A widget whose `implicitWidth` follows the width it is given (a table, a text that wraps rich
+    // text) states here what it would ask for if it did not, so a table that sizes its columns by their cells'
+    // widths does not feed its own result back to itself.
+    property real widthFreeNatural: -1
+    // The table that sizes its column by this widget when it is a cell, and the column; the table's cell reports
+    // through them (`reportCell`) whenever the widget's widths change.
+    property var measuredBy: null
+    property int measuredIndex: -1
+    function reportMeasure() {
+        if (root.measuredBy && root.visible)
+            root.measuredBy.reportCell(root.measuredIndex, root)
+    }
+    onShrinkWidthChanged: root.reportMeasure()
+    onWidthFreeNaturalChanged: root.reportMeasure()
     property int minWidthUnits: -1
     property int maxWidthUnits: -1
     property int minHeightUnits: -1

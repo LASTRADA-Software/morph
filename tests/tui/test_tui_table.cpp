@@ -155,8 +155,10 @@ TEST_CASE("tui table: a hidden cell keeps its column, so the cells after it stay
     CHECK(harness.draw() == Rows{"  Note Name", "       wide-name"});
 }
 
-// Mutation: leave the `shown()` test out of `TableImpl::naturalWidths` (the hidden cell's 11 cells hold the column open).
-TEST_CASE("tui table: a hidden cell widens no column, and the column goes back to its header", "[tui][table][columns]") {
+// Mutation: leave the `shown()` test out of `TableImpl::naturalWidths` (the hidden cell's 11 cells hold the column
+// open).
+TEST_CASE("tui table: a hidden cell widens no column, and the column goes back to its header",
+          "[tui][table][columns]") {
     Harness harness{30, 3};
     auto const table = harness.make<TableImpl>(nullptr);
     table->setColumns({{.label = "Note"}, {.label = "Name"}});
@@ -179,9 +181,9 @@ TEST_CASE("tui table: a label wider than its column is cut at the column's edge"
     CHECK(harness.draw() == Rows{"  Qua Name"});
 }
 
-// Mutation: leave a column's `wrap` unread (the cell is cut at the column's edge with no ellipsis), or elide every
-// column (the wrapping column's cell ends in an ellipsis too).
-TEST_CASE("tui table: a text cell of a column that does not wrap ends in an ellipsis where it is cut",
+// Mutation: leave the table's `setElided` out of `arrangeRows` (both cells are cut at the column's edge with no
+// ellipsis).
+TEST_CASE("tui table: a text cell a column cuts ends in an ellipsis, whether the column wraps or not",
           "[tui][table][columns]") {
     Harness harness{30, 3};
     auto const table = harness.make<TableImpl>(nullptr);
@@ -193,7 +195,7 @@ TEST_CASE("tui table: a text cell of a column that does not wrap ends in an elli
     auto const note = harness.make<TextImpl>(row.get());
     note->setText("99.4 % LC");
     table->setRowKey(*row, key(1));
-    CHECK(harness.draw() == Rows{"  Assay  Note", "  99.4 … 99.4 %"});
+    CHECK(harness.draw() == Rows{"  Assay  Note", "  99.4 … 99.4 …"});
 }
 
 // Mutation: leave `_elided` unread for a text with spans (the runs draw to the column's edge with no ellipsis, and the
@@ -910,4 +912,124 @@ TEST_CASE("tui table: the sorted column's header shows its direction, and a clic
     CHECK(harness.click({.x = 3, .y = 0}) == EventResult::Handled);
     CHECK(harness.click({.x = 9, .y = 0}) == EventResult::Handled);
     CHECK(asked == std::vector<std::size_t>{0});
+}
+
+namespace {
+
+/// A table of the given columns, one row holding a text per column.
+struct Worksheet {
+    Worksheet(Harness& harness, std::vector<ui::TableColumn> const& columns, std::vector<std::string> const& texts)
+        : table{harness.make<TableImpl>(nullptr)} {
+        table->setColumns(columns);
+        row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+        for (auto const& text : texts) {
+            cells.push_back(harness.make<TextImpl>(row.get()));
+            cells.back()->setText(text);
+        }
+        table->setRowKey(*row, key(1));
+    }
+    ~Worksheet() {
+        cells.clear();
+        row.reset();
+    }
+    Worksheet(Worksheet const&) = delete;
+    Worksheet& operator=(Worksheet const&) = delete;
+    Worksheet(Worksheet&&) = delete;
+    Worksheet& operator=(Worksheet&&) = delete;
+
+    std::unique_ptr<TableImpl> table;
+    std::unique_ptr<StackImpl> row;
+    std::vector<std::unique_ptr<TextImpl>> cells;
+};
+
+}  // namespace
+
+// Mutation: ignore the natural widths in `TableImpl::columnWidths` (the stretch columns share 30 by weight alone, and
+// the long text is cut).
+TEST_CASE("tui table: a stretch column starts from its content and the weights share only what is left",
+          "[tui][table][columns]") {
+    Harness harness{40, 3};
+    Worksheet const sheet{harness,
+                          {{.label = "A", .width = ui::Sizing::stretch(1), .wrap = false},
+                           {.label = "B", .width = ui::Sizing::stretch(1), .wrap = false}},
+                          {"a", "thirty-character-text-for-b-col"}};
+    // 40 less the gutter of 2 and a gap leaves 37 for 1 + 30: the long text is whole, and the spare goes by weight.
+    CHECK(harness.draw() == Rows{"  A    B", "  a    thirty-character-text-for-b-col"});
+}
+
+// Mutation: let the last column give first in review's shape (Spec. would be cut), or share by weight (the tag too).
+TEST_CASE("tui table: the column that shrinks gives first, the others stay whole", "[tui][table][columns]") {
+    Harness harness{40, 3};
+    Worksheet const sheet{harness,
+                          {{.label = "Analyte", .width = ui::Sizing::stretch(1), .wrap = false, .shrink = true},
+                           {.label = "Spec", .width = ui::Sizing::stretch(1), .wrap = false},
+                           {.label = "Change", .width = ui::Sizing::stretch(1), .wrap = false, .shrink = true}},
+                          {"Assay, mean", "95.0-105.0", "integration complete"}};
+    // 40 less 2 and two gaps is 36 for 11 + 10 + 20: the last column gives 5 and the first two keep their text.
+    auto const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 2);
+    CHECK(drawn.at(1) == "  Assay, mean 95.0-105.0 integration co…");
+}
+
+// Mutation: leave the `shown()` test out of `TableImpl::leastWidths`, or the cell out of `naturalWidths`.
+TEST_CASE("tui table: a wrapping text cell is narrowed to its widest word, and ends its line in an ellipsis",
+          "[tui][table][columns]") {
+    Harness harness{24, 3};
+    Worksheet const sheet{harness,
+                          {{.label = "Note", .width = ui::Sizing::stretch(1)},
+                           {.label = "Tag", .width = ui::Sizing::stretch(1), .wrap = false}},
+                          {"alpha beta gamma", "out of spec now"}};
+    // 24 less 2 and a gap leaves 21 for 16 + 15: the wrapping column gives down towards its widest word (5), so
+    // the tag stays whole, and the narrowed note ends in an ellipsis.
+    auto const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 2);
+    CHECK(drawn.at(1) == "  alpha… out of spec now");
+}
+
+// Mutation: leave `leastWidth` at the text's natural width (the wrapping column never gives).
+TEST_CASE("tui table: a text's least width is its widest word, a mono text's its whole width",
+          "[tui][table][columns]") {
+    Harness harness{30, 3};
+    auto const text = harness.make<TextImpl>(nullptr);
+    text->setText("alpha beta\ngamma");
+    CHECK(text->leastWidth() == 5);
+    text->setSpans({{.text = "ab cd"}, {.text = "efgh ij", .strong = true}});
+    CHECK(text->leastWidth() == 6);
+    text->setText("alpha beta");
+    text->setRole(ui::TextRole::Mono);
+    CHECK(text->leastWidth() == 10);
+}
+
+// Mutation: join the lines of the runs with `elidedRuns` in a wrapping column (the second line is lost).
+TEST_CASE("tui table: runs in a wrapping column end each cut line in an ellipsis", "[tui][table][columns]") {
+    Harness harness{30, 4};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Note", .width = ui::Sizing::fixed(6)}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    auto const note = harness.make<TextImpl>(row.get());
+    note->setSpans({{.text = "first line\n"}, {.text = "second one", .strong = true}});
+    table->setRowKey(*row, key(1));
+    auto const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 3);
+    CHECK(drawn.at(1) == "  first…");
+    CHECK(drawn.at(2) == "  secon…");
+}
+
+// Mutation: leave the container cell's natural width out of `leastWidths` (the column narrows below a nested text).
+TEST_CASE("tui table: a container cell keeps its natural least width", "[tui][table][columns]") {
+    Harness harness{24, 3};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Note", .width = ui::Sizing::stretch(1)},
+                       {.label = "Tag", .width = ui::Sizing::stretch(1), .wrap = false}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    auto const holder = harness.make<StackImpl>(row.get(), ui::Axis::Vertical);
+    auto const inner = harness.make<TextImpl>(holder.get());
+    inner->setText("alpha beta gamma");
+    auto const tag = harness.make<TextImpl>(row.get());
+    tag->setText("out of spec now");
+    table->setRowKey(*row, key(1));
+    auto const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 2);
+    // The nested text is not a direct cell, so its column never narrows below it and the tag gives instead.
+    CHECK(drawn.at(1).starts_with("  alpha beta gamma "));
 }

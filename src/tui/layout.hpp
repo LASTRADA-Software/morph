@@ -44,6 +44,31 @@ struct Track {
     int gap = 0;     ///< Cells between two neighbours.
 };
 
+/// One column of a table, for `planColumns`.
+struct ColumnItem {
+    ui::Sizing sizing{};  ///< How the column asks for space.
+    int natural = 0;      ///< The width its widest shown cell and its header ask for.
+    int least = 0;    ///< The narrowest it takes without cutting a word; `natural` for a column that cuts anywhere.
+    int floor = 0;    ///< The narrowest a stretch column goes before the table is short of room.
+    int minimum = 0;  ///< The narrowest any column is squeezed to when the table is short of room.
+    bool shrinks = false;  ///< Whether a stretch column gives up width before the other stretch columns.
+};
+
+/// Widths of a table's columns, in order. Fixed, Percent and Content columns ask for what `distribute` gives an item
+/// of that sizing. What is left, `L`, goes to the Stretch columns, each of which has a natural width `n`, a least
+/// width `l` and a floor `f` (`f <= l <= n`):
+///  1. `L >= sum(n)`: each is `n` plus its weighted share of the spare `L - sum(n)`.
+///  2. `sum(l) <= L < sum(n)`: each is `l` plus the share `(n - l) * (L - sum(l)) / (sum(n) - sum(l))` of the room
+///     between its widths, the cells a division leaves over going one each to the first columns with `n > l`.
+///  3. `sum(f) <= L < sum(l)`: each starts at `l`, and the deficit is taken from the columns that shrink, last first,
+///     each down to `f`, then from the others in the same order.
+///  4. `L < sum(f)`: each is `f`, and then the overflow is taken from every column, last first, down to `minimum`.
+/// In steps 1 to 3 the Stretch columns add up to `L` exactly, and a column's width never falls as the track grows.
+/// @param items The columns.
+/// @param track The cells available and the gap between two columns.
+/// @return One width per column.
+[[nodiscard]] std::vector<int> planColumns(std::span<ColumnItem const> items, Track track);
+
 /// Extents along a stack's main axis, in item order. Fixed items get their amount, Percent items that share of the
 /// track's length (rounded down; the gaps are not taken off first) and Content items their natural extent, each
 /// clamped into its bounds; Stretch items share what is left by weight (a weight below one counts as

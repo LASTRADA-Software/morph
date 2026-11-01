@@ -5,8 +5,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // Rows of cells under column headers. Each column's width comes from its sizing: fixed units, the widest of its
-// header and its shown cells for content, or a share of what is left for stretch; every row places its cells at
-// those widths.
+// header and its shown cells for content, or for stretch its content plus a share of what is left; every row places
+// its cells at those widths.
 MorphWidget {
     id: root
 
@@ -66,12 +66,17 @@ MorphWidget {
     // sets it when it makes the table.
     property Component headerBackground: null
     readonly property Item headerBackgroundItem: headerBackgroundLoader.item as Item
-    // A content column's widest-cell width, cached per column index; [] until seeded. A cell growing only raises
-    // its entry (no rescan needed); a cell shrinking, a row leaving, or a cell's/row's visibility changing can only
-    // be resolved by rescanning that column, since the cache does not know whether the row that set its current
-    // value is still there or still contributing. Reassigned (not mutated in place) whenever it changes, since a
-    // QML array notifies dependents only on reassignment.
+    // A content or stretch column's widest-cell natural width (the cell's `widthFreeNatural` when it has one, else its
+    // `implicitWidth`), cached per column index; [] until seeded. A cell growing only raises its entry (no rescan
+    // needed); a cell shrinking, a row leaving, or a cell's/row's visibility changing can only be resolved by rescanning
+    // that column, since the cache does not know whether the row that set its current value is still there or still
+    // contributing. Reassigned (not mutated in place) whenever it changes, since a QML array notifies dependents only
+    // on reassignment.
     property var columnCache: []
+    // A stretch column's widest-cell least width, the narrowest its cells can be laid out without losing content (a
+    // cell's `shrinkWidth` within its natural width, else its natural width), cached and kept like `columnCache`. Both
+    // caches are written outside the `widths` binding, so no binding loop forms.
+    property var leastCache: []
     // Test-only: how many rows a full column rescan has visited, summed across every rescan. Not a public API.
     property int rowScans: 0
     readonly property var widths: root.columnWidths(width - root.lead)
@@ -80,69 +85,125 @@ MorphWidget {
     // never takes room from the content: a fixed column is its units plus the padding (a unit is a body character,
     // or the mono face's advance in a column whose role is mono, whatever its cells draw), a content column its widest
     // cell plus the padding. No column is narrower than its header: a content column is at least its header and its
-    // widest cell, a stretch column at least its header (its cells are meant to take what is left, so they do not
-    // raise it), each with the padding a side and never under 8 units. A stretch column that says `shrink` has the 8
-    // units alone as its floor, so it can be narrower than its header, which then elides. A stretch column takes its
-    // share of what the others leave, and a share under its floor is the floor, the rest shared among the others; the
-    // shares add up to what is left exactly. Columns wider in sum than the table by a pixel or more scroll sideways
-    // (`hflick`).
-    function columnWidths(total: real): var {
+    // widest cell, with the padding a side and never under 8 units.
+    //
+    // A stretch column starts from its content. It has a natural width `n` (the larger of its header and its widest
+    // cell), a least width `l` (`n` in a column that does not wrap; in one that does, the widest word of its cells,
+    // never under the header) and a floor `f` (the header, or the 8 units alone with `shrink`, so the column can be
+    // narrower than its header, which then elides). With `L` the width left after the fixed and content columns:
+    //  1. `L >= sum(n)`: each is `n` plus its weighted share of `L - sum(n)`.
+    //  2. `sum(l) <= L < sum(n)`: each is `l` plus the share `(n - l) * (L - sum(l)) / (sum(n) - sum(l))` of the room
+    //     between its widths.
+    //  3. `sum(f) <= L < sum(l)`: each starts at `l`, and the deficit is taken from the columns with `shrink`, last
+    //     first, each down to `f`, then from the others in the same order.
+    //  4. `L < sum(f)`: each is `f`, and the columns scroll sideways.
+    // In steps 1 to 3 the stretch columns add up to `L` exactly, and no column narrows as the table widens. Columns
+    // wider in sum than the table by a pixel or more scroll sideways (`hflick`).
+    //
+    // Each column's widths, read from the caches and the headers, never from the table's own width.
+    function measure(): var {
         const pad = 2 * Theme.tableCellPaddingX
         const out = []
-        const floors = []
-        let used = 0
-        let pending = []
         for (let i = 0; i < root.columns.length; ++i) {
             const column = root.columns[i]
             const mark = column.sortable ? headerMetrics.advanceWidth(root.ascendingMark) : 0
             const header = Math.max(headerMetrics.advanceWidth(column.label) + mark + pad,
                                     8 * Theme.unitWidth)
-            let w = 0
-            if (column.kind === 1)
+            let natural = header
+            let least = header
+            let floor = header
+            if (column.kind === 1) {
                 // A mono column's n characters are whole pixels wide, so the text, which a pixel of rounding can make
                 // wider than n advances, is never cut short for want of it.
-                w = (column.role === 6 ? Math.ceil(column.amount * Theme.monoAdvance) : column.amount * Theme.unitWidth) + pad
-            else if (column.kind === 0)
-                w = Math.max(root.cachedWidth(i) + pad, header)
-            else
-                pending.push(i)
-            out.push(w)
-            floors.push(column.kind === 2 && column.shrink === true ? 8 * Theme.unitWidth : header)
-            used += w
+                natural = (column.role === 6 ? Math.ceil(column.amount * Theme.monoAdvance)
+                                             : column.amount * Theme.unitWidth) + pad
+                least = natural
+                floor = natural
+            } else if (column.kind === 0) {
+                natural = Math.max(root.cachedWidth(i) + pad, header)
+                least = natural
+                floor = natural
+            } else {
+                natural = Math.max(root.cachedWidth(i) + pad, header)
+                least = column.wrap ? Math.min(natural, Math.max(root.cachedLeast(i) + pad, header)) : natural
+                floor = column.shrink === true ? 8 * Theme.unitWidth : header
+            }
+            out.push({"kind": column.kind, "natural": natural, "least": least, "floor": floor,
+                      "weight": Math.max(1, column.amount)})
         }
-        let left = Math.max(0, total - used)
-        let floored = true
-        while (floored && pending.length > 0) {
-            floored = false
-            let weights = 0
-            for (const i of pending)
-                weights += Math.max(1, root.columns[i].amount)
-            const next = []
-            for (const i of pending) {
-                const share = left * Math.max(1, root.columns[i].amount) / weights
-                if (share < floors[i]) {
-                    out[i] = floors[i]
-                    floored = true
-                } else {
-                    out[i] = share
-                    next.push(i)
+        return out
+    }
+
+    function columnWidths(total: real): var {
+        const metrics = root.measure()
+        const out = []
+        const stretch = []
+        let used = 0
+        for (let i = 0; i < metrics.length; ++i) {
+            if (metrics[i].kind === 2) {
+                out.push(0)
+                stretch.push(i)
+            } else {
+                out.push(metrics[i].natural)
+                used += metrics[i].natural
+            }
+        }
+        if (stretch.length === 0)
+            return out
+        const left = Math.max(0, total - used)
+        let natural = 0
+        let least = 0
+        let floor = 0
+        let weights = 0
+        for (const i of stretch) {
+            natural += metrics[i].natural
+            least += metrics[i].least
+            floor += metrics[i].floor
+            weights += metrics[i].weight
+        }
+        // The last column a step changes takes what the others leave, so the stretch columns add up to `left` exactly
+        // rather than to within the rounding of the quotients.
+        let last = -1
+        if (left >= natural) {
+            for (const i of stretch) {
+                out[i] = metrics[i].natural + (left - natural) * metrics[i].weight / weights
+                last = i
+            }
+        } else if (left >= least) {
+            for (const i of stretch) {
+                const m = metrics[i]
+                out[i] = m.least + (m.natural - m.least) * (left - least) / (natural - least)
+                if (m.natural > m.least)
+                    last = i
+            }
+        } else if (left >= floor) {
+            for (const i of stretch)
+                out[i] = metrics[i].least
+            let deficit = least - left
+            for (const gives of [true, false]) {
+                for (let k = stretch.length - 1; k >= 0 && deficit > 0; --k) {
+                    const i = stretch[k]
+                    if ((root.columns[i].shrink === true) !== gives)
+                        continue
+                    const take = Math.min(out[i] - metrics[i].floor, deficit)
+                    if (take > 0) {
+                        out[i] -= take
+                        deficit -= take
+                        last = Math.max(last, i)
+                    }
                 }
             }
-            // The shares are quotients, which add up to a hair more or less than what is left; the last column that
-            // is not floored takes what the others leave, so the columns add up to the table's width exactly.
-            if (!floored && next.length > 0) {
-                let others = 0
-                for (let k = 0; k < next.length - 1; ++k)
-                    others += out[next[k]]
-                out[next[next.length - 1]] = left - others
+        } else {
+            for (const i of stretch)
+                out[i] = metrics[i].floor
+        }
+        if (last >= 0) {
+            let others = 0
+            for (const i of stretch) {
+                if (i !== last)
+                    others += out[i]
             }
-            if (floored) {
-                for (const i of pending) {
-                    if (!next.includes(i))
-                        left = Math.max(0, left - floors[i])
-                }
-            }
-            pending = next
+            out[last] = left - others
         }
         return out
     }
@@ -165,22 +226,43 @@ MorphWidget {
         return index < root.columnCache.length ? root.columnCache[index] : 0
     }
 
-    // Grows `columnCache` to cover every column, scanning any not-yet-cached content column once. Called only from
-    // outside a `widths` evaluation (onColumnsChanged, and C++ on each row adoption) -- never from `cachedWidth`.
+    // The cached widest-cell least width for stretch column `index`; 0 until seeded. Read-only, for the same reason.
+    function cachedLeast(index: int): real {
+        return index < root.leastCache.length ? root.leastCache[index] : 0
+    }
+
+    // What a cell asks for however wide it is laid out: its `widthFreeNatural` where it gives one, else its
+    // `implicitWidth`.
+    function naturalOf(cell: var): real {
+        const free = cell.widthFreeNatural
+        return free !== undefined && free >= 0 ? free : cell.implicitWidth
+    }
+
+    // The narrowest a cell can be laid out without losing content: its `shrinkWidth` within its natural width `natural`,
+    // else the natural width.
+    function leastOf(cell: var, natural: real): real {
+        const shrink = cell.shrinkWidth
+        return shrink !== undefined && shrink >= 0 ? Math.min(shrink, natural) : natural
+    }
+
+    // Grows `columnCache` to cover every column, scanning any not-yet-cached content or stretch column once. Called only
+    // from outside a `widths` evaluation (onColumnsChanged, and C++ on each row adoption) -- never from `cachedWidth`.
     // columnCache's own per-entry default is 0, set by rescanColumn's own padding, which is indistinguishable from
     // a column whose widest cell really is 0 (an empty table) -- harmless here, since seeding an already-correct
     // zero with the same scan just repeats the (cheap, currently-zero-row) work rather than skipping it wrongly.
     function seedMissingColumns() {
         for (let i = 0; i < root.columns.length; ++i) {
-            if (root.columns[i].kind === 0 && i >= root.columnCache.length)
+            if (root.columns[i].kind !== 1 && i >= root.columnCache.length)
                 root.rescanColumn(i)
         }
     }
 
-    // The widest shown cell in column `index`, scanning every row. Used only to seed or rescan the cache -- not
-    // read from a property binding, so it does not make `widths` a dependency of every cell's `implicitWidth`.
-    function widestCell(index: int): real {
-        let widest = 0
+    // The widest natural and least widths of the shown cells in column `index`, scanning every row. Used only to seed
+    // or rescan the cache -- not read from a property binding, so it does not make `widths` a dependency of every
+    // cell's `implicitWidth`.
+    function widestCell(index: int): var {
+        let natural = 0
+        let least = 0
         for (let r = 0; r < body.children.length; ++r) {
             ++root.rowScans
             const row = body.children[r]
@@ -188,39 +270,86 @@ MorphWidget {
             if (!row.visible || row.heading || !row.content || index >= row.content.children.length)
                 continue
             const cell = row.content.children[index]
-            if (cell.visible)
-                widest = Math.max(widest, cell.implicitWidth)
+            if (cell.visible) {
+                const cellNatural = root.naturalOf(cell)
+                natural = Math.max(natural, cellNatural)
+                least = Math.max(least, root.leastOf(cell, cellNatural))
+            }
         }
-        return widest
+        return {"natural": natural, "least": least}
     }
 
-    // Rescans column `index` from scratch and stores the result, reassigning the whole array so bindings on
-    // `columnCache` (through `widths`) are notified. Virtualized, the result only ever grows the cache: this is
+    // Rescans column `index` from scratch and stores the result, reassigning the whole arrays so bindings on
+    // `columnCache` (through `widths`) are notified. Virtualized, the result only ever grows the caches: this is
     // the one true chokepoint every shrink-capable caller (invalidateAllColumns, a cell's own visibleChanged
-    // handler in table.cpp, reportCellWidth's own shrink branch below) ultimately goes through, so the monotonic
+    // handler in table.cpp, reportCell's own shrink branch below) ultimately goes through, so the monotonic
     // rule from invalidateAllColumns' own comment is enforced here, not duplicated at each call site.
     function rescanColumn(index: int) {
+        const column = root.columns[index]
+        if (!column || column.kind === 1)
+            return
+        const scanned = root.widestCell(index)
+        if (column.kind === 2) {
+            const nextLeast = root.leastCache.slice()
+            while (nextLeast.length <= index)
+                nextLeast.push(0)
+            nextLeast[index] = root.virtualized ? Math.max(nextLeast[index], scanned.least) : scanned.least
+            root.leastCache = nextLeast
+        }
         const next = root.columnCache.slice()
         while (next.length <= index)
             next.push(0)
-        const scanned = root.widestCell(index)
-        next[index] = root.virtualized ? Math.max(next[index], scanned) : scanned
+        next[index] = root.virtualized ? Math.max(next[index], scanned.natural) : scanned.natural
         root.columnCache = next
     }
 
-    // Called by C++ (TableRowImpl::adopted, via the row's item, the same safe idiom `place` uses) when a cell's
-    // implicitWidth changes: grows the column's cached width on the spot when the new width is larger (no rescan
-    // needed -- a cache can only grow correctly that way), otherwise rescans the column fully, since a shrink might
-    // have been the row that set today's maximum.
-    function reportCellWidth(index: int, width: real) {
-        if (index >= root.columnCache.length || width > root.columnCache[index]) {
+    // Called by C++ (TableRowImpl::adopted, via the row's item, the same safe idiom `place` uses) and by a cell itself
+    // (`MorphWidget.reportMeasure`) when a cell's widths change: grows the column's cached widths on the spot when the
+    // new ones are larger (no rescan needed -- a cache can only grow correctly that way), otherwise rescans the column
+    // fully, since a shrink might have been the row that set today's maximum.
+    //
+    // A report that arrives while a row is placing its cells is held until the placing is done: placing runs from the
+    // change notification of `widths`, and writing a cache that `widths` reads from inside that notification would
+    // make `widths` a binding loop.
+    property int placing: 0
+    property var deferredReports: []
+    function flushReports() {
+        const reports = root.deferredReports
+        root.deferredReports = []
+        for (const report of reports)
+            root.reportCell(report[0], report[1])
+    }
+    function reportCell(index: int, cell: var) {
+        if (root.placing > 0) {
+            root.deferredReports.push([index, cell])
+            Qt.callLater(root.flushReports)
+            return
+        }
+        const column = root.columns[index]
+        if (!column || column.kind === 1 || !cell || !cell.visible || cell.parent?.parent?.heading)
+            return
+        const natural = root.naturalOf(cell)
+        const stretch = column.kind === 2
+        const least = stretch ? root.leastOf(cell, natural) : 0
+        const cachedNatural = root.cachedWidth(index)
+        const cachedLeast = root.cachedLeast(index)
+        if (natural < cachedNatural || (stretch && least < cachedLeast)) {
+            root.rescanColumn(index)
+            return
+        }
+        if (stretch && (index >= root.leastCache.length || least > cachedLeast)) {
+            const nextLeast = root.leastCache.slice()
+            while (nextLeast.length <= index)
+                nextLeast.push(0)
+            nextLeast[index] = least
+            root.leastCache = nextLeast
+        }
+        if (index >= root.columnCache.length || natural > cachedNatural) {
             const next = root.columnCache.slice()
             while (next.length <= index)
                 next.push(0)
-            next[index] = Math.max(next[index], width)
+            next[index] = natural
             root.columnCache = next
-        } else if (width < root.columnCache[index]) {
-            root.rescanColumn(index)
         }
     }
 
@@ -238,13 +367,14 @@ MorphWidget {
     // that justified it has scrolled away, preferred over that jitter.
     function invalidateAllColumns() {
         for (let i = 0; i < root.columns.length; ++i) {
-            if (root.columns[i].kind === 0)
+            if (root.columns[i].kind !== 1)
                 root.rescanColumn(i)
         }
     }
 
     onColumnsChanged: {
         root.columnCache = []
+        root.leastCache = []
         root.seedMissingColumns()
     }
 
@@ -324,6 +454,16 @@ MorphWidget {
     }
 
     implicitWidth: Math.max(root.showHeader ? header.implicitWidth : 0, body.implicitWidth)
+    // The width the columns ask for, whatever the table's own width: the lead and each column's natural width, read
+    // from the caches and the headers. `implicitWidth` follows `width` through the header, so a table that is a cell
+    // of another table reports this instead.
+    widthFreeNatural: {
+        let sum = root.lead
+        for (const m of root.measure())
+            sum += m.natural
+        // In whole pixels, so a sum that wobbles in its last digits does not read as a change.
+        return Math.ceil(sum)
+    }
     // Unvirtualized: unchanged, the realized rows' own full height. Virtualized: the realized rows' real height
     // (whatever that happens to measure) plus the estimated height of every row this table is not realizing right
     // now -- otherwise the table's own size, and so its container's scrollbar, would shrink every time a row

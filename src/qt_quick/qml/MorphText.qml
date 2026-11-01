@@ -75,6 +75,27 @@ MorphField {
         return widest + root.wrapSlack + (root.required ? root.markerRoom : 0)
     }
     shrinkWidth: root.wrapMinimumWidth
+    // What the text asks for however wide it is laid out. Runs that wrap are rich text, whose own implicit width
+    // follows the width given, so it is the widest of their lines read from advances: a run's text can hold line
+    // feeds, which start a new line.
+    widthFreeNatural: {
+        if (root.oneLine || !root.hasRuns)
+            return root.implicitWidth
+        let widest = 0
+        let line = 0
+        for (const run of root.runs) {
+            const parts = root.plainOf(run.text).split("\n")
+            for (let i = 0; i < parts.length; ++i) {
+                if (i > 0) {
+                    widest = Math.max(widest, line)
+                    line = 0
+                }
+                line += root.advanceOf(root.faceOf(run), parts[i])
+            }
+        }
+        // In whole pixels, so a sum that wobbles in its last digits does not read as a change.
+        return Math.ceil(Math.max(widest, line) + root.wrapSlack + (root.required ? root.markerRoom : 0))
+    }
 
     // The width of a line in a face. Reading the face's height makes every binding that measures through here depend
     // on the font: a method call alone registers no dependency, so a text whose role is set after its text would keep

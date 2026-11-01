@@ -4454,7 +4454,8 @@ struct TableColumn {
     std::string name;
     /// @brief The header label.
     AnyHandle label;
-    /// @brief The width.
+    /// @brief The width. A stretch column starts from its content, and its weight shares only the width the content
+    ///        leaves.
     AnyHandle width;
     /// @brief The column's text role; absent writes no key, `Normal`. A `mono` role also makes a `fixed(n)` width
     ///        count n monospace characters, plus the cell padding, even when the column has its own `cell`.
@@ -4477,7 +4478,8 @@ struct TableColumn {
     ///        column's width with an ellipsis, and writes `wrap: false`.
     bool wrap = true;
     /// @brief Whether a stretch column may be narrower than its header, cutting header and cells with an ellipsis,
-    ///        instead of the table scrolling sideways; writes `shrink: true`. It needs a stretch `width`.
+    ///        instead of the table scrolling sideways, and gives up its width before the other stretch columns;
+    ///        writes `shrink: true`. It needs a stretch `width`.
     bool shrink = false;
 };
 

@@ -181,6 +181,146 @@ std::vector<int> distribute(std::span<Item const> items, Track track) {
     return sizes;
 }
 
+namespace {
+
+/// The stretch columns of a table: their three widths in item order (zero for a column that does not stretch), their
+/// sums and their weights.
+struct StretchWidths {
+    std::vector<int> natural;
+    std::vector<int> least;
+    std::vector<int> floor;
+    Wide sumNatural = 0;
+    Wide sumLeast = 0;
+    Wide sumFloor = 0;
+    Wide weights = 0;
+};
+
+/// The widths of the stretch columns in @p items, ordered `floor <= least <= natural`.
+StretchWidths stretchWidthsOf(std::span<ColumnItem const> items) {
+    StretchWidths widths;
+    widths.natural.assign(items.size(), 0);
+    widths.least.assign(items.size(), 0);
+    widths.floor.assign(items.size(), 0);
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        auto const& column = *std::next(items.begin(), static_cast<std::ptrdiff_t>(index));
+        if (!isStretch(column.sizing)) {
+            continue;
+        }
+        int const floor = std::max(0, column.floor);
+        int const natural = std::max(floor, column.natural);
+        int const least = std::clamp(column.least, floor, natural);
+        widths.floor.at(index) = floor;
+        widths.natural.at(index) = natural;
+        widths.least.at(index) = least;
+        widths.sumNatural += natural;
+        widths.sumLeast += least;
+        widths.sumFloor += floor;
+        widths.weights += weightOf(column.sizing);
+    }
+    return widths;
+}
+
+/// Step 1: each stretch column is its natural width plus its weighted share of the spare @p room.
+void fitNatural(std::span<Item const> asItems, StretchWidths const& widths, Wide room, std::vector<int>& sizes) {
+    std::vector<bool> sharing(asItems.size());
+    for (std::size_t index = 0; index < asItems.size(); ++index) {
+        sharing.at(index) = isStretch(itemAt(asItems, index).sizing);
+    }
+    std::vector<int> extra(asItems.size(), 0);
+    shareSpare(asItems, sharing, extra, room - widths.sumNatural, widths.weights);
+    for (std::size_t index = 0; index < asItems.size(); ++index) {
+        if (sharing.at(index)) {
+            sizes.at(index) = widths.natural.at(index) + extra.at(index);
+        }
+    }
+}
+
+/// Step 2: each stretch column is its least width plus its share of the room between its widths; the cells a division
+/// leaves over go one each to the first columns that have room between their widths.
+void fitLeast(std::span<Item const> asItems, StretchWidths const& widths, Wide room, std::vector<int>& sizes) {
+    Wide given = 0;
+    for (std::size_t index = 0; index < asItems.size(); ++index) {
+        if (isStretch(itemAt(asItems, index).sizing)) {
+            Wide const between = Wide{widths.natural.at(index)} - widths.least.at(index);
+            Wide const share = between * (room - widths.sumLeast) / (widths.sumNatural - widths.sumLeast);
+            sizes.at(index) = widths.least.at(index) + static_cast<int>(share);
+            given += sizes.at(index);
+        }
+    }
+    Wide remainder = room - given;
+    for (std::size_t index = 0; index < asItems.size() && remainder > 0; ++index) {
+        if (isStretch(itemAt(asItems, index).sizing) && widths.natural.at(index) > widths.least.at(index)) {
+            ++sizes.at(index);
+            --remainder;
+        }
+    }
+}
+
+/// Step 3: each stretch column starts at its least width, and the deficit is taken from the columns that shrink, last
+/// first, each down to its floor, then from the others in the same order.
+void fitFloor(std::span<ColumnItem const> items, StretchWidths const& widths, Wide room, std::vector<int>& sizes) {
+    Wide deficit = widths.sumLeast - room;
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        if (isStretch(std::next(items.begin(), static_cast<std::ptrdiff_t>(index))->sizing)) {
+            sizes.at(index) = widths.least.at(index);
+        }
+    }
+    for (bool const shrinking : {true, false}) {
+        for (std::size_t index = items.size(); index-- > 0 && deficit > 0;) {
+            auto const& column = *std::next(items.begin(), static_cast<std::ptrdiff_t>(index));
+            if (isStretch(column.sizing) && column.shrinks == shrinking) {
+                auto const take = std::min(Wide{sizes.at(index)} - widths.floor.at(index), deficit);
+                sizes.at(index) -= static_cast<int>(take);
+                deficit -= take;
+            }
+        }
+    }
+}
+
+}  // namespace
+
+std::vector<int> planColumns(std::span<ColumnItem const> items, Track track) {
+    std::vector<Item> asItems;
+    asItems.reserve(items.size());
+    std::vector<int> sizes;
+    sizes.reserve(items.size());
+    Wide used = 0;
+    for (auto const& column : items) {
+        asItems.push_back(Item{.sizing = column.sizing, .natural = column.natural, .minimum = column.minimum});
+        sizes.push_back(isStretch(column.sizing) ? 0 : requestOf(asItems.back(), track.length));
+        used += sizes.back();
+    }
+    Wide const gaps = gapsBetween(items.size(), std::max(0, track.gap));
+    Wide const room = Wide{track.length} - gaps - used;
+    StretchWidths const widths = stretchWidthsOf(items);
+
+    if (widths.weights == 0) {
+        // No stretch column: nothing to share.
+    } else if (room >= widths.sumNatural) {
+        fitNatural(asItems, widths, room, sizes);
+    } else if (room >= widths.sumLeast) {
+        fitLeast(asItems, widths, room, sizes);
+    } else if (room >= widths.sumFloor) {
+        fitFloor(items, widths, room, sizes);
+    } else {
+        for (std::size_t index = 0; index < items.size(); ++index) {
+            if (isStretch(itemAt(asItems, index).sizing)) {
+                sizes.at(index) = widths.floor.at(index);
+            }
+        }
+    }
+
+    Wide total = 0;
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        sizes.at(index) = std::max({sizes.at(index), itemAt(asItems, index).minimum, 0});
+        total += sizes.at(index);
+    }
+    if (Wide const overflow = total + gaps - Wide{track.length}; overflow > 0) {
+        shrinkFromLast(asItems, sizes, overflow);
+    }
+    return sizes;
+}
+
 int crossExtent(ui::Sizing sizing, int space, Bounds bounds) {
     int const wanted = sizing.kind == ui::Sizing::Kind::Fixed ? sizing.amount : space;
     return std::clamp(clampInto(wanted, bounds), 0, std::max(0, space));

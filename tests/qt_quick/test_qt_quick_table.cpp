@@ -10,6 +10,9 @@
 #include <QList>
 #include <QObject>
 #include <QPointF>
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QQmlExpression>
 #include <QQuickItem>
 #include <QSizeF>
 #include <QStringList>
@@ -1310,4 +1313,386 @@ TEST_CASE("qt_quick table: a cell whose content is wider than its column keeps i
     CHECK(packedItem.width() <= widths.at(0).toReal() + 0.5);
     CHECK(lotItem.mapToItem(&tableItem, QPointF{0, 0}).x() - packedItem.mapToItem(&tableItem, QPointF{0, 0}).x() ==
           Catch::Approx(widths.at(0).toReal()).margin(1.0));
+}
+
+namespace {
+
+// A table of stretch (and other) columns with one row of texts, made as the mount makes them.
+struct Sheet {
+    std::unique_ptr<ui::TableWidget> table;
+    std::unique_ptr<ui::StackWidget> row;
+    std::vector<std::unique_ptr<ui::TextWidget>> cells;
+};
+
+Sheet makeSheet(Scene& scene, std::vector<ui::TableColumn> const& columns, std::vector<std::string> const& texts) {
+    Sheet sheet;
+    sheet.table = scene.backend().createTable(nullptr);
+    sheet.table->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    sheet.table->setColumns(columns);
+    sheet.row = scene.backend().createStack(sheet.table.get(), ui::Axis::Horizontal);
+    sheet.table->setRowKey(*sheet.row, ui::Key{std::int64_t{1}});
+    for (std::string const& text : texts) {
+        sheet.cells.push_back(scene.backend().createText(sheet.row.get()));
+        sheet.cells.back()->setText(text);
+    }
+    return sheet;
+}
+
+std::vector<qreal> widthsOf(QQuickItem const& table) {
+    std::vector<qreal> out;
+    for (QVariant const& width : table.property("widths").toList()) {
+        out.push_back(width.toReal());
+    }
+    return out;
+}
+
+// The table's per-column {kind, natural, least, floor, weight}.
+QVariantList measureOf(QQuickItem& table) {
+    QVariant result;
+    REQUIRE(QMetaObject::invokeMethod(&table, "measure", Qt::DirectConnection, Q_RETURN_ARG(QVariant, result)));
+    return result.toList();
+}
+
+}  // namespace
+
+// Mutation: weight the stretch columns without their content (the two columns are equal, 300 px each).
+TEST_CASE("qt_quick table: a stretch column starts from its content, and the weights share only what is left",
+          "[qt_quick][table]") {
+    Scene scene;
+    Sheet sheet = makeSheet(scene,
+                            {{.label = "A", .width = ui::Sizing::stretch(1), .wrap = false},
+                             {.label = "B", .width = ui::Sizing::stretch(1), .wrap = false}},
+                            {"a", "a thirty-character text, whole"});
+    scene.window().resize(600, 400);
+    scene.settle();
+    QQuickItem const& tableItem = Scene::itemOf(*sheet.table);
+    auto const widths = widthsOf(tableItem);
+    REQUIRE(widths.size() == 2);
+    CHECK(widths.at(1) - widths.at(0) > 5 * units(scene).width());
+    CHECK_FALSE(Scene::itemOf(*sheet.cells.at(1)).property("elided").toBool());
+    CHECK(widths.at(0) + widths.at(1) == Catch::Approx(tableItem.width()));
+}
+
+// Mutation: skip step 2 (the wrapping column keeps its natural width and the one-line column gives, so it is cut), or
+// share by weight alone (the one-line column is cut at the narrow widths).
+TEST_CASE("qt_quick table: a wrapping column gives before a column that does not wrap", "[qt_quick][table]") {
+    Scene scene;
+    Sheet sheet = makeSheet(scene,
+                            {{.label = "Note", .width = ui::Sizing::stretch(1)},
+                             {.label = "Tag", .width = ui::Sizing::stretch(1), .wrap = false}},
+                            {"alpha beta gamma delta epsilon zeta", "Out of specification"});
+    scene.window().resize(300, 400);
+    scene.settle();
+    QQuickItem& tableItem = Scene::itemOf(*sheet.table);
+    QVariantList const metrics = measureOf(tableItem);
+    REQUIRE(metrics.size() == 2);
+    auto const field = [&metrics](int column, char const* name) {
+        return metrics.at(column).toMap().value(QString::fromLatin1(name)).toReal();
+    };
+    // The width where the wrapping column has given up all it can and the tag is still whole.
+    qreal const room = field(0, "least") + field(1, "natural");
+    REQUIRE(room < field(0, "natural") + field(1, "natural"));
+    scene.window().resize(static_cast<int>(std::ceil(room)) + 2, 400);
+    scene.settle();
+    auto const widths = widthsOf(tableItem);
+    REQUIRE(widths.size() == 2);
+    CHECK(widths.at(1) >= field(1, "natural") - 1e-6);
+    CHECK(widths.at(0) < field(0, "natural"));
+    CHECK_FALSE(Scene::itemOf(*sheet.cells.at(1)).property("elided").toBool());
+}
+
+// Mutation: weights alone, or proportional shrinking, or step 2 skipped: the guard fails at the widths where its
+// discriminating checks hold.
+TEST_CASE("qt_quick table: no column narrows as the table widens, and the stretch columns sum to what is left",
+          "[qt_quick][table]") {
+    Scene scene;
+    Sheet sheet = makeSheet(scene,
+                            {{.label = "F", .width = ui::Sizing::fixed(6)},
+                             {.label = "C"},
+                             {.label = "W", .width = ui::Sizing::stretch(1)},
+                             {.label = "L", .width = ui::Sizing::stretch(2), .wrap = false},
+                             {.label = "S", .width = ui::Sizing::stretch(1), .wrap = false, .shrink = true},
+                             {.label = "O", .width = ui::Sizing::stretch(1), .wrap = false}},
+                            {"fixed", "content", "alpha beta gamma delta epsilon zeta eta theta",
+                             "one line of a few words", "another line here", "x"});
+    QQuickItem& tableItem = Scene::itemOf(*sheet.table);
+    auto const* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("hflick"));
+    REQUIRE(flick != nullptr);
+    std::vector<qreal> previous;
+    int inFirst = 0;
+    int inSecond = 0;
+    int inThird = 0;
+    for (int width = 200; width <= 1600; ++width) {
+        scene.window().resize(width, 400);
+        scene.settle();
+        auto const widths = widthsOf(tableItem);
+        QVariantList const metrics = measureOf(tableItem);
+        REQUIRE(std::cmp_equal(widths.size(), metrics.size()));
+        INFO("window width " << width);
+        qreal used = 0;
+        qreal natural = 0;
+        qreal least = 0;
+        qreal floor = 0;
+        qreal stretched = 0;
+        for (std::size_t i = 0; i < widths.size(); ++i) {
+            QVariantMap const metric = metrics.at(static_cast<qsizetype>(i)).toMap();
+            if (metric.value(QStringLiteral("kind")).toInt() == 2) {
+                natural += metric.value(QStringLiteral("natural")).toReal();
+                least += metric.value(QStringLiteral("least")).toReal();
+                floor += metric.value(QStringLiteral("floor")).toReal();
+                stretched += widths.at(i);
+            } else {
+                used += widths.at(i);
+            }
+            if (!previous.empty()) {
+                CHECK(widths.at(i) >= previous.at(i) - 1e-6);
+            }
+        }
+        qreal const left = std::max<qreal>(0, tableItem.width() - used);
+        if (floor <= left) {
+            CHECK(std::abs(stretched - left) < 1e-6);
+            CHECK_FALSE(flick->property("interactive").toBool());
+        }
+        for (std::size_t i = 0; i < widths.size(); ++i) {
+            QVariantMap const metric = metrics.at(static_cast<qsizetype>(i)).toMap();
+            if (metric.value(QStringLiteral("kind")).toInt() != 2) {
+                continue;
+            }
+            qreal const own = metric.value(QStringLiteral("natural")).toReal();
+            if (left >= natural) {
+                CHECK(widths.at(i) >= own - 1e-6);
+            } else if (left >= least) {
+                // Only the wrapping column (index 2) narrows; the one-line columns stay at their natural width.
+                CHECK((i == 2 ? widths.at(i) < own : std::abs(widths.at(i) - own) < 1e-6));
+            }
+        }
+        inFirst += left >= natural ? 1 : 0;
+        inSecond += left < natural && left >= least ? 1 : 0;
+        inThird += left < least && left >= floor ? 1 : 0;
+        previous = widths;
+    }
+    // The sweep reaches every step, or its checks would hold for nothing.
+    CHECK(inFirst > 100);
+    CHECK(inSecond > 20);
+    CHECK(inThird > 20);
+}
+
+namespace {
+
+QStringList& loopMessages() {
+    static QStringList messages;
+    return messages;
+}
+
+QtMessageHandler& previousLoopHandler() {
+    static QtMessageHandler previous = nullptr;
+    return previous;
+}
+
+void collectLoopMessages(QtMsgType type, QMessageLogContext const& context, QString const& message) {
+    if (type == QtWarningMsg && message.contains(QStringLiteral("Binding loop"))) {
+        loopMessages().append(message);
+    } else if (previousLoopHandler() != nullptr) {
+        previousLoopHandler()(type, context, message);
+    }
+}
+
+class LoopWatch {
+public:
+    LoopWatch() : _previous{qInstallMessageHandler(collectLoopMessages)} {
+        previousLoopHandler() = _previous;
+        loopMessages().clear();
+    }
+    ~LoopWatch() { qInstallMessageHandler(_previous); }
+    LoopWatch(LoopWatch const&) = delete;
+    LoopWatch& operator=(LoopWatch const&) = delete;
+    LoopWatch(LoopWatch&&) = delete;
+    LoopWatch& operator=(LoopWatch&&) = delete;
+
+private:
+    QtMessageHandler _previous;
+};
+
+// Lets queued calls (`Qt.callLater`) and bindings run until nothing changes.
+void settleFully(Scene& scene, QQuickItem const& row) {
+    int previous = -1;
+    for (int turn = 0; turn < 50; ++turn) {
+        scene.settle();
+        QTest::qWait(5);
+        int const passes = row.property("placePasses").toInt();
+        if (passes == previous) {
+            return;
+        }
+        previous = passes;
+    }
+}
+
+}  // namespace
+
+// Mutation: remove the `placing`/`placeAgain` guard from MorphTableRow.place (the nested call runs inside the outer
+// one: no re-entry is held, and the outer frame resumes with positions it read before).
+TEST_CASE("qt_quick table: a cell whose width follows its width does not leave a misaligned row",
+          "[qt_quick][table]") {
+    LoopWatch const watch;
+    Scene scene;
+    Sheet sheet = makeSheet(scene,
+                            {{.label = "A", .width = ui::Sizing::stretch(1), .wrap = false},
+                             {.label = "B", .width = ui::Sizing::stretch(1), .wrap = false},
+                             {.label = "C", .width = ui::Sizing::stretch(1), .wrap = false},
+                             {.label = "D", .width = ui::Sizing::stretch(1), .wrap = false}},
+                            {"alpha", "beta", "gamma", "delta"});
+    // The second cell asks for 20 more than the width it is given until that is 100, then 100: it changes as it is
+    // placed, which reports to the table and places the row again while it is still placing.
+    QQmlExpression follow{
+        scene.engine().rootContext(), &Scene::itemOf(*sheet.cells.at(1)),
+        QStringLiteral("implicitWidth = Qt.binding(function() { return width < 100 ? width + 20 : 100 })")};
+    static_cast<void>(follow.evaluate());
+    REQUIRE_FALSE(follow.hasError());
+    scene.window().resize(700, 400);
+    QQuickItem& rowItem = Scene::itemOf(*sheet.row);
+    settleFully(scene, rowItem);
+    QQuickItem& tableItem = Scene::itemOf(*sheet.table);
+    auto const widths = widthsOf(tableItem);
+    REQUIRE(widths.size() == 4);
+    qreal sum = 0;
+    for (std::size_t i = 0; i < sheet.cells.size(); ++i) {
+        INFO("column " << i);
+        // The header label of a column starts where the widths before it end; its cell sits an inset in.
+        CHECK(Scene::itemOf(*sheet.cells.at(i)).x() == Catch::Approx(sum + kCellInset));
+        sum += widths.at(i);
+    }
+    auto* const cells = rowItem.property("content").value<QObject*>();
+    REQUIRE(cells != nullptr);
+    CHECK(cells->property("implicitWidth").toReal() == Catch::Approx(sum));
+    INFO(loopMessages().join(QLatin1Char('\n')).toStdString());
+    CHECK(loopMessages().isEmpty());
+    CHECK(rowItem.property("placePasses").toInt() > 0);
+    // The follower did place the row again while it was placing, and the guard held that call for another pass.
+    CHECK(rowItem.property("placeReentries").toInt() > 0);
+}
+
+// Mutation: read the cell's `implicitWidth` instead of its `widthFreeNatural` in `naturalOf` (the nested table keeps
+// the width it was widened to as its natural width, and the siblings come out narrower than in a fresh build).
+TEST_CASE("qt_quick table: a table in a cell settles to the layout a fresh build has", "[qt_quick][table]") {
+    LoopWatch const watch;
+    struct Nested {
+        Sheet outer;
+        std::unique_ptr<ui::TableWidget> inner;
+        std::unique_ptr<ui::StackWidget> innerRow;
+        std::vector<std::unique_ptr<ui::TextWidget>> innerCells;
+    };
+    auto const build = [](Scene& scene) {
+        Nested made;
+        made.outer.table = scene.backend().createTable(nullptr);
+        made.outer.table->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+        made.outer.table->setColumns({{.label = "A", .width = ui::Sizing::stretch(1), .wrap = false},
+                                      {.label = "Inner", .width = ui::Sizing::stretch(1), .wrap = false},
+                                      {.label = "B", .width = ui::Sizing::stretch(1), .wrap = false}});
+        made.outer.row = scene.backend().createStack(made.outer.table.get(), ui::Axis::Horizontal);
+        made.outer.table->setRowKey(*made.outer.row, ui::Key{std::int64_t{1}});
+        made.outer.cells.push_back(scene.backend().createText(made.outer.row.get()));
+        made.outer.cells.back()->setText("sibling of some width");
+        made.inner = scene.backend().createTable(made.outer.row.get());
+        made.inner->setColumns({{.label = "X", .width = ui::Sizing::stretch(1), .wrap = false},
+                                {.label = "Y", .width = ui::Sizing::stretch(1), .wrap = false}});
+        made.innerRow = scene.backend().createStack(made.inner.get(), ui::Axis::Horizontal);
+        made.inner->setRowKey(*made.innerRow, ui::Key{std::int64_t{1}});
+        for (char const* text : {"inner x", "inner y of a longer text"}) {
+            made.innerCells.push_back(scene.backend().createText(made.innerRow.get()));
+            made.innerCells.back()->setText(text);
+        }
+        made.outer.cells.push_back(scene.backend().createText(made.outer.row.get()));
+        made.outer.cells.back()->setText("another sibling of some width");
+        return made;
+    };
+    // Built wide, then narrowed in steps, against the same table built narrow.
+    Scene history;
+    Nested walked = build(history);
+    QQuickItem& walkedItem = Scene::itemOf(*walked.outer.table);
+    history.window().resize(900, 400);
+    settleFully(history, Scene::itemOf(*walked.outer.row));
+    history.window().resize(1400, 400);
+    settleFully(history, Scene::itemOf(*walked.outer.row));
+    history.window().resize(700, 400);
+    settleFully(history, Scene::itemOf(*walked.outer.row));
+
+    Scene fresh;
+    Nested built = build(fresh);
+    fresh.window().resize(700, 400);
+    settleFully(fresh, Scene::itemOf(*built.outer.row));
+
+    auto const a = widthsOf(walkedItem);
+    auto const b = widthsOf(Scene::itemOf(*built.outer.table));
+    REQUIRE(a.size() == 3);
+    REQUIRE(b.size() == 3);
+    for (std::size_t i = 0; i < 3; ++i) {
+        INFO("column " << i);
+        CHECK(a.at(i) == Catch::Approx(b.at(i)).margin(0.5));
+    }
+    CHECK(loopMessages().isEmpty());
+}
+
+// Mutation: read `label.implicitWidth` for runs that wrap (on Qt 6.8 the value follows the width it is given; on newer
+// Qt the control may not fail, and only the computed value is asserted).
+TEST_CASE("qt_quick table: the width-free natural width of runs that wrap is the widest line's advance",
+          "[qt_quick][table]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto text = scene.backend().createText(column.get());
+    text->setSpans({{.text = "first line\n"}, {.text = "the second line is longer", .strong = true}});
+    scene.window().resize(400, 300);
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*text);
+    auto const advanceOf = [&item](QString const& plain, bool strong) {
+        QVariantMap run;
+        run.insert(QStringLiteral("text"), plain);
+        run.insert(QStringLiteral("strong"), strong);
+        double advance = 0;
+        REQUIRE(QMetaObject::invokeMethod(&item, "runsAdvance", Qt::DirectConnection, Q_RETURN_ARG(double, advance),
+                                          Q_ARG(QVariant, QVariantList{run})));
+        return advance;
+    };
+    qreal const slack = item.property("wrapSlack").toReal();
+    qreal const expected = std::ceil(std::max(advanceOf(QStringLiteral("first line"), false),
+                                              advanceOf(QStringLiteral("the second line is longer"), true)) +
+                                     slack);
+    item.setProperty("singleLine", false);
+    for (int width : {400, 120, 400}) {
+        scene.window().resize(width, 300);
+        scene.settle();
+        INFO("window width " << width);
+        CHECK(item.property("widthFreeNatural").toReal() == Catch::Approx(expected));
+    }
+}
+
+// Mutation: let `rescanColumn` replace the caches when virtualized (the least and natural widths fall when the wide
+// row dewindows).
+TEST_CASE("qt_quick table: a virtualized table's stretch column caches only grow as a wide row dewindows",
+          "[qt_quick][table]") {
+    Scene scene;
+    std::vector<VirtualRow> const many = [] {
+        std::vector<VirtualRow> rows;
+        rows.push_back(VirtualRow{.id = 0, .name = "a very very very very very very long row name indeed"});
+        for (std::int64_t i = 1; i < 20; ++i) {
+            rows.push_back(VirtualRow{.id = i, .name = "short"});
+        }
+        return rows;
+    }();
+    ui::Mounted const mounted{
+        scene.runtime(), scene.backend(),
+        ui::table<VirtualRow>(
+            {{.label = "Name", .width = ui::Sizing::stretch(1)}}, [&many] { return many; },
+            [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+            {.virtualize = {.threshold = 5, .overscan = 1}, .common = {.layout = {.height = ui::Sizing::fixed(10)}}})};
+    scene.settle();
+    QQuickItem const& tableItem = Scene::itemOf(mounted.root());
+    auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    qreal const wide = tableItem.property("columnCache").toList().at(0).toReal();
+    qreal const wideLeast = tableItem.property("leastCache").toList().at(0).toReal();
+    flick->setProperty("contentY", flick->property("contentHeight").toReal() * 0.9);
+    scene.settle();
+    REQUIRE(tableItem.property("realizedFirst").toInt() > 0);
+    CHECK(tableItem.property("columnCache").toList().at(0).toReal() == wide);
+    CHECK(tableItem.property("leastCache").toList().at(0).toReal() == wideLeast);
 }

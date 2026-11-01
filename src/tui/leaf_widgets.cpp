@@ -103,6 +103,38 @@ std::vector<ui::TextSpan> elidedRuns(std::vector<ui::TextSpan> runs, int width) 
     return runs;
 }
 
+// @p runs laid out on lines of @p width cells, a line break starting the next line: each line that is wider than
+// @p width ends in an ellipsis in its last cell, and the runs after the cut on that line are dropped.
+std::vector<ui::TextSpan> elidedRunLines(std::vector<ui::TextSpan> runs, int width) {
+    int room = width;
+    bool cut = false;
+    for (ui::TextSpan& run : runs) {
+        std::string kept;
+        bool first = true;
+        for (auto const line : splitLines(run.text)) {
+            if (!first) {
+                kept += '\n';
+                room = width;
+                cut = false;
+            }
+            first = false;
+            if (cut) {
+                continue;
+            }
+            int const advance = displayWidth(line);
+            if (advance > room) {
+                kept += elidedLine(line, room);
+                cut = true;
+            } else {
+                kept += line;
+                room -= advance;
+            }
+        }
+        run.text = std::move(kept);
+    }
+    return runs;
+}
+
 }  // namespace
 
 void TextImpl::setSpans(std::vector<ui::TextSpan> const& spans) {
@@ -126,11 +158,32 @@ void TextImpl::setTone(ui::Tone tone) {
     refresh();
 }
 
-void TextImpl::setElided(bool elided) {
-    if (_elided != elided) {
-        _elided = elided;
+void TextImpl::setElided(Elision elision) {
+    if (_elision != elision) {
+        _elision = elision;
         refresh();
     }
+}
+
+int TextImpl::leastWidth() const {
+    // A mono text is never broken across rows, so it is no narrower than it is.
+    if (_role == ui::TextRole::Mono) {
+        return controlSize().width;
+    }
+    int widest = 0;
+    std::size_t start = 0;
+    auto const isBlank = [](char letter) {
+        return letter == ' ' || letter == '\n' || letter == '\t' || letter == '\r';
+    };
+    while (start <= _text.size()) {
+        std::size_t end = start;
+        while (end < _text.size() && !isBlank(_text.at(end))) {
+            ++end;
+        }
+        widest = std::max(widest, displayWidth(std::string_view{_text}.substr(start, end - start)));
+        start = end + 1;
+    }
+    return widest + (required() ? displayWidth(kRequiredMark) : 0);
 }
 
 void TextImpl::setAlign(ui::TextAlign align) {
@@ -165,13 +218,15 @@ void TextImpl::paintControl(::core::tui::Canvas& canvas) {
     }
     ui::TextAlign const alignment = _align.value_or(ui::TextAlign::Start);
     if (!_runs.empty()) {
-        if (_elided) {
+        if (_elision == Elision::OneLine) {
             paintRuns(canvas, elidedRuns(_runs, canvas.width()), style, false, 0, 0, alignment);
+        } else if (_elision == Elision::PerLine) {
+            paintRuns(canvas, elidedRunLines(_runs, canvas.width()), style, true, 0, 0, alignment);
         } else {
             paintRuns(canvas, _runs, style, true, 0, 0, alignment);
         }
     } else {
-        bool const elide = _elided || _role == ui::TextRole::Mono;
+        bool const elide = _elision != Elision::None || _role == ui::TextRole::Mono;
         int row = 0;
         for (auto const line : splitLines(_text)) {
             if (row >= canvas.height()) {

@@ -234,10 +234,35 @@ std::vector<int> TableImpl::naturalWidths() const {
     return widths;
 }
 
+std::vector<int> TableImpl::leastWidths() const {
+    std::vector<int> widths = naturalWidths();
+    for (auto const [width, column] : std::views::zip(widths, _columns)) {
+        if (column.wrap) {
+            width = headerWidth(column);
+        }
+    }
+    for (auto const* row : children()) {
+        auto const* const cells = dynamic_cast<ContainerBase const*>(row);
+        if (cells == nullptr || !row->shown() || isHeading(row)) {
+            continue;
+        }
+        for (auto const [width, column, cell] : std::views::zip(widths, _columns, cells->children())) {
+            if (!column.wrap || !cell->shown()) {
+                continue;
+            }
+            auto const* const text = dynamic_cast<TextImpl const*>(cell);
+            width = std::max(width, text != nullptr ? text->leastWidth() : requestedSize(*cell).width);
+        }
+    }
+    return widths;
+}
+
 std::vector<int> TableImpl::columnWidths(int width) const {
-    std::vector<layout::Item> items;
+    std::vector<layout::ColumnItem> items;
     items.reserve(_columns.size());
-    for (auto const [column, natural] : std::views::zip(_columns, naturalWidths())) {
+    auto const naturals = naturalWidths();
+    auto const leasts = leastWidths();
+    for (auto const [column, natural, least] : std::views::zip(_columns, naturals, leasts)) {
         // No column is squeezed below its header, so none is drawn at width 0; a fixed column narrower than its
         // header keeps the width the author gave it, and a column that may shrink goes down to `kShrunkColumn`. A
         // table whose columns still exceed its width is cut at its edge.
@@ -246,9 +271,14 @@ std::vector<int> TableImpl::columnWidths(int width) const {
         int const minimum = column.width.kind == ui::Sizing::Kind::Fixed
                                 ? std::min(header, std::max(0, column.width.amount))
                                 : flexible;
-        items.push_back(layout::Item{.sizing = column.width, .natural = natural, .minimum = minimum});
+        items.push_back(layout::ColumnItem{.sizing = column.width,
+                                           .natural = natural,
+                                           .least = least,
+                                           .floor = minimum,
+                                           .minimum = minimum,
+                                           .shrinks = column.shrink});
     }
-    return layout::distribute(items, layout::Track{.length = std::max(0, width - gutter()), .gap = kColumnGap});
+    return layout::planColumns(items, layout::Track{.length = std::max(0, width - gutter()), .gap = kColumnGap});
 }
 
 ::core::tui::Size TableImpl::naturalSize() const {
@@ -436,10 +466,11 @@ void TableImpl::arrangeRows(std::vector<int> const& widths) {
                 stack->setColumnLayout({across}, kColumnGap, {CellPlace{.across = ui::Align::Start}});
             } else {
                 stack->setColumnLayout(widths, kColumnGap, places);
-                // A column that does not wrap cuts its text cells at its width with an ellipsis.
+                // The terminal cannot wrap, so a text cell a column cuts ends in an ellipsis: on one line in a
+                // column that does not wrap, on each line in one that does.
                 for (auto const [column, cell] : std::views::zip(_columns, stack->children())) {
                     if (auto* const text = dynamic_cast<TextImpl*>(cell)) {
-                        text->setElided(!column.wrap);
+                        text->setElided(column.wrap ? TextImpl::Elision::PerLine : TextImpl::Elision::OneLine);
                     } else if (auto* const badge = dynamic_cast<BadgeImpl*>(cell)) {
                         badge->setElided(true);
                     }

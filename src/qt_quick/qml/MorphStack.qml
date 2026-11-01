@@ -75,6 +75,31 @@ MorphWidget {
         }
         return root.axis === 1 ? along + root.gapLength * Math.max(0, shown - 1) : across
     }
+    // The width the children ask for however wide the stack is laid out, or -1 while none of them has such a width
+    // (their own implicit widths are then the stack's): a row sums the children's, a column takes the widest, with the
+    // gaps and the padding.
+    widthFreeNatural: {
+        if (root.wrap)
+            return -1
+        let given = false
+        let along = 0
+        let across = 0
+        let shown = 0
+        for (const object of root.content.children) {
+            const child = object as MorphWidget
+            if (!child || !child.visible)
+                continue
+            const free = child.widthFreeNatural
+            given = given || free >= 0
+            const natural = free >= 0 ? free : child.implicitWidth
+            along += natural
+            across = Math.max(across, natural)
+            ++shown
+        }
+        if (!given)
+            return -1
+        return 2 * root.insetX + (root.axis === 1 ? along + root.gapLength * Math.max(0, shown - 1) : across)
+    }
     // The content's minimum across the width, and the width there is inside the padding.
     needWidth: root.wrap ? root.widestMinimum : root.axis === 1 && root.between ? root.naturalLength
                                                                        : layout.Layout.minimumWidth

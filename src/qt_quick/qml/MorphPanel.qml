@@ -40,6 +40,21 @@ MorphWidget {
     haveWidth: inner.width
     contentMinimumWidth: 2 * Theme.spaceOf(root.padding) + 2 + root.needWidth
     overflowKind: "panel"
+    // The width the content asks for however wide the panel is laid out, or -1 while none of it has such a width: the
+    // widest child or the header, with the padding and the border.
+    widthFreeNatural: {
+        let given = false
+        let widest = header.visible ? header.implicitWidth : 0
+        for (const object of column.children) {
+            const child = object as MorphWidget
+            if (!child || !child.visible)
+                continue
+            const free = child.widthFreeNatural
+            given = given || free >= 0
+            widest = Math.max(widest, free >= 0 ? free : child.implicitWidth)
+        }
+        return given ? widest + 2 * Theme.spaceOf(root.padding) + 2 : -1
+    }
     frameRadius: Theme.radiusCard
 
     Rectangle {

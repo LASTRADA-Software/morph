@@ -108,8 +108,12 @@ private:
     void arrangeRows(std::vector<int> const& widths);
     /// The gutter of @p row: its selection mark, or its box, then the cursor mark when @p cursor.
     [[nodiscard]] std::string rowMark(WidgetBase const* row, bool cursor) const;
-    /// Each column's content width: its label's, or its widest cell's, hidden cells included.
+    /// Each column's content width: its label's, or its widest shown cell's.
     [[nodiscard]] std::vector<int> naturalWidths() const;
+    /// Each column's least width: for a column that wraps, the widest of its header and its shown cells' least
+    /// widths (a text cell's widest word; any other cell's natural width); for a column that does not, its natural
+    /// width.
+    [[nodiscard]] std::vector<int> leastWidths() const;
     /// The solved column widths for a table @p width cells wide.
     [[nodiscard]] std::vector<int> columnWidths(int width) const;
     [[nodiscard]] std::optional<ui::Key> keyOf(WidgetBase const* row) const;
