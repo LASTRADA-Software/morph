@@ -925,6 +925,42 @@ TEMPLATE_TEST_CASE("qt_quick overlays: both rules draw the card's divider", "[qt
     }
 }
 
+// Mutation: draw the shadow as one rectangle (the layers are one, with no blur), or give every layer the colour's full
+// alpha (the composite then exceeds it).
+TEMPLATE_TEST_CASE("qt_quick overlays: the shadow is blurred, its layers growing outward and compositing to its alpha",
+                   "[qt_quick]", ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    ui::ThemeValues values = ui::themeValues();
+    values.shadows.insert_or_assign("elevation.dialog",
+                                    ui::ThemeShadow{.color = ui::Rgba{.r = 20, .g = 24, .b = 31, .a = 128},
+                                                    .offsetX = 0,
+                                                    .offsetY = 18,
+                                                    .blur = 48,
+                                                    .spread = 0});
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    auto const overlay = openedOverlay<TestType>(scene);
+    QQuickItem const* const shadow = namedIn(*scene.window().contentItem(), QStringLiteral("dialogShadow"));
+    REQUIRE(shadow != nullptr);
+    std::vector<QQuickItem const*> layers;
+    for (QQuickItem const* const child : shadow->childItems()) {
+        if (child->property("radius").isValid()) {
+            layers.push_back(child);
+        }
+    }
+    REQUIRE(layers.size() == 16);
+    double uncovered = 1.0;
+    for (std::size_t index = 0; index < layers.size(); ++index) {
+        if (index > 0) {
+            CHECK(layers[index]->width() < layers[index - 1]->width());
+        }
+        uncovered *= 1.0 - static_cast<double>(layers[index]->property("color").value<QColor>().alphaF());
+    }
+    // The outermost layer reaches about two deviations (blur / 2 each) past the outline, the innermost as far inside.
+    CHECK(layers.front()->width() > shadow->width() + 24);
+    CHECK(layers.back()->width() < shadow->width());
+    CHECK(1.0 - uncovered == Catch::Approx(128.0 / 255.0).margin(0.01));
+}
+
 // Mutation: read the card's shadow (the dialog's shadow is the transparent card colour), or read the dialog's shadow
 // without the card fallback.
 TEMPLATE_TEST_CASE("qt_quick overlays: the shadow is elevation.dialog, and the card's while it is unset", "[qt_quick]",

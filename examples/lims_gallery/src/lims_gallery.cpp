@@ -73,9 +73,9 @@ constexpr char const* kThemeBase = R"({
     "card": { "$value": { "color": "#00000000",
       "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 0, "unit": "px" },
       "blur": { "value": 0, "unit": "px" }, "spread": { "value": 0, "unit": "px" } } },
-    "dialog": { "$value": { "color": "#00000014",
-      "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 2, "unit": "px" },
-      "blur": { "value": 10, "unit": "px" }, "spread": { "value": 0, "unit": "px" } } },
+    "dialog": { "$value": { "color": "#14181F47",
+      "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 18, "unit": "px" },
+      "blur": { "value": 48, "unit": "px" }, "spread": { "value": 0, "unit": "px" } } },
     "popup": { "$value": { "color": "#14181F24",
       "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 8, "unit": "px" },
       "blur": { "value": 24, "unit": "px" }, "spread": { "value": 0, "unit": "px" } } } }
