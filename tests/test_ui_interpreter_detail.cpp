@@ -603,6 +603,19 @@ TEST_CASE("interpreter: a share lowers to the backend, and a share inside a case
         REQUIRE(h.diagnostics.size() == 1);
         CHECK(h.diagnostics.front().reason.contains("pane 0's sizing is not used"));
     }
+    SECTION("a splitter's sizes name a fixed pane, but leave a stretch pane and a vertical splitter's panes alone") {
+        ui::testing::Harness h;
+        auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "column", "children": [
+            { "kind": "splitter", "orientation": "horizontal", "sizes": { "lit": [ 10, 20 ] }, "children": [
+              { "kind": "text", "text": "a", "sizing": { "lit": { "stretch": 1 } } },
+              { "kind": "text", "text": "b", "sizing": { "lit": { "fixed": 8 } } } ] },
+            { "kind": "splitter", "orientation": "vertical", "sizes": { "lit": [ 10, 20 ] }, "children": [
+              { "kind": "text", "text": "c", "sizing": { "lit": { "fixed": 5 } } },
+              { "kind": "text", "text": "d" } ] }
+            ] } })");
+        REQUIRE(h.diagnostics.size() == 1);
+        CHECK(h.diagnostics.front().reason.contains("pane 1's sizing is not used"));
+    }
     SECTION("a splitter whose panes give no sizing, or whose sizes do not match, reports nothing") {
         ui::testing::Harness h;
         auto screen = h.mount(R"({ "vocab": "ui/1", "id": "t", "view": { "kind": "column", "children": [

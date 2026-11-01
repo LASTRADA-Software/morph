@@ -338,6 +338,9 @@ TEST_CASE("ui::Mounted: a percent width is a row's or a horizontal splitter's pa
     CHECK_THROWS_WITH(
         (ui::Mounted{runtime, backend, ui::row({.children = {shared({.width = ui::Sizing::percent(101)})}})}),
         Catch::Matchers::ContainsSubstring("a percent width outside 1 to 100"));
+    CHECK_THROWS_WITH(
+        (ui::Mounted{runtime, backend, ui::row({.children = {shared({.width = ui::Sizing::percent(0)})}})}),
+        Catch::Matchers::ContainsSubstring("a percent width outside 1 to 100"));
     ui::Dialog dialog{.open = true, .title = "D"};
     dialog.common.layout.width = ui::Sizing::percent(20);
     CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::row({.children = {ui::dialog(dialog)}})}),
