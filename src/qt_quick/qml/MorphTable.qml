@@ -83,8 +83,9 @@ MorphWidget {
     // widest cell, a stretch column at least its header (its cells are meant to take what is left, so they do not
     // raise it), each with the padding a side and never under 8 units. A stretch column that says `shrink` has the 8
     // units alone as its floor, so it can be narrower than its header, which then elides. A stretch column takes its
-    // share of what the others leave, and a share under its floor is the floor, the rest shared among the others. Columns wider in sum than the table
-    // scroll sideways (`hflick`).
+    // share of what the others leave, and a share under its floor is the floor, the rest shared among the others; the
+    // shares add up to what is left exactly. Columns wider in sum than the table by a pixel or more scroll sideways
+    // (`hflick`).
     function columnWidths(total: real): var {
         const pad = 2 * Theme.tableCellPaddingX
         const out = []
@@ -126,6 +127,14 @@ MorphWidget {
                     out[i] = share
                     next.push(i)
                 }
+            }
+            // The shares are quotients, which add up to a hair more or less than what is left; the last column that
+            // is not floored takes what the others leave, so the columns add up to the table's width exactly.
+            if (!floored && next.length > 0) {
+                let others = 0
+                for (let k = 0; k < next.length - 1; ++k)
+                    others += out[next[k]]
+                out[next[next.length - 1]] = left - others
             }
             if (floored) {
                 for (const i of pending) {
@@ -343,7 +352,8 @@ MorphWidget {
         contentWidth: Math.max(root.columnsWidth, width)
         contentHeight: height
         flickableDirection: Flickable.HorizontalFlick
-        interactive: root.columnsWidth > width
+        // Columns wider than the table by less than a pixel are rounding, not content to scroll to.
+        interactive: root.columnsWidth - width >= 1
         clip: interactive
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.horizontal: root.barItem

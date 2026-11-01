@@ -194,6 +194,68 @@ TEST_CASE("qt_quick table: a badge cell narrower than its label elides it and st
     CHECK(badgeItem.property("text").toString() == QStringLiteral("Out of trend: \u22120.7 % vs. last 5 lots"));
 }
 
+// Mutation: share the spare width as the quotients alone (at some widths the shares sum a hair over or under the width
+// and the sweep fails the exact-sum check), or compare `columnsWidth > width` (the hair makes the table interactive).
+TEST_CASE("qt_quick table: stretch columns sum to the width that is left, and a table that fits does not scroll",
+          "[qt_quick][table]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    // Weights that do not divide the width evenly, as the review screen's worksheet table has.
+    table->setColumns({{.label = "A", .width = ui::Sizing::stretch(1)},
+                       {.label = "B", .width = ui::Sizing::stretch(3)},
+                       {.label = "C", .width = ui::Sizing::stretch(1)},
+                       {.label = "D", .width = ui::Sizing::stretch(1)}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    std::vector<std::unique_ptr<ui::TextWidget>> cells;
+    for (char const* text : {"a", "b", "c", "d"}) {
+        cells.push_back(scene.backend().createText(row.get()));
+        cells.back()->setText(text);
+    }
+    QQuickItem const& tableItem = Scene::itemOf(*table);
+    int unequal = 0;
+    int interactive = 0;
+    for (int width = 300; width <= 900; ++width) {
+        scene.window().resize(width, 400);
+        scene.settle();
+        qreal const sum = tableItem.property("columnsWidth").toReal();
+        unequal += sum == tableItem.width() ? 0 : 1;
+        auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("hflick"));
+        REQUIRE(flick != nullptr);
+        interactive += flick->property("interactive").toBool() ? 1 : 0;
+    }
+    CHECK(unequal == 0);
+    CHECK(interactive == 0);
+}
+
+// Mutation: make `interactive` true for any excess (the table that is a hair wider than the window scrolls).
+TEST_CASE("qt_quick table: a table scrolls sideways only when its columns are 1 px or more wider than it",
+          "[qt_quick][table]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    table->setColumns(
+        {{.label = "A", .width = ui::Sizing::fixed(20)}, {.label = "B", .width = ui::Sizing::fixed(20)}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    auto first = scene.backend().createText(row.get());
+    first->setText("a");
+    auto second = scene.backend().createText(row.get());
+    second->setText("b");
+    scene.settle();
+    QQuickItem const& tableItem = Scene::itemOf(*table);
+    auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("hflick"));
+    REQUIRE(flick != nullptr);
+    qreal const needed = tableItem.property("columnsWidth").toReal();
+    scene.window().resize(static_cast<int>(std::ceil(needed)), 400);
+    scene.settle();
+    CHECK_FALSE(flick->property("interactive").toBool());
+    scene.window().resize(static_cast<int>(std::floor(needed)) - 1, 400);
+    scene.settle();
+    CHECK(flick->property("interactive").toBool());
+}
+
 // Mutation: write the column's alignment over a text that has its own (the start-aligned text becomes right-aligned).
 TEST_CASE("qt_quick table: a text with its own alignment keeps it in an end column", "[qt_quick][align]") {
     Scene scene;

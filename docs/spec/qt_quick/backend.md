@@ -269,7 +269,7 @@ declares `textAlign` (`MorphText`, `MorphTextInput`) is given the column's `alig
 mirrors; an `end` column's cells also set `tabularFigures`, drawing digits at one width (`tnum`) so numbers line up.
 The header's label takes the column's alignment. Every cell keeps its implicit height, up to the tallest, and sits at
 the row's top, centre or bottom by the column's `valign`; `Stretch` gives it the row's height. The header and the rows sit in a horizontal `Flickable` (`hflick`) as wide as the
-columns: while they are wider than the table it scrolls sideways, clips and shows a horizontal `MorphScrollBar`;
+columns: while they are wider than the table by 1 px or more it scrolls sideways, clips and shows a horizontal `MorphScrollBar` (a smaller excess is rounding: the stretch columns sum to the width that is left exactly, the last one not floored taking what the others leave, and the table's form of the layout's "a smaller shortfall is rounding" keeps it from scrolling); a table whose columns are wider than it by less scrolls not at all;
 otherwise it takes no drag or wheel event, and it never takes a vertical one. The rows' own vertical `Flickable`
 (`flick`) is, virtualized, what the header leaves of the table's height, and otherwise its rows' height. A content column's width is cached per column rather than recomputed
 by rescanning every row on every change: a cell growing only raises its column's cached width; a cell shrinking, a row
