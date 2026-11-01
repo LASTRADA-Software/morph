@@ -139,7 +139,7 @@ Item {
         for (const run of runs) {
             let style = ""
             if (run.strong) {
-                style += "font-weight:" + Theme.strongWeight + ";"
+                style += "font-weight:" + Theme.textWeightOf(Theme.strongWeight) + ";"
             }
             if (run.mono) {
                 style += "font-family:" + monoFamily + ";"

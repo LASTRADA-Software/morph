@@ -150,7 +150,7 @@ MorphField {
             font.family: combo.font.family
             font.pixelSize: combo.font.pixelSize
             // The theme's strong weight, never a literal one: a family without that weight may match another face.
-            font.weight: option.current ? Theme.strongWeight : Font.Normal
+            font.weight: Theme.textWeightOf(option.current ? Theme.strongWeight : Font.Normal)
             highlighted: combo.highlightedIndex === index
             hoverEnabled: combo.hoverEnabled
             palette.text: Theme.cardScheme.text

@@ -25,6 +25,16 @@ class Relay;
 /// font database for; whether the property took it.
 bool writePlatformMonoFamily(QObject& theme);
 
+/// The weight to ask Qt for when a face of weight @p wanted is wanted and the family has upright faces of the weights
+/// @p available. A weight the family has is kept. Otherwise it follows the CSS font-matching order, so a request never
+/// lands on a face of another style: a weight under 400 looks lighter first, then heavier; one over 500 looks heavier
+/// first, then lighter; one from 400 to 500 looks up to 500, then lighter, then heavier. @p wanted comes back
+/// unchanged when @p available is empty, which is a family Qt does not know and matches by its own substitution.
+int uprightWeight(std::vector<int> const& available, int wanted);
+
+/// The weights of the upright faces of the family Qt resolves @p families to (the first it has).
+std::vector<int> uprightWeightsOf(QStringList const& families);
+
 /// Writes the text glyph of each framework icon name that has one as @p theme's `iconGlyphs`, the glyphs the terminal
 /// draws; whether the property took them.
 bool writeIconGlyphs(QObject& theme);

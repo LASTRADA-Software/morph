@@ -198,6 +198,21 @@ QtObject {
     property int strongWeight: Font.Bold
     // The weight of a button's strong caption: `font.weight.button`.
     property int buttonWeight: Font.Bold
+    // For each weight a font may be asked for (as a key), the weight of the nearest upright face the text families have,
+    // and the same for the mono families; written with the theme. Asking Qt for a weight a family lacks can draw an
+    // italic face, so a font takes its weight through `textWeightOf` and `monoWeightOf`. Empty, a weight stands as asked.
+    property var textWeights: ({})
+    property var monoWeights: ({})
+    // @p weight, or the nearest weight the text families have an upright face of.
+    function textWeightOf(weight: int): int {
+        const snapped = textWeights[weight]
+        return snapped === undefined ? weight : snapped
+    }
+    // @p weight, or the nearest weight the mono families have an upright face of.
+    function monoWeightOf(weight: int): int {
+        const snapped = monoWeights[weight]
+        return snapped === undefined ? weight : snapped
+    }
     // Whether an icon-only push button or menu trigger that gives no shape is drawn square: `shape.iconOnly`.
     property bool iconOnlySquare: false
     // Whether a collapsible section's and a collapsible panel's header draws its chevron: `collapsible.marker`.
@@ -223,7 +238,7 @@ QtObject {
     function weightedOf(base: font, weight: int): font {
         const spec = {
             family: base.family,
-            weight: weight
+            weight: textWeightOf(weight)
         }
         if (base.pixelSize > 0)
             spec.pixelSize = base.pixelSize
@@ -261,7 +276,7 @@ QtObject {
             family: monoFamilies.length > 0 ? monoFamilies[0] : "monospace",
             families: monoFamilies.length > 0 ? monoFamilies : ["monospace"],
             pixelSize: Math.round(pixels),
-            weight: weight
+            weight: monoWeightOf(weight)
         })
     }
 
@@ -271,7 +286,7 @@ QtObject {
             family: theme.families[0],
             families: theme.families,
             pixelSize: Math.round(pixels),
-            weight: weight
+            weight: textWeightOf(weight)
         })
     }
     // The card's shadow: `elevation.card`.

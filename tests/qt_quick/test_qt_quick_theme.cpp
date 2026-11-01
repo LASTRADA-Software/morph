@@ -17,6 +17,7 @@
 #include <QPalette>
 #include <QPointF>
 #include <QQuickItem>
+#include <QRawFont>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
@@ -42,6 +43,7 @@
 #include <utility>
 #include <vector>
 
+#include "qt_quick/context.hpp"
 #include "qt_quick/kinds.hpp"
 #include "qt_quick_harness.hpp"
 
@@ -565,7 +567,11 @@ TEST_CASE("qt_quick theme: the small and caption sizes, the display role and the
     CHECK(theme->property("captionPixels").toReal() == 12.0);
     CHECK(theme->property("displayPixels").toReal() == 22.0);
     CHECK(theme->property("strongWeight").toInt() == 600);
-    CHECK(theme->property("strongFont").value<QFont>().weight() == QFont::DemiBold);
+    // The weight the platform font has an upright face nearest to: DemiBold where it has one.
+    auto const strong = static_cast<QFont::Weight>(morph::qt_quick::detail::uprightWeight(
+        morph::qt_quick::detail::uprightWeightsOf({QFontDatabase::systemFont(QFontDatabase::GeneralFont).family()}),
+        600));
+    CHECK(theme->property("strongFont").value<QFont>().weight() == strong);
 
     auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
     auto table = scene.backend().createTable(column.get());
@@ -583,14 +589,57 @@ TEST_CASE("qt_quick theme: the small and caption sizes, the display role and the
     auto const* const header = namedItem(Scene::itemOf(*table), QStringLiteral("header0"));
     REQUIRE(header != nullptr);
     CHECK(header->property("font").value<QFont>().pixelSize() == 11);
-    CHECK(header->property("font").value<QFont>().weight() == QFont::DemiBold);
+    CHECK(header->property("font").value<QFont>().weight() == strong);
     auto const* const caption = namedItem(Scene::itemOf(*input), QStringLiteral("caption"));
     REQUIRE(caption != nullptr);
     CHECK(caption->property("font").value<QFont>().pixelSize() == 12);
     CHECK(labelFont(*display).pixelSize() == 22);
-    CHECK(labelFont(*display).weight() == QFont::DemiBold);
+    CHECK(labelFont(*display).weight() == strong);
     CHECK(labelFont(*small).pixelSize() == 11);
     CHECK(labelFont(*small).weight() == QFont::Normal);
+}
+
+// Mutation: return @p wanted whenever it is not available, or look heavier first for a weight under 400.
+TEST_CASE("qt_quick theme: a weight the family lacks moves to the nearest upright one in CSS order", "[qt_quick]") {
+    using morph::qt_quick::detail::uprightWeight;
+    std::vector<int> const regularAndBold{400, 700};
+    CHECK(uprightWeight(regularAndBold, 400) == 400);
+    CHECK(uprightWeight(regularAndBold, 500) == 400);
+    CHECK(uprightWeight(regularAndBold, 600) == 700);
+    CHECK(uprightWeight(regularAndBold, 300) == 400);
+    CHECK(uprightWeight(regularAndBold, 800) == 700);
+    CHECK(uprightWeight(regularAndBold, 100) == 400);
+    std::vector<int> const lightMediumBlack{300, 500, 900};
+    CHECK(uprightWeight(lightMediumBlack, 400) == 500);
+    CHECK(uprightWeight(lightMediumBlack, 450) == 500);
+    CHECK(uprightWeight(lightMediumBlack, 700) == 900);
+    CHECK(uprightWeight(lightMediumBlack, 200) == 300);
+    std::vector<int> const lightAndBold{300, 700};
+    CHECK(uprightWeight(lightAndBold, 400) == 300);
+    CHECK(uprightWeight(lightAndBold, 500) == 300);
+    std::vector<int> const boldOnly{700};
+    CHECK(uprightWeight(boldOnly, 400) == 700);
+    CHECK(uprightWeight({}, 500) == 500);
+}
+
+// Mutation: write the theme's weights without the lookup (a weight stands as asked, and Qt may pick an italic face for
+// one the family lacks, as it does for 500 on a platform font of regular and bold faces only). The platform font
+// stands for the family: where it has every weight the check holds without the lookup.
+TEST_CASE("qt_quick theme: a font of any weight is drawn in an upright face", "[qt_quick]") {
+    Scene scene;
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    for (int weight = 100; weight <= 900; weight += 100) {
+        ui::ThemeValues values = ui::themeValues();
+        values.numbers.insert_or_assign("font.weight.button", static_cast<double>(weight));
+        morph::qt_quick::applyTheme(scene.engine(), values);
+        auto const asked = theme->property("buttonFont").value<QFont>();
+        INFO("weight " << weight);
+        // The face's own style name: QFontInfo and QRawFont::style report the requested style, not the face drawn.
+        QString const face = QRawFont::fromFont(asked).styleName();
+        CHECK_FALSE(face.contains(QStringLiteral("Italic"), Qt::CaseInsensitive));
+        CHECK_FALSE(face.contains(QStringLiteral("Oblique"), Qt::CaseInsensitive));
+    }
 }
 
 // Mutation: bind the units' metrics to the platform font always (unitWidth keeps the platform font's width).

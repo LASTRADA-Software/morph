@@ -13,6 +13,7 @@
 #include <QStringList>
 #include <QVariant>
 #include <QVariantMap>
+#include <algorithm>
 #include <array>
 #include <functional>
 #include <map>
@@ -315,12 +316,109 @@ void setSurfaces(QObject& theme, std::map<std::string, ui::ThemeValues, std::les
     }
 }
 
+// The families a family token names, else the platform's.
+QStringList familiesOf(ui::ThemeValues const& values, std::string_view path, QString const& platform) {
+    QStringList names;
+    if (auto const found = values.families.find(path); found != values.families.end()) {
+        for (std::string const& name : found->second) {
+            names.append(QString::fromStdString(name));
+        }
+    }
+    if (names.isEmpty()) {
+        names.append(platform);
+    }
+    return names;
+}
+
+// A weight table: each weight a font may be asked for (the hundreds and the theme's two weight tokens) onto the
+// nearest weight of @p available.
+QVariantMap weightTable(std::vector<int> const& available, ui::ThemeValues const& values) {
+    std::vector<int> wanted{100, 200, 300, 400, 500, 600, 700, 800, 900};
+    for (std::string_view const path : {"font.weight.strong", "font.weight.button"}) {
+        if (auto const found = values.numbers.find(path); found != values.numbers.end()) {
+            wanted.push_back(static_cast<int>(found->second));
+        }
+    }
+    QVariantMap table;
+    for (int const weight : wanted) {
+        table.insert(QString::number(weight), detail::uprightWeight(available, weight));
+    }
+    return table;
+}
+
+// `textWeights` and `monoWeights`: for each weight a font is asked for, the weight of the nearest upright face of the
+// text families and of the mono families. Qt matches a weight a family lacks across its styles as well, and can take
+// an italic face for it, so a font's weight is first moved to an upright one.
+void setWeights(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
+    QStringList const text =
+        familiesOf(values, "font.family", QFontDatabase::systemFont(QFontDatabase::GeneralFont).family());
+    QStringList const mono =
+        familiesOf(values, "font.mono", QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
+    if (!theme.setProperty("textWeights", weightTable(detail::uprightWeightsOf(text), values))) {
+        unset.emplace_back("textWeights");
+    }
+    if (!theme.setProperty("monoWeights", weightTable(detail::uprightWeightsOf(mono), values))) {
+        unset.emplace_back("monoWeights");
+    }
+}
+
 }  // namespace
 
 namespace detail {
 
 bool writePlatformMonoFamily(QObject& theme) {
     return theme.setProperty("platformMonoFamily", QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
+}
+
+int uprightWeight(std::vector<int> const& available, int wanted) {
+    if (available.empty() || std::ranges::find(available, wanted) != available.end()) {
+        return wanted;
+    }
+    constexpr int kUnbounded = 1000;
+    // The nearest available weight above @p below and up to @p upTo (the lightest one), or in the same bounds the
+    // heaviest one when @p heaviestFirst is false.
+    auto const pick = [&available](int below, int upTo, bool lightest) -> std::optional<int> {
+        std::optional<int> best;
+        for (int const weight : available) {
+            bool const inside = weight > below && weight <= upTo;
+            bool const nearer = !best || (lightest ? weight < *best : weight > *best);
+            if (inside && nearer) {
+                best = weight;
+            }
+        }
+        return best;
+    };
+    // The order the CSS font-matching algorithm tries the weights in: a request under 400 looks lighter first, one
+    // over 500 heavier first, and one from 400 to 500 up to 500 first, then lighter, then heavier.
+    std::optional<int> choice;
+    if (wanted < 400) {
+        choice = pick(0, wanted, false);
+        choice = choice ? choice : pick(wanted, kUnbounded, true);
+    } else if (wanted > 500) {
+        choice = pick(wanted, kUnbounded, true);
+        choice = choice ? choice : pick(0, wanted, false);
+    } else {
+        choice = pick(wanted, 500, true);
+        choice = choice ? choice : pick(0, wanted, false);
+        choice = choice ? choice : pick(500, kUnbounded, true);
+    }
+    return choice.value_or(wanted);
+}
+
+std::vector<int> uprightWeightsOf(QStringList const& families) {
+    if (families.isEmpty()) {
+        return {};
+    }
+    QFont font;
+    font.setFamilies(families);
+    QString const family = QFontInfo{font}.family();
+    std::vector<int> weights;
+    for (QString const& style : QFontDatabase::styles(family)) {
+        if (!QFontDatabase::italic(family, style)) {
+            weights.push_back(QFontDatabase::weight(family, style));
+        }
+    }
+    return weights;
 }
 
 bool writeIconGlyphs(QObject& theme) {
@@ -348,6 +446,7 @@ std::vector<std::string> applyTheme(QQmlEngine& engine, ui::ThemeValues const& v
     setPlainTokens(*theme, values, unset);
     setFamilies(*theme, values, "font.family", "fontFamilies", unset);
     setFamilies(*theme, values, "font.mono", "monoFontFamilies", unset);
+    setWeights(*theme, values, unset);
     if (!detail::writePlatformMonoFamily(*theme)) {
         unset.emplace_back("platformMonoFamily");
     }

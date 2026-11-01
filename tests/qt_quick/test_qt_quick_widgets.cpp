@@ -11,6 +11,7 @@
 #include <QDate>
 #include <QDateTime>
 #include <QFont>
+#include <QFontDatabase>
 #include <QFontInfo>
 #include <QFontMetricsF>
 #include <QList>
@@ -49,6 +50,7 @@
 #include <utility>
 #include <vector>
 
+#include "qt_quick/context.hpp"
 #include "qt_quick/keys.hpp"
 #include "qt_quick/kinds.hpp"
 #include "qt_quick_harness.hpp"
@@ -1956,8 +1958,13 @@ TEST_CASE("qt_quick widgets: a filled button's caption takes font.weight.button,
     CHECK(theme->property("strongWeight").toInt() == 800);
     QList<QQuickItem*> const texts = Scene::itemsOf(Scene::itemOf(*save), "QQuickText");
     REQUIRE_FALSE(texts.isEmpty());
-    CHECK(static_cast<int>(texts.front()->property("font").value<QFont>().weight()) == 500);
-    CHECK(static_cast<int>(Scene::controlOf(*heading).property("font").value<QFont>().weight()) == 800);
+    // Each weight is the nearest upright one of the platform font, which is the weight itself where it has that face.
+    std::vector<int> const upright =
+        morph::qt_quick::detail::uprightWeightsOf({QFontDatabase::systemFont(QFontDatabase::GeneralFont).family()});
+    CHECK(static_cast<int>(texts.front()->property("font").value<QFont>().weight()) ==
+          morph::qt_quick::detail::uprightWeight(upright, 500));
+    CHECK(static_cast<int>(Scene::controlOf(*heading).property("font").value<QFont>().weight()) ==
+          morph::qt_quick::detail::uprightWeight(upright, 800));
 }
 
 // Mutation: ignore `Theme.iconOnlySquare` in the menu's trigger.

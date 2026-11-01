@@ -273,7 +273,11 @@ heading 1.3 times the body, and the others as the closed set lists. Every `Morph
 `Theme.bodyFont` (`strongFont` where it is emphasised and for a `section` text, which is also muted, `headingFont`
 for a heading, `smallFont` and `smallStrongFont` for a table header's label and a `small` text, `captionFont` for a
 field's caption, `displayFont` for a `display` text): the theme's families at the font's size, or the platform font
-untouched while `fontFamilies` is empty. Every strong font draws at `Theme.strongWeight`. A family Qt cannot resolve
+untouched while `fontFamilies` is empty. Every strong font draws at `Theme.strongWeight`, moved to the nearest weight the family has an upright face of
+(`Theme.textWeightOf`, `monoWeightOf` for the mono families; the CSS font-matching order: a request under 400 looks
+lighter first, one over 500 heavier first, one from 400 to 500 up to 500, then lighter): Qt asked for a weight a family
+lacks (500 on a family with only regular and bold faces) can draw an italic face, and a weight never changes the style.
+`applyTheme` writes the lookup for the hundreds and the two weight tokens. A family Qt cannot resolve
 falls back to Qt's own substitute, and `applyTheme` reports it (`font.family: none of <names> is installed`),
 comparing `QFontInfo`'s family against the list.
 
