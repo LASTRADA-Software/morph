@@ -1152,15 +1152,25 @@ TEST_CASE("qt_quick containers: the shell's head shares the title's line, and wr
     CHECK(badgeAt1000.x() > subtitleAt1000.right());
     CHECK(subtitleAt1000.y() >= titleAt1000.bottom() - 1.0);
 
-    // Narrow enough that the trail does not fit beside the lead, wide enough for the sidebar and the lead's minimum.
-    scene.window().resize(560, 600);
-    scene.settle();
+    // Narrow the window, by steps, until the trail no longer fits beside the lead: where that happens depends on the
+    // font's metrics, so the width is found rather than fixed. The floor leaves room for the sidebar and the lead's
+    // minimum.
+    int width = 1000;
+    for (int candidate = 560; candidate >= 400; candidate -= 20) {
+        width = candidate;
+        scene.window().resize(width, 600);
+        scene.settle();
+        if (rectOf("head_Book").y() > rectOf("shell_title").y() + 1.0) {
+            break;
+        }
+    }
     QRectF const badges = rectOf("head_badge_Due today");
-    QRectF const bookAt390 = rectOf("head_Book");
-    INFO("the badges end at " << badges.bottom() << ", the actions start at " << bookAt390.y());
+    QRectF const bookNarrow = rectOf("head_Book");
+    INFO("at " << width << " the badges end at " << badges.bottom() << ", the actions start at " << bookNarrow.y());
     // Out of room: the actions drop to a line of their own, below the badges.
-    CHECK(bookAt390.y() >= badges.bottom() - 1.0);
-    CHECK(rectOf("head_Sign").right() <= 560.0);
+    REQUIRE(bookNarrow.y() > rectOf("shell_title").y() + 1.0);
+    CHECK(bookNarrow.y() >= badges.bottom() - 1.0);
+    CHECK(rectOf("head_Sign").right() <= static_cast<double>(width));
 }
 
 // A head that fits stays on the title's line at any width: wrapping the trail under the title needs the line to be out
