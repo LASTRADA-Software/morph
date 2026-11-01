@@ -643,14 +643,16 @@ ui::Node compactConditions(Study const& study) {
          ui::text({.text = perPullMessage(study, true), .role = "error"})
              .visible(!study.enough)
              .testId("per-pull-error"),
-         ui::forEach(study.conditions, {.key = ui::row("id"), .gap = 3},
-                     [&study](ui::DeclScope&) { return ui::Nodes{conditionSection(study)}; })
-             .testId("conditions"),
-         addCondition(study, true),
-         ui::panel({summary(study)}, {.title = ui::format("Summary · first pull {0}", {study.firstDate}),
-                                      .collapsible = true,
-                                      .collapsed = true})
-             .testId("summary-section")},
+         // The cards, Add and the Summary sit 12 px apart; the fields above them sit 8 apart.
+         ui::column({ui::forEach(study.conditions, {.key = ui::row("id"), .gap = 3},
+                                 [&study](ui::DeclScope&) { return ui::Nodes{conditionSection(study)}; })
+                         .testId("conditions"),
+                     addCondition(study, true),
+                     ui::panel({summary(study)}, {.title = ui::format("Summary · first pull {0}", {study.firstDate}),
+                                                  .collapsible = true,
+                                                  .collapsed = true})
+                         .testId("summary-section")},
+                    {.gap = 3})},
         {.gap = 2});
 }
 
