@@ -456,7 +456,7 @@ ui::Node resultTable(Worksheet const& sheet) {
         {.name = "area", .label = "Peak area", .width = ui::fixed(10), .align = Align::End},
         {.name = "result",
          .label = "Result",
-         .width = ui::fixed(10),
+         .width = ui::fixed(12),
          .align = Align::End,
          .cell = resultInput(sheet, evaluation, field)},
         {.name = "unit", .label = "Unit", .width = ui::fixed(6), .cell = ui::text({.text = ui::row("unit")})},
