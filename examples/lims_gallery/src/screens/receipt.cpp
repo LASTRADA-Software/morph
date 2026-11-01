@@ -427,10 +427,10 @@ ui::Node expandedLayout(Receipt const& receipt) {
                           .sizing(ui::stretch());
     auto const session = ui::panel({sessionTable(receipt, true), rejectionLine(receipt).testId("last-rejection")},
                                    {.title = "This session", .padding = 2})
-                             // 31 % of the row, at most 39 units (about 300 px): 236 px on the 1000 px page beside the
+                             // 32 % of the row, at most 39 units (about 300 px): 241 px on the 1000 px page beside the
                              // sidebar, which keeps the sample card's fields whole on the 785 px page, and the width
                              // of the mockup's pane from a wider page up.
-                             .sizing(ui::percent(31))
+                             .sizing(ui::percent(32))
                              .maxWidth(39)
                              .testId("session-panel");
     return ui::pinned(
