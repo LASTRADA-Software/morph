@@ -681,9 +681,9 @@ ui::Node sortChoice(Samples const& list) {
 
 ui::Node compactLayout(Samples const& list) {
     auto const shownCount = ui::Handle<std::int64_t>{ui::call("count", {list.shown})};
-    auto const active =
-        ui::cond(ui::eq(list.status, "open"), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1}) +
-        ui::cond(ui::eq(list.priority, "any"), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1});
+    // Every filter that has a value counts, the defaults "open" and "any" among them, as the list's chips name them.
+    auto const active = ui::cond(ui::isEmpty(list.status), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1}) +
+                        ui::cond(ui::isEmpty(list.priority), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1});
     // The search, Filters and Sort stay at the top of the phone screen in the head's block, and the bulk bar at the
     // bottom, while the cards scroll between them.
     auto const controls = ui::Nodes{ui::column(
