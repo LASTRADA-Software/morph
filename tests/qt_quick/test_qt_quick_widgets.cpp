@@ -133,6 +133,25 @@ std::pair<int, int> inkColumns(Scene& scene, QQuickItem const& item) {
 
 }  // namespace
 
+// Mutation: drop `contentMinimumWidth` from MorphBadge (the column's minimum stays under the badge's width), or set
+// `elideToWidth` whatever the container (the badge is cut in the narrow column).
+TEST_CASE("qt_quick widgets: a badge outside a table keeps its natural width and raises its column's minimum",
+          "[qt_quick][badge]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(6)});
+    auto badge = scene.backend().createBadge(column.get());
+    badge->setText("Out of trend: \u22120.7 % vs. last 5 lots");
+    scene.settle();
+    QQuickItem const& badgeItem = Scene::itemOf(*badge);
+    auto* const label = badgeItem.findChild<QQuickItem*>(QStringLiteral("label"));
+    REQUIRE(label != nullptr);
+    CHECK_FALSE(label->property("truncated").toBool());
+    CHECK(badgeItem.width() >= badgeItem.property("naturalWidth").toReal() - 0.5);
+    CHECK(Scene::itemOf(*column).property("contentMinimumWidth").toReal() >=
+          badgeItem.property("naturalWidth").toReal());
+}
+
 // Mutation: leave `setAlign` out of TextImpl (the ink then ends near the text's own width, about 200 px in).
 TEST_CASE("qt_quick widgets: a stretching text with an end alignment draws its line at the end of its width",
           "[qt_quick][align]") {

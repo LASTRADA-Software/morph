@@ -250,8 +250,12 @@ size until the user drags. A splitter's panes are sized by the splitter, not by 
 header whatever the panel's height; only a stretching child takes the spare height.
 
 **Table cells.** A table draws a 1 px rule under each row in `color.divider` on Qt Quick. A table sizes and places its cells itself. On Qt Quick a cell is inset by `table.cellPaddingX` and `table.cellPaddingY`, and the header's labels with it; the padding is added to a column's declared width on both sides (a `fixed(n)` column is `n` units plus twice the inset, a content column its widest cell plus twice the inset), so it never takes room from the content; the terminal keeps one column between cells, no vertical padding and no inset in a column's width. A cell fills its column's width, except a kind whose
-width is its label (a badge, a check box, a push button), which draws at its natural width at the column's start,
-centre or end, as `TableColumn::align` says. The column's `align` also places the text of a text cell and of a text
+width is its label (a badge, a check box, a push button), which draws at its natural width, at most the column's, at
+the column's start, centre or end, as `TableColumn::align` says. A badge placed narrower than its natural width elides
+its text with an ellipsis and keeps its fill, border, padding, icon and remove control; its accessible name stays the
+full text and the full text is its tooltip unless the node gives one. Below its padding plus one character and the
+ellipsis the label is empty and the frame stays. A badge elides only in a table cell: anywhere else it is never
+narrower than its natural width. The column's `align` also places the text of a text cell and of a text
 input cell (where the frontend can align an input's text), and the header's label; a container cell fills its
 column and places its own content. Every cell keeps its own height and is placed down its row by its column's
 `valign`: at the top, centred (the default; rounded down on the terminal) or at the bottom, or, for `Stretch`, at
@@ -265,7 +269,8 @@ wraps is the document's choice (`wrap`, `minWidth`, a stretch). A container's mi
 or a panel is never laid out narrower than its padding and its children's minimums, so a row of content-sized children
 that cannot fit raises its column's minimum, and so on up to the first container whose width its parent does not
 choose (a page, a splitter's pane, a window root). A document's `minWidth` wins. A table, a scroll and every leaf take
-their own overflow; a table's cells are placed at their column's width and do not raise it. A page (a slot) whose
+their own overflow; a table's cells are placed at their column's width and do not raise it. A badge's minimum is its
+natural width, so a stack that holds one is raised with it; only a table cell, which is not raised, is placed narrower. A page (a slot) whose
 content cannot be narrower than it scrolls sideways when it is scrollable, and a scrolling vertical `scroll` does too.
 A frontend that can says so, once per container while it is mounted, when a container that is shown and sized holds
 content wider than itself by 2 px or more (a smaller shortfall is layout rounding); Qt Quick writes it as a warning of

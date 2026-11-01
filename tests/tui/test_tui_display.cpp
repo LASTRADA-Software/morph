@@ -212,6 +212,24 @@ TEST_CASE("tui badge: an outline badge is drawn in parentheses", "[tui][display]
     CHECK(harness.draw() == Rows{"(STAT)"});
 }
 
+// Mutation: leave the elision out of BadgeImpl::paint (the caption is cut by the canvas, the bracket with it), or
+// hit-test the remove control at the whole caption's width (the click on the drawn `×` removes nothing).
+TEST_CASE("tui badge: an elided chip keeps its brackets and is removed by a click on its drawn remove control",
+          "[tui][display]") {
+    Harness harness{8, 1};
+    auto const badge = harness.make<BadgeImpl>(nullptr);
+    badge->setText("Out of trend");
+    int removed = 0;
+    badge->setOnRemove([&removed] { ++removed; }, "Remove Out of trend");
+    badge->setElided(true);
+    CHECK(harness.draw() == Rows{"[Out… ×]"});
+    static_cast<void>(harness.click({.x = 0, .y = 0}));
+    CHECK(removed == 0);
+    static_cast<void>(harness.click({.x = 6, .y = 0}));
+    CHECK(removed == 1);
+    CHECK(badge->probeText() == "Out of trend");
+}
+
 // Mutation: draw a quiet badge in brackets.
 TEST_CASE("tui badge: a quiet badge is drawn in parentheses", "[tui][display]") {
     Harness harness{20, 1};

@@ -335,6 +335,9 @@ void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks);
 [[nodiscard]] std::vector<std::string_view> splitLines(std::string_view text);
 /// The display width of @p text in cells.
 [[nodiscard]] int displayWidth(std::string_view text);
+/// @p line cut to @p width cells: unchanged while it fits, else its longest prefix that leaves a cell for an ellipsis,
+/// then the ellipsis; empty for a width of nothing.
+[[nodiscard]] std::string elidedLine(std::string_view line, int width);
 /// A tone's style: the theme's info, success, warning or error style, and the normal text for `Neutral`.
 [[nodiscard]] ::core::tui::Style const& toneStyle(::core::tui::Theme const& theme, ui::Tone tone);
 /// Draws a field's description under its control: each line muted, or in @p tone's style while toned, clipped at

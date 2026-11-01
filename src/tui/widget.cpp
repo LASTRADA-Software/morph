@@ -834,6 +834,27 @@ std::vector<std::string_view> splitLines(std::string_view text) {
 
 int displayWidth(std::string_view text) { return ::core::tui::stringWidth(text); }
 
+std::string elidedLine(std::string_view line, int width) {
+    if (displayWidth(line) <= width) {
+        return std::string{line};
+    }
+    if (width <= 0) {
+        return {};
+    }
+    std::size_t kept = 0;
+    while (kept < line.size()) {
+        std::size_t next = kept + 1;
+        while (next < line.size() && (static_cast<unsigned char>(line.at(next)) & 0xC0U) == 0x80U) {
+            ++next;
+        }
+        if (displayWidth(line.substr(0, next)) > width - 1) {
+            break;
+        }
+        kept = next;
+    }
+    return std::string{line.substr(0, kept)} + "…";
+}
+
 ui::Align alignOfText(ui::TextAlign align) noexcept {
     switch (align) {
         case ui::TextAlign::Center:

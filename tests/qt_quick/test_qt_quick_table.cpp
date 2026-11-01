@@ -165,6 +165,35 @@ TEST_CASE("qt_quick table: a fixed mono column holds its identifiers whole, and 
     CHECK(Scene::itemOf(*unwrapped).height() < Scene::itemOf(*wrapped).height());
 }
 
+// Mutation: leave `elideToWidth` unset in MorphTableRow.place (the label runs past the badge into the next column).
+TEST_CASE("qt_quick table: a badge cell narrower than its label elides it and stays inside its column",
+          "[qt_quick][badge]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setLayout({.width = ui::Sizing::fixed(40)});
+    table->setColumns({{.label = "Analyte", .width = ui::Sizing::fixed(8)},
+                       {.label = "Evaluation", .width = ui::Sizing::stretch(1), .shrink = true},
+                       {.label = "Change", .width = ui::Sizing::fixed(8)}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    auto analyte = scene.backend().createText(row.get());
+    analyte->setText("Impurity A");
+    auto badge = scene.backend().createBadge(row.get());
+    badge->setText("Out of trend: \u22120.7 % vs. last 5 lots");
+    auto change = scene.backend().createText(row.get());
+    change->setText("0.12");
+    scene.settle();
+    QQuickItem const& badgeItem = Scene::itemOf(*badge);
+    QQuickItem const& changeItem = Scene::itemOf(*change);
+    auto* const label = badgeItem.findChild<QQuickItem*>(QStringLiteral("label"));
+    REQUIRE(label != nullptr);
+    CHECK(badgeItem.x() + badgeItem.width() <= changeItem.x() + 0.5);
+    CHECK(label->property("truncated").toBool());
+    CHECK(label->width() <= badgeItem.width());
+    CHECK(badgeItem.property("tooltipText").toString() == QStringLiteral("Out of trend: \u22120.7 % vs. last 5 lots"));
+    CHECK(badgeItem.property("text").toString() == QStringLiteral("Out of trend: \u22120.7 % vs. last 5 lots"));
+}
+
 // Mutation: write the column's alignment over a text that has its own (the start-aligned text becomes right-aligned).
 TEST_CASE("qt_quick table: a text with its own alignment keeps it in an end column", "[qt_quick][align]") {
     Scene scene;

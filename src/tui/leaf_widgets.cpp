@@ -86,29 +86,6 @@ void TextImpl::setText(std::string_view text) {
 
 namespace {
 
-// @p line cut to @p width cells: unchanged while it fits, else its longest prefix that leaves a cell for an ellipsis,
-// then the ellipsis.
-std::string elidedLine(std::string_view line, int width) {
-    if (displayWidth(line) <= width) {
-        return std::string{line};
-    }
-    if (width <= 0) {
-        return {};
-    }
-    std::size_t kept = 0;
-    while (kept < line.size()) {
-        std::size_t next = kept + 1;
-        while (next < line.size() && (static_cast<unsigned char>(line.at(next)) & 0xC0U) == 0x80U) {
-            ++next;
-        }
-        if (displayWidth(line.substr(0, next)) > width - 1) {
-            break;
-        }
-        kept = next;
-    }
-    return std::string{line.substr(0, kept)} + "…";
-}
-
 // @p runs laid end to end on one line of @p width cells: a line break reads as a space, and the run the width ends in
 // is cut with an ellipsis, so the runs after it are dropped.
 std::vector<ui::TextSpan> elidedRuns(std::vector<ui::TextSpan> runs, int width) {
@@ -189,7 +166,7 @@ void TextImpl::paintControl(::core::tui::Canvas& canvas) {
     ui::TextAlign const alignment = _align.value_or(ui::TextAlign::Start);
     if (!_runs.empty()) {
         if (_elided) {
-            paintRuns(canvas, elidedRuns(_runs, canvas.width()), style, false);
+            paintRuns(canvas, elidedRuns(_runs, canvas.width()), style, false, 0, 0, alignment);
         } else {
             paintRuns(canvas, _runs, style, true, 0, 0, alignment);
         }

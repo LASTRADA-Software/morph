@@ -16,6 +16,7 @@
 
 #include "tui/chord.hpp"
 #include "tui/container_widgets.hpp"
+#include "tui/display_widgets.hpp"
 #include "tui/layout.hpp"
 #include "tui/leaf_widgets.hpp"
 
@@ -436,6 +437,8 @@ void TableImpl::arrangeRows(std::vector<int> const& widths) {
                 for (auto const [column, cell] : std::views::zip(_columns, stack->children())) {
                     if (auto* const text = dynamic_cast<TextImpl*>(cell)) {
                         text->setElided(!column.wrap);
+                    } else if (auto* const badge = dynamic_cast<BadgeImpl*>(cell)) {
+                        badge->setElided(true);
                     }
                 }
             }

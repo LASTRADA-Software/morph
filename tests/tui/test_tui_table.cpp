@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "tui/container_widgets.hpp"
+#include "tui/display_widgets.hpp"
 #include "tui/leaf_widgets.hpp"
 #include "tui/table_widget.hpp"
 #include "tui_harness.hpp"
@@ -23,6 +24,7 @@
 namespace ui = morph::ui;
 using core::tui::EventResult;
 using core::tui::KeyCode;
+using morph::tui::detail::BadgeImpl;
 using morph::tui::detail::ButtonImpl;
 using morph::tui::detail::ScrollImpl;
 using morph::tui::detail::StackImpl;
@@ -812,6 +814,21 @@ TEST_CASE("tui table: an end column draws its text and its header label at its e
     table->setRowKey(*row, key(1));
     // The gutter's 2 cells, `Name` 4, a gap, then the 12-cell column: its last four cells hold the digits.
     CHECK(harness.draw() == Rows{"  Name         Area", "  pH           0.21"});
+}
+
+// Mutation: do not tell a badge cell it is elided (the caption is cut by the cell's edge: `[Out of t`).
+TEST_CASE("tui table: a badge cell wider than its column is cut with an ellipsis and keeps its closing bracket",
+          "[tui][table][columns]") {
+    Harness harness{30, 3};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name"}, {.label = "Check", .width = ui::Sizing::fixed(9)}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    auto const name = harness.make<TextImpl>(row.get());
+    name->setText("pH");
+    auto const check = harness.make<BadgeImpl>(row.get());
+    check->setText("Out of trend");
+    table->setRowKey(*row, key(1));
+    CHECK(harness.draw() == Rows{"  Name Check", "  pH   [Out of…]"});
 }
 
 // Mutation: let the column place a text that has its own alignment (the start-aligned text moves to the column's end).

@@ -109,6 +109,9 @@ public:
     [[nodiscard]] std::string probeText() const override { return _text; }
     [[nodiscard]] bool placedAcrossColumn() const override { return true; }
     [[nodiscard]] bool wantsFocus() const override { return static_cast<bool>(_onRemove); }
+    /// Whether the caption is cut with an ellipsis where the badge is narrower than its natural width, so that the
+    /// closing bracket stays in its last cell; a table sets it on the badge cells it places.
+    void setElided(bool elided);
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void activate() override;
@@ -116,6 +119,9 @@ public:
 
 private:
     [[nodiscard]] std::string caption() const;
+    // The caption as drawn in @p width cells: all of it, or while elided what the brackets and the remove control
+    // leave room for.
+    [[nodiscard]] std::string shownCaption(int width) const;
     /// Runs the remove handler, which may destroy this badge.
     void remove();
     ui::Tone _tone = ui::Tone::Neutral;
@@ -123,6 +129,9 @@ private:
     std::string _icon;
     ui::Action _onRemove;
     ui::BadgeStyle _style = ui::BadgeStyle::Filled;
+    bool _elided = false;
+    // The width of the caption as last drawn, where the remove control is hit-tested.
+    int _shownWidth = 0;
 };
 
 /// Progress: a bar of `#` over `.` and the percentage, or `<=>` for an indeterminate one, then the label.

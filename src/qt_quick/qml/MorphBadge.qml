@@ -26,6 +26,9 @@ MorphWidget {
     property string removeLabel: ""
     // Whether the label is drawn in the mono face; set once. `round` is the widget's.
     property bool mono: false
+    // Whether the label is cut with an ellipsis where the badge is narrower than its content; a table sets it on a
+    // cell it places at a width of its own. A badge elsewhere is never narrower than its natural width.
+    property bool elideToWidth: false
     // A neutral outline or chip takes the text colour and the control border; a toned one, the tone's colours.
     readonly property bool plain: root.tone === 0 && (root.outline || root.removable)
     readonly property bool framed: root.outline || root.removable
@@ -45,8 +48,15 @@ MorphWidget {
     // A tag insets its label 1 px above and below and one and a half spacing units at each side. A chip is the
     // control height less 6 px, with a spacing step of 2 before the label and its remove button against the end.
     readonly property real chipHeight: Theme.targetHeight - 6
-    readonly property real naturalWidth: content.implicitWidth +
-                                         (root.removable ? Theme.spaceOf(2) : Theme.spaceOf(1) * 3)
+    // The side padding in all, and the width of what the row holds around the label. Both are read from the parts, not
+    // from the row's own implicit width, which sums the label as it is drawn and so would follow an elided width.
+    readonly property real sidePadding: root.removable ? Theme.spaceOf(2) : Theme.spaceOf(1) * 3
+    readonly property real iconRoom: root.iconSource !== "" ? label.implicitHeight + Theme.spaceOf(1) : 0
+    readonly property real removeRoom: root.removable ? root.chipHeight - 2 + Theme.spaceOf(1) : 0
+    readonly property real naturalWidth: root.sidePadding + root.iconRoom + label.implicitWidth + root.removeRoom
+    contentMinimumWidth: root.naturalWidth
+    // The full text is the tooltip while the label is cut, unless the node gives its own.
+    tooltipText: root.tooltip !== "" ? root.tooltip : label.truncated ? root.text : ""
     // A round badge is at least as wide as it is tall: a circle for a short label, a stadium for a longer one.
     implicitWidth: root.round ? Math.max(root.naturalWidth, implicitHeight) : root.naturalWidth
     implicitHeight: root.removable ? root.chipHeight : label.implicitHeight + 2
@@ -70,6 +80,7 @@ MorphWidget {
 
     Row {
         id: content
+        clip: root.elideToWidth
         x: root.removable ? Theme.spaceOf(2) : root.round ? (root.width - width) / 2 : Theme.spaceOf(1) * 1.5
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.spaceOf(1)
@@ -92,6 +103,10 @@ MorphWidget {
                                  : root.mono ? Theme.monoFontOf(Theme.smallPixels, Theme.strongWeight)
                                              : Theme.smallStrongFont
             text: (root.icon !== "" && root.iconSource === "" ? root.icon + " " : "") + root.text
+            elide: root.elideToWidth ? Text.ElideRight : Text.ElideNone
+            width: root.elideToWidth ? Math.max(0, Math.min(label.implicitWidth, root.width - root.sidePadding -
+                                                                                      root.iconRoom - root.removeRoom))
+                                     : label.implicitWidth
             color: root.quiet ? root.scheme.muted : root.plain ? root.scheme.text : root.toneOf(root.tone)
             anchors.verticalCenter: parent.verticalCenter
         }

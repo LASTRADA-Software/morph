@@ -262,6 +262,20 @@ void BadgeImpl::setOnRemove(ui::Action onRemove, std::string_view label) {
     return {.width = displayWidth(caption()) + (_onRemove ? 4 : 2), .height = 1};
 }
 
+std::string BadgeImpl::shownCaption(int width) const {
+    if (!_elided) {
+        return caption();
+    }
+    return elidedLine(caption(), width - (_onRemove ? 4 : 2));
+}
+
+void BadgeImpl::setElided(bool elided) {
+    if (_elided != elided) {
+        _elided = elided;
+        refresh();
+    }
+}
+
 void BadgeImpl::paint(::core::tui::Canvas& canvas) {
     ::core::tui::Style style = toneStyle(canvas.theme(), _tone);
     bool const outline = _style != ui::BadgeStyle::Filled;
@@ -269,9 +283,11 @@ void BadgeImpl::paint(::core::tui::Canvas& canvas) {
         style.inverse = true;
     }
     std::string const glyph{ui::iconGlyph("close")};
-    canvas.putString(
-        0, 0, (outline ? "(" : "[") + caption() + (_onRemove ? " " + glyph : std::string{}) + (outline ? ")" : "]"),
-        style);
+    std::string const shown = shownCaption(canvas.width());
+    _shownWidth = displayWidth(shown);
+    canvas.putString(0, 0,
+                     (outline ? "(" : "[") + shown + (_onRemove ? " " + glyph : std::string{}) + (outline ? ")" : "]"),
+                     style);
 }
 
 EventResult BadgeImpl::key(::core::tui::KeyEvent const& key) {
@@ -284,9 +300,9 @@ EventResult BadgeImpl::key(::core::tui::KeyEvent const& key) {
 
 void BadgeImpl::activate() { remove(); }
 
-// The `×` is the cell before the closing bracket.
+// The `×` is the cell before the closing bracket, where it was drawn.
 void BadgeImpl::click(::core::tui::Point cell) {
-    if (_onRemove && cell.y == 0 && cell.x == displayWidth(caption()) + 2) {
+    if (_onRemove && cell.y == 0 && cell.x == (_elided ? _shownWidth : displayWidth(caption())) + 2) {
         remove();
     }
 }
