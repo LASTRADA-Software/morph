@@ -217,7 +217,7 @@ Study declare(ui::Scope& screen) {
             .at("short");
     study.firstDate = screen.let("firstDate", pullDate(study.start, first));
     study.firstPull =
-        screen.let("firstPull", ui::format("{0} ({1}, {2} m)", {study.firstDate, firstCondition, first}));
+        screen.let("firstPull", ui::format("{0} ({1}, {2}\u00a0m)", {study.firstDate, firstCondition, first}));
     study.lastPull = screen.let("lastPull", pullDate(study.start, last));
     return study;
 }
@@ -643,7 +643,7 @@ ui::Node compactConditions(Study const& study) {
          ui::text({.text = perPullMessage(study, true), .role = "error"})
              .visible(!study.enough)
              .testId("per-pull-error"),
-         ui::forEach(study.conditions, {.key = ui::row("id"), .gap = 1},
+         ui::forEach(study.conditions, {.key = ui::row("id"), .gap = 3},
                      [&study](ui::DeclScope&) { return ui::Nodes{conditionSection(study)}; })
              .testId("conditions"),
          addCondition(study, true),
