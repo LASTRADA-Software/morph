@@ -811,8 +811,10 @@ ui::Node worksheetPane(Review const& review) {
         {.bottom = ui::row({returnButton(review, "Return to analyst…"), rejectButton(review, "Reject…"),
                             // The note takes the room the buttons leave and wraps when the pane is narrow, so the bar
                             // never asks the worksheet for more than its buttons.
-                            layout::muted(ui::cond(review.self, Text{"Another reviewer must approve"},
-                                                   Text{"Approving needs your signature"}))
+                            ui::text({.text = ui::cond(review.self, Text{"Another reviewer must approve"},
+                                                       Text{"Approving needs your signature"}),
+                                      .role = "muted",
+                                      .align = morph::ui::TextAlign::End})
                                 .sizing(ui::stretch())
                                 .testId("approve-note"),
                             approveButton(review, "Approve and sign…")},

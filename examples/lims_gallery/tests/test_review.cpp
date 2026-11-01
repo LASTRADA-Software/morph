@@ -87,6 +87,12 @@ TEST_CASE("review: the splitter's sizes reach the splitter", "[lims-gallery]") {
     CHECK(screen.prop("Splitter", "split", "sizes") == "[28,75]");
 }
 
+// The approval note ends at the Approve button.
+TEST_CASE("review: the approval note is placed at the end of its slot", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    CHECK(screen.prop("Text", "approve-note", "align") == "End");
+}
+
 // The review's `navigate` asks for a dialog, and the generic client draws one over the review: no tab is added. The
 // signature answers with its meaning, which marks the worksheet signed.
 TEST_CASE("review: approve and sign opens the e-signature over the review, and its signature answers it",
