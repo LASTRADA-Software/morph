@@ -553,7 +553,7 @@ ui::Node instruments() {
                                {.gap = 1, .align = Align::Center})
                            .testId(std::string{"instrument-"} + instrument.name));
     }
-    return ui::column(rows, {.gap = 1}).testId("instruments");
+    return ui::column(rows, {.gap = 2}).testId("instruments");
 }
 
 // ── The worklist and the sample pane ─────────────────────────────────────────────────────────────────────────────
