@@ -1616,6 +1616,29 @@ TEST_CASE("qt_quick widgets: a caption's hint follows its required mark, and onl
     CHECK_FALSE(hint->isVisible());
 }
 
+// Mutation: draw a quiet badge's text in the tone's colour, or its border in the tone's outline colour.
+TEST_CASE("qt_quick widgets: a quiet badge is outlined in the control border with the muted text, whatever its tone",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const routine = scene.backend().createBadge(column.get());
+    routine->setTone(ui::Tone::Err);
+    routine->setText("Routine");
+    routine->setStyle(ui::BadgeStyle::Quiet);
+    scene.window().resize(300, 200);
+    scene.settle();
+    QObject const* const scheme = Scene::itemOf(*routine).property("scheme").value<QObject*>();
+    REQUIRE(scheme != nullptr);
+    QQuickItem const* const fill = findNamed(Scene::itemOf(*routine), QStringLiteral("fill"));
+    REQUIRE(fill != nullptr);
+    CHECK(fill->property("color").value<QColor>() == scheme->property("surface").value<QColor>());
+    CHECK(fill->property("border").value<QObject*>()->property("color").value<QColor>() ==
+          scheme->property("controlBorder").value<QColor>());
+    QQuickItem const* const label = findNamed(Scene::itemOf(*routine), QStringLiteral("label"));
+    REQUIRE(label != nullptr);
+    CHECK(label->property("color").value<QColor>() == scheme->property("muted").value<QColor>());
+}
+
 // Mutation: map DangerOutline to Danger in ButtonImpl::setEmphasis (the fill then reads the error colour).
 TEST_CASE("qt_quick widgets: a danger outlined button, an outline badge, and a stretched segmented select",
           "[qt_quick]") {

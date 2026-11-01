@@ -264,7 +264,7 @@ void BadgeImpl::setOnRemove(ui::Action onRemove, std::string_view label) {
 
 void BadgeImpl::paint(::core::tui::Canvas& canvas) {
     ::core::tui::Style style = toneStyle(canvas.theme(), _tone);
-    bool const outline = _style == ui::BadgeStyle::Outline;
+    bool const outline = _style != ui::BadgeStyle::Filled;
     if (_onRemove && hasFocus()) {
         style.inverse = true;
     }

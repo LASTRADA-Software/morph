@@ -4,6 +4,7 @@
 #include <morph/ui/alignment.hpp>
 #include <morph/ui/author.hpp>
 #include <morph/ui/button_emphasis.hpp>
+#include <string>
 #include <utility>
 
 #include "lims_gallery/lims_gallery.hpp"
@@ -77,6 +78,25 @@ inline void plainPageWhenCompact(ui::Scope& screen, ui::AnyHandle const& width) 
 /// @return The node.
 [[nodiscard]] inline ui::Node outlineTag(ui::AnyHandle const& text, ui::AnyHandle const& tone) {
     return ui::badge(text, tone, {}, morph::ui::BadgeStyle::Outline);
+}
+
+/// @brief A quiet tag: the muted outlined label of the routine priority beside the urgent ones.
+/// @param text The text.
+/// @return The node.
+[[nodiscard]] inline ui::Node quietTag(ui::AnyHandle const& text) {
+    return ui::badge(text, {}, {}, morph::ui::BadgeStyle::Quiet);
+}
+
+/// @brief A priority tag: STAT in an outlined error tag, Urgent in an outlined warning tag, and any other priority a
+///        quiet one.
+/// @param priority The priority's name.
+/// @return The node.
+[[nodiscard]] inline ui::Node priorityTag(ui::AnyHandle const& priority) {
+    ui::Handle<bool> const stat = ui::eq(priority, "STAT");
+    ui::Handle<bool> const urgent = ui::eq(priority, "Urgent");
+    return ui::row({outlineTag(priority, ui::Handle<std::string>{"err"}).visible(stat),
+                    outlineTag(priority, ui::Handle<std::string>{"warn"}).visible(urgent),
+                    quietTag(priority).visible(!(stat || urgent))});
 }
 
 }  // namespace lims_gallery::layout

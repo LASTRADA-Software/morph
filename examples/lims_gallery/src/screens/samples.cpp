@@ -310,19 +310,6 @@ ui::Node selectBox(Samples const& list) {
 
 // ── The tags ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-ui::AnyHandle priorityTone(ui::AnyHandle const& priority) {
-    return ui::cond(ui::eq(priority, "STAT"), Text{"err"},
-                    ui::cond(ui::eq(priority, "Urgent"), Text{"warn"}, Text{"neutral"}));
-}
-
-// The urgent priorities are outlined tags; the routine one is a muted word, so the tags that matter stand out.
-ui::Node priorityCell() {
-    auto const priority = ui::row("priority");
-    Flag const routine = ui::eq(priority, "Routine");
-    return ui::row({layout::outlineTag(priority, priorityTone(priority)).visible(!routine),
-                    layout::muted(priority).visible(routine)});
-}
-
 ui::Node specCell() {
     auto const spec = ui::row("spec");
     return ui::row({layout::tag(spec, ui::row("specTone")).visible(!ui::isEmpty(spec)),
@@ -524,7 +511,10 @@ ui::Node samplesTable(Samples const& list) {
                                ui::isEmpty(ui::row("lot")), ui::AnyHandle{ui::spans({ui::row("product")})},
                                ui::AnyHandle{ui::spans({ui::row("product"), " · ", ui::mono(ui::row("lot"))})})})},
                      {.name = "tests", .label = "Tests", .width = ui::stretch(4)},
-                     {.name = "priority", .label = "Priority", .width = ui::fixed(6), .cell = priorityCell()},
+                     {.name = "priority",
+                      .label = "Priority",
+                      .width = ui::fixed(7),
+                      .cell = layout::priorityTag(ui::row("priority"))},
                      {.name = "status",
                       .label = "Status",
                       .width = ui::fixed(10),
@@ -608,7 +598,7 @@ ui::Node cardContent(Samples const& list) {
     return ui::row({selectBox(list),
                     ui::column({ui::row({idText, dueText()}, {.gap = 1, .justify = Justify::Between}),
                                 ui::text({.text = ui::format("{0} · {1}", {ui::row("short"), ui::row("tests")})}),
-                                ui::row({layout::outlineTag(ui::row("priority"), priorityTone(ui::row("priority"))),
+                                ui::row({layout::priorityTag(ui::row("priority")),
                                          layout::tag(ui::row("status"), ui::row("statusTone")),
                                          layout::tag(spec, ui::row("specTone")).visible(!ui::isEmpty(spec))},
                                         {.gap = 1, .wrap = true})},

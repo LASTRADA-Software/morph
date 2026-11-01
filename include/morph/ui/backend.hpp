@@ -935,7 +935,8 @@ public:
     virtual void setOnRemove(Action onRemove, std::string_view label) = 0;
 
     /// @brief Sets how the badge is drawn. A new badge is filled; the mount calls it once, only for `Outline`, which
-    ///        draws the surface's fill with the tone's colour as border and text.
+    ///        draws the surface's fill with the tone's colour as border and text, or `Quiet`, which draws the
+    ///        surface's fill with the control border and the muted text colour.
     /// @param style The style.
     virtual void setStyle(BadgeStyle style) = 0;
 

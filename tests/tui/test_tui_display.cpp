@@ -212,6 +212,15 @@ TEST_CASE("tui badge: an outline badge is drawn in parentheses", "[tui][display]
     CHECK(harness.draw() == Rows{"(STAT)"});
 }
 
+// Mutation: draw a quiet badge in brackets.
+TEST_CASE("tui badge: a quiet badge is drawn in parentheses", "[tui][display]") {
+    Harness harness{20, 1};
+    auto const badge = harness.make<BadgeImpl>(nullptr);
+    badge->setText("Routine");
+    badge->setStyle(ui::BadgeStyle::Quiet);
+    CHECK(harness.draw() == Rows{"(Routine)"});
+}
+
 // Mutation: ignore the style (the link is drawn as the bracketed button after the text, and the stretched button
 // stays on the text's row).
 TEST_CASE("tui banner: a button action is bracketed, a stretched one is on its own row", "[tui][display]") {

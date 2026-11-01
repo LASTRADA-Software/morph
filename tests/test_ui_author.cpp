@@ -612,6 +612,10 @@ TEST_CASE("a button's and a badge's shape, size and mono are written only when g
                           .mono = true})
                    .json()) == R"({"kind":"badge","text":"QC","style":"outline","shape":"round","mono":true})");
     CHECK(text(ui::badge({.text = "QC"}).json()) == R"({"kind":"badge","text":"QC"})");
+    CHECK(text(ui::badge("Routine", {}, {}, morph::ui::BadgeStyle::Quiet).json()) ==
+          R"({"kind":"badge","text":"Routine","style":"quiet"})");
+    CHECK(text(ui::badge({.text = "Routine", .style = morph::ui::BadgeStyle::Quiet}).json()) ==
+          R"({"kind":"badge","text":"Routine","style":"quiet"})");
 }
 
 template <typename M>

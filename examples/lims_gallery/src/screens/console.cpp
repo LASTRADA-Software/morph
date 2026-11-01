@@ -570,7 +570,7 @@ ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::s
         {.name = "priority",
          .label = "Priority",
          .width = ui::fixed(7),
-         .cell = layout::tag(ui::row("priority"), ui::row("priorityTone"))},
+         .cell = layout::priorityTag(ui::row("priority"))},
         {.name = "due", .label = "Due", .width = ui::fixed(12), .cell = dueCell(), .wrap = false},
         {.name = "status",
          .label = "Status",
@@ -826,12 +826,12 @@ ui::Node compactCard() {
     // The id is an identifier: a strong run in the mono face.
     auto const idText = ui::text(
         {.text = ui::row("id"), .spans = ui::spans({ui::styled(ui::row("id"), {.strong = true, .mono = true})})});
-    return ui::column({ui::row({idText.sizing(ui::stretch()), dueCell()}, {.gap = 1, .align = Align::Center}),
-                       ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("product")})}),
-                       ui::row({layout::tag(ui::row("priority"), ui::row("priorityTone")),
-                                layout::tag(ui::row("status"), ui::row("statusTone"))},
-                               {.gap = 1, .wrap = true})},
-                      {.gap = 1});
+    return ui::column(
+        {ui::row({idText.sizing(ui::stretch()), dueCell()}, {.gap = 1, .align = Align::Center}),
+         ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("product")})}),
+         ui::row({layout::priorityTag(ui::row("priority")), layout::tag(ui::row("status"), ui::row("statusTone"))},
+                 {.gap = 1, .wrap = true})},
+        {.gap = 1});
 }
 
 // Tapping a sample opens it as its own page: the compact result entry of design 08. The card is the item.

@@ -1442,7 +1442,15 @@ public:
     void setText(std::string_view text) override { set("text", formatText(text)); }
     void setIcon(std::string_view icon) override { set("icon", formatText(icon)); }
 
-    void setStyle(BadgeStyle style) override { set("style", style == BadgeStyle::Outline ? "Outline" : "Filled"); }
+    void setStyle(BadgeStyle style) override {
+        std::string name = "Filled";
+        if (style == BadgeStyle::Outline) {
+            name = "Outline";
+        } else if (style == BadgeStyle::Quiet) {
+            name = "Quiet";
+        }
+        set("style", name);
+    }
     void setShape(ControlShape shape) override { set("shape", std::string{shapeName(shape)}); }
     void setMono(bool mono) override { set("mono", formatBool(mono)); }
 

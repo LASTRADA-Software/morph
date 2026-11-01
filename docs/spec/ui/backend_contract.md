@@ -202,8 +202,9 @@ in the error colour, and falls back to `Normal`'s plain style for `Ghost`.
 
 **Badge style.** `BadgeWidget::setStyle(BadgeStyle::Outline)` draws a badge outlined: the surface's fill with the
 tone's outline colour as border and its colour as text, where a filled one is drawn in the tone's fill. A red outline then means one thing
-(STAT) and a red fill another (out of specification). The terminal draws an outline badge as `(text)`, a filled one
-as `[text]`.
+(STAT) and a red fill another (out of specification). `BadgeStyle::Quiet` draws the surface's fill with the control
+border and the muted text colour whatever the tone (the tone colours only an icon): the low-key label beside outlined
+ones, such as the routine priority. The terminal draws an outline or quiet badge as `(text)`, a filled one as `[text]`.
 
 **Shape, size and mono.** `ButtonWidget::setShape`, `BadgeWidget::setShape(ControlShape::Round)` draw a control with
 corners of half its height, at least as wide as it is tall: a circle for a short label, a stadium for a longer one, and

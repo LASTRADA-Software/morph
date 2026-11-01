@@ -7922,7 +7922,13 @@ inline std::optional<Node> ScreenCore::lowerDisplay(DocNode const& node, LowerCt
         Badge spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Neutral, toneOf),
                    .text = kit.textProp("text")};
         spec.icon = kit.onceText("icon");
-        spec.style = node.name("style") == "outline" ? BadgeStyle::Outline : BadgeStyle::Filled;
+        std::string_view const style = node.name("style");
+        spec.style = BadgeStyle::Filled;
+        if (style == "outline") {
+            spec.style = BadgeStyle::Outline;
+        } else if (style == "quiet") {
+            spec.style = BadgeStyle::Quiet;
+        }
         spec.shape = shapeNamed(node.name("shape")).value_or(ControlShape::Default);
         spec.mono = node.flag("mono");
         if (Commands const* const onRemove = node.event("onRemove")) {

@@ -441,6 +441,7 @@ TEST_CASE("ui document: dangerOutline, an outline badge and a segmented select l
     CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "c", "view": {"kind": "column", "children": [
         {"kind": "button", "label": "Reject", "emphasis": "dangerOutline"},
         {"kind": "badge", "text": "STAT", "tone": "err", "style": "outline"},
+        {"kind": "badge", "text": "Routine", "style": "quiet"},
         {"kind": "select", "label": "Show", "style": "segmented", "options": {"list": []}}]}})")
               .has_value());
     auto const emphasis = loadDocumentText(R"({"vocab": "ui/1", "id": "c", "view": {"kind": "button", "label": "x",

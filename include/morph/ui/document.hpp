@@ -3846,7 +3846,7 @@ private:
         } else if (node.kind == "banner") {
             checkBanner(node);
         } else if (node.kind == "badge") {
-            static constexpr std::array<std::string_view, 2> kBadgeStyles = {"filled", "outline"};
+            static constexpr std::array<std::string_view, 3> kBadgeStyles = {"filled", "outline", "quiet"};
             checkChoice(node, "style", kBadgeStyles);
             static constexpr std::array<std::string_view, 2> kBadgeShapes = {"default", "round"};
             checkChoice(node, "shape", kBadgeShapes);

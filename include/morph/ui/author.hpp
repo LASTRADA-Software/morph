@@ -4880,15 +4880,15 @@ struct BannerOptions {
 /// @param text  The text.
 /// @param tone  The tone.
 /// @param icon  An icon.
-/// @param style Filled, the default, which writes no key, or outlined: the surface's fill with the tone's colour as
-///              border and text.
+/// @param style Filled, the default, which writes no key; outlined: the surface's fill with the tone's colour as
+///              border and text; or quiet: the surface's fill with the control border and the muted text colour.
 /// @return The node.
 [[nodiscard]] inline Node badge(AnyHandle const& text, AnyHandle const& tone = {}, AnyHandle const& icon = {},
                                 BadgeStyle style = BadgeStyle::Filled) {
     detail::NodeWriter node{"badge"};
     node.put("tone", tone).put("text", text).put("icon", icon);
-    if (style == BadgeStyle::Outline) {
-        node.text("style", "outline");
+    if (style != BadgeStyle::Filled) {
+        node.text("style", style == BadgeStyle::Quiet ? "quiet" : "outline");
     }
     return node.done();
 }
@@ -4906,8 +4906,9 @@ struct BadgeOptions {
     Commands onRemove;
     /// @brief The remove control's accessible name; absent: `Remove ` and the text.
     AnyHandle removeLabel;
-    /// @brief Filled, the default, which writes no key, or outlined: the surface's fill, with the tone's outline
-    ///        colour as border and its colour as text.
+    /// @brief Filled, the default, which writes no key; outlined: the surface's fill, with the tone's outline colour
+    ///        as border and its colour as text; or quiet: the surface's fill with the control border and the muted
+    ///        text colour.
     BadgeStyle style = BadgeStyle::Filled;
     /// @brief The badge's outline; `Default` writes no key.
     ControlShape shape = ControlShape::Default;
@@ -4921,8 +4922,8 @@ struct BadgeOptions {
 [[nodiscard]] inline Node badge(BadgeOptions const& options) {
     detail::NodeWriter node{"badge"};
     node.put("tone", options.tone).put("text", options.text).put("icon", options.icon);
-    if (options.style == BadgeStyle::Outline) {
-        node.text("style", "outline");
+    if (options.style != BadgeStyle::Filled) {
+        node.text("style", options.style == BadgeStyle::Quiet ? "quiet" : "outline");
     }
     if (options.shape != ControlShape::Default) {
         node.text("shape", std::string{shapeName(options.shape)});

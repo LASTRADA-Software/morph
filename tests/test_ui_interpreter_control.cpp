@@ -996,10 +996,12 @@ TEST_CASE("interpreter control: a computed select style naming none is reported 
         {"kind": "select", "testId": "odd", "label": "Show", "style": {"ref": "style"}, "options": {"list": []}},
         {"kind": "select", "testId": "seg", "label": "Show", "style": "segmented", "options": {"list": []}},
         {"kind": "badge", "testId": "stat", "text": "STAT", "style": "outline"},
+        {"kind": "badge", "testId": "routine", "text": "Routine", "style": "quiet"},
         {"kind": "button", "testId": "reject", "label": "Reject", "emphasis": "dangerOutline"}]}})");
     CHECK(h.backend.prop(h.byTestId("Select", "odd"), "style") == "Dropdown");
     CHECK(h.backend.prop(h.byTestId("Select", "seg"), "style") == "Segmented");
     CHECK(h.backend.prop(h.byTestId("Badge", "stat"), "style") == "Outline");
+    CHECK(h.backend.prop(h.byTestId("Badge", "routine"), "style") == "Quiet");
     CHECK(h.backend.prop(h.byTestId("Button", "reject"), "emphasis") == "DangerOutline");
     CHECK(std::ranges::count_if(h.diagnostics, [](ui::Refusal const& refusal) {
               return refusal.reason.contains("a select's style is dropdown, radio or segmented");

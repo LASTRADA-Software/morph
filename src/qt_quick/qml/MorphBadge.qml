@@ -5,8 +5,9 @@ import QtQuick.Controls
 
 // A short label in a tone, with an optional icon, drawn as a tag: a small strong label on the tone's fill, with
 // square-ish corners and no border. Outlined, it is drawn on the surface's fill with a border in the tone's outline
-// colour. A removable badge is a chip, a control's label rather than a status: the control surface and border, the
-// body font, and a remove button after the text, which takes the focus; a click on it, or Delete, Backspace, Enter
+// colour. Quiet, it is outlined in the control border with the muted text colour, whatever the tone. A removable badge
+// is a chip, a control's label rather than a status: the control surface and border, the body font, and a remove
+// button after the text, which takes the focus; a click on it, or Delete, Backspace, Enter
 // or Space while it has the focus, removes the badge.
 MorphWidget {
     id: root
@@ -18,6 +19,8 @@ MorphWidget {
     property string icon: ""
     // Outlined: the surface's fill, with the tone's outline colour as border and its colour as text; set once.
     property bool outline: false
+    // Quiet: an outlined badge in the control border and the muted text colour, whatever the tone; set once.
+    property bool quiet: false
     // Whether the badge has a remove button, and the button's accessible name; set by C++ before the first frame.
     property bool removable: false
     property string removeLabel: ""
@@ -26,7 +29,8 @@ MorphWidget {
     // A neutral outline or chip takes the text colour and the control border; a toned one, the tone's colours.
     readonly property bool plain: root.tone === 0 && (root.outline || root.removable)
     readonly property bool framed: root.outline || root.removable
-    readonly property color outlineColor: root.tone === 0 ? root.scheme.controlBorder : root.toneBorderOf(root.tone)
+    readonly property color outlineColor: root.tone === 0 || root.quiet ? root.scheme.controlBorder
+                                                                        : root.toneBorderOf(root.tone)
 
     focusTarget: root.removable ? remove : root
 
@@ -88,7 +92,7 @@ MorphWidget {
                                  : root.mono ? Theme.monoFontOf(Theme.smallPixels, Theme.strongWeight)
                                              : Theme.smallStrongFont
             text: (root.icon !== "" && root.iconSource === "" ? root.icon + " " : "") + root.text
-            color: root.plain ? root.scheme.text : root.toneOf(root.tone)
+            color: root.quiet ? root.scheme.muted : root.plain ? root.scheme.text : root.toneOf(root.tone)
             anchors.verticalCenter: parent.verticalCenter
         }
 

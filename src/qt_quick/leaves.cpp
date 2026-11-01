@@ -293,7 +293,10 @@ void BadgeImpl::setOnRemove(ui::Action onRemove, std::string_view label) {
     relay().on(QStringLiteral("remove"), actionHandler(std::move(onRemove)));
 }
 
-void BadgeImpl::setStyle(ui::BadgeStyle style) { write("outline", style == ui::BadgeStyle::Outline); }
+void BadgeImpl::setStyle(ui::BadgeStyle style) {
+    write("outline", style != ui::BadgeStyle::Filled);
+    write("quiet", style == ui::BadgeStyle::Quiet);
+}
 
 // MorphBadge's `round`.
 void BadgeImpl::setShape(ui::ControlShape shape) { write("round", shape == ui::ControlShape::Round); }

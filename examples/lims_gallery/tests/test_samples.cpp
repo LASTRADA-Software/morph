@@ -40,7 +40,7 @@ TEST_CASE("samples, expanded: the table, its out-of-spec tone, and three rows se
     screen.requireNoProblems();
     CHECK(screen.shows("Table", "samples"));
     CHECK(screen.prop("Table", "samples", "columns") ==
-          "[Sample:fixed(11);sortable=true,Product · lot:stretch(6),Tests:stretch(4),Priority:fixed(6),"
+          "[Sample:fixed(11);sortable=true,Product · lot:stretch(6),Tests:stretch(4),Priority:fixed(7),"
           "Status:fixed(10),Due:fixed(12);sortable=true;wrap=false,Specification:fixed(12)]");
     // Sorted by due time, earliest first, 25 rows a page.
     CHECK(screen.prop("Table", "samples", "sort") == "5:Ascending");
@@ -74,11 +74,13 @@ TEST_CASE("samples, expanded: selecting rows drives the bulk bar, and changing p
     screen.choose("new-priority", "STAT");
     screen.click("action_apply");
     CHECK(screen.waitFor([&screen] { return !screen.shows("Panel", "bulk"); }));
-    // Two STAT tags now: the first sample's and the one just changed.
+    // Two STAT tags now: the first sample's and the one just changed. A priority mounts a tag per look and shows one,
+    // so the error-toned one counts.
     CHECK(screen.waitFor([&screen] { return !screen.backend().all("Badge").empty(); }));
     std::size_t stat = 0;
     for (int const badge : screen.backend().all("Badge")) {
-        stat += screen.backend().prop(badge, "text") == "STAT" ? 1U : 0U;
+        stat +=
+            screen.backend().prop(badge, "text") == "STAT" && screen.backend().prop(badge, "tone") == "Err" ? 1U : 0U;
     }
     CHECK(stat == 2);
     // The header box is Ctrl+A: every row on the page.
