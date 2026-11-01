@@ -659,7 +659,10 @@ ui::Node runLine(Plate const& plate) {
     marker.onClick = ui::Commands{ui::ifThen(ui::includes(plate.sampleWells, first), toggleWell(plate, first))};
     marker.selected = ui::includes(plate.selection, first);
     return ui::row(
-        {ui::button(marker).surface(ui::row("first.surface")).a11y(ui::format("Select {0}", {first})).testId("marker"),
+        {ui::button(marker)
+             .surface(ui::row("first.surface"))
+             .a11y(ui::format("Select {0}", {first}))
+             .testId("marker"),
          ui::text({.text = ui::format("{0} · {1}", {name, line}), .spans = ui::spans({ui::strong(name), " · ", line})})
              .sizing(ui::stretch())
              .testId("line"),
@@ -667,8 +670,8 @@ ui::Node runLine(Plate const& plate) {
              .visible(empty)
              .a11y(ui::format("Assign a sample to {0}", {first}))
              .testId("assign")},
-        // The inset leaves room for a selected marker's ring at the page's edge.
-        {.gap = 1, .align = Align::Center, .padding = 1});
+        // The side inset leaves room for a selected marker's ring at the page's edge; rows are as tall as their wells.
+        {.gap = 1, .align = Align::Center, .padding = ui::padding(0, 1)});
 }
 
 // "Row B · 1 standard, 1 blank, 10 samples": the template's wells, then how many sample wells are filled and empty.
@@ -706,10 +709,10 @@ ui::Node rowSection(Plate const& plate, std::size_t row) {
     // An empty leading child gives the divided column a rule under the row's title, as the design draws.
     return ui::collapsible(
                {ui::column({ui::spacer().sizing(ui::fixed(0), ui::fixed(0)),
-                            ui::forEach(runs, {.key = ui::row("first.name"), .gap = 1, .divided = true},
+                            ui::forEach(runs, {.key = ui::row("first.name"), .divided = true},
                                         [&plate](ui::DeclScope&) { return ui::Nodes{runLine(plate)}; })
                                 .testId(std::string{"lines-"} + kRowNames.at(row))},
-                           {.gap = 1, .divided = true})},
+                           {.divided = true})},
                {.title = rowTitle(plate, row),
                 .open = ui::eq(plate.openRow, name),
                 .onToggle = ui::set(plate.openRow, ui::cond(ui::Handle<bool>{ui::event()}, name, ui::AnyHandle{""}))})
