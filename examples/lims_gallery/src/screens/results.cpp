@@ -578,9 +578,11 @@ ui::AnyHandle currentSample(Worksheet const& sheet) {
 // The reason asked for inline, under the result it is about. It has no buttons of its own: Submit settles it.
 ui::Node inlineReason(Worksheet const& sheet) {
     Change const& change = sheet.change;
-    // A line of room above the field's caption keeps it off the evaluation line.
-    return ui::column({reasonField(change, "Reason for change"), commentField(change)},
-                      {.gap = 2, .padding = ui::padding(2, 0)})
+    // The leading zero-height spacer is a child of the gap-2 column, so the reason starts one step below the
+    // evaluation line and nothing is added under the comment box.
+    return ui::column({ui::spacer().sizing(ui::fixed(0), ui::fixed(0)), reasonField(change, "Reason for change"),
+                       commentField(change)},
+                      {.gap = 2})
         .visible(change.open && ui::eq(change.id, ui::row("id")))
         .testId("inline-reason");
 }
