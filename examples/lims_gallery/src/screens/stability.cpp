@@ -87,11 +87,12 @@ ui::AnyHandle condition(char const* key, char const* climate, char const* kind, 
         {{"id", key}, {"climate", climate}, {"kind", kind}, {"short", temperature}, {"points", months(chosen)}});
 }
 
-// The ICH Q1A set the study opens with.
+// The ICH Q1A set the study opens with. A condition's short name keeps its number and unit together: it is written
+// inside a parenthetical that must not break between them.
 ui::AnyHandle ichConditions() {
-    return ui::list({condition("lt", "25 °C / 60 % RH", "long term", "25 °C", {0, 3, 6, 9, 12, 18, 24, 36}),
-                     condition("int", "30 °C / 65 % RH", "intermediate", "30 °C", {3, 6, 9, 12}),
-                     condition("acc", "40 °C / 75 % RH", "accelerated", "40 °C", {1, 3, 6})});
+    return ui::list({condition("lt", "25 °C / 60 % RH", "long term", "25\u00a0°C", {0, 3, 6, 9, 12, 18, 24, 36}),
+                     condition("int", "30 °C / 65 % RH", "intermediate", "30\u00a0°C", {3, 6, 9, 12}),
+                     condition("acc", "40 °C / 75 % RH", "accelerated", "40\u00a0°C", {1, 3, 6})});
 }
 
 ui::AnyHandle lotList() {
@@ -282,8 +283,8 @@ ui::Node addCondition(Study const& study, bool compact = false) {
         ui::button({.label = "Add condition",
                     .onClick = ui::set(
                         study.conditions,
-                        ui::concatLists({study.conditions,
-                                         ui::list({condition("rf", "5 °C ± 3 °C", "refrigerated", "5 °C", {})})}))})
+                        ui::concatLists({study.conditions, ui::list({condition("rf", "5 °C ± 3 °C", "refrigerated",
+                                                                               "5\u00a0°C", {})})}))})
             .enabled(!ui::includes(keys, "rf"))
             .testId("add-condition");
     return compact ? button.sizing(ui::stretch()) : button;
@@ -622,7 +623,7 @@ ui::Node conditionSection(Study const& study) {
     auto const rowId = ui::row("id");
     // A panel reports whether it is collapsed, so the open one is the row's id while the section is not.
     return ui::panel(
-        {ui::grid(boxes, {.gap = 1, .columns = 3})},
+        {ui::grid(boxes, {.gap = 0, .columns = 3})},
         {.title = ui::format("{0} · {1} pulls", {ui::row("climate"), ui::call("count", {ui::row("points")})}),
          .padding = 3,
          .collapsible = true,
