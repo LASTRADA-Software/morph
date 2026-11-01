@@ -1419,6 +1419,80 @@ TEST_CASE("qt_quick containers: the shell's top bar insets its controls and cent
     CHECK(std::abs(menu.center().y() - actionAt.center().y()) < 1.5);
 }
 
+namespace {
+
+/// The scene rectangle of the widget whose test id is @p testId.
+QRectF headRectOf(char const* testId) {
+    detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+    REQUIRE(widget != nullptr);
+    QQuickItem const* const item = widget->item();
+    REQUIRE(item != nullptr);
+    return QRectF{item->mapToScene(QPointF{0, 0}), QSizeF{item->width(), item->height()}};
+}
+
+}  // namespace
+
+// Mutation: leave `setHeadBar` out of the frame (the 12 px case measures the bar's 8 px step), ignore the token in
+// MorphStack.gapLength, or read it for the compact bar too.
+TEST_CASE("qt_quick containers: the theme's head padding is the space above and below the expanded head bar's line",
+          "[qt_quick][head]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setTitle("Console");
+    frame.setHeadShown(true);
+    scene.window().resize(1200, 600);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto const measured = [&](double padding) {
+        ui::ThemeValues values = ui::themeValues();
+        values.dimensions.insert_or_assign("head.paddingY", padding);
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+        scene.settle();
+        QRectF const bar = headRectOf("shell_topbar");
+        QRectF const line = headRectOf("shell_topbar_line");
+        return std::pair{line.top() - bar.top(), bar.height() - line.height()};
+    };
+    auto const [unsetAbove, unsetBar] = measured(0);
+    qreal step = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, step), Q_ARG(int, 2)));
+    CHECK(unsetAbove == Catch::Approx(step).margin(0.6));
+    CHECK(unsetBar == Catch::Approx(2 * step).margin(0.6));
+    auto const [twelveAbove, twelveBar] = measured(12);
+    CHECK(twelveAbove == Catch::Approx(12).margin(0.6));
+    CHECK(twelveBar == Catch::Approx(24).margin(0.6));
+    auto const [fourAbove, fourBar] = measured(4);
+    CHECK(fourAbove == Catch::Approx(4).margin(0.6));
+    CHECK(fourBar == Catch::Approx(8).margin(0.6));
+    // The compact bar keeps its own padding whatever the token says.
+    static_cast<void>(measured(12));
+    frame.setCompact(true);
+    scene.window().resize(390, 600);
+    scene.settle();
+    CHECK(headRectOf("shell_topbar").height() == Catch::Approx(52).margin(1.0));
+}
+
+// Mutation: leave the joined bar out of the token (a seam shows between the bar and the page's first rule).
+TEST_CASE("qt_quick containers: a joined head bar with the head padding set meets the page without a gap",
+          "[qt_quick][head]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setTitle("Console");
+    frame.setHeadShown(true);
+    frame.setHeadJoined(true);
+    ui::ThemeValues values = ui::themeValues();
+    values.dimensions.insert_or_assign("head.paddingY", 12.0);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    scene.window().resize(1200, 600);
+    scene.settle();
+    QRectF const bar = headRectOf("shell_topbar");
+    QRectF const page = headRectOf("shell_page");
+    CHECK(page.top() == Catch::Approx(bar.bottom()).margin(0.6));
+    CHECK(headRectOf("shell_topbar_line").top() - bar.top() == Catch::Approx(12).margin(0.6));
+}
+
 // Mutation: draw the rules in the scheme's border colour, leave `divided` unread (no rules), or put the rule on the
 // lower child's edge instead of in the gap.
 TEST_CASE("qt_quick containers: a divided column draws a divider rule in each gap and a plain one none",

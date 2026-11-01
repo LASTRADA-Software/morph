@@ -136,6 +136,7 @@ public:
         // Zero-sized spacers above and below pad the line by the bar's gap, as they do at the line's two ends by its
         // own gap; the line is centred across the bar.
         _topBar->setGap(2);
+        _topBar->setHeadBar(true);
         _topAbove->setLayout({.width = {}, .height = Sizing::fixed(0)});
         _topBelow->setLayout({.width = {}, .height = Sizing::fixed(0)});
         _topLine->setGap(3);
@@ -445,7 +446,8 @@ private:
         _trailInset->setVisible(_compact && _trailEndFramed);
     }
 
-    // The bar's padding above and below its line. Expanded it is step 2. Compact it is step 1 while the head is one
+    // The bar's padding above and below its line. Expanded it is step 2, or the theme's `head.paddingY` where a
+    // backend reads one (`setHeadBar`). Compact it is step 1 while the head is one
     // line of plain text and icons, which fits the bar to one touch target; a head with an eyebrow or a lead under
     // its title, or one that ends in a framed button, is content the card's own padding frames, so it takes step 3.
     void showBarInset() {
@@ -453,6 +455,8 @@ private:
         int const compactStep = plain ? 1 : 3;
         int const step = _compact ? compactStep : 2;
         _topBar->setGap(step);
+        // Only the expanded bar's gap is the theme's `head.paddingY`; a compact bar fits the touch target.
+        _topBar->setHeadBar(!_compact);
     }
 
     // Whether the inline lead shows: see setLeadInline.

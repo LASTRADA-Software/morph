@@ -474,6 +474,14 @@ public:
     ///        column the interpreter inserts around a list of nodes. A table's row view ignores it.
     /// @param passes Always true: a stack that is not a holder is never told.
     virtual void setPassesBleed(bool passes) = 0;
+
+    /// @brief Marks the stack as the shell's expanded head bar: its gap, which pads the line between its two
+    ///        zero-height spacers, is then the theme's `head.paddingY` when the theme sets one (above 0), in place of
+    ///        the spacing step `setGap` gave. A new stack is not a head bar; the frame calls it with true while the
+    ///        shell is expanded and with false while it is compact. A backend that reads no such token, such as the
+    ///        terminal, keeps the gap it was given.
+    /// @param headBar Whether the stack is the expanded head bar.
+    virtual void setHeadBar(bool headBar) = 0;
 };
 
 /// @brief Children laid out row-major in columns.

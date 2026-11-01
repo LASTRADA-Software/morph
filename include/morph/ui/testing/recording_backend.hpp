@@ -1263,6 +1263,9 @@ public:
     }
     void setSelected(bool selected) override { set("selected", selected ? "true" : "false"); }
     void setPassesBleed(bool passes) override { set("passesBleed", passes ? "true" : "false"); }
+    /// @brief Records property `headBar`.
+    /// @param headBar Whether the stack is the expanded head bar.
+    void setHeadBar(bool headBar) override { set("headBar", headBar ? "true" : "false"); }
 };
 
 /// @brief A fake `GridWidget`: properties `columns`, `tracks`, `gap`, `align`, and `span` on a child.

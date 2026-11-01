@@ -332,6 +332,26 @@ TEST_CASE("ui theme values: an input's inner padding defaults to 8 and a negativ
     CHECK(refused->contains("input.paddingX: must not be negative"));
 }
 
+// Mutation: leave `head.paddingY` out of `kThemeTokens` (the bundle's 12 is dropped and 0 reads), or drop its check (a
+// negative padding is accepted).
+TEST_CASE("ui theme values: the head padding defaults to 0 and a negative one is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().dimensions.at("head.paddingY") == 0.0);
+    CHECK(valuesOf(R"({"head": {"paddingY": {"$type": "dimension", "$value": {"value": 12, "unit": "px"}}}})")
+              .dimensions.at("head.paddingY") == 12.0);
+
+    auto const tokens =
+        ui::parseTokens(R"({"head": {"paddingY": {"$type": "dimension", "$value": {"value": -1, "unit": "px"}}}})");
+    REQUIRE(tokens.has_value());
+    ui::ThemeIndex index;
+    index.base = "base";
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        return id == "base" ? &*tokens : nullptr;
+    };
+    auto const refused = ui::checkTheme(index, files);
+    REQUIRE(refused.has_value());
+    CHECK(refused->contains("head.paddingY: must not be negative"));
+}
+
 // Mutation: treat a token of another type as the keyword (a colour at `shape.iconOnly` is then reported), or let a
 // non-string value through as a valid name.
 TEST_CASE("ui theme values: the keyword, dimension and stroke checks skip tokens of other types and refuse non-names",

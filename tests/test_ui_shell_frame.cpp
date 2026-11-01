@@ -126,6 +126,23 @@ bool within(RecordingBackend const& backend, int ancestor, int node) {
 
 }  // namespace
 
+// Mutation: leave `setHeadBar` out of the frame (the bar is never one), or call it with true while compact.
+TEST_CASE("shell frame: the top bar is the head bar while expanded, and not while compact", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const topBar = backend.find("Column", "testId", "shell_topbar").value();
+    CHECK(backend.prop(topBar, "headBar") == "true");
+    frame.setCompact(true);
+    CHECK(backend.prop(topBar, "headBar") == "false");
+    frame.setCompact(false);
+    CHECK(backend.prop(topBar, "headBar") == "true");
+    frame.setCompact(true);
+    frame.setCompact(false);
+    CHECK(backend.prop(topBar, "headBar") == "true");
+}
+
 // Mutation: put the head slots back on a line of their own (outside `shell_topbar_main`), start them shown, start the
 // top line without the wrap before its children, or leave the lead block without its minimum.
 TEST_CASE("shell frame: the head shares the title's wrapping line, its slots shown only when the client says",

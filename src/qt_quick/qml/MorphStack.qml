@@ -165,9 +165,14 @@ MorphWidget {
         }
         return lengths
     }
-    readonly property real gapLength: Theme.spaceOf(root.gap) + (root.divided && !root.wrap ? 1 : 0)
-    readonly property real naturalLength: root.shownLengths.reduce((sum, length) => sum + length, 0)
-                                          + root.gapLength * Math.max(0, root.shownLengths.length - 1)
+    // Whether the stack is the shell's expanded head bar, whose gap the theme's `head.paddingY` sets while it is
+    // above 0: the bar has no other gap, so the token is the space above and below its line.
+    property bool headBar: false
+    readonly property real gapLength: (root.headBar && Theme.headPaddingY > 0 ? Theme.headPaddingY
+                                                                               : Theme.spaceOf(root.gap)) +
+                                      (root.divided && !root.wrap ? 1 : 0)
+    readonly property real naturalLength: root.naturalLengths.reduce((sum, length) => sum + length, 0)
+                                          + root.gapLength * Math.max(0, root.naturalLengths.length - 1)
     readonly property real betweenSpacing: {
         const count = root.shownLengths.length
         if (count < 2)

@@ -958,3 +958,19 @@ TEST_CASE("tui containers: a tab page pads its own content, and a bleeding child
     CHECK(harness.draw().at(1) == "  xy");
     CHECK(harness.draw().at(2) == "ab");
 }
+
+// Mutation: make `StackImpl::setHeadBar` change the gap (the rows then differ with the flag on).
+TEST_CASE("tui containers: telling a stack it is the head bar changes none of its rows", "[tui][containers]") {
+    Harness harness{20, 6};
+    auto const bar = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    bar->setGap(3);
+    auto const above = harness.make<TextImpl>(bar.get());
+    above->setText("above");
+    auto const below = harness.make<TextImpl>(bar.get());
+    below->setText("below");
+    auto const plain = harness.draw();
+    bar->setHeadBar(true);
+    CHECK(harness.draw() == plain);
+    bar->setHeadBar(false);
+    CHECK(harness.draw() == plain);
+}

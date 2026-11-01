@@ -2925,6 +2925,38 @@ struct WrappingRow {
     return checks.result();
 }
 
+/// @brief Case: a stack told it is the head bar, and then that it is not, keeps its children, their order and their
+///        visibility.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> headBarKeepsItsChildren(ConformanceProbe& probe) {
+    IViewBackend& backend = probe.backend();
+    auto const bar = backend.createStack(nullptr, Axis::Vertical);
+    auto const first = backend.createText(bar.get());
+    first->setText("first");
+    auto const second = backend.createText(bar.get());
+    second->setText("second");
+    second->setVisible(false);
+    Checks checks;
+    for (bool const headBar : {true, false, true}) {
+        bar->setHeadBar(headBar);
+        probe.settle();
+        checks.that(probe.childCount(*bar) == 2, "a stack told headBar=" + std::string{headBar ? "true" : "false"} +
+                                                     " holds " + std::to_string(probe.childCount(*bar)) +
+                                                     " children, not 2");
+        Widget const* const one = probe.childAt(*bar, 0);
+        Widget const* const two = probe.childAt(*bar, 1);
+        checks.that(one != nullptr && two != nullptr, "both children are reachable");
+        if (one != nullptr && two != nullptr) {
+            checks.text("the first child", "first", probe.textOf(*one));
+            checks.text("the second child", "second", probe.textOf(*two));
+            checks.that(probe.visibleOf(*one) && !probe.visibleOf(*two),
+                        "the first child is shown and the second stays hidden");
+        }
+    }
+    return checks.result();
+}
+
 /// @brief Case: a scrollable slot of fixed height shows a column of 40 lines inside its own height and brings the
 ///        focused last one into view; holding a column that stretches in height, the column fills it exactly.
 /// @param probe The backend under test.
@@ -3447,7 +3479,7 @@ struct WrappingRow {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 55> const cases{{
+    static std::array<ConformanceCase, 56> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -3529,6 +3561,7 @@ struct WrappingRow {
          .run = detail::entryContentIsTheEntrys},
         {.name = "an unlabelled steps indicator still names its current step",
          .run = detail::unlabelledStepsNameTheirCurrentStep},
+        {.name = "a stack told it is the head bar keeps its children", .run = detail::headBarKeepsItsChildren},
     }};
     return cases;
 }

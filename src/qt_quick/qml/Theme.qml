@@ -229,6 +229,8 @@ QtObject {
     property bool collapsibleMarker: true
     // The inner inset of every input on each side: `input.paddingX`.
     property real inputPaddingX: 8
+    // The space above and below the line of the shell's expanded head bar: `head.paddingY`; 0 keeps the bar's own gap.
+    property real headPaddingY: 0
     // Whether the `overline` text role is drawn in small capitals: `font.overline.case`.
     property bool overlineCaps: false
     readonly property real bodyPixels: bodySize > 0 ? bodySize : platformMetrics.font.pixelSize > 0
