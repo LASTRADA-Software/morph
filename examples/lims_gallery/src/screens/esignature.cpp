@@ -89,7 +89,7 @@ ui::Node summary(Signature const& sign, bool compact) {
                            {"spans", ui::spans({"2 out of specification, investigation ", ui::mono("OOS-2026-031"),
                                                 " linked"})}}),
               }));
-    return ui::panel({body}, {.padding = 2}).surface("page").testId("record");
+    return ui::panel({body}, {.padding = 2}).surface("record").testId("record");
 }
 
 // The refusal: "Password incorrect." in a strong run, then the attempts that are left, at every width.

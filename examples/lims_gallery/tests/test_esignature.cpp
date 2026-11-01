@@ -30,6 +30,7 @@ TEST_CASE("e-signature, expanded: a dialog over the worksheet, opened on the ref
     CHECK(screen.backend().find("Text", "testId", "shell_title").has_value());
     CHECK(screen.backend().all("KeyValue").size() == 1);
     CHECK(screen.shows("Panel", "record"));
+    CHECK(screen.prop("Panel", "record", "surface") == "record");
     CHECK(screen.prop("TextInput", "signer", "readonly") == "true");
     // The refusal is said once: the banner has the words, so the field is only marked.
     CHECK(screen.prop("TextInput", "password", "errors") == "[]");

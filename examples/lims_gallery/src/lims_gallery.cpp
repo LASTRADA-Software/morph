@@ -28,7 +28,7 @@ constexpr char const* kThemeIndex = R"({
                 "blank": "theme/blank.tokens.json", "sample": "theme/sample.tokens.json",
                 "empty": "theme/empty.tokens.json", "pane": "theme/pane.tokens.json",
                 "darkHead": "theme/dark-head.tokens.json", "sidebar": "theme/sidebar.tokens.json",
-                "plainPage": "theme/plain-page.tokens.json" },
+                "plainPage": "theme/plain-page.tokens.json", "record": "theme/record.tokens.json" },
   "icons": { "scan": "icon/scan.svg" }
 })";
 
@@ -162,6 +162,11 @@ constexpr char const* kPlainPageSurface = R"({
   "color": { "$type": "color", "surface": { "$value": "#FFFFFF" } }
 })";
 
+// The e-signature's record box: the page's fill, outlined in the dialog's rule colour, as the design draws it.
+constexpr char const* kRecordSurface = R"({
+  "color": { "$type": "color", "surface": { "$value": "{color.background}" }, "border": { "$value": "{color.dialogRule}" } }
+})";
+
 // The barcode glyph of the receipt screen's scan field, as the design draws it.
 constexpr char const* kScanIcon =
     R"(<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none" )"
@@ -241,6 +246,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
                                        std::tuple{"theme", "theme/dark-head.tokens.json", kDarkHeadSurface},
                                        std::tuple{"theme", "theme/sidebar.tokens.json", kSidebarSurface},
                                        std::tuple{"theme", "theme/plain-page.tokens.json", kPlainPageSurface},
+                                       std::tuple{"theme", "theme/record.tokens.json", kRecordSurface},
                                        std::tuple{"icon", "icon/scan.svg", kScanIcon}}) {
         if (auto added = served.addFile(morph::ui::BundleFile{.kind = kind, .id = fileId, .bytes = bytes}); !added) {
             return std::unexpected(std::move(added.error()));
