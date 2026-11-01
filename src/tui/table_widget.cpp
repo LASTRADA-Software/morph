@@ -238,9 +238,10 @@ std::vector<int> TableImpl::columnWidths(int width) const {
         // header keeps the width the author gave it, and a column that may shrink goes down to `kShrunkColumn`. A
         // table whose columns still exceed its width is cut at its edge.
         int const header = headerWidth(column);
+        int const flexible = column.shrink ? std::min(header, kShrunkColumn) : header;
         int const minimum = column.width.kind == ui::Sizing::Kind::Fixed
                                 ? std::min(header, std::max(0, column.width.amount))
-                                : (column.shrink ? std::min(header, kShrunkColumn) : header);
+                                : flexible;
         items.push_back(layout::Item{.sizing = column.width, .natural = natural, .minimum = minimum});
     }
     return layout::distribute(items, layout::Track{.length = std::max(0, width - gutter()), .gap = kColumnGap});

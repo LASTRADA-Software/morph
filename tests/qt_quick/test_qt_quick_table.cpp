@@ -772,7 +772,7 @@ TEST_CASE("qt_quick table: a stretch column that shrinks goes under its header, 
     QVariantList const widths = item.property("widths").toList();
     REQUIRE(widths.size() == 3);
     qreal const unit = units(scene).width();
-    CHECK(widths.at(2).toReal() >= 8 * unit - 0.5);
+    CHECK(widths.at(2).toReal() >= (8 * unit) - 0.5);
     auto const* const flick = item.findChild<QQuickItem*>(QStringLiteral("hflick"));
     REQUIRE(flick != nullptr);
     CHECK_FALSE(flick->property("interactive").toBool());

@@ -3331,8 +3331,11 @@ private:
 
     // A tab page's padding is `pageInset`, else `inset`, both literal steps. A page of no padding has nothing for a
     // child's `bleed` to reach past, so the document is refused rather than the flag silently doing nothing; a step
-    // that is computed is left to the mount.
+    // that is computed is left to the mount. Any node that is not a `tabs` is passed over.
     static void checkTabBleed(DocNode const& tabs) {
+        if (tabs.kind != "tabs") {
+            return;
+        }
         auto const step = [&tabs](std::string_view key) -> std::optional<std::int64_t> {
             ExprPtr const expr = tabs.prop(key);
             if (expr == nullptr) {
@@ -3343,7 +3346,7 @@ private:
         };
         auto const page = step("pageInset");
         auto const outer = step("inset");
-        std::int64_t const effective = page ? *page : (outer ? *outer : 0);
+        std::int64_t const effective = page.value_or(outer.value_or(0));
         if (effective != 0) {
             return;
         }
@@ -3394,9 +3397,7 @@ private:
             }
         }
         checkPlacements(node);
-        if (node.kind == "tabs") {
-            checkTabBleed(node);
-        }
+        checkTabBleed(node);
         if (part && node.kind == "column") {
             checkColumnPart(node);
         } else if (part && node.kind == "track") {

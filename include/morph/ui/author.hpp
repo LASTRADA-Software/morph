@@ -1128,12 +1128,12 @@ enum class DateUnit : std::uint8_t {
     return call("dateAdd", {value, amount, std::string{kNames.at(static_cast<std::size_t>(unit))}});
 }
 
-/// @brief `dateRange(from, to)`: two days as one span in the shortest unambiguous form, such as `20–24 Oct 2026`.
-/// @param from The first day: a `yyyy-MM-dd` date, a timestamp or ISO date-time text.
-/// @param to   The last day, read as @p from is.
+/// @brief `dateRange(first, last)`: two days as one span in the shortest unambiguous form, such as `20–24 Oct 2026`.
+/// @param first The first day: a `yyyy-MM-dd` date, a timestamp or ISO date-time text.
+/// @param last  The last day, read as @p first is.
 /// @return The span's text; `null` when either end is not given.
-[[nodiscard]] inline AnyHandle dateRange(AnyHandle const& from, AnyHandle const& to) {
-    return call("dateRange", {from, to});
+[[nodiscard]] inline AnyHandle dateRange(AnyHandle const& first, AnyHandle const& last) {
+    return call("dateRange", {first, last});
 }
 
 /// @brief `parseDecimal(text)`: typed text, in the client's locale, as an exact decimal; `null` while it does not
