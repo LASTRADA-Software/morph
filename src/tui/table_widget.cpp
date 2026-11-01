@@ -225,7 +225,10 @@ std::vector<int> TableImpl::naturalWidths() const {
             continue;
         }
         for (auto const [width, cell] : std::views::zip(widths, cells->children())) {
-            width = std::max(width, requestedSize(*cell).width);
+            // A hidden cell is drawn as nothing, so it asks for no room.
+            if (cell->shown()) {
+                width = std::max(width, requestedSize(*cell).width);
+            }
         }
     }
     return widths;

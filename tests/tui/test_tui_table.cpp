@@ -155,7 +155,8 @@ TEST_CASE("tui table: a hidden cell keeps its column, so the cells after it stay
     CHECK(harness.draw() == Rows{"  Note Name", "       wide-name"});
 }
 
-TEST_CASE("tui table: a hidden cell still counts toward its column's width", "[tui][table][columns]") {
+// Mutation: leave the `shown()` test out of `TableImpl::naturalWidths` (the hidden cell's 11 cells hold the column open).
+TEST_CASE("tui table: a hidden cell widens no column, and the column goes back to its header", "[tui][table][columns]") {
     Harness harness{30, 3};
     auto const table = harness.make<TableImpl>(nullptr);
     table->setColumns({{.label = "Note"}, {.label = "Name"}});
@@ -168,7 +169,7 @@ TEST_CASE("tui table: a hidden cell still counts toward its column's width", "[t
     Rows const shown{"  Note        Name", "  secret-note a"};
     CHECK(harness.draw() == shown);
     note->setVisible(false);
-    CHECK(harness.draw() == Rows{"  Note        Name", "              a"});
+    CHECK(harness.draw() == Rows{"  Note Name", "       a"});
 }
 
 TEST_CASE("tui table: a label wider than its column is cut at the column's edge", "[tui][table][columns]") {
