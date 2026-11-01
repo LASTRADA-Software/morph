@@ -522,9 +522,13 @@ ui::Node showChoice(Review const& review, bool compact) {
 }
 
 ui::Node resultTable(Review const& review) {
+    // Sample is a fixed mono id. Result, Spec. and Prior lot take their widest value, and Spec. is a limit, so none
+    // of them elides. The three stretch columns split what is left in step with their content: when the table is
+    // short, Change gives first and Analyte next (both `shrink`), and Evaluation, which is not `shrink`, gives last,
+    // so its tag, which carries the whole verdict, stays whole until the other two are at their floors.
     std::vector<ui::TableColumn> const columns{
         {.name = "sample", .label = "Sample", .width = ui::fixed(11), .role = "mono"},
-        {.name = "analyte", .label = "Analyte", .width = ui::content(), .wrap = false},
+        {.name = "analyte", .label = "Analyte", .width = ui::stretch(), .wrap = false, .shrink = true},
         {.name = "value",
          .label = "Result",
          .width = ui::content(),
@@ -535,10 +539,9 @@ ui::Node resultTable(Review const& review) {
         {.name = "previous", .label = "Prior lot", .width = ui::content(), .align = Align::End, .wrap = false},
         {.name = "evaluation",
          .label = "Evaluation",
-         .width = ui::stretch(3),
+         .width = ui::stretch(),
          .cell = layout::tag(ui::row("evaluation"), ui::row("tone")),
-         .wrap = false,
-         .shrink = true},
+         .wrap = false},
         {.name = "change",
          .label = "Change",
          .width = ui::stretch(),
@@ -813,13 +816,13 @@ ui::Node worksheetPane(Review const& review) {
 }
 
 ui::Node expandedLayout(Review const& review) {
-    // The queue is 28 % of the splitter, at most 37 units (about 280 px): 280 px on the 1000 px page beside the
+    // The queue is 27 % of the splitter, at most 37 units (about 284 px): 270 px on the 1000 px page beside the
     // sidebar, and a share of the 785 px page small enough that the worksheet's table does not scroll sideways, its
-    // Analyte, Spec. and Change columns giving up width. The worksheet takes the rest. The splitter takes the page's
-    // height, so each pane reaches the page's bottom.
+    // Analyte, Evaluation and Change columns giving up width. The worksheet takes the rest. The splitter takes the
+    // page's height, so each pane reaches the page's bottom.
     return ui::column(
                {ui::splitter(
-                    {queuePane(review).surface("pane").sizing(ui::percent(28)).maxWidth(37).testId("queue-pane"),
+                    {queuePane(review).surface("pane").sizing(ui::percent(27)).maxWidth(37).testId("queue-pane"),
                      worksheetPane(review).surface("pane").sizing(ui::stretch()).testId("worksheet-pane")},
                     ui::AnyHandle{"horizontal"})
                     .sizing(ui::stretch(), ui::stretch())

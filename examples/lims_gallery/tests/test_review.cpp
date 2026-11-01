@@ -46,9 +46,9 @@ TEST_CASE("review, expanded: the queue beside the worksheet, its flagged results
     CHECK(screen.prop("Button", "approve", "enabled") == "true");
     // The Result column is as wide as its widest value, "99.4 % LC", so the value is not split from its unit.
     CHECK(screen.prop("Table", "results", "columns").value_or("none") ==
-          "[Sample:fixed(11),Analyte:content;wrap=false,Result:content;align=end;wrap=false,"
+          "[Sample:fixed(11),Analyte:stretch(1);wrap=false;shrink=true,Result:content;align=end;wrap=false,"
           "Spec.:content;wrap=false,Prior "
-          "lot:content;align=end;wrap=false,Evaluation:stretch(3);wrap=false;shrink=true,"
+          "lot:content;align=end;wrap=false,Evaluation:stretch(1);wrap=false,"
           "Change:stretch(1);wrap=false;shrink=true]");
 }
 
@@ -85,7 +85,7 @@ TEST_CASE("review: the queue is a share of the splitter and the worksheet stretc
     int const worksheet = screen.find("Column", "worksheet-pane").value_or(-1);
     REQUIRE(queue >= 0);
     REQUIRE(worksheet >= 0);
-    CHECK(screen.backend().prop(queue, "layout").starts_with("percent(28) max=37/"));
+    CHECK(screen.backend().prop(queue, "layout").starts_with("percent(27) max=37/"));
     CHECK(screen.backend().prop(worksheet, "layout").starts_with("stretch(1)/"));
 }
 
