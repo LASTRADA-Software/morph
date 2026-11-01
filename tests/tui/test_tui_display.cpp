@@ -10,16 +10,23 @@
 #include <string>
 #include <vector>
 
+#include "tui/container_widgets.hpp"
 #include "tui/display_widgets.hpp"
+#include "tui/layout.hpp"
+#include "tui/leaf_widgets.hpp"
 #include "tui_harness.hpp"
 
 namespace ui = morph::ui;
+namespace layout = morph::tui::layout;
 using morph::tui::detail::BadgeImpl;
 using morph::tui::detail::BannerImpl;
 using morph::tui::detail::EmptyStateImpl;
 using morph::tui::detail::KeyValueImpl;
+using morph::tui::detail::PanelImpl;
 using morph::tui::detail::ProgressImpl;
+using morph::tui::detail::StackImpl;
 using morph::tui::detail::StepsImpl;
+using morph::tui::detail::TextImpl;
 using morph::tui::testing::Harness;
 using Rows = std::vector<std::string>;
 
@@ -284,4 +291,55 @@ TEST_CASE("tui banner: a link action is underlined inside its sentence and a cli
     plain->setActionLabel("Retry");
     plain->setActionStyle(ui::BannerActionStyle::Link, false);
     CHECK(plain->naturalSize().width == 13);
+}
+
+// Mutation: leave the content minimum out of the stack's placement (the fixed(9) badge is cut at 9 cells, its closing
+// bracket gone).
+TEST_CASE("tui badge: a badge given a width below its natural one is raised to it in a row", "[tui][display]") {
+    Harness harness{30, 2};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    auto const badge = harness.make<BadgeImpl>(row.get());
+    badge->setText("Out of spec");
+    badge->setLayout(ui::LayoutHints{.width = ui::Sizing::fixed(9)});
+    auto const next = harness.make<TextImpl>(row.get());
+    next->setText("next");
+    CHECK(badge->contentMinimumWidth() == 13);
+    CHECK(harness.draw() == Rows{"[Out of spec]next"});
+}
+
+// Mutation: leave the content minimum out of the cross-axis width of a column (the badge is drawn in 9 cells).
+TEST_CASE("tui badge: a badge given a width below its natural one is raised to it in a column", "[tui][display]") {
+    Harness harness{30, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    column->setAlign(ui::Align::Start);
+    auto const badge = harness.make<BadgeImpl>(column.get());
+    badge->setText("Out of spec");
+    badge->setLayout(ui::LayoutHints{.width = ui::Sizing::fixed(9)});
+    CHECK(harness.draw() == Rows{"[Out of spec]"});
+}
+
+// Mutation: return 0 from StackImpl or PanelImpl (a container holding a badge is not raised with it).
+TEST_CASE("tui badge: a stack or a panel holding a badge has the badge's content minimum, one without has none",
+          "[tui][display]") {
+    Harness harness{40, 5};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const badge = harness.make<BadgeImpl>(column.get());
+    badge->setText("Out of spec");
+    CHECK(column->contentMinimumWidth() == 13);
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    row->setGap(1);
+    auto const first = harness.make<BadgeImpl>(row.get());
+    first->setText("ab");
+    auto const second = harness.make<BadgeImpl>(row.get());
+    second->setText("cd");
+    auto const gap = layout::stepCells(1, ui::Axis::Horizontal);
+    CHECK(row->contentMinimumWidth() == 4 + 4 + gap);
+    auto const plain = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    auto const text = harness.make<TextImpl>(plain.get());
+    text->setText("no badge");
+    CHECK(plain->contentMinimumWidth() == 0);
+    auto const panel = harness.make<PanelImpl>(nullptr);
+    auto const inner = harness.make<BadgeImpl>(panel.get());
+    inner->setText("Out of spec");
+    CHECK(panel->contentMinimumWidth() == 13 + 2);
 }

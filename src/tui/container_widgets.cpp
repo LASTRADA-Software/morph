@@ -141,6 +141,26 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
                                          : ::core::tui::Size{.width = natural.width, .height = columns};
 }
 
+int StackImpl::contentMinimumWidth() const {
+    if (!_extents.empty()) {
+        return 0;
+    }
+    bool const along = _axis == ui::Axis::Horizontal && !_wrap;
+    int content = 0;
+    int count = 0;
+    for (WidgetBase const* const child : children()) {
+        if (child->shown()) {
+            int const minimum = child->contentMinimumWidth();
+            content = along ? content + minimum : std::max(content, minimum);
+            ++count;
+        }
+    }
+    if (content == 0) {
+        return 0;
+    }
+    return content + (along ? _gap * (count - 1) : 0) + leadingColumns() + _paddingColumns;
+}
+
 std::vector<::core::tui::Rect> StackImpl::childAreas(::core::tui::Size size) const {
     // A holder lies over its container's whole span, so it pads its children by the container's padding itself.
     int const passed = _passesBleed && container() != nullptr ? container()->bleedColumns() : 0;
@@ -519,6 +539,19 @@ void PanelImpl::syncChildren() {
     auto const inner = stackNaturalSize(body(), ui::Axis::Vertical, 0);
     return {.width = std::max({inner.width + (2 * _paddingColumns) + 2, displayWidth(heading()) + 4, headerWidth + 2}),
             .height = inner.height + (2 * _paddingRows) + 2 + headerHeight};
+}
+
+int PanelImpl::contentMinimumWidth() const {
+    if (_collapsed) {
+        return 0;
+    }
+    int content = 0;
+    for (WidgetBase const* const child : body()) {
+        if (child->shown()) {
+            content = std::max(content, child->contentMinimumWidth());
+        }
+    }
+    return content == 0 ? 0 : content + (2 * _paddingColumns) + 2;
 }
 
 std::vector<::core::tui::Rect> PanelImpl::childAreas(::core::tui::Size size) const {

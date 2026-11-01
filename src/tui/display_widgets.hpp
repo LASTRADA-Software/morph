@@ -108,6 +108,7 @@ public:
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     [[nodiscard]] std::string probeText() const override { return _text; }
     [[nodiscard]] bool placedAcrossColumn() const override { return true; }
+    [[nodiscard]] int contentMinimumWidth() const override { return naturalSize().width; }
     [[nodiscard]] bool wantsFocus() const override { return static_cast<bool>(_onRemove); }
     /// Whether the caption is cut with an ellipsis where the badge is narrower than its natural width, so that the
     /// closing bracket stays in its last cell; a table sets it on the badge cells it places.

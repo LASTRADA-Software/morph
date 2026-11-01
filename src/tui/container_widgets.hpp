@@ -54,6 +54,9 @@ public:
     /// alignment.
     void setColumnLayout(std::vector<int> extents, int gap, std::vector<CellPlace> places);
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    /// Along a row the shown children's content minimums with the gaps and the padding, across a column the largest
+    /// with the padding; zero while no child has a content minimum, and for a table row, which its table places.
+    [[nodiscard]] int contentMinimumWidth() const override;
     [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
     void paint(::core::tui::Canvas& canvas) override;
 
@@ -144,6 +147,8 @@ public:
     void setCollapsed(bool collapsed) override;
     void setOnToggle(std::function<void(bool)> onToggle) override;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    /// The widest content minimum of the body, with the padding and the frame; zero while the body has none.
+    [[nodiscard]] int contentMinimumWidth() const override;
     [[nodiscard]] bool wantsFocus() const override { return _collapsible; }
     [[nodiscard]] bool focusesOnPress() const override { return false; }
     [[nodiscard]] std::string probeText() const override { return _title; }

@@ -3407,13 +3407,68 @@ struct WrappingRow {
     return checks.result();
 }
 
+/// @brief A row of a badge sized by @p sizing and a text after it, for the badge cases.
+/// @param sizing The badge's width.
+/// @return The row.
+[[nodiscard]] inline Node badgeThenText(Sizing sizing) {
+    Badge badge{.text = std::string{"Out of spec"}};
+    badge.common.layout = {.width = sizing};
+    Row row{.children = {ui::badge(std::move(badge)), sizedText("next", {})}};
+    row.common.layout = {.width = Sizing::fixed(60)};
+    return ui::row(std::move(row));
+}
+
+/// @brief Checks that a badge sized by @p sizing is as wide as the same badge sized by its content, and that the
+///        text after it starts past it.
+/// @param probe  The backend under test.
+/// @param sizing The badge's width in the narrow row.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> badgeRaisedTo(ConformanceProbe& probe, Sizing sizing) {
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::column(Column{.children = {badgeThenText(sizing), badgeThenText(Sizing::content())}})};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Widget const* const narrowWidget = probe.childAt(rootContainer(view), 0);
+    Widget const* const naturalWidget = probe.childAt(rootContainer(view), 1);
+    ContainerWidget const* const narrow = narrowWidget == nullptr ? nullptr : asContainer(*narrowWidget);
+    ContainerWidget const* const natural = naturalWidget == nullptr ? nullptr : asContainer(*naturalWidget);
+    checks.that(
+        narrow != nullptr && natural != nullptr && probe.childCount(*narrow) == 2 && probe.childCount(*natural) == 2,
+        "the column holds two rows of a badge and a text");
+    if (narrow != nullptr && natural != nullptr && probe.childCount(*narrow) == 2 && probe.childCount(*natural) == 2) {
+        WidgetBounds const badge = geometry.of(*probe.childAt(*narrow, 0));
+        WidgetBounds const reference = geometry.of(*probe.childAt(*natural, 0));
+        WidgetBounds const after = geometry.of(*probe.childAt(*narrow, 1));
+        geometry.near("the sized badge's width, against its content width", reference.width, badge.width);
+        checks.that(after.x >= badge.x + badge.width - 1.0,
+                    "the text after the badge starts at " + std::to_string(after.x) +
+                        ", inside the badge, which ends at " + std::to_string(badge.x + badge.width));
+    }
+    return checks.result();
+}
+
+/// @brief Case: a badge given a fixed width narrower than its label is raised to its natural width.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> fixedBadgeRaisedToItsNaturalWidth(ConformanceProbe& probe) {
+    return badgeRaisedTo(probe, Sizing::fixed(5));
+}
+
+/// @brief Case: a badge given a percent width narrower than its label is raised to its natural width.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> percentBadgeRaisedToItsNaturalWidth(ConformanceProbe& probe) {
+    return badgeRaisedTo(probe, Sizing::percent(5));
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 35> const cases{{
+    static std::array<ConformanceCase, 37> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3469,6 +3524,10 @@ struct WrappingRow {
         {.name = "a splitter without matching sizes places its panes by their own sizing",
          .run = detail::splitterPlacesPanesBySizing},
         {.name = "a splitter holds its panes within their width bounds", .run = detail::splitterHonoursPaneBounds},
+        {.name = "a badge given a fixed width below its label is raised to its natural width",
+         .run = detail::fixedBadgeRaisedToItsNaturalWidth},
+        {.name = "a badge given a percent width below its label is raised to its natural width",
+         .run = detail::percentBadgeRaisedToItsNaturalWidth},
     }};
     return cases;
 }

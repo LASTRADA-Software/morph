@@ -129,6 +129,10 @@ public:
     [[nodiscard]] virtual bool focusesOnPress() const { return wantsFocus(); }
     /// Whether a Content main-axis size means Stretch(1) in a stack (a Spacer).
     [[nodiscard]] virtual bool expandsByDefault() const { return false; }
+    /// The least width a stack gives this widget along a row, or across a column, even where it asked for less: a
+    /// badge's natural width, so its closing bracket is never cut; a stack or panel holding one, the room that
+    /// content needs. Zero for every widget that takes its own overflow.
+    [[nodiscard]] virtual int contentMinimumWidth() const { return 0; }
     /// Whether a table column places this widget at its natural width (a text, a badge, a check box, a push
     /// button) rather than filling the column with it.
     [[nodiscard]] virtual bool placedAcrossColumn() const { return false; }

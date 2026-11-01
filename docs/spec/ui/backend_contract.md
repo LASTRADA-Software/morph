@@ -274,13 +274,15 @@ table scrolls sideways on Qt Quick, with a bar that shows while it can; on the t
 wraps is the document's choice (`wrap`, `minWidth`, a stretch). A container's minimum width is its content's: a stack
 or a panel is never laid out narrower than its padding and its children's minimums, so a row of content-sized children
 that cannot fit raises its column's minimum, and so on up to the first container whose width its parent does not
-choose (a page, a splitter's pane, a window root). A document's `minWidth` wins. A child sized by a `percent` is placed as a fixed child is, on each
-frontend: on Qt Quick a stack's or a panel's content minimum still raises it, and on the terminal its bounds alone apply;
-only a `stretch` sibling takes the spare width, and in a row with none `justify` packs a percent child as it packs a
+choose (a page, a splitter's pane, a window root). A document's `minWidth` wins. A child sized by a `percent` is placed as a fixed child is, on both
+frontends: a stack's or a panel's content minimum raises it; only a `stretch` sibling takes the spare width, and in a row with none `justify` packs a percent child as it packs a
 fixed one. A percent child adds its natural width to its row's natural width, never its share, so the share a row hands
 out does not depend on the row's own natural width. A table, a scroll and every leaf take
 their own overflow; a table's cells are placed at their column's width and do not raise it. A badge's minimum is its
-natural width, so a stack that holds one is raised with it; only a table cell, which is not raised, is placed narrower. A page (a slot) whose
+natural width, so a stack or a panel that holds one is raised with it, on the terminal as on Qt Quick, whether the badge
+is sized `fixed` or `percent`; only a table cell, which is not raised, is placed narrower. On the terminal the minimum
+reaches along a row through the stack's gaps and padding, and across a column and through a panel's frame and padding; a
+stack that holds no badge has none, and a table row, which its table places, has none. A page (a slot) whose
 content cannot be narrower than it scrolls sideways when it is scrollable, and a scrolling vertical `scroll` does too.
 A frontend that can says so, once per container while it is mounted, when a container that is shown and sized holds
 content wider than itself by 2 px or more (a smaller shortfall is layout rounding); Qt Quick writes it as a warning of

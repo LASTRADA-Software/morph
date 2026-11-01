@@ -633,7 +633,8 @@ void ContainerBase::childForgotten(WidgetBase& /*child*/) {}
         if (!child->shown()) {
             continue;
         }
-        auto const natural = requestedSize(*child);
+        auto natural = requestedSize(*child);
+        natural.width = std::max(natural.width, child->contentMinimumWidth());
         along += vertical ? natural.height : natural.width;
         across = std::max(across, vertical ? natural.width : natural.height);
         ++count;
@@ -665,8 +666,11 @@ int mainExtent(::core::tui::Size size, bool vertical) { return vertical ? size.h
     ui::Align const placed = hints.alignSelf.value_or(align);
     ::core::tui::Size const requested = requestedSize(child);
     if (placement.vertical) {
-        int const width = alignedExtent(placed, hints.width, requested.width, area.width,
-                                        layout::boundsOf(hints.minWidth, hints.maxWidth));
+        // Across a column the content minimum raises the child's width as it does along a row.
+        layout::Bounds bounds = layout::boundsOf(hints.minWidth, hints.maxWidth);
+        bounds.minimum = std::max(bounds.minimum, child.contentMinimumWidth());
+        int const width =
+            alignedExtent(placed, hints.width, std::max(requested.width, bounds.minimum), area.width, bounds);
         return {.x = area.x + alignedOffset(placed, width, area.width),
                 .y = area.y + offset,
                 .width = width,
@@ -700,8 +704,12 @@ void solvedAreas(std::span<WidgetBase* const> children, Placement const& placeme
         placed.push_back(child);
         slots.push_back(&area);
         ui::LayoutHints const& hints = child->layout();
-        layout::Bounds const bounds = placement.vertical ? layout::boundsOf(hints.minHeight, hints.maxHeight)
-                                                         : layout::boundsOf(hints.minWidth, hints.maxWidth);
+        layout::Bounds bounds = placement.vertical ? layout::boundsOf(hints.minHeight, hints.maxHeight)
+                                                   : layout::boundsOf(hints.minWidth, hints.maxWidth);
+        if (!placement.vertical) {
+            // A badge, or a stack holding one, is raised to the room its content needs.
+            bounds.minimum = std::max(bounds.minimum, child->contentMinimumWidth());
+        }
         items.push_back(layout::Item{.sizing = sizing,
                                      .natural = mainExtent(child->naturalSize(), placement.vertical),
                                      .minimum = bounds.minimum,
