@@ -201,3 +201,24 @@
 {"logged": "2026-10-31 09:00:41", "event": "done", "task": "K.D"}
 {"logged": "2026-10-31 09:00:41", "event": "start", "task": "K.DV", "title": "Revise batch K design", "group": "K"}
 {"logged": "2026-10-31 09:00:41", "event": "start", "task": "K.CI", "title": "Lane CI: PR #1045", "group": "K"}
+{"logged": "2026-10-31 22:00:56", "event": "done", "task": "K.DV"}
+{"logged": "2026-10-31 22:00:56", "event": "start", "task": "K.A", "title": "Lane K-A", "group": "K"}
+{"logged": "2026-10-31 22:00:56", "event": "start", "task": "K.B", "title": "Lane K-B", "group": "K"}
+{"logged": "2026-10-31 23:14:16", "event": "done", "task": "K.CI"}
+{"logged": "2026-10-31 23:14:16", "event": "start", "task": "K.C", "title": "Lane K-C", "group": "K"}
+{"logged": "2026-10-31 23:55:29", "event": "done", "task": "K.A"}
+{"logged": "2026-11-01 00:03:20", "event": "done", "task": "K.B"}
+{"logged": "2026-11-01 00:05:01", "event": "done", "task": "K.C"}
+{"logged": "2026-11-01 00:05:01", "event": "start", "task": "K.V", "title": "Lane V2: verify the fold", "group": "K"}
+{"logged": "2026-11-01 01:22:14", "event": "done", "task": "K.V"}
+{"logged": "2026-11-01 01:22:18", "event": "start", "task": "K.CI8", "title": "Lane CI8: fix PR CI", "group": "K"}
+{"logged": "2026-11-01 01:22:18", "event": "start", "task": "K.R", "title": "Compare after batch K", "group": "K"}
+{"logged": "2026-11-01 01:29:08", "event": "done", "task": "K.R"}
+{"logged": "2026-11-01 01:29:08", "event": "start", "task": "L.S", "title": "Lane L-S: screens", "group": "L"}
+{"logged": "2026-11-01 01:29:08", "event": "start", "task": "L.F", "title": "Lane L-F: framework", "group": "L"}
+{"logged": "2026-11-01 03:07:58", "event": "done", "task": "L.F"}
+{"logged": "2026-11-01 03:07:58", "event": "start", "task": "L.G", "title": "Lane L-G: framework 2", "group": "L"}
+{"logged": "2026-11-01 03:20:58", "event": "done", "task": "L.S"}
+{"logged": "2026-11-01 03:20:58", "event": "start", "task": "L.H", "title": "Lane L-H: framework 3", "group": "L"}
+{"logged": "2026-11-01 03:33:58", "event": "done", "task": "K.CI8"}
+{"logged": "2026-11-01 11:07:15", "event": "done", "task": "L.H"}
