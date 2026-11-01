@@ -483,6 +483,32 @@ TEST_CASE("shell frame: the compact top bar pads above and below its line by ste
     CHECK(backend.prop(bar, "gap") == "2");
 }
 
+// Mutation: ignore the head's height or its framed end, so every compact head pads by step 1; or give the expanded bar
+// the larger inset.
+TEST_CASE("shell frame: a compact bar pads a head taller than one line, or one that ends framed, by step 3",
+          "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const bar = backend.find("Column", "testId", "shell_topbar").value();
+    frame.setCompact(true);
+    frame.setHeadOneLine(true);
+    CHECK(backend.prop(bar, "gap") == "1");
+    frame.setHeadOneLine(false);
+    CHECK(backend.prop(bar, "gap") == "3");
+    frame.setHeadOneLine(true);
+    frame.setTrailEndInset(true);
+    CHECK(backend.prop(bar, "gap") == "3");
+    frame.setTrailEndInset(false);
+    CHECK(backend.prop(bar, "gap") == "1");
+
+    frame.setHeadOneLine(false);
+    frame.setTrailEndInset(true);
+    frame.setCompact(false);
+    CHECK(backend.prop(bar, "gap") == "2");
+}
+
 // Mutation: a no-op `setTrailEndInset`, or show the inset expanded.
 TEST_CASE("shell frame: a trail end inset shows only compact", "[ui][shell]") {
     RecordingBackend backend;

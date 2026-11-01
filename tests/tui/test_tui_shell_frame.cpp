@@ -261,11 +261,15 @@ TEST_CASE("tui shell frame: the compact bar's padding is no row, and the end ins
     CHECK(title == 0);
     std::string const before = rowsOf(page.screen).at(title);
 
+    // A framed end also takes the larger bar padding, step 3, which is a row above the line on the terminal: the
+    // title and the trail move down together and stay on one row.
     page.frame->setTrailEndInset(true);
     static_cast<void>(page.loop.runUntilIdle());
     page.backend.fit();
     page.screen.draw();
-    REQUIRE(rowOf(page.screen, "SCAN") == title);
-    std::string const after = rowsOf(page.screen).at(title);
+    std::size_t const padded = rowOf(page.screen, "Review");
+    REQUIRE(padded == title + 1);
+    REQUIRE(rowOf(page.screen, "SCAN") == padded);
+    std::string const after = rowsOf(page.screen).at(padded);
     CHECK(after.find("SCAN") < before.find("SCAN"));
 }

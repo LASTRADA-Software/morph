@@ -274,7 +274,11 @@ public:
     ///        title), so a title alone is level with the trail's buttons; a taller head aligns the items' tops, so
     ///        the trail's top is the eyebrow's.
     /// @param oneLine Whether the head is one line. A new frame aligns tops.
-    void setHeadOneLine(bool oneLine) { _topMain->setAlign(oneLine ? Align::Center : Align::Start); }
+    void setHeadOneLine(bool oneLine) {
+        _headTall = !oneLine;
+        _topMain->setAlign(oneLine ? Align::Center : Align::Start);
+        showBarInset();
+    }
 
     /// @brief Tells the frame that the shown page continues the head's block, so the top bar is drawn on the
     ///        `toolbarJoined` surface, whatever surface the screen asks for.
@@ -358,9 +362,9 @@ public:
     void setCompact(bool compact) {
         _compact = compact;
         // The compact top bar is tighter: a touch-sized menu square beside the title leaves no room for the full
-        // steps, so the bar pads its line by step 1 above and below, and the line pads its ends by step 1 and spaces
-        // its items by step 2.
-        _topBar->setGap(compact ? 1 : 2);
+        // steps, so the bar pads its line by step 1 above and below (more for a head that is not one plain line, see
+        // showBarInset), and the line pads its ends by step 1 and spaces its items by step 2.
+        showBarInset();
         _topLine->setGap(compact ? 1 : 3);
         _topMain->setGap(compact ? 2 : 3);
         showChrome();
@@ -372,6 +376,7 @@ public:
     /// @param endsFramed Whether the trail ends in a framed button. A new frame has no inset.
     void setTrailEndInset(bool endsFramed) {
         _trailEndFramed = endsFramed;
+        showBarInset();
         showTrail();
     }
 
@@ -438,6 +443,16 @@ private:
         _topPrincipal->setVisible(principalShown);
         _trail->setVisible(_headShown || principalShown);
         _trailInset->setVisible(_compact && _trailEndFramed);
+    }
+
+    // The bar's padding above and below its line. Expanded it is step 2. Compact it is step 1 while the head is one
+    // line of plain text and icons, which fits the bar to one touch target; a head with an eyebrow or a lead under
+    // its title, or one that ends in a framed button, is content the card's own padding frames, so it takes step 3.
+    void showBarInset() {
+        bool const plain = !_headTall && !_trailEndFramed;
+        int const compactStep = plain ? 1 : 3;
+        int const step = _compact ? compactStep : 2;
+        _topBar->setGap(step);
     }
 
     // Whether the inline lead shows: see setLeadInline.
@@ -512,6 +527,7 @@ private:
     bool _headJoined = false;
     bool _principalInHead = false;
     bool _trailEndFramed = false;
+    bool _headTall = false;
 };
 
 }  // namespace morph::ui
