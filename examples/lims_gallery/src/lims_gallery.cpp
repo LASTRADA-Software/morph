@@ -46,6 +46,7 @@ constexpr char const* kThemeBase = R"({
     "hover": { "$value": "#F0F3F7" }, "track": { "$value": "#E7EAEE" },
     "controlSurface": { "$value": "#FFFFFF" }, "controlBorder": { "$value": "#C3C9D2" },
     "divider": { "$value": "#EDF0F3" }, "dialogRule": { "$value": "#E6E9ED" },
+    "placeholder": { "$value": "#848587" },
     "scrim": { "$value": "#14181F59" },
     "disabled": { "text": { "$value": "#5F6673" }, "bg": { "$value": "#EEF0F3" }, "border": { "$value": "#DDE1E6" } },
     "ok": { "$root": { "$value": "#17602F" }, "bg": { "$value": "#E2F4E8" }, "border": { "$value": "#BCDFC9" },

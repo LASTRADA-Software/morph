@@ -179,6 +179,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `color.controlBorder` (`#c7c7cc`): the outline of those controls at rest; a theme that sets `color.border` alone no longer moves them. A focused control's outline stays `color.focus`, a toned one's its tone's border | colour |
 | `color.divider` (`#dcdce0`): a table's row rules and the rules of a divided list; `color.border` stays the outline of a card, a panel, a popup and a table | colour |
 | `color.dialogRule`: the rules inside a dialog and a drawer (under the head, above the footer). No default: while a theme does not set it they draw the card surface's `color.divider`. Read from the theme only, not per surface | colour |
+| `color.placeholder`: the text an input shows while it is empty (a text input, a text area, a date input, a file picker's path), read per surface. No default: where neither the surface nor the theme sets it, a placeholder draws that surface's `color.muted`. The built-in sidebar takes it only from a declared `sidebar` surface, since its text colours are its own palette. The terminal keeps drawing a placeholder dim | colour |
 | `color.scrim` (`#0000004d`, black at 30 %): the dim over the window behind a modal dialog or drawer; a sheet draws none | colour |
 | `color.track` (`#e5e5ea`): the unfilled part of a progress bar, and the segmented select's track | colour |
 | `color.table.header` (transparent) | colour |
@@ -250,6 +251,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `overlineCaps` (true for `uppercase`) | `font.overline.case` |
 | `collapsibleMarker` (true for `shown`) | `collapsible.marker` |
 | `selectionText`, `hasSelectionText` (a role of every scheme; the theme's own is bound by the built-in schemes, a declared surface's is written from its resolved values) | `color.selectionText` |
+| `placeholder`, `hasPlaceholder` (a role of every scheme, with `placeholderText` reading the colour or the muted one; the theme's own is bound by the built-in schemes, a declared surface's is written from its resolved values) | `color.placeholder` |
 | `dialogRule`, `hasDialogRule` (`dialogRuleShown` reads the colour, or the card scheme's divider while none is set) | `color.dialogRule` |
 | `dialogShadowColor`, `dialogShadowOffsetX`, `dialogShadowOffsetY`, `dialogShadowBlur`, `dialogShadowSpread`, `hasDialogShadow` (`dialogShadowShown*` read these, or the card's while none is set) | `elevation.dialog` |
 | `listSelectionFill` (true for `fill`; a role of every scheme, written for each surface from its own resolved values) | `list.selection` |

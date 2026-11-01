@@ -33,7 +33,7 @@ namespace morph::qt_quick {
 namespace {
 
 /// The `Theme` property each colour token of the set sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 43> kColorProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 44> kColorProperties = {{
     {"color.text", "text"},
     {"color.muted", "muted"},
     {"color.err", "error"},
@@ -74,13 +74,14 @@ constexpr std::array<std::pair<std::string_view, char const*>, 43> kColorPropert
     {"color.selectionText", "selectionText"},
     {"color.scrim", "scrim"},
     {"color.dialogRule", "dialogRule"},
+    {"color.placeholder", "placeholder"},
     {"color.disabled.text", "disabledText"},
     {"color.disabled.bg", "disabledFill"},
     {"color.disabled.border", "disabledBorder"},
 }};
 
 /// The scheme property each colour token of a surface sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 38> kSchemeProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 39> kSchemeProperties = {{
     {"color.surface", "surface"},
     {"color.text", "text"},
     {"color.muted", "muted"},
@@ -119,6 +120,7 @@ constexpr std::array<std::pair<std::string_view, char const*>, 38> kSchemeProper
     {"color.chart.3", "chart3"},
     {"color.chart.4", "chart4"},
     {"color.selectionText", "selectionText"},
+    {"color.placeholder", "placeholder"},
 }};
 
 /// The `Theme` property each dimension token of the set sets, besides the spacing scale.
@@ -186,6 +188,9 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     }
     if (!theme.setProperty("hasDialogRule", values.colors.contains("color.dialogRule"))) {
         unset.emplace_back("hasDialogRule");
+    }
+    if (!theme.setProperty("hasPlaceholder", values.colors.contains("color.placeholder"))) {
+        unset.emplace_back("hasPlaceholder");
     }
     if (!theme.setProperty("overlineCaps", keywordIs(values, "font.overline.case", "uppercase"))) {
         unset.emplace_back("overlineCaps");
@@ -316,6 +321,9 @@ void setSurfaces(QObject& theme, std::map<std::string, ui::ThemeValues, std::les
         }
         if (!scheme->setProperty("hasSelectionText", surface.colors.contains("color.selectionText"))) {
             unset.push_back(name + ".hasSelectionText");
+        }
+        if (!scheme->setProperty("hasPlaceholder", surface.colors.contains("color.placeholder"))) {
+            unset.push_back(name + ".hasPlaceholder");
         }
     }
 }

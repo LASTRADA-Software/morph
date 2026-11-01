@@ -1378,6 +1378,7 @@ TEST_CASE("qt_quick theme: every built-in scheme sets every colour role MorphSch
     ui::ThemeValues values = ui::themeValues();
     // Set, so that the schemes that follow the theme's selection text have a value to differ from the default.
     values.colors.insert_or_assign("color.selectionText", ui::Rgba{});
+    values.colors.insert_or_assign("color.placeholder", ui::Rgba{});
     std::uint8_t step = 0;
     for (auto& [path, color] : values.colors) {
         step = static_cast<std::uint8_t>(step + 7);
@@ -1404,8 +1405,10 @@ TEST_CASE("qt_quick theme: every built-in scheme sets every colour role MorphSch
             if (property.metaType() != QMetaType::fromType<QColor>()) {
                 continue;
             }
-            // The built-in sidebar keeps no selection text of its own to differ: its palette is its own.
-            if (std::string_view{name} == "sidebarScheme" && std::string_view{property.name()} == "selectionText") {
+            // The built-in sidebar keeps no selection text or placeholder of its own to differ: its palette is its
+            // own.
+            if (std::string_view{name} == "sidebarScheme" && (std::string_view{property.name()} == "selectionText" ||
+                                                              std::string_view{property.name()} == "placeholder")) {
                 continue;
             }
             ++roles;
@@ -1972,4 +1975,44 @@ TEST_CASE("qt_quick theme: a re-apply that drops elevation.dialog returns the di
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
     CHECK_FALSE(theme.property("hasDialogShadow").toBool());
     CHECK(theme.property("dialogShadowShownOffsetY").toReal() == theme.property("cardShadowOffsetY").toReal());
+}
+
+// Mutation: read `muted` for a placeholder whatever the token (the colour does not move), or read the token whether
+// or not it is set (an unset theme draws the default grey, not the muted colour).
+TEST_CASE("qt_quick theme: an input's placeholder is color.placeholder, and the muted colour while it is unset",
+          "[qt_quick]") {
+    for (bool const set : {false, true}) {
+        INFO("token set: " << set);
+        Scene scene;
+        REQUIRE(morph::qt_quick::applyTheme(
+                    scene.engine(),
+                    set ? valuesOfDocument(R"({"color": {"placeholder": {"$type": "color", "$value": "#848587"}}})")
+                        : ui::themeValues())
+                    .empty());
+        QObject& theme = themeSingleton(scene);
+        auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+        auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+        auto area = scene.backend().createTextInput(column.get(), ui::TextInputMode::Multiline);
+        input->setPlaceholder("Waiting for scan");
+        area->setPlaceholder("Note");
+        scene.settle();
+        QColor const expected = set ? QColor{"#848587"} : theme.property("muted").value<QColor>();
+        CHECK(theme.property("hasPlaceholder").toBool() == set);
+        CHECK(Scene::controlOf(*input).property("placeholderTextColor").value<QColor>() == expected);
+        CHECK(Scene::controlOf(*area).property("placeholderTextColor").value<QColor>() == expected);
+        CHECK(builtinScheme(theme, "cardScheme").property("placeholderText").value<QColor>() == expected);
+    }
+}
+
+// Mutation: leave `placeholder` out of the surface's colour table (a declared surface keeps the muted colour).
+TEST_CASE("qt_quick theme: a declared surface sets its own placeholder", "[qt_quick]") {
+    Scene scene;
+    std::map<std::string, ui::ThemeValues, std::less<>> const declared{
+        {"sidebar", valuesOfDocument(R"({"color": {"placeholder": {"$type": "color", "$value": "#010203"}}})")}};
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(), declared).empty());
+    QObject& theme = themeSingleton(scene);
+    QObject& sidebar = builtinScheme(theme, "sidebarScheme");
+    CHECK(sidebar.property("hasPlaceholder").toBool());
+    CHECK(sidebar.property("placeholderText").value<QColor>() == QColor{"#010203"});
+    CHECK_FALSE(builtinScheme(theme, "cardScheme").property("hasPlaceholder").toBool());
 }

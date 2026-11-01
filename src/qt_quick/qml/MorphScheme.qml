@@ -15,6 +15,11 @@ QtObject {
     property color selectionText: "#1d1d1f"
     property bool hasSelectionText: false
     readonly property color selectedText: hasSelectionText ? selectionText : text
+    // The colour of an input's placeholder: `color.placeholder`, when the surface has one (`hasPlaceholder`), and the
+    // surface's muted colour when not.
+    property color placeholder: "#6e6e73"
+    property bool hasPlaceholder: false
+    readonly property color placeholderText: hasPlaceholder ? placeholder : muted
     property color border: "#c7c7cc"
     // The neutral tone's text, fill, outline and marker: `color.neutral` and its `.bg`, `.border` and `.dot`.
     property color neutral: "#6e6e73"

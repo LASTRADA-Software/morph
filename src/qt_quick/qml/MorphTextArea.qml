@@ -35,7 +35,7 @@ MorphField {
         Keys.priority: Keys.BeforeItem
         Keys.onPressed: event => event.accepted = root.takeOwnChord(event)
         color: root.scheme.text
-        placeholderTextColor: root.scheme.muted
+        placeholderTextColor: root.scheme.placeholderText
         // Each side set itself: the style's own left padding is wider than its others.
         leftPadding: Theme.inputPaddingX
         rightPadding: Theme.inputPaddingX

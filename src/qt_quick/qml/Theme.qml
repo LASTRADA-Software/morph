@@ -147,6 +147,10 @@ QtObject {
     // The text of a selected list item and whether the theme sets one: `color.selectionText`.
     property color selectionText: "#1d1d1f"
     property bool hasSelectionText: false
+    // The colour of an input's placeholder and whether the theme sets one: `color.placeholder`. Unset, a placeholder is
+    // drawn in the surface's muted colour.
+    property color placeholder: "#6e6e73"
+    property bool hasPlaceholder: false
     // The rules of a dialog and a drawer and whether the theme sets them: `color.dialogRule`.
     property color dialogRule: "#dcdce0"
     property bool hasDialogRule: false
@@ -343,6 +347,8 @@ QtObject {
         selection: theme.selection
         selectionText: theme.selectionText
         hasSelectionText: theme.hasSelectionText
+        placeholder: theme.placeholder
+        hasPlaceholder: theme.hasPlaceholder
         border: theme.border
         neutral: theme.neutral
         neutralBg: theme.neutralBg
@@ -386,6 +392,8 @@ QtObject {
         selection: theme.selection
         selectionText: theme.selectionText
         hasSelectionText: theme.hasSelectionText
+        placeholder: theme.placeholder
+        hasPlaceholder: theme.hasPlaceholder
         border: theme.border
         neutral: theme.neutral
         neutralBg: theme.neutralBg
@@ -429,6 +437,8 @@ QtObject {
         selection: theme.selection
         selectionText: theme.selectionText
         hasSelectionText: theme.hasSelectionText
+        placeholder: theme.placeholder
+        hasPlaceholder: theme.hasPlaceholder
         border: theme.border
         neutral: theme.neutral
         neutralBg: theme.neutralBg
@@ -512,6 +522,8 @@ QtObject {
         selection: theme.selection
         selectionText: theme.selectionText
         hasSelectionText: theme.hasSelectionText
+        placeholder: theme.placeholder
+        hasPlaceholder: theme.hasPlaceholder
         border: "#e3e5ea"
         neutral: theme.neutral
         neutralBg: theme.neutralBg
@@ -555,6 +567,8 @@ QtObject {
         selection: theme.selection
         selectionText: theme.selectionText
         hasSelectionText: theme.hasSelectionText
+        placeholder: theme.placeholder
+        hasPlaceholder: theme.hasPlaceholder
         border: theme.border
         neutral: theme.neutral
         neutralBg: theme.neutralBg
@@ -599,6 +613,8 @@ QtObject {
         selection: theme.barScheme.selection
         selectionText: theme.barScheme.selectionText
         hasSelectionText: theme.barScheme.hasSelectionText
+        placeholder: theme.barScheme.placeholder
+        hasPlaceholder: theme.barScheme.hasPlaceholder
         border: theme.barScheme.border
         neutral: theme.barScheme.neutral
         neutralBg: theme.barScheme.neutralBg

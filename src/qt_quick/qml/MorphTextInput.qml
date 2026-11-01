@@ -84,7 +84,7 @@ MorphField {
                 event.accepted = root.takeOwnChord(event)
         }
         color: root.scheme.text
-        placeholderTextColor: root.scheme.muted
+        placeholderTextColor: root.scheme.placeholderText
         // The text starts after the icon and the prefix.
         leftPadding: Theme.inputPaddingX + (iconImage.visible ? iconImage.width + Theme.spaceOf(1) : 0) +
                      (prefixLabel.visible ? prefixLabel.implicitWidth + Theme.spaceOf(1) : 0)

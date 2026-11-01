@@ -1192,7 +1192,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 77> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 78> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1229,6 +1229,9 @@ inline constexpr std::array<ThemeTokenSpec, 77> kThemeTokens = {{
     // text is the surface's `color.text`, which is the first colour to follow another; the token is absent from
     // `ThemeValues` until set.
     {.path = "color.selectionText", .kind = ThemeTokenKind::Color, .color = "", .number = 0.0},
+    // The text an empty input shows, read per surface. Empty: while a theme does not set it, a placeholder draws the
+    // surface's `color.muted`, and the token is absent from `ThemeValues`. The terminal always draws it dim.
+    {.path = "color.placeholder", .kind = ThemeTokenKind::Color, .color = "", .number = 0.0},
     {.path = "color.ok", .kind = ThemeTokenKind::Color, .color = "#2e7d32", .number = 0.0},
     {.path = "color.ok.bg", .kind = ThemeTokenKind::Color, .color = "#e8f5e9", .number = 0.0},
     {.path = "color.ok.border", .kind = ThemeTokenKind::Color, .color = "#a5d6a7", .number = 0.0},

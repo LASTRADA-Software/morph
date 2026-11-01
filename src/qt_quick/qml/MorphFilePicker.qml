@@ -34,7 +34,7 @@ MorphField {
             id: pathField
             Layout.fillWidth: true
             color: root.scheme.text
-            placeholderTextColor: root.scheme.muted
+            placeholderTextColor: root.scheme.placeholderText
             leftPadding: Theme.spaceOf(3)
             rightPadding: Theme.spaceOf(3)
             background: MorphInputBackground {
