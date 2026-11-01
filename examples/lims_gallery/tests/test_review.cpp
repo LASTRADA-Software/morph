@@ -39,15 +39,16 @@ TEST_CASE("review, expanded: the queue beside the worksheet, its flagged results
     CHECK(screen.backend().prop(queueEntry(screen, "WS-2026-0412 · 2 h 10 min"), "selected") == "true");
     CHECK(screen.text("sheet-title") == "Assay and impurities · Paracetamol 500 mg");
     CHECK(screen.prop("Select", "show", "options") == "[\"all\":All 7,\"flagged\":Flagged 2]");
-    // The evaluation is one tag with its whole text, so a row stays one line.
-    CHECK(screen.backend().find("Badge", "text", "Out of trend: −0.7 % vs. last 5 lots").has_value());
+    CHECK(screen.backend().find("Badge", "text", "Out of trend").has_value());
+    CHECK(screen.backend().find("Text", "text", "−0.7 % vs. last 5 lots").has_value());
     CHECK(screen.prop("Tabs", "record-tabs", "tabs") == "[Results,Previous lots,Audit trail · 3,Comments · 1]");
     CHECK_FALSE(screen.shows("Banner", "self-review"));
     CHECK(screen.prop("Button", "approve", "enabled") == "true");
     // The Result column is as wide as its widest value, "99.4 % LC", so the value is not split from its unit.
     CHECK(screen.prop("Table", "results", "columns").value_or("none") ==
-          "[Sample:fixed(11),Analyte:content;wrap=false,Result:content;align=end;wrap=false,Spec.:content;wrap=false,"
-          "Prior lot:content;align=end;wrap=false,Evaluation:content;wrap=false,Change:stretch(1);wrap=false]");
+          "[Sample:fixed(11),Analyte:stretch(1);wrap=false;shrink=true,Result:content;align=end;wrap=false,"
+          "Spec.:stretch(1);wrap=false;shrink=true,Prior lot:content;align=end;wrap=false,Evaluation:fixed(10),"
+          "Change:stretch(1);wrap=false;shrink=true]");
 }
 
 TEST_CASE("review: self-review is blocked with its reason", "[lims-gallery]") {
@@ -81,9 +82,9 @@ TEST_CASE("review: the splitter's sizes reach the splitter", "[lims-gallery]") {
     auto const written = lims_gallery::reviewScreen().write();
     REQUIRE(written.has_value());
     auto const text = written.value_or(morph::ui::author::Emitted{}).text;
-    CHECK(text.contains(R"("sizes":{"lit":[36,67]})"));
+    CHECK(text.contains(R"("sizes":{"lit":[28,75]})"));
     GalleryScreen screen{kScreen, "expanded"};
-    CHECK(screen.prop("Splitter", "split", "sizes") == "[36,67]");
+    CHECK(screen.prop("Splitter", "split", "sizes") == "[28,75]");
 }
 
 // The review's `navigate` asks for a dialog, and the generic client draws one over the review: no tab is added. The

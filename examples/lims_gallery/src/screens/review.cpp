@@ -313,6 +313,12 @@ ui::AnyHandle resultList() {
     std::vector<ui::AnyHandle> items;
     items.reserve(kResults.size());
     for (Result const& result : kResults) {
+        // The table's cell shows the verdict as a tag and the rest of the text under it, which wraps in the column's
+        // width; the phone's card shows the whole text as the tag.
+        std::string_view const text{result.evaluation};
+        auto const colon = text.find(": ");
+        std::string const verdict{text.substr(0, colon)};
+        std::string const note{colon == std::string_view::npos ? std::string_view{} : text.substr(colon + 2)};
         items.push_back(ui::obj({{"sheet", result.sheet},
                                  {"key", result.key},
                                  {"sample", result.sample},
@@ -321,6 +327,8 @@ ui::AnyHandle resultList() {
                                  {"spec", result.spec},
                                  {"previous", result.previous},
                                  {"evaluation", result.evaluation},
+                                 {"verdict", verdict},
+                                 {"note", note},
                                  {"tone", result.tone},
                                  {"change", result.change},
                                  {"flagged", result.flagged}}));
@@ -524,25 +532,28 @@ ui::Node showChoice(Review const& review, bool compact) {
 ui::Node resultTable(Review const& review) {
     std::vector<ui::TableColumn> const columns{
         {.name = "sample", .label = "Sample", .width = ui::fixed(11), .role = "mono"},
-        {.name = "analyte", .label = "Analyte", .width = ui::content(), .wrap = false},
+        {.name = "analyte", .label = "Analyte", .width = ui::stretch(), .wrap = false, .shrink = true},
         {.name = "value",
          .label = "Result",
          .width = ui::content(),
          .align = Align::End,
          .cell = ui::text({.text = ui::row("value"), .spans = ui::spans({ui::strong(ui::row("value"))})}),
          .wrap = false},
-        {.name = "spec", .label = "Spec.", .width = ui::content(), .wrap = false},
+        {.name = "spec", .label = "Spec.", .width = ui::stretch(), .wrap = false, .shrink = true},
         {.name = "previous", .label = "Prior lot", .width = ui::content(), .align = Align::End, .wrap = false},
         {.name = "evaluation",
          .label = "Evaluation",
-         .width = ui::content(),
-         .cell = layout::tag(ui::row("evaluation"), ui::row("tone")),
-         .wrap = false},
+         .width = ui::fixed(10),
+         .cell =
+             ui::column({layout::tag(ui::row("verdict"), ui::row("tone")),
+                         layout::muted(ui::row("note")).sizing(ui::stretch()).visible(!ui::isEmpty(ui::row("note")))},
+                        {.gap = 0})},
         {.name = "change",
          .label = "Change",
          .width = ui::stretch(),
          .cell = ui::text({.text = ui::row("change"), .role = "muted"}),
-         .wrap = false}};
+         .wrap = false,
+         .shrink = true}};
     return ui::table(review.shownResults, {.key = ui::row("key"),
                                            .columns = columns,
                                            .rowTone = ui::cond(ui::eq(ui::row("tone"), "err"), ui::AnyHandle{"err"},
@@ -809,11 +820,12 @@ ui::Node worksheetPane(Review const& review) {
 }
 
 ui::Node expandedLayout(Review const& review) {
-    // Splitter sizes are absolute units, not shares, so the queue's 36 units (about 280 px) hold at every width and
-    // the worksheet takes the rest of the page. The queue is wide enough for an entry's id, age and tags on their
-    // lines; the worksheet's table gives up its Change column's width first when the page is narrow. The splitter
-    // takes the page's height, so each pane reaches the page's bottom.
-    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{36, 67}};
+    // Splitter sizes are absolute units, not shares, so the queue's 28 units (about 215 px) hold at every width and
+    // the worksheet takes the rest of the page. That is the most the queue can take on the 785 px page the sidebar
+    // leaves without the worksheet's table scrolling sideways, its Analyte, Spec. and Change columns already giving up
+    // width; an entry's id, age and tags still sit on their own lines. The splitter takes the page's height, so each
+    // pane reaches the page's bottom.
+    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{28, 75}};
     return ui::column({ui::splitter({queuePane(review).surface("pane"), worksheetPane(review).surface("pane")},
                                     ui::AnyHandle{"horizontal"}, sizes)
                            .sizing(ui::stretch(), ui::stretch())
