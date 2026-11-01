@@ -26,6 +26,8 @@ TEST_CASE("console, expanded: navigation, alert, figures, chart, instruments and
     CHECK(screen.prop("Badge", "head_status_0", "text") == "Connected");
     CHECK(screen.shows("Row", "shell_sidebar"));
     CHECK(screen.shows("Banner", "alert"));
+    // The unit is a column of its own beside the input, not drawn inside it.
+    CHECK(screen.backend().find("Text", "text", "% LC").has_value());
     // The Test column takes its text whole and Status, last, takes what is left, so the table does not scroll.
     CHECK(screen.prop("Table", "worklist", "columns").value_or("none") ==
           "[Sample:fixed(11),Test:content;wrap=false,Priority:fixed(7),Due:fixed(12);wrap=false,Status:stretch(1);"
@@ -101,6 +103,10 @@ TEST_CASE("console, compact: menu navigation, stacked sections, a sample opens r
     CHECK(screen.prop("Panel", "chart-section", "title") == "Assay control, HPLC-02 · latest run +3.4 SD");
     CHECK(screen.find("Column", "worklist").has_value());
     CHECK(screen.prop("Grid", "kpis", "tracks") == "[stretch(1),stretch(1)]");
+    // A card names what its time is; an overdue one already says so.
+    CHECK(screen.backend().find("Text", "text", "due 10:30").has_value());
+    CHECK(screen.backend().find("Text", "text", "22 min overdue").has_value());
+    CHECK_FALSE(screen.backend().find("Text", "text", "due 22 min overdue").has_value());
     screen.click("open-sample");
     CHECK(screen.waitFor([&screen] { return screen.mounted().size() == 2; }));
     CHECK(screen.mounted().back() == "lims-gallery.results");

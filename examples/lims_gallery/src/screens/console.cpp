@@ -558,9 +558,12 @@ ui::Node instruments() {
 
 // ── The worklist and the sample pane ─────────────────────────────────────────────────────────────────────────────
 
-ui::Node dueCell() {
-    return ui::text(
-        {.text = ui::row("due"), .role = ui::cond(Flag{ui::row("overdue")}, Text{"error"}, Text{"normal"})});
+ui::Node dueCell(bool prefixed = false) {
+    // A card names what the time is, "due 10:30"; an overdue one already says so, "22 min overdue".
+    ui::AnyHandle const text = prefixed ? ui::cond(Flag{ui::row("overdue")}, ui::AnyHandle{ui::row("due")},
+                                                   ui::AnyHandle{ui::format("due {0}", {ui::row("due")})})
+                                        : ui::AnyHandle{ui::row("due")};
+    return ui::text({.text = text, .role = ui::cond(Flag{ui::row("overdue")}, Text{"error"}, Text{"normal"})});
 }
 
 ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::string const& testId) {
@@ -667,12 +670,13 @@ ui::Node resultLine(Console const& console) {
         {ui::text({.text = ui::format("{0} · {1}", {ui::row("name"), ui::row("spec")})}).sizing(ui::stretch()),
          ui::textInput({.value = evaluation.shown,
                         .label = ui::format("{0} result", {ui::row("name")}),
-                        .unit = ui::row("unit"),
                         .align = morph::ui::Align::End,
                         .onCommit = enterResult(console)})
              .readonly(Flag{ui::row("total")})
-             .sizing(ui::fixed(10))
+             .sizing(ui::fixed(8))
              .testId("pane-result"),
+         // The unit is its own column beside the input, so the inputs of every line end at one edge.
+         layout::muted(ui::row("unit")).sizing(ui::fixed(5)),
          // A fixed width, wide enough for "Out of spec", keeps the result inputs of every line in one column.
          layout::tag(evaluation.label, evaluation.tone).sizing(ui::fixed(9)).testId("pane-evaluation")},
         {.gap = 1, .align = Align::Center});
@@ -803,7 +807,7 @@ ui::Node expandedLayout(Console const& console) {
                {alert(false), kpis(false),
                 ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
                          ui::panel({instruments()}, {.padding = 2}).sizing(ui::stretch(10))},
-                        {.gap = 1, .align = Align::Start}),
+                        {.gap = 1, .align = Align::Stretch}),
                 // The two panes are one card: the splitter fills a panel with no padding, and each pane pads itself.
                 ui::panel(
                     {ui::splitter({worklistTabs(console),
@@ -827,7 +831,7 @@ ui::Node compactCard() {
     auto const idText = ui::text(
         {.text = ui::row("id"), .spans = ui::spans({ui::styled(ui::row("id"), {.strong = true, .mono = true})})});
     return ui::column(
-        {ui::row({idText.sizing(ui::stretch()), dueCell()}, {.gap = 1, .align = Align::Center}),
+        {ui::row({idText.sizing(ui::stretch()), dueCell(true)}, {.gap = 1, .align = Align::Center}),
          ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("product")})}),
          ui::row({layout::priorityTag(ui::row("priority")), layout::tag(ui::row("status"), ui::row("statusTone"))},
                  {.gap = 1, .wrap = true})},
