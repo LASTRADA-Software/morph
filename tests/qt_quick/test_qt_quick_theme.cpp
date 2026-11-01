@@ -1544,11 +1544,11 @@ void checkPanelFillIsRounded(std::string const& around, std::string const& surfa
 // Mutation: remove `frameRadius: Theme.radiusCard` from MorphPanel (the fill is square and shows outside the arc).
 TEST_CASE("qt_quick theme: a panel's surface fill follows its frame's rounded corners", "[qt_quick]") {
     checkPanelFillIsRounded("card", "well", QColor{"#ffee88"});
-    {
+    QColor const background = [] {
         Scene scene;
-        QColor const background = themeOf(scene)->property("background").value<QColor>();
-        checkPanelFillIsRounded("well", "page", background);
-    }
+        return themeOf(scene)->property("background").value<QColor>();
+    }();
+    checkPanelFillIsRounded("well", "page", background);
 }
 
 // Mutation: leave `radius: 0` on the surface's background in MorphWidget (the corner reads the surface's yellow).
