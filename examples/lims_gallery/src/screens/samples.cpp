@@ -517,7 +517,7 @@ ui::Node samplesTable(Samples const& list) {
                       .cell = layout::priorityTag(ui::row("priority"))},
                      {.name = "status",
                       .label = "Status",
-                      .width = ui::fixed(10),
+                      .width = ui::fixed(11),
                       .cell = layout::tag(ui::row("status"), ui::row("statusTone"))},
                      {.name = "due",
                       .label = "Due",
