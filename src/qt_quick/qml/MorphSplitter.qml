@@ -123,6 +123,21 @@ MorphWidget {
         root.handleItem = first
     }
 
+    // What a pane adds to the splitter's natural length when `sizes` does not place it. A horizontal splitter that is
+    // given its width by its container reads no width from a pane that is sized by the splitter (fixed in units, or a
+    // share or a stretch): such a pane's implicit width can follow the width it is given, and the splitter's own
+    // implicit width would then grow with it on every layout pass.
+    function paneAlong(pane: var): real {
+        if (root.axis === 0)
+            return pane.implicitHeight
+        const kind = pane.widthKind ?? 0
+        if (kind === 1)
+            return pane.widthAmount * root.unit
+        if ((kind === 2 || kind === 3) && root.widthKind !== 0)
+            return 0
+        return pane.implicitWidth
+    }
+
     // What the panes ask for: along the axis, each pane's size in units when `sizes` matches the pane count and its
     // implicit extent otherwise, plus the handles between them; across, the largest pane's implicit extent. A
     // SplitView's own implicit size is 0x0, so a splitter sized `content` would otherwise have no area.
@@ -133,7 +148,7 @@ MorphWidget {
         let across = 0
         for (let i = 0; i < panes.length; ++i) {
             const pane = panes[i]
-            along += given ? root.sizes[i] * root.unit : (root.axis === 0 ? pane.implicitHeight : pane.implicitWidth)
+            along += given ? root.sizes[i] * root.unit : root.paneAlong(pane)
             across = Math.max(across, root.axis === 0 ? pane.implicitWidth : pane.implicitHeight)
         }
         return [along, across]

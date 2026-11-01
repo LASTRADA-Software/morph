@@ -22,9 +22,13 @@
 #include <QVariantList>
 #include <QtLogging>
 #include <algorithm>
+#include <atomic>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <morph/core/completion.hpp>
@@ -38,6 +42,7 @@
 #include <morph/ui/view.hpp>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -492,6 +497,50 @@ TEST_CASE("qt_quick containers: a splitter places a percent pane by the share, k
     splitter->setLayout({.width = ui::Sizing::fixed(60), .height = ui::Sizing::fixed(10)});
     scene.settle();
     CHECK(queueItem.width() == Catch::Approx(dragged).margin(1.0));
+}
+
+// A pane whose implicit width follows the width it is given (a table in a panel, a wrapping row) must not make the
+// splitter that places it grow without end: the splitter's implicit width read the pane's, so each layout pass added
+// the pane's excess again. Mutation: read `pane.implicitWidth` for every pane in `MorphSplitter.paneAlong` (the layout
+// never settles and the watchdog ends the process).
+TEST_CASE("qt_quick containers: a splitter whose stretch pane's implicit width follows its width settles",
+          "[qt_quick][percent]") {
+    std::atomic<bool> settled{false};
+    std::thread watchdog{[&settled] {
+        for (int tenths = 0; tenths < 600 && !settled.load(); ++tenths) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{100});
+        }
+        if (!settled.load()) {
+            std::fputs("watchdog: the splitter's layout did not settle in 60 s\n", stderr);
+            std::_Exit(3);
+        }
+    }};
+    {
+        Scene scene;
+        auto page = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+        page->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+        auto splitter = scene.backend().createSplitter(page.get(), ui::Axis::Horizontal);
+        splitter->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+        auto queue = scene.backend().createText(splitter.get());
+        queue->setText("queue");
+        queue->setLayout({.width = ui::Sizing::fixed(28)});
+        auto worksheet = scene.backend().createStack(splitter.get(), ui::Axis::Vertical);
+        worksheet->setLayout({.width = ui::Sizing::stretch()});
+        auto filler = scene.backend().createText(worksheet.get());
+        filler->setText("worksheet");
+        QQuickItem& pane = Scene::itemOf(*worksheet);
+        QQuickItem const& splitterItem = Scene::itemOf(*splitter);
+        QObject::connect(&splitterItem, &QQuickItem::widthChanged, &pane,
+                         [&pane, &splitterItem] { pane.setImplicitWidth(splitterItem.width() + 126); });
+        for (int width : {1215, 1000, 390, 1920}) {
+            scene.window().resize(width, 700);
+            scene.settle();
+            CHECK(Scene::itemOf(*queue).width() > 0);
+            CHECK(Scene::itemOf(*splitter).width() <= width);
+        }
+    }
+    settled = true;
+    watchdog.join();
 }
 
 // Mutation: leave the SplitView bounds out of MorphWidget (the drag carries the pane past its maximum).
