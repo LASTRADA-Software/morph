@@ -241,3 +241,24 @@
 {"logged": "2026-11-01 17:42:58", "event": "done", "task": "N.D2"}
 {"logged": "2026-11-01 17:42:59", "event": "start", "task": "N.F", "title": "Lane N-F: framework", "group": "N"}
 {"logged": "2026-11-01 17:42:59", "event": "start", "task": "N.S", "title": "Lane N-S: screens", "group": "N"}
+{"logged": "2026-11-01 19:08:48", "event": "done", "task": "M.V"}
+{"logged": "2026-11-01 20:00:24", "event": "done", "task": "N.F"}
+{"logged": "2026-11-01 20:12:18", "event": "done", "task": "N.S"}
+{"logged": "2026-11-01 20:12:18", "event": "start", "task": "N.H", "title": "N-F: the Qt splitter hang", "group": "N"}
+{"logged": "2026-11-01 20:21:59", "event": "done", "task": "N.H"}
+{"logged": "2026-11-01 20:21:59", "event": "start", "task": "N.V", "title": "Lane V5: verify batch N", "group": "N"}
+{"logged": "2026-11-01 20:21:59", "event": "start", "task": "N.C", "title": "After-N comparison", "group": "N"}
+{"logged": "2026-11-01 20:27:43", "event": "done", "task": "N.C"}
+{"logged": "2026-11-01 20:27:43", "event": "start", "task": "O.S", "title": "Lane O-S: screens", "group": "O"}
+{"logged": "2026-11-01 20:27:43", "event": "start", "task": "O.D", "title": "Batch O design", "group": "O"}
+{"logged": "2026-11-01 20:44:29", "event": "done", "task": "O.D"}
+{"logged": "2026-11-01 20:44:30", "event": "start", "task": "O.R", "title": "Batch O design review", "group": "O"}
+{"logged": "2026-11-01 20:59:40", "event": "done", "task": "O.R"}
+{"logged": "2026-11-01 20:59:41", "event": "start", "task": "O.D2", "title": "Batch O design revision", "group": "O"}
+{"logged": "2026-11-01 21:05:25", "event": "done", "task": "O.D2"}
+{"logged": "2026-11-01 21:05:25", "event": "start", "task": "O.F", "title": "Lane O-F: framework", "group": "O"}
+{"logged": "2026-11-01 21:32:00", "event": "done", "task": "O.S"}
+{"logged": "2026-11-01 22:43:25", "event": "done", "task": "O.F"}
+{"logged": "2026-11-01 22:43:31", "event": "start", "task": "O.S2", "title": "Lane O-S2: review columns, control height, re-grabs", "group": "O"}
+{"logged": "2026-11-01 23:35:01", "event": "done", "task": "O.S2"}
+{"logged": "2026-11-01 23:35:02", "event": "done", "task": "N.V"}

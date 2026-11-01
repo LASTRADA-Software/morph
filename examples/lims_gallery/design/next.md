@@ -6,27 +6,30 @@ side branches, each in its own worktree, and is rebased onto `feat/lims-gallery`
 The live tracker is `status/STATUS.md` in this folder, published as a phone-friendly page (see "The status board"
 below). It lists every lane, its commits, the decisions and the follow-ups; read it first.
 
-## Resume here (2026-11-01, batch N running)
+## Resume here (2026-11-01, batch O implemented, not yet folded)
 
 Everything below this section is older history; this section is current.
 
 | Branch | Worktree | Holds | State |
 |---|---|---|---|
-| `feat/lims-gallery` (PR #1045) | `../morph-lims-e1` (`lg-fold-m`) | batches A–M, verified by lane V4 (all CI checks local-green, ui coverage 92.09%) | pushed |
-| `lg-nf` | `../morph-lims-lf` | batch N framework lane N-F (N3, N2, N1, N4, N5), from `a30f51c93` | in progress; brief `handoff/lane-nf-brief.md` |
-| `lg-ns` | `../morph-lims-e2` | batch N screen lane N-S (S1–S7), rebasing onto `lg-nf` | in progress; brief `handoff/lane-ns-brief.md` |
+| `feat/lims-gallery` (PR #1045) | `../morph-lims-e1` (`lg-fold-n`) | batches A–N, verified by lane V5 (all CI checks local-green, ui coverage 92.08%, every commit builds on its own) | pushed |
+| `lg-of` | `../morph-lims-lf` | batch O framework lane O-F (O5, O1b, O4, O1), 4 commits from `227b4f06b` | done; pushed as a backup branch |
+| `lg-os` | `../morph-lims-e2` | batch O screen lanes O-S and O-S2, rebased onto `lg-of` | done; pushed as a backup branch |
 
-Batch N's design is `docs/superpowers/specs/2026-11-01-lims-gallery-batch-n-design.md` (reviewed twice; review in
-`handoff/batch-n-review.md`). Issues it fixes: #1073 (badge in a narrow cell), #1074 (table scroll bar). Batch M came
-from the after-L comparison (`handoff/after-l-findings-{A,B}.md`).
+Batch O's design is `docs/superpowers/specs/2026-11-01-lims-gallery-batch-o-design.md` (review in
+`handoff/batch-o-review.md`). Issues it fixes: #1075 (terminal badge), #1076 (panel fill corners). It came from the
+after-N comparison (`handoff/after-n-findings-{A,B}.md`).
 
 Next steps, in order:
-1. Finish N-F and N-S (resume from their worktrees if a session ended; check `git status` there for uncommitted work).
-2. Fold `lg-nf` then `lg-ns` onto `feat/lims-gallery`; verify as lane V4 did (`handoff/lane-v4-brief.md`).
-3. Push, drive CI green (Qt6 WebSockets exit 143 is a runner shutdown: rerun).
+1. Fold batch O: cherry-pick `lg-of`'s commits from `227b4f06b`, then `lg-os`'s commits above `lg-of`, onto
+   `feat/lims-gallery`. Verify as lane V5 did (`handoff/lane-v5-brief.md`), including that every commit builds alone.
+2. Push, drive CI green (Qt6 WebSockets exit 143 is a runner shutdown: rerun).
+3. Known gap: a text input has no size option, so review's phone textarea draws 13 px text against the mockup's 14.
+   Batch it with whatever the next comparison finds.
 4. Re-grab every screen at 1000x830, 1215x830, 390x844 (and 1920x1080 for capped panes), compare with two reviewers,
    batch any remaining gap.
-5. Merge PR #1045 once no known gaps remain, then remove the worktrees `../morph-lims-{e1,e2,e3,lf,gallery}`.
+5. Merge PR #1045 once no known gaps remain, then remove the worktrees `../morph-lims-{e1,e2,e3,lf,gallery}` and run
+   `git worktree prune`.
 
 ## Branches
 
