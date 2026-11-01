@@ -269,8 +269,10 @@ ui::Node facetsPanel(Audit const& audit) {
                 ui::column(facetFields(audit), {.gap = 3})},
                {.gap = 2, .padding = ui::padding(3, 3)})
         .surface("bar")
-        // Wide enough for a date and time in the From and To fields; the trail beside it takes the rest.
-        .sizing(ui::fixed(22))
+        // 22 % of the page, at most 29 units (about 220 px): 220 px on the 1000 px page and 173 px on the 785 px
+        // one, wide enough for a date and time in the From and To fields at both; the trail beside it takes the rest.
+        .sizing(ui::percent(22))
+        .maxWidth(29)
         .a11y("Filters")
         .testId("facets");
 }

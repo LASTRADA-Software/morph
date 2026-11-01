@@ -31,6 +31,8 @@ TEST_CASE("audit, expanded: facets beside the trail, with the active filters as 
     GalleryScreen screen{kScreen, "expanded"};
     screen.requireNoProblems();
     CHECK(screen.shows("Column", "facets"));
+    // The rail is a share of the page, capped at the mockup's width.
+    CHECK(screen.prop("Column", "facets", "layout").value_or("none").starts_with("percent(22) max=29/"));
     CHECK(screen.prop("Checkbox", "type-result", "checked") == "true");
     CHECK(screen.prop("Checkbox", "type-specification", "checked") == "false");
     CHECK(screen.shows("Table", "trail"));

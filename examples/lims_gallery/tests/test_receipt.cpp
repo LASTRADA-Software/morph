@@ -68,6 +68,8 @@ TEST_CASE("receipt, expanded: scan field, duplicate notice, the sample's card an
     GalleryScreen screen{kScreen, "expanded"};
     screen.requireNoProblems();
     CHECK(screen.prop("TextInput", "scan", "icon") == "scan");
+    // The session pane is a share of the row, capped at the mockup's width.
+    CHECK(screen.prop("Panel", "session-panel", "layout").value_or("none").starts_with("percent(31) max=39/"));
     CHECK(screen.prop("TextInput", "scan", "mono") == "true");
     // The notice's words as runs: the label strong and the ID in the mono face.
     CHECK(screen.prop("Banner", "duplicate", "spans") ==

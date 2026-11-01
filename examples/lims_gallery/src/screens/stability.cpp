@@ -595,10 +595,12 @@ ui::Node expandedConditions(Study const& study) {
                    matrix(study).bleed(), layout::muted("T0 is tested once, from the long-term condition.")},
                   {.padding = 2});
     auto const aside = ui::panel({summary(study)}, {.title = "Summary", .padding = 2})
-                           // The summary takes under a quarter of the page, which leaves the conditions' labels
-                           // room for one line.
-                           .sizing(ui::fixed(26))
-                           .a11y("Summary");
+                           // 26 % of the row, at most 33 units (about 250 px): 250 px on the 1000 px page and 196 px
+                           // on the 785 px one, which leaves the conditions' labels room for one line.
+                           .sizing(ui::percent(26))
+                           .maxWidth(33)
+                           .a11y("Summary")
+                           .testId("summary-panel");
     return ui::row(
         {ui::column({attention(study, false), fields, conditions}, {.gap = 2}).sizing(ui::stretch()), aside},
         {.gap = 2, .align = Align::Start});
