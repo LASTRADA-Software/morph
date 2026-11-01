@@ -35,20 +35,28 @@ Item {
         return t - (2.515517 + 0.802853 * t + 0.010328 * t * t) / (1 + 1.432788 * t + 0.189269 * t * t + 0.001308 * t * t * t)
     }
 
+    // The share of the shadow's strength that layers 0..k reach together, 0 for k below the first layer. It grows as
+    // the square of the layer's position, not linearly, so the outermost layers are far fainter than a uniform share
+    // would make them: a uniform first layer is a visible step of 1/count of the strength at the edge of the whole
+    // shadow, where the squared one adds less than one 8-bit level and the shadow fades to nothing.
+    function reachedBy(k: int): real {
+        return k < 0 ? 0 : Math.pow((k + 1) / count, 2)
+    }
+
     // How far the k-th layer (0 is the outermost) reaches beyond the outline: where the shadow's falloff crosses the
-    // middle of the k-th share of its strength, so the layers' steps follow the Gaussian's edge. Negative for a layer
-    // inside the outline.
+    // middle of the k-th layer's share of its strength, so the layers' steps follow the Gaussian's edge. Negative for
+    // a layer inside the outline.
     function extentOf(k: int): real {
-        return sigma > 0 ? sigma * upperQuantile((k + 0.5) / count) : 0
+        return sigma > 0 ? sigma * upperQuantile((reachedBy(k - 1) + reachedBy(k)) / 2) : 0
     }
 
     // The alpha the k-th layer is drawn with so that layers 0..k composited with source-over reach the colour's alpha
-    // times (k + 1) / count: what the layers under it left uncovered is what it adds.
+    // times `reachedBy(k)`: what the layers under it left uncovered is what it adds.
     function alphaOf(k: int): real {
         if (count === 1)
             return color.a
-        const reached = color.a * (k + 1) / count
-        const below = color.a * k / count
+        const reached = color.a * reachedBy(k)
+        const below = color.a * reachedBy(k - 1)
         return (reached - below) / (1 - below)
     }
 

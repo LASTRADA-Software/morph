@@ -925,8 +925,9 @@ TEMPLATE_TEST_CASE("qt_quick overlays: both rules draw the card's divider", "[qt
     }
 }
 
-// Mutation: draw the shadow as one rectangle (the layers are one, with no blur), or give every layer the colour's full
-// alpha (the composite then exceeds it).
+// Mutation: draw the shadow as one rectangle (the layers are one, with no blur), give every layer the colour's full
+// alpha (the composite then exceeds it), or split the strength evenly over the layers (the outermost layer's alpha is
+// 1/16 of the shadow's).
 TEMPLATE_TEST_CASE("qt_quick overlays: the shadow is blurred, its layers growing outward and compositing to its alpha",
                    "[qt_quick]", ui::DialogWidget, ui::DrawerWidget) {
     Scene scene;
@@ -959,6 +960,9 @@ TEMPLATE_TEST_CASE("qt_quick overlays: the shadow is blurred, its layers growing
     CHECK(layers.front()->width() > shadow->width() + 24);
     CHECK(layers.back()->width() < shadow->width());
     CHECK(1.0 - uncovered == Catch::Approx(128.0 / 255.0).margin(0.01));
+    // The outermost layer adds a sliver of the shadow, far under the 1/16 a uniform split would give it, so the shadow
+    // fades out and ends in no visible edge.
+    CHECK(static_cast<double>(layers.front()->property("color").value<QColor>().alphaF()) < 0.005);
 }
 
 // Mutation: read the card's shadow (the dialog's shadow is the transparent card colour), or read the dialog's shadow
