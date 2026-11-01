@@ -192,7 +192,7 @@ arithmetic, and `any` where it depends on data the document does not describe.
 | Optional | `engaged(x)` (never `null`), `coalesce(x, ...)` (the first non-`null`) |
 | Strings | `concat(s, ...)`, `format(template, args...)`, `trim`, `length` (code points), `isEmpty` (a string or a list), `contains` |
 | Lists | `count`, `sum` (0 for an empty list), `mean`, `min`, `max`, `stdev(list, dp, mode?)` (sample, n − 1), `rsd(list, dp, mode?)` (in percent), `any`, `all`, `first`, `includes`, `indexOf`, `concatLists(list, ...)`, `slice(list, start, count?)` |
-| Dates | `dateAdd(x, n, unit)` |
+| Dates | `dateAdd(x, n, unit)`, `dateRange(from, to)` |
 | Display | `number`, `decimal(x, dp, mode?)`, `quantity(x, unit?)`, `money(x, currency)`, `date(x, style?)`, `dateTime(x, style?)` |
 | Entry | `parseDecimal(text, dp?)` |
 | Text | `t(key, fallback, args?)` |
@@ -277,6 +277,13 @@ the `render::TranslationProvider`, the `UnitTable`, the display zone's offset an
   `2026-10-11 08:30` (`long` adds seconds). An instant is shifted to the display zone first. A date
   is that calendar day at any offset, and `dateTime` shows it as midnight of that day in the display
   zone, as a date input does. `""` is `null` without a report.
+
+- `dateRange(from, to)` writes two days as one span, each read as `date` reads (an instant is shifted to the
+  display zone first): `20–24 Oct 2026` within a month, `28 Oct – 3 Nov 2026` within a year, `30 Dec 2026 – 2 Jan
+  2027` across years, and a single day when both are the same. The days are unpadded and the month is the English
+  abbreviation of a date pattern's `MMM`. The form is fixed rather than the application's date pattern, which writes
+  one day and cannot say which parts two days share. Either end `""` or `null` gives `null` without a report; text
+  that is not a date is a mismatch.
 
 **Date patterns** (`ui/date_pattern.hpp`: `checkDatePattern`, `formatDate`, `parseDate`, which the formatter, the
 interpreter and both frontends share). The tokens are `yyyy`, `MM`, `MMM` (`Jan` … `Dec`, in English whatever the

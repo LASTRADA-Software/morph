@@ -297,12 +297,16 @@ ui::Node chips(Audit const& audit) {
                     .testId(std::string{"chip-"} + facet.testId));
         }
     }
-    // An open end of the range shows as an ellipsis; `date` reads only a date that is set.
+    // A closed range reads as one span, `20–24 Oct 2026`; an open end shows as an ellipsis, since `date` reads only
+    // a date that is set.
     auto const end = [](Text const& value) {
         return ui::cond(ui::isEmpty(value), ui::AnyHandle{"…"}, ui::call("date", {value}));
     };
-    row.push_back(chip(ui::format("{0} – {1}", {end(audit.from), end(audit.until)}), "Remove dates",
-                       {ui::set(audit.from, std::string{}), ui::set(audit.until, std::string{})}, audit.dated)
+    auto const closed = !ui::isEmpty(audit.from) && !ui::isEmpty(audit.until);
+    auto const span = ui::cond(closed, ui::AnyHandle{ui::dateRange(audit.from, audit.until)},
+                               ui::AnyHandle{ui::format("{0} – {1}", {end(audit.from), end(audit.until)})});
+    row.push_back(chip(span, "Remove dates", {ui::set(audit.from, std::string{}), ui::set(audit.until, std::string{})},
+                       audit.dated)
                       .testId("chip-dates"));
     // The note follows the chips on their line while the page is wide enough, and wraps under them otherwise.
     row.push_back(entriesNote(audit));

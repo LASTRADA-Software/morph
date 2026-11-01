@@ -141,6 +141,7 @@ enum class FunctionId : std::uint8_t {
     Stdev,
     Rsd,
     DateAdd,
+    DateRange,
 };
 
 struct Expr;
@@ -227,7 +228,7 @@ struct FunctionSpec {
 
 /// @brief The library, indexed by `FunctionId`.
 // NOLINTBEGIN(modernize-use-designated-initializers): one row per function reads as a table; names on every field would not.
-inline constexpr std::array<FunctionSpec, 48> kFunctions = {{
+inline constexpr std::array<FunctionSpec, 49> kFunctions = {{
     {"and", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"or", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"not", 1, 1, {kindBit(TypeKind::Bool), 0, 0}, TypeKind::Bool},
@@ -304,6 +305,12 @@ inline constexpr std::array<FunctionSpec, 48> kFunctions = {{
      3,
      {kindBit(TypeKind::Timestamp) | kindBit(TypeKind::String), kindBit(TypeKind::Int), kindBit(TypeKind::String)},
      TypeKind::Any},
+    {"dateRange",
+     2,
+     2,
+     {kindBit(TypeKind::Timestamp) | kindBit(TypeKind::String),
+      kindBit(TypeKind::Timestamp) | kindBit(TypeKind::String), 0},
+     TypeKind::String},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
 
@@ -1831,6 +1838,55 @@ private:
         return Value{};
     }
 
+    /// The calendar day of a reading in the display zone: a date as it is, an instant shifted by the display offset.
+    [[nodiscard]] std::chrono::year_month_day localDay(DateValue const& reading) {
+        if (reading.form == DateForm::Date) {
+            return reading.date;
+        }
+        auto const local = reading.instant + std::chrono::minutes{_env->formatting().utcOffsetMinutes};
+        return std::chrono::year_month_day{std::chrono::floor<std::chrono::days>(local.value)};
+    }
+
+    /// `dateRange(from, to)`: the span of two days in the shortest form that stays unambiguous, `20–24 Oct 2026`
+    /// within a month, `28 Oct – 3 Nov 2026` within a year, and both days in full across years. It is one fixed
+    /// English form, not the application's date pattern, because the pattern writes a single day.
+    Value dateRange(Expr const& expr, std::vector<Value> const& args) {
+        DateValue const from = readDateValue(args.at(0));
+        DateValue const until = readDateValue(args.at(1));
+        if (from.form == DateForm::Unreadable || until.form == DateForm::Unreadable) {
+            return mismatch(expr, "`dateRange` takes two dates, timestamps or ISO text");
+        }
+        if (from.form == DateForm::Absent || until.form == DateForm::Absent) {
+            return Value{};
+        }
+        auto const first = localDay(from);
+        auto const last = localDay(until);
+        auto const month = [](std::chrono::year_month_day day) {
+            return std::string{detail::dates::kMonths.at(static_cast<unsigned>(day.month()) - 1)};
+        };
+        auto const dayOf = [](std::chrono::year_month_day day) {
+            return std::to_string(static_cast<unsigned>(day.day()));
+        };
+        auto const yearOf = [](std::chrono::year_month_day day) {
+            return std::to_string(static_cast<int>(day.year()));
+        };
+        // U+2013 EN DASH, written as bytes so the source's character set cannot change it.
+        std::string const dash = "\xE2\x80\x93";
+        std::string const separator = " " + dash + " ";
+        if (first.year() != last.year()) {
+            return dayOf(first) + " " + month(first) + " " + yearOf(first) + separator + dayOf(last) + " " +
+                   month(last) + " " + yearOf(last);
+        }
+        if (first.month() != last.month()) {
+            return dayOf(first) + " " + month(first) + separator + dayOf(last) + " " + month(last) + " " +
+                   yearOf(last);
+        }
+        if (first.day() == last.day()) {
+            return dayOf(last) + " " + month(last) + " " + yearOf(last);
+        }
+        return dayOf(first) + dash + dayOf(last) + " " + month(last) + " " + yearOf(last);
+    }
+
     /// `dateAdd(value, amount, unit)`: a date or an instant moved by whole units, in the value's own form.
     Value addToDate(Expr const& expr, std::vector<Value> const& args) {
         DateValue const reading = readDateValue(args.at(0));
@@ -2778,6 +2834,8 @@ private:
             }
             case FunctionId::DateAdd:
                 return addToDate(expr, args);
+            case FunctionId::DateRange:
+                return dateRange(expr, args);
             case FunctionId::ParseDecimal: {
                 std::string const* const text = args.at(0).asString();
                 std::optional<std::uint32_t> declared;

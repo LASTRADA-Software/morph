@@ -347,6 +347,14 @@
     { "name": "date of a number", "expr": { "fn": "date", "args": [5] }, "expect": null, "reports": 1 },
     { "name": "dateTime with a non-string style", "expr": { "fn": "dateTime", "args": ["2026-10-11T23:30:00Z", 5] }, "expect": null, "reports": 1 },
 
+    { "name": "dateRange within a month", "expr": { "fn": "dateRange", "args": ["2026-10-20", "2026-10-24"] }, "expect": "20\u201324 Oct 2026" },
+    { "name": "dateRange within a year", "expr": { "fn": "dateRange", "args": ["2026-10-28", "2026-11-03"] }, "expect": "28 Oct \u2013 3 Nov 2026" },
+    { "name": "dateRange across years", "expr": { "fn": "dateRange", "args": ["2026-12-30", "2027-01-02"] }, "expect": "30 Dec 2026 \u2013 2 Jan 2027" },
+    { "name": "dateRange of one day", "expr": { "fn": "dateRange", "args": ["2026-10-20", "2026-10-20"] }, "expect": "20 Oct 2026" },
+    { "name": "dateRange of an instant in the display zone", "expr": { "fn": "dateRange", "args": ["2026-10-19T23:30:00Z", "2026-10-24"] }, "env": { "offset": 60 }, "expect": "20\u201324 Oct 2026" },
+    { "name": "dateRange with an open end", "expr": { "fn": "dateRange", "args": ["2026-10-20", ""] }, "expect": null },
+    { "name": "dateRange of text that is not a date", "expr": { "fn": "dateRange", "args": ["2026-10-20", "soon"] }, "expect": null, "reports": 1 },
+
     { "name": "dateAdd a month to a date", "expr": { "fn": "dateAdd", "args": ["2026-11-03", 1, "months"] }, "expect": "2026-12-03" },
     { "name": "dateAdd 36 months to a date", "expr": { "fn": "dateAdd", "args": ["2026-11-03", 36, "months"] }, "expect": "2029-11-03" },
     { "name": "dateAdd 3 months to a date", "expr": { "fn": "dateAdd", "args": ["2026-11-03", 3, "months"] }, "expect": "2027-02-03" },
