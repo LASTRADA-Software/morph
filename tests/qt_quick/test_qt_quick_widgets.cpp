@@ -2401,9 +2401,34 @@ TEST_CASE("qt_quick widgets: a text follows a body size the theme changes after 
 // cut it was first given, and draws past its width in its larger font).
 TEST_CASE("qt_quick widgets: a one-line text whose role is set after its text elides by its own font", "[qt_quick]") {
     Scene scene;
+    // The width is taken from the font in use: the fewest layout units that hold the label in the body font, which
+    // must still be narrower than the heading font needs.
+    double bodyWidth = 0;
+    double headingWidth = 0;
+    double unitWidth = 0;
+    {
+        Scene probe;
+        auto const probeRow = probe.backend().createStack(nullptr, ui::Axis::Horizontal);
+        auto const body = probe.backend().createText(probeRow.get());
+        body->setText("System suitability");
+        auto const heading = probe.backend().createText(probeRow.get());
+        heading->setText("System suitability");
+        heading->setRole(ui::TextRole::Heading);
+        probe.settle();
+        bodyWidth = Scene::itemOf(*body).implicitWidth();
+        headingWidth = Scene::itemOf(*heading).implicitWidth();
+        auto const ruler = probe.backend().createText(probeRow.get());
+        ruler->setLayout({.width = ui::Sizing::fixed(10)});
+        probe.settle();
+        unitWidth = Scene::itemOf(*ruler).width() / 10;
+    }
+    REQUIRE(unitWidth > 0);
+    int const units = static_cast<int>(std::ceil((bodyWidth + 1) / unitWidth));
+    INFO("body " << bodyWidth << ", heading " << headingWidth << ", " << units << " units of " << unitWidth);
+    REQUIRE(units * unitWidth + 2 < headingWidth);
     auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
     auto const text = scene.backend().createText(row.get());
-    text->setLayout({.width = ui::Sizing::fixed(15)});
+    text->setLayout({.width = ui::Sizing::fixed(units)});
     text->setText("System suitability");
     QQuickItem& item = Scene::itemOf(*text);
     item.setProperty("singleLine", true);
