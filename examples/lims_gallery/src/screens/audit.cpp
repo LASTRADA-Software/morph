@@ -304,9 +304,9 @@ ui::Node chips(Audit const& audit) {
     row.push_back(chip(ui::format("{0} – {1}", {end(audit.from), end(audit.until)}), "Remove dates",
                        {ui::set(audit.from, std::string{}), ui::set(audit.until, std::string{})}, audit.dated)
                       .testId("chip-dates"));
-    // The note sits above the chips, so the date range's chip stays on the chips' line.
-    return ui::column({entriesNote(audit), ui::row(row, {.gap = 1, .align = Align::Center, .wrap = true})}, {.gap = 1})
-        .testId("chips");
+    // The note follows the chips on their line while the page is wide enough, and wraps under them otherwise.
+    row.push_back(entriesNote(audit));
+    return ui::row(row, {.gap = 1, .align = Align::Center, .wrap = true}).testId("chips");
 }
 
 // ── The trail ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -345,11 +345,11 @@ ui::Node trailTable(Audit const& audit) {
                                       ui::text({.text = ui::row("detail")}).visible(!ui::isEmpty(ui::row("detail")))},
                                      {.gap = 0})},
                      {.name = "field", .label = "Field", .width = ui::fixed(8)},
-                     {.name = "old", .label = "Old value", .width = ui::stretch(3), .cell = oldValue(ui::row("old"))},
-                     {.name = "new", .label = "New value", .width = ui::stretch(4), .cell = newValue(ui::row("new"))},
+                     {.name = "old", .label = "Old value", .width = ui::fixed(7), .cell = oldValue(ui::row("old"))},
+                     {.name = "new", .label = "New value", .width = ui::fixed(8), .cell = newValue(ui::row("new"))},
                      {.name = "reason",
                       .label = "Reason",
-                      .width = ui::stretch(5),
+                      .width = ui::stretch(),
                       .cell = ui::text({.text = ui::cond(noReason, ui::AnyHandle{"—"}, reason),
                                         .role = ui::cond(noReason, Text{"muted"}, Text{"normal"})})}},
                 .pageSize = std::int64_t{25},
