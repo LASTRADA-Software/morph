@@ -703,8 +703,8 @@ TEST_CASE("tui::layout::planColumns holds its invariants on random input", "[tui
                 CHECK(widths.at(index) >= previous.at(index) - 1);
                 sum += widths.at(index);
             }
-            if (length - gap * (count - 1) >= floors) {
-                CHECK(sum == length - gap * (count - 1));
+            if (length - (gap * (count - 1)) >= floors) {
+                CHECK(sum == length - (gap * (count - 1)));
             }
             previous = widths;
         }

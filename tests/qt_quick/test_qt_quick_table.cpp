@@ -1406,15 +1406,15 @@ TEST_CASE("qt_quick table: a wrapping column gives before a column that does not
 TEST_CASE("qt_quick table: no column narrows as the table widens, and the stretch columns sum to what is left",
           "[qt_quick][table]") {
     Scene scene;
-    Sheet sheet = makeSheet(scene,
-                            {{.label = "F", .width = ui::Sizing::fixed(6)},
-                             {.label = "C"},
-                             {.label = "W", .width = ui::Sizing::stretch(1)},
-                             {.label = "L", .width = ui::Sizing::stretch(2), .wrap = false},
-                             {.label = "S", .width = ui::Sizing::stretch(1), .wrap = false, .shrink = true},
-                             {.label = "O", .width = ui::Sizing::stretch(1), .wrap = false}},
-                            {"fixed", "content", "alpha beta gamma delta epsilon zeta eta theta",
-                             "one line of a few words", "another line here", "x"});
+    Sheet const sheet = makeSheet(scene,
+                                  {{.label = "F", .width = ui::Sizing::fixed(6)},
+                                   {.label = "C"},
+                                   {.label = "W", .width = ui::Sizing::stretch(1)},
+                                   {.label = "L", .width = ui::Sizing::stretch(2), .wrap = false},
+                                   {.label = "S", .width = ui::Sizing::stretch(1), .wrap = false, .shrink = true},
+                                   {.label = "O", .width = ui::Sizing::stretch(1), .wrap = false}},
+                                  {"fixed", "content", "alpha beta gamma delta epsilon zeta eta theta",
+                                   "one line of a few words", "another line here", "x"});
     QQuickItem& tableItem = Scene::itemOf(*sheet.table);
     auto const* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("hflick"));
     REQUIRE(flick != nullptr);
@@ -1549,9 +1549,9 @@ TEST_CASE("qt_quick table: a cell whose width follows its width does not leave a
     static_cast<void>(follow.evaluate());
     REQUIRE_FALSE(follow.hasError());
     scene.window().resize(700, 400);
-    QQuickItem& rowItem = Scene::itemOf(*sheet.row);
+    QQuickItem const& rowItem = Scene::itemOf(*sheet.row);
     settleFully(scene, rowItem);
-    QQuickItem& tableItem = Scene::itemOf(*sheet.table);
+    QQuickItem const& tableItem = Scene::itemOf(*sheet.table);
     auto const widths = widthsOf(tableItem);
     REQUIRE(widths.size() == 4);
     qreal sum = 0;
@@ -1607,8 +1607,8 @@ TEST_CASE("qt_quick table: a table in a cell settles to the layout a fresh build
     };
     // Built wide, then narrowed in steps, against the same table built narrow.
     Scene history;
-    Nested walked = build(history);
-    QQuickItem& walkedItem = Scene::itemOf(*walked.outer.table);
+    Nested const walked = build(history);
+    QQuickItem const& walkedItem = Scene::itemOf(*walked.outer.table);
     history.window().resize(900, 400);
     settleFully(history, Scene::itemOf(*walked.outer.row));
     history.window().resize(1400, 400);
@@ -1617,7 +1617,7 @@ TEST_CASE("qt_quick table: a table in a cell settles to the layout a fresh build
     settleFully(history, Scene::itemOf(*walked.outer.row));
 
     Scene fresh;
-    Nested built = build(fresh);
+    Nested const built = build(fresh);
     fresh.window().resize(700, 400);
     settleFully(fresh, Scene::itemOf(*built.outer.row));
 
@@ -1657,7 +1657,7 @@ TEST_CASE("qt_quick table: the width-free natural width of runs that wrap is the
                                               advanceOf(QStringLiteral("the second line is longer"), true)) +
                                      slack);
     item.setProperty("singleLine", false);
-    for (int width : {400, 120, 400}) {
+    for (int const width : {400, 120, 400}) {
         scene.window().resize(width, 300);
         scene.settle();
         INFO("window width " << width);
@@ -1681,7 +1681,7 @@ TEST_CASE("qt_quick table: a virtualized table's stretch column caches only grow
     ui::Mounted const mounted{
         scene.runtime(), scene.backend(),
         ui::table<VirtualRow>(
-            {{.label = "Name", .width = ui::Sizing::stretch(1)}}, [&many] { return many; },
+            {{.label = "Name", .width = ui::Sizing::stretch(1)}}, [&many] { return std::vector<VirtualRow>{many}; },
             [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
             {.virtualize = {.threshold = 5, .overscan = 1}, .common = {.layout = {.height = ui::Sizing::fixed(10)}}})};
     scene.settle();

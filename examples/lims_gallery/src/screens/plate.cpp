@@ -659,10 +659,7 @@ ui::Node runLine(Plate const& plate) {
     marker.onClick = ui::Commands{ui::ifThen(ui::includes(plate.sampleWells, first), toggleWell(plate, first))};
     marker.selected = ui::includes(plate.selection, first);
     return ui::row(
-        {ui::button(marker)
-             .surface(ui::row("first.surface"))
-             .a11y(ui::format("Select {0}", {first}))
-             .testId("marker"),
+        {ui::button(marker).surface(ui::row("first.surface")).a11y(ui::format("Select {0}", {first})).testId("marker"),
          ui::text({.text = ui::format("{0} · {1}", {name, line}), .spans = ui::spans({ui::strong(name), " · ", line})})
              .sizing(ui::stretch())
              .testId("line"),
