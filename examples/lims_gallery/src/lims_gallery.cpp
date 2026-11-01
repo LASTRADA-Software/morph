@@ -68,6 +68,7 @@ constexpr char const* kThemeBase = R"({
   "shape": { "iconOnly": { "$type": "keyword", "$value": "square" } },
   "collapsible": { "marker": { "$type": "keyword", "$value": "none" } },
   "table": { "$type": "dimension", "cellPaddingY": { "$value": { "value": 6, "unit": "px" } } },
+  "head": { "$type": "dimension", "paddingY": { "$value": { "value": 12, "unit": "px" } } },
   "radius": { "$type": "dimension",
     "control": { "$value": { "value": 6, "unit": "px" } }, "card": { "$value": { "value": 6, "unit": "px" } } },
   "elevation": { "$type": "shadow",
