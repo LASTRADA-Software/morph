@@ -297,7 +297,8 @@ Worksheet declare(ui::Scope& screen) {
         .after = screen.state("changeAfter", std::string{"0.21"}),
         .reason = screen.state("changeReason", std::string{"integration"}),
         .comment = screen.state(
-            "changeComment", std::string{"Peak 7 integrated with the wrong baseline; reintegrated per SOP-CHR-012."}),
+            "changeComment",
+            std::string{"Peak 7 integrated with the wrong baseline; reintegrated per SOP\u2011CHR\u2011012."}),
     };
     auto const prep1 = ui::parseDecimal(valueOf(sheet.lines, "a1"), 1);
     auto const prep2 = ui::parseDecimal(valueOf(sheet.lines, "a2"), 1);
