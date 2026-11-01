@@ -65,7 +65,23 @@ TEST_CASE("results, expanded: the worksheet grid, its calculations and the chang
           "S-26-104170 · Impurity B: 0.12 % → 0.21 %");
     CHECK(screen.prop("Dialog", "change", "descriptionSpans") ==
           "[S-26-104170;mono, · Impurity B: ,0.12 %;strong, → ,0.21 %;strong]");
-    CHECK(screen.prop("Button", "submit", "enabled") == "false");
+    // Submit is enabled under the open dialog, as the design draws it.
+    CHECK(screen.prop("Button", "submit", "enabled") == "true");
+}
+
+TEST_CASE("results, expanded: Submit with the dialog open needs the reason, and settles the change once it has one",
+          "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    screen.edit("comment", "");
+    CHECK(screen.waitFor([&screen] { return screen.prop("Button", "action_confirm", "enabled") == "false"; }));
+    CHECK(screen.prop("Button", "submit", "enabled") == "true");
+    screen.click("submit");
+    CHECK(screen.prop("Dialog", "change", "open") == "true");
+    screen.edit("comment", "Reintegrated.");
+    CHECK(screen.waitFor([&screen] { return screen.prop("Button", "action_confirm", "enabled") == "true"; }));
+    screen.click("submit");
+    CHECK(screen.waitFor([&screen] { return screen.prop("Dialog", "change", "open") == "false"; }));
+    screen.requireNoProblems();
 }
 
 TEST_CASE("results, expanded: undoing the change, then editing a result asks for its reason", "[lims-gallery]") {

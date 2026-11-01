@@ -497,21 +497,25 @@ ui::AnyHandle outOfSpecMessage(Worksheet const& sheet) {
                                              {sheet.outOfSpec})}));
 }
 
-// Submitting waits for every result to be readable and every change to have its reason. The expanded layout asks for
-// the change to be confirmed or undone first; the compact one has neither button, so a change with its reason and
-// comment filled in already stands.
+// Whether the change on the table has the reason and comment it needs, or there is no change open.
+Flag changeSettled(Change const& change) { return !change.open || canConfirm(change); }
+
+// Submitting waits for every result to be readable. The expanded layout keeps Submit enabled while the reason dialog
+// is open, as the design draws it, and the click then asks for the reason when it is missing; the compact layout has
+// no dialog, so Submit stays disabled until the inline reason and comment are filled in.
 Flag canSubmit(Worksheet const& sheet) {
-    Flag const settled =
-        ui::cond(ui::eq(sheet.width, "compact"), !sheet.change.open || canConfirm(sheet.change), !sheet.change.open);
+    Flag const settled = ui::cond(ui::eq(sheet.width, "compact"), changeSettled(sheet.change), Flag{true});
     return settled && ui::eq(sheet.unreadable, std::int64_t{0});
 }
 
 ui::Commands submit(Worksheet const& sheet) {
-    return {
-        ui::set(sheet.change.open, false),
-        ui::notify(ui::cond(ui::eq(sheet.outOfSpec, std::int64_t{0}), Text{"WS-2026-0412 is submitted for review."},
-                            Text{"WS-2026-0412 is submitted for review; investigation OOS-2026-031 is opened."}),
-                   ui::Role::Success)};
+    return {ui::ifThen(
+        changeSettled(sheet.change),
+        {ui::set(sheet.change.open, false),
+         ui::notify(ui::cond(ui::eq(sheet.outOfSpec, std::int64_t{0}), Text{"WS-2026-0412 is submitted for review."},
+                             Text{"WS-2026-0412 is submitted for review; investigation OOS-2026-031 is opened."}),
+                    ui::Role::Success)},
+        {ui::notify("Give the reason and comment for the change before submitting.", ui::Role::Warning)})};
 }
 
 ui::Node saveButton() {
