@@ -217,7 +217,7 @@ Study declare(ui::Scope& screen) {
             .at("short");
     study.firstDate = screen.let("firstDate", pullDate(study.start, first));
     study.firstPull =
-        screen.let("firstPull", ui::format("{0} ({1}, {2}\u00a0m)", {study.firstDate, firstCondition, first}));
+        screen.let("firstPull", ui::format("{0} ({1},\u00a0{2}\u00a0m)", {study.firstDate, firstCondition, first}));
     study.lastPull = screen.let("lastPull", pullDate(study.start, last));
     return study;
 }

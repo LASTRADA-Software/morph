@@ -48,7 +48,7 @@ TEST_CASE("stability, expanded: step 2 of the wizard, the matrix and the summary
     CHECK(screen.backend().prop(monthBox(screen, "25\u00a0°C", "T0"), "checked") == "true");
     CHECK(screen.backend().prop(monthBox(screen, "25\u00a0°C", "1 m"), "checked") == "false");
     CHECK(holdsPair(screen, "summary-pairs", "Pulls:15"));
-    CHECK(holdsPair(screen, "summary-pairs", "First pull:[03-Dec-2026 (40\u00a0°C\\, 1\u00a0m);mono]"));
+    CHECK(holdsPair(screen, "summary-pairs", "First pull:[03-Dec-2026 (40\u00a0°C\\,\u00a01\u00a0m);mono]"));
     CHECK(holdsPair(screen, "summary-pairs", "Last pull:[03-Nov-2029;mono]"));
     CHECK(holdsPair(screen, "summary-pairs", "Containers:180 needed\\, 150 in stock;tone=Err"));
     CHECK(screen.prop("TextInput", "per-pull", "errors") ==
@@ -69,7 +69,7 @@ TEST_CASE("stability, expanded: a timepoint changes the summary, and enough cont
     screen.backend().toggle(monthBox(screen, "40\u00a0°C", "1 m"));
     CHECK(screen.waitFor([&screen] {
         return holdsPair(screen, "summary-pairs", "Pulls:14") &&
-               holdsPair(screen, "summary-pairs", "First pull:[03-Feb-2027 (25\u00a0°C\\, 3\u00a0m);mono]");
+               holdsPair(screen, "summary-pairs", "First pull:[03-Feb-2027 (25\u00a0°C\\,\u00a03\u00a0m);mono]");
     }));
     screen.edit("per-pull", "10");
     CHECK(screen.waitFor([&screen] { return !screen.shows("Banner", "attention"); }));
@@ -93,7 +93,7 @@ TEST_CASE("stability: the pull dates follow the study start, a month on from 31 
     REQUIRE(instant.has_value());
     screen.backend().setDateTime(start.value_or(0), morph::time::Timestamp{instant.value_or(morph::time::DateTime{})});
     CHECK(screen.waitFor([&screen] {
-        return holdsPair(screen, "summary-pairs", "First pull:[28-Feb-2027 (40\u00a0°C\\, 1\u00a0m);mono]") &&
+        return holdsPair(screen, "summary-pairs", "First pull:[28-Feb-2027 (40\u00a0°C\\,\u00a01\u00a0m);mono]") &&
                holdsPair(screen, "summary-pairs", "Last pull:[31-Jan-2030;mono]");
     }));
     screen.requireNoProblems();
