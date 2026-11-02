@@ -845,12 +845,12 @@ ui::Node compactWorksheet(Review const& review) {
                                       .testId("back")},
                                  {.padding = ui::padding(1, 4)})
                           .surface("bar");
-    auto const decisions = ui::row({returnButton(review, "Return…").sizing(ui::stretch()),
-                                    rejectButton(review, "Reject…").sizing(ui::stretch()),
-                                    approveButton(review, "Approve…").sizing(ui::stretch(2))},
-                                   {.gap = 2, .padding = ui::padding(2, 4)})
-                               .surface("bar")
-                               .testId("decisions");
+    auto const decisions = ui::column({ui::actionBar({returnButton(review, "Return…").sizing(ui::stretch()),
+                                                      rejectButton(review, "Reject…").sizing(ui::stretch()),
+                                                      approveButton(review, "Approve…").sizing(ui::stretch(2))})
+                                           .testId("decisions")},
+                                      {.padding = ui::padding(2, 4)})
+                               .surface("bar");
     return ui::column({back, recordTabs(review, true), decisions, decisionDialog(review)},
                       {.gap = 0, .divided = true, .pageEdge = true, .headJoined = true})
         .sizing(ui::stretch(), ui::stretch());

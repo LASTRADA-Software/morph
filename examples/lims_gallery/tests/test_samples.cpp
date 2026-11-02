@@ -133,6 +133,8 @@ TEST_CASE("samples, compact: rows become cards with the same selection, the bar 
     CHECK(screen.text("selected") == "3 selected");
     CHECK(screen.find("Menu", "more-bulk").has_value());
     CHECK(screen.prop("Button", "head_action_register", "label") == "Register");
+    // The Filters button and the sort choice sit 8 px apart.
+    CHECK(screen.prop("Row", "actions", "gap") == "2");
     CHECK(screen.prop("Button", "open-filters", "label") == "Filters · 2");
     // The cards follow the shared order, 25 at a time.
     CHECK(screen.prop("Select", "sort", "selected") == "\"due-asc\"");

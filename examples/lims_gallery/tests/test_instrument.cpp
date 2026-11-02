@@ -108,6 +108,8 @@ TEST_CASE("instrument, compact: stacked sections, actions in the page, the secti
     CHECK(screen.backend().find("Column", "surface", "bar").has_value());
     CHECK(screen.prop("Tabs", "tabs", "inset") == "4");
     CHECK(screen.shows("Button", "maintenance"));
+    // Book, Log maintenance and the menu sit 8 px apart.
+    CHECK(screen.prop("Row", "actions", "gap") == "2");
     // Compact hides the head's menu entries, so the head draws no menu and the page's follows the large buttons.
     CHECK_FALSE(screen.find("Menu", "head_menu").has_value());
     CHECK(screen.find("Menu", "more").has_value());

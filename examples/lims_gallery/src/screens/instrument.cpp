@@ -374,7 +374,7 @@ ui::Node section(ui::AnyHandle const& title, ui::Node const& content, ui::Handle
 }
 
 ui::Node compactLayout(Instrument const& instrument) {
-    auto const actions = ui::row(
+    auto const actions = ui::actionBar(
         {ui::button({.label = "Book", .emphasis = ButtonEmphasis::Primary, .onClick = book(instrument)})
              .enabled(instrument.inService)
              .sizing(ui::stretch())
@@ -385,7 +385,8 @@ ui::Node compactLayout(Instrument const& instrument) {
              .sizing(ui::stretch())
              .testId("maintenance"),
          moreMenu(instrument)},
-        {.gap = 1, .align = Align::Center});
+        {.align = Align::Center})
+        .testId("actions");
     auto const overview =
         ui::column({compactDetails(),
                     section("Current booking", currentBooking(true), instrument.bookingOpen).testId("booking-section"),

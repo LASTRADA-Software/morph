@@ -81,6 +81,8 @@ TEST_CASE("audit, compact: entries stack as cards, filters in a drawer", "[lims-
     CHECK(screen.backend().dump().contains("[S-26-104170 · Impurity B · Result;mono]"));
     CHECK(showsText(screen, "Reason: F-02 out of range during defrost cycle."));
     CHECK_FALSE(screen.shows("Table", "trail"));
+    // The Filters and Export buttons sit 8 px apart.
+    CHECK(screen.prop("Row", "actions", "gap") == "2");
     CHECK(screen.prop("Button", "open-filters", "label") == "Filters · 4");
     CHECK(screen.prop("Button", "head_action_pdf", "label") == "Export PDF");
     screen.click("open-filters");

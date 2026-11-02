@@ -443,13 +443,13 @@ ui::Node filtersDrawer(Audit const& audit) {
 // head's block, so the head draws no rule of its own over it.
 ui::Node compactLayout(Audit const& audit) {
     auto const actions = ui::column(
-        {ui::row(
+        {ui::actionBar(
              {ui::button({.label = ui::format("Filters · {0}", {audit.active}), .onClick = ui::open(audit.filters)})
                   .sizing(ui::stretch())
                   .testId("open-filters"),
               ui::button({.label = "Export CSV", .onClick = ui::notify("Exporting the audit trail as CSV")})
-                  .sizing(ui::stretch())},
-             {.gap = 1}),
+                  .sizing(ui::stretch())})
+             .testId("actions"),
          entriesNote(audit)},
         {.gap = 2, .padding = ui::padding(2, 4)});
     return ui::column(

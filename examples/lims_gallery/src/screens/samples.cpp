@@ -688,11 +688,11 @@ ui::Node compactLayout(Samples const& list) {
     // bottom, while the cards scroll between them.
     auto const controls = ui::Nodes{ui::column(
         {searchField(list),
-         ui::row({ui::button({.label = ui::format("Filters · {0}", {active}), .onClick = ui::open(list.filtersDrawer)})
-                      .sizing(ui::stretch())
-                      .testId("open-filters"),
-                  sortChoice(list).sizing(ui::stretch())},
-                 {.gap = 1})},
+         ui::actionBar({ui::button({.label = ui::format("Filters · {0}", {active}), .onClick = ui::open(list.filtersDrawer)})
+                            .sizing(ui::stretch())
+                            .testId("open-filters"),
+                        sortChoice(list).sizing(ui::stretch())})
+             .testId("actions")},
         {.gap = 2})};
     return ui::pinned(
         ui::column({ui::panel({ui::forEach(ui::slice(cardOrder(list), std::int64_t{0}, list.cardCount),
