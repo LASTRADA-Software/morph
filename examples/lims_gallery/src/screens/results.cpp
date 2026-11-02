@@ -563,10 +563,10 @@ ui::Node expandedLayout(Worksheet const& sheet) {
                               {.padding = 0}),
                     changeDialog(sheet)},
                    {.gap = 2}),
-        {.bottom =
-             ui::row({ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).sizing(ui::stretch()).testId("oos"),
-                      saveButton(), submitButton(sheet)},
-                     {.gap = 1, .align = Align::Center})});
+        {.bottom = ui::actionBar(
+             {ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).sizing(ui::stretch()).testId("oos"),
+              saveButton(), submitButton(sheet)},
+             {.align = Align::Center})});
 }
 
 // ── Compact: one sample at a time ────────────────────────────────────────────────────────────────────────────────

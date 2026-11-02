@@ -465,9 +465,9 @@ ui::Node compactLayout(Receipt const& receipt) {
                  .testId("session-panel"),
              rejectDialog(receipt)},
             {.gap = 2}),
-        {.bottom = ui::row({rejectButton(receipt, "Reject…").sizing(ui::fixed(14)),
-                            receiveButton(receipt, "Receive, next").sizing(ui::stretch())},
-                           {.gap = 1})});
+        {.bottom = ui::actionBar({rejectButton(receipt, "Reject…").sizing(ui::fixed(14)),
+                                  receiveButton(receipt, "Receive, next").sizing(ui::stretch())},
+                                 {.align = Align::Center})});
 }
 
 }  // namespace

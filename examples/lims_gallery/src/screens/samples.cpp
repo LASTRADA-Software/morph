@@ -629,7 +629,7 @@ ui::Node compactFilters(Samples const& list) {
 }
 
 ui::Node compactBulkBar(Samples const& list) {
-    return ui::row(
+    return ui::actionBar(
                {ui::text({.text = selectedLabel(list, true), .role = "section"})
                     .sizing(ui::stretch())
                     .testId("selected"),
@@ -640,7 +640,7 @@ ui::Node compactBulkBar(Samples const& list) {
                                 {.label = "Clear selection", .onClick = clearSelection(list)}})
                     .a11y("More bulk actions")
                     .testId("more-bulk")},
-               {.gap = 1, .align = Align::Center})
+               {.align = Align::Center})
         .a11y("Bulk actions")
         .visible(list.selectedCount > 0)
         .testId("bulk");

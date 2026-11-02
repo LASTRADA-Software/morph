@@ -804,17 +804,17 @@ ui::Node worksheetPane(Review const& review) {
     return ui::pinned(
         {ui::column({sheetHead(review, false), selfBanner(review), signedBanner(review), recordTabs(review, false)},
                     {.gap = 2})},
-        {.bottom = ui::row({returnButton(review, "Return to analyst…"), rejectButton(review, "Reject…"),
-                            // The note takes the room the buttons leave and wraps when the pane is narrow, so the bar
-                            // never asks the worksheet for more than its buttons.
-                            ui::text({.text = ui::cond(review.self, Text{"Another reviewer must approve"},
-                                                       Text{"Approving needs your signature"}),
-                                      .role = "caption",
-                                      .align = morph::ui::TextAlign::End})
-                                .sizing(ui::stretch())
-                                .testId("approve-note"),
-                            approveButton(review, "Approve and sign…")},
-                           {.gap = 1, .align = Align::Center})});
+        {.bottom = ui::actionBar({returnButton(review, "Return to analyst…"), rejectButton(review, "Reject…"),
+                                  // The note takes the room the buttons leave and wraps when the pane is narrow, so
+                                  // the bar never asks the worksheet for more than its buttons.
+                                  ui::text({.text = ui::cond(review.self, Text{"Another reviewer must approve"},
+                                                             Text{"Approving needs your signature"}),
+                                            .role = "caption",
+                                            .align = morph::ui::TextAlign::End})
+                                      .sizing(ui::stretch())
+                                      .testId("approve-note"),
+                                  approveButton(review, "Approve and sign…")},
+                                 {.align = Align::Center})});
 }
 
 ui::Node expandedLayout(Review const& review) {
