@@ -818,13 +818,13 @@ ui::Node worksheetPane(Review const& review) {
 }
 
 ui::Node expandedLayout(Review const& review) {
-    // The queue is 27 % of the splitter, at most 37 units (about 284 px): 270 px on the 1000 px page beside the
-    // sidebar, and a share of the 785 px page small enough that the worksheet's table does not scroll sideways, its
-    // Analyte, Evaluation and Change columns giving up width. The worksheet takes the rest. The splitter takes the
-    // page's height, so each pane reaches the page's bottom.
+    // The queue is 26 % of the splitter, at most 37 units (about 284 px): about 260 px on the 1000 px page beside the
+    // sidebar. The worksheet's table then has room for its Analyte and Evaluation columns whole, and on the 785 px
+    // page it does not scroll sideways, its Analyte, Evaluation and Change columns giving up width. The worksheet
+    // takes the rest. The splitter takes the page's height, so each pane reaches the page's bottom.
     return ui::column(
                {ui::splitter(
-                    {queuePane(review).surface("pane").sizing(ui::percent(27)).maxWidth(37).testId("queue-pane"),
+                    {queuePane(review).surface("pane").sizing(ui::percent(26)).maxWidth(37).testId("queue-pane"),
                      worksheetPane(review).surface("pane").sizing(ui::stretch()).testId("worksheet-pane")},
                     ui::AnyHandle{"horizontal"})
                     .sizing(ui::stretch(), ui::stretch())

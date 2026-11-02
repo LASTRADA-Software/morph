@@ -87,7 +87,7 @@ TEST_CASE("review: the queue is a share of the splitter and the worksheet stretc
     int const worksheet = screen.find("Column", "worksheet-pane").value_or(-1);
     REQUIRE(queue >= 0);
     REQUIRE(worksheet >= 0);
-    CHECK(screen.backend().prop(queue, "layout").starts_with("percent(27) max=37/"));
+    CHECK(screen.backend().prop(queue, "layout").starts_with("percent(26) max=37/"));
     CHECK(screen.backend().prop(worksheet, "layout").starts_with("stretch(1)/"));
 }
 
