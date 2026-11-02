@@ -673,7 +673,7 @@ ui::Node resultLine(Console const& console) {
                         .align = morph::ui::Align::End,
                         .onCommit = enterResult(console)})
              .readonly(Flag{ui::row("total")})
-             .sizing(ui::fixed(10))
+             .sizing(ui::fixed(9))
              .testId("pane-result"),
          // The unit is its own column beside the input, so the inputs of every line end at one edge.
          layout::muted(ui::row("unit")).sizing(ui::fixed(5)),

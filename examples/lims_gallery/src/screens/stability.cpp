@@ -594,16 +594,15 @@ ui::Node expandedConditions(Study const& study) {
                    // The table runs to the card's edges, its header band and rules with it.
                    matrix(study).bleed(), layout::muted("T0 is tested once, from the long-term condition.")},
                   {.padding = 2});
-    auto const aside =
-        ui::panel({summary(study)}, {.title = "Summary", .padding = 2})
-            // 26 % of the row, between 29 and 33 units (about 220 to 250 px): 250 px on the 1000 px page and 220 px
-            // on the 785 px one. The floor leaves the longest value word room beside the 13-unit
-            // caption column, so no word breaks; the conditions' labels wrap between words there.
-            .sizing(ui::percent(26))
-            .minWidth(29)
-            .maxWidth(33)
-            .a11y("Summary")
-            .testId("summary-panel");
+    auto const aside = ui::panel({summary(study)}, {.title = "Summary", .padding = 2})
+                           // 26 % of the row, between 30 and 33 units: 250 px on the 1000 px page and the floor on the
+                           // 785 px one. The floor leaves the longest value segment room beside the 13-unit caption
+                           // column, so none breaks; the conditions' labels wrap between words there.
+                           .sizing(ui::percent(26))
+                           .minWidth(30)
+                           .maxWidth(33)
+                           .a11y("Summary")
+                           .testId("summary-panel");
     return ui::row(
         {ui::column({attention(study, false), fields, conditions}, {.gap = 2}).sizing(ui::stretch()), aside},
         {.gap = 2, .align = Align::Start});
