@@ -674,8 +674,8 @@ ui::Node runLine(Plate const& plate) {
                                 .a11y(ui::format("Assign a sample to {0}", {first}))
                                 .testId("assign"));
         }
-        // The side inset leaves room for a selected marker's ring at the page's edge.
-        return ui::row(cells, {.gap = 2, .align = Align::Center, .padding = ui::padding(withAssign ? 0 : 1, 1)})
+        // A selected marker's ring stands in the page's own gutter, so the row needs no side inset.
+        return ui::row(cells, {.gap = 2, .align = Align::Center, .padding = ui::padding(withAssign ? 0 : 1, 0)})
             .testId("run-line");
     };
     return ui::switchOn(ui::row("key"), {ui::Case{"empty", ui::Nodes{lineOf(true)}}}, ui::Nodes{lineOf(false)});
