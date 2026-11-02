@@ -28,9 +28,12 @@ MorphWidget {
     implicitWidth: column.implicitWidth
     implicitHeight: column.implicitHeight
 
+    // The header and the body sit with no spacing between them: a closed section is as tall as its header, and an open
+    // one is its header with its body directly under it.
     ColumnLayout {
         id: column
         anchors.fill: parent
+        spacing: 0
 
         MorphSectionHeader {
             id: header

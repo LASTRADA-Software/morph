@@ -262,6 +262,31 @@ TEST_CASE("qt_quick containers: a collapsible panel reports the state the user a
     CHECK(toggles.size() == 1);
 }
 
+// Mutation: give MorphCollapsible's column `spacing: 5` (the closed section is 5 px taller than its header, the open
+// one 10 px taller than header plus body: 5 under the header and 5 before the filler).
+TEST_CASE("qt_quick containers: a closed collapsible is as tall as its header, an open one its header and its body",
+          "[qt_quick]") {
+    Scene scene;
+    auto root = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    root->setAlign(ui::Align::Start);
+    auto section = scene.backend().createCollapsible(root.get());
+    section->setTitle("Section");
+    auto body = scene.backend().createText(section.get());
+    body->setText("body");
+    body->setLayout({.height = ui::Sizing::fixed(3)});
+    section->setOpen(false);
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*section);
+    auto const* const toggle = item.property("focusTarget").value<QQuickItem*>();
+    REQUIRE(toggle != nullptr);
+    CHECK(item.height() == Catch::Approx(toggle->height()).margin(0.5));
+    section->setOpen(true);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(item.height() == Catch::Approx(toggle->height() + (3 * theme->property("unitHeight").toReal())).margin(1.0));
+}
+
 TEST_CASE("qt_quick containers: a collapsible taller than its content keeps the content under its header",
           "[qt_quick]") {
     Scene scene;
