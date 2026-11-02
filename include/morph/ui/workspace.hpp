@@ -22,6 +22,7 @@
 #include "host.hpp"
 #include "mount.hpp"
 #include "route.hpp"
+#include "shell_frame.hpp"
 #include "value.hpp"
 #include "view.hpp"
 #include "workspace_model.hpp"
@@ -405,22 +406,30 @@ public:
         return !(eyebrowHasContent(*tab) || leadUnderTitle);
     }
 
-    /// @brief Whether the active tab's head trail ends in a button that draws a frame, so a compact top bar can keep
-    ///        it clear of the window's edge. A tracked read.
-    /// @return Whether the trail's last element is a framed button: the last visible action that is not icon-only
-    ///         and not ghost. A head menu, drawn as an icon button after the actions, ends the trail unframed.
-    ///         `false` with no active tab and with no action.
-    [[nodiscard]] bool activeHeadTrailEndsFramed() const {
+    /// @brief What ends the active tab's head trail, so a compact top bar can stand the line's end the right distance
+    ///        from the window's edge. A tracked read.
+    /// @return The last element of the trail, in its order (tools, actions, then the head menu): a head menu, whose
+    ///         trigger is an icon button, or a last action that is icon-only or ghost is `Unframed`; any other last
+    ///         action is `Framed`; with no action and no menu, a head tool is `Framed`; an empty trail, and no active
+    ///         tab, is `None`.
+    [[nodiscard]] HeadTrailEnd activeHeadTrailEnd() const {
         std::optional<WorkspaceTabId> const tab = _model->active().get();
-        if (!tab || !headMenuOf(*tab).empty()) {
-            return false;
+        if (!tab) {
+            return HeadTrailEnd::None;
+        }
+        if (!headMenuOf(*tab).empty()) {
+            return HeadTrailEnd::Unframed;
         }
         ScreenHead const* const head = headOf(*tab);
         if (head == nullptr) {
-            return false;
+            return HeadTrailEnd::None;
         }
         std::vector<HeadAction> const actions = head->actions().get();
-        return !actions.empty() && !actions.back().iconOnly && actions.back().emphasis != ButtonEmphasis::Ghost;
+        if (!actions.empty()) {
+            return actions.back().iconOnly || actions.back().emphasis == ButtonEmphasis::Ghost ? HeadTrailEnd::Unframed
+                                                                                               : HeadTrailEnd::Framed;
+        }
+        return headToolsOf(*tab).empty() ? HeadTrailEnd::None : HeadTrailEnd::Framed;
     }
 
     /// @brief Whether the active tab's page continues the head's block: the screen's shown root says so

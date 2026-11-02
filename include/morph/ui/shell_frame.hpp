@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -29,6 +30,15 @@ static_assert(kShellSidebarWidth + 80 <= kExpandedWidthUnits,
 /// @brief The narrowest the top bar's title and head lead are given before the head's trail wraps to a line of its
 ///        own, in units; the same bound as the in-page head's.
 inline constexpr int kShellHeadLeadMinimum = 32;
+
+/// @brief What ends the line of a head's trail, which decides how far a compact top bar's trailing end stands from the
+///        window's edge: a button that draws no frame pads itself, so a frame leaves it to the button; anything else
+///        reaches the edge of its box.
+enum class HeadTrailEnd : std::uint8_t {
+    None,      ///< Nothing is in the trail: the lead's text or badges end the line.
+    Unframed,  ///< A ghost or icon-only action, or the head menu's trigger, which carries its own padding.
+    Framed,    ///< A framed action, or a head tool such as a select.
+};
 
 /// @brief What a `ShellFrame` shows and reports.
 struct ShellFrameOptions {
@@ -279,6 +289,7 @@ public:
         _headTall = !oneLine;
         _topMain->setAlign(oneLine ? Align::Center : Align::Start);
         showBarInset();
+        showTrail();
     }
 
     /// @brief Tells the frame that the shown page continues the head's block, so the top bar is drawn on the
@@ -371,12 +382,14 @@ public:
         showChrome();
     }
 
-    /// @brief Tells the frame whether the head's last action draws a frame. Compact, the bar's end pad is step 1,
-    ///        which is the whole inset a button without a frame needs; a button that draws one stands step 4 from the
-    ///        edge, so the bar adds step 3 after the trail. The expanded bar's step-3 end pad already matches.
-    /// @param endsFramed Whether the trail ends in a framed button. A new frame has no inset.
-    void setTrailEndInset(bool endsFramed) {
-        _trailEndFramed = endsFramed;
+    /// @brief Tells the frame what ends the head's trail. Compact, the line's ends are padded by step 1, which is the
+    ///        whole inset a button that pads itself needs; anything else that ends the line (text, a badge, a select
+    ///        or a button that draws a frame) stands step 4 from the edge, the page's gutter, so the frame adds step 3
+    ///        after the trail. A trail that ends in a framed button or a tool also takes the larger vertical padding
+    ///        of the bar. The expanded bar's step-3 end pad already matches.
+    /// @param end What ends the trail. A new frame has `None`.
+    void setTrailEnd(HeadTrailEnd end) {
+        _trailEnd = end;
         showBarInset();
         showTrail();
     }
@@ -443,7 +456,7 @@ private:
         bool const principalShown = _principalInHead && !_compact && !_principalName.empty();
         _topPrincipal->setVisible(principalShown);
         _trail->setVisible(_headShown || principalShown);
-        _trailInset->setVisible(_compact && _trailEndFramed);
+        _trailInset->setVisible(_compact && _trailEnd != HeadTrailEnd::Unframed);
     }
 
     // The bar's padding above and below its line. Expanded it is step 2, or the theme's `head.paddingY` where a
@@ -451,7 +464,7 @@ private:
     // line of plain text and icons, which fits the bar to one touch target; a head with an eyebrow or a lead under
     // its title, or one that ends in a framed button, is content the card's own padding frames, so it takes step 3.
     void showBarInset() {
-        bool const plain = !_headTall && !_trailEndFramed;
+        bool const plain = !_headTall && _trailEnd != HeadTrailEnd::Framed;
         int const compactStep = plain ? 1 : 3;
         int const step = _compact ? compactStep : 2;
         _topBar->setGap(step);
@@ -530,7 +543,7 @@ private:
     bool _leadInline = false;
     bool _headJoined = false;
     bool _principalInHead = false;
-    bool _trailEndFramed = false;
+    HeadTrailEnd _trailEnd = HeadTrailEnd::None;
     bool _headTall = false;
 };
 

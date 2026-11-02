@@ -13,6 +13,7 @@
 #include <vector>
 
 using morph::ui::CatalogEntry;
+using morph::ui::HeadTrailEnd;
 using morph::ui::ShellFrame;
 using morph::ui::ShellFrameOptions;
 using morph::ui::testing::RecordingBackend;
@@ -515,19 +516,22 @@ TEST_CASE("shell frame: a compact bar pads a head taller than one line, or one t
     frame.setHeadOneLine(false);
     CHECK(backend.prop(bar, "gap") == "3");
     frame.setHeadOneLine(true);
-    frame.setTrailEndInset(true);
+    frame.setTrailEnd(HeadTrailEnd::Framed);
     CHECK(backend.prop(bar, "gap") == "3");
-    frame.setTrailEndInset(false);
+    frame.setTrailEnd(HeadTrailEnd::Unframed);
+    CHECK(backend.prop(bar, "gap") == "1");
+    frame.setTrailEnd(HeadTrailEnd::None);
     CHECK(backend.prop(bar, "gap") == "1");
 
     frame.setHeadOneLine(false);
-    frame.setTrailEndInset(true);
+    frame.setTrailEnd(HeadTrailEnd::Framed);
     frame.setCompact(false);
     CHECK(backend.prop(bar, "gap") == "2");
 }
 
-// Mutation: a no-op `setTrailEndInset`, or show the inset expanded.
-TEST_CASE("shell frame: a trail end inset shows only compact", "[ui][shell]") {
+// Mutation: the inset on `Framed` only (a head with no trail ends at step 1), `Unframed` treated as `None`, a no-op
+// `setTrailEnd`, or the inset shown expanded.
+TEST_CASE("shell frame: the trailing inset follows what ends the compact line", "[ui][shell]") {
     RecordingBackend backend;
     std::vector<std::string> opened;
     int signOuts = 0;
@@ -542,13 +546,47 @@ TEST_CASE("shell frame: a trail end inset shows only compact", "[ui][shell]") {
     CHECK(at(inset) == at(main) + 1);
     CHECK(backend.prop(inset, "visible") == "false");
 
-    frame.setTrailEndInset(true);
-    CHECK(backend.prop(inset, "visible") == "false");
+    // Expanded, whatever ends the line: the bar's own step-3 end pad already stands the page's gutter from the edge.
+    for (HeadTrailEnd const end : {HeadTrailEnd::None, HeadTrailEnd::Unframed, HeadTrailEnd::Framed}) {
+        frame.setTrailEnd(end);
+        CHECK(backend.prop(inset, "visible") == "false");
+    }
     frame.setCompact(true);
+    // The lead's text or badges end the line: they reach their box's edge, so the inset stands the gutter.
+    frame.setTrailEnd(HeadTrailEnd::None);
     CHECK(backend.prop(inset, "visible") == "true");
-    frame.setTrailEndInset(false);
+    frame.setTrailEnd(HeadTrailEnd::Framed);
+    CHECK(backend.prop(inset, "visible") == "true");
+    // A button that pads itself ends the line: it needs no inset.
+    frame.setTrailEnd(HeadTrailEnd::Unframed);
     CHECK(backend.prop(inset, "visible") == "false");
-    frame.setTrailEndInset(true);
+    frame.setTrailEnd(HeadTrailEnd::Framed);
     frame.setCompact(false);
     CHECK(backend.prop(inset, "visible") == "false");
+}
+
+// Mutation: leave `showBarInset()` out of `setHeadOneLine` (the bar's gap stays at the step the last other setter
+// left), or ignore the end in `showTrail` (the inset follows the head's height). Leaving `showTrail()` out of
+// `setHeadOneLine` survives: the inset reads no input that call changes.
+TEST_CASE("shell frame: the compact inset and padding agree whatever order the setters are called in", "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const inset = backend.find("Row", "testId", "shell_trail_end_inset").value();
+    int const bar = backend.find("Column", "testId", "shell_topbar").value();
+
+    frame.setCompact(true);
+    frame.setTrailEnd(HeadTrailEnd::Unframed);
+    CHECK(backend.prop(inset, "visible") == "false");
+    frame.setTrailEnd(HeadTrailEnd::None);
+    frame.setHeadOneLine(false);
+    CHECK(backend.prop(inset, "visible") == "true");
+    CHECK(backend.prop(bar, "gap") == "3");
+
+    frame.setHeadOneLine(true);
+    CHECK(backend.prop(bar, "gap") == "1");
+    frame.setHeadOneLine(false);
+    CHECK(backend.prop(bar, "gap") == "3");
+    CHECK(backend.prop(inset, "visible") == "true");
 }

@@ -1507,21 +1507,32 @@ TEST_CASE("workspace: activePageSurface follows the active screen's pageSurface"
     CHECK(shell.activePageSurface().empty());
 }
 
-// Mutation: answer from the first action, ignore the emphasis or the icon-only flag, or read the last action
-// untracked.
-TEST_CASE("workspace: the head's trail ends framed when its last visible action draws a frame", "[ui][workspace]") {
+// Mutation: answer from the first action, ignore the emphasis or the icon-only flag, read the last action untracked,
+// skip the head menu (a menu-only head reads `None`), treat a tool as nothing (a tool-only head reads `None`), or
+// answer `Framed` for the menu. An empty trail is checked before any tab opens.
+TEST_CASE("workspace: the head's trail end is what its last shown element draws", "[ui][workspace]") {
+    using morph::ui::HeadTrailEnd;
     Harness harness;
     Host host{harness, std::nullopt};
     Workspace shell{harness.runtime, harness.backend, host, catalog(), nullptr, morph::ui::HeadPlacement::External};
-    CHECK_FALSE(shell.activeHeadTrailEndsFramed());
+    CHECK(shell.activeHeadTrailEnd() == HeadTrailEnd::None);
+    // A ghost icon-only last action is unframed; hiding it leaves the primary action before it, which is framed.
     REQUIRE(shell.open("trailend", {}) == 0U);
     harness.settle();
-    CHECK_FALSE(shell.activeHeadTrailEndsFramed());
+    CHECK(shell.activeHeadTrailEnd() == HeadTrailEnd::Unframed);
     harness.backend.click(harness.byTestId("Button", "hideMore"));
     harness.settle();
-    CHECK(shell.activeHeadTrailEndsFramed());
+    CHECK(shell.activeHeadTrailEnd() == HeadTrailEnd::Framed);
     // A plain action draws a frame, so a head whose last action is one ends framed.
     REQUIRE(shell.open("headed", {}) == 1U);
     harness.settle();
-    CHECK(shell.activeHeadTrailEndsFramed());
+    CHECK(shell.activeHeadTrailEnd() == HeadTrailEnd::Framed);
+    // The head menu's trigger is an icon button that ends the trail unframed.
+    REQUIRE(shell.open("menued", {}) == 2U);
+    harness.settle();
+    CHECK(shell.activeHeadTrailEnd() == HeadTrailEnd::Unframed);
+    // A head with a tool alone ends in the tool, which draws a frame.
+    REQUIRE(shell.open("tooled", {}) == 3U);
+    harness.settle();
+    CHECK(shell.activeHeadTrailEnd() == HeadTrailEnd::Framed);
 }

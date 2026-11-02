@@ -514,7 +514,7 @@ private:
         _headLayout = std::make_unique<reactive::Effect>(_context->runtime(), [this] {
             _frame->setLeadInline(_workspace->activeLeadPlacement() == ui::LeadPlacement::Inline);
             _frame->setHeadOneLine(_workspace->activeHeadOneLine());
-            _frame->setTrailEndInset(_workspace->activeHeadTrailEndsFramed());
+            _frame->setTrailEnd(_workspace->activeHeadTrailEnd());
             _frame->setHeadJoined(_workspace->activeHeadJoined());
             _frame->setHeadSurface(_workspace->activeHeadSurface());
             _frame->setPageSurface(_workspace->activePageSurface());

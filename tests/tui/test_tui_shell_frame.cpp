@@ -254,6 +254,8 @@ TEST_CASE("tui shell frame: the compact bar's padding is no row, and the end ins
     ui::Text action{.text = std::string{"SCAN"}};
     ui::Mounted const trailMount{page.runtime, page.backend, ui::text(std::move(action)), &page.frame->headSlot()};
     page.frame->setHeadShown(true);
+    // An end that pads itself has no inset: the trail's end is where the line's is.
+    page.frame->setTrailEnd(morph::ui::HeadTrailEnd::Unframed);
     static_cast<void>(page.loop.runUntilIdle());
     page.backend.fit();
     page.screen.draw();
@@ -263,7 +265,7 @@ TEST_CASE("tui shell frame: the compact bar's padding is no row, and the end ins
 
     // A framed end also takes the larger bar padding, step 3, which is a row above the line on the terminal: the
     // title and the trail move down together and stay on one row.
-    page.frame->setTrailEndInset(true);
+    page.frame->setTrailEnd(morph::ui::HeadTrailEnd::Framed);
     static_cast<void>(page.loop.runUntilIdle());
     page.backend.fit();
     page.screen.draw();

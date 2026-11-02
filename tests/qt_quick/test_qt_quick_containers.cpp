@@ -3061,6 +3061,40 @@ TEST_CASE("qt_quick containers: the compact top bar is one touch target tall plu
     CHECK(bar.height() == Catch::Approx(touch + (2 * themeStep(scene, 1))).margin(0.5));
 }
 
+// A compact head whose line ends in text stands step 4 from the window's edge, the page's gutter; one that ends in an
+// icon-only button, which pads itself, ends step 1 from it. Mutation: show the inset only after a framed end (the
+// title then reaches step 1 from the edge), or hide it for `None` too.
+TEST_CASE("qt_quick containers: a compact head ends step 4 from the edge unless an icon button ends it",
+          "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setCompact(true);
+    frame.setTitle("A review title long enough that it has to wrap between its words at a phone's width");
+    frame.setHeadOneLine(false);
+    frame.setHeadShown(true);
+    ui::Text eyebrow{.text = std::string{"Review"}};
+    ui::Mounted const eyebrowMount{scene.runtime(), scene.backend(), ui::text(std::move(eyebrow)),
+                                   &frame.headEyebrowSlot()};
+    scene.window().resize(390, 800);
+    frame.setTrailEnd(morph::ui::HeadTrailEnd::None);
+    scene.settle();
+    QRectF const bar = sceneRectOf("shell_topbar");
+    QRectF const title = sceneRectOf("shell_title");
+    INFO("the bar ends at " << bar.right() << ", the title at " << title.right());
+    CHECK(bar.right() - title.right() >= themeStep(scene, 4) - 0.5);
+
+    ui::Button scan{.label = {}, .icon = "scan"};
+    scan.emphasis = ui::ButtonEmphasis::Ghost;
+    scan.common.testId = "end_scan";
+    ui::Mounted const trailMount{scene.runtime(), scene.backend(),
+                                 ui::row(ui::Row{.children = {ui::button(std::move(scan))}, .gap = 1}),
+                                 &frame.headSlot()};
+    frame.setTrailEnd(morph::ui::HeadTrailEnd::Unframed);
+    scene.settle();
+    CHECK(bar.right() - sceneRectOf("end_scan").right() == Catch::Approx(themeStep(scene, 1)).margin(0.5));
+}
+
 // A framed button at the compact bar's end stands step 4 from the edge, an unframed one step 1. Mutation: no end
 // inset (the framed button is step 1 from the edge).
 TEST_CASE("qt_quick containers: a framed button ends the compact bar step 4 from its edge", "[qt_quick]") {
@@ -3077,13 +3111,13 @@ TEST_CASE("qt_quick containers: a framed button ends the compact bar step 4 from
                                  ui::row(ui::Row{.children = {ui::button(std::move(primary))}, .gap = 1}),
                                  &frame.headSlot()};
     scene.window().resize(390, 600);
-    frame.setTrailEndInset(true);
+    frame.setTrailEnd(morph::ui::HeadTrailEnd::Framed);
     scene.settle();
     QRectF const bar = sceneRectOf("shell_topbar");
     QRectF const button = sceneRectOf("end_primary");
     INFO("the bar ends at " << bar.right() << ", the button at " << button.right());
     CHECK(bar.right() - button.right() == Catch::Approx(themeStep(scene, 4)).margin(0.5));
-    frame.setTrailEndInset(false);
+    frame.setTrailEnd(morph::ui::HeadTrailEnd::Unframed);
     scene.settle();
     CHECK(bar.right() - sceneRectOf("end_primary").right() == Catch::Approx(themeStep(scene, 1)).margin(0.5));
 }

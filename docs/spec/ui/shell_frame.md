@@ -92,11 +92,16 @@ would; with a sign-out handler the menu ends with a separator and a "Sign out" e
 step 1 each side (52 px with 44 px targets), the line's ends are padded by step 1 and its items are step 2 apart, so a
 touch-sized menu square beside the title leaves the title room. On the terminal steps 1 and 2 are both no rows, so the
 bar's rows do not change. A head that is not one line (`setHeadOneLine(false)`: an eyebrow, or a lead under the title) or
-that ends in a framed button (`setTrailEndInset(true)`) is content a card's padding would frame, so the bar pads it by
-step 3 above and below (12 px; one row each on the terminal). A button that draws a frame at the trail's end
-would stand too close to the edge at step 1, so `setTrailEndInset(true)` adds step 3 after the trail and the
-frame stands step 4 from the edge; the client says it from the head's last action (`Workspace::activeHeadTrailEndsFramed`),
-and a ghost or icon-only button, whose frame is invisible, keeps step 1. The expanded bar needs no inset. `setCompact(false)` shows the sidebar
+that ends in a framed button (`setTrailEnd(HeadTrailEnd::Framed)`) is content a card's padding would frame, so the bar
+pads it by step 3 above and below (12 px; one row each on the terminal). What ends the line decides the trailing end:
+`HeadTrailEnd` is `None` (nothing in the trail: the lead's text or badges end the line), `Unframed` (a ghost or
+icon-only action, or the head menu's trigger, each of which carries its own padding) or `Framed` (a framed action, or a
+head tool such as a select); a new frame is `None`. Compact, unless the end is `Unframed`, `setTrailEnd` adds step 3
+after the trail, so the line ends step 4 from the edge, the page's gutter; an `Unframed` end keeps step 1, since the
+button's own padding makes up the rest. The inset follows the end alone, not the head's height, and
+`setHeadOneLine`, `setTrailEnd` and `setCompact` each re-evaluate both the bar's vertical padding and the inset. The client says
+the end from the last shown element of the trail in its order (`Workspace::activeHeadTrailEnd`). On the terminal the
+same widget tree puts such heads 3 more cells from the edge. The expanded bar needs no inset. `setCompact(false)` shows the sidebar
 again, restores the bar's step 2 and the line's steps 3 and 3, and hides the menu; `compact()` answers the form, and a new frame is not compact. The form
 and the sign-in state combine: signed out, the sidebar and the top bar stay hidden in either form. The frame does not
 decide when to be compact; the generic client's rule is in [`client/client.md`](../client/client.md#the-shell). A
