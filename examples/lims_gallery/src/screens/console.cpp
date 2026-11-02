@@ -521,7 +521,7 @@ ui::Node controlChart() {
     using ui::LineStyle;
     return ui::column(
         {ui::row({layout::section("Assay control, HPLC-02 · last 20 runs").sizing(ui::stretch()),
-                  layout::muted("mean 100.0 % · SD 0.4")},
+                  ui::text({.text = "mean 100.0 % · SD 0.4", .role = "caption"})},
                  {.gap = 1, .align = Align::Center}),
          ui::chart(
              {.summary = "Levey-Jennings chart: 19 runs within 2 SD, the latest run at plus 3.4 SD, beyond the 3 SD "
