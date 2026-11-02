@@ -200,7 +200,11 @@ MorphWidget {
         const shared = root.axis === 1 && widget && widget.widthKind === 3
         // A share's preferred width is not read for the natural length: it follows this stack's width, which a
         // parent may derive from the natural length.
-        const preferred = (shared && !useShare) || root.stretchesIn(child) ? -1
+        // A content-sized or stretching widget's preferred length is its share, which this stack computes from the
+        // lengths read here, so it is not read for them: only a fixed length, or a percent share that is wanted, is.
+        const kind = widget ? (root.axis === 0 ? widget.heightKind : widget.widthKind) : -1
+        const reads = !widget || kind === 1 || (shared && useShare)
+        const preferred = !reads || root.stretchesIn(child) ? -1
                           : root.axis === 0 ? child.Layout.preferredHeight : child.Layout.preferredWidth
         const implicit = root.axis === 0 ? child.implicitHeight : child.implicitWidth
         // A share's floor follows this stack's width, so the natural length reads the minimum without it.
