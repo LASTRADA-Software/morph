@@ -129,7 +129,8 @@ MorphWidget {
 
         Button {
             id: action
-            font: Theme.bodyFont
+            // An outlined or ghost push button: the control text size at the normal weight.
+            font: Theme.controlFontOf(Font.Normal)
             objectName: "action"
             visible: root.actionLabel !== "" && !root.link
             text: root.actionLabel

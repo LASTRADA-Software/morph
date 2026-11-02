@@ -122,8 +122,11 @@ MorphWidget {
         rightPadding: leftPadding
         palette.buttonText: root.triggerEmphasis === 3 ? root.scheme.accent
                             : root.triggerEmphasis === 0 ? root.scheme.text : "white"
-        font: (root.triggerEmphasis === 0 || root.triggerEmphasis === 3) && !root.squareTrigger ? Theme.bodyFont
-                                                                                                : Theme.strongFont
+        // As a push button's caption: the control text size, at the button weight for a filled or square trigger and
+        // at the normal weight for an outline, ghost or danger outline one.
+        font: Theme.controlFontOf((root.triggerEmphasis === 0 || root.triggerEmphasis === 3
+                                   || root.triggerEmphasis === 4) && !root.squareTrigger ? Font.Normal
+                                                                                         : Theme.buttonWeight)
         icon.source: Theme.iconSourceIn(root.triggerIcon, trigger.palette.buttonText)
         icon.color: "transparent"
         contentItem: MorphPlainContent {

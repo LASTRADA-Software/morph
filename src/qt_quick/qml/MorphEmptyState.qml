@@ -60,7 +60,7 @@ MorphWidget {
 
         Button {
             id: action
-            font: Theme.bodyFont
+            font: Theme.controlFontOf(Font.Normal)
             objectName: "action"
             contentItem: MorphPlainContent {
                 control: action

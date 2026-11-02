@@ -2304,6 +2304,101 @@ TEST_CASE("qt_quick theme: a control's own text takes the touch text size while 
     }
 }
 
+namespace {
+
+/// The first push-button control inside @p widget's item.
+QQuickItem& firstButtonIn(ui::Widget const& widget) {
+    QList<QQuickItem*> const buttons = Scene::itemsOf(Scene::itemOf(widget), "QQuickAbstractButton");
+    REQUIRE_FALSE(buttons.isEmpty());
+    return *buttons.first();
+}
+
+}  // namespace
+
+// Mutation: leave the banner's action on `Theme.bodyFont` (it stays 13), or put the filled branch of the menu trigger
+// back on `Theme.strongFont` (its weight is the strong one, not the button weight).
+TEST_CASE("qt_quick theme: every push button the library draws takes the touch text size at a button's weights",
+          "[qt_quick][touch]") {
+    Scene scene;
+    scene.window().resize(500, 400);
+    // A button weight of 500 resolves to a lighter face than the strong weight on every family, so the weight checks
+    // below tell the button weight from the strong one.
+    ui::ThemeValues values = touchTextTheme(14);
+    values.numbers.insert_or_assign("font.weight.button", 500.0);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    QObject& theme = themeSingleton(scene);
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setAlign(ui::Align::Start);
+    auto ghost = scene.backend().createBanner(column.get());
+    ghost->setText("Message");
+    ghost->setActionLabel("Open");
+    auto framed = scene.backend().createBanner(column.get());
+    framed->setText("Message");
+    framed->setActionLabel("Open");
+    framed->setActionStyle(ui::BannerActionStyle::Button, false);
+    auto stretched = scene.backend().createBanner(column.get());
+    stretched->setText("Message");
+    stretched->setActionLabel("Open");
+    stretched->setActionStyle(ui::BannerActionStyle::Button, true);
+    auto primaryMenu = scene.backend().createMenu(column.get(), ui::MenuStyle::Button);
+    primaryMenu->setTrigger({.label = "Actions", .emphasis = ui::ButtonEmphasis::Primary});
+    primaryMenu->setItems({{.label = "One"}});
+    auto outlineMenu = scene.backend().createMenu(column.get(), ui::MenuStyle::Button);
+    outlineMenu->setTrigger({.label = "Others", .emphasis = ui::ButtonEmphasis::Normal});
+    outlineMenu->setItems({{.label = "One"}});
+    auto primaryButton = scene.backend().createButton(column.get());
+    primaryButton->setLabel("Primary");
+    primaryButton->setEmphasis(ui::ButtonEmphasis::Primary);
+    auto picker = scene.backend().createFilePicker(column.get(), ui::FilePickerMode::Open);
+    picker->setPath("/tmp/a.csv");
+    auto empty = scene.backend().createEmptyState(column.get());
+    empty->setTitle("Nothing");
+    empty->setActionLabel("Create");
+    scene.settle();
+
+    auto const actionOf = [](ui::Widget const& banner) -> QQuickItem& {
+        QQuickItem* const action = namedBelow(Scene::itemOf(banner), QStringLiteral("action"));
+        REQUIRE(action != nullptr);
+        return *action;
+    };
+    auto const sizes = [&] {
+        std::vector<int> pixels;
+        pixels.push_back(fontOfItem(actionOf(*ghost)).first);
+        pixels.push_back(fontOfItem(actionOf(*framed)).first);
+        pixels.push_back(fontOfItem(actionOf(*stretched)).first);
+        pixels.push_back(fontOfItem(firstButtonIn(*primaryMenu)).first);
+        pixels.push_back(fontOfItem(firstButtonIn(*outlineMenu)).first);
+        QList<QQuickItem*> const fields = Scene::itemsOf(Scene::itemOf(*picker), "QQuickTextField");
+        REQUIRE(fields.size() == 1);
+        pixels.push_back(fontOfItem(*fields.first()).first);
+        pixels.push_back(fontOfItem(firstButtonIn(*picker)).first);
+        pixels.push_back(fontOfItem(actionOf(*empty)).first);
+        return pixels;
+    };
+
+    SECTION("compact") {
+        theme.setProperty("touchTargets", true);
+        scene.settle();
+        CHECK(sizes() == std::vector<int>(8, 14));
+        // A filled trigger is at the button weight, as a filled button is; an outline one is regular.
+        auto const buttonWeight = theme.property("buttonFont").value<QFont>().weight();
+        CHECK(buttonWeight < theme.property("strongFont").value<QFont>().weight());
+        CHECK(fontOfItem(firstButtonIn(*primaryMenu)).second == buttonWeight);
+        CHECK(fontOfItem(firstButtonIn(*primaryMenu)).second == fontOfItem(buttonOf(*primaryButton)).second);
+        CHECK(fontOfItem(firstButtonIn(*outlineMenu)).second == QFont::Normal);
+        CHECK(fontOfItem(actionOf(*ghost)).second == QFont::Normal);
+        // The message stays at the body size.
+        QQuickItem const* const message = namedBelow(Scene::itemOf(*ghost), QStringLiteral("message"));
+        REQUIRE(message != nullptr);
+        CHECK(fontOfItem(*message).first == 13);
+    }
+    SECTION("not compact") {
+        theme.setProperty("touchTargets", false);
+        scene.settle();
+        CHECK(sizes() == std::vector<int>(8, 13));
+    }
+}
+
 // Mutation: leave `control.touchTextSize` out of the dimension table in theme.cpp (the Theme keeps 0).
 TEST_CASE("qt_quick theme: the touch text size reaches the Theme singleton", "[qt_quick][touch]") {
     Scene scene;

@@ -277,7 +277,11 @@ keeping their size. The width class stands in for touch input, and is not a dens
 window, not a choice. While `touchTargets` holds and `control.touchTextSize` is above 0, a control's own text is drawn
 at that size (`Theme.controlTextPixels`, through `Theme.controlFontOf(weight)`): the text of a text input with its
 prefix and unit label, of a text area, a date input and a select with its segments, and a push button's caption at
-`size: normal`. The prominent input keeps the heading size, a `mono` control the mono size, a small button the small
+`size: normal`. Every push button the library draws follows it, at a `MorphButton`'s weights (the button weight for a
+filled or square button, the normal weight for an outline, ghost or danger outline one): a banner's action in the ghost
+or button style, a button-style menu's trigger, a file picker's path field and its button, and an empty state's
+action. The banner's message, a `link` action, the dismiss glyph, a sheet's dismiss button (an item-style header
+button) and a menu's entries stay at the body font. The prominent input keeps the heading size, a `mono` control the mono size, a small button the small
 step, and an item-style button, a field's caption, a popup list and the labels of radio selects, check boxes and tabs
 the body size. Units keep reading the body font, so no unit moves. A `size: small` button is drawn at
 `Theme.smallButtonHeight`: `button.smallTouchHeight` while `touchTargets` holds and it is set, else the touch target;
