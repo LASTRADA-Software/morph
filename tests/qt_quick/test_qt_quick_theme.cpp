@@ -2062,11 +2062,33 @@ TEST_CASE("qt_quick theme: a declared surface sets its own placeholder", "[qt_qu
 
 namespace {
 
+/// An installed family with an upright face at the normal weight and one at a bold weight: a strong font asked of it
+/// is drawn heavier than a normal one. A family with a single face snaps every weight to it, so the first family
+/// alphabetically, which a CI image may give only a regular face, cannot show a weight at all.
+QString familyWithBoldFace() {
+    for (QString const& family : QFontDatabase::families()) {
+        bool regular = false;
+        bool bold = false;
+        for (QString const& style : QFontDatabase::styles(family)) {
+            if (QFontDatabase::italic(family, style)) {
+                continue;
+            }
+            int const weight = QFontDatabase::weight(family, style);
+            regular = regular || weight == QFont::Normal;
+            bold = bold || weight >= QFont::Bold;
+        }
+        if (regular && bold) {
+            return family;
+        }
+    }
+    return QFontDatabase::families().first();
+}
+
 /// A theme that names a font family, so the body font is built from the body size rather than taken from the
 /// platform: a body of 13 px, a touch text size of 14 px, and a button weight apart from the strong one.
 ui::ThemeValues touchTextTheme(double touchTextSize) {
     std::string document = R"({"font": {"family": {"$type": "fontFamily", "$value": ")";
-    document += QFontDatabase::families().first().toStdString();
+    document += familyWithBoldFace().toStdString();
     document += R"("},
         "size": {"$type": "dimension", "body": {"$value": {"value": 13, "unit": "px"}}},
         "weight": {"button": {"$type": "fontWeight", "$value": 600}}},
