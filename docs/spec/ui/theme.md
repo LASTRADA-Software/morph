@@ -195,7 +195,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `control.touchHeight` (44, the common minimum touch target): a sibling of `control.height` | dimension, in px |
 | `control.touchTextSize` (0): the size of a control's own text while the window's width class is compact; 0 keeps the body size. A negative value is refused by `checkTheme`. The terminal draws no text sizes and ignores it | dimension, in px |
 | `button.smallHeight` (0), `button.smallTouchHeight` (0): the height of a `size: small` button, on the desktop and while the window is compact; 0 keeps the control height and the touch target. They apply to every small button in the theme, and either may be above or below `control.height` and `control.touchHeight`: a theme that sets `button.smallTouchHeight` below `control.touchHeight` takes the touch target onto itself. A negative value is refused by `checkTheme`. The terminal draws a small button on one row and ignores them | dimension, in px |
-| `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3) | dimension, in px |
+| `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3): a body size alone, with no `font.family`, draws the body text in the platform family at that size | dimension, in px |
 | `font.size.small` (0: the body size ×0.85, rounded): a table header's label, the `small` text role; `font.size.caption` (0: ×0.92, rounded): a field's caption above its control, a stacked key-value's captions and the `caption` text role; `font.size.mono` (0: the body size): the `mono` role; `font.size.display` (0: ×1.7, rounded): the `display` role. Each derives from the body size, none from another new token, so what a theme leaves unset never depends on what else it sets | dimension, in px |
 | `font.weight.strong` (700): the weight of every strong font (`strongFont`, `headingFont`, the table header, a section, a strong run) | font weight: a number from 1 to 1000 or a DTCG weight name (`semi-bold` is 600), read into `ThemeValues::numbers` |
 | `font.weight.button` (700): the weight of a button's strong caption (a filled, small or square button); `font.weight.strong` stays the weight of every other strong font | font weight, as `font.weight.strong` |
@@ -289,7 +289,7 @@ heading 1.3 times the body, and the others as the closed set lists. Every `Morph
 `Theme.bodyFont` (`strongFont` where it is emphasised and for a `section` text, which is also muted, `headingFont`
 for a heading, `smallFont` and `smallStrongFont` for a table header's label and a `small` text, `captionFont` for a
 field's caption, `displayFont` for a `display` text): the theme's families at the font's size, or the platform font
-untouched while `fontFamilies` is empty. Every strong font draws at `Theme.strongWeight`, moved to the nearest weight the family has an upright face of
+untouched while the theme names no family and sets no `font.size.body`. Every strong font draws at `Theme.strongWeight`, moved to the nearest weight the family has an upright face of
 (`Theme.textWeightOf`, `monoWeightOf` for the mono families; the CSS font-matching order: a request under 400 looks
 lighter first, one over 500 heavier first, one from 400 to 500 up to 500, then lighter): Qt asked for a weight a family
 lacks (500 on a family with only regular and bold faces) can draw an italic face, and a weight never changes the style.
@@ -307,6 +307,12 @@ it starts and on every `applyTheme`. A `font.mono` Qt cannot resolve is reported
 `bodyPixels` while `fontFamilies` is set and the platform font otherwise, so the units and every `fixed(n)` are
 unchanged until a theme names a family. `bodyPixels` derives from the platform metrics rather than from `metrics`, so
 the size never depends on the metrics it feeds.
+
+A theme that sets `font.size.body` without a family draws its body text in the platform family at that size
+(`Theme.themedBody`), while the units still read the platform font, because `metrics` follows `fontFamilies` alone.
+Two things follow: a `fixed(n)` width holds fewer body characters than the platform font's (about 8 % fewer at 13 px
+against a 12 px platform font), and a `fixed(n)` height holds slightly less than n body lines, since `unitHeight` is
+the platform font's line height.
 
 Every `MorphUi` component binds to `Theme`, and a host component that imports `MorphUi` reads the same instance in
 the same engine, so a theme reaches both, and applying another theme later updates what is mounted. It returns the

@@ -62,15 +62,17 @@ QtObject {
     }
     // The families text is drawn in: the theme's, else the platform font's.
     readonly property list<string> families: fontFamilies.length > 0 ? fontFamilies : [platformMetrics.font.family]
+    // Whether the theme sets the body face: it names a family or gives a body size. Body text and controls then draw
+    // in the theme's families at the body size; otherwise they draw in the platform font untouched.
+    readonly property bool themedBody: fontFamilies.length > 0 || bodySize > 0
     // Body text and controls: the theme's families at the body size, or the platform font untouched.
-    readonly property font bodyFont: fontFamilies.length > 0 ? fontOf(bodyPixels, Font.Normal) : platformMetrics.font
+    readonly property font bodyFont: themedBody ? fontOf(bodyPixels, Font.Normal) : platformMetrics.font
     // Emphasised text at the body size: a title, a header, the current step. Every strong font draws at
     // `strongWeight`.
-    readonly property font strongFont: fontFamilies.length > 0 ? fontOf(bodyPixels, strongWeight)
-                                                               : boldOf(platformMetrics.font)
+    readonly property font strongFont: themedBody ? fontOf(bodyPixels, strongWeight) : boldOf(platformMetrics.font)
     // A strong button caption at the body size, at `buttonWeight`.
-    readonly property font buttonFont: fontFamilies.length > 0 ? fontOf(bodyPixels, buttonWeight)
-                                                               : weightedOf(platformMetrics.font, buttonWeight)
+    readonly property font buttonFont: themedBody ? fontOf(bodyPixels, buttonWeight)
+                                                  : weightedOf(platformMetrics.font, buttonWeight)
     // A heading: the families at the heading size, strong.
     readonly property font headingFont: fontOf(headingPixels, strongWeight)
     // The small size, regular and strong: a table header (strong), a footnote, a timestamp, a tag.

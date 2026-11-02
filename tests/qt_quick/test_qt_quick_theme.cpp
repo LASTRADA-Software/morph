@@ -642,6 +642,67 @@ TEST_CASE("qt_quick theme: a font of any weight is drawn in an upright face", "[
     }
 }
 
+// Mutation: make `Theme.themedBody` depend on the family alone (the body, strong and button fonts stay the platform
+// font at its own size), or draw a stacked caption in `Theme.bodyFont` (it then reads 17 px).
+TEST_CASE("qt_quick theme: a body size without a family sets the body fonts, and a caption keeps its own size",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 300);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const inlined = scene.backend().createKeyValue(column.get());
+    inlined->setItems({{.label = "Lot", .value = "L-17"}});
+    auto const stacked = scene.backend().createKeyValue(column.get());
+    stacked->setCaptionPlacement(ui::CaptionPlacement::Above);
+    stacked->setItems({{.label = "Serial", .value = "S-17"}});
+    ui::ThemeValues values = ui::themeValues();
+    values.dimensions.insert_or_assign("font.size.body", 17.0);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    // Without this the checks below could pass on a platform font that is already 17 px.
+    CHECK(theme->property("platformMetrics").value<QObject*>()->property("font").value<QFont>().pixelSize() != 17);
+    CHECK(theme->property("fontFamilies").toStringList().isEmpty());
+
+    CHECK(theme->property("bodyFont").value<QFont>().pixelSize() == 17);
+    CHECK(theme->property("strongFont").value<QFont>().pixelSize() == 17);
+    CHECK(theme->property("strongFont").value<QFont>().weight() > QFont::Normal);
+    CHECK(theme->property("buttonFont").value<QFont>().pixelSize() == 17);
+
+    auto const textItem = [](QQuickItem const& root, QString const& text) -> QQuickItem const* {
+        QList<QQuickItem const*> pending{&root};
+        while (!pending.isEmpty()) {
+            QQuickItem const* const node = pending.takeLast();
+            if (node->property("text").toString() == text && node->property("font").isValid()) {
+                return node;
+            }
+            for (QQuickItem const* const child : node->childItems()) {
+                pending.append(child);
+            }
+        }
+        return nullptr;
+    };
+    QQuickItem const* const inlineCaption = textItem(Scene::itemOf(*inlined), QStringLiteral("Lot"));
+    QQuickItem const* const inlineValue = textItem(Scene::itemOf(*inlined), QStringLiteral("L-17"));
+    REQUIRE(inlineCaption != nullptr);
+    REQUIRE(inlineValue != nullptr);
+    CHECK(inlineCaption->property("font").value<QFont>().pixelSize() == 17);
+    CHECK(inlineValue->property("font").value<QFont>().pixelSize() == 17);
+    QQuickItem const* const stackedCaption = namedItem(Scene::itemOf(*stacked), QStringLiteral("caption"));
+    QQuickItem const* const stackedValue = namedItem(Scene::itemOf(*stacked), QStringLiteral("value"));
+    REQUIRE(stackedCaption != nullptr);
+    REQUIRE(stackedValue != nullptr);
+    CHECK(stackedCaption->property("font").value<QFont>().pixelSize() ==
+          static_cast<int>(std::lround(theme->property("captionPixels").toReal())));
+    CHECK(stackedCaption->property("font").value<QFont>().pixelSize() != 17);
+    CHECK(stackedValue->property("font").value<QFont>().pixelSize() == 17);
+
+    // Neither token: the platform font untouched.
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    CHECK(theme->property("bodyFont").value<QFont>() ==
+          theme->property("platformMetrics").value<QObject*>()->property("font").value<QFont>());
+}
+
 // Mutation: bind the units' metrics to the platform font always (unitWidth keeps the platform font's width).
 TEST_CASE("qt_quick theme: font.family sets the body font and the units follow it; an unknown family is reported",
           "[qt_quick]") {
