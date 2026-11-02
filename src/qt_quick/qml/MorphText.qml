@@ -48,9 +48,11 @@ MorphField {
     // The label lays a line out in a pixel more than its advance, so a wrapping text given exactly its advance would
     // break its last word: a text asks for the advance plus this.
     readonly property real wrapSlack: 1
+    // Spans ask for the label's own width in whole pixels: a layout lays an item out in whole pixels, and a width a
+    // fraction under the rich text's ideal width wraps its last words.
     // A text has no caption, so this is the field's width with the mark that follows the text.
     implicitWidth: (root.oneLine ? (root.hasRuns ? root.runsAdvance(root.runs) : root.advanceOf(metrics, root.text))
-                    : root.hasRuns ? label.implicitWidth
+                    : root.hasRuns ? Math.ceil(label.implicitWidth)
                                    : root.text.split("\n").reduce(
                                          (widest, line) => Math.max(widest, root.advanceOf(metrics, line)), 0) +
                                      root.wrapSlack) +

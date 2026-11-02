@@ -3187,6 +3187,25 @@ TEST_CASE("qt_quick widgets: a text that wraps asks for no more than its widest 
     CHECK(item.property("wrapMinimumWidth").toDouble() == Catch::Approx(item.implicitWidth()));
 }
 
+// Mutation: read `label.implicitWidth` as it is for runs (a fraction of a pixel): a layout that snaps the width down
+// to a whole pixel then lays the rich text out narrower than its ideal width and wraps its last words.
+TEST_CASE("qt_quick widgets: a text of runs asks for a whole number of pixels and stays on one line in a content row",
+          "[qt_quick]") {
+    Scene scene;
+    auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    row->setLayout({.width = ui::Sizing::fixed(1000), .height = ui::Sizing::content()});
+    auto const text = scene.backend().createText(row.get());
+    text->setSpans({{.text = "ELISA, host cell protein \xC2\xB7 worksheet "}, {.text = "WS-2026-0415", .mono = true}});
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*text);
+    double const asked = item.implicitWidth();
+    CHECK(asked == std::floor(asked));
+    QQuickItem const& label = Scene::controlOf(*text);
+    CHECK(label.width() >= asked);
+    CHECK(label.property("contentHeight").toDouble() <
+          1.5 * QFontMetricsF{label.property("font").value<QFont>()}.height());
+}
+
 namespace {
 
 /// Applies a `sidebar` surface that sets `color.selectionText` to @p selectionText under the `list.selection` look
