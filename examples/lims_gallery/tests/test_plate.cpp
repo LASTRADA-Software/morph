@@ -167,6 +167,8 @@ TEST_CASE("plate, compact: the wells listed by row, empty wells as one line a ru
     GalleryScreen screen{kScreen, "compact"};
     screen.requireNoProblems();
     CHECK_FALSE(screen.find("Grid", "plate").has_value());
+    // The well, its label and its button sit 8 px apart.
+    CHECK(screen.prop("Row", "run-line", "gap") == "2");
     CHECK(screen.prop("Collapsible", "row-A", "title") == "Row A · 1 standard, 2 controls, 9 empty");
     CHECK(screen.prop("Collapsible", "row-B", "title") == "Row B · 1 standard, 1 blank, 10 samples");
     CHECK(screen.prop("Collapsible", "row-D", "title") == "Row D · 1 standard, 10 samples, 1 empty");
