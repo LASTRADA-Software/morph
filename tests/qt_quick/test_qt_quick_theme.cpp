@@ -2083,6 +2083,7 @@ std::pair<int, int> fontOfItem(QQuickItem const& item) {
 }
 
 /// The first descendant of @p root named @p name.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
 QQuickItem* namedBelow(QQuickItem& root, QString const& name) {
     for (QQuickItem* const child : root.childItems()) {
         if (child->objectName() == name) {
@@ -2103,6 +2104,7 @@ QQuickItem& buttonOf(ui::Widget const& widget) {
 }
 
 /// Every descendant of @p root named @p name, depth first.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
 void collectNamed(QQuickItem& root, QString const& name, QList<QQuickItem*>& found) {
     for (QQuickItem* const child : root.childItems()) {
         if (child->objectName() == name) {
@@ -2131,7 +2133,8 @@ struct TouchControls {
         prominent->setEmphasis(ui::InputEmphasis::Prominent);
         dropdown->setOptions({{.key = std::string{"a"}, .label = "Alpha"}});
         dropdown->setSelected(ui::Key{std::string{"a"}});
-        segmented->setOptions({{.key = std::string{"a"}, .label = "Alpha"}, {.key = std::string{"b"}, .label = "Beta"}});
+        segmented->setOptions(
+            {{.key = std::string{"a"}, .label = "Alpha"}, {.key = std::string{"b"}, .label = "Beta"}});
         segmented->setSelected(ui::Key{std::string{"b"}});
         push->setLabel("Push");
         primary->setLabel("Primary");
@@ -2173,12 +2176,12 @@ TEST_CASE("qt_quick theme: a control's own text takes the touch text size while 
     auto const sizes = [&controls] {
         std::vector<int> pixels;
         pixels.push_back(fontOfItem(Scene::controlOf(*controls.input)).first);
-        QQuickItem* const unit = namedBelow(Scene::controlOf(*controls.input), QStringLiteral("unit"));
+        QQuickItem const* const unit = namedBelow(Scene::controlOf(*controls.input), QStringLiteral("unit"));
         pixels.push_back(unit == nullptr ? -1 : fontOfItem(*unit).first);
         pixels.push_back(fontOfItem(Scene::controlOf(*controls.area)).first);
         pixels.push_back(fontOfItem(Scene::controlOf(*controls.date)).first);
         pixels.push_back(fontOfItem(Scene::controlOf(*controls.dropdown)).first);
-        QQuickItem* const segment = namedBelow(Scene::itemOf(*controls.segmented), QStringLiteral("segment"));
+        QQuickItem const* const segment = namedBelow(Scene::itemOf(*controls.segmented), QStringLiteral("segment"));
         pixels.push_back(segment == nullptr ? -1 : fontOfItem(*segment).first);
         pixels.push_back(fontOfItem(buttonOf(*controls.push)).first);
         pixels.push_back(fontOfItem(buttonOf(*controls.primary)).first);
@@ -2191,7 +2194,8 @@ TEST_CASE("qt_quick theme: a control's own text takes the touch text size while 
         CHECK(sizes() == std::vector<int>(8, 14));
         // Left alone: a small button's step, a prominent input's heading size, an item button's body size.
         CHECK(fontOfItem(buttonOf(*controls.small)).first == static_cast<int>(theme.property("smallPixels").toReal()));
-        CHECK(fontOfItem(Scene::controlOf(*controls.prominent)).first == static_cast<int>(std::lround(theme.property("headingPixels").toReal())));
+        CHECK(fontOfItem(Scene::controlOf(*controls.prominent)).first ==
+              static_cast<int>(std::lround(theme.property("headingPixels").toReal())));
         CHECK(fontOfItem(buttonOf(*controls.item)).first == 13);
         // The primary caption keeps the button weight, and a marked segment the strong weight.
         CHECK(fontOfItem(buttonOf(*controls.primary)).second == theme.property("buttonFont").value<QFont>().weight());
@@ -2220,11 +2224,98 @@ TEST_CASE("qt_quick theme: a control's own text takes the touch text size while 
 // Mutation: leave `control.touchTextSize` out of the dimension table in theme.cpp (the Theme keeps 0).
 TEST_CASE("qt_quick theme: the touch text size reaches the Theme singleton", "[qt_quick][touch]") {
     Scene scene;
-    QObject& theme = themeSingleton(scene);
+    QObject const& theme = themeSingleton(scene);
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
     CHECK(theme.property("touchTextSize").toReal() == 0.0);
     auto const errors = morph::qt_quick::applyTheme(scene.engine(), touchTextTheme(14));
     INFO((errors.empty() ? std::string{} : errors.front()));
     REQUIRE(errors.empty());
     CHECK(theme.property("touchTextSize").toReal() == 14.0);
+}
+
+namespace {
+
+/// A theme with a control height of 30, a touch height of 44, and small buttons of 40 and, under touch, 36.
+ui::ThemeValues smallButtonTheme(bool setSmall) {
+    return valuesOfDocument(std::string{R"({"control": {"$type": "dimension",
+        "height": {"$value": {"value": 30, "unit": "px"}},
+        "touchHeight": {"$value": {"value": 44, "unit": "px"}}})"} +
+                            (setSmall ? R"(, "button": {"$type": "dimension",
+        "smallHeight": {"$value": {"value": 40, "unit": "px"}},
+        "smallTouchHeight": {"$value": {"value": 36, "unit": "px"}}})"
+                                      : "") +
+                            "}");
+}
+
+std::unique_ptr<ui::ButtonWidget> smallButton(Scene& scene, ui::ContainerWidget* parent, bool small, bool round) {
+    auto button = scene.backend().createButton(parent);
+    button->setLabel("S1");
+    if (small) {
+        button->setSize(ui::ButtonSize::Small);
+    }
+    if (round) {
+        button->setShape(ui::ControlShape::Round);
+    }
+    return button;
+}
+
+}  // namespace
+
+// Mutation: put `implicitHeight` back to `Theme.targetHeight` in MorphButtonBackground (a small button is 30 and 44).
+TEST_CASE("qt_quick theme: a small button is drawn at the theme's small height, and a normal one at the control's",
+          "[qt_quick][small]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), smallButtonTheme(true)).empty());
+    QObject& theme = themeSingleton(scene);
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setAlign(ui::Align::Start);
+    auto small = smallButton(scene, column.get(), true, true);
+    auto normal = smallButton(scene, column.get(), false, false);
+    scene.settle();
+    CHECK(Scene::itemOf(*small).height() == 40.0);
+    CHECK(Scene::itemOf(*small).width() == 40.0);
+    CHECK(Scene::itemOf(*normal).height() == 30.0);
+    theme.setProperty("touchTargets", true);
+    scene.settle();
+    CHECK(Scene::itemOf(*small).height() == 36.0);
+    CHECK(Scene::itemOf(*small).width() == 36.0);
+    CHECK(Scene::itemOf(*normal).height() == 44.0);
+}
+
+TEST_CASE("qt_quick theme: with the small heights at 0 a small button is as tall as a normal one",
+          "[qt_quick][small]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), smallButtonTheme(false)).empty());
+    QObject& theme = themeSingleton(scene);
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setAlign(ui::Align::Start);
+    auto small = smallButton(scene, column.get(), true, false);
+    auto normal = smallButton(scene, column.get(), false, false);
+    scene.settle();
+    CHECK(Scene::itemOf(*small).height() == Scene::itemOf(*normal).height());
+    theme.setProperty("touchTargets", true);
+    scene.settle();
+    CHECK(Scene::itemOf(*small).height() == Scene::itemOf(*normal).height());
+    CHECK(Scene::itemOf(*small).height() == 44.0);
+}
+
+// Mutation: leave the round rule out of MorphButtonBackground (the background is 30 wide and 40 high).
+TEST_CASE("qt_quick theme: a round button placed narrower than tall draws a circle of its width, centred",
+          "[qt_quick][small]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), smallButtonTheme(true)).empty());
+    auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    row->setAlign(ui::Align::Start);
+    auto well = smallButton(scene, row.get(), true, true);
+    well->setLayout({.width = ui::Sizing::fixed(1)});
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*well);
+    auto* const background = buttonOf(*well).property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    CHECK(item.height() == 40.0);
+    CHECK(item.width() < 40.0);
+    CHECK(background->width() == item.width());
+    CHECK(background->height() == item.width());
+    CHECK(background->y() == (item.height() - item.width()) / 2);
+    CHECK(background->property("radius").toReal() == item.width() / 2);
 }

@@ -217,7 +217,7 @@ corners of half its height, at least as wide as it is tall: a circle for a short
 the surface it sits on is drawn in that shape too. `ButtonWidget::setShape(ControlShape::Square)` draws a button for a
 glyph: the theme's corners, no least width, little side padding, at least as wide as tall and a strong caption at the
 body size; a badge takes no `Square`. `ButtonWidget::setSize(ButtonSize::Small)` makes a push button
-dense: the least side padding, a strong label in the small type step, and the control height kept. `setMono(true)` on a
+compact: the least side padding, a strong label in the small type step, and the theme's small button height (`button.smallHeight`, above or below the control height; the control height without it). A round button is never drawn taller than it is wide: placed narrower than its height, its surface and rings are a circle of its width, centred, while the widget keeps its height and touch area. `setMono(true)` on a
 button or a badge draws the label in the `mono` text role's face. The mount calls each once, and only for the
 non-default value. The terminal has no corners and only one face, so a round shape and `mono` draw nothing there; a small
 or square push button is `[S1]` where a normal one is `[ S1 ]`. `ButtonWidget::setWeight(int)` draws the caption at a

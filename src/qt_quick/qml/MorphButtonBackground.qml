@@ -7,7 +7,7 @@ import QtQuick
 // its border; unless filled it also takes the item's accent tint, since the default theme's focus and accent colours
 // are the same and a ring alone would read as focus. A ghost button is unframed the same way but has no "current"
 // concept: just the hover tint while hovered or pressed, transparent otherwise. A round button's corners are half its
-// height; a compact one has no least width. On a surface whose outlines are dashed, a framed button's outline is
+// height and it is never taller than it is wide; a compact one has no least width and the small button height. On a surface whose outlines are dashed, a framed button's outline is
 // stroked in dashes instead of drawn solid.
 Rectangle {
     id: background
@@ -38,7 +38,17 @@ Rectangle {
     // Whether the outline is stroked in dashes: the surface's `border.style`, for a button that has an outline.
     readonly property bool dashed: scheme.borderDashed && !filled && !item && !ghost && !disabled
 
-    implicitHeight: Theme.targetHeight
+    // A compact button is a small one: it is drawn at the theme's small height, which may be above or below the
+    // control height.
+    implicitHeight: compact ? Theme.smallButtonHeight : Theme.targetHeight
+    // The button's own box, but a round one is never taller than it is wide: placed narrower than its height it is a
+    // circle of its width, centred, and the button keeps its height and its touch area.
+    readonly property real boxWidth: parent ? parent.width : implicitWidth
+    readonly property real boxHeight: parent ? parent.height : implicitHeight
+    width: boxWidth
+    height: round ? Math.min(boxHeight, boxWidth) : boxHeight
+    x: 0
+    y: (boxHeight - height) / 2
     implicitWidth: ghost || compact || square ? 0 : Theme.unitWidth * 8
     radius: round ? height / 2 : Theme.radiusControl
     // The fill a push button shades while hovered or pressed: the tint while selected, unless the button is filled.

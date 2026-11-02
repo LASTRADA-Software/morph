@@ -70,8 +70,8 @@ MorphWidget {
                                               : button.implicitWidth
     implicitHeight: button.implicitHeight
 
-    // The caption's font: the body face, strong (at `Theme.buttonWeight`) for a filled button; a small button draws a strong caption in the
-    // small step, and a mono one in the mono role's face.
+    // The caption's font: the control text face, strong (at `Theme.buttonWeight`) for a filled button; a small button draws a
+    // strong caption in the small step, and a mono one in the mono role's face.
     readonly property bool strongCaption: root.small || root.squared
                                           || !(root.emphasis === 0 || root.emphasis === 4 || root.ghost)
     readonly property font captionFont: {
