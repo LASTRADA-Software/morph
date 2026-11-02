@@ -941,6 +941,19 @@ TEST_CASE("text: the caption role lowers to Caption, written literally or comput
     CHECK(h.backend.prop(h.byTestId("Text", "computed"), "role") == "Caption");
 }
 
+// Mutation: leave "label" out of `roleNamed` (a literal role is refused, a computed one drawn Normal).
+TEST_CASE("text: the label role lowers to Label, written literally or computed", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "roles", "state": { "r": { "init": "label" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "text", "testId": "literal", "text": "x", "role": "label" },
+        { "kind": "text", "testId": "computed", "text": "y", "role": { "ref": "r" } } ] } })");
+    CHECK(h.diagnostics.empty());
+    CHECK(h.backend.prop(h.byTestId("Text", "literal"), "role") == "Label");
+    CHECK(h.backend.prop(h.byTestId("Text", "computed"), "role") == "Label");
+}
+
 // Mutation: lower a computed role through roleOf (an unknown name is drawn Normal, unreported).
 TEST_CASE("text: a computed role of no known name is reported once for its path and drawn Normal",
           "[ui][interpreter]") {

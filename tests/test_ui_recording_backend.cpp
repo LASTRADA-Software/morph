@@ -54,6 +54,14 @@ TEST_CASE("RecordingBackend: a caption text records its role by name", "[ui]") {
     CHECK(backend.log().back() == "set Text#1 role=Caption");
 }
 
+// Mutation: leave `Label` out of `enumName(TextRole)` (it records as "unknown").
+TEST_CASE("RecordingBackend: a label text records its role by name", "[ui]") {
+    RecordingBackend backend;
+    auto text = backend.createText(nullptr);
+    text->setRole(ui::TextRole::Label);
+    CHECK(backend.log().back() == "set Text#1 role=Label");
+}
+
 TEST_CASE("RecordingBackend: creation parameters are properties, a horizontal stack is a Row", "[ui]") {
     RecordingBackend backend;
     auto row = backend.createStack(nullptr, ui::Axis::Horizontal);

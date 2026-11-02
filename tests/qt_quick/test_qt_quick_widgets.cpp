@@ -2202,6 +2202,28 @@ TEST_CASE("qt_quick widgets: a caption text is the caption size, regular and mut
     CHECK(Scene::controlOf(*caption).property("color").value<QColor>() == scheme->property("muted").value<QColor>());
 }
 
+// Mutation: map role 11 to the body font in MorphText (the size check fails: the default theme's caption is 11 px
+// against the body's 12), or to the muted colour (the colour check).
+TEST_CASE("qt_quick widgets: a label text is the caption size, regular and in the text colour", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 200);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const label = scene.backend().createText(column.get());
+    label->setText("Sample type");
+    label->setRole(ui::TextRole::Label);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.settle();
+    QObject const* const theme = themeOf(scene);
+    auto const font = Scene::controlOf(*label).property("font").value<QFont>();
+    CHECK(font.pixelSize() == static_cast<int>(std::lround(theme->property("captionPixels").toReal())));
+    CHECK(font.pixelSize() != static_cast<int>(std::lround(theme->property("bodyPixels").toReal())));
+    CHECK(font.weight() == QFont::Normal);
+    QObject const* const scheme = Scene::itemOf(*label).property("scheme").value<QObject*>();
+    REQUIRE(scheme != nullptr);
+    CHECK(Scene::controlOf(*label).property("color").value<QColor>() == scheme->property("text").value<QColor>());
+    CHECK(Scene::controlOf(*label).property("color").value<QColor>() != scheme->property("muted").value<QColor>());
+}
+
 // Mutation: read `Theme.bodyFont` for a stacked caption again (its size is the body's).
 TEST_CASE("qt_quick widgets: a stacked key-value caption is the caption size, an inline one the body size",
           "[qt_quick]") {

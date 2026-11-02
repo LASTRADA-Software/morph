@@ -6556,12 +6556,15 @@ namespace detail {
     if (name == "caption") {
         return TextRole::Caption;
     }
+    if (name == "label") {
+        return TextRole::Label;
+    }
     return std::nullopt;
 }
 
 /// @brief What a role that names none is told: the names `roleNamed` reads.
 inline constexpr std::string_view kRoleNames =
-    "a role is normal, muted, heading, section, error, success, mono, display, small, overline or caption";
+    "a role is normal, muted, heading, section, error, success, mono, display, small, overline, caption or label";
 
 /// @brief A text role by name, as `roleNamed` reads it.
 /// @param value  The name.
@@ -7165,7 +7168,8 @@ inline KeyValueItem ScreenCore::keyValueItemOf(Value const& item, std::string co
 // description.
 inline Node ScreenCore::lowerGroup(DocNode const& node, LowerCtx const& ctx, ElementState* element,
                                    std::vector<Node> children) {
-    Text legend{.text = bindProp<std::string>(ctx, node.prop("label"), std::string{}, stringOf)};
+    Text legend{.text = bindProp<std::string>(ctx, node.prop("label"), std::string{}, stringOf),
+                .role = TextRole::Label};
     legend.field.required = bindProp<bool>(ctx, node.prop("required"), false, boolOf);
     std::vector<Node> column;
     column.reserve(children.size() + 3);

@@ -251,6 +251,8 @@ enum class TextRole : std::uint8_t {
                ///< reads; the terminal draws it as `Section`, whatever the theme.
     Caption,   ///< A note under a control or a figure: `font.size.caption`, regular, muted. The terminal draws it as
                ///< `Muted`.
+    Label,  ///< A field's or a group's caption: `font.size.caption`, regular, the text colour. The terminal draws it
+            ///< as `Normal`.
 };
 
 /// @brief How a `TextInput` edits.

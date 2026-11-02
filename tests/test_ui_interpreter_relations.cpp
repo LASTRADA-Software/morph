@@ -376,4 +376,6 @@ TEST_CASE("interpreter relations: a check targets a group, shows once a box insi
     CHECK(h.backend.prop(group, "a11yName") == "Condition on receipt");
     CHECK(h.backend.prop(lines.front(), "required") == "true");
     CHECK(h.backend.prop(lines.front(), "text") == "Condition on receipt");
+    // The legend is drawn in the label role, the caption of a field.
+    CHECK(h.backend.prop(lines.front(), "role") == "Label");
 }

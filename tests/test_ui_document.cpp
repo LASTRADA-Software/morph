@@ -363,6 +363,17 @@ TEST_CASE("ui document: a text's role may be caption, and an unknown role is sti
     CHECK(refused.error().path == "/view/role");
 }
 
+// Mutation: leave "label" out of the loader's role list (the document is refused).
+TEST_CASE("ui document: a text's role may be label", "[ui][document]") {
+    CHECK(loadDocumentText(
+              R"({"vocab": "ui/1", "id": "r", "view": {"kind": "text", "text": "Sample type", "role": "label"}})")
+              .has_value());
+    auto const refused = loadDocumentText(
+        R"({"vocab": "ui/1", "id": "r", "view": {"kind": "text", "text": "Sample type", "role": "labels"}})");
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().path == "/view/role");
+}
+
 // Mutation: drop the keyValue's fieldLayout check (the grid layout loads).
 TEST_CASE("ui document: a key-value's fieldLayout is inline or stacked, and its items' spans are checked",
           "[ui][document]") {

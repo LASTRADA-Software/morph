@@ -982,6 +982,20 @@ TEST_CASE("tui widgets: a caption text is drawn in the muted style", "[tui][widg
     CHECK_FALSE(buffer.at(0, 0).style.bold);
 }
 
+// Guard: a label is the normal text style on the terminal. It passes without the role too (an unknown role falls
+// through to the normal style), and says what the terminal does with it.
+TEST_CASE("tui widgets: a label text is drawn in the normal style", "[tui][widgets]") {
+    Harness harness{20, 1};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const label = harness.make<TextImpl>(column.get());
+    label->setText("Sample type");
+    label->setRole(ui::TextRole::Label);
+    CHECK(harness.draw() == Rows{"Sample type"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.fg == harness.screen().theme().textNormal.fg);
+    CHECK_FALSE(buffer.at(0, 0).style.bold);
+}
+
 // Mutation: map Overline to Normal in roleStyle (the label is neither bold nor muted).
 TEST_CASE("tui widgets: an overline text is bold and muted, written as it reads", "[tui][widgets]") {
     Harness harness{20, 1};
