@@ -58,6 +58,8 @@ TEST_CASE("review: self-review is blocked with its reason", "[lims-gallery]") {
     CHECK(screen.waitFor([&screen] { return screen.shows("Banner", "self-review"); }));
     CHECK(screen.prop("Button", "approve", "enabled") == "false");
     CHECK(screen.text("approve-note") == "Another reviewer must approve");
+    // Both notes are captions: 12 px muted.
+    CHECK(screen.prop("Text", "approve-note", "role") == "Caption");
     // Picking another worksheet mounts its own tabs, whose labels count its entries.
     CHECK(screen.prop("Tabs", "record-tabs", "tabs") == "[Results,Previous lots,Audit trail · 0,Comments · 0]");
     screen.requireNoProblems();

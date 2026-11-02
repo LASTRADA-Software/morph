@@ -55,6 +55,8 @@ TEST_CASE("instrument, expanded: the head's status and actions, the overflow men
     CHECK(screen.prop("Tabs", "tabs", "inset") == "4");
     CHECK(screen.prop("Tabs", "tabs", "stripSurface") == "bar");
     CHECK(screen.shows("Panel", "details"));
+    // The details' captions take the design's 17-unit column.
+    CHECK(screen.backend().find("KeyValue", "captionWidth", "17").has_value());
     CHECK(screen.find("Column", "qualification").has_value());
     CHECK(screen.prop("Progress", "booking-elapsed", "value") == "0.29");
 }

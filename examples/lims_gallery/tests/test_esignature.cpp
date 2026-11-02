@@ -29,6 +29,8 @@ TEST_CASE("e-signature, expanded: a dialog over the worksheet, opened on the ref
     CHECK_FALSE(screen.find("Button", "head_action_sign").has_value());
     CHECK(screen.backend().find("Text", "testId", "shell_title").has_value());
     CHECK(screen.backend().all("KeyValue").size() == 1);
+    // The record's captions take the design's 12-unit column.
+    CHECK(screen.backend().find("KeyValue", "captionWidth", "12").has_value());
     CHECK(screen.shows("Panel", "record"));
     CHECK(screen.prop("Panel", "record", "surface") == "record");
     CHECK(screen.prop("TextInput", "signer", "readonly") == "true");

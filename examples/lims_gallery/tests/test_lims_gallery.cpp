@@ -119,6 +119,10 @@ TEST_CASE("lims gallery: the sidebar surface fills the current entry and the bas
     auto const baseValues = morph::ui::themeValues(*base);
     auto const sidebarValues = morph::ui::themeValues(*sidebar);
     CHECK(baseValues.keywords.at("list.selection") == "accent");
+    // A phone's control text is 14 px, and a small button (a plate well) is 40 px, or 36 px on the phone.
+    CHECK(baseValues.dimensions.at("control.touchTextSize") == 14.0);
+    CHECK(baseValues.dimensions.at("button.smallHeight") == 40.0);
+    CHECK(baseValues.dimensions.at("button.smallTouchHeight") == 36.0);
     CHECK(sidebarValues.keywords.at("list.selection") == "fill");
     CHECK(sidebarValues.colors.at("color.selection").hex() == "#2b3038");
 }

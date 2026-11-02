@@ -40,6 +40,13 @@ TEST_CASE("console, expanded: navigation, alert, figures, chart, instruments and
               .starts_with("[System suitability failed on HPLC-02;strong, at 09:40 CEST"));
     CHECK(screen.text("kpi-received") == "64");
     CHECK(screen.prop("Text", "kpi-due", "role") == "Display");
+    // A KPI's note and the control chart's figures are captions, 12 px muted.
+    auto const note = screen.backend().find("Text", "text", "58 on a typical Thursday");
+    REQUIRE(note.has_value());
+    CHECK(screen.backend().prop(note.value_or(-1), "role") == "Caption");
+    auto const figures = screen.backend().find("Text", "text", "mean 100.0 % · SD 0.4");
+    REQUIRE(figures.has_value());
+    CHECK(screen.backend().prop(figures.value_or(-1), "role") == "Caption");
     CHECK(screen.prop("Text", "kpi-due", "tone") == "Err");
     CHECK(screen.prop("Text", "kpi-received", "tone").value_or("").empty());
     CHECK(screen.find("Chart", "chart").has_value());

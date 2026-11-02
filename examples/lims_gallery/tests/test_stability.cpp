@@ -47,6 +47,8 @@ TEST_CASE("stability, expanded: step 2 of the wizard, the matrix and the summary
     CHECK(screen.prop("Panel", "summary-panel", "layout").value_or("none").starts_with("percent(26) max=33/"));
     CHECK(screen.backend().prop(monthBox(screen, "25\u00a0°C", "T0"), "checked") == "true");
     CHECK(screen.backend().prop(monthBox(screen, "25\u00a0°C", "1 m"), "checked") == "false");
+    // The summary's captions take the design's 13-unit column.
+    CHECK(screen.prop("KeyValue", "summary-pairs", "captionWidth") == "13");
     CHECK(holdsPair(screen, "summary-pairs", "Pulls:15"));
     CHECK(holdsPair(screen, "summary-pairs", "First pull:[03-Dec-2026 (40\u00a0°C\\,\u00a01\u00a0m);mono]"));
     CHECK(holdsPair(screen, "summary-pairs", "Last pull:[03-Nov-2029;mono]"));
