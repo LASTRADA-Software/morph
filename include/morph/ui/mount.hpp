@@ -1395,6 +1395,12 @@ private:
 
     Widget& mountKind(reactive::Scope& scope, ForEach const& spec, ContainerWidget* parent) {
         StackWidget& widget = scope.adopt(_backend->createStack(parent, spec.axis));
+        // A horizontal ForEach directly in an action bar is part of the row of actions, so its rows are the action
+        // gap apart, whatever gap the ForEach says.
+        bool const actionRow = spec.axis == Axis::Horizontal && _actionBar != nullptr && parent == _actionBar;
+        if (actionRow) {
+            widget.setActionRow();
+        }
         if (spec.axis == Axis::Horizontal && !spec.wrap) {
             scope.make<ShareParent>(_shareParents, &widget);
         }
@@ -1405,7 +1411,7 @@ private:
             widget.setDivided(true);
         }
         applyCommon(scope, widget, spec.common);
-        widget.setGap(spacingStep(spec.gap));
+        widget.setGap(spacingStep(actionRow ? 2 : spec.gap));
         mountRows(scope, spec.model, widget, {}, nullptr);
         return widget;
     }
@@ -1949,12 +1955,20 @@ private:
     // children by the theme's action gap.
     Widget& mountKind(reactive::Scope& scope, ActionBar const& spec, ContainerWidget* parent) {
         ContainerWidget* const footer = overlayFooter();
+        if (spec.wrap && footer != nullptr) {
+            throw std::invalid_argument{
+                "morph::ui::Mounted: an overlay's footer is one row of actions; `wrap` is for an action bar in place"};
+        }
         StackWidget& widget =
             scope.adopt(_backend->createStack(footer != nullptr ? footer : parent, Axis::Horizontal));
-        if (footer == nullptr) {
+        // A wrapping row shares no width with its parent, as a wrapping ForEach does.
+        if (footer == nullptr && !spec.wrap) {
             scope.make<ShareParent>(_shareParents, &widget);
         }
         widget.setActionRow();
+        if (spec.wrap) {
+            widget.setWrap(true);
+        }
         applyCommon(scope, widget, spec.common);
         widget.setGap(spacingStep(2));
         if (spec.align != Align::Stretch) {
@@ -1963,6 +1977,21 @@ private:
         if (spec.justify != Justify::Start) {
             widget.setJustify(spec.justify);
         }
+        // While the children mount, a horizontal ForEach whose parent is this bar is part of its row.
+        class Restore {
+        public:
+            Restore(Mounter& self, StackWidget* bar) : _self{&self}, _saved{std::exchange(self._actionBar, bar)} {}
+            Restore(Restore const&) = delete;
+            Restore& operator=(Restore const&) = delete;
+            Restore(Restore&&) = delete;
+            Restore& operator=(Restore&&) = delete;
+            ~Restore() { _self->_actionBar = _saved; }
+
+        private:
+            Mounter* _self;
+            StackWidget* _saved;
+        };
+        Restore const restore{*this, &widget};
         for (Node const& child : spec.children) {
             static_cast<void>(mount(scope, child, &widget));
         }
@@ -2034,6 +2063,8 @@ private:
     // that mounts later (a Switch case, a Tabs page, a row) mounts under the overlay it was made under. The footer is
     // asked for only when an ActionBar mounts, so an overlay without actions never makes one.
     ContainerWidget* _overlay = nullptr;
+    // The action bar whose children are being mounted, while they are.
+    StackWidget* _actionBar = nullptr;
     // The first autofocus widget of the mount pass in progress, and how deeply passes are nested.
     Widget* _autofocus = nullptr;
     std::size_t _passDepth = 0;

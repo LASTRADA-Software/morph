@@ -221,6 +221,7 @@ expression of one),
   a grid's `justify` is written so the loader refuses it rather than dropped. `wrap` is a row's: the children
   continue on the next line when they do not fit; written on a column or a grid, the loader refuses it. `divided` draws a rule between the children of a column, or of a row that does not wrap; the loader refuses it on a wrapping row. `forEach`
   takes the same `wrap`, for a horizontal `axis`, and `divided`, for a vertical one, in its `ForEachOptions`.
+- **`actionBar`** takes its buttons and `ActionBarOptions{align, justify, wrap}`: an absent `align` or `justify` is left out and `wrap` is written only when true. It takes no `gap`: its buttons are the theme's `actions.gap` apart, and so are the rows of a horizontal `forEach` that is a direct child. `wrap` continues the buttons on the next line when they do not fit; the mount refuses it in an overlay's footer.
 - **`table`** takes its rows, its options (`key`, `columns` (each `TableColumn{name, label, width, role, align,
   valign, cell, sortable, sortBy}`; an absent `align` or `valign` is left out and a present one is written by name,
   `sortable` only when `true`), `selectionMode` (a

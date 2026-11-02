@@ -2794,6 +2794,9 @@ private:
     Node lowerSplitter(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     /// A collapsible section. Its own function, so a deep document stacks only what this kind needs per level.
     Node lowerCollapsible(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// Reports the `gap` of each `forEach` directly in an action bar whose computed `axis` is horizontal: such a
+    /// `forEach` is part of the bar's row and takes the theme's action gap. A literal axis is refused at load.
+    void reportActionBarGaps(DocNode const& bar, LowerCtx const& ctx);
     /// A drop zone. Its own function, so a deep document stacks only what this kind needs per level.
     Node lowerDropZone(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element);
@@ -8205,6 +8208,18 @@ inline Node ScreenCore::lowerSplitter(DocNode const& node, LowerCtx const& ctx, 
     return ui::splitter(std::move(spec));
 }
 
+inline void ScreenCore::reportActionBarGaps(DocNode const& bar, LowerCtx const& ctx) {
+    for (DocNodePtr const& child : bar.nodes("children")) {
+        if (child->kind != "forEach" || child->prop("gap") == nullptr) {
+            continue;
+        }
+        ExprPtr const axis = child->prop("axis");
+        if (axis != nullptr && axis->kind != ExprKind::Literal && axisOf(once(ctx, axis)) == Axis::Horizontal) {
+            report(child->path + "/gap", kActionBarGapRefusal);
+        }
+    }
+}
+
 inline Node ScreenCore::lowerCollapsible(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     KindKit const kit{*this, node, ctx, element};
     Collapsible spec{.title = kit.textProp("title"), .open = bindProp<bool>(ctx, node.prop("open"), true, boolOf)};
@@ -8295,7 +8310,9 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         KindKit const bar{*this, node, ctx, element};
         ActionBar spec{.children = bar.children("children"),
                        .align = alignOf(node.name("align")),
-                       .justify = justifyOf(node.name("justify"))};
+                       .justify = justifyOf(node.name("justify")),
+                       .wrap = node.flag("wrap")};
+        reportActionBarGaps(node, ctx);
         commonOf(node, ctx, element, spec.common);
         return ui::actionBar(std::move(spec));
     }

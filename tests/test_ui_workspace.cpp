@@ -211,6 +211,9 @@ constexpr std::string_view kAsker = R"({
                    "onCancel": [ { "set": "got", "value": "cancelled" } ] } },
     { "kind": "button", "testId": "askTooled", "label": "samples in a dialog",
       "onClick": { "navigate": "tooled", "as": "dialog",
+                   "onCancel": [ { "set": "got", "value": "cancelled" } ] } },
+    { "kind": "button", "testId": "askHeaded", "label": "a headed sample in a dialog",
+      "onClick": { "navigate": "headed", "as": "dialog",
                    "onCancel": [ { "set": "got", "value": "cancelled" } ] } } ] } })";
 
 /// The picker, a singleton by its catalog facts: it answers 42.
@@ -1109,6 +1112,32 @@ TEST_CASE("workspace: the in-page head is a wrapping line of a lead that stretch
     REQUIRE(harness.backend.children(lead).size() == 2);
     CHECK(harness.backend.prop(harness.backend.children(lead).at(1), "wrap") == "true");
     CHECK(harness.backend.prop(trail, "wrap") == "true");
+    // A row of actions: its tools, actions and menu stacks are the theme's action gap apart, and the lead is not.
+    CHECK(harness.backend.prop(trail, "actionRow") == "true");
+    std::vector<int> const parts = harness.backend.children(trail);
+    REQUIRE(parts.size() == 4);
+    CHECK(harness.backend.prop(parts.at(0), "actionRow") == "true");
+    CHECK(harness.backend.prop(parts.at(1), "actionRow") != "true");
+    CHECK(harness.backend.prop(parts.at(2), "actionRow") == "true");
+    CHECK(harness.backend.prop(parts.at(3), "actionRow") == "true");
+    CHECK(harness.backend.prop(parts.at(2), "gap") == "2");
+}
+
+// Mutation: leave `overlayActions` a plain Row (the footer's actions are then no row of actions).
+TEST_CASE("workspace: a screen's actions in an overlay's footer are a row of actions", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    host.shell = &shell;
+    REQUIRE(shell.open("asker", {}) == 0U);
+    harness.settle();
+    harness.backend.click(harness.byTestId("Button", "askHeaded"));
+    harness.settle();
+    int const bar = harness.byTestId("Row", "overlay_actions");
+    CHECK(harness.backend.prop(bar, "actionRow") == "true");
+    std::vector<int> const rows = harness.backend.children(bar);
+    REQUIRE(rows.size() == 1);
+    CHECK(harness.backend.prop(rows.front(), "actionRow") == "true");
 }
 
 namespace {

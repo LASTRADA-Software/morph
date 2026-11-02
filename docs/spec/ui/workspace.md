@@ -118,7 +118,7 @@ open tab, which is when a host settles the navigation's call rather than leave i
 
 With `HeadPlacement::InPage`, the default, the shell mounts a row over the handle's `head()` above each tab's
 screen, in its page: one wrapping row (`head`, gap 2, `align: start`, `justify: end`) of a lead and a trail. The lead (`head_lead`) is a
-row of gap 1 that wraps, `align: center`, and stretches from `kHeadLeadMinimum` (32) units: the subtitle (muted; the screen's `subtitleSpans` as the text's runs when it gives them, else its plain subtitle as one run) and the badges, whose holder wraps too, so they sit beside one another while they fit and wrap under one another where they do not. (A wrapping row holding a wrapping row is sized from its children's one-line widths, so the width a row was last laid out at never feeds back into the width it asks for.) The trail (`head_trail`) is a row of gap 1 that wraps, so a part with nothing in it takes no gap after the last action:
+row of gap 1 that wraps, `align: center`, and stretches from `kHeadLeadMinimum` (32) units: the subtitle (muted; the screen's `subtitleSpans` as the text's runs when it gives them, else its plain subtitle as one run) and the badges, whose holder wraps too, so they sit beside one another while they fit and wrap under one another where they do not. (A wrapping row holding a wrapping row is sized from its children's one-line widths, so the width a row was last laid out at never feeds back into the width it asks for.) The trail (`head_trail`) is a wrapping action bar (`ActionBar` with `wrap`, `align: center`), so its parts, and the buttons within each, are the theme's `actions.gap` apart (8 px unless the theme sets it) and a part with nothing in it takes no gap after the last action:
 the tools, the actions as buttons and the head's own menu. Where the trail fits beside the lead (32 units, or its natural width where that is less), the lead takes
 the rest of the width; where it does not, the trail drops to a line of its own at the trailing edge. The test ids are
 `head`, `head_lead`, `head_trail`, `head_subtitle`, `head_status_<n>` (the badge's place among the visible
@@ -217,7 +217,7 @@ has none). It is what a host's `onNavigate` calls for those two, and stays insid
   screen, are refused with a `MountError` and show nothing, as is a refused mount. A host screen adopts no call, so a
   host opens it as a tab and settles its call.
 - **What it shows.** The overlay's title follows the screen's `title()`. Its footer holds a button per visible head
-  action (`overlay_action_<id>` in a row `overlay_actions`, hidden while there is none), each running the action by
+  action (`overlay_action_<id>` in an action bar `overlay_actions`, hidden while there is none, so the buttons are the theme's `actions.gap` apart, as the head's are), each running the action by
   its id, as the head row's do. Its badges are not shown, nor its head menu or tools: the first time the head has
   either, the workspace reports it once to `WorkspaceOptions::diagnostics` (`a dialog or drawer does not show the
   head menu or tools of <screen>`).

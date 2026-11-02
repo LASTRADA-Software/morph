@@ -689,6 +689,36 @@ TEST_CASE("interpreter: a wrapping forEach whose computed axis is not horizontal
     CHECK_FALSE(h.backend.dump().contains("wrap=true"));
 }
 
+// Mutation: skip the report (the diagnostics stay empty), or report a vertical computed axis too.
+TEST_CASE("interpreter: a forEach directly in an action bar whose computed axis is horizontal is reported for its gap",
+          "[ui][interpreter][layout]") {
+    auto const bar = [](char const* const on) {
+        return std::string{R"({ "vocab": "ui/1", "id": "t", "state": { "on": { "init": )"} + on +
+               R"( } }, "view": { "kind": "actionBar", "wrap": true, "children": [
+          { "kind": "button", "label": "x" },
+          { "kind": "forEach", "rows": { "lit": [ 1 ] }, "key": { "row": "" },
+            "children": [ { "kind": "button", "label": "x" } ] },
+          { "kind": "forEach", "rows": { "lit": [ 1 ] }, "key": { "row": "" }, "gap": 3,
+            "children": [ { "kind": "button", "label": "x" } ] },
+          { "kind": "forEach", "rows": { "lit": [ 1 ] }, "key": { "row": "" }, "gap": 3, "axis": "vertical",
+            "children": [ { "kind": "button", "label": "x" } ] },
+          { "kind": "forEach", "rows": { "lit": [ 1, 2 ] }, "key": { "row": "" }, "gap": 3,
+            "axis": { "if": [ { "ref": "on" }, "horizontal", "vertical" ] },
+            "children": [ { "kind": "button", "label": "x" } ] } ] } })";
+    };
+    {
+        ui::testing::Harness h;
+        auto screen = h.mount(bar("true"));
+        REQUIRE_FALSE(h.diagnostics.empty());
+        CHECK(h.diagnostics.front().path == "/view/children/4/gap");
+        CHECK(h.diagnostics.size() == 1);
+        CHECK(h.backend.dump().contains("wrap=true"));
+    }
+    ui::testing::Harness h;
+    auto screen = h.mount(bar("false"));
+    CHECK(h.diagnostics.empty());
+}
+
 // Mutation: pass no gap to `lowerAll` or `holding` (every column records gap=0), or read the default as 0.
 TEST_CASE(
     "interpreter: a panel, a collapsible, a dialog and a drawer space their children by gap, and a single child "

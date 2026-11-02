@@ -1244,3 +1244,88 @@ TEST_CASE("ui::Mounted: a banner is told its action style only when it is not th
     CHECK(dump.contains("Banner#4 actionLabel= actionStretch=true actionStyle=ghost"));
     CHECK(dump.contains("Row#5 divided=true"));
 }
+
+namespace {
+
+// A horizontal ForEach of two buttons whose own gap is 0.
+ui::Node actionRows(Runtime& runtime) {
+    static_cast<void>(runtime);
+    return ui::forEach<std::int64_t>(
+        [] { return std::vector<std::int64_t>{1, 2}; }, [](std::int64_t row) { return ui::Key{row}; },
+        [](Signal<std::int64_t> const& row) { return ui::button({.label = std::to_string(row.peek())}); },
+        ui::Axis::Horizontal, 0);
+}
+
+// The ids of the stacks the recording backend holds, with the property set on them.
+std::vector<int> actionRowsOf(RecordingBackend const& backend) {
+    std::vector<int> found;
+    for (int const row : backend.all("Row")) {
+        if (backend.prop(row, "actionRow") == "true") {
+            found.push_back(row);
+        }
+    }
+    return found;
+}
+
+}  // namespace
+
+// Mutation: mount the bar without `setWrap`, or leave out the ForEach's action-row marking.
+TEST_CASE("ui::Mounted: a wrapping action bar wraps, and its direct horizontal ForEach is part of the row", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::ActionBar bar{.children = {actionRows(runtime)}, .align = ui::Align::Center, .justify = ui::Justify::Start};
+    bar.wrap = true;
+    ui::Mounted const view{runtime, backend, ui::actionBar(bar)};
+    std::vector<int> const rows = actionRowsOf(backend);
+    REQUIRE(rows.size() == 2);
+    CHECK(backend.prop(rows.front(), "wrap") == "true");
+    CHECK(backend.prop(rows.front(), "gap") == "2");
+    CHECK(backend.prop(rows.back(), "gap") == "2");  // the ForEach said 0
+    CHECK(backend.prop(rows.back(), "wrap") != "true");
+}
+
+// Mutation: a plain Row's ForEach gets the marking, or an ActionBar's non-wrapping row gets `wrap`.
+TEST_CASE("ui::Mounted: the same ForEach in a plain row keeps its own gap, and a bar without wrap does not wrap",
+          "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    {
+        ui::Mounted const view{runtime, backend, ui::row(ui::Row{.children = {actionRows(runtime)}})};
+        CHECK(actionRowsOf(backend).empty());
+        std::vector<int> const rows = backend.all("Row");
+        REQUIRE(rows.size() == 2);
+        CHECK(backend.prop(rows.back(), "gap") == "0");
+    }
+    RecordingBackend plain;
+    ui::Mounted const view{runtime, plain, ui::actionBar(ui::ActionBar{.children = {actionRows(runtime)}})};
+    std::vector<int> const rows = actionRowsOf(plain);
+    REQUIRE(rows.size() == 2);
+    CHECK(plain.prop(rows.front(), "wrap") != "true");
+}
+
+// Mutation: the check becomes "any ActionBar is mounting" instead of "my parent is that bar".
+TEST_CASE("ui::Mounted: a ForEach in a row in an action bar is not part of the bar's row", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Node const nested = ui::row(ui::Row{.children = {actionRows(runtime)}});
+    ui::Mounted const view{runtime, backend, ui::actionBar(ui::ActionBar{.children = {nested}})};
+    std::vector<int> const rows = actionRowsOf(backend);
+    CHECK(rows.size() == 1);  // the bar alone: the ForEach's parent is the row, not the bar
+}
+
+// Mutation: drop the footer refusal (the wrapping bar mounts in the dialog's footer).
+TEST_CASE("ui::Mounted: a wrapping action bar in a dialog's content is refused, and mounts outside it", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::ActionBar bar{.children = {ui::button({.label = "Go"})}};
+    bar.wrap = true;
+    ui::Dialog const dialog{.open = true, .title = "D", .child = ui::actionBar(bar)};
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::dialog(dialog)}),
+                      Catch::Matchers::ContainsSubstring("an overlay's footer is one row of actions"));
+    ui::Mounted const outside{runtime, backend, ui::actionBar(bar)};
+    CHECK(actionRowsOf(backend).size() == 1);
+}

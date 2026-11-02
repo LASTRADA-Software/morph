@@ -21,10 +21,13 @@
 #include <memory>
 #include <morph/qt_quick/backend.hpp>
 #include <morph/qt_quick/components.hpp>
+#include <morph/qt_quick/theme.hpp>
 #include <morph/reactive/testing/manual_scheduler.hpp>
 #include <morph/testing/step_executor.hpp>
 #include <morph/ui/host.hpp>
 #include <morph/ui/interpreter.hpp>
+#include <morph/ui/theme.hpp>
+#include <morph/ui/workspace.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -955,4 +958,91 @@ TEST_CASE("qt_quick interpreter: a switch sized as a share of its row is that sh
     qreal const row = QtHarness::widget("row").item()->width();
     CHECK(QtHarness::widget("slot").item()->width() == Catch::Approx(0.3 * row).margin(0.7));
     CHECK(QtHarness::widget("inside").item()->width() == Catch::Approx(0.3 * row).margin(0.7));
+}
+
+namespace {
+
+/// A host whose only screen is a headed one, and whose navigations open nothing.
+class HeadedHost final : public ui::DocumentScreenHost {
+public:
+    HeadedHost(QtHarness& harness, std::shared_ptr<ui::Document const> headed)
+        : DocumentScreenHost{harness.session, harness.dispatcher, options(harness, std::move(headed))} {}
+
+    using DocumentScreenHost::onNavigate;
+    void onNavigate(std::string_view /*screenId*/, ui::ParamMap const& /*params*/) override {}
+
+private:
+    static ui::DocumentScreenHostOptions options(QtHarness& harness, std::shared_ptr<ui::Document const> headed) {
+        ui::DocumentScreenHostOptions made;
+        made.documents = [headed = std::move(headed)](std::string_view id) {
+            return id == "headed" ? headed : std::shared_ptr<ui::Document const>{};
+        };
+        made.backend = &harness.scene.backend();
+        return made;
+    }
+};
+
+}  // namespace
+
+// A screen's actions in an overlay's footer are the theme's action gap apart, as the same actions are in a head.
+// Mutation: leave `overlayActions` a Row of gap 2 (the footer's actions stay 8 px apart at a gap of 12).
+TEST_CASE("qt_quick interpreter: a screen opened as a dialog spaces its actions by the theme's action gap",
+          "[qt_quick][interpreter]") {
+    QtHarness h;
+    ui::ThemeValues values = ui::themeValues();
+    values.dimensions.insert_or_assign("actions.gap", 12.0);
+    REQUIRE(morph::qt_quick::applyTheme(h.scene.engine(), values).empty());
+    HeadedHost host{h, loadOrFail(R"({ "vocab": "ui/1", "id": "headed", "title": "Sign",
+      "actions": [ { "id": "cancel", "label": "Cancel", "onClick": [] },
+                   { "id": "sign", "label": "Sign", "emphasis": "primary", "onClick": [] } ],
+      "view": { "kind": "text", "text": "Sign this?" } })",
+                                  corpusCatalog())};
+    ui::Workspace shell{h.scene.runtime(), h.scene.backend(), host, ui::WorkspaceOptions{}};
+    ui::NavigateRequest request;
+    request.screen = "headed";
+    request.as = "dialog";
+    REQUIRE(shell.openOverlay(request).has_value());
+    h.scene.settle();
+    QQuickItem const& cancel = *QtHarness::widget("overlay_action_cancel").item();
+    QQuickItem const& sign = *QtHarness::widget("overlay_action_sign").item();
+    qreal const between = sign.mapToScene(QPointF{0, 0}).x() - cancel.mapToScene(QPointF{cancel.width(), 0}).x();
+    CHECK(between == Catch::Approx(12.0).margin(0.5));
+}
+
+// The head's trail is mounted from the workspace: its tools and its actions are the theme's action gap apart, to
+// within the whole pixel the layout rounds a tool's width up to. Mutation: build the trail as a Row of gap 1 again (4
+// px), or leave its ForEach stacks out of the row of actions (the gap within a part is 0).
+TEST_CASE("qt_quick interpreter: a screen's head trail spaces its tools and actions by the theme's action gap",
+          "[qt_quick][interpreter]") {
+    for (double const gap : {0.0, 12.0}) {
+        CAPTURE(gap);
+        QtHarness h;
+        ui::ThemeValues values = ui::themeValues();
+        values.dimensions.insert_or_assign("actions.gap", gap);
+        REQUIRE(morph::qt_quick::applyTheme(h.scene.engine(), values).empty());
+        qreal const expected = gap > 0 ? gap : 8.0;
+        h.scene.window().resize(1200, 400);
+        HeadedHost host{h, loadOrFail(R"({ "vocab": "ui/1", "id": "headed", "title": "Samples",
+          "tools": [ { "id": "q", "kind": "search", "label": "Search", "placeholder": "Sample ID" },
+                     { "id": "lab", "kind": "select", "label": "Lab", "options": { "lit": ["North", "South"] } } ],
+          "actions": [ { "id": "save", "label": "Save", "onClick": [] },
+                       { "id": "print", "label": "Print", "onClick": [] } ],
+          "view": { "kind": "text", "text": "Samples" } })",
+                                      corpusCatalog())};
+        ui::Workspace shell{h.scene.runtime(),      h.scene.backend(), host,
+                            ui::WorkspaceOptions{}, nullptr,           ui::HeadPlacement::External};
+        REQUIRE(shell.open("headed", {}).has_value());
+        h.scene.settle();
+        ui::HeadParts parts = shell.headPartsForActive();
+        ui::Mounted const trail{h.scene.runtime(), h.scene.backend(), std::move(parts.trail)};
+        h.scene.settle();
+        auto const left = [](char const* id) { return QtHarness::widget(id).item()->mapToScene(QPointF{0, 0}).x(); };
+        auto const right = [](char const* id) {
+            QQuickItem const& item = *QtHarness::widget(id).item();
+            return item.mapToScene(QPointF{item.width(), 0}).x();
+        };
+        CHECK(left("head_tool_lab") - right("head_tool_q") == Catch::Approx(expected).margin(1.0));
+        CHECK(left("head_action_save") - right("head_tool_lab") == Catch::Approx(expected).margin(1.0));
+        CHECK(left("head_action_print") - right("head_action_save") == Catch::Approx(expected).margin(1.0));
+    }
 }

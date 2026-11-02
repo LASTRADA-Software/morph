@@ -1089,7 +1089,10 @@ inline constexpr std::array<KeySpec, 6> kCollapsibleKeys = {{{"title", Shape::Ex
                                                              {"header", Shape::Nodes},
                                                              {"children", Shape::Nodes},
                                                              {"onToggle", Shape::Commands}}};
-/// @brief The keys of `actionBar`; `gap` and `wrap` are read only to refuse them: its gap is the theme's.
+/// @brief Why an action bar takes no `gap`, and a horizontal `forEach` directly in it takes none either.
+inline constexpr char const* kActionBarGapRefusal =
+    "an action bar's gap is the theme's `actions.gap`; set it there, not on the row";
+/// @brief The keys of `actionBar`; `gap` is read only to refuse it: its gap is the theme's.
 inline constexpr std::array<KeySpec, 5> kActionBarKeys = {{{"children", Shape::Nodes},
                                                            {"align", Shape::Text},
                                                            {"justify", Shape::Text},
@@ -4555,15 +4558,23 @@ private:
         }
     }
 
-    // A grid's columns come from a count or from tracks, never both, and their widths, not a justification, size
-    // them.
+    // An action bar's gap is the theme's, and a horizontal `forEach` directly in it is part of that row.
     static void checkActionBar(DocNode const& node) {
         if (node.prop("gap") != nullptr) {
-            refuse(pointerAppend(node.path, "gap"),
-                   "an action bar's gap is the theme's `actions.gap`; set it there, not on the row");
+            refuse(pointerAppend(node.path, "gap"), kActionBarGapRefusal);
         }
-        if (node.flag("wrap")) {
-            refuse(pointerAppend(node.path, "wrap"), "an action bar is one row of actions and does not wrap");
+        // A horizontal `forEach` directly in the bar is part of its row of actions, so it takes the same gap.
+        for (DocNodePtr const& child : node.nodes("children")) {
+            if (child->kind != "forEach" || child->prop("gap") == nullptr) {
+                continue;
+            }
+            ExprPtr const axis = child->prop("axis");
+            if (axis != nullptr && axis->kind == ExprKind::Literal) {
+                std::string const* const named = axis->literal.asString();
+                if (named != nullptr && *named == "horizontal") {
+                    refuse(pointerAppend(child->path, "gap"), kActionBarGapRefusal);
+                }
+            }
         }
     }
 

@@ -334,6 +334,30 @@ TEST_CASE("ui document rules: wrap is a literal flag of a row and of a horizonta
     CHECK(refusal(each(R"("axis": "vertical", "wrap": false,)")) == "loads");
 }
 
+// Mutation: drop the refusal (the forEach's gap is then silently overridden by the bar's), or make it apply at any
+// depth (the forEach in the row is then refused).
+TEST_CASE("ui document rules: a horizontal forEach directly in an action bar takes no gap", "[ui][document]") {
+    auto const bar = [](std::string const& each) {
+        return document(R"({"kind": "actionBar", "children": [)" + each + "]}");
+    };
+    auto const each = [](std::string const& extra) {
+        return R"({"kind": "forEach", "rows": {"lit": []}, "key": {"row": "id"}, )" + extra +
+               R"("children": [{"kind": "button", "label": "x"}]})";
+    };
+    CHECK(refusal(bar(each(R"("axis": "horizontal", "gap": 1,)"))) ==
+          "/view/children/0/gap: an action bar's gap is the theme's `actions.gap`; set it there, not on the row");
+    CHECK(refusal(bar(each(R"("axis": "horizontal",)"))) == "loads");
+    CHECK(refusal(bar(each(R"("axis": "vertical", "gap": 1,)"))) == "loads");
+    CHECK(refusal(bar(R"({"kind": "row", "children": [)" + each(R"("axis": "horizontal", "gap": 1,)") + "]}")) ==
+          "loads");
+    CHECK(refusal(document(each(R"("axis": "horizontal", "gap": 1,)"))) == "loads");
+    // No axis is vertical; an axis that is no name is refused for itself, not as a gap.
+    CHECK(refusal(bar(each(R"("gap": 1,)"))) == "loads");
+    CHECK(refusal(bar(each(R"("axis": 3, "gap": 1,)"))).find("/gap") == std::string::npos);
+    // A child that is no forEach is left alone.
+    CHECK(refusal(bar(R"({"kind": "button", "label": "x"})")) == "loads");
+}
+
 // Mutation: drop `divided` from the container keys (a column then refuses it), or its refusals on a row and on a
 // horizontal forEach.
 TEST_CASE(

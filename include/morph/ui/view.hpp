@@ -1576,7 +1576,8 @@ struct Drawer {
 
 /// @brief A row of buttons: the actions of what holds it. Inside the content of a dialog or drawer, at any depth, it
 ///        is the overlay's footer, as a document's overlay `actions` lower to; anywhere else it is a row in the place
-///        it is written. Either way the buttons are the theme's `actions.gap` apart.
+///        it is written. Either way the buttons are the theme's `actions.gap` apart, and so are the rows of a
+///        horizontal `ForEach` that is a direct child: they are part of the row, whatever `ForEach::gap` says.
 struct ActionBar {
     /// @brief The buttons, in order; a null child is skipped.
     std::vector<Node> children;
@@ -1584,6 +1585,10 @@ struct ActionBar {
     Align align = Align::Stretch;
     /// @brief Where the spare width goes while no shown button stretches.
     Justify justify = Justify::Start;
+    /// @brief Whether buttons that do not fit on one line continue on the next, as a Row's `wrap`; set once. A part
+    ///        with no width takes no gap. Refused at mount in an overlay's footer: the footer sizes the row to its
+    ///        one-line width, so it would never wrap there.
+    bool wrap = false;
     /// @brief Visibility, enablement, layout, drag-and-drop of the row.
     Common common{};
 };

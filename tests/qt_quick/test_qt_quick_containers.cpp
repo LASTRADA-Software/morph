@@ -1727,6 +1727,73 @@ TEST_CASE("qt_quick containers: a head row puts its actions at the trailing edge
     CHECK(actionRight >= slotRight - gap - 0.5);
 }
 
+namespace {
+
+/// A horizontal ForEach of buttons labelled @p labels, each with the test id `head_<label>`; its own gap is 0.
+ui::Node buttonsEach(std::vector<std::string> labels) {
+    return ui::forEach<std::string>([labels = std::move(labels)] { return labels; },
+                                    [](std::string const& label) { return ui::Key{label}; },
+                                    [](morph::reactive::Signal<std::string> const& label) {
+                                        ui::Button button{.label = label.peek()};
+                                        button.common.testId = "head_" + label.peek();
+                                        return ui::button(std::move(button));
+                                    },
+                                    ui::Axis::Horizontal, 0);
+}
+
+qreal leftOf(char const* testId) {
+    detail::ItemBase const* const found = detail::findWidget(QString::fromUtf8(testId));
+    return found == nullptr ? -1.0 : found->item()->mapToScene(QPointF{0, 0}).x();
+}
+
+qreal rightOf(char const* testId) {
+    detail::ItemBase const* const found = detail::findWidget(QString::fromUtf8(testId));
+    return found == nullptr ? -1.0 : found->item()->mapToScene(QPointF{found->item()->width(), 0}).x();
+}
+
+}  // namespace
+
+// A head's trail is a wrapping action bar: its tools and its actions are the theme's action gap apart, whatever gap
+// the ForEach holding them says. Mutation: build the trail as a Row with gap 1 (the gaps are 4 px), leave the ForEach
+// out of the action row (the gaps within a ForEach are 0), or ignore the theme's gap (12 stays 8).
+TEST_CASE("qt_quick containers: a head trail's tools and actions are the theme's action gap apart", "[qt_quick]") {
+    for (double const gap : {0.0, 12.0}) {
+        CAPTURE(gap);
+        Scene scene;
+        ui::ThemeValues values = ui::themeValues();
+        values.dimensions.insert_or_assign("actions.gap", gap);
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+        qreal const expected = gap > 0 ? gap : 8.0;
+        scene.window().resize(800, 400);
+        ui::ActionBar trail{.children = {buttonsEach({"T1", "T2"}), buttonsEach({"A1", "A2"})}};
+        trail.wrap = true;
+        trail.align = ui::Align::Center;
+        trail.common.testId = "head_trail";
+        ui::Mounted const view{scene.runtime(), scene.backend(), ui::column({.children = {ui::actionBar(trail)}})};
+        scene.settle();
+        CHECK(leftOf("head_T2") - rightOf("head_T1") == Catch::Approx(expected).margin(0.5));
+        CHECK(leftOf("head_A1") - rightOf("head_T2") == Catch::Approx(expected).margin(0.5));
+        CHECK(leftOf("head_A2") - rightOf("head_A1") == Catch::Approx(expected).margin(0.5));
+    }
+}
+
+// A part with nothing in it takes no gap: the trail's ends are its first and last action's. Mutation: mount the bar
+// without `setWrap` (an empty, visible child of a non-wrapping row is given a gap, so the trail runs past the last
+// action by a gap on each side that holds one).
+TEST_CASE("qt_quick containers: a head trail with empty tools and menu ends at its actions", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(800, 400);
+    ui::ActionBar trail{.children = {buttonsEach({}), buttonsEach({"A1", "A2"}), buttonsEach({})}};
+    trail.wrap = true;
+    trail.align = ui::Align::Center;
+    trail.common.testId = "head_trail";
+    ui::Mounted const view{scene.runtime(), scene.backend(),
+                           ui::column({.children = {ui::actionBar(trail)}, .align = ui::Align::Start})};
+    scene.settle();
+    CHECK(leftOf("head_A1") == Catch::Approx(leftOf("head_trail")).margin(0.5));
+    CHECK(rightOf("head_A2") == Catch::Approx(rightOf("head_trail")).margin(0.5));
+}
+
 // Mutation: put the head slots back on a line of their own below the title (at 1000 px the actions are then lower than
 // the title), make the lead a column of the subtitle over the badges (the badges are then below the subtitle at
 // 1000 px), or drop the lead block's minimum width (at 390 px the actions stay beside the badges).

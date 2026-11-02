@@ -4035,6 +4035,8 @@ struct ActionBarOptions {
     std::optional<Align> align;
     /// @brief The spare length along the row; absent packs at the start.
     std::optional<Justify> justify;
+    /// @brief Whether buttons that do not fit on one line continue on the next; refused in an overlay's footer.
+    bool wrap = false;
 };
 
 /// @brief An `actionBar` node: a row of the actions of what holds it. Inside the content of a dialog or drawer, at any
@@ -4051,6 +4053,9 @@ struct ActionBarOptions {
     }
     if (options.justify) {
         node.text("justify", detail::justifyName(*options.justify));
+    }
+    if (options.wrap) {
+        node.flag("wrap");
     }
     return node.done();
 }

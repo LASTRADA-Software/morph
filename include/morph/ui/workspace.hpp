@@ -365,7 +365,7 @@ public:
             lead.common.layout.minWidth.reset();
             return HeadParts{.eyebrow = ui::text(buildHeadEyebrow(*tab)),
                              .lead = ui::row(std::move(lead)),
-                             .trail = ui::row(buildHeadTrail(*tab)),
+                             .trail = ui::actionBar(buildHeadTrail(*tab)),
                              .inlineLead = ui::row(buildHeadLead(*tab, LeadPlacement::Inline))};
         }
         Text eyebrow{.text = std::string{}, .role = TextRole::Muted, .field = {}, .common = {}};
@@ -638,12 +638,13 @@ private:
         overlay.setOpen(true);
     }
 
-    // The footer of an overlay: a button per visible head action, each running the action by its id.
+    // The footer of an overlay: a button per visible head action, each running the action by its id. It is an action
+    // bar, so its buttons are the theme's action gap apart, as the same actions are in a head.
     [[nodiscard]] static Node overlayActions(ScreenHead& head) {
-        Row row{.children = {}, .gap = 2, .common = {}, .tone = std::nullopt};
-        row.common.testId = "overlay_actions";
-        row.common.visible = Prop<bool>{[&head] { return !head.actions().get().empty(); }};
-        row.children.push_back(ui::forEach<HeadAction>(
+        ActionBar bar;
+        bar.common.testId = "overlay_actions";
+        bar.common.visible = Prop<bool>{[&head] { return !head.actions().get().empty(); }};
+        bar.children.push_back(ui::forEach<HeadAction>(
             [&head] { return head.actions().get(); }, [](HeadAction const& action) { return Key{action.id}; },
             [&head](reactive::Signal<HeadAction> const& action) {
                 Button button{.label = Prop<std::string>{[&action] { return action.get().label; }},
@@ -655,7 +656,7 @@ private:
                 return ui::button(std::move(button));
             },
             Axis::Horizontal, 2));
-        return ui::row(std::move(row));
+        return ui::actionBar(std::move(bar));
     }
 
     [[nodiscard]] Overlay const* overlayOf(std::uint64_t overlayId) const {
@@ -1054,13 +1055,14 @@ private:
     }
 
     // The head's trail: the tools, the actions as buttons and the head's own menu behind one icon button, in one row.
-    // Hidden while the head has none of them.
-    [[nodiscard]] Row buildHeadTrail(WorkspaceTabId tab) const {
+    // It is a row of actions: its parts are the theme's action gap apart, and it wraps, so a part with nothing in it
+    // takes none. Hidden while the head has none of them.
+    [[nodiscard]] ActionBar buildHeadTrail(WorkspaceTabId tab) const {
         auto const actions = [this, tab] {
             ScreenHead const* const head = headOf(tab);
             return head == nullptr ? std::vector<HeadAction>{} : head->actions().get();
         };
-        Row row{.children = {}, .gap = 1, .common = {}, .tone = std::nullopt};
+        ActionBar row;
         // Wrapping, so a part with nothing in it (no tools, no menu) takes no gap: a non-wrapping row would leave one
         // after the last action, short of the edge by a step.
         row.wrap = true;
@@ -1138,7 +1140,7 @@ private:
     [[nodiscard]] Node headRow(WorkspaceTabId tab) const {
         Row row{.children = {}, .gap = 2, .common = {}, .tone = std::nullopt};
         row.children.push_back(ui::row(buildHeadLead(tab, LeadPlacement::Below)));
-        row.children.push_back(ui::row(buildHeadTrail(tab)));
+        row.children.push_back(ui::actionBar(buildHeadTrail(tab)));
         row.common.testId = "head";
         row.common.layout.width = Sizing::stretch();
         row.common.visible = Prop<bool>{[this, tab] { return leadHasContent(tab) || trailHasContent(tab); }};

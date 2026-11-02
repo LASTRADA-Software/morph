@@ -275,22 +275,16 @@ TEST_CASE("ui document: a grid's least column width is a literal 1 to 64 for a g
     }
 }
 
-// Mutation: drop `actionBar` from `kKinds` (it is refused as an unknown kind), or give it `gap` or `wrap` (the theme's
-// gap is then overridden by a literal).
-TEST_CASE("ui document: an action bar takes children, align and justify, and no gap or wrap", "[ui][document]") {
+// Mutation: drop `actionBar` from `kKinds` (it is refused as an unknown kind), give it `gap` (the theme's gap is then
+// overridden by a literal), or refuse `wrap` again.
+TEST_CASE("ui document: an action bar takes children, align, justify and wrap, and no gap", "[ui][document]") {
     CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "a", "view": {"kind": "actionBar", "align": "center",
-        "justify": "end", "children": [{"kind": "button", "label": "a"}, {"kind": "button", "label": "b"}]}})")
+        "justify": "end", "wrap": true, "children": [{"kind": "button", "label": "a"}, {"kind": "button", "label": "b"}]}})")
               .has_value());
-    for (char const* const keyed : {R"("gap": 1,)", R"("wrap": true,)"}) {
-        INFO(keyed);
-        auto const refused =
-            loadDocumentText(std::string{R"({"vocab": "ui/1", "id": "a", "view": {"kind": "actionBar", )"} + keyed +
-                             R"("children": []}})");
-        REQUIRE_FALSE(refused.has_value());
-        CHECK(refused.error().path.starts_with("/view/"));
-        CHECK((refused.error().path == "/view/gap" || refused.error().path == "/view/wrap"));
-    }
-    // `wrap: false` asks for nothing the row refuses.
+    auto const refused =
+        loadDocumentText(R"({"vocab": "ui/1", "id": "a", "view": {"kind": "actionBar", "gap": 1, "children": []}})");
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().path == "/view/gap");
     CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "a", "view": {"kind": "actionBar", "wrap": false,
         "children": []}})")
               .has_value());
