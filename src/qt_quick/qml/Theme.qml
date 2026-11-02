@@ -94,8 +94,9 @@ QtObject {
     // A figure that stands out, such as a KPI's number: the display size, strong.
     readonly property font displayFont: fontOf(displayPixels, strongWeight)
     // What measures the unbreakable segments of a text (`widestSegment(pieces)`): the backend writes it, since only
-    // C++ can ask Qt's line breaker. Null until then, and a wrapping text keeps no minimum width.
-    property QtObject textMeasure: null
+    // C++ can ask Qt's line breaker. Null until then, and a wrapping text keeps no minimum width. A `var`, not a
+    // `QtObject`: qmllint reads a call on a plain QObject as a missing member.
+    property var textMeasure: null
     // The families `font.mono` names, in order of preference; empty draws in the platform's fixed-pitch font.
     property list<string> monoFontFamilies: []
     // The family of the platform's fixed-pitch font; the backend writes it, since QML cannot ask the font database.
