@@ -1059,6 +1059,9 @@ private:
         } else {
             widget.setTracks(spec.tracks);
         }
+        if (spec.minColumnWidth > 0 && spec.tracks.empty()) {
+            widget.setMinColumnWidth(spec.minColumnWidth);
+        }
         widget.setGap(spacingStep(spec.gap));
         if (spec.align != Align::Stretch) {
             widget.setAlign(spec.align);

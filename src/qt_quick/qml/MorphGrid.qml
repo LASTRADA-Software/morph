@@ -9,6 +9,9 @@ MorphWidget {
     id: root
 
     property int columns: 1
+    // The least width of a column in units while above 0: the grid shows as many of its `columns` as fit that width
+    // (at least one), and its height follows the columns shown. Ignored with `tracks`. Set once.
+    property int minColumnWidth: 0
     property int gap: 0
     // Where each cell's content sits in its row, a `ui::Align` index, which C++ also writes on each child as its
     // `crossAlign`.
@@ -32,6 +35,7 @@ MorphWidget {
 
     onWidthChanged: place()
     onPlacedTracksChanged: place()
+    onMinColumnWidthChanged: place()
     onGapChanged: place()
 
     // The spacing scale and the unit sizes feed every extent `place` computes.
@@ -81,10 +85,22 @@ MorphWidget {
     // to its own maximum width. Without tracks the natural width is the terminal's: the widest cell, a span divided
     // out, times the columns, so a content-sized grid never squeezes its own cells. Down its row a cell sits by its own `alignSelf`, else the grid's `align`. C++ calls it again whenever a cell's
     // implicit size, visibility or span changes.
+    // How many of the equal columns fit @p width: n columns need n times the minimum plus n - 1 gaps, so n is at
+    // most (width + gap) / (minimum + gap). The epsilon keeps an exactly fitting width at n when the quotient is not
+    // exact in floating point.
+    function shownColumns(width: real, columns: int, space: real, unit: real): int {
+        if (root.tracked || root.minColumnWidth <= 0)
+            return columns
+        const fitting = Math.floor((width + space) / (root.minColumnWidth * unit + space) + 1e-6)
+        return Math.max(1, Math.min(columns, fitting))
+    }
+
     function place() {
-        const tracks = root.placedTracks
-        const count = tracks.length
         const space = Theme.spaceOf(root.gap)
+        const allTracks = root.placedTracks
+        const tracks = allTracks.length === root.shownColumns(root.width, allTracks.length, space, Theme.unitWidth)
+                       ? allTracks : allTracks.slice(0, root.shownColumns(root.width, allTracks.length, space, Theme.unitWidth))
+        const count = tracks.length
         const cells = []
         let column = 0
         let row = 0
@@ -98,7 +114,8 @@ MorphWidget {
                 ++row
                 column = 0
             }
-            cells.push({"item": cell, "column": column, "row": row, "span": span})
+            cells.push({"item": cell, "column": column, "row": row, "span": span,
+                        "declared": Math.min(Math.max(widget ? widget.columnSpan : 1, 1), allTracks.length)})
             column += span
         }
 
@@ -180,10 +197,10 @@ MorphWidget {
         if (!root.tracked) {
             let unit = 0
             for (const placed of cells) {
-                const covered = space * (placed.span - 1)
-                unit = Math.max(unit, Math.ceil(Math.max(0, root.naturalWidth(placed.item) - covered) / placed.span))
+                const covered = space * (placed.declared - 1)
+                unit = Math.max(unit, Math.ceil(Math.max(0, root.naturalWidth(placed.item) - covered) / placed.declared))
             }
-            natural = unit * count + space * (count - 1)
+            natural = unit * allTracks.length + space * (allTracks.length - 1)
         }
         free.implicitWidth = Math.max(0, natural)
         free.implicitHeight = heights.length > 0 ? y - space : 0

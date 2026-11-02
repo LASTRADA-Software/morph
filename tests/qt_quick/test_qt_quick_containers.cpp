@@ -1220,6 +1220,111 @@ TEST_CASE("qt_quick containers: a grid's gap and a panel's padding are spacing s
           13.0);
 }
 
+namespace {
+
+/// The y of @p cell's top in the scene.
+qreal topOf(ui::Widget const& cell) { return Scene::itemOf(cell).mapToScene(QPointF{0, 0}).y(); }
+
+/// The x of @p cell's left edge in the scene.
+qreal leftOf(ui::Widget const& cell) { return Scene::itemOf(cell).mapToScene(QPointF{0, 0}).x(); }
+
+}  // namespace
+
+// Mutation: ignore `minColumnWidth` in MorphGrid.place (the third cell stays in the first row at 25 units).
+TEST_CASE("qt_quick containers: a grid's columns follow its width as it is resized, without a layout loop",
+          "[qt_quick]") {
+    Scene scene;
+    LoopWatch const watch;
+    int const loopsBefore = LoopWatch::loops();
+    auto grid = scene.backend().createGrid(nullptr);
+    grid->setColumns(3);
+    grid->setMinColumnWidth(10);
+    grid->setLayout({.width = ui::Sizing::fixed(25)});
+    std::vector<std::unique_ptr<ui::TextWidget>> cells;
+    for (int index = 0; index < 3; ++index) {
+        cells.push_back(scene.backend().createText(grid.get()));
+        cells.back()->setText("a");
+    }
+    scene.settle();
+    CHECK(leftOf(*cells.at(2)) == Catch::Approx(leftOf(*cells.at(0))).margin(0.5));
+    CHECK(topOf(*cells.at(2)) > topOf(*cells.at(0)) + 1.0);
+    grid->setLayout({.width = ui::Sizing::fixed(30)});
+    scene.settle();
+    CHECK(topOf(*cells.at(2)) == Catch::Approx(topOf(*cells.at(0))).margin(0.5));
+    CHECK(leftOf(*cells.at(2)) > leftOf(*cells.at(1)) + 1.0);
+    grid->setLayout({.width = ui::Sizing::fixed(25)});
+    scene.settle();
+    CHECK(topOf(*cells.at(2)) > topOf(*cells.at(0)) + 1.0);
+    CHECK(LoopWatch::loops() == loopsBefore);
+}
+
+// Mutation: take the natural width from the columns shown (a grid narrower than its content, with the key, is
+// narrower by nature than without it).
+TEST_CASE("qt_quick containers: a grid with a least column width is as wide by nature as without it, narrowed or not",
+          "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto plain = scene.backend().createGrid(column.get());
+    plain->setColumns(3);
+    auto minimum = scene.backend().createGrid(column.get());
+    minimum->setColumns(3);
+    minimum->setMinColumnWidth(10);
+    // Narrower than its three columns, so only one is shown while its natural width is still all of them.
+    minimum->setLayout({.width = ui::Sizing::fixed(15)});
+    std::vector<std::unique_ptr<ui::TextWidget>> cells;
+    for (ui::GridWidget* const grid : {plain.get(), minimum.get()}) {
+        for (int index = 0; index < 3; ++index) {
+            cells.push_back(scene.backend().createText(grid));
+            cells.back()->setText("abcdefghij");
+        }
+    }
+    scene.settle();
+    CHECK(Scene::itemOf(*plain).implicitWidth() > 0.0);
+    CHECK(Scene::itemOf(*minimum).implicitWidth() == Catch::Approx(Scene::itemOf(*plain).implicitWidth()).margin(0.5));
+}
+
+// The conformance case `a grid's gap counts in how many least columns fit` tells two columns from three only while
+// the unit is under twice the step-1 space (floor((31u + 4) / (10u + 4)) is 2 while u < 8): a theme or font change
+// that breaks that fails here, naming the cause, rather than turning the case into a guard.
+TEST_CASE(
+    "qt_quick containers: the unit is small enough for the grid gap conformance case to tell two columns from three",
+    "[qt_quick]") {
+    Scene scene;
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal const unit = theme->property("unitWidth").toReal();
+    qreal step = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, step), Q_ARG(int, 1)));
+    INFO("the unit is " << unit << " px and the step-1 space " << step << " px");
+    CHECK(unit < 2.0 * step);
+}
+
+// Mutation: leave the epsilon out of `shownColumns` (a width that holds exactly n columns loses one when its quotient
+// lands just under n). The widths are n times the least width in a unit that is no binary fraction, the arithmetic in
+// which a plain floor loses a column.
+TEST_CASE("qt_quick containers: a width that exactly holds n columns shows n, whatever the unit", "[qt_quick]") {
+    Scene scene;
+    auto grid = scene.backend().createGrid(nullptr);
+    grid->setColumns(4);
+    QObject* const item = &Scene::itemOf(*grid);
+    int checked = 0;
+    for (qreal const unit : {7.67, 7.7, 7.1, 6.3}) {
+        for (int least = 1; least <= 64; ++least) {
+            grid->setMinColumnWidth(least);
+            for (int columns = 2; columns <= 4; ++columns) {
+                qreal const width = (columns * least) * unit;
+                int shown = 0;
+                REQUIRE(QMetaObject::invokeMethod(item, "shownColumns", Q_RETURN_ARG(int, shown), Q_ARG(qreal, width),
+                                                  Q_ARG(int, 4), Q_ARG(qreal, 0.0), Q_ARG(qreal, unit)));
+                INFO("unit " << unit << ", least " << least << ", " << columns << " columns in " << width << " px");
+                CHECK(shown == columns);
+                ++checked;
+            }
+        }
+    }
+    CHECK(checked == 4 * 64 * 3);
+}
+
 TEST_CASE("qt_quick containers: a theme's space token sets what a spacing step is", "[qt_quick]") {
     Scene scene;
     auto const tokens =

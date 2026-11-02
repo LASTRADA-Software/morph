@@ -325,6 +325,11 @@ void GridImpl::setTracks(std::vector<ui::GridTrack> const& tracks) {
     refresh();
 }
 
+void GridImpl::setMinColumnWidth(int units) {
+    _minColumnWidth = units;
+    refresh();
+}
+
 void GridImpl::setGap(int gap) {
     _columnGap = layout::stepCells(gap, ui::Axis::Horizontal);
     _rowGap = layout::stepCells(gap, ui::Axis::Vertical);
@@ -382,9 +387,18 @@ std::vector<layout::Item> GridImpl::trackItems(std::span<WidgetBase* const> show
     return items;
 }
 
+int GridImpl::shownColumns(int width) const {
+    int const columns = std::max(1, _columns);
+    if (_minColumnWidth <= 0 || !_tracks.empty()) {
+        return columns;
+    }
+    // n columns need n * minimum + (n - 1) * gap cells: n <= (width + gap) / (minimum + gap).
+    return std::clamp((width + _columnGap) / (_minColumnWidth + _columnGap), 1, columns);
+}
+
 layout::GridPlan GridImpl::planOf(std::span<WidgetBase* const> shown, int width) const {
     layout::Track const track{.length = width, .gap = _columnGap};
-    return _tracks.empty() ? layout::planGrid(_columns, cellsOf(shown), track, _rowGap)
+    return _tracks.empty() ? layout::planGrid(shownColumns(width), cellsOf(shown), track, _rowGap)
                            : layout::planGrid(trackItems(shown), cellsOf(shown), track, _rowGap);
 }
 
@@ -413,8 +427,12 @@ layout::GridPlan GridImpl::planOf(std::span<WidgetBase* const> shown, int width)
         unit = std::max(unit, (width + span - 1) / span);
     }
     int const width = (unit * columns) + (_columnGap * (columns - 1));
-    auto const plan =
-        layout::planGrid(columns, cellsOf(shown), layout::Track{.length = width, .gap = _columnGap}, _rowGap);
+    // The width is that of all the columns; the height is that of the columns that fit the width the grid was last
+    // drawn at.
+    bool const follows = _minColumnWidth > 0 && _drawnWidth > 0;
+    auto const plan = follows ? planOf(shown, _drawnWidth)
+                              : layout::planGrid(columns, cellsOf(shown),
+                                                 layout::Track{.length = width, .gap = _columnGap}, _rowGap);
     int const height = std::accumulate(plan.rowHeights.begin(), plan.rowHeights.end(), 0) +
                        (_rowGap * (static_cast<int>(plan.rowHeights.size()) - 1));
     return {.width = width, .height = height};
@@ -457,7 +475,14 @@ std::vector<::core::tui::Rect> GridImpl::childAreas(::core::tui::Size size) cons
     return areas;
 }
 
-void GridImpl::paint(::core::tui::Canvas& canvas) { placeChildren(childAreas(canvas.size())); }
+void GridImpl::paint(::core::tui::Canvas& canvas) {
+    if (_minColumnWidth > 0 && canvas.size().width != _drawnWidth) {
+        // The grid's height follows its width, so its container lays it out again at the next frame.
+        _drawnWidth = canvas.size().width;
+        refresh();
+    }
+    placeChildren(childAreas(canvas.size()));
+}
 
 void PanelImpl::setTitle(std::string_view title) {
     _title = std::string{title};

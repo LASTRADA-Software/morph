@@ -348,6 +348,7 @@ public:
     GridImpl(Context& context, ui::ContainerWidget* parent);
     void setColumns(int columns) override;
     void setTracks(std::vector<ui::GridTrack> const& tracks) override;
+    void setMinColumnWidth(int units) override;
     void setGap(int gap) override;
     void setSpan(ui::Widget& child, int span) override;
     void setAlign(ui::Align align) override;

@@ -541,6 +541,13 @@ TEST_CASE("a grid's tracks are written as parts, each key only when given", "[ui
           R"({}]})");
 }
 
+// Mutation: leave `minColumnWidth` out of grid (it is not written), or write it for a row too.
+TEST_CASE("a grid's least column width is written, a row's options do not carry it", "[ui][author]") {
+    CHECK(text(ui::grid(ui::Nodes{}, {.columns = 3, .minColumnWidth = 25}).json()) ==
+          R"({"kind":"grid","columns":3,"minColumnWidth":25})");
+    CHECK(text(ui::row(ui::Nodes{}, {.minColumnWidth = 25}).json()) == R"({"kind":"row"})");
+}
+
 // Mutation: drop the align branch of stackNode (the column's `align` is not written).
 TEST_CASE("align, justify and alignSelf are written by name, and a screen using them validates", "[ui][author]") {
     CHECK(text(ui::column({ui::text({.text = "a"}).alignSelf(morph::ui::Align::End)},

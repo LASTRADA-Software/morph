@@ -101,6 +101,8 @@ void GridImpl::setTracks(std::vector<ui::GridTrack> const& tracks) {
     write("tracks", list);
 }
 
+void GridImpl::setMinColumnWidth(int units) { write("minColumnWidth", units); }
+
 void GridImpl::adopted(ItemBase& child) {
     QQuickItem const* const cell = child.item();
     if (cell == nullptr || item() == nullptr) {

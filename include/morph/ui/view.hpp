@@ -886,6 +886,10 @@ struct Grid {
     /// @brief Where each cell's content sits vertically in its row; set once. A grid's columns are sized by their
     ///        count or tracks, so there is no spare length to justify.
     Align align = Align::Stretch;
+    /// @brief The least width of a column, in units, while above 0: the grid shows as many of its `columns` as fit
+    ///        that width, and at least one, so its columns follow the room it is given; its height follows the columns
+    ///        shown. Ignored with `tracks`; set once.
+    int minColumnWidth = 0;
 };
 
 /// @brief Empty space that takes what its layout hints ask for.

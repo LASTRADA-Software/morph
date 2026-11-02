@@ -507,6 +507,16 @@ public:
     /// @param tracks At least one.
     virtual void setTracks(std::vector<GridTrack> const& tracks) = 0;
 
+    /// @brief Makes the column count follow the grid's width: the columns shown are
+    ///        `max(1, min(columns, floor((W + g) / (m * u + g) + e)))`, W the width inside the grid, g the gap, m the
+    ///        least width given here, u the unit and e 1e-6, so a width that holds exactly n columns, computed in
+    ///        floating point, gives n. The natural width is unchanged (`columns` times the widest cell, a span divided
+    ///        out); the natural height is that of the columns shown at the width the grid was last laid out at, so a
+    ///        grid whose columns drop pushes its siblings down. The mount calls it once, before any child, only for a
+    ///        grid without tracks that gives a least width above 0, and the tracks and this are never both given.
+    /// @param units The least column width in units, at least 1.
+    virtual void setMinColumnWidth(int units) = 0;
+
     /// @brief Sets the space between cells.
     /// @param gap A spacing step, 0 to `kMaxSpacingStep`; the mount never passes another value.
     virtual void setGap(int gap) = 0;

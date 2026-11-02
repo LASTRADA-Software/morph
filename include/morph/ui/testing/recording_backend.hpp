@@ -1292,6 +1292,9 @@ public:
                 return text;
             }));
     }
+    /// @brief Records property `minColumnWidth`.
+    /// @param units The least column width in units.
+    void setMinColumnWidth(int units) override { set("minColumnWidth", std::to_string(units)); }
     void setGap(int gap) override { set("gap", std::to_string(gap)); }
     void setAlign(Align align) override { set("align", formatAlign(align)); }
 

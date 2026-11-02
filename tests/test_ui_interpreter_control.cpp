@@ -764,6 +764,21 @@ TEST_CASE("interpreter control: a grid's tracks reach the grid in place of a col
     CHECK_FALSE(h.backend.hasProp(plain, "tracks"));
 }
 
+// Mutation: lower no `minColumnWidth` (the recording has none), or record it on a grid that gives none.
+TEST_CASE("interpreter control: a grid's least column width reaches the grid, and only a grid that gives one",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "minimum",
+      "view": { "kind": "column", "children": [
+        { "kind": "grid", "testId": "fields", "columns": 3, "minColumnWidth": 25, "children": [] },
+        { "kind": "grid", "testId": "plain", "columns": 3, "children": [] } ] } })");
+    int const fields = h.byTestId("Grid", "fields");
+    CHECK(h.backend.prop(fields, "minColumnWidth") == "25");
+    CHECK(h.backend.prop(fields, "columns") == "3");
+    CHECK_FALSE(h.backend.hasProp(h.byTestId("Grid", "plain"), "minColumnWidth"));
+}
+
 // Mutation: lower `text` beside `spans`, and the fallback text is recorded; drop the report, and the diagnostic is
 // missing.
 TEST_CASE("interpreter control: a text's and a banner's spans record their runs in place of the text",

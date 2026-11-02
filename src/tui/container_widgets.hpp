@@ -106,6 +106,10 @@ public:
     explicit GridImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
     void setColumns(int columns) override;
     void setTracks(std::vector<ui::GridTrack> const& tracks) override;
+    /// The columns shown are as many as fit @p units cells each, at most the column count; the natural height is that
+    /// of the grid at the width it was last drawn at, so a grid whose columns drop pushes its siblings down one frame
+    /// after its width changes.
+    void setMinColumnWidth(int units) override;
     void setGap(int gap) override;
     /// Throws std::logic_error when @p child is not one of this grid's children.
     void setSpan(ui::Widget& child, int span) override;
@@ -122,10 +126,16 @@ private:
     [[nodiscard]] std::vector<layout::GridCell> cellsOf(std::span<WidgetBase* const> shown) const;
     /// The plan of the shown cells in @p width: equal columns, or the tracks' widths.
     [[nodiscard]] layout::GridPlan planOf(std::span<WidgetBase* const> shown, int width) const;
+    /// How many equal columns are drawn in @p width: the column count, fewer while `minColumnWidth` is set and the
+    /// width holds fewer of them, and at least one.
+    [[nodiscard]] int shownColumns(int width) const;
     /// One stack item per track, a content track's natural width its widest one-track cell's.
     [[nodiscard]] std::vector<layout::Item> trackItems(std::span<WidgetBase* const> shown) const;
 
     int _columns = 1;
+    int _minColumnWidth = 0;
+    /// The width the grid was last drawn at; its natural height is computed at it while `_minColumnWidth` is set.
+    int _drawnWidth = 0;
     std::vector<ui::GridTrack> _tracks;
     int _columnGap = 0;
     int _rowGap = 0;

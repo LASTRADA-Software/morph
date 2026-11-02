@@ -48,6 +48,8 @@ clients keeps such documents free of it. The shared corpus is
 | `{"session": "name"}` | `Session` | `principal`, `userName`, `displayName`, `userKey`, `tenant`, `authenticated` |
 | `{"host": "name"}` | `Host` | A value the application registered, `null` when absent |
 
+A width class is the window's. A grid's `minColumnWidth`, a stretch's bounds and a wrapping row follow the room a node is given instead, which a sidebar or a pane's share changes without the window changing.
+
 `widthClass` is the width of the surface the client draws on, in the unit `fixed(n)` counts: `compact` below 80
 units, `medium` below 108 (`kExpandedWidthUnits`: the compact bound, 80, plus the shell sidebar's 28), `expanded` otherwise (`ui::widthClassOf`). The client sets it from its view backend before
 the first mount and updates it on a resize. The terminal counts its columns, so an 80-column terminal is `medium`; Qt

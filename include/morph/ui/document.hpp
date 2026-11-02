@@ -874,9 +874,10 @@ inline constexpr std::array<KeySpec, 10> kContainerKeys = {{{"children", Shape::
                                                             {"headJoined", Shape::Flag},
                                                             {"selected", Shape::Condition}}};
 /// @brief The keys of `grid`; `justify` and `selected` are read only to refuse them.
-inline constexpr std::array<KeySpec, 7> kGridKeys = {{{"children", Shape::Nodes},
+inline constexpr std::array<KeySpec, 8> kGridKeys = {{{"children", Shape::Nodes},
                                                       {"gap", Shape::Expr},
                                                       {"columns", Shape::Expr},
+                                                      {"minColumnWidth", Shape::Expr},
                                                       {"tracks", Shape::Parts, "track"},
                                                       {"align", Shape::Text},
                                                       {"justify", Shape::Text},
@@ -4566,6 +4567,37 @@ private:
         }
     }
 
+    // A grid's `minColumnWidth`: a literal number of units that has columns to drop, and no tracks, which size their
+    // own columns. Where it could do nothing, it is refused rather than ignored.
+    static void checkMinColumnWidth(DocNode const& node) {
+        ExprPtr const least = node.prop("minColumnWidth");
+        if (least == nullptr) {
+            return;
+        }
+        std::int64_t const* const units =
+            least->kind == ExprKind::Literal ? least->literal.asInt() : static_cast<std::int64_t const*>(nullptr);
+        if (units == nullptr) {
+            refuse(least->path, "`minColumnWidth` is a literal integer");
+        }
+        if (*units < 1 || *units > 64) {
+            refuse(least->path, "`minColumnWidth` is 1 to 64 units");
+        }
+        if (node.parts.contains("tracks")) {
+            refuse(least->path, "a grid with tracks sizes its own columns; `minColumnWidth` is for equal columns");
+        }
+        ExprPtr const columns = node.prop("columns");
+        if (columns == nullptr) {
+            refuse(least->path,
+                   "`minColumnWidth` needs `columns`: it drops columns from that count as the grid narrows");
+        }
+        if (columns->kind == ExprKind::Literal) {
+            std::int64_t const* const count = columns->literal.asInt();
+            if (count != nullptr && *count <= 1) {
+                refuse(least->path, "`minColumnWidth` has nothing to drop from one column");
+            }
+        }
+    }
+
     static void checkGrid(DocNode const& node) {
         if (!node.name("justify").empty()) {
             refuse(pointerAppend(node.path, "justify"),
@@ -4575,6 +4607,7 @@ private:
             refuse(pointerAppend(node.path, "selected"),
                    "a grid is not an entry of a list; `selected` marks a column or a row");
         }
+        checkMinColumnWidth(node);
         auto const tracks = node.parts.find("tracks");
         if (tracks == node.parts.end()) {
             return;

@@ -3161,6 +3161,148 @@ struct WrappingRow {
     return checks.result();
 }
 
+/// @brief A fixed-width grid of three one-character texts with a least column width, in a column, as mounted by
+///        `mountMinColumnGrid`.
+struct MinColumnGrid {
+    /// @brief The mount, kept alive while the widgets are read.
+    std::unique_ptr<Mounted> view;
+    /// @brief The grid's three cells.
+    std::vector<Widget*> cells;
+    /// @brief The text after the grid; null when there is none.
+    Widget* after = nullptr;
+};
+
+/// @brief Mounts the grid of `MinColumnGrid`.
+/// @param probe          The backend under test.
+/// @param width          The grid's width in units.
+/// @param minColumnWidth The grid's least column width in units.
+/// @param gap            The grid's gap, a spacing step.
+/// @param withAfter      Whether a text follows the grid in the column.
+/// @return The mount and the widgets read from it.
+[[nodiscard]] inline MinColumnGrid mountMinColumnGrid(ConformanceProbe& probe, int width, int minColumnWidth, int gap,
+                                                      bool withAfter) {
+    Grid grid{.columns = 3, .gap = gap, .minColumnWidth = minColumnWidth};
+    for (int index = 0; index < 3; ++index) {
+        grid.cells.push_back(GridCell{.node = sizedText("a", {})});
+    }
+    grid.common.layout = {.width = Sizing::fixed(width)};
+    Column column{.children = {ui::grid(std::move(grid))}};
+    if (withAfter) {
+        column.children.push_back(sizedText("z", {}));
+    }
+    MinColumnGrid made;
+    made.view =
+        std::make_unique<Mounted>(probe.runtime(), probe.backend(), insideColumn(ui::column(std::move(column))));
+    probe.settle();
+    Measured const found = measured(probe, *made.view);
+    if (found.children.empty()) {
+        return made;
+    }
+    if (ContainerWidget const* const cells = asContainer(*found.children.at(0)); cells != nullptr) {
+        for (std::size_t index = 0; index < probe.childCount(*cells); ++index) {
+            made.cells.push_back(probe.childAt(*cells, index));
+        }
+    }
+    if (withAfter && found.children.size() == 2) {
+        made.after = found.children.at(1);
+    }
+    return made;
+}
+
+/// @brief Case: a grid of three columns with a least column width of 10 units, 25 units wide, shows two columns:
+///        the third cell starts the second row under the first (25 / 10 is 2).
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> gridColumnsFollowWidth(ConformanceProbe& probe) {
+    MinColumnGrid const made = mountMinColumnGrid(probe, 25, 10, 0, false);
+    Checks checks;
+    Geometry geometry{probe, checks};
+    checks.that(made.cells.size() == 3, "the grid holds three cells");
+    if (made.cells.size() == 3) {
+        WidgetBounds const first = geometry.of(*made.cells.at(0));
+        WidgetBounds const second = geometry.of(*made.cells.at(1));
+        WidgetBounds const third = geometry.of(*made.cells.at(2));
+        geometry.near("the third cell's left edge, under the first", first.x, third.x);
+        checks.that(second.x > first.x + 1.0, "the second cell is in a column of its own");
+        checks.that(third.y > first.y + 0.5, "the third cell starts the next row");
+    }
+    return checks.result();
+}
+
+/// @brief Case: the same grid 30 units wide keeps three columns: three times 10 is exactly 30, which must not be
+///        lost to a floating-point quotient just under 3.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> gridKeepsColumnsWhenRoom(ConformanceProbe& probe) {
+    MinColumnGrid const made = mountMinColumnGrid(probe, 30, 10, 0, false);
+    Checks checks;
+    Geometry geometry{probe, checks};
+    checks.that(made.cells.size() == 3, "the grid holds three cells");
+    if (made.cells.size() == 3) {
+        WidgetBounds const first = geometry.of(*made.cells.at(0));
+        WidgetBounds const second = geometry.of(*made.cells.at(1));
+        WidgetBounds const third = geometry.of(*made.cells.at(2));
+        geometry.near("the third cell's top, on the first's row", first.y, third.y);
+        checks.that(second.x > first.x + 1.0 && third.x > second.x + 1.0, "the cells are in three columns");
+    }
+    return checks.result();
+}
+
+/// @brief Case: the same grid 9 units wide, narrower than one column, shows one: the cells stand over one another.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> gridFallsToOneColumn(ConformanceProbe& probe) {
+    MinColumnGrid const made = mountMinColumnGrid(probe, 9, 10, 0, false);
+    Checks checks;
+    Geometry geometry{probe, checks};
+    checks.that(made.cells.size() == 3, "the grid holds three cells");
+    if (made.cells.size() == 3) {
+        WidgetBounds const first = geometry.of(*made.cells.at(0));
+        WidgetBounds const second = geometry.of(*made.cells.at(1));
+        WidgetBounds const third = geometry.of(*made.cells.at(2));
+        geometry.near("the second cell's left edge, under the first", first.x, second.x);
+        geometry.near("the third cell's left edge, under the first", first.x, third.x);
+        checks.that(first.y + 0.5 < second.y && second.y + 0.5 < third.y, "the rows go down in order");
+    }
+    return checks.result();
+}
+
+/// @brief Case: the gap counts: 31 units wide, a gap of step 1 and a least column width of 10 hold two columns
+///        (n columns need n times 10 plus n - 1 gaps), where the same width without the gap would hold three.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> gridGapCounts(ConformanceProbe& probe) {
+    MinColumnGrid const made = mountMinColumnGrid(probe, 31, 10, 1, false);
+    Checks checks;
+    Geometry geometry{probe, checks};
+    checks.that(made.cells.size() == 3, "the grid holds three cells");
+    if (made.cells.size() == 3) {
+        WidgetBounds const first = geometry.of(*made.cells.at(0));
+        WidgetBounds const third = geometry.of(*made.cells.at(2));
+        geometry.near("the third cell's left edge, under the first (two columns)", first.x, third.x);
+        checks.that(third.y > first.y + 0.5, "the third cell starts the next row");
+    }
+    return checks.result();
+}
+
+/// @brief Case: a grid whose columns drop grows down, and the text after it in its column sits below its last row.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> gridDropGrowsDown(ConformanceProbe& probe) {
+    MinColumnGrid const made = mountMinColumnGrid(probe, 25, 10, 0, true);
+    Checks checks;
+    Geometry geometry{probe, checks};
+    checks.that(made.cells.size() == 3 && made.after != nullptr, "the grid holds three cells and a text follows it");
+    if (made.cells.size() == 3 && made.after != nullptr) {
+        WidgetBounds const first = geometry.of(*made.cells.at(0));
+        WidgetBounds const last = geometry.of(*made.cells.at(2));
+        WidgetBounds const after = geometry.of(*made.after);
+        checks.that(last.y > first.y + 0.5, "the third cell starts a second row");
+        checks.that(after.y + 0.5 >= last.y + last.height, "the text after the grid is below its last row");
+    }
+    return checks.result();
+}
+
 /// @brief Case: a content-sized grid of two columns and no tracks is as wide as its widest cell times its columns:
 ///        for cells of one and ten characters, twice the width the ten characters have on their own (within a unit),
 ///        where the sum of the columns' naturals is about once, and the second cell keeps most of its ten
@@ -3744,7 +3886,7 @@ struct WrappingRow {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 48> const cases{{
+    static std::array<ConformanceCase, 53> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3766,6 +3908,13 @@ struct WrappingRow {
         {.name = "a grid's columns without tracks are equal", .run = detail::gridColumnsAreEqual},
         {.name = "a content-sized grid without tracks is its widest cell times its columns",
          .run = detail::gridColumnsNaturalIsWidestTimesColumns},
+        {.name = "a grid's columns follow its width when it gives a least column width",
+         .run = detail::gridColumnsFollowWidth},
+        {.name = "a grid keeps all its columns when its width holds them exactly",
+         .run = detail::gridKeepsColumnsWhenRoom},
+        {.name = "a grid narrower than one least column shows one column", .run = detail::gridFallsToOneColumn},
+        {.name = "a grid's gap counts in how many least columns fit", .run = detail::gridGapCounts},
+        {.name = "a grid whose columns drop grows down and pushes what follows it", .run = detail::gridDropGrowsDown},
         {.name = "a key-value's caption width sets its value column",
          .run = detail::keyValueCaptionWidthSetsTheValueColumn},
         {.name = "a centred track centres a label-width cell", .run = detail::centredTrackCentresBadge},

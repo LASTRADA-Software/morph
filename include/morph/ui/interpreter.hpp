@@ -8138,7 +8138,8 @@ inline Node ScreenCore::lowerGrid(DocNode const& node, LowerCtx const& ctx, Elem
     KindKit const kit{*this, node, ctx, element};
     Grid spec{.columns = static_cast<int>(kit.onceInt("columns", 1)),
               .gap = static_cast<int>(kit.onceInt("gap", 0)),
-              .align = alignOf(node.name("align"))};
+              .align = alignOf(node.name("align")),
+              .minColumnWidth = static_cast<int>(kit.onceInt("minColumnWidth", 0))};
     for (DocNodePtr const& track : node.partList("tracks")) {
         ExprPtr const width = track->prop("width");
         spec.tracks.push_back(GridTrack{.width = width ? sizingOf(once(ctx, width)) : Sizing::stretch(),

@@ -3904,6 +3904,10 @@ struct ContainerOptions {
     AnyHandle columns;
     /// @brief A grid's column tracks, in place of `columns`; empty writes none.
     std::vector<GridTrack> tracks;
+    /// @brief A grid's least column width in units, a literal 1 to 64: the grid shows as many of its `columns` as fit
+    ///        that width, so its columns follow the room it is given. Needs `columns` above one; the loader refuses it
+    ///        with `tracks`. Written by `grid` only.
+    AnyHandle minColumnWidth;
     /// @brief Where the children sit across the axis; absent stretches them.
     std::optional<Align> align;
     /// @brief A row's or column's spare length along its axis; absent packs at the start. Not on a grid, whose
@@ -4057,7 +4061,10 @@ struct ActionBarOptions {
 /// @return The node.
 [[nodiscard]] inline Node grid(Nodes const& children, ContainerOptions const& options = {}) {
     detail::NodeWriter node{"grid"};
-    node.put("children", children).put("gap", options.gap).put("columns", options.columns);
+    node.put("children", children)
+        .put("gap", options.gap)
+        .put("columns", options.columns)
+        .put("minColumnWidth", options.minColumnWidth);
     if (!options.tracks.empty()) {
         Json::array_t tracks;
         tracks.reserve(options.tracks.size());

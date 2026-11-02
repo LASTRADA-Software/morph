@@ -251,6 +251,30 @@ TEST_CASE("ui document: a refusal names the document", "[ui][document]") {
     CHECK(std::ranges::find(kinds, "menuItem") == kinds.end());
 }
 
+// Mutation: drop a refusal of `checkMinColumnWidth` (the grid loads and the key does nothing), or accept a computed
+// value (the mount would read a number it cannot know at load).
+TEST_CASE("ui document: a grid's least column width is a literal 1 to 64 for a grid of several columns without tracks",
+          "[ui][document]") {
+    auto const grid = [](std::string const& keys) {
+        return loadDocumentText(R"({"vocab": "ui/1", "id": "g", "view": {"kind": "grid", )" + keys +
+                                R"("children": []}})");
+    };
+    CHECK(grid(R"("columns": 3, "minColumnWidth": 25,)").has_value());
+    CHECK(grid(R"("columns": 3, "minColumnWidth": 1,)").has_value());
+    CHECK(grid(R"("columns": 3, "minColumnWidth": 64,)").has_value());
+    // A computed column count is not known at load, so it is not judged.
+    CHECK(grid(R"("columns": {"env": "widthClass"}, "minColumnWidth": 25,)").has_value());
+    for (std::string const& refused :
+         {R"("columns": 3, "minColumnWidth": 0,)", R"("columns": 3, "minColumnWidth": 65,)",
+          R"("columns": 3, "minColumnWidth": {"env": "widthClass"},)", R"("minColumnWidth": 25,)",
+          R"("columns": 1, "minColumnWidth": 25,)", R"("tracks": [{}, {}], "minColumnWidth": 25,)"}) {
+        INFO(refused);
+        auto const loaded = grid(refused);
+        REQUIRE_FALSE(loaded.has_value());
+        CHECK(loaded.error().path.starts_with("/view/minColumnWidth"));
+    }
+}
+
 // Mutation: drop `actionBar` from `kKinds` (it is refused as an unknown kind), or give it `gap` or `wrap` (the theme's
 // gap is then overridden by a literal).
 TEST_CASE("ui document: an action bar takes children, align and justify, and no gap or wrap", "[ui][document]") {
