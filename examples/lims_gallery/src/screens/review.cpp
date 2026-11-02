@@ -589,7 +589,9 @@ ui::Node commentCards(Review const& review) {
                [](ui::DeclScope&) {
                    return ui::Nodes{ui::panel(
                        {ui::text({.text = ui::format("Comment from {0} · {1}", {ui::row("who"), ui::row("when")}),
-                                  .role = "section"}),
+                                  .spans = ui::spans({ui::strong(
+                                      ui::format("Comment from {0} · {1}", {ui::row("who"), ui::row("when")}))}),
+                                  .role = "label"}),
                         ui::text({.text = ui::row("what")})},
                        {.padding = 2})};
                })
