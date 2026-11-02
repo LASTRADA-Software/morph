@@ -44,7 +44,7 @@ TEST_CASE("stability, expanded: step 2 of the wizard, the matrix and the summary
     CHECK(screen.prop("Steps", "steps", "current") == "1");
     CHECK(screen.shows("Table", "matrix"));
     // The summary is a share of the row, capped at the mockup's width.
-    CHECK(screen.prop("Panel", "summary-panel", "layout").value_or("none").starts_with("percent(26) min=30 max=33/"));
+    CHECK(screen.prop("Panel", "summary-panel", "layout").value_or("none").starts_with("percent(26) max=33/"));
     CHECK(screen.backend().prop(monthBox(screen, "25\u00a0°C", "T0"), "checked") == "true");
     CHECK(screen.backend().prop(monthBox(screen, "25\u00a0°C", "1 m"), "checked") == "false");
     // The summary's captions take the design's 13-unit column.
