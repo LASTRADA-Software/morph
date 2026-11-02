@@ -846,8 +846,9 @@ ui::Node compactWorksheet(Review const& review) {
     auto const decisions = ui::row({returnButton(review, "Return…").sizing(ui::stretch()),
                                     rejectButton(review, "Reject…").sizing(ui::stretch()),
                                     approveButton(review, "Approve…").sizing(ui::stretch(2))},
-                                   {.gap = 1, .padding = ui::padding(2, 4)})
-                               .surface("bar");
+                                   {.gap = 2, .padding = ui::padding(2, 4)})
+                               .surface("bar")
+                               .testId("decisions");
     return ui::column({back, recordTabs(review, true), decisions, decisionDialog(review)},
                       {.gap = 0, .divided = true, .pageEdge = true, .headJoined = true})
         .sizing(ui::stretch(), ui::stretch());

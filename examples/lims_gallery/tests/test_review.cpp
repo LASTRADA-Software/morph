@@ -134,6 +134,7 @@ TEST_CASE("review, compact: the worksheet as its own page, the queue behind it",
     GalleryScreen screen{kScreen, "compact"};
     screen.requireNoProblems();
     CHECK_FALSE(screen.find("Splitter", "split").has_value());
+    CHECK(screen.prop("Row", "decisions", "gap") == "2");
     CHECK(screen.prop("Button", "back", "label") == "‹ Awaiting review · 4");
     CHECK(screen.prop("Tabs", "record-tabs", "tabs") == "[Results,Prior lots,Audit 3,Comments 1]");
     CHECK(screen.find("Column", "results").has_value());

@@ -161,6 +161,9 @@ TEST_CASE("results, compact: one sample at a time, the reason asked inline", "[l
     GalleryScreen screen{kScreen, "compact"};
     screen.requireNoProblems();
     CHECK_FALSE(screen.find("Table", "results").has_value());
+    // Each pair of buttons sits 8 px apart.
+    CHECK(screen.prop("Row", "pager", "gap") == "2");
+    CHECK(screen.prop("Row", "actions", "gap") == "2");
     // The sample is the head's title, in runs, with its ID in the mono face.
     CHECK(screen.prop("Text", "shell_title", "spans") == "[Sample 2 of 2 · ,S-26-104170;mono]");
     CHECK(screen.shows("Column", "inline-reason"));

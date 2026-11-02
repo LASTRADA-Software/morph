@@ -644,10 +644,12 @@ ui::Node compactLayout(Worksheet const& sheet) {
                               .enabled(sheet.current < last)
                               .sizing(ui::stretch())
                               .testId("next")},
-                         {.gap = 1})},
+                         {.gap = 2})
+                     .testId("pager")},
          .bottom = {
              ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).testId("oos"),
-             ui::row({saveButton().sizing(ui::stretch()), submitButton(sheet).sizing(ui::stretch())}, {.gap = 1})}});
+             ui::row({saveButton().sizing(ui::stretch()), submitButton(sheet).sizing(ui::stretch())}, {.gap = 2})
+                 .testId("actions")}});
 }
 
 }  // namespace
