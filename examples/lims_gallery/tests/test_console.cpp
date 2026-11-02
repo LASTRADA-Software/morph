@@ -126,3 +126,11 @@ TEST_CASE("console, expanded: the sample pager is square glyph buttons", "[lims-
     CHECK(screen.prop("Button", "previous", "shape") == "square");
     CHECK(screen.prop("Button", "next", "shape") == "square");
 }
+
+// Mutation: give the pane's result input a fixed width again.
+TEST_CASE("console, expanded: a result input shares its row, from 9 to 10 units", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    auto const layout = screen.prop("TextInput", "pane-result", "layout");
+    REQUIRE(layout.has_value());
+    CHECK(layout->starts_with("stretch(1) min=9 max=10/"));
+}

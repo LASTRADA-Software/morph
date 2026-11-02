@@ -673,7 +673,11 @@ ui::Node resultLine(Console const& console) {
                         .align = morph::ui::Align::End,
                         .onCommit = enterResult(console)})
              .readonly(Flag{ui::row("total")})
-             .sizing(ui::fixed(9))
+             // Beside the name, a stretch input takes an equal share, capped at 10 units where there is room; where
+             // the name's widest segment needs more it gives down to 9. The inputs of every line then end at one edge.
+             .sizing(ui::stretch())
+             .minWidth(9)
+             .maxWidth(10)
              .testId("pane-result"),
          // The unit is its own column beside the input, so the inputs of every line end at one edge.
          layout::muted(ui::row("unit")).sizing(ui::fixed(5)),
