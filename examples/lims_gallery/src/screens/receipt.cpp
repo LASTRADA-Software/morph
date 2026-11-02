@@ -379,7 +379,7 @@ ui::Node sessionTable(Receipt const& receipt, bool bleeds) {
         ui::table(receipt.session, {.key = ui::row("sample"),
                                     .columns = {{.name = "time",
                                                  .label = "Time",
-                                                 .width = ui::fixed(6),
+                                                 .width = ui::fixed(5),
                                                  .cell = ui::text({.text = ui::row("time")})},
                                                 {.name = "sample",
                                                  .label = "Sample",
@@ -427,10 +427,11 @@ ui::Node expandedLayout(Receipt const& receipt) {
                           .sizing(ui::stretch());
     auto const session = ui::panel({sessionTable(receipt, true), rejectionLine(receipt).testId("last-rejection")},
                                    {.title = "This session", .padding = 2})
-                             // 32 % of the row, at most 39 units (about 300 px): 241 px on the 1000 px page beside the
-                             // sidebar, which keeps the sample card's fields whole on the 785 px page, and the width
-                             // of the mockup's pane from a wider page up.
-                             .sizing(ui::percent(32))
+                             // 31 % of the row, at most 39 units (about 300 px): 234 px on the 1000 px page beside the
+                             // sidebar, the least that shows the table's Received badge whole, which leaves the sample
+                             // card's fields a few pixels short of the longest sample type; the width of the mockup's
+                             // pane from a wider page up.
+                             .sizing(ui::percent(31))
                              .maxWidth(39)
                              .testId("session-panel");
     return ui::pinned(
