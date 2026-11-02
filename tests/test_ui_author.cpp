@@ -1711,6 +1711,14 @@ TEST_CASE("author: a key-value writes its caption layout only when given", "[ui]
           R"({"kind":"keyValue","items":{"ref":"pairs"},"fieldLayout":"inline"})");
 }
 
+// Mutation: write the caption width when it is absent, or leave it out when it is given.
+TEST_CASE("author: a key-value writes its caption width only when given", "[ui][author]") {
+    CHECK(text(ui::keyValue(ui::KeyValueOptions{.items = ui::ref("pairs"), .captionWidth = 12})) ==
+          R"({"kind":"keyValue","items":{"ref":"pairs"},"captionWidth":12})");
+    CHECK(text(ui::keyValue(ui::KeyValueOptions{.items = ui::ref("pairs")})).find("captionWidth") ==
+          std::string::npos);
+}
+
 // Mutation: write today's helper (no page edge, no inset around the content, bars padded by 2 on every side).
 TEST_CASE("pinned marks its column as the page's edge and insets the content and each bar's sides", "[ui][author]") {
     ui::Node const node = ui::pinned(ui::text({.text = "body"}), {.bottom = ui::text({.text = "bar"})});

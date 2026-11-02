@@ -1867,6 +1867,15 @@ private:
         if (spec.captions != CaptionPlacement::Beside) {
             widget.setCaptionPlacement(spec.captions);
         }
+        if (spec.captionWidth) {
+            if (*spec.captionWidth < 1) {
+                throw std::invalid_argument{"morph::ui::mount: `captionWidth` is at least 1 unit"};
+            }
+            if (spec.captions == CaptionPlacement::Above) {
+                throw std::invalid_argument{"morph::ui::mount: `captionWidth` needs the captions beside their values"};
+            }
+            widget.setCaptionWidth(*spec.captionWidth);
+        }
         bind(scope, spec.items, [&widget](std::vector<KeyValueItem> const& items) { widget.setItems(items); });
         return widget;
     }

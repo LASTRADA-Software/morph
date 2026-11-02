@@ -1650,6 +1650,50 @@ TEST_CASE("qt_quick widgets: a stacked key-value puts each caption over its valu
     CHECK(values.at(0)->property("textFormat").toInt() == 1);  // the run, as rich text
 }
 
+// Mutation: ignore `captionUnits` in MorphKeyValue (the widths follow the captions).
+TEST_CASE("qt_quick widgets: a key-value's caption column has the set width and wraps a longer caption",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const kv = scene.backend().createKeyValue(column.get());
+    kv->setCaptionWidth(12);
+    kv->setItems({{.label = "Lot", .value = "L-1"},
+                  {.label = "A caption of well over thirty characters", .value = "v"},
+                  {.label = "Serial number", .value = "S"}});
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*kv);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal const unit = theme->property("unitWidth").toReal();
+    auto const captionOf = [&item](QString const& text) -> QQuickItem const* {
+        for (QQuickItem const* const label : Scene::itemsOf(item, "QQuickText")) {
+            if (label->property("text").toString() == text) {
+                return label;
+            }
+        }
+        return nullptr;
+    };
+    QQuickItem const* const lot = captionOf(QStringLiteral("Lot"));
+    QQuickItem const* const longest = captionOf(QStringLiteral("A caption of well over thirty characters"));
+    QQuickItem const* const serial = captionOf(QStringLiteral("Serial number"));
+    REQUIRE(lot != nullptr);
+    REQUIRE(longest != nullptr);
+    REQUIRE(serial != nullptr);
+    CHECK(lot->width() == Catch::Approx(12 * unit).margin(0.5));
+    CHECK(longest->width() == Catch::Approx(12 * unit).margin(0.5));
+    CHECK(serial->width() == Catch::Approx(12 * unit).margin(0.5));
+    // The long caption wraps, and its pair grows to the taller of the caption and the value.
+    CHECK(longest->height() > 1.5 * lot->height());
+    // The values start at one place whatever the captions.
+    QQuickItem const* const value = captionOf(QStringLiteral("L-1"));
+    QQuickItem const* const other = captionOf(QStringLiteral("S"));
+    REQUIRE(value != nullptr);
+    REQUIRE(other != nullptr);
+    CHECK(value->mapToItem(&item, QPointF{0, 0}).x() == Catch::Approx(other->mapToItem(&item, QPointF{0, 0}).x()));
+    CHECK(value->mapToItem(&item, QPointF{0, 0}).x() == Catch::Approx(14 * unit).margin(1.0));
+}
+
+
 // Mutation: put the mark back at the right edge under the caption (its `y` is then the caption's height); bind a
 // text's mark to the label's `contentWidth` (its `x` is then after the first, longer line).
 TEST_CASE("qt_quick widgets: a required mark follows a caption, or a text's last line", "[qt_quick]") {

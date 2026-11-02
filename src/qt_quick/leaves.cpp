@@ -402,6 +402,8 @@ void KeyValueImpl::setCaptionPlacement(ui::CaptionPlacement placement) {
     write("captionsAbove", placement == ui::CaptionPlacement::Above);
 }
 
+void KeyValueImpl::setCaptionWidth(int units) { write("captionUnits", units); }
+
 // ── EmptyState ────────────────────────────────────────────────────────────
 
 EmptyStateImpl::EmptyStateImpl(Context& context, ui::ContainerWidget* parent)

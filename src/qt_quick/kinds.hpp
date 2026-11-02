@@ -289,6 +289,7 @@ public:
     KeyValueImpl(Context& context, ui::ContainerWidget* parent);
     void setItems(std::vector<ui::KeyValueItem> const& items) override;
     void setCaptionPlacement(ui::CaptionPlacement placement) override;
+    void setCaptionWidth(int units) override;
 };
 
 class EmptyStateImpl final : public ItemWidget<ui::EmptyStateWidget> {

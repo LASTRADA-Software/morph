@@ -173,6 +173,24 @@ TEST_CASE("ui::Mounted: bounds reach the backend, and the loader's bound rules h
     }
 }
 
+// Mutation: drop the checks in mountKind(KeyValue) (a width above stacked captions, or below 1, mounts).
+TEST_CASE("ui::Mounted: a key-value refuses a caption width with captions above, or below 1", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::KeyValue const beside{.captionWidth = 12};
+    {
+        ui::Mounted const view{runtime, backend, ui::keyValue(beside)};
+        CHECK(backend.find("KeyValue", "captionWidth", "12").has_value());
+    }
+    ui::KeyValue const above{.captions = ui::CaptionPlacement::Above, .captionWidth = 12};
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::keyValue(above)}),
+                      Catch::Matchers::ContainsSubstring("needs the captions beside their values"));
+    ui::KeyValue const none{.captionWidth = 0};
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::keyValue(none)}),
+                      Catch::Matchers::ContainsSubstring("at least 1 unit"));
+}
+
 // Mutation: skip checkOverlayLayout in mountKind(Dialog)/mountKind(Drawer) (both still mount).
 TEST_CASE("ui::Mounted: a dialog or drawer refuses a stretching width or height, for a C++ tree", "[ui]") {
     Owner owner;

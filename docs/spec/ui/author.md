@@ -236,7 +236,7 @@ expression of one),
   `Client`).
 - **`form<A>(model, {.prefill, .key, .submit, .showErrors, .fields, .onSubmit, .onSuccess, .onError,
   .presentation})`**: the `fields` overlay is keyed by member pointer, `{&A::member, {.hidden, .label, .unit,
-  ...}}`. `FormPresentation{title, submitLabel, showStatus, columns, fieldLayout}` writes the presentation keys a form, a
+  ...}}`. `FormPresentation{title, submitLabel, showStatus, columns, fieldLayout, captionWidth}` writes the presentation keys a form, a
   collection and a wizard share; an absent one is left out.
 - **`collection<View>(model, presentation)` and `wizard<Wizard>(model, presentation)`** (`ui/author_forms.hpp`),
   like `collection<A>` and `wizard<A>`, take a `FormPresentation` (default none) and a view

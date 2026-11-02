@@ -14,6 +14,9 @@ MorphWidget {
     property var items: []
     // Whether each caption sits above its value; set once.
     property bool captionsAbove: false
+    // The caption column's width in units; -1 sizes it to the widest caption. Set once.
+    property int captionUnits: -1
+    readonly property bool captionSet: captionUnits >= 0
 
     implicitWidth: captionsAbove ? stack.implicitWidth : grid.implicitWidth
     implicitHeight: captionsAbove ? stack.implicitHeight : grid.implicitHeight
@@ -50,11 +53,14 @@ MorphWidget {
                 // The grid sizes from its columns' own rules, with no cap computed from its width: a caption keeps
                 // its whole width on one line, and a value fills what is left and wraps in it. A cap read from the
                 // grid's width and written back from a label's implicit width during the grid's own polish is a
-                // binding cycle through the layout, which Qt reports as a polish loop.
-                wrapMode: Text.NoWrap
+                // binding cycle through the layout, which Qt reports as a polish loop. A set column width is a
+                // fixed number of units, so a longer caption wraps at word boundaries in it without reading the grid.
+                wrapMode: root.captionSet ? Text.Wrap : Text.NoWrap
                 Layout.row: index
                 Layout.column: 0
-                Layout.minimumWidth: implicitWidth
+                Layout.minimumWidth: root.captionSet ? root.captionUnits * Theme.unitWidth : implicitWidth
+                Layout.preferredWidth: root.captionSet ? root.captionUnits * Theme.unitWidth : -1
+                Layout.maximumWidth: root.captionSet ? root.captionUnits * Theme.unitWidth : -1
                 // One node per pair, named "<caption>: <value>", so a test reads a value without a second query.
                 Accessible.name: pair ? pair.label + ": " + pair.value : ""
             }

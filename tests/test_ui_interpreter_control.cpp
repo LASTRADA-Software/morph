@@ -861,6 +861,17 @@ TEST_CASE("interpreter control: a stacked key-value records its captions, its it
           "[Serial number:[DEAB-902114;mono],Containers:180 needed\\, 150 in stock,Note\\; tone\\=Ok:a\\;b]");
 }
 
+// Mutation: drop the caption width in the keyValue lowering (nothing is recorded).
+TEST_CASE("interpreter control: a key-value with a captionWidth records it once, and one without records none",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "kv", "view": {"kind": "column", "children": [
+        {"kind": "keyValue", "testId": "wide", "captionWidth": 12, "items": {"list": []}},
+        {"kind": "keyValue", "testId": "plain", "items": {"list": []}}]}})");
+    CHECK(h.backend.prop(h.byTestId("KeyValue", "wide"), "captionWidth") == "12");
+    CHECK(h.backend.prop(h.byTestId("KeyValue", "plain"), "captionWidth").empty());
+}
+
 namespace {
 
 constexpr char const* kToned = R"({"vocab": "ui/1", "id": "toned",

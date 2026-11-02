@@ -110,7 +110,7 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
 - **Required mark.** `setRequired(true)` marks a field that must be given. The mark follows the caption, on the
   caption's line, while the field draws one (`setCaption(label, true)`), so the control keeps the field's whole
   width; without a caption it sits beside the control. A required text's mark follows the end of its last line.
-- **Key-values.** Each caption sits beside its value, or above it once `setCaptionPlacement(Above)` is called. A
+- **Key-values.** Each caption sits beside its value, or above it once `setCaptionPlacement(Above)` is called. `setCaptionWidth(units)` fixes the width of the caption column beside the values; without it the column is as wide as the widest caption, and a caption longer than the column wraps where the backend can and is cut with an ellipsis where it cannot. A
   toned value (`KeyValueItem::tone` other than `Neutral`) is drawn in the tone's colour and the strong weight, and a
   value with spans draws them as a text does; its accessible text is the runs' text joined.
 - **Text is characters.** Every setter's text is shown as the characters it holds: a backend never interprets a
@@ -372,7 +372,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `BadgeWidget` | `setTone`, `setText`, `setIcon` (once), `setStyle` (once, only for `Outline`), `setShape` (once, only for `Round`), `setMono` (once, only for `true`) | `setOnRemove(onRemove, label)`: only for a removable badge, which then draws a remove control after its text (the framework icon `close`) named `label`, and takes the focus; Delete, Backspace, Enter or Space on it, or a click on its control, calls `onRemove`. A badge without it takes no focus |
 | `ProgressWidget` | `setValue(optional<double>)`, `setLabel` | — |
 | `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)`, `setLabelled(bool)` (pure; the mount calls it only when the document gives `labelled`) | — |
-| `KeyValueWidget` | `setItems(vector<KeyValueItem>)`, `setCaptionPlacement` (once, only for `Above`) | — |
+| `KeyValueWidget` | `setItems(vector<KeyValueItem>)`, `setCaptionPlacement` (once, only for `Above`), `setCaptionWidth` (once, only when the node gives a width) | — |
 | `EmptyStateWidget` | `setTitle`, `setText`, `setIcon` (once), `setActionLabel` | `setOnAction` |
 | `ChartWidget` | `setData(ChartData)`, at mount and on every change (`view_tree.md`, Chart data); it takes no focus | — |
 | `DrawerWidget` | `setOpen`, `setTitle`, `setDescription` (as a dialog's), `footer()` | `setOnDismiss` (Esc on the TUI), for an open drawer |
@@ -479,7 +479,7 @@ The headless reference backend and the test double for everything above the cont
   and `rowKey` on a row (Table); `mode`, `offset`, `value`, `pattern` (DateTimeInput); `range`, `value`
   (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `spans`, `actionLabel`, `dismissible` (Banner);
   `tone`, `text`, `icon`, `style`, and `removable` (the remove control's name) of a removable one (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
-  and `captions` (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title`, `description` (Drawer);
+  `captions` and `captionWidth` (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title`, `description` (Drawer);
   `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
   `accept`, `multiple` (DropZone); `component`, `minVersion` and each prop as `prop.<name>` (Custom);
   `yRange`, `xRange`, `yLabel`, `yTicks`, `lines`, `series`, `summary` (Chart, each set only when its text

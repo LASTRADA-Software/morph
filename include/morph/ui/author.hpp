@@ -5286,6 +5286,9 @@ struct KeyValueOptions {
     /// @brief Where each caption sits: `Inline`, beside its value, or `Stacked`, above it; absent writes no key, which
     ///        is inline.
     std::optional<::morph::forms::FieldLayout> fieldLayout;
+    /// @brief The width of the caption column in units, 1 to 64; absent sizes it to the widest caption. It needs
+    ///        inline captions.
+    std::optional<int> captionWidth;
 };
 
 /// @brief A `keyValue` node with its options.
@@ -5296,6 +5299,9 @@ struct KeyValueOptions {
     node.put("items", options.items);
     if (options.fieldLayout) {
         node.text("fieldLayout", *options.fieldLayout == ::morph::forms::FieldLayout::Stacked ? "stacked" : "inline");
+    }
+    if (options.captionWidth) {
+        node.raw("captionWidth", AnyHandle{std::int64_t{*options.captionWidth}}.json());
     }
     return node.done();
 }
@@ -5469,6 +5475,9 @@ struct FormPresentation {
     std::optional<int> columns;
     /// @brief Where every cell puts its caption; absent stacks it over the control.
     std::optional<::morph::forms::FieldLayout> fieldLayout;
+    /// @brief The width of every inline caption column in units, 1 to 64; absent keeps the engine's. It needs
+    ///        `fieldLayout` `Inline`.
+    std::optional<int> captionWidth;
 };
 
 namespace detail {
@@ -5487,6 +5496,9 @@ inline void present(NodeWriter& node, FormPresentation const& presentation) {
     if (presentation.fieldLayout) {
         node.text("fieldLayout",
                   *presentation.fieldLayout == ::morph::forms::FieldLayout::Inline ? "inline" : "stacked");
+    }
+    if (presentation.captionWidth) {
+        node.raw("captionWidth", AnyHandle{std::int64_t{*presentation.captionWidth}}.json());
     }
 }
 

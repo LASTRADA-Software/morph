@@ -209,6 +209,19 @@ TEST_CASE("tui key-value: a stacked pair takes two rows, and a toned value is bo
     CHECK(kv->probeText() == "Serial: D-9\nContainers: 180 needed");
 }
 
+// Mutation: ignore the set width (the values start after the widest caption), or leave out the elision (the long
+// caption overwrites its value).
+TEST_CASE("tui key-value: a set caption width places the values, and a longer caption is cut with an ellipsis",
+          "[tui][display]") {
+    Harness harness{30, 3};
+    auto const kv = harness.make<KeyValueImpl>(nullptr);
+    kv->setCaptionWidth(8);
+    kv->setItems({{.label = "Lot", .value = "L-1"}, {.label = "Serial number", .value = "S"}});
+    CHECK(harness.draw() == Rows{"Lot:      L-1", "Serial n… S"});
+    CHECK(kv->probeText() == "Lot: L-1\nSerial number: S");
+    CHECK(kv->naturalSize().width == 8 + 2 + 3);
+}
+
 // Mutation: draw an outline badge in brackets (it then reads as a filled one).
 TEST_CASE("tui badge: an outline badge is drawn in parentheses", "[tui][display]") {
     Harness harness{20, 1};

@@ -1052,7 +1052,8 @@ inline constexpr std::array<KeySpec, 2> kProgressKeys = {{{"value", Shape::Expr}
 inline constexpr std::array<KeySpec, 3> kStepsKeys = {
     {{"items", Shape::Expr}, {"current", Shape::Expr}, {"labelled", Shape::Condition}}};
 /// @brief The keys of `keyValue`.
-inline constexpr std::array<KeySpec, 2> kKeyValueKeys = {{{"items", Shape::Expr}, {"fieldLayout", Shape::Text}}};
+inline constexpr std::array<KeySpec, 3> kKeyValueKeys = {
+    {{"items", Shape::Expr}, {"fieldLayout", Shape::Text}, {"captionWidth", Shape::Expr}}};
 /// @brief The keys of `emptyState`.
 inline constexpr std::array<KeySpec, 4> kEmptyStateKeys = {
     {{"title", Shape::Expr}, {"text", Shape::Expr}, {"icon", Shape::Expr}, {"action", Shape::Part, "action"}}};
@@ -1096,7 +1097,7 @@ inline constexpr std::array<KeySpec, 1> kCustomizeKeys = {{{"point", Shape::Name
 inline constexpr std::array<KeySpec, 3> kBoundaryKeys = {
     {{"loading", Shape::Nodes}, {"error", Shape::Nodes, {}, kBoundaryError}, {"children", Shape::Nodes}}};
 /// @brief The keys of `form`.
-inline constexpr std::array<KeySpec, 15> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
+inline constexpr std::array<KeySpec, 16> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
                                                        {"action", Shape::Text, {}, kRequired},
                                                        {"prefill", Shape::Expr},
                                                        {"key", Shape::Expr},
@@ -1110,16 +1111,18 @@ inline constexpr std::array<KeySpec, 15> kFormKeys = {{{"model", Shape::Name, {}
                                                        {"submitLabel", Shape::Expr},
                                                        {"showStatus", Shape::Flag},
                                                        {"columns", Shape::Expr},
-                                                       {"fieldLayout", Shape::Text}}};
+                                                       {"fieldLayout", Shape::Text},
+                                                       {"captionWidth", Shape::Expr}}};
 /// @brief The keys of `collection` and `wizard`: the model and action, and the presentation keys that reach every
 ///        form the view draws.
-inline constexpr std::array<KeySpec, 7> kCollectionKeys = {{{"model", Shape::Name, {}, kRequired},
+inline constexpr std::array<KeySpec, 8> kCollectionKeys = {{{"model", Shape::Name, {}, kRequired},
                                                             {"action", Shape::Text, {}, kRequired},
                                                             {"title", Shape::Expr},
                                                             {"submitLabel", Shape::Expr},
                                                             {"showStatus", Shape::Flag},
                                                             {"columns", Shape::Expr},
-                                                            {"fieldLayout", Shape::Text}}};
+                                                            {"fieldLayout", Shape::Text},
+                                                            {"captionWidth", Shape::Expr}}};
 /// @brief The keys of `custom`.
 inline constexpr std::array<KeySpec, 3> kCustomKeys = {
     {{"name", Shape::Text, {}, kRequired}, {"props", Shape::ExprRecord}, {"on", Shape::CommandRecord}}};
@@ -3905,6 +3908,7 @@ private:
         } else if (node.kind == "keyValue") {
             static constexpr std::array<std::string_view, 2> kCaptionPlaces = {"inline", "stacked"};
             checkChoice(node, "fieldLayout", kCaptionPlaces);
+            checkCaptionWidth(node, node.name("fieldLayout") != "stacked");
             checkItemSpans(node.prop("items"));
         } else if (node.kind == "table") {
             checkCellPlace(node, "valign");
@@ -3913,6 +3917,7 @@ private:
             checkFormColumns(node);
             static constexpr std::array<std::string_view, 2> kFieldLayouts = {"stacked", "inline"};
             checkChoice(node, "fieldLayout", kFieldLayouts);
+            checkCaptionWidth(node, node.name("fieldLayout") == "inline");
         }
         static constexpr std::array<std::string_view, 4> kAlign = {"start", "center", "end", "stretch"};
         static constexpr std::array<std::string_view, 4> kJustify = {"start", "center", "end", "between"};
@@ -4636,6 +4641,25 @@ private:
         }
         if (*count < 1 || *count > 12) {
             refuse(columns->path, "`columns` is 1 to 12; a form lays its fields in at least one column");
+        }
+    }
+
+    // A `captionWidth`: a literal integer, 1 to 64, which needs a caption column, so inline captions.
+    static void checkCaptionWidth(DocNode const& node, bool inlineCaptions) {
+        ExprPtr const width = node.prop("captionWidth");
+        if (width == nullptr) {
+            return;
+        }
+        std::int64_t const* const units =
+            width->kind == ExprKind::Literal ? width->literal.asInt() : static_cast<std::int64_t const*>(nullptr);
+        if (units == nullptr) {
+            refuse(width->path, "`captionWidth` is a literal integer");
+        }
+        if (*units < 1 || *units > 64) {
+            refuse(width->path, "`captionWidth` is 1 to 64 units");
+        }
+        if (!inlineCaptions) {
+            refuse(width->path, "`captionWidth` needs inline captions");
         }
     }
 

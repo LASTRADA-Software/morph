@@ -3187,6 +3187,25 @@ struct WrappingRow {
     return checks.result();
 }
 
+/// @brief Case: a content-sized key-value with a `captionWidth` of 20 and the pair "a", "b" is 23 units wide: the
+///        caption column, the two-unit gap and the value.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> keyValueCaptionWidthSetsTheValueColumn(ConformanceProbe& probe) {
+    KeyValue pairs{.items = std::vector<KeyValueItem>{{.label = "a", .value = "b"}}, .captionWidth = 20};
+    Column column{.children = {ui::keyValue(std::move(pairs))}, .align = Align::Start};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::column(std::move(column)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 1, "the column holds the key-value");
+    if (children.size() == 1) {
+        geometry.near("the key-value's width", 23, geometry.of(*children.front()).width);
+    }
+    return checks.result();
+}
+
 /// @brief Case: a badge in a `fixed(12)` track with `align: Center` has as much space before it as after it, within
 ///        a unit.
 /// @param probe The backend under test.
@@ -3515,7 +3534,7 @@ struct WrappingRow {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 39> const cases{{
+    static std::array<ConformanceCase, 40> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3537,6 +3556,8 @@ struct WrappingRow {
         {.name = "a grid's columns without tracks are equal", .run = detail::gridColumnsAreEqual},
         {.name = "a content-sized grid without tracks is its widest cell times its columns",
          .run = detail::gridColumnsNaturalIsWidestTimesColumns},
+        {.name = "a key-value's caption width sets its value column",
+         .run = detail::keyValueCaptionWidthSetsTheValueColumn},
         {.name = "a centred track centres a label-width cell", .run = detail::centredTrackCentresBadge},
         {.name = "a chart's content size is 40 by 8 units", .run = detail::chartHasContentSize},
         {.name = "a sheet fills the surface", .run = detail::sheetFillsSurface},

@@ -498,8 +498,8 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   or any later value of a form without a `key`, `prefill`s every field. It lowers to `forms::formView` inside a column that
   carries the node's common properties. `title` (a heading over the fields) and `submitLabel` (the explicit-mode
   button, and the status line's `ready: press <label>`) are bound in the node's scope, so a `t` re-resolves on
-  `setLocale`; `showStatus`, `columns` and `fieldLayout` are read at load, `columns` setting every group's grid and
-  the implicit group's, `fieldLayout` the engine's `FormViewOptions::fieldLayout`. `onSubmit`, `onSuccess` and `onError` run once per attempt,
+  `setLocale`; `showStatus`, `columns`, `fieldLayout` and `captionWidth` are read at load, `columns` setting every group's grid and
+  the implicit group's, `fieldLayout` the engine's `FormViewOptions::fieldLayout`, `captionWidth` its `inlineLabelWidth`. `onSubmit`, `onSuccess` and `onError` run once per attempt,
   success and failure, with the body, the reply and the error text as `event`. Its element values
   are `ready`, `body` (the record it would submit, `null` while not ready), `submitted`, `pending`
   and each field by wire name, a record of `value`, `draft`, `valid`, `required`, `visible`,

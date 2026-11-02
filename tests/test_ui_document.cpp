@@ -329,6 +329,38 @@ TEST_CASE("ui document: a text's spans load beside or in place of its text, and 
     CHECK(number.error().reason == "a run is a string or a record with `text`");
 }
 
+// Mutation: drop checkCaptionWidth (a computed, zero, oversized or caption-less width loads).
+TEST_CASE("ui document: a captionWidth is a literal integer, 1 to 64, and needs inline captions", "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "k", "view": {"kind": "keyValue", "captionWidth": 12,
+        "items": {"list": []}}})")
+              .has_value());
+    for (std::string const width : {"1.5", "0", "65", R"({"ref": "w"})"}) {
+        auto const refused = loadDocumentText(R"({"vocab": "ui/1", "id": "k", "state": {"w": {"init": 12}},
+            "view": {"kind": "keyValue", "captionWidth": )" + width + R"(, "items": {"list": []}}})");
+        INFO(width);
+        REQUIRE_FALSE(refused.has_value());
+        CHECK(refused.error().path == "/view/captionWidth");
+    }
+    auto const stacked = loadDocumentText(R"({"vocab": "ui/1", "id": "k", "view": {"kind": "keyValue",
+        "fieldLayout": "stacked", "captionWidth": 12, "items": {"list": []}}})");
+    REQUIRE_FALSE(stacked.has_value());
+    CHECK(stacked.error().reason == "`captionWidth` needs inline captions");
+    auto const form = loadDocumentText(R"({"vocab": "ui/1", "id": "f", "models": {"m": {"type": "Lims_SampleModel"}},
+        "view": {"kind": "collection", "model": "m", "action": "Lims_Add", "captionWidth": 12}})");
+    REQUIRE_FALSE(form.has_value());
+    CHECK(form.error().reason == "`captionWidth` needs inline captions");
+}
+
+// Mutation: leave "caption" out of the loader's role list (the document is refused).
+TEST_CASE("ui document: a text's role may be caption, and an unknown role is still refused", "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "r", "view": {"kind": "text", "text": "Note", "role": "caption"}})")
+              .has_value());
+    auto const refused =
+        loadDocumentText(R"({"vocab": "ui/1", "id": "r", "view": {"kind": "text", "text": "Note", "role": "captions"}})");
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().path == "/view/role");
+}
+
 // Mutation: drop the keyValue's fieldLayout check (the grid layout loads).
 TEST_CASE("ui document: a key-value's fieldLayout is inline or stacked, and its items' spans are checked",
           "[ui][document]") {

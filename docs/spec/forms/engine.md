@@ -274,7 +274,7 @@ before it.
   label's place, so its box lines up with the other controls. The control's column already starts at the label's width, so its
   description lines up under it; a field whose help the cell draws (an override's) is a column of that row and a
   second row, the help indented by a spacer of the label's width, with `cell_<path>` on the column. An Object's panel and
-  an ObjectArray's rows stay stacked, and their members follow the form's layout. `formView` throws
+  an ObjectArray's rows stay stacked, and their members follow the form's layout. A document sets `inlineLabelWidth` with `captionWidth`, a literal from 1 to 64 that needs `fieldLayout: inline`. `formView` throws
   `std::invalid_argument` for an `inlineLabelWidth` below 1. While a field shows an error, an inline label centres on
   the control and its message together: centring on the control alone needs a baseline the view tree does not carry.
 - **Layout.** A section is a `Panel`, consecutive tab groups one `Tabs`, an accordion a collapsible `Panel`, the

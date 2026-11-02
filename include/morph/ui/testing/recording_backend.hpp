@@ -1629,6 +1629,7 @@ public:
     void setCaptionPlacement(CaptionPlacement placement) override {
         set("captions", placement == CaptionPlacement::Above ? "Above" : "Beside");
     }
+    void setCaptionWidth(int units) override { set("captionWidth", std::to_string(units)); }
 };
 
 /// @brief A fake `EmptyStateWidget`: properties `title`, `text`, `icon`, `actionLabel`.

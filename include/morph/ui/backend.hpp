@@ -1013,6 +1013,13 @@ public:
     ///        for `Above`.
     /// @param placement Where the captions sit.
     virtual void setCaptionPlacement(CaptionPlacement placement) = 0;
+
+    /// @brief Sets the width of the caption column, in units, while the captions sit beside their values; the mount
+    ///        calls it once, only when the node gives a width. Without it the column is as wide as the widest caption.
+    ///        A caption longer than the column wraps where the backend can and is cut with an ellipsis where it
+    ///        cannot.
+    /// @param units The column's width in units, at least 1.
+    virtual void setCaptionWidth(int units) = 0;
 };
 
 /// @brief Points against a numeric axis, with reference lines. It takes no focus and calls no handler.

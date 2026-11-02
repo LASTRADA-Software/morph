@@ -481,7 +481,16 @@ void KeyValueImpl::setCaptionPlacement(ui::CaptionPlacement placement) {
     refresh();
 }
 
+void KeyValueImpl::setCaptionWidth(int units) {
+    _captionWidth = units;
+    refresh();
+}
+
+// The caption column's width: the one the node sets, else the widest caption.
 int KeyValueImpl::captionWidth() const {
+    if (_captionWidth) {
+        return *_captionWidth;
+    }
     int widest = 0;
     for (auto const& item : _items) {
         widest = std::max(widest, displayWidth(item.label));
@@ -523,7 +532,10 @@ void KeyValueImpl::paint(::core::tui::Canvas& canvas) {
         if (valueRow >= canvas.height()) {
             break;
         }
-        canvas.putString(row, 0, above ? item.label : item.label + ":", theme.textMuted);
+        // Beside, the caption and its colon take the column and one cell: a longer one is cut with an ellipsis, since
+        // a cell row cannot wrap.
+        std::string const caption = above ? item.label : elidedLine(item.label + ":", captionWidth() + 1);
+        canvas.putString(row, 0, caption, theme.textMuted);
         ::core::tui::Style style = item.tone == ui::Tone::Neutral ? theme.textNormal : toneStyle(theme, item.tone);
         style.bold = style.bold || item.tone != ui::Tone::Neutral;
         if (item.spans.empty()) {

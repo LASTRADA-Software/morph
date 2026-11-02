@@ -8064,6 +8064,10 @@ inline std::optional<Node> ScreenCore::lowerDisplay(DocNode const& node, LowerCt
     if (kind == "keyValue") {
         KeyValue spec;
         spec.captions = node.name("fieldLayout") == "stacked" ? CaptionPlacement::Above : CaptionPlacement::Beside;
+        // The loader has checked `captionWidth` is a literal integer.
+        if (ExprPtr const width = node.prop("captionWidth")) {
+            spec.captionWidth = static_cast<int>(*width->literal.asInt());
+        }
         spec.items = slotProp<std::vector<KeyValueItem>>(
             [this, scope = ctx.scope, bindings = ctx.bindings, expr = node.prop("items")] {
                 std::vector<KeyValueItem> out;
@@ -8747,7 +8751,7 @@ inline void ScreenCore::wireComposite(ElementState& element) {
 
 // The presentation keys a form, a collection and a wizard share, but the title: the label of the explicit-mode button
 // and the status line naming it, bound in the node's scope; whether the status line shows, the grid's columns and the
-// field layout, as read at load.
+// field layout and the inline caption column's width, as read at load.
 inline void ScreenCore::presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options) {
     if (ExprPtr const label = node.prop("submitLabel")) {
         options.submitLabel = bindProp<std::string>(ctx, label, std::string{}, stringOf);
@@ -8761,6 +8765,10 @@ inline void ScreenCore::presentForm(DocNode const& node, LowerCtx const& ctx, fo
     }
     if (node.name("fieldLayout") == "inline") {
         options.fieldLayout = forms::FieldLayout::Inline;
+    }
+    // The loader has checked `captionWidth` is a literal integer.
+    if (ExprPtr const width = node.prop("captionWidth")) {
+        options.inlineLabelWidth = static_cast<int>(*width->literal.asInt());
     }
 }
 

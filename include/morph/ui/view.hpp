@@ -1523,6 +1523,11 @@ struct KeyValue {
     Prop<std::vector<KeyValueItem>> items;
     /// @brief Where the captions sit; set once.
     CaptionPlacement captions = CaptionPlacement::Beside;
+    /// @brief The width of the caption column in units, 1 to 64, while the captions sit beside their values; absent
+    ///        sizes it to the widest caption. A caption longer than the column wraps on Qt Quick and is cut with an
+    ///        ellipsis in the terminal. Set once; the mount refuses a value below 1 and a value given with
+    ///        `CaptionPlacement::Above`, which has no caption column.
+    std::optional<int> captionWidth;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
 };
