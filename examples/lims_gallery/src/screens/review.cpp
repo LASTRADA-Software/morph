@@ -453,7 +453,7 @@ ui::Node queueEntry(Review const& review) {
                  {.gap = 1, .justify = Justify::Between, .wrap = true}),
          ui::text({.text = ui::format("{0} · {1}", {ui::row("test"), ui::row("analyst")}), .role = "muted"}),
          tagRow(ui::row("tags"), "queue-tags"),
-         layout::muted(kSelfReview).visible(Flag{ui::row("self")}).testId("queue-self")},
+         ui::text({.text = kSelfReview, .role = "caption"}).visible(Flag{ui::row("self")}).testId("queue-self")},
         {.gap = 1, .padding = ui::padding(1, 0)});
     return ui::button({.label = ui::format("{0} · {1}", {ui::row("id"), ui::row("age")}),
                        .onClick = choose(review),
