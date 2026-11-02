@@ -1088,6 +1088,12 @@ inline constexpr std::array<KeySpec, 6> kCollapsibleKeys = {{{"title", Shape::Ex
                                                              {"header", Shape::Nodes},
                                                              {"children", Shape::Nodes},
                                                              {"onToggle", Shape::Commands}}};
+/// @brief The keys of `actionBar`; `gap` and `wrap` are read only to refuse them: its gap is the theme's.
+inline constexpr std::array<KeySpec, 5> kActionBarKeys = {{{"children", Shape::Nodes},
+                                                           {"align", Shape::Text},
+                                                           {"justify", Shape::Text},
+                                                           {"gap", Shape::Expr},
+                                                           {"wrap", Shape::Flag}}};
 /// @brief The keys of `dropZone`.
 inline constexpr std::array<KeySpec, 4> kDropZoneKeys = {
     {{"accept", Shape::Expr}, {"multiple", Shape::Expr}, {"children", Shape::Nodes}, {"onDrop", Shape::Commands}}};
@@ -1134,7 +1140,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 57> kKinds = {{
+inline constexpr std::array<KindSpec, 58> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -1168,6 +1174,7 @@ inline constexpr std::array<KindSpec, 57> kKinds = {{
     {"splitter", kSplitterKeys},
     {"collapsible", kCollapsibleKeys},
     {"dropZone", kDropZoneKeys},
+    {"actionBar", kActionBarKeys},
     {"customize", kCustomizeKeys},
     {"boundary", kBoundaryKeys},
     {"form", kFormKeys, kOpenValues, kFormValues},
@@ -3353,8 +3360,8 @@ private:
     // A child that places itself sits in a row, a column, a grid or a `forEach`; any other parent (a panel, a dialog,
     // a tab page) has no cross axis to place it on.
     static void checkPlacements(DocNode const& parent) {
-        bool const places =
-            parent.kind == "row" || parent.kind == "column" || parent.kind == "grid" || parent.kind == "forEach";
+        bool const places = parent.kind == "row" || parent.kind == "column" || parent.kind == "grid" ||
+                            parent.kind == "forEach" || parent.kind == "actionBar";
         bool const bleeds = parent.kind == "column" || parent.kind == "panel" || parent.kind == "tab";
         for (auto const& [key, nodes] : parent.children) {
             for (DocNodePtr const& child : nodes) {
@@ -3872,6 +3879,8 @@ private:
             checkButtonValues(node);
         } else if (node.kind == "grid") {
             checkGrid(node);
+        } else if (node.kind == "actionBar") {
+            checkActionBar(node);
         } else if (node.kind == "column" && node.flags.contains("wrap")) {
             refuse(pointerAppend(node.path, "wrap"), "only a row wraps; a column has no lines to continue on");
         } else if (node.kind == "row" && node.flag("divided") && node.flag("wrap")) {
@@ -4547,6 +4556,16 @@ private:
 
     // A grid's columns come from a count or from tracks, never both, and their widths, not a justification, size
     // them.
+    static void checkActionBar(DocNode const& node) {
+        if (node.prop("gap") != nullptr) {
+            refuse(pointerAppend(node.path, "gap"),
+                   "an action bar's gap is the theme's `actions.gap`; set it there, not on the row");
+        }
+        if (node.flags.contains("wrap")) {
+            refuse(pointerAppend(node.path, "wrap"), "an action bar is one row of actions and does not wrap");
+        }
+    }
+
     static void checkGrid(DocNode const& node) {
         if (!node.name("justify").empty()) {
             refuse(pointerAppend(node.path, "justify"),

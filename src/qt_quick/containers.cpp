@@ -50,6 +50,8 @@ void StackImpl::setSelected(bool selected) {
 
 void StackImpl::setPassesBleed(bool passes) { write("passesBleed", passes); }
 
+void StackImpl::setActionRow() { write("actionRow", true); }
+
 void StackImpl::setHeadBar(bool headBar) { write("headBar", headBar); }
 
 void StackImpl::setPadding(ui::Padding padding) {

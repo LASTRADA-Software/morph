@@ -142,6 +142,8 @@ ui::Screen homeScreen() {
                        {.label = "Group", .required = true, .description = "A group's description"}),
              ui::collapsible({ui::text({.text = "Inside"})}, {.title = "More", .open = checked}),
              ui::dropZone({ui::text({.text = "Drop files here"})}, {.onDrop = ui::set(picked, "dropped")}),
+             ui::actionBar({ui::button({.label = "Cancel"}),
+                            ui::button({.label = "Save", .emphasis = morph::ui::ButtonEmphasis::Primary})}),
              ui::customize(density), ui::custom(swatch).a11y("Swatch")});
 
         auto const forms =

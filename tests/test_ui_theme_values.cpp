@@ -333,11 +333,16 @@ TEST_CASE("ui theme values: an input's inner padding defaults to 8 and a negativ
     CHECK(refused->contains("input.paddingX: must not be negative"));
 }
 
-// Mutation: drop the three paths from `kNonNegativePaths` (a negative size or height is accepted).
-TEST_CASE("ui theme values: a negative touch text size or small button height is refused", "[ui][theme]") {
-    for (auto const& [group, name, path] : {std::tuple{"control", "touchTextSize", "control.touchTextSize"},
-                                            std::tuple{"button", "smallHeight", "button.smallHeight"},
-                                            std::tuple{"button", "smallTouchHeight", "button.smallTouchHeight"}}) {
+// Mutation: drop the four paths from `kNonNegativePaths` (a negative size, height or gap is accepted), or leave
+// `actions.gap` out of `kThemeTokens` (the default and a set value are lost).
+TEST_CASE("ui theme values: a negative touch text size, small button height or action gap is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().dimensions.at("actions.gap") == 0.0);
+    CHECK(valuesOf(R"({"actions": {"gap": {"$type": "dimension", "$value": {"value": 12, "unit": "px"}}}})")
+              .dimensions.at("actions.gap") == 12.0);
+    for (auto const& [group, name, path] :
+         {std::tuple{"actions", "gap", "actions.gap"}, std::tuple{"control", "touchTextSize", "control.touchTextSize"},
+          std::tuple{"button", "smallHeight", "button.smallHeight"},
+          std::tuple{"button", "smallTouchHeight", "button.smallTouchHeight"}}) {
         auto const tokens = ui::parseTokens(std::string{R"({")"} + group + R"(": {")" + name +
                                             R"(": {"$type": "dimension", "$value": {"value": -2, "unit": "px"}}}})");
         REQUIRE(tokens.has_value());

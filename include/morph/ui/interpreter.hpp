@@ -8290,6 +8290,14 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
     if (kind == "dropZone") {
         return lowerDropZone(node, ctx, element);
     }
+    if (kind == "actionBar") {
+        KindKit const bar{*this, node, ctx, element};
+        ActionBar spec{.children = bar.children("children"),
+                       .align = alignOf(node.name("align")),
+                       .justify = justifyOf(node.name("justify"))};
+        commonOf(node, ctx, element, spec.common);
+        return ui::actionBar(std::move(spec));
+    }
     if (kind == "boundary") {
         return lowerBoundary(node, ctx);
     }

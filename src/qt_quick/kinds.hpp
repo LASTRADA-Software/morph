@@ -325,6 +325,7 @@ public:
     void setPadding(ui::Padding padding) override;
     void setSelected(bool selected) override;
     void setPassesBleed(bool passes) override;
+    void setActionRow() override;
     void setHeadBar(bool headBar) override;
 
 protected:
@@ -628,6 +629,8 @@ public:
     void setSelected(bool selected) override { static_cast<void>(selected); }
     /// As `setAlign`: a table row is never a holder.
     void setPassesBleed(bool passes) override { static_cast<void>(passes); }
+    /// As `setAlign`: a table row is never a row of actions.
+    void setActionRow() override {}
     /// As `setAlign`: a table row is never the head bar.
     void setHeadBar(bool headBar) override { static_cast<void>(headBar); }
     /// Its key, once the table was told it.

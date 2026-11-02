@@ -4025,6 +4025,32 @@ struct GroupOptions {
     return detail::stackNode("row", children, options);
 }
 
+/// @brief Options of `actionBar`.
+struct ActionBarOptions {
+    /// @brief Where the buttons sit across the row; absent stretches them.
+    std::optional<Align> align;
+    /// @brief The spare length along the row; absent packs at the start.
+    std::optional<Justify> justify;
+};
+
+/// @brief An `actionBar` node: a row of the actions of what holds it. Inside the content of a dialog or drawer, at any
+///        depth, it is the overlay's footer; anywhere else it is a row where it is written. The buttons are the
+///        theme's `actions.gap` apart (spacing step 2 while the theme sets none), so it takes no gap.
+/// @param children The buttons.
+/// @param options  Where they sit.
+/// @return The node.
+[[nodiscard]] inline Node actionBar(Nodes const& children, ActionBarOptions const& options = {}) {
+    detail::NodeWriter node{"actionBar"};
+    node.put("children", children);
+    if (options.align) {
+        node.text("align", detail::alignName(*options.align));
+    }
+    if (options.justify) {
+        node.text("justify", detail::justifyName(*options.justify));
+    }
+    return node.done();
+}
+
 /// @brief A `grid` node.
 /// @param children The children.
 /// @param options  The gap, columns or tracks, and alignment; a `justify` is written, and the loader refuses it.
@@ -5034,7 +5060,9 @@ struct StepperParts {
     Node indicator;
     /// @brief The `switch` on the step, one case per step.
     Node body;
-    /// @brief The footer row: Back, a spacer unless Continue stretches, the extra nodes and Continue.
+    /// @brief The footer, an `actionBar`: Back, a spacer unless Continue stretches, the extra nodes and Continue. The
+    ///        buttons are the theme's `actions.gap` apart. Placed inside a dialog's or drawer's content it would be
+    ///        that overlay's footer, so a stepper in an overlay is placed with `stepper`'s own column.
     Node footer;
 };
 
@@ -5142,7 +5170,7 @@ namespace detail {
     footer.push_back(withId(enabled ? next.enabled(*enabled) : next, "continue"));
     return {.indicator = withId(steps(list(items), options.step, options.labelled), "steps"),
             .body = switchOn(options.step, cases),
-            .footer = row(Nodes{footer}, {.gap = 1})};
+            .footer = actionBar(Nodes{footer})};
 }
 
 /// @brief A wizard over screen state: a `column` of the parts of `stepperParts`, the indicator, the step's body and

@@ -244,10 +244,30 @@ TEST_CASE("ui document: a refusal names the document", "[ui][document]") {
     CHECK(loaded->view->kind == "text");
 
     auto const kinds = morph::ui::nodeKinds();
-    CHECK(kinds.size() == 39);
+    CHECK(kinds.size() == 40);
+    CHECK(std::ranges::find(kinds, "actionBar") != kinds.end());
     CHECK(std::ranges::find(kinds, "chart") != kinds.end());
     CHECK(std::ranges::find(kinds, "dateTimeInput") != kinds.end());
     CHECK(std::ranges::find(kinds, "menuItem") == kinds.end());
+}
+
+// Mutation: drop `actionBar` from `kKinds` (it is refused as an unknown kind), or give it `gap` or `wrap` (the theme's
+// gap is then overridden by a literal).
+TEST_CASE("ui document: an action bar takes children, align and justify, and no gap or wrap", "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "a", "view": {"kind": "actionBar", "align": "center",
+        "justify": "end", "children": [{"kind": "button", "label": "a"}, {"kind": "button", "label": "b"}]}})")
+              .has_value());
+    for (std::string_view const key : {"gap", "wrap"}) {
+        INFO(key);
+        auto const refused =
+            loadDocumentText(std::string{R"({"vocab": "ui/1", "id": "a", "view": {"kind": "actionBar", ")"} +
+                             std::string{key} + R"(": 1, "children": []}})");
+        REQUIRE_FALSE(refused.has_value());
+        CHECK(refused.error().path == std::string{"/view/"} + std::string{key});
+    }
+    auto const badJustify = loadDocumentText(
+        R"({"vocab": "ui/1", "id": "a", "view": {"kind": "actionBar", "justify": "sideways", "children": []}})");
+    CHECK_FALSE(badJustify.has_value());
 }
 
 TEST_CASE("ui document: a button's emphasis is normal, primary, danger or ghost", "[ui][document]") {

@@ -400,7 +400,9 @@ TEST_CASE("stepper writes the same document by default, and its parts are the pi
     CHECK(text(parts.indicator).starts_with(R"({"kind":"steps","items":{"list":[{"obj":{"label":"One")"));
     CHECK_FALSE(text(parts.indicator).contains("labelled"));
     CHECK(text(parts.body).starts_with(R"({"kind":"switch")"));
-    CHECK(text(parts.footer).starts_with(R"({"kind":"row")"));
+    // Mutation: the footer as a `row` with a literal gap (the buttons are then not the theme's action gap apart).
+    CHECK(text(parts.footer).starts_with(R"({"kind":"actionBar")"));
+    CHECK_FALSE(text(parts.footer).contains(R"("gap")"));
     CHECK(text(parts.footer).contains(R"("kind":"spacer")"));
     CHECK(text(parts.footer).contains(R"({"if":[{"fn":"eq","args":[{"ref":"step"},1]},"Finish","Continue"]})"));
 

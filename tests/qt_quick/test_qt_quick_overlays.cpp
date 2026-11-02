@@ -339,6 +339,59 @@ TEST_CASE("qt_quick dialog: a sheet's footer action fills the sheet's width, a d
     CHECK(Scene::itemOf(*late).width() > 600);
 }
 
+namespace {
+
+/// The space between @p first's right edge and @p second's left edge, in @p second's coordinates' parent-free scene.
+qreal gapBetween(QQuickItem const& first, QQuickItem const& second) {
+    return second.mapToScene(QPointF{0, 0}).x() - first.mapToScene(QPointF{first.width(), 0}).x();
+}
+
+}  // namespace
+
+// Mutation: ignore `setActionRow` in StackImpl (a row of actions keeps step 2 whatever the theme says), keep
+// `Theme.spaceOf(2)` in MorphFooter (the dialog's footer actions stay 8 px apart), or read the gap at 0 as no gap.
+TEST_CASE("qt_quick dialog: the theme's action gap spaces a footer's actions and an action row, and 0 keeps step 2",
+          "[qt_quick]") {
+    for (double const gap : {0.0, 12.0}) {
+        CAPTURE(gap);
+        Scene scene;
+        ui::ThemeValues values = ui::themeValues();
+        values.dimensions.insert_or_assign("actions.gap", gap);
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+        qreal const expected = gap > 0 ? gap : 8.0;
+
+        auto const dialog = scene.backend().createDialog(nullptr);
+        auto const body = scene.backend().createText(dialog.get());
+        body->setText("Sure? This text is long enough that the dialog is wider than its two actions together.");
+        auto const undo = scene.backend().createButton(&dialog->footer());
+        undo->setLabel("Undo");
+        auto const sign = scene.backend().createButton(&dialog->footer());
+        sign->setLabel("Confirm");
+        dialog->setOpen(true);
+
+        auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+        auto const row = scene.backend().createStack(column.get(), ui::Axis::Horizontal);
+        row->setActionRow();
+        row->setGap(2);
+        auto const back = scene.backend().createButton(row.get());
+        back->setLabel("Back");
+        auto const next = scene.backend().createButton(row.get());
+        next->setLabel("Continue");
+        auto const plain = scene.backend().createStack(column.get(), ui::Axis::Horizontal);
+        plain->setGap(2);
+        auto const left = scene.backend().createButton(plain.get());
+        left->setLabel("Back");
+        auto const right = scene.backend().createButton(plain.get());
+        right->setLabel("Continue");
+        scene.settle();
+
+        CHECK(gapBetween(Scene::itemOf(*undo), Scene::itemOf(*sign)) == Catch::Approx(expected).margin(0.5));
+        CHECK(gapBetween(Scene::itemOf(*back), Scene::itemOf(*next)) == Catch::Approx(expected).margin(0.5));
+        // A stack that is not a row of actions keeps its own step whatever the theme's gap.
+        CHECK(gapBetween(Scene::itemOf(*left), Scene::itemOf(*right)) == Catch::Approx(8.0).margin(0.5));
+    }
+}
+
 // Mutation: make the footer fill its area only while it stretches (a dialog's actions then sit at the footer's left).
 TEST_CASE("qt_quick dialog: a dialog's footer actions sit against the footer's right edge", "[qt_quick]") {
     Scene scene;

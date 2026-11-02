@@ -1570,11 +1570,16 @@ struct Drawer {
     Prop<std::vector<TextSpan>> descriptionSpans;
 };
 
-/// @brief A row of buttons in the footer of the dialog or drawer whose content holds it: what a document's overlay
-///        `actions` lower to. The mount refuses one anywhere else.
+/// @brief A row of buttons: the actions of what holds it. Inside the content of a dialog or drawer, at any depth, it
+///        is the overlay's footer, as a document's overlay `actions` lower to; anywhere else it is a row in the place
+///        it is written. Either way the buttons are the theme's `actions.gap` apart.
 struct ActionBar {
     /// @brief The buttons, in order; a null child is skipped.
     std::vector<Node> children;
+    /// @brief Where the buttons sit across the row; `Stretch` fills the row's height.
+    Align align = Align::Stretch;
+    /// @brief Where the spare width goes while no shown button stretches.
+    Justify justify = Justify::Start;
     /// @brief Visibility, enablement, layout, drag-and-drop of the row.
     Common common{};
 };

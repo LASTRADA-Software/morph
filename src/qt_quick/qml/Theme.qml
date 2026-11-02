@@ -246,6 +246,9 @@ QtObject {
     property real inputPaddingX: 8
     // The space above and below the line of the shell's expanded head bar: `head.paddingY`; 0 keeps the bar's own gap.
     property real headPaddingY: 0
+    // The space between the actions of a row of actions: `actions.gap`; 0 keeps spacing step 2.
+    property real actionsGap: 0
+    readonly property real actionSpacing: actionsGap > 0 ? actionsGap : spaceOf(2)
     // Whether the `overline` text role is drawn in small capitals: `font.overline.case`.
     property bool overlineCaps: false
     readonly property real bodyPixels: bodySize > 0 ? bodySize : platformMetrics.font.pixelSize > 0

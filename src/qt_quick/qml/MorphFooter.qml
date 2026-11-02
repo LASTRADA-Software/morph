@@ -28,7 +28,7 @@ MorphWidget {
         anchors.right: parent.right
         anchors.left: root.stretching ? parent.left : undefined
         height: root.height
-        spacing: Theme.spaceOf(2)
+        spacing: Theme.actionSpacing
         // A stretching footer's actions each take an equal share, so a lone action fills the footer.
         onChildrenChanged: root.share()
     }

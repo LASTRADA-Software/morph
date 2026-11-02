@@ -43,6 +43,8 @@ public:
     /// The stack pads its children by its container's `bleedColumns` besides its own padding, and a child that bleeds
     /// takes the stack's full width: the container lays the stack out over its whole span, past its padding.
     void setPassesBleed(bool passes) override;
+    /// The terminal reads no dimension token, so a row of actions keeps the gap it was given.
+    void setActionRow() override {}
     /// The terminal reads no dimension token, so its head bar keeps its rows.
     void setHeadBar(bool headBar) override { static_cast<void>(headBar); }
     [[nodiscard]] bool passesBleed() const noexcept override { return _passesBleed; }

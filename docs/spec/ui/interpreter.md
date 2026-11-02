@@ -365,7 +365,7 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   that runs the part's `onClick` there as a user event, in one batch.
 - **Overlay actions.** A dialog's or drawer's `actions` are lowered with its content, in its scope, and end the
   content as a `ui::ActionBar` of buttons (test id `action_<id>`, shown and enabled as the action is), so their
-  bindings hold the overlay's scope as the content does; the mount puts the bar in the overlay's footer. `default`
+  bindings hold the overlay's scope as the content does; the mount puts the bar in the overlay's footer. A document's own `actionBar` lowers to the same `ui::ActionBar`, with its `align` and `justify`. `default`
   and `cancel` keep their Enter and Escape bindings, chords of the content column. So the `default` runs for Enter
   that no focused widget inside took: a button, a text input with `onSubmit` or that commits on Enter, and a table
   take it first.

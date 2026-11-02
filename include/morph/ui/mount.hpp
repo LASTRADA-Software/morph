@@ -1941,16 +1941,25 @@ private:
     }
 
     // The component the backend loads in the custom node's place, or the fallback when it loads none.
-    // An ActionBar is a horizontal stack in the footer of the overlay whose content holds it, not in its own parent.
+    // An ActionBar holds the actions of what holds it: the footer of the overlay whose content it is in, else the
+    // place it is written. It is a horizontal stack either way, marked as a row of actions so the backend spaces its
+    // children by the theme's action gap.
     Widget& mountKind(reactive::Scope& scope, ActionBar const& spec, ContainerWidget* parent) {
-        static_cast<void>(parent);
         ContainerWidget* const footer = overlayFooter();
+        StackWidget& widget =
+            scope.adopt(_backend->createStack(footer != nullptr ? footer : parent, Axis::Horizontal));
         if (footer == nullptr) {
-            throw std::logic_error{"morph::ui: an action bar mounts only in a dialog's or drawer's content"};
+            scope.make<ShareParent>(_shareParents, &widget);
         }
-        StackWidget& widget = scope.adopt(_backend->createStack(footer, Axis::Horizontal));
+        widget.setActionRow();
         applyCommon(scope, widget, spec.common);
         widget.setGap(spacingStep(2));
+        if (spec.align != Align::Stretch) {
+            widget.setAlign(spec.align);
+        }
+        if (spec.justify != Justify::Start) {
+            widget.setJustify(spec.justify);
+        }
         for (Node const& child : spec.children) {
             static_cast<void>(mount(scope, child, &widget));
         }

@@ -685,11 +685,50 @@ TEST_CASE("interpreter commands: a dialog's footer action keeps its icon, and dr
     CHECK(h.backend.prop(only, "tooltip") == "Only");
 }
 
-// Mutation: let an action bar mount wherever it is (it would show in the column, under no overlay).
-TEST_CASE("mount: an action bar outside a dialog's or drawer's content is refused", "[ui][interpreter]") {
+// Mutation: throw outside an overlay again (the mount throws instead of placing the row), or leave `setActionRow` out
+// (the row is not marked), or mount the row in the overlay's footer wherever it is.
+TEST_CASE("mount: an action bar outside a dialog's or drawer's content is a row of actions in its place",
+          "[ui][interpreter]") {
     Harness h;
-    ui::Node const bar = ui::actionBar(ui::ActionBar{.children = {ui::button(ui::Button{.label = "Save"})}});
-    CHECK_THROWS_AS(ui::Mounted(h.runtime, h.backend, ui::column(ui::Column{.children = {bar}})), std::logic_error);
+    ui::Node const bar = ui::actionBar(ui::ActionBar{.children = {ui::button(ui::Button{.label = "Save"})},
+                                                     .align = ui::Align::Center,
+                                                     .justify = ui::Justify::End});
+    ui::Mounted const mounted(h.runtime, h.backend, ui::column(ui::Column{.children = {bar}}));
+    CHECK(h.backend.all("Footer").empty());
+    std::optional<int> const row = h.backend.find("Row", "actionRow", "true");
+    REQUIRE(row.has_value());
+    CHECK(h.backend.prop(*row, "gap") == "2");
+    CHECK(h.backend.prop(*row, "align") == "center");
+    CHECK(h.backend.prop(*row, "justify") == "end");
+    std::vector<int> const siblings = h.backend.children(h.backend.all("Column").front());
+    CHECK(std::ranges::find(siblings, *row) != siblings.end());
+    CHECK(h.backend.children(*row).size() == 1);
+}
+
+// Mutation: mount a document's `actionBar` in place whatever holds it, or only when it is an overlay's direct child
+// (it is then left in the content when a column holds it).
+TEST_CASE("interpreter: a document's action bar in a dialog's content, at any depth, is the dialog's footer",
+          "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "bar.footer",
+      "view": { "kind": "column", "children": [
+        { "kind": "button", "testId": "open", "label": "open", "onClick": { "open": "dlg" } },
+        { "kind": "actionBar", "children": [ { "kind": "button", "testId": "inline", "label": "Inline" } ] },
+        { "kind": "dialog", "id": "dlg", "children": [
+          { "kind": "column", "children": [
+            { "kind": "text", "testId": "body", "text": "Body" },
+            { "kind": "actionBar", "justify": "end",
+              "children": [ { "kind": "button", "testId": "nested", "label": "Nested" } ] } ] } ] } ] } })");
+    CHECK(h.backend.all("Footer").empty());
+    h.backend.click(h.byTestId("Button", "open"));
+    h.settle();
+    std::vector<int> const footers = h.backend.all("Footer");
+    REQUIRE(footers.size() == 1);
+    CHECK(holds(h.backend, footers.front(), "nested"));
+    CHECK_FALSE(holds(h.backend, footers.front(), "inline"));
+    std::vector<int> const rows = h.backend.all("Row");
+    CHECK(std::ranges::count_if(rows, [&](int row) { return h.backend.prop(row, "actionRow") == "true"; }) == 2);
 }
 
 namespace {

@@ -33,6 +33,11 @@ MorphWidget {
     // Whether a 1 px rule in the scheme's divider colour is drawn between each two shown children of a column; the
     // rule takes 1 px of its own, so the children are `gap` plus that apart.
     property bool divided: false
+    // Whether the stack is a row of actions (an overlay's footer, an action bar): its children are then the theme's
+    // action gap apart, which is spacing step 2 while the theme sets none.
+    property bool actionRow: false
+    // The space between two children before the divider: the action gap of a row of actions, else the `gap` step.
+    readonly property real stepLength: root.actionRow ? Theme.actionSpacing : Theme.spaceOf(root.gap)
     readonly property Item content: wrap ? free : layout
 
     // Under `between` the layout's spacing comes from the stack's length, so its implicit length along the axis would
@@ -216,7 +221,7 @@ MorphWidget {
     // above 0: the bar has no other gap, so the token is the space above and below its line.
     property bool headBar: false
     readonly property real gapLength: (root.headBar && Theme.headPaddingY > 0 ? Theme.headPaddingY
-                                                                               : Theme.spaceOf(root.gap)) +
+                                                                               : root.stepLength) +
                                       (root.divided && !root.wrap ? 1 : 0)
     // What the stack asks of its parent along the axis: the children's natural lengths and the gaps, where the
     // stretching children together ask for what lets each hold its natural.
@@ -346,7 +351,7 @@ MorphWidget {
     readonly property real wrappedNaturalWidth: {
         if (!root.wrap)
             return 0
-        const space = Theme.spaceOf(root.gap)
+        const space = root.stepLength
         let natural = 0
         for (let i = 0; i < free.children.length; ++i) {
             const cell = free.children[i]
@@ -425,7 +430,7 @@ MorphWidget {
     function place() {
         if (!root.wrap)
             return
-        const space = Theme.spaceOf(root.gap)
+        const space = root.stepLength
         const lineWidth = root.width - 2 * root.insetX
         const cells = []
         for (let i = 0; i < free.children.length; ++i) {

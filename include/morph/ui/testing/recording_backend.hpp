@@ -1266,6 +1266,8 @@ public:
                            : std::to_string(padding.vertical) + "/" + std::to_string(padding.horizontal));
     }
     void setSelected(bool selected) override { set("selected", selected ? "true" : "false"); }
+    /// @brief Records property `actionRow` as true.
+    void setActionRow() override { set("actionRow", "true"); }
     void setPassesBleed(bool passes) override { set("passesBleed", passes ? "true" : "false"); }
     /// @brief Records property `headBar`.
     /// @param headBar Whether the stack is the expanded head bar.

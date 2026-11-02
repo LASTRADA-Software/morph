@@ -995,8 +995,9 @@ inline constexpr std::array<KeywordSpec, 4> kKeywords = {{
 }};
 
 /// @brief The dimension tokens of the set that may not be negative: an inset has no meaning below zero.
-inline constexpr std::array<std::string_view, 5> kNonNegativePaths = {
-    "input.paddingX", "head.paddingY", "control.touchTextSize", "button.smallHeight", "button.smallTouchHeight"};
+inline constexpr std::array<std::string_view, 6> kNonNegativePaths = {"input.paddingX",     "head.paddingY",
+                                                                      "actions.gap",        "control.touchTextSize",
+                                                                      "button.smallHeight", "button.smallTouchHeight"};
 
 /// @brief Whether @p name is one of the names of the keyword at @p path.
 /// @param path The keyword's path.
@@ -1193,7 +1194,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 82> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 83> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1291,6 +1292,8 @@ inline constexpr std::array<ThemeTokenSpec, 82> kThemeTokens = {{
     {.path = "input.paddingX", .kind = ThemeTokenKind::Dimension, .color = "", .number = 8.0},
     // The space above and below the line of the shell's expanded head bar; 0 keeps the bar's own gap, a spacing step.
     {.path = "head.paddingY", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    // The space between the actions of a row of actions (an overlay's footer, an `actionBar`); 0 keeps spacing step 2.
+    {.path = "actions.gap", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.family", .kind = ThemeTokenKind::FontFamily, .color = "", .number = 0.0},
     // The fixed-pitch family of the `mono` text role; none draws in the platform's fixed-pitch font. A sibling of
     // `font.family`: the set keeps one spelling per path.

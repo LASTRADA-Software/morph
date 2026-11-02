@@ -892,6 +892,21 @@ TEST_CASE("tui containers: a bleeding child of a padded column starts at the col
     CHECK(harness.draw() == Rows{"  xy", "ab"});
 }
 
+// Guard: a row of actions keeps the step it was given in cells, the terminal reading no `actions.gap`. Mutation: make
+// the marker move the children (the buttons then sit closer or further than one cell).
+TEST_CASE("tui containers: a row of actions keeps its step, one cell, between the buttons", "[tui][containers]") {
+    Harness harness{12, 1};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    row->setActionRow();
+    // Step 2 is one cell.
+    row->setGap(2);
+    auto const first = harness.make<TextImpl>(row.get());
+    first->setText("ab");
+    auto const second = harness.make<TextImpl>(row.get());
+    second->setText("cd");
+    CHECK(harness.draw() == Rows{"ab cd"});
+}
+
 // Mutation: do not widen a holder over the panel's inner span (the bleeding child is cut at the padding), or do not
 // pad the holder's other children by the panel's padding (the sibling sits at the frame's edge).
 TEST_CASE("tui containers: a bleeding child of a holder column reaches its panel's inner edges", "[tui][containers]") {

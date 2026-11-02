@@ -143,7 +143,7 @@ Every kind of the kind table has a builder whose options struct holds the kind's
 `text`, `button`, `textInput`, `checkbox`, `select`, `menu`, `column`, `row`, `grid`, `spacer`,
 `panel`, `scroll`, `switchOn` with `Case`, `tabs`, `dialog`, `drawer`, `busy`, `forEach`, `table`,
 `dataTable`, `group`, `dateTimeInput`, `slider`, `filePicker`, `banner`, `badge`, `progress`, `steps`,
-`keyValue`, `emptyState`, `chart`, `splitter`, `collapsible`, `dropZone`, `customize`, `boundary`, `form`,
+`keyValue`, `emptyState`, `chart`, `splitter`, `collapsible`, `dropZone`, `actionBar`, `customize`, `boundary`, `form`,
 `collection`, `wizard` and `custom`. `chart(ChartOptions{summary, series, lines, yMin, yMax, yPlaces, yLabel})`
 takes its series as `ChartSeries{label, points, y, x, xLabel, tone, note, joined}`, where each per-point key is a
 `PointExpression`, a function from the point's element (`row()`) to an expression, and its lines as
@@ -160,7 +160,7 @@ have a `visible` condition is visible while any of them is (a list with an uncon
 vertical, horizontal)` writes a stack's two-step padding, the constant `{"lit": [vertical, horizontal]}`.
 `stepper(StepperOptions{.step, .steps, .backLabel, .continueLabel, .finishLabel, .onFinish, .extra, .labelled,
 .continueStretches, .testIdPrefix})` writes a wizard over screen state, with no node of its own: a column of a `steps`
-indicator built from the steps' labels and `step`, a `switch` on `step` with one case per step, and a footer row of
+indicator built from the steps' labels and `step`, a `switch` on `step` with one case per step, and a footer `actionBar` of
 Back, a spacer, `extra` and Continue. `labelled` is a condition (absent: labelled); unlabelled, the steps keep their
 labels and the indicator draws only the marks. `continueStretches` drops the spacer and lets Continue take the
 footer's spare width. `stepperParts(options)` returns the same three nodes as `StepperParts{indicator, body, footer}`,

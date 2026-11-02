@@ -1954,6 +1954,25 @@ TEST_CASE("qt_quick theme: the input inset reaches the Theme singleton", "[qt_qu
     CHECK(theme->property("inputPaddingX").toReal() == 10.0);
 }
 
+// Mutation: leave `actions.gap` out of the dimension table in theme.cpp (a set gap never reaches Theme), or let
+// `actionSpacing` ignore the gap (it stays step 2), or read the gap at 0 (the gap collapses).
+TEST_CASE("qt_quick theme: the action gap reaches the Theme singleton and 0 keeps spacing step 2", "[qt_quick]") {
+    Scene scene;
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    CHECK(theme->property("actionsGap").toReal() == 0.0);
+    CHECK(theme->property("actionSpacing").toReal() == 8.0);
+    auto const tokens =
+        ui::parseTokens(R"({"actions": {"gap": {"$type": "dimension", "$value": {"value": 12, "unit": "px"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    CHECK(theme->property("actionsGap").toReal() == 12.0);
+    CHECK(theme->property("actionSpacing").toReal() == 12.0);
+}
+
 namespace {
 
 /// The resolved values of one token document.
