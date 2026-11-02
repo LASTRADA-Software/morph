@@ -152,6 +152,32 @@ Item {
     // `pre-wrap` span so line feeds and runs of spaces stay as a plain text keeps them. A strong run is drawn at the
     // theme's strong weight, a mono run in the theme's mono families and a toned run in its tone's colour in this
     // widget's scheme. It reads the theme and the scheme when it is evaluated, so a binding to it follows both.
+    // The face a run is drawn in inside text of @p base, which is drawn in @p families: a strong run at the strong
+    // weight, a mono run in the mono families, each at @p base's size, as `runsHtml` draws them. It lets a run be
+    // measured as it is drawn.
+    function runFontOf(base: font, families: list<string>, strong: bool, mono: bool): font {
+        const spec = {
+            family: mono ? (Theme.monoFamilies.length > 0 ? Theme.monoFamilies[0] : "monospace") : base.family,
+            families: mono ? (Theme.monoFamilies.length > 0 ? Array.from(Theme.monoFamilies) : ["monospace"])
+                           : (families.length > 0 ? Array.from(families) : [base.family]),
+            weight: strong ? Theme.textWeightOf(Theme.strongWeight) : base.weight,
+            italic: base.italic,
+            capitalization: base.capitalization,
+            letterSpacing: base.letterSpacing
+        }
+        if (base.pixelSize > 0)
+            spec.pixelSize = base.pixelSize
+        else
+            spec.pointSize = base.pointSize
+        return Qt.font(spec)
+    }
+    // A run's text as its characters: the runs carry it escaped for rich text.
+    function plainOf(escaped: string): string {
+        return escaped.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&amp;/g, "&")
+    }
+    function escapedOf(plain: string): string {
+        return plain.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    }
     function runsHtml(runs: var): string {
         const quoted = Array.from(Theme.monoFamilies).map(family => "'" + family.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'")
         const monoFamily = (quoted.length > 0 ? quoted.join(",") : "monospace")

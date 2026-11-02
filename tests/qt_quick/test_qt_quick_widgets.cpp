@@ -2224,6 +2224,56 @@ TEST_CASE("qt_quick widgets: a label text is the caption size, regular and in th
     CHECK(Scene::controlOf(*label).property("color").value<QColor>() != scheme->property("muted").value<QColor>());
 }
 
+// Mutation: measure a strong run in `Theme.strongFont` and a mono run in `Theme.monoFont` again (their sizes are the
+// body's and the mono token's, so a heading or a caption holding either is measured at the wrong size).
+TEST_CASE("qt_quick widgets: a run is measured in the face and at the size it is drawn in", "[qt_quick]") {
+    for (auto const role : {ui::TextRole::Heading, ui::TextRole::Caption, ui::TextRole::Normal}) {
+        for (int kind = 0; kind < 3; ++kind) {
+            Scene scene;
+            scene.window().resize(900, 300);
+            // A concrete fixed-pitch family: the markup's generic `monospace` is resolved by the rich text, not by a
+            // font built in QML.
+            QString fixedFamily;
+            for (QString const& family : QFontDatabase::families()) {
+                if (QFontDatabase::isFixedPitch(family)) {
+                    fixedFamily = family;
+                    break;
+                }
+            }
+            REQUIRE_FALSE(fixedFamily.isEmpty());
+            ui::ThemeValues values = ui::themeValues();
+            values.families.insert_or_assign("font.mono", std::vector<std::string>{fixedFamily.toStdString()});
+            REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+            auto const row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+            auto const text = scene.backend().createText(row.get());
+            text->setLayout({.width = ui::Sizing::fixed(80)});
+            text->setSpans({{.text = "Assay 95.0 to 105.0 HPLC-02", .strong = kind == 1, .mono = kind == 2}});
+            text->setRole(role);
+            QQuickItem& item = Scene::itemOf(*text);
+            item.setProperty("singleLine", true);
+            scene.settle();
+            QObject const* const theme = themeOf(scene);
+            auto const label = Scene::controlOf(*text).property("font").value<QFont>();
+            // What the markup draws: the run at the label's size, in the strong weight for a strong run and in the
+            // mono families for a mono one.
+            QFont drawn = label;
+            if (kind == 1) {
+                drawn.setWeight(theme->property("strongFont").value<QFont>().weight());
+            } else if (kind == 2) {
+                drawn = QFont{};
+                drawn.setFamilies(theme->property("monoFamilies").toStringList());
+                drawn.setPixelSize(label.pixelSize());
+                drawn.setWeight(label.weight());
+            }
+            qreal const expected =
+                QFontMetricsF{drawn}.horizontalAdvance(QStringLiteral("Assay 95.0 to 105.0 HPLC-02"));
+            INFO("role " << static_cast<int>(role) << ", run kind " << kind << ", label size " << label.pixelSize());
+            REQUIRE_FALSE(item.property("elided").toBool());
+            CHECK(item.implicitWidth() == Catch::Approx(expected).margin(1.5));
+        }
+    }
+}
+
 // Mutation: read `Theme.bodyFont` for a stacked caption again (its size is the body's).
 TEST_CASE("qt_quick widgets: a stacked key-value caption is the caption size, an inline one the body size",
           "[qt_quick]") {

@@ -104,13 +104,6 @@ MorphField {
         return face.height < 0 ? 0 : face.advanceWidth(line)
     }
 
-    // A run's text as its characters: the runs carry it escaped for rich text.
-    function plainOf(escaped: string): string {
-        return escaped.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&amp;/g, "&")
-    }
-    function escapedOf(plain: string): string {
-        return plain.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
-    }
     // The face a run is drawn in.
     function faceOf(run: var): FontMetrics {
         return run.mono ? monoMetrics : run.strong ? strongMetrics : metrics
@@ -157,15 +150,16 @@ MorphField {
         font: label.font
     }
 
-    // The faces a run can switch to.
+    // The faces a run can switch to, at the label's own size: the markup draws a run in the label's size, so a run is
+    // measured in the face and the size it is drawn in.
     FontMetrics {
         id: strongMetrics
-        font: Theme.strongFont
+        font: root.runFontOf(label.font, root.role === 6 ? Theme.monoFamilies : Theme.families, true, false)
     }
 
     FontMetrics {
         id: monoMetrics
-        font: Theme.monoFont
+        font: root.runFontOf(label.font, root.role === 6 ? Theme.monoFamilies : Theme.families, false, true)
     }
 
     Label {
