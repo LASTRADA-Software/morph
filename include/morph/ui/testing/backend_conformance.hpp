@@ -3275,12 +3275,14 @@ struct MinColumnGridSpec {
     return checks.result();
 }
 
-/// @brief Case: the gap counts: 31 units wide, a gap of step 1 and a least column width of 10 hold two columns
-///        (n columns need n times 10 plus n - 1 gaps), where the same width without the gap would hold three.
+/// @brief Case: the gap counts: 31 units wide, a gap of step 2 and a least column width of 10 hold two columns
+///        (n columns need n times 10 plus n - 1 gaps), where the same width without the gap would hold three. The
+///        gap is a step, not units, so the case tells the two apart only while the unit is under twice the gap's
+///        distance in pixels, which the distance of step 2 leaves room for in any ordinary font.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> gridGapCounts(ConformanceProbe& probe) {
-    MinColumnGrid const made = mountMinColumnGrid(probe, {.width = 31, .minColumnWidth = 10, .gap = 1});
+    MinColumnGrid const made = mountMinColumnGrid(probe, {.width = 31, .minColumnWidth = 10, .gap = 2});
     Checks checks;
     Geometry geometry{probe, checks};
     checks.that(made.cells.size() == 3, "the grid holds three cells");

@@ -1284,7 +1284,7 @@ TEST_CASE("qt_quick containers: a grid with a least column width is as wide by n
 }
 
 // The conformance case `a grid's gap counts in how many least columns fit` tells two columns from three only while
-// the unit is under twice the step-1 space (floor((31u + 4) / (10u + 4)) is 2 while u < 8): a theme or font change
+// the unit is under twice the step-2 space (floor((31u + 8) / (10u + 8)) is 2 while u < 16): a theme or font change
 // that breaks that fails here, naming the cause, rather than turning the case into a guard.
 TEST_CASE(
     "qt_quick containers: the unit is small enough for the grid gap conformance case to tell two columns from three",
@@ -1294,8 +1294,8 @@ TEST_CASE(
     REQUIRE(theme != nullptr);
     qreal const unit = theme->property("unitWidth").toReal();
     qreal step = 0;
-    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, step), Q_ARG(int, 1)));
-    INFO("the unit is " << unit << " px and the step-1 space " << step << " px");
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, step), Q_ARG(int, 2)));
+    INFO("the unit is " << unit << " px and the step-2 space " << step << " px");
     CHECK(unit < 2.0 * step);
 }
 
