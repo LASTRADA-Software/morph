@@ -117,7 +117,7 @@ TEST_CASE("a presentation's captionWidth is written only when given", "[ui][auth
     CHECK(glz::write_json(wide.json()).value_or("") ==
           R"({"kind":"wizard","model":"rows","action":"Af_AddRow","fieldLayout":"inline","captionWidth":20})");
     ui::Node const plain = ui::wizard<af::AddWizard>(model, {});
-    CHECK(glz::write_json(plain.json()).value_or("").find("captionWidth") == std::string::npos);
+    CHECK_FALSE(glz::write_json(plain.json()).value_or("").contains("captionWidth"));
 }
 
 // Mutation: leave fieldLayout out of detail::present (the key is not written).

@@ -1715,8 +1715,7 @@ TEST_CASE("author: a key-value writes its caption layout only when given", "[ui]
 TEST_CASE("author: a key-value writes its caption width only when given", "[ui][author]") {
     CHECK(text(ui::keyValue(ui::KeyValueOptions{.items = ui::ref("pairs"), .captionWidth = 12})) ==
           R"({"kind":"keyValue","items":{"ref":"pairs"},"captionWidth":12})");
-    CHECK(text(ui::keyValue(ui::KeyValueOptions{.items = ui::ref("pairs")})).find("captionWidth") ==
-          std::string::npos);
+    CHECK_FALSE(text(ui::keyValue(ui::KeyValueOptions{.items = ui::ref("pairs")})).contains("captionWidth"));
 }
 
 // Mutation: write today's helper (no page edge, no inset around the content, bars padded by 2 on every side).
