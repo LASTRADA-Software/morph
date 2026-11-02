@@ -336,7 +336,8 @@ TEST_CASE("ui document: a captionWidth is a literal integer, 1 to 64, and needs 
               .has_value());
     for (std::string const width : {"1.5", "0", "65", R"({"ref": "w"})"}) {
         auto const refused = loadDocumentText(R"({"vocab": "ui/1", "id": "k", "state": {"w": {"init": 12}},
-            "view": {"kind": "keyValue", "captionWidth": )" + width + R"(, "items": {"list": []}}})");
+            "view": {"kind": "keyValue", "captionWidth": )" +
+                                              width + R"(, "items": {"list": []}}})");
         INFO(width);
         REQUIRE_FALSE(refused.has_value());
         CHECK(refused.error().path == "/view/captionWidth");
@@ -353,10 +354,11 @@ TEST_CASE("ui document: a captionWidth is a literal integer, 1 to 64, and needs 
 
 // Mutation: leave "caption" out of the loader's role list (the document is refused).
 TEST_CASE("ui document: a text's role may be caption, and an unknown role is still refused", "[ui][document]") {
-    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "r", "view": {"kind": "text", "text": "Note", "role": "caption"}})")
+    CHECK(loadDocumentText(
+              R"({"vocab": "ui/1", "id": "r", "view": {"kind": "text", "text": "Note", "role": "caption"}})")
               .has_value());
-    auto const refused =
-        loadDocumentText(R"({"vocab": "ui/1", "id": "r", "view": {"kind": "text", "text": "Note", "role": "captions"}})");
+    auto const refused = loadDocumentText(
+        R"({"vocab": "ui/1", "id": "r", "view": {"kind": "text", "text": "Note", "role": "captions"}})");
     REQUIRE_FALSE(refused.has_value());
     CHECK(refused.error().path == "/view/role");
 }

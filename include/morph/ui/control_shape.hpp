@@ -27,8 +27,9 @@ enum class ControlShape : std::uint8_t {
 /// @brief How much room a button gives its caption.
 enum class ButtonSize : std::uint8_t {
     Normal,  ///< The control's padding and the body size.
-    Small,   ///< A compact caption: the least side padding and the small type step, at the theme's `button.smallHeight`,
-             ///< which may be above or below the control height; without it, the control height.
+    Small,   ///< A compact caption: the least side padding and the small type step, at the theme's
+             ///< `button.smallHeight`, which may be above or below the control height; without it, the control
+             ///< height.
 };
 
 /// @brief Every shape by its document name, `default` first.

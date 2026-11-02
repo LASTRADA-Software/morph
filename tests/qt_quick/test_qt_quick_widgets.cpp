@@ -1693,7 +1693,6 @@ TEST_CASE("qt_quick widgets: a key-value's caption column has the set width and 
     CHECK(value->mapToItem(&item, QPointF{0, 0}).x() == Catch::Approx(14 * unit).margin(1.0));
 }
 
-
 // Mutation: put the mark back at the right edge under the caption (its `y` is then the caption's height); bind a
 // text's mark to the label's `contentWidth` (its `x` is then after the first, longer line).
 TEST_CASE("qt_quick widgets: a required mark follows a caption, or a text's last line", "[qt_quick]") {
@@ -2182,7 +2181,8 @@ TEST_CASE("qt_quick widgets: under shape.iconOnly an icon-only menu trigger is s
     CHECK(Scene::itemOf(*labelled).width() > Scene::itemOf(*labelled).height());
 }
 
-// Mutation: map role 10 to the body font in MorphText (the size check fails), or to the text colour (the colour check).
+// Mutation: map role 10 to the body font in MorphText (the size check fails), or to the text colour (the colour
+// check).
 TEST_CASE("qt_quick widgets: a caption text is the caption size, regular and muted", "[qt_quick]") {
     Scene scene;
     scene.window().resize(400, 200);
