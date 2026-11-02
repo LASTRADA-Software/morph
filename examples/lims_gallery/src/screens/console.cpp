@@ -484,7 +484,7 @@ ui::Node kpis(bool compact) {
         if (std::string_view{note}.empty()) {
             lines.push_back(ui::spacer());
         } else {
-            lines.push_back(layout::muted(note));
+            lines.push_back(ui::text({.text = note, .role = "caption"}));
         }
         tiles.push_back(ui::panel({ui::column(lines, {.gap = 0})}, {.padding = 2}).a11y(kpi.label));
     }
