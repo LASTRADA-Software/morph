@@ -285,7 +285,7 @@ TEST_CASE("qt_quick widgets: an input without the focus marks a cut with an elli
     scene.settle();
     QQuickItem& widget = Scene::itemOf(*input);
     QQuickItem& field = Scene::controlOf(*input);
-    QQuickItem* const label = elisionOf(widget);
+    QQuickItem const* const label = elisionOf(widget);
     REQUIRE(label != nullptr);
     CHECK(isCut(label));
     CHECK_FALSE(drawsText(field));
@@ -336,10 +336,10 @@ TEST_CASE("qt_quick widgets: a focused input shows its editor, and the elided co
     input->setText(kLongValue);
     scene.settle();
     QQuickItem& widget = Scene::itemOf(*input);
-    QQuickItem& field = Scene::controlOf(*input);
-    QQuickItem* const label = elisionOf(widget);
+    QQuickItem const& field = Scene::controlOf(*input);
+    QQuickItem const* const label = elisionOf(widget);
     REQUIRE(label != nullptr);
-    QColor const textColor = widget.property("textColor").value<QColor>();
+    auto const textColor = widget.property("textColor").value<QColor>();
     for (int round = 0; round < 2; ++round) {
         CAPTURE(round);
         CHECK(isCut(label));
@@ -366,7 +366,7 @@ TEST_CASE("qt_quick widgets: a selection that outlives the focus is drawn by the
     scene.settle();
     QQuickItem& widget = Scene::itemOf(*input);
     QQuickItem& field = Scene::controlOf(*input);
-    QQuickItem* const label = elisionOf(widget);
+    QQuickItem const* const label = elisionOf(widget);
     REQUIRE(label != nullptr);
     scene.click(field);
     REQUIRE(QMetaObject::invokeMethod(&field, "select", Q_ARG(int, 3), Q_ARG(int, 20)));
@@ -405,7 +405,7 @@ TEST_CASE("qt_quick widgets: a value wider than the text room but narrower than 
     input->setLayout(
         {.width = ui::Sizing::fixed(static_cast<int>(std::lround((contentWidth + 14.0) / unit))), .height = {}});
     scene.settle();
-    QQuickItem& field = Scene::controlOf(*input);
+    QQuickItem const& field = Scene::controlOf(*input);
     qreal const room =
         field.width() - field.property("leftPadding").toReal() - field.property("rightPadding").toReal();
     INFO("the text is " << contentWidth << " px in a room of " << room << " in a field of " << field.width());
@@ -424,7 +424,7 @@ TEST_CASE("qt_quick widgets: a date-time input too narrow for its text marks the
     input->setValue(morph::time::Timestamp{
         morph::time::DateTime{year{2026}, month{10}, day{11}, hours{22}, minutes{30}, seconds{0}}});
     scene.settle();
-    QQuickItem& field = Scene::controlOf(*input);
+    QQuickItem const& field = Scene::controlOf(*input);
     CHECK(isCut(elisionOf(Scene::itemOf(*input))));
     CHECK_FALSE(drawsText(field));
     CHECK(field.property("text").toString() == QStringLiteral("2026-10-11 22:30"));

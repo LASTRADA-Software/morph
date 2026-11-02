@@ -3172,22 +3172,30 @@ struct MinColumnGrid {
     Widget* after = nullptr;
 };
 
+/// @brief What `mountMinColumnGrid` mounts.
+struct MinColumnGridSpec {
+    /// @brief The grid's width in units.
+    int width = 0;
+    /// @brief The grid's least column width in units.
+    int minColumnWidth = 0;
+    /// @brief The grid's gap, a spacing step.
+    int gap = 0;
+    /// @brief Whether a text follows the grid in the column.
+    bool withAfter = false;
+};
+
 /// @brief Mounts the grid of `MinColumnGrid`.
-/// @param probe          The backend under test.
-/// @param width          The grid's width in units.
-/// @param minColumnWidth The grid's least column width in units.
-/// @param gap            The grid's gap, a spacing step.
-/// @param withAfter      Whether a text follows the grid in the column.
+/// @param probe The backend under test.
+/// @param spec  The grid's width, least column width and gap, and whether a text follows it.
 /// @return The mount and the widgets read from it.
-[[nodiscard]] inline MinColumnGrid mountMinColumnGrid(ConformanceProbe& probe, int width, int minColumnWidth, int gap,
-                                                      bool withAfter) {
-    Grid grid{.columns = 3, .gap = gap, .minColumnWidth = minColumnWidth};
+[[nodiscard]] inline MinColumnGrid mountMinColumnGrid(ConformanceProbe& probe, MinColumnGridSpec const& spec) {
+    Grid grid{.columns = 3, .gap = spec.gap, .minColumnWidth = spec.minColumnWidth};
     for (int index = 0; index < 3; ++index) {
         grid.cells.push_back(GridCell{.node = sizedText("a", {})});
     }
-    grid.common.layout = {.width = Sizing::fixed(width)};
+    grid.common.layout = {.width = Sizing::fixed(spec.width)};
     Column column{.children = {ui::grid(std::move(grid))}};
-    if (withAfter) {
+    if (spec.withAfter) {
         column.children.push_back(sizedText("z", {}));
     }
     MinColumnGrid made;
@@ -3203,7 +3211,7 @@ struct MinColumnGrid {
             made.cells.push_back(probe.childAt(*cells, index));
         }
     }
-    if (withAfter && found.children.size() == 2) {
+    if (spec.withAfter && found.children.size() == 2) {
         made.after = found.children.at(1);
     }
     return made;
@@ -3214,7 +3222,7 @@ struct MinColumnGrid {
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> gridColumnsFollowWidth(ConformanceProbe& probe) {
-    MinColumnGrid const made = mountMinColumnGrid(probe, 25, 10, 0, false);
+    MinColumnGrid const made = mountMinColumnGrid(probe, {.width = 25, .minColumnWidth = 10});
     Checks checks;
     Geometry geometry{probe, checks};
     checks.that(made.cells.size() == 3, "the grid holds three cells");
@@ -3234,7 +3242,7 @@ struct MinColumnGrid {
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> gridKeepsColumnsWhenRoom(ConformanceProbe& probe) {
-    MinColumnGrid const made = mountMinColumnGrid(probe, 30, 10, 0, false);
+    MinColumnGrid const made = mountMinColumnGrid(probe, {.width = 30, .minColumnWidth = 10});
     Checks checks;
     Geometry geometry{probe, checks};
     checks.that(made.cells.size() == 3, "the grid holds three cells");
@@ -3252,7 +3260,7 @@ struct MinColumnGrid {
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> gridFallsToOneColumn(ConformanceProbe& probe) {
-    MinColumnGrid const made = mountMinColumnGrid(probe, 9, 10, 0, false);
+    MinColumnGrid const made = mountMinColumnGrid(probe, {.width = 9, .minColumnWidth = 10});
     Checks checks;
     Geometry geometry{probe, checks};
     checks.that(made.cells.size() == 3, "the grid holds three cells");
@@ -3272,7 +3280,7 @@ struct MinColumnGrid {
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> gridGapCounts(ConformanceProbe& probe) {
-    MinColumnGrid const made = mountMinColumnGrid(probe, 31, 10, 1, false);
+    MinColumnGrid const made = mountMinColumnGrid(probe, {.width = 31, .minColumnWidth = 10, .gap = 1});
     Checks checks;
     Geometry geometry{probe, checks};
     checks.that(made.cells.size() == 3, "the grid holds three cells");
@@ -3289,7 +3297,7 @@ struct MinColumnGrid {
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> gridDropGrowsDown(ConformanceProbe& probe) {
-    MinColumnGrid const made = mountMinColumnGrid(probe, 25, 10, 0, true);
+    MinColumnGrid const made = mountMinColumnGrid(probe, {.width = 25, .minColumnWidth = 10, .withAfter = true});
     Checks checks;
     Geometry geometry{probe, checks};
     checks.that(made.cells.size() == 3 && made.after != nullptr, "the grid holds three cells and a text follows it");
