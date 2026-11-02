@@ -37,14 +37,16 @@ MorphWidget {
 
     // Under `between` the layout's spacing comes from the stack's length, so its implicit length along the axis would
     // feed that length back to a parent that sizes the stack from it, growing on every pass; the stack's own natural
-    // length is the children's and the gaps' instead. The same holds while a child's width is a share of the stack's:
-    // the layout's implicit width sums the shares, which follow the width a parent derives from this one.
+    // length is the children's and the gaps' instead. The same holds while a child's width is a share of the stack's,
+    // and while a child stretches along the axis: the layout's implicit length sums the shares, which follow the
+    // length a parent derives from this one.
     implicitWidth: 2 * root.insetX + (root.wrap ? root.wrappedNaturalWidth
-                                                : root.axis === 1 && (root.between || root.hasShare)
+                                                : root.axis === 1 && (root.between || root.hasShare
+                                                                      || root.stretchesAlong)
                                                   ? root.naturalLength : layout.implicitWidth)
     implicitHeight: 2 * root.insetY + (root.wrap ? free.implicitHeight
-                                                : root.axis === 0 && root.between ? root.naturalLength
-                                                                                  : layout.implicitHeight)
+                                                : root.axis === 0 && (root.between || root.stretchesAlong)
+                                                  ? root.naturalLength : layout.implicitHeight)
 
     // The widest a wrapping row's child ever needs: a wrapping row can be as narrow as that. A child that can be
     // narrower than its basis (a text that wraps, a stack of them) counts as that.
@@ -76,29 +78,27 @@ MorphWidget {
         return root.axis === 1 ? along + root.gapLength * Math.max(0, shown - 1) : across
     }
     // The width the children ask for however wide the stack is laid out, or -1 while none of them has such a width
-    // (their own implicit widths are then the stack's): a row sums the children's, a column takes the widest, with the
-    // gaps and the padding.
+    // (their own implicit widths are then the stack's): a row's children together, as `naturalLength` counts them,
+    // a column takes the widest, with the gaps and the padding.
     widthFreeNatural: {
         if (root.wrap)
             return -1
         let given = false
-        let along = 0
         let across = 0
-        let shown = 0
         for (const object of root.content.children) {
             const child = object as MorphWidget
             if (!child || !child.visible)
                 continue
             const free = child.widthFreeNatural
             given = given || free >= 0
-            const natural = free >= 0 ? free : child.implicitWidth
-            along += natural
-            across = Math.max(across, natural)
-            ++shown
+            across = Math.max(across, free >= 0 ? free : child.implicitWidth)
         }
         if (!given)
             return -1
-        return 2 * root.insetX + (root.axis === 1 ? along + root.gapLength * Math.max(0, shown - 1) : across)
+        return 2 * root.insetX + (root.axis === 1 ? root.naturalAlong(child => {
+                                                        const free = (child as MorphWidget)?.widthFreeNatural ?? -1
+                                                        return free >= 0 ? free : child.implicitWidth
+                                                    }) : across)
     }
     // The content's minimum across the width, and the width there is inside the padding.
     needWidth: root.wrap ? root.widestMinimum : root.axis === 1 && root.between ? root.naturalLength
@@ -135,13 +135,25 @@ MorphWidget {
     onAlignChanged: place()
     onJustifyChanged: place()
 
-    // Whether a shown child stretches along the axis. Without one, the layout keeps its natural length on the axis
-    // and packs the children at the start: given more, a layout would hand the spare length to the gaps between
-    // them.
+    // Whether a shown child stretches along the axis: its sizing there is `stretch`, or it is a content-sized spacer,
+    // which counts as a stretch of weight 1. @p child is untyped because only a spacer declares `expandsByDefault`.
+    function stretchesIn(child: var): bool {
+        if (!child || !child.visible)
+            return false
+        const kind = root.axis === 0 ? child.heightKind : child.widthKind
+        return kind === 2 || (kind === 0 && child["expandsByDefault"] === true)
+    }
+    // A stretching child's weight along the axis: its amount, at least 1; a spacer's is 1.
+    function weightIn(child: var): real {
+        const kind = root.axis === 0 ? child.heightKind : child.widthKind
+        return kind === 2 ? Math.max(1, root.axis === 0 ? child.heightAmount : child.widthAmount) : 1
+    }
+    // Whether a shown child stretches along the axis, or a row's child takes a share of its spare width. Without
+    // one, the layout keeps its natural length on the axis and packs the children at the start: given more, a layout
+    // would hand the spare length to the gaps between them.
     readonly property bool stretchesAlong: {
         for (const child of layout.children) {
-            const along = root.axis === 0 ? child.heightKind : child.widthKind
-            if (child.visible && (along === 2 || (root.axis === 1 && child.takesShare)))
+            if (root.stretchesIn(child) || (root.axis === 1 && child.visible && child.takesShare))
                 return true
         }
         return false
@@ -154,9 +166,6 @@ MorphWidget {
     // The shown children's lengths along the axis, as the layout sizes a child that does not stretch. A child that is
     // a share of the stack's width counts at that share, where the spare length is divided.
     readonly property var shownLengths: root.lengthsOf(true)
-    // The same lengths with a share counted at the child's natural length, which does not follow this stack's width:
-    // what the stack asks its own parent for.
-    readonly property var naturalLengths: root.lengthsOf(false)
     // Whether a shown child along a row is a share of the row's width.
     readonly property bool hasShare: {
         if (root.axis !== 1)
@@ -175,20 +184,33 @@ MorphWidget {
             const child = object as Item
             if (!child || !child.visible)
                 continue
-            const widget = child as MorphWidget
-            const shared = root.axis === 1 && widget && widget.widthKind === 3
-            // A share's preferred width is not read for the natural length: it follows this stack's width, which a
-            // parent may derive from the natural length.
-            const preferred = shared && !useShare ? -1
-                              : root.axis === 0 ? child.Layout.preferredHeight : child.Layout.preferredWidth
-            const implicit = root.axis === 0 ? child.implicitHeight : child.implicitWidth
-            // A share's floor follows this stack's width, so the natural length reads the minimum without it.
-            const least = shared && !useShare ? widget.baseMinimumWidth
-                          : root.axis === 0 ? child.Layout.minimumHeight : child.Layout.minimumWidth
-            const most = root.axis === 0 ? child.Layout.maximumHeight : child.Layout.maximumWidth
-            lengths.push(Math.min(Math.max(preferred >= 0 ? preferred : implicit, least), most))
+            lengths.push(root.lengthOf(child, useShare))
         }
         return lengths
+    }
+    // A shown child's length along the axis as the layout sizes it, within its bounds. A stretching child's
+    // preferred length is its share, which follows this stack's length, so it is never read here.
+    function lengthOf(child: Item, useShare: bool): real {
+        const widget = child as MorphWidget
+        const shared = root.axis === 1 && widget && widget.widthKind === 3
+        // A share's preferred width is not read for the natural length: it follows this stack's width, which a
+        // parent may derive from the natural length.
+        const preferred = (shared && !useShare) || root.stretchesIn(child) ? -1
+                          : root.axis === 0 ? child.Layout.preferredHeight : child.Layout.preferredWidth
+        const implicit = root.axis === 0 ? child.implicitHeight : child.implicitWidth
+        // A share's floor follows this stack's width, so the natural length reads the minimum without it.
+        const least = shared && !useShare ? widget.baseMinimumWidth
+                      : root.axis === 0 ? child.Layout.minimumHeight : child.Layout.minimumWidth
+        return Math.min(Math.max(preferred >= 0 ? preferred : implicit, Math.max(0, least)), root.mostOf(child))
+    }
+    // A child's maximum length along the axis; unbounded while it has none.
+    function mostOf(child: Item): real {
+        const most = root.axis === 0 ? child.Layout.maximumHeight : child.Layout.maximumWidth
+        return most >= 0 ? most : Infinity
+    }
+    // A child's minimum length along the axis.
+    function leastOf(child: Item): real {
+        return Math.max(0, root.axis === 0 ? child.Layout.minimumHeight : child.Layout.minimumWidth)
     }
     // Whether the stack is the shell's expanded head bar, whose gap the theme's `head.paddingY` sets while it is
     // above 0: the bar has no other gap, so the token is the space above and below its line.
@@ -196,8 +218,119 @@ MorphWidget {
     readonly property real gapLength: (root.headBar && Theme.headPaddingY > 0 ? Theme.headPaddingY
                                                                                : Theme.spaceOf(root.gap)) +
                                       (root.divided && !root.wrap ? 1 : 0)
-    readonly property real naturalLength: root.naturalLengths.reduce((sum, length) => sum + length, 0)
-                                          + root.gapLength * Math.max(0, root.naturalLengths.length - 1)
+    // What the stack asks of its parent along the axis: the children's natural lengths and the gaps, where the
+    // stretching children together ask for what lets each hold its natural.
+    readonly property real naturalLength: root.naturalAlong(child => root.axis === 0 ? child.implicitHeight
+                                                                                        : child.implicitWidth)
+
+    // The shown children's natural lengths along the axis, and the gaps: a child that does not stretch counts as
+    // the layout sizes it, and the stretching children, which share what is left by weight, ask for
+    // `W * max(n / w)` together, where `n` is a child's natural within its bounds and `w` its weight, and `W` the
+    // sum of the weights, so that each share is at least its child's natural. With one stretching child that is its
+    // natural. @p natural gives a stretching child's natural along the axis.
+    function naturalAlong(natural: var): real {
+        let others = 0
+        let weights = 0
+        let ratio = 0
+        let shown = 0
+        for (const object of layout.children) {
+            const child = object as Item
+            if (!child || !child.visible)
+                continue
+            ++shown
+            if (root.stretchesIn(child)) {
+                const weight = root.weightIn(child)
+                const basis = Math.min(Math.max(natural(child), root.leastOf(child)), root.mostOf(child))
+                weights += weight
+                ratio = Math.max(ratio, basis / weight)
+            } else {
+                others += root.lengthOf(child, false)
+            }
+        }
+        return others + weights * ratio + root.gapLength * Math.max(0, shown - 1)
+    }
+
+    // The length each shown child along the axis has, aligned with the layout's children: -1 for a child that does not
+    // stretch, else its share. The stretching children share what the fixed, percent and content children and the
+    // gaps leave of the length inside the padding, by weight, from zero. A wrapping row has none.
+    readonly property var stretchShares: {
+        const shares = []
+        if (root.wrap)
+            return shares
+        const members = []
+        const owners = []
+        let used = 0
+        let shown = 0
+        let index = 0
+        for (const object of layout.children) {
+            const child = object as Item
+            shares.push(-1)
+            if (child && child.visible) {
+                ++shown
+                if (root.stretchesIn(child)) {
+                    members.push({"weight": root.weightIn(child), "minimum": root.leastOf(child),
+                                     "maximum": root.mostOf(child)})
+                    owners.push(index)
+                } else {
+                    used += root.lengthOf(child, true)
+                }
+            }
+            ++index
+        }
+        const length = root.axis === 0 ? root.height - 2 * root.insetY : root.width - 2 * root.insetX
+        const given = root.shareByWeight(members, length - used - root.gapLength * Math.max(0, shown - 1))
+        for (let i = 0; i < owners.length; ++i)
+            shares[owners[i]] = given[i]
+        return shares
+    }
+    // The share of @p child along @p along (0 down a column, 1 along a row), or -1 when this stack does not size the
+    // child that way.
+    function shareOf(child: Item, along: int): real {
+        if (along !== root.axis)
+            return -1
+        let index = 0
+        for (const object of layout.children) {
+            if (object === child)
+                return index < root.stretchShares.length ? root.stretchShares[index] : -1
+            ++index
+        }
+        return -1
+    }
+    // Shares @p room among @p members, which hold a `weight`, a `minimum` and a `maximum`, by weight from zero. A
+    // share outside its bounds is held at the bound and the rest is shared again among the others (the bounds of a
+    // flex layout): each pass shares the room among the open members and clamps; when the clamps added length in
+    // total the members raised to their minimum are held, when they removed length the members cut to their maximum
+    // are, and when they changed nothing every member is. A pass holds at least one member, so there are at most as
+    // many passes as members.
+    function shareByWeight(members: var, room: real): var {
+        const lengths = members.map(() => 0)
+        let open = members.map((member, i) => i)
+        let spare = room
+        while (open.length > 0) {
+            let weights = 0
+            for (const i of open)
+                weights += members[i].weight
+            const clamped = {}
+            let added = 0
+            for (const i of open) {
+                const raw = Math.max(0, spare) * members[i].weight / weights
+                clamped[i] = Math.min(Math.max(raw, members[i].minimum), members[i].maximum)
+                added += clamped[i] - raw
+            }
+            const frozen = []
+            for (const i of open) {
+                const raw = Math.max(0, spare) * members[i].weight / weights
+                if (Math.abs(added) < 1e-6 || (added > 0 ? clamped[i] > raw : clamped[i] < raw))
+                    frozen.push(i)
+            }
+            for (const i of frozen) {
+                lengths[i] = clamped[i]
+                spare -= clamped[i]
+            }
+            open = open.filter(i => !frozen.includes(i))
+        }
+        return lengths
+    }
     readonly property real betweenSpacing: {
         const count = root.shownLengths.length
         if (count < 2)

@@ -3540,13 +3540,210 @@ struct WrappingRow {
     return badgeRaisedTo(probe, Sizing::percent(5));
 }
 
+/// @brief A row of two stretch texts laid out in a `fixed(60)` row: the first "a", the second thirty characters in
+///        words, weighted @p firstWeight and @p secondWeight; checks their widths.
+/// @param probe        The backend under test.
+/// @param firstWeight  The first text's stretch weight.
+/// @param secondWeight The second text's stretch weight.
+/// @param first        The width the first text should have, in units.
+/// @param second       The width the second text should have, in units.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> stretchPairWidths(ConformanceProbe& probe, int firstWeight,
+                                                                  int secondWeight, double first, double second) {
+    Row row{.children = {sizedText("a", {.width = Sizing::stretch(firstWeight)}),
+                         sizedText("aaaa aaaa aaaa aaaa aaaa aaaa", {.width = Sizing::stretch(secondWeight)})}};
+    row.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the row holds two children");
+    if (children.size() == 2) {
+        geometry.near("the first stretch child's width", first, geometry.of(*children.at(0)).width);
+        geometry.near("the second stretch child's width", second, geometry.of(*children.at(1)).width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: two stretch siblings of weight 1 share the row equally, whatever their content.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> stretchSiblingsShareEqually(ConformanceProbe& probe) {
+    return stretchPairWidths(probe, 1, 1, 30, 30);
+}
+
+/// @brief Case: stretch siblings of weight 1 and 2 share the row one to two.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> stretchWeightsShareInProportion(ConformanceProbe& probe) {
+    return stretchPairWidths(probe, 1, 2, 20, 40);
+}
+
+/// @brief Case: a content-sized row of two stretch texts of one and ten characters is as wide as ten characters
+///        times its two weights (16 to 21 units: 20 where a character is a unit), where the sum of their naturals is
+///        about 11, and the ten-character text keeps nearly all of its characters.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> stretchRowNaturalGivesEachItsNatural(ConformanceProbe& probe) {
+    Row row{.children = {sizedText("a", {.width = Sizing::stretch()}),
+                         sizedText(std::string(10, 'b'), {.width = Sizing::stretch()})}};
+    row.common.layout = {.alignSelf = Align::Start};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const found = measured(probe, view);
+    checks.that(found.container != nullptr && found.children.size() == 2, "the row holds two texts");
+    if (found.container != nullptr && found.children.size() == 2) {
+        double const width = geometry.of(*found.container).width;
+        checks.that(width >= 16 && width <= 21,
+                    "the row is " + std::to_string(width) + " units wide, not the sum of its children (16 to 21)");
+        double const second = geometry.of(*found.children.at(1)).width;
+        checks.that(second >= 8,
+                    "the second text keeps its ten characters: it is " + std::to_string(second) + " units wide");
+    }
+    return checks.result();
+}
+
+/// @brief Case: a stretch row nested in a content-sized stretch row keeps its children's naturals: the ten-character
+///        text in it keeps its characters (a character is about a unit; the ten of this text are a little under).
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> stretchRowNestedKeepsNaturals(ConformanceProbe& probe) {
+    Row inner{.children = {sizedText("a", {.width = Sizing::stretch()}),
+                           sizedText(std::string(10, 'b'), {.width = Sizing::stretch()})}};
+    inner.common.layout = {.width = Sizing::stretch()};
+    Row outer{.children = {sizedText("a", {.width = Sizing::stretch()}), ui::row(std::move(inner))}};
+    outer.common.layout = {.alignSelf = Align::Start};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(outer)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const found = measured(probe, view);
+    ContainerWidget const* const nested =
+        found.children.size() == 2 && found.children.at(1) != nullptr ? asContainer(*found.children.at(1)) : nullptr;
+    checks.that(nested != nullptr && probe.childCount(*nested) == 2,
+                "the outer row holds the nested row of two texts");
+    if (nested != nullptr && probe.childCount(*nested) == 2) {
+        double const second = geometry.of(*probe.childAt(*nested, 1)).width;
+        checks.that(second >= 8, "the nested ten-character text is " + std::to_string(second) +
+                                     " units wide: the nested row asked for less than its children's naturals");
+    }
+    return checks.result();
+}
+
+/// @brief Case: a stretch child held at its minimum leaves the others to share what is left: three stretch texts in
+///        a 60-unit row, the first at least 30 wide, are 30, 15 and 15, where raising the first and taking the
+///        overflow from the last would give 30, 20 and 10.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> stretchSharesFreezeAtMinimum(ConformanceProbe& probe) {
+    Row row{.children = {sizedText("a", {.width = Sizing::stretch(), .minWidth = 30}),
+                         sizedText("b", {.width = Sizing::stretch()}), sizedText("c", {.width = Sizing::stretch()})}};
+    row.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 3, "the row holds three children");
+    if (children.size() == 3) {
+        geometry.near("the child held at its minimum", 30, geometry.of(*children.at(0)).width);
+        geometry.near("the second child's width", 15, geometry.of(*children.at(1)).width);
+        geometry.near("the third child's width", 15, geometry.of(*children.at(2)).width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a content-sized spacer in a row shares the spare width as a stretch child of weight 1: beside a
+///        stretch text in a 40-unit row, each is 20.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> spacerCountsAsStretch(ConformanceProbe& probe) {
+    Row row{.children = {sizedText("a", {.width = Sizing::stretch()}), ui::spacer()}};
+    row.common.layout = {.width = Sizing::fixed(40)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the row holds a text and a spacer");
+    if (children.size() == 2) {
+        geometry.near("the stretch text's width, beside a spacer", 20, geometry.of(*children.at(0)).width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: two stretch-height children of one and ten lines share a 20-unit column equally.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> stretchHeightsShareByWeight(ConformanceProbe& probe) {
+    std::string tall = "l";
+    for (int line = 1; line < 10; ++line) {
+        tall += "\nl";
+    }
+    Column column{
+        .children = {sizedText("l", {.height = Sizing::stretch()}), sizedText(tall, {.height = Sizing::stretch()})}};
+    column.common.layout = {.width = Sizing::fixed(30), .height = Sizing::fixed(20)};
+    Mounted const view{probe.runtime(), probe.backend(), insideRow(ui::column(std::move(column)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the column holds two children");
+    if (children.size() == 2) {
+        geometry.near("the short child's height", 10, geometry.of(*children.at(0)).height);
+        geometry.near("the tall child's height", 10, geometry.of(*children.at(1)).height);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a stretch push button is not narrowed below its label: in a 60-unit row it is as wide as the same
+///        button sized by its content, and the button beside it gives up the width.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> stretchButtonKeepsItsLabel(ConformanceProbe& probe) {
+    std::string const label(40, 'b');
+    auto const buttons = [&label](bool stretch) {
+        Button shortButton{.label = std::string{"a"}};
+        Button longButton{.label = label};
+        if (stretch) {
+            shortButton.common.layout = {.width = Sizing::stretch()};
+            longButton.common.layout = {.width = Sizing::stretch()};
+        }
+        Row row{.children = {ui::button(std::move(shortButton)), ui::button(std::move(longButton))}};
+        row.common.layout = stretch ? LayoutHints{.width = Sizing::fixed(60)} : LayoutHints{.alignSelf = Align::Start};
+        return ui::row(std::move(row));
+    };
+    Mounted const view{probe.runtime(), probe.backend(),
+                       ui::column(Column{.children = {buttons(true), buttons(false)}})};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Widget const* const sharedWidget = probe.childAt(rootContainer(view), 0);
+    Widget const* const naturalWidget = probe.childAt(rootContainer(view), 1);
+    ContainerWidget const* const shared = sharedWidget == nullptr ? nullptr : asContainer(*sharedWidget);
+    ContainerWidget const* const natural = naturalWidget == nullptr ? nullptr : asContainer(*naturalWidget);
+    checks.that(
+        shared != nullptr && natural != nullptr && probe.childCount(*shared) == 2 && probe.childCount(*natural) == 2,
+        "the column holds two rows of two buttons");
+    if (shared != nullptr && natural != nullptr && probe.childCount(*shared) == 2 && probe.childCount(*natural) == 2) {
+        double const wide = geometry.of(*probe.childAt(*shared, 1)).width;
+        double const reference = geometry.of(*probe.childAt(*natural, 1)).width;
+        checks.that(wide >= reference - 1.0, "the stretch button is " + std::to_string(wide) +
+                                                 " wide, below its label's " + std::to_string(reference));
+    }
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 40> const cases{{
+    static std::array<ConformanceCase, 48> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3611,6 +3808,21 @@ struct WrappingRow {
          .run = detail::fixedBadgeRaisedToItsNaturalWidth},
         {.name = "a badge given a percent width below its label is raised to its natural width",
          .run = detail::percentBadgeRaisedToItsNaturalWidth},
+        {.name = "two stretch siblings of weight 1 share a row equally, whatever their content",
+         .run = detail::stretchSiblingsShareEqually},
+        {.name = "stretch siblings share a row in proportion to their weights",
+         .run = detail::stretchWeightsShareInProportion},
+        {.name = "a content-sized row of stretch children gives each its natural width",
+         .run = detail::stretchRowNaturalGivesEachItsNatural},
+        {.name = "a stretch row nested in a content-sized stretch row keeps its children's naturals",
+         .run = detail::stretchRowNestedKeepsNaturals},
+        {.name = "a stretch child held at its minimum leaves the others to share the rest",
+         .run = detail::stretchSharesFreezeAtMinimum},
+        {.name = "a content-sized spacer shares a row as a stretch child of weight 1",
+         .run = detail::spacerCountsAsStretch},
+        {.name = "stretch-height children share a column by weight, whatever their content",
+         .run = detail::stretchHeightsShareByWeight},
+        {.name = "a stretch push button keeps its label's width", .run = detail::stretchButtonKeepsItsLabel},
     }};
     return cases;
 }

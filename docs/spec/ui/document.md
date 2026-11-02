@@ -242,7 +242,7 @@ node sits across its `row`'s, `column`'s, `grid` row's or `forEach`'s axis, in p
 string is a literal one: a value that names no surface draws as no surface does, `null` is no surface, and any other
 value that is not a string is reported once at the node's `surface` path and drawn as no surface), `a11y`
 (`{name, role}`), `drag` (`{payload}`), `drop` (`{accepts, onDrop}`) and `keys`. `sizing` is the width's —
-`"content"`, `{"lit": {"fixed": n}}`, `{"lit": {"stretch": w}}` or `{"lit": {"percent": n}}` (n from 1 to 100: that share of the width inside the padding of the row or horizontal splitter the node is in, gaps and handles not taken off first, so a pane is usually a percent with a `maxWidth`) — or both dimensions as a record of them, one
+`"content"`, `{"lit": {"fixed": n}}`, `{"lit": {"stretch": w}}` (in a row or a column the stretching children share the length left by weight, from zero, so two of weight 1 are equal whatever their content) or `{"lit": {"percent": n}}` (n from 1 to 100: that share of the width inside the padding of the row or horizontal splitter the node is in, gaps and handles not taken off first, so a pane is usually a percent with a `maxWidth`) — or both dimensions as a record of them, one
 left out being content: `"sizing": {"lit": {"width": {"stretch": 1}, "height": {"stretch": 1}}}`. A node's sizing means the
 same inside a `switch` case, an overlay or a row as at the root: the content's stretch reaches the container it is
 mounted in, and several nodes in a case or a default are spaced as the vertical list around the switch spaces its nodes. **Text and the inputs** also take `readonly`, `required`, `stale`

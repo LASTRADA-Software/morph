@@ -446,7 +446,8 @@ TEST_CASE("qt_quick containers: a splitter takes its panes through the split vie
 
 namespace {
 
-/// Counts the "Binding loop" messages Qt prints while it is installed.
+/// Counts the "Binding loop" and the polish loop messages Qt prints while it is installed. A layout loop is reported
+/// as either, depending on the Qt version.
 class LoopWatch {
 public:
     LoopWatch() : _previous{qInstallMessageHandler(&LoopWatch::handle)} {}
@@ -459,7 +460,9 @@ public:
 
 private:
     static void handle(QtMsgType /*type*/, QMessageLogContext const& /*context*/, QString const& message) {
-        if (message.contains(QStringLiteral("Binding loop"))) {
+        bool const polishLoop = message.contains(QStringLiteral("polish"), Qt::CaseInsensitive) &&
+                                message.contains(QStringLiteral("loop"), Qt::CaseInsensitive);
+        if (message.contains(QStringLiteral("Binding loop")) || polishLoop) {
             ++counter();
         }
     }
@@ -557,6 +560,205 @@ TEST_CASE("qt_quick containers: a share inside a content-sized row, or under jus
         CHECK(std::isfinite(Scene::itemOf(*inner).width()));
     }
     CHECK(LoopWatch::loops() == before);
+}
+
+namespace {
+
+/// The layout hints of the two texts of a `StretchPair`.
+struct PairHints {
+    ui::LayoutHints first;
+    ui::LayoutHints second;
+};
+
+/// A row of two texts, the first "a" and the second @p words, @p units wide, each sized by its hints.
+struct StretchPair {
+    StretchPair(Scene& scene, int units, std::string const& words, PairHints const& hints)
+        : row{scene.backend().createStack(nullptr, ui::Axis::Horizontal)},
+          one{scene.backend().createText(row.get())},
+          two{scene.backend().createText(row.get())} {
+        row->setLayout({.width = ui::Sizing::fixed(units)});
+        one->setText("a");
+        one->setLayout(hints.first);
+        two->setText(words);
+        two->setLayout(hints.second);
+        scene.settle();
+    }
+    std::unique_ptr<ui::StackWidget> row;
+    std::unique_ptr<ui::TextWidget> one;
+    std::unique_ptr<ui::TextWidget> two;
+};
+
+}  // namespace
+
+// Mutation: leave the stretch branch out of `Layout.preferredWidth` in MorphWidget (the layout grows each child from
+// its implicit width, so the shorter text is narrower than its sibling: 165 against 189 in a 359 px row).
+TEST_CASE("qt_quick containers: stretch siblings of weight 1 stay equal as their row widens", "[qt_quick][stretch]") {
+    Scene scene;
+    StretchPair pair{scene,
+                     40,
+                     "aaaa aaaa aaaa aaaa aaaa aaaa aaaa aaaa",
+                     {.first = {.width = ui::Sizing::stretch(1)}, .second = {.width = ui::Sizing::stretch(1)}}};
+    for (int const units : {40, 60, 100}) {
+        pair.row->setLayout({.width = ui::Sizing::fixed(units)});
+        scene.settle();
+        INFO(units << " units");
+        CHECK(Scene::itemOf(*pair.one).width() == Catch::Approx(Scene::itemOf(*pair.two).width()).margin(1.0));
+        CHECK(Scene::itemOf(*pair.one).width() + Scene::itemOf(*pair.two).width() ==
+              Catch::Approx(Scene::itemOf(*pair.row).width()).margin(1.0));
+    }
+}
+
+// Mutation: share the room by the children's implicit widths in `stretchShares` (the weights 1 and 3 are not 1:3).
+TEST_CASE("qt_quick containers: stretch siblings share their row in proportion to their weights",
+          "[qt_quick][stretch]") {
+    Scene scene;
+    StretchPair const pair{scene,
+                           80,
+                           "aaaa aaaa aaaa aaaa aaaa",
+                           {.first = {.width = ui::Sizing::stretch(1)}, .second = {.width = ui::Sizing::stretch(3)}}};
+    qreal const first = Scene::itemOf(*pair.one).width();
+    qreal const second = Scene::itemOf(*pair.two).width();
+    CHECK(second == Catch::Approx(3 * first).margin(4.0));
+}
+
+// Guards: `GridLayout` honours a maximum and a minimum itself, so the widths pass without the shares. The stack's own
+// `stretchShares` are what is checked besides, which a dropped cap in `shareByWeight` changes.
+TEST_CASE("qt_quick containers: a stretch share stops at its maximum, and a badge keeps its natural width",
+          "[qt_quick][stretch]") {
+    Scene scene;
+    StretchPair const capped{
+        scene,
+        60,
+        "aaaa aaaa aaaa aaaa aaaa aaaa",
+        {.first = {.width = ui::Sizing::stretch(1), .maxWidth = 10}, .second = {.width = ui::Sizing::stretch(1)}}};
+    qreal const unit = Scene::itemOf(*capped.row).width() / 60;
+    CHECK(Scene::itemOf(*capped.one).width() == Catch::Approx(10 * unit).margin(1.0));
+    CHECK(Scene::itemOf(*capped.two).width() == Catch::Approx(50 * unit).margin(1.0));
+    // The shares the stack computes are the widths, so the cap is held by the stack and not only by the layout.
+    QVariantList const shares = Scene::itemOf(*capped.row).property("stretchShares").toList();
+    REQUIRE(shares.size() == 2);
+    CHECK(shares.at(0).toReal() == Catch::Approx(10 * unit).margin(1.0));
+    CHECK(shares.at(1).toReal() == Catch::Approx(50 * unit).margin(1.0));
+
+    auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    row->setLayout({.width = ui::Sizing::fixed(60)});
+    auto badge = scene.backend().createBadge(row.get());
+    badge->setText("Out of specification");
+    badge->setLayout({.width = ui::Sizing::stretch()});
+    auto text = scene.backend().createText(row.get());
+    text->setText("a");
+    text->setLayout({.width = ui::Sizing::stretch()});
+    scene.settle();
+    CHECK(Scene::itemOf(*badge).width() >= Scene::itemOf(*badge).implicitWidth() - 1.0);
+}
+
+// Guard: with equal weights the layout's own shrink of the siblings gives the same 30, 15 and 15 without the freeze in
+// `shareByWeight`, so this holds the widths the freeze must give; the terminal's pass loop is where the freeze is
+// told from raise-then-take.
+TEST_CASE("qt_quick containers: a share raised to its minimum leaves the rest to the other stretch children",
+          "[qt_quick][stretch]") {
+    Scene scene;
+    auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    row->setLayout({.width = ui::Sizing::fixed(60)});
+    std::vector<std::unique_ptr<ui::TextWidget>> texts;
+    for (int index = 0; index < 3; ++index) {
+        texts.push_back(scene.backend().createText(row.get()));
+        texts.back()->setText("t");
+        texts.back()->setLayout({.width = ui::Sizing::stretch(), .minWidth = index == 0 ? 30 : 0});
+    }
+    scene.settle();
+    qreal const unit = Scene::itemOf(*row).width() / 60;
+    CHECK(Scene::itemOf(*texts.at(0)).width() == Catch::Approx(30 * unit).margin(2.0));
+    CHECK(Scene::itemOf(*texts.at(1)).width() == Catch::Approx(15 * unit).margin(2.0));
+    CHECK(Scene::itemOf(*texts.at(2)).width() == Catch::Approx(15 * unit).margin(2.0));
+}
+
+// Mutation: read `layout.implicitWidth` for a row's implicit width while a child stretches (the shares follow the
+// row's width, which the column derives from this implicit width: a counted loop message).
+TEST_CASE("qt_quick containers: stretch rows in a content-sized column, or in a table cell, make no layout loop",
+          "[qt_quick][stretch]") {
+    LoopWatch const watch;
+    int const before = LoopWatch::loops();
+    {
+        // A content-sized row holding a row whose children stretch, beside a sibling.
+        Scene scene;
+        auto outer = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+        auto inner = scene.backend().createStack(outer.get(), ui::Axis::Horizontal);
+        auto first = scene.backend().createText(inner.get());
+        first->setText("aaaa aaaa");
+        first->setLayout({.width = ui::Sizing::stretch()});
+        auto second = scene.backend().createText(inner.get());
+        second->setText("bb");
+        second->setLayout({.width = ui::Sizing::stretch(2)});
+        auto sibling = scene.backend().createText(outer.get());
+        sibling->setText("sibling");
+        scene.settle();
+        CHECK(std::isfinite(Scene::itemOf(*inner).width()));
+        CHECK(Scene::itemOf(*inner).width() > 0);
+    }
+    {
+        Scene scene;
+        auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+        column->setAlign(ui::Align::Start);
+        column->setLayout({.alignSelf = ui::Align::Start});
+        std::vector<std::unique_ptr<ui::StackWidget>> rows;
+        std::vector<std::unique_ptr<ui::TextWidget>> texts;
+        for (int line = 0; line < 2; ++line) {
+            rows.push_back(scene.backend().createStack(column.get(), ui::Axis::Horizontal));
+            rows.back()->setLayout({.width = ui::Sizing::stretch()});
+            for (int index = 0; index < 2; ++index) {
+                texts.push_back(scene.backend().createText(rows.back().get()));
+                texts.back()->setText("aaaa aaaa");
+                texts.back()->setLayout({.width = ui::Sizing::stretch()});
+            }
+        }
+        scene.settle();
+        CHECK(std::isfinite(Scene::itemOf(*column).width()));
+        CHECK(Scene::itemOf(*column).width() > 0);
+    }
+    {
+        Scene scene;
+        auto table = scene.backend().createTable(nullptr);
+        table->setColumns({{.label = "Cell"}});
+        auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+        table->setRowKey(*row, ui::Key{std::int64_t{1}});
+        auto cell = scene.backend().createStack(row.get(), ui::Axis::Horizontal);
+        cell->setLayout({.width = ui::Sizing::stretch()});
+        auto first = scene.backend().createText(cell.get());
+        first->setText("a");
+        first->setLayout({.width = ui::Sizing::stretch()});
+        auto second = scene.backend().createText(cell.get());
+        second->setText(std::string(10, 'b'));
+        second->setLayout({.width = ui::Sizing::stretch()});
+        scene.settle();
+        CHECK(std::isfinite(Scene::itemOf(*cell).width()));
+    }
+    CHECK(LoopWatch::loops() == before);
+}
+
+// Mutation: sum the children's naturals in a row's `widthFreeNatural` (the nested row asks for 11 units, not 20, so
+// the table column and the cell are too narrow for the ten-character text).
+TEST_CASE("qt_quick containers: a table cell holding a stretch row keeps its children's naturals",
+          "[qt_quick][stretch]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "Cell"}});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    auto cell = scene.backend().createStack(row.get(), ui::Axis::Horizontal);
+    auto first = scene.backend().createText(cell.get());
+    first->setText("a");
+    first->setLayout({.width = ui::Sizing::stretch()});
+    auto second = scene.backend().createText(cell.get());
+    second->setText(std::string(10, 'b'));
+    second->setLayout({.width = ui::Sizing::stretch()});
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal const unit = theme->property("unitWidth").toReal();
+    // Ten b's are about 8.9 units, so two stretch children of that natural ask for about 17.7.
+    CHECK(Scene::itemOf(*cell).width() >= 17 * unit);
+    CHECK(Scene::itemOf(*second).width() >= 8 * unit);
 }
 
 // Mutation: read the pane's kind as content in MorphSplitter.applyOwn (the first pane is its text's width).

@@ -10,12 +10,16 @@
 #include <core/tui/Modifier.hpp>
 #include <core/tui/Screen.hpp>
 #include <core/tui/Unicode.hpp>
+#include <cstdint>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <ranges>
 #include <stdexcept>
+#include <utility>
 #include <variant>
+#include <vector>
 
 #include "tui/container_widgets.hpp"
 #include "tui/display_widgets.hpp"
@@ -646,6 +650,57 @@ void ContainerBase::childForgotten(WidgetBase& /*child*/) {}
                     : ::core::tui::Size{.width = along, .height = across};
 }
 
+ui::Sizing stretchSizingOf(WidgetBase const& child, bool vertical) {
+    ui::Sizing sizing = vertical ? child.layout().height : child.layout().width;
+    if (sizing.kind == ui::Sizing::Kind::Content && child.expandsByDefault()) {
+        sizing = ui::Sizing::stretch(1);
+    }
+    return sizing;
+}
+
+::core::tui::Size weightedNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap) {
+    bool const vertical = axis == ui::Axis::Vertical;
+    std::int64_t others = 0;
+    std::int64_t weights = 0;
+    std::vector<std::pair<std::int64_t, std::int64_t>> stretching;  // each one's natural and weight
+    int across = 0;
+    int count = 0;
+    for (auto const* child : children) {
+        if (!child->shown()) {
+            continue;
+        }
+        auto natural = requestedSize(*child);
+        natural.width = std::max(natural.width, child->contentMinimumWidth());
+        int along = vertical ? natural.height : natural.width;
+        across = std::max(across, vertical ? natural.width : natural.height);
+        ++count;
+        ui::Sizing const sizing = stretchSizingOf(*child, vertical);
+        if (sizing.kind != ui::Sizing::Kind::Stretch) {
+            others += along;
+            continue;
+        }
+        // A spacer asks for nothing: it is empty, and takes only what the others leave.
+        if ((vertical ? child->layout().height : child->layout().width).kind == ui::Sizing::Kind::Content &&
+            child->expandsByDefault()) {
+            along = 0;
+        }
+        std::int64_t const weight = std::max(1, sizing.amount);
+        weights += weight;
+        stretching.emplace_back(along, weight);
+    }
+    // Each child needs a share of at least its natural, and the shares are proportional to the weights, so the
+    // stretching children together need the largest of `n * W / w`, rounded up to a whole cell.
+    std::int64_t shared = 0;
+    for (auto const& [natural, weight] : stretching) {
+        shared = std::max(shared, ((natural * weights) + weight - 1) / weight);
+    }
+    std::int64_t total = others + shared + (count > 1 ? std::int64_t{gap} * (count - 1) : 0);
+    total = std::min<std::int64_t>(total, std::numeric_limits<int>::max());
+    int const length = static_cast<int>(total);
+    return vertical ? ::core::tui::Size{.width = across, .height = length}
+                    : ::core::tui::Size{.width = length, .height = across};
+}
+
 namespace {
 
 /// What every child of one `arrangeStack` call shares.
@@ -697,10 +752,7 @@ void solvedAreas(std::span<WidgetBase* const> children, Placement const& placeme
         if (!child->shown()) {
             continue;
         }
-        auto sizing = placement.vertical ? child->layout().height : child->layout().width;
-        if (sizing.kind == ui::Sizing::Kind::Content && child->expandsByDefault()) {
-            sizing = ui::Sizing::stretch(1);
-        }
+        ui::Sizing const sizing = stretchSizingOf(*child, placement.vertical);
         placed.push_back(child);
         slots.push_back(&area);
         ui::LayoutHints const& hints = child->layout();

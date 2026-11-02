@@ -121,6 +121,7 @@ enum class Fault : std::uint8_t {
     SecondMissing,   // a column hands out only its first child
     HollowNarrow,    // a row whose first child is sized by a fixed or percent width reports no children
     HollowNatural,   // a row whose first child is sized by its content reports no children
+    NarrowStretch,   // a button sized by a stretch width is laid out narrower than its label
 };
 
 // The reference probe: what a TUI or Qt Quick probe does with a rendered screen or a QQuickItem tree, this one does
@@ -141,6 +142,12 @@ public:
         if (_fault == Fault::TinyBounds || _fault == Fault::HugeBounds) {
             return ui::testing::WidgetBounds{
                 .x = 0, .y = 0, .width = _fault == Fault::TinyBounds ? 5.0 : 40.0, .height = 1};
+        }
+        if (_fault == Fault::NarrowStretch) {
+            int const buttonId = _backend.idOf(widget);
+            bool const narrow =
+                _backend.kindOf(buttonId) == "Button" && _backend.prop(buttonId, "layout").starts_with("stretch");
+            return ui::testing::WidgetBounds{.x = 0, .y = 0, .width = narrow ? 5.0 : 20.0, .height = 1};
         }
         if (_fault != Fault::NarrowBadge && _fault != Fault::OverlappedText) {
             return std::nullopt;
@@ -586,4 +593,36 @@ TEST_CASE("ui conformance: the grid and key-value width cases flag a wrong size 
         }
     }
     CHECK(cases == 3);
+}
+
+// Mutation: make the stretch cases check nothing (a row that shares by content, a row that sums its naturals or a
+// button narrowed below its label passes).
+TEST_CASE("ui conformance: the stretch cases flag a wrong width, a missing child and a narrowed button",
+          "[ui][conformance]") {
+    std::set<std::string_view> const names{
+        "two stretch siblings of weight 1 share a row equally, whatever their content",
+        "stretch siblings share a row in proportion to their weights",
+        "a content-sized row of stretch children gives each its natural width",
+        "a stretch row nested in a content-sized stretch row keeps its children's naturals",
+        "a stretch child held at its minimum leaves the others to share the rest",
+        "a content-sized spacer shares a row as a stretch child of weight 1",
+        "stretch-height children share a column by weight, whatever their content",
+        "a stretch push button keeps its label's width"};
+    std::size_t cases = 0;
+    for (auto const& testCase : ui::testing::layoutConformanceCases()) {
+        if (!names.contains(testCase.name)) {
+            continue;
+        }
+        ++cases;
+        INFO(testCase.name);
+        RecordingProbe none{Fault::NoChildren};
+        CHECK(testCase.run(none).has_value());
+        RecordingProbe tiny{Fault::TinyBounds};
+        RecordingProbe huge{Fault::HugeBounds};
+        RecordingProbe narrow{Fault::NarrowStretch};
+        bool const flagged =
+            testCase.run(tiny).has_value() || testCase.run(huge).has_value() || testCase.run(narrow).has_value();
+        CHECK(flagged);
+    }
+    CHECK(cases == names.size());
 }

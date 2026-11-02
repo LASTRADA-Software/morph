@@ -2382,15 +2382,16 @@ TEST_CASE("qt_quick theme: with the small heights at 0 a small button is as tall
     CHECK(Scene::itemOf(*small).height() == 44.0);
 }
 
-// Mutation: leave the round rule out of MorphButtonBackground (the background is 30 wide and 40 high).
+// Mutation: leave the round rule out of MorphButtonBackground (the background is 30 wide and 40 high). The button sits
+// in a grid track: a stack never places a push button below its natural width, a grid track does.
 TEST_CASE("qt_quick theme: a round button placed narrower than tall draws a circle of its width, centred",
           "[qt_quick][small]") {
     Scene scene;
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), smallButtonTheme(true)).empty());
-    auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
-    row->setAlign(ui::Align::Start);
-    auto well = smallButton(scene, row.get(), true, true);
-    well->setLayout({.width = ui::Sizing::fixed(1)});
+    auto grid = scene.backend().createGrid(nullptr);
+    grid->setColumns(1);
+    grid->setTracks({{.width = ui::Sizing::fixed(1)}});
+    auto well = smallButton(scene, grid.get(), true, true);
     scene.settle();
     QQuickItem const& item = Scene::itemOf(*well);
     auto* const background = buttonOf(*well).property("background").value<QQuickItem*>();

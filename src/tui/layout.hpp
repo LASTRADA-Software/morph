@@ -71,12 +71,14 @@ struct ColumnItem {
 
 /// Extents along a stack's main axis, in item order. Fixed items get their amount, Percent items that share of the
 /// track's length (rounded down; the gaps are not taken off first) and Content items their natural extent, each
-/// clamped into its bounds; Stretch items share what is left by weight (a weight below one counts as
-/// one), the cells a division leaves over going one each to the first Stretch items. A share stops at its item's
-/// maximum and what it leaves goes to the Stretch items not capped, at most one pass per Stretch item; a share
-/// below its item's minimum is raised to it. An overflow is taken from the last item first, down to each item's
-/// minimum, and then the stack overflows. Gaps are never shrunk, so items whose gaps alone overflow the track keep
-/// only their minimums.
+/// clamped into its bounds; Stretch items share what is left by weight from zero (a weight below one counts as
+/// one), the cells a division leaves over going one each to the first Stretch items. A share outside its item's
+/// bounds is held at the bound and the rest is shared again among the others by weight: when the clamping of a pass
+/// added length the items raised to their minimum are held, when it removed length the items cut to their maximum
+/// are, and when it changed nothing every item is; at most one pass per Stretch item. Three Stretch items of
+/// weight 1 in 90 cells, the first with a minimum of 50, get 50, 20 and 20. An overflow, which only the minimums
+/// can make, is taken from the last item first, down to each item's minimum, and then the stack overflows. Gaps are
+/// never shrunk, so items whose gaps alone overflow the track keep only their minimums.
 [[nodiscard]] std::vector<int> distribute(std::span<Item const> items, Track track);
 
 /// A child's extent across a stack: a Fixed child's amount, while Content and Stretch fill `space`; then clamped

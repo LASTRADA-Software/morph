@@ -86,38 +86,40 @@ void shareSpare(std::span<Item const> items, std::vector<bool> const& sharing, s
     }
 }
 
-/// Shares `spare` among the Stretch items, each stopped at its maximum; what a capped item leaves goes to the
-/// others. Each pass caps at least one item or settles, so there are at most as many passes as Stretch items.
-void shareCapped(std::span<Item const> items, std::vector<int>& sizes, Wide spare) {
-    std::vector<bool> sharing(items.size());
+/// Shares `spare` among the Stretch items by weight, each held within its bounds; what a held item leaves, or takes,
+/// is shared again among the others. Each pass shares the room among the open items and clamps each share into its
+/// bounds; if the clamping added length in total the items raised to their minimum are held there, if it removed
+/// length the items cut to their maximum are, and if it changed nothing every item is. A pass holds at least one
+/// item, so there are at most as many passes as Stretch items.
+void shareBounded(std::span<Item const> items, std::vector<int>& sizes, Wide spare) {
+    std::vector<bool> open(items.size());
     for (std::size_t index = 0; index < items.size(); ++index) {
-        sharing.at(index) = isStretch(itemAt(items, index).sizing);
+        open.at(index) = isStretch(itemAt(items, index).sizing);
     }
     for (;;) {
         Wide weights = 0;
         for (std::size_t index = 0; index < items.size(); ++index) {
-            weights += sharing.at(index) ? weightOf(itemAt(items, index).sizing) : 0;
+            weights += open.at(index) ? weightOf(itemAt(items, index).sizing) : 0;
         }
-        if (weights == 0 || spare <= 0) {
+        if (weights == 0) {
             return;
         }
-        shareSpare(items, sharing, sizes, spare, weights);
-        bool capped = false;
+        shareSpare(items, open, sizes, std::max<Wide>(spare, 0), weights);
+        std::vector<int> clamped(items.size());
+        Wide added = 0;
         for (std::size_t index = 0; index < items.size(); ++index) {
-            int const maximum = maximumOf(boundsOfItem(itemAt(items, index)));
-            if (sharing.at(index) && sizes.at(index) > maximum) {
-                sizes.at(index) = maximum;
-                sharing.at(index) = false;
-                spare -= maximum;
-                capped = true;
+            if (open.at(index)) {
+                clamped.at(index) = clampInto(sizes.at(index), boundsOfItem(itemAt(items, index)));
+                added += Wide{clamped.at(index)} - sizes.at(index);
             }
         }
-        if (!capped) {
-            return;
-        }
         for (std::size_t index = 0; index < items.size(); ++index) {
-            if (sharing.at(index)) {
-                sizes.at(index) = 0;
+            bool const violates =
+                added > 0 ? clamped.at(index) > sizes.at(index) : clamped.at(index) < sizes.at(index);
+            if (open.at(index) && (added == 0 || violates)) {
+                sizes.at(index) = clamped.at(index);
+                open.at(index) = false;
+                spare -= sizes.at(index);
             }
         }
     }
@@ -168,13 +170,10 @@ std::vector<int> distribute(std::span<Item const> items, Track track) {
         used += sizes.back();
     }
     Wide const gaps = gapsBetween(items.size(), std::max(0, track.gap));
-    shareCapped(items, sizes, Wide{track.length} - gaps - used);
-    // A share below its minimum is raised to it; the overflow that makes is taken back from the last items first.
-    Wide total = 0;
-    for (std::size_t index = 0; index < items.size(); ++index) {
-        sizes.at(index) = std::max({sizes.at(index), itemAt(items, index).minimum, 0});
-        total += sizes.at(index);
-    }
+    shareBounded(items, sizes, Wide{track.length} - gaps - used);
+    // Every item is within its bounds, so what overflows the track is the minimums: it is taken back from the last
+    // items first, none below its minimum.
+    Wide const total = std::accumulate(sizes.begin(), sizes.end(), Wide{0});
     if (Wide const deficit = total + gaps - Wide{track.length}; deficit > 0) {
         shrinkFromLast(items, sizes, deficit);
     }

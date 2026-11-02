@@ -287,8 +287,17 @@ Item {
     // The least width without a share: the document's `minWidth`, else the content's minimum where it is honoured.
     readonly property real baseMinimumWidth: minWidthUnits >= 0 ? minWidthUnits * Theme.unitWidth
                                                                : honoursContentMinimum ? contentMinimumWidth : -1
-    Layout.preferredWidth: widthKind === 1 ? widthAmount * Theme.unitWidth : widthKind === 3 ? shareWidth : -1
-    Layout.preferredHeight: heightKind === 1 ? heightAmount * Theme.unitHeight : -1
+    // The length the stack this widget is in gives it along its row (`stretchWidth`) or column (`stretchHeight`) while it
+    // stretches there, else -1. The stack shares its room among the stretching children by weight, so each one's
+    // preferred length is its share. The parameter is untyped because only a stack declares `shareOf`.
+    function shareIn(stack, along: int): real {
+        return stack && stack.shareOf !== undefined ? stack.shareOf(root, along) : -1
+    }
+    readonly property real stretchWidth: shareIn(parent ? parent.parent : null, 1)
+    readonly property real stretchHeight: shareIn(parent ? parent.parent : null, 0)
+    Layout.preferredWidth: widthKind === 1 ? widthAmount * Theme.unitWidth
+                                           : widthKind === 3 ? shareWidth : stretchWidth
+    Layout.preferredHeight: heightKind === 1 ? heightAmount * Theme.unitHeight : stretchHeight
     Layout.minimumWidth: Math.max(baseMinimumWidth, shareFloor)
     Layout.maximumWidth: maxWidthUnits >= 0 ? maxWidthUnits * Theme.unitWidth : -1
     Layout.minimumHeight: minHeightUnits >= 0 ? minHeightUnits * Theme.unitHeight : -1

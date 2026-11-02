@@ -132,7 +132,7 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
         return ::core::tui::Size{.width = oneLine.width, .height = std::max(height, oneLine.height)};
     }
     if (_extents.empty()) {
-        return stackNaturalSize(children(), _axis, _gap);
+        return weightedNaturalSize(children(), _axis, _gap);
     }
     auto const natural = stackNaturalSize(children(), _axis, 0);
     int const columns =

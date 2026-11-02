@@ -182,7 +182,7 @@ reorders children, and only through this.
 
 | Container | Children |
 |---|---|
-| `StackWidget` | In order along the axis fixed at creation, `setGap` apart; `setAlign` places them across the axis and `setJustify` the spare length along it. A wrapping row (`setWrap(true)`, called before its first child) fills lines in order: each shown child has a basis (a content child its natural width, a fixed child its amount, a stretch child its minimum width, no more than its natural width, else its natural width, each within its bounds and at most the row's width); a child starts a new line when its basis and a gap do not fit after those on the line (a line always holds one child; a child with no basis takes no gap and starts no line); on a line the stretch children share the spare width by weight, each stopping at its maximum, and a line with none places it by `justify`; a line is as tall as its tallest child, `align` places a child down it, and lines are a gap apart, the same step as between children; a child wider than the row sits alone at the row's width. Its natural width is its children's on one line, its natural height its lines' at the width it is given. A divided stack (`setDivided(true)`, called before its first child, never on a wrapping row) draws a 1 px rule in the theme's divider colour between each two shown children, centred in the gap, horizontal in a column and vertical in a row; the rule takes 1 px of its own, so a gap of 0 still separates the children. The terminal draws no rule: it would take a row of its own and double a list's height, and its lines are already apart |
+| `StackWidget` | In order along the axis fixed at creation, `setGap` apart; a row's or a column's natural length along the axis is the other children's lengths and the gaps plus, for its stretching children together, the weights' sum times the largest of their naturals per weight (`W * max(n / w)`, `n` within the child's bounds and at least its content minimum), so that each share is at least its child's natural; with one stretching child that is its natural. A row's width asked for without regard to its own width (`widthFreeNatural` on Qt Quick) follows the same rule; `setAlign` places them across the axis and `setJustify` the spare length along it. A wrapping row (`setWrap(true)`, called before its first child) fills lines in order: each shown child has a basis (a content child its natural width, a fixed child its amount, a stretch child its minimum width, no more than its natural width, else its natural width, each within its bounds and at most the row's width); a child starts a new line when its basis and a gap do not fit after those on the line (a line always holds one child; a child with no basis takes no gap and starts no line); on a line the stretch children share the spare width by weight, each stopping at its maximum, and a line with none places it by `justify`; a line is as tall as its tallest child, `align` places a child down it, and lines are a gap apart, the same step as between children; a child wider than the row sits alone at the row's width. Its natural width is its children's on one line, its natural height its lines' at the width it is given. A divided stack (`setDivided(true)`, called before its first child, never on a wrapping row) draws a 1 px rule in the theme's divider colour between each two shown children, centred in the gap, horizontal in a column and vertical in a row; the rule takes 1 px of its own, so a gap of 0 still separates the children. The terminal draws no rule: it would take a row of its own and double a list's height, and its lines are already apart |
 | `GridWidget` | Row-major in `setColumns` equal columns (each `stretch(1)`; its natural width is the column count times its widest cell), or in `setTracks` columns sized by their tracks, `setGap` apart; `setSpan(child, n)` widens one, and a child spans 1 until told; `setAlign` places each cell's content in its row |
 | `PanelWidget` | A card unless the node names a surface: filled with the card scheme's surface, which its content inherits, with the card's border, radius and shadow; on a card it draws no shadow. Inside the frame, `setPadding` in; a collapsed panel hides its content, which takes no input. `setHeader`'s widget is not part of "its content" for this: it stays shown and usable while collapsed |
 | `ScrollWidget` | One scrolled viewport, on the axis fixed at creation, that keeps the focused child visible |
@@ -251,7 +251,16 @@ in a row as tall as the row; a grid cell, and the content of a panel, scroll are
 fills its width. A kind whose width is its label (a button, a badge, a checkbox) fills the line but draws at its
 natural width at the line's start, on Qt Quick as on the terminal. Along the axis a stack packs its children at the
 start, `setGap` apart; only a `stretch` child takes spare length, so a `stretch` child of a column takes the column's
-spare height, and a stretching scroll above a bar keeps the bar at the column's end. A content-sized splitter keeps each pane at its own
+spare height, and a stretching scroll above a bar keeps the bar at the column's end. In a row or a column the
+`stretch` children (and a content-sized spacer, which counts as `stretch(1)` with no natural length) share the length
+the other children and the gaps leave **by weight, from zero**: two children of weight 1 are equal whatever their
+content. A share outside its child's bounds is frozen at the bound and the rest is shared again by weight among the
+others: each pass shares the open length by weight and clamps; when the clamping added length in total the children
+raised to their minimum are frozen, when it removed length the children cut to their maximum are, and when it
+changed nothing every child is. Three `stretch(1)` children in 90 units, the first with a minimum of 50, are 50, 20
+and 20. Minimums that together exceed the length overflow the stack. Panels, collapsibles, scroll areas, slots, tab
+pages, dialogs and drawers do not apply the rule to their own children: a frontend may grow two stretch-height
+children of one of those by their content, as Qt Quick does. A content-sized splitter keeps each pane at its own
 size until the user drags. A splitter's panes are sized by the splitter, not by this rule. A panel's or a collapsible's content starts under its
 header whatever the panel's height; only a stretching child takes the spare height.
 
@@ -302,7 +311,8 @@ fixed one. A percent child adds its natural width to its row's natural width, ne
 out does not depend on the row's own natural width. A table, a scroll and every leaf take
 their own overflow; a table's cells are placed at their column's width and do not raise it. A badge's minimum is its
 natural width, so a stack or a panel that holds one is raised with it, on the terminal as on Qt Quick, whether the badge
-is sized `fixed` or `percent`; only a table cell, which is not raised, is placed narrower. On the terminal the minimum
+is sized `fixed` or `percent`; a push button's minimum is its natural width too (a list item, a select, an input and a
+menu trigger have none), so a stretch push button gives up share before it gives up its label; only a table cell, which is not raised, is placed narrower. On the terminal the minimum
 reaches along a row through the stack's gaps and padding, and across a column and through a panel's frame and padding; a
 stack that holds no badge has none, and a table row, which its table places, has none. A page (a slot) whose
 content cannot be narrower than it scrolls sideways when it is scrollable, and a scrolling vertical `scroll` does too.
@@ -628,6 +638,14 @@ reads `textExtentOf` for where the line is drawn.
 In a `fixed(60)` row a `percent(25)` child and a `stretch` sibling are 15 and 45 units wide, and 10 and 50 with a
 `maxWidth` of 10 on the first. In a `fixed(41)` horizontal splitter a `percent(50)` pane and a content pane are 20 and
 20 units, two content panes share equally, matching `sizes` place the panes, and a `stretch` pane capped at 8 is 8.
+In a `fixed(60)` row of a `stretch` text "a" and a thirty-character `stretch` text the widths are 30 and 30, and 20 and
+40 at weights 1 and 2. A content-sized row of "a" and a ten-character text, both `stretch`, is as wide as ten characters
+times its two weights (16 to 21 units: the sum of the naturals would be about 11) and its second text keeps its ten
+characters; a `stretch` row inside such a row, holding the same two texts, keeps them too. Three `stretch` texts in a
+`fixed(60)` row, the first with `minWidth: 30`, are 30, 15 and 15. A `stretch` text beside a content-sized spacer in a
+`fixed(40)` row is 20. Two `stretch`-height children of one and ten lines in a 20-unit column are 10 and 10. A
+`stretch` push button in a `fixed(60)` row beside another is at least as wide as the same button sized by its
+content.
 
 ### The probe
 

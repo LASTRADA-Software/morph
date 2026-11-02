@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <core/tui/InputEvent.hpp>
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Rect.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <morph/ui/backend.hpp>
@@ -629,10 +631,12 @@ TEST_CASE("tui widgets: a child squeezed out of a row takes no click at its old 
     int clicks = 0;
     auto const text = harness.make<TextImpl>(row.get());
     text->setText("ab");
+    // A list item, which has no minimum width: a push button keeps its label and takes the room from the text.
     auto const button = harness.make<ButtonImpl>(row.get());
+    button->setStyle(ui::ButtonStyle::Item);
     button->setLabel("B");
     button->setOnClick([&] { ++clicks; });
-    CHECK(harness.draw() == Rows{"ab[ B ]"});
+    CHECK(harness.draw().front().starts_with("ab B"));
     text->setText("abcdefgh");
     CHECK(harness.draw() == Rows{"abcdefgh"});
     CHECK(WidgetBase::of(*button).view().screenBounds().empty());
@@ -1030,4 +1034,91 @@ TEST_CASE("tui widgets: the toolbar surfaces, joined to the head's block or not,
     CHECK(buffer.at(0, 0).style.inverse);
     CHECK(buffer.at(1, 0).style.inverse);
     CHECK_FALSE(buffer.at(2, 0).style.inverse);
+}
+
+namespace {
+
+/// What @p naturals ask for as stretch children of the weights @p weights: the weights' sum times the largest natural
+/// per weight, rounded up to a whole cell.
+int stretchNaturalOf(std::vector<int> const& naturals, std::vector<int> const& weights) {
+    int sum = 0;
+    for (int const weight : weights) {
+        sum += weight;
+    }
+    int asked = 0;
+    for (std::size_t index = 0; index < naturals.size(); ++index) {
+        asked = std::max(asked, ((naturals.at(index) * sum) + weights.at(index) - 1) / weights.at(index));
+    }
+    return asked;
+}
+
+}  // namespace
+
+// Mutation: sum the stretching children's naturals in `weightedNaturalSize` (a row of two stretch texts asks for
+// less than every share needs, so the first case's 20 is 11).
+TEST_CASE("tui widgets: a row of stretch children asks for the weights' sum times the largest natural per weight",
+          "[tui][widgets]") {
+    struct Case {
+        std::vector<int> naturals;
+        std::vector<int> weights;
+        int expected;
+    };
+    // The expected widths are written out beside the formula, which computes them again.
+    for (auto const& testCase : {Case{.naturals = {1, 10}, .weights = {1, 1}, .expected = 20},
+                                 Case{.naturals = {10, 10}, .weights = {1, 2}, .expected = 30},
+                                 Case{.naturals = {10, 10}, .weights = {2, 1}, .expected = 30},
+                                 Case{.naturals = {4, 10}, .weights = {1, 2}, .expected = 15},
+                                 Case{.naturals = {10}, .weights = {3}, .expected = 10}}) {
+        INFO(testCase.expected);
+        Harness harness{80, 1};
+        auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+        std::vector<std::unique_ptr<TextImpl>> texts;
+        for (std::size_t index = 0; index < testCase.naturals.size(); ++index) {
+            texts.push_back(harness.make<TextImpl>(row.get()));
+            texts.back()->setText(std::string(static_cast<std::size_t>(testCase.naturals.at(index)), 'x'));
+            texts.back()->setLayout(ui::LayoutHints{.width = ui::Sizing::stretch(testCase.weights.at(index))});
+        }
+        CHECK(stretchNaturalOf(testCase.naturals, testCase.weights) == testCase.expected);
+        CHECK(row->naturalSize().width == testCase.expected);
+    }
+}
+
+// Mutation: leave a spacer out of `stretchSizingOf` (the row asks for the text's 4 cells, not 8), or drop the gaps.
+TEST_CASE("tui widgets: a spacer counts as a stretch child of weight 1 and no natural size in a stack's natural size",
+          "[tui][widgets]") {
+    Harness harness{80, 1};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    row->setGap(1);
+    auto const text = harness.make<TextImpl>(row.get());
+    text->setText("abcd");
+    text->setLayout(ui::LayoutHints{.width = ui::Sizing::stretch()});
+    auto const spacer = harness.make<SpacerImpl>(row.get());
+    auto const fixed = harness.make<TextImpl>(row.get());
+    fixed->setText("zz");
+    // 2 stretching children of weight 1, the larger natural 4: 8 cells, then the fixed text and two gaps.
+    CHECK(row->naturalSize().width == 8 + 2 + (2 * row->gap()));
+}
+
+// Mutation: leave `contentMinimumWidth` off ButtonImpl (a stretch push button is narrowed below its label).
+TEST_CASE("tui widgets: a push button's minimum width is its label's, and a list item's is none", "[tui][widgets]") {
+    Harness harness{40, 1};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    auto const push = harness.make<ButtonImpl>(row.get());
+    push->setLabel("Approve");
+    auto const item = harness.make<ButtonImpl>(row.get());
+    item->setLabel("Approve");
+    item->setStyle(ui::ButtonStyle::Item);
+    CHECK(push->contentMinimumWidth() == push->naturalSize().width);
+    CHECK(push->contentMinimumWidth() > 7);
+    CHECK(item->contentMinimumWidth() == 0);
+}
+
+// Guard: a text is cut at its width on the terminal, which never wraps it, so it keeps no minimum. It passes with or
+// without a minimum on a text that wraps on another frontend.
+TEST_CASE("tui widgets: a text keeps no minimum width", "[tui][widgets]") {
+    Harness harness{40, 1};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const text = harness.make<TextImpl>(column.get());
+    text->setText("Assay 95.0-105.0 and a longer word");
+    CHECK(text->contentMinimumWidth() == 0);
 }

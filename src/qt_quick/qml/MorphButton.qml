@@ -69,6 +69,8 @@ MorphWidget {
     implicitWidth: root.round || root.squared ? Math.max(button.implicitWidth, button.implicitHeight)
                                               : button.implicitWidth
     implicitHeight: button.implicitHeight
+    // A push button is not narrowed below its caption; a list item gives up width to its line.
+    contentMinimumWidth: root.style === 0 ? root.implicitWidth : -1
 
     // The caption's font: the control text face, strong (at `Theme.buttonWeight`) for a filled button; a small button draws a
     // strong caption in the small step, and a mono one in the mono role's face.

@@ -390,6 +390,22 @@ that has one. A unit is the body font's average character width
 horizontally and its line height vertically (`Theme.unitWidth`, `Theme.unitHeight`): the platform font's, or the
 theme's `font.family` at the body size once a theme names one ([`../ui/theme.md`](../ui/theme.md), "On Qt Quick").
 
+Along its axis a `MorphStack` without `wrap` shares its length among the children that stretch (`stretch` sizing, or a
+`MorphSpacer`, which counts as weight 1: its `expandsByDefault`) by weight, from zero, with the bounds resolved as
+the contract says. `stretchShares` is the binding that does it: an array aligned with the layout's children, -1 for a
+child that does not stretch, built from the length inside the padding, the other children's lengths, `gapLength` and
+each stretching child's weight and `Layout.minimum*`/`maximum*`, never from a stretching child's preferred length;
+`shareByWeight` is the pass loop. A stretching child's `Layout.preferredWidth` (`stretchWidth`) or `preferredHeight`
+(`stretchHeight`) is its share (`MorphStack.shareOf`, duck-typed as `roomOf` is), so the `GridLayout` places the shares
+exactly. The stack's own implicit length along the axis is `naturalLength` while a child stretches: the other
+children's lengths, the gaps and `W * max(n / w)` for the stretching ones (`naturalAlong`), which never reads a share,
+since the shares follow the length a parent derives from the natural. `widthFreeNatural` along a row is the same
+function over each child's `widthFreeNatural` where it has one, else its `implicitWidth`, so a stretch row in a content
+sized context, a table cell or a panel still asks for its children's naturals. The containers that lay their children
+out with a plain `ColumnLayout` (panel, collapsible, scroll, slot, tab page, dialog and drawer) keep the layout's own
+growth for stretch-height children. A push button (`style` 0) is not narrowed below its natural width
+(`contentMinimumWidth`), as a badge is; a list item, a select, an input and a menu trigger have no minimum.
+
 A content-sized dimension fills the container across its axis ([`../ui/backend_contract.md`](../ui/backend_contract.md),
 the cross axis). A QML child cannot see its parent's axis, so the container says: `ContainerCore::adopt` writes the
 child's `fillsWidth` and `fillsHeight` from `crossFill()`, which is the width for every container but a row (the

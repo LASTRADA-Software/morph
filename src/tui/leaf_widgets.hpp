@@ -99,6 +99,11 @@ public:
     [[nodiscard]] std::string probeText() const override { return _label; }
     /// A push button keeps its label's width; a list item fills its slot.
     [[nodiscard]] bool placedAcrossColumn() const override { return _style == ui::ButtonStyle::Push; }
+    /// A push button is not narrowed below its label, which the user reads to act; a list item, which fills its slot,
+    /// has no minimum.
+    [[nodiscard]] int contentMinimumWidth() const override {
+        return _style == ui::ButtonStyle::Push ? naturalSize().width : 0;
+    }
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void activate() override;
