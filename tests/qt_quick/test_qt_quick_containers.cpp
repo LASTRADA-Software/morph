@@ -1245,7 +1245,7 @@ TEST_CASE("qt_quick containers: a content child fills its container across the a
     auto const column = scene.backend().createStack(outer.get(), ui::Axis::Vertical);
     auto const input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
     auto narrow = scene.backend().createButton(column.get());
-    narrow->setLabel("Narrow");
+    narrow->setLabel("No");
     narrow->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
     auto const row = scene.backend().createStack(column.get(), ui::Axis::Horizontal);
     auto tall = scene.backend().createText(row.get());

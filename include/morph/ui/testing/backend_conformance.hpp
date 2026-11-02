@@ -3581,7 +3581,8 @@ struct WrappingRow {
 }
 
 /// @brief Case: a content-sized row of two stretch texts of one and ten characters is as wide as ten characters
-///        times its two weights (16 to 21 units: 20 where a character is a unit), where the sum of their naturals is
+///        times its two weights (16 to 25 units: 20 where a character is a unit, more where a proportional
+///        face draws a letter wider than the unit), where the sum of their naturals is
 ///        about 11, and the ten-character text keeps nearly all of its characters.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -3597,8 +3598,8 @@ struct WrappingRow {
     checks.that(found.container != nullptr && found.children.size() == 2, "the row holds two texts");
     if (found.container != nullptr && found.children.size() == 2) {
         double const width = geometry.of(*found.container).width;
-        checks.that(width >= 16 && width <= 21,
-                    "the row is " + std::to_string(width) + " units wide, not the sum of its children (16 to 21)");
+        checks.that(width >= 16 && width <= 25,
+                    "the row is " + std::to_string(width) + " units wide, not the sum of its children (16 to 25)");
         double const second = geometry.of(*found.children.at(1)).width;
         checks.that(second >= 8,
                     "the second text keeps its ten characters: it is " + std::to_string(second) + " units wide");

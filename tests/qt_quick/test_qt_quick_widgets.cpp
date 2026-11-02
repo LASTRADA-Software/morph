@@ -2235,7 +2235,8 @@ TEST_CASE("qt_quick widgets: a run is measured in the face and at the size it is
             // font built in QML.
             QString fixedFamily;
             for (QString const& family : QFontDatabase::families()) {
-                if (QFontDatabase::isFixedPitch(family)) {
+                // A family Qt substitutes for another does not count: the theme reports it as not installed.
+                if (QFontDatabase::isFixedPitch(family) && QFontInfo{QFont{family}}.family() == family) {
                     fixedFamily = family;
                     break;
                 }
@@ -3110,8 +3111,12 @@ TEST_CASE("qt_quick widgets: a word split between two runs is one segment, each 
     qreal const wrapped =
         qtWidestSegment(scene, QStringLiteral("Para<b>cetamol</b> 500"), font, QStringLiteral("RichText"));
     CHECK(measured == Catch::Approx(wrapped).margin(1.5));
-    // The word is wider than it would be all in the body face.
-    CHECK(measured > measuredSegment(*theme, {pieceOf(QStringLiteral("Paracetamol 500"), font)}));
+    // The word is wider than it would be all in the body face, where the installed fonts have a bold face wider than
+    // the regular one.
+    if (QFontMetricsF{bold}.horizontalAdvance(QStringLiteral("cetamol")) >
+        QFontMetricsF{font}.horizontalAdvance(QStringLiteral("cetamol"))) {
+        CHECK(measured > measuredSegment(*theme, {pieceOf(QStringLiteral("Paracetamol 500"), font)}));
+    }
 }
 
 // Mutation: leave `contentMinimumWidth` out of MorphText (the text keeps -1), or give a one-line text a minimum.
