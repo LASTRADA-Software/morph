@@ -302,7 +302,7 @@ ui::Node conditions(Receipt const& receipt, bool compact) {
         check(receipt.labelled, compact ? "Label legible and matches" : "Label legible and matches the request",
               "labelled"),
         check(receipt.logger, "Temperature logger attached", "logger")};
-    ui::Node const boxes = compact ? ui::column(checks, {.gap = 1}) : ui::grid(checks, {.gap = 1, .columns = 2});
+    ui::Node const boxes = compact ? ui::column(checks, {.gap = 1}) : ui::grid(checks, {.gap = 1, .columns = 2, .minColumnWidth = 32}).testId("checks");
     return ui::group({boxes}, {.label = "Condition on receipt", .required = true, .gap = 1}).testId("conditions");
 }
 
@@ -350,7 +350,8 @@ ui::Node sampleCard(Receipt const& receipt) {
                                         {.gap = 1, .align = Align::Center}),
                                 ui::grid({type, temperatureField(receipt, false), receivedAtField(receipt),
                                           locationField(receipt), containersField(receipt), courierField(receipt)},
-                                         {.gap = 2, .columns = 3, .align = Align::Start}),
+                                         {.gap = 2, .columns = 3, .minColumnWidth = 25, .align = Align::Start})
+                                    .testId("fields"),
                                 conditions(receipt, false), noteField(receipt)},
                                {.gap = 2}),
                     // A rule above the decisions separates them from the form.
@@ -379,7 +380,7 @@ ui::Node sessionTable(Receipt const& receipt, bool bleeds) {
         ui::table(receipt.session, {.key = ui::row("sample"),
                                     .columns = {{.name = "time",
                                                  .label = "Time",
-                                                 .width = ui::fixed(5),
+                                                 .width = ui::fixed(6),
                                                  .cell = ui::text({.text = ui::row("time")})},
                                                 {.name = "sample",
                                                  .label = "Sample",
@@ -431,7 +432,7 @@ ui::Node expandedLayout(Receipt const& receipt) {
                              // sidebar, the least that shows the table's Received badge whole, which leaves the sample
                              // card's fields a few pixels short of the longest sample type; the width of the mockup's
                              // pane from a wider page up.
-                             .sizing(ui::percent(31))
+                             .sizing(ui::percent(33))
                              .maxWidth(39)
                              .testId("session-panel");
     return ui::pinned(

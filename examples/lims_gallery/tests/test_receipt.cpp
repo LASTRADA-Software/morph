@@ -69,7 +69,10 @@ TEST_CASE("receipt, expanded: scan field, duplicate notice, the sample's card an
     screen.requireNoProblems();
     CHECK(screen.prop("TextInput", "scan", "icon") == "scan");
     // The session pane is a share of the row, capped at the mockup's width.
-    CHECK(screen.prop("Panel", "session-panel", "layout").value_or("none").starts_with("percent(31) max=39/"));
+    CHECK(screen.prop("Panel", "session-panel", "layout").value_or("none").starts_with("percent(33) max=39/"));
+    // The form's grids drop columns with the room the card is given: a field and a check need 25 and 32 units.
+    CHECK(screen.prop("Grid", "fields", "minColumnWidth") == "25");
+    CHECK(screen.prop("Grid", "checks", "minColumnWidth") == "32");
     CHECK(screen.prop("TextInput", "scan", "mono") == "true");
     // The notice's words as runs: the label strong and the ID in the mono face.
     CHECK(screen.prop("Banner", "duplicate", "spans") ==
