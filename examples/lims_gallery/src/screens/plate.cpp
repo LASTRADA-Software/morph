@@ -658,17 +658,26 @@ ui::Node runLine(Plate const& plate) {
     auto marker = wellOptions(ui::row("first.label"));
     marker.onClick = ui::Commands{ui::ifThen(ui::includes(plate.sampleWells, first), toggleWell(plate, first))};
     marker.selected = ui::includes(plate.selection, first);
-    return ui::row(
-        {ui::button(marker).surface(ui::row("first.surface")).a11y(ui::format("Select {0}", {first})).testId("marker"),
-         ui::text({.text = ui::format("{0} · {1}", {name, line}), .spans = ui::spans({ui::strong(name), " · ", line})})
-             .sizing(ui::stretch())
-             .testId("line"),
-         ui::button({.label = "Assign…", .onClick = openAssign(plate, first, firstToPlace(plate))})
-             .visible(empty)
-             .a11y(ui::format("Assign a sample to {0}", {first}))
-             .testId("assign")},
-        // The side inset leaves room for a selected marker's ring at the page's edge; rows are as tall as their wells.
-        {.gap = 1, .align = Align::Center, .padding = ui::padding(0, 1)});
+    // A run that still takes an Assign is as tall as its button, so its row pads sideways only; a run without one pads
+    // 4 px above and below, so the well keeps its row's height. The two kinds of row are one pitch apart.
+    auto const lineOf = [&](bool withAssign) {
+        std::vector<ui::Node> cells{ui::button(marker)
+                                        .surface(ui::row("first.surface"))
+                                        .a11y(ui::format("Select {0}", {first}))
+                                        .testId("marker"),
+                                    ui::text({.text = ui::format("{0} · {1}", {name, line}),
+                                              .spans = ui::spans({ui::strong(name), " · ", line})})
+                                        .sizing(ui::stretch())
+                                        .testId("line")};
+        if (withAssign) {
+            cells.push_back(ui::button({.label = "Assign…", .onClick = openAssign(plate, first, firstToPlace(plate))})
+                                .a11y(ui::format("Assign a sample to {0}", {first}))
+                                .testId("assign"));
+        }
+        // The side inset leaves room for a selected marker's ring at the page's edge.
+        return ui::row(cells, {.gap = 1, .align = Align::Center, .padding = ui::padding(withAssign ? 0 : 1, 1)});
+    };
+    return ui::switchOn(ui::row("key"), {ui::Case{"empty", ui::Nodes{lineOf(true)}}}, ui::Nodes{lineOf(false)});
 }
 
 // "Row B · 1 standard, 1 blank, 10 samples": the template's wells, then how many sample wells are filled and empty.
