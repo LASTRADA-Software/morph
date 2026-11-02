@@ -245,12 +245,13 @@ ui::AnyHandle serialNumber() {
 }
 
 ui::Node detailsCard() {
-    return ui::panel(
-               {ui::keyValue(ui::list({detail("Model", "[Manufacturer] 1290 series"), serialNumber(),
-                                       detail("Location", "QC lab 2, bench 4"), detail("Owner", "Dr. Anna Meyer"),
-                                       detail("Software", "CDS 3.4.1, validated 14-Mar-2026"),
-                                       detail("Methods", "Assay and impurities, dissolution")}))},
-               {.title = "Details", .padding = 3})
+    return ui::panel({ui::keyValue({.items = ui::list({detail("Model", "[Manufacturer] 1290 series"), serialNumber(),
+                                                       detail("Location", "QC lab 2, bench 4"),
+                                                       detail("Owner", "Dr. Anna Meyer"),
+                                                       detail("Software", "CDS 3.4.1, validated 14-Mar-2026"),
+                                                       detail("Methods", "Assay and impurities, dissolution")}),
+                                    .captionWidth = 17})},
+                     {.title = "Details", .padding = 3})
         .testId("details");
 }
 

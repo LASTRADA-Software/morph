@@ -346,7 +346,7 @@ ui::Node attention(Study const& study, bool compact) {
         .testId("attention");
 }
 
-// Captions beside their values, then @p toned, pairs written whole.
+// Captions beside their values in a 13-unit column, then @p toned, pairs written whole.
 // The captions in @p monoLabels have their value drawn in the monospace face, as identifiers and dates are.
 ui::Node pairs(std::vector<std::pair<char const*, ui::AnyHandle>> const& items, std::string const& testId,
                std::vector<ui::AnyHandle> const& toned = {}, std::vector<std::string_view> const& monoLabels = {}) {
@@ -360,7 +360,7 @@ ui::Node pairs(std::vector<std::pair<char const*, ui::AnyHandle>> const& items, 
         }
     }
     listed.insert(listed.end(), toned.begin(), toned.end());
-    return ui::keyValue(ui::list(listed)).testId(testId);
+    return ui::keyValue({.items = ui::list(listed), .captionWidth = 13}).testId(testId);
 }
 
 // The containers the study needs against the stock, red and bold while the stock is short.

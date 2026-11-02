@@ -81,14 +81,17 @@ ui::Node summary(Signature const& sign, bool compact) {
                    ui::text({.spans = ui::spans({"24 results · Assay and impurities · Lot ", ui::mono("L-26-0381")})}),
                    ui::text({.spans = ui::spans({"2 out of specification, ", ui::mono("OOS-2026-031"), " linked"})})},
                   {.gap = 0})
-            : ui::keyValue(ui::list({
-                  ui::obj({{"label", "Record"}, {"spans", ui::spans({ui::mono(sign.record), " · worksheet"})}}),
-                  ui::obj({{"label", "Content"},
-                           {"spans", ui::spans({"24 results · Assay and impurities · Lot ", ui::mono("L-26-0381")})}}),
-                  ui::obj({{"label", "Flags"},
-                           {"spans", ui::spans({"2 out of specification, investigation ", ui::mono("OOS-2026-031"),
-                                                " linked"})}}),
-              }));
+            : ui::keyValue(
+                  {.items = ui::list({
+                       ui::obj({{"label", "Record"}, {"spans", ui::spans({ui::mono(sign.record), " · worksheet"})}}),
+                       ui::obj({{"label", "Content"},
+                                {"spans",
+                                 ui::spans({"24 results · Assay and impurities · Lot ", ui::mono("L-26-0381")})}}),
+                       ui::obj({{"label", "Flags"},
+                                {"spans", ui::spans({"2 out of specification, investigation ",
+                                                     ui::mono("OOS-2026-031"), " linked"})}}),
+                   }),
+                   .captionWidth = 12});
     return ui::panel({body}, {.padding = 2}).surface("record").testId("record");
 }
 
