@@ -20,6 +20,7 @@ namespace morph::qt_quick::detail {
 
 class ContainerCore;
 class Relay;
+class TextMeasure;
 
 /// Writes the family of the platform's fixed-pitch font as @p theme's `platformMonoFamily`, which QML cannot ask the
 /// font database for; whether the property took it.
@@ -108,6 +109,8 @@ private:
     BackendOptions _options;
     QPointer<QQuickItem> _holder;
     std::unique_ptr<ContainerCore> _roots;
+    // What `Theme.textMeasure` is told to measure the pieces of a wrapping text with.
+    std::unique_ptr<TextMeasure> _textMeasure;
     std::map<QString, std::unique_ptr<QQmlComponent>> _components;
     std::string _widthClass;
     std::function<void(std::string const&)> _onWidthClass;

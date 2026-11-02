@@ -3025,3 +3025,151 @@ TEST_CASE("qt_quick widgets: a selected item's own label draws in the selection 
         CHECK(drawnColor(root, QStringLiteral("Instrument 3")) == sidebar.property("text").value<QColor>());
     }
 }
+
+namespace {
+
+/// What Qt's own word-wrapping makes of @p text laid out in @p font: the widest line when the label is one pixel
+/// wide, which is the widest piece Qt's line breaker keeps whole. @p format is `Text.PlainText` or `Text.RichText`.
+qreal qtWidestSegment(Scene& scene, QString const& text, QFont const& font, QString const& format) {
+    QQmlComponent component{&scene.engine()};
+    component.setData(
+        ("import QtQuick\nText { wrapMode: Text.WordWrap; width: 1; textFormat: Text." + format + " }").toUtf8(),
+        QUrl{});
+    std::unique_ptr<QObject> made{component.create()};
+    REQUIRE(made != nullptr);
+    auto* const label = qobject_cast<QQuickItem*>(made.get());
+    REQUIRE(label != nullptr);
+    label->setParentItem(scene.window().contentItem());
+    label->setProperty("font", font);
+    label->setProperty("text", text);
+    scene.settle();
+    qreal const width = label->property("contentWidth").toReal();
+    label->setParentItem(nullptr);
+    return width;
+}
+
+/// What `Theme.textMeasure` says is the widest segment of @p pieces, each a `{text, font}` map.
+qreal measuredSegment(QObject& theme, QVariantList const& pieces) {
+    auto* const measure = theme.property("textMeasure").value<QObject*>();
+    REQUIRE(measure != nullptr);
+    qreal widest = -1;
+    REQUIRE(
+        QMetaObject::invokeMethod(measure, "widestSegment", Q_RETURN_ARG(qreal, widest), Q_ARG(QVariantList, pieces)));
+    return widest;
+}
+
+QVariantMap pieceOf(QString const& text, QFont const& font) {
+    QVariantMap piece;
+    piece.insert(QStringLiteral("text"), text);
+    piece.insert(QStringLiteral("font"), font);
+    return piece;
+}
+
+}  // namespace
+
+// Mutation: leave the `Theme.textMeasure` write out of Context's constructor (the theme keeps none, and a wrapping
+// text keeps no minimum).
+TEST_CASE("qt_quick widgets: the backend gives the theme its text measure", "[qt_quick]") {
+    Scene scene;
+    CHECK(themeOf(scene)->property("textMeasure").value<QObject*>() != nullptr);
+}
+
+// Mutation: split the text at `/\s+/` again in `wrapMinimumWidth`, or measure the segments of a plain text without
+// `QTextBoundaryFinder` (a no-break space, a zero-width space, a slash and a no-break hyphen then break differently
+// from Qt's own wrap).
+TEST_CASE("qt_quick widgets: a text's widest segment is the widest piece Qt's own wrapping keeps whole",
+          "[qt_quick]") {
+    Scene scene;
+    QObject* const theme = themeOf(scene);
+    auto const font = theme->property("bodyFont").value<QFont>();
+    for (QString const& text :
+         {QStringLiteral("Assay \u00b7 95.0\u2013105.0"), QStringLiteral("Assay \u00b7 95.0\u2013\u200b105.0"),
+          QStringLiteral("Paracetamol\u00a0500\u00a0mg and a lot"), QStringLiteral("usr/local/share/data/files"),
+          QStringLiteral("SOP\u2011CHR\u2011012. is current"), QStringLiteral("a plain sentence of ordinary words")}) {
+        INFO(text.toStdString());
+        qreal const measured = measuredSegment(*theme, {pieceOf(text, font)});
+        qreal const wrapped = qtWidestSegment(scene, text, font, QStringLiteral("PlainText"));
+        CHECK(measured == Catch::Approx(wrapped).margin(1.0));
+    }
+    // The old split on whitespace gave 72.4 against Qt's 119.4 for a text joined by no-break spaces: the control for
+    // the case above is a measure that cannot tell them apart.
+    QString const joined = QStringLiteral("Paracetamol\u00a0500\u00a0mg");
+    CHECK(qtWidestSegment(scene, joined, font, QStringLiteral("PlainText")) >
+          measuredSegment(*theme, {pieceOf(QStringLiteral("Paracetamol"), font)}));
+}
+
+// Mutation: measure every piece of a run text in the first piece's face (a strong half of a word is the body width).
+TEST_CASE("qt_quick widgets: a word split between two runs is one segment, each part in its own face", "[qt_quick]") {
+    Scene scene;
+    QObject* const theme = themeOf(scene);
+    auto const font = theme->property("bodyFont").value<QFont>();
+    QFont bold = font;
+    bold.setWeight(QFont::Bold);
+    qreal const measured =
+        measuredSegment(*theme, {pieceOf(QStringLiteral("Para"), font), pieceOf(QStringLiteral("cetamol 500"), bold)});
+    qreal const wrapped =
+        qtWidestSegment(scene, QStringLiteral("Para<b>cetamol</b> 500"), font, QStringLiteral("RichText"));
+    CHECK(measured == Catch::Approx(wrapped).margin(1.5));
+    // The word is wider than it would be all in the body face.
+    CHECK(measured > measuredSegment(*theme, {pieceOf(QStringLiteral("Paracetamol 500"), font)}));
+}
+
+// Mutation: leave `contentMinimumWidth` out of MorphText (the text keeps -1), or give a one-line text a minimum.
+TEST_CASE(
+    "qt_quick widgets: a text that wraps is never narrower than its widest segment, and a one-line text has no "
+    "minimum",
+    "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(500, 300);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const wrapping = scene.backend().createText(column.get());
+    wrapping->setText("Paracetamol\u00a0500\u00a0mg and a few words");
+    auto const oneLine = scene.backend().createText(column.get());
+    oneLine->setText("Paracetamol\u00a0500\u00a0mg and a few words");
+    Scene::itemOf(*oneLine).setProperty("singleLine", true);
+    scene.settle();
+    QObject* const theme = themeOf(scene);
+    auto const font = theme->property("bodyFont").value<QFont>();
+    qreal const segment =
+        measuredSegment(*theme, {pieceOf(QStringLiteral("Paracetamol\u00a0500\u00a0mg and a few words"), font)});
+    QQuickItem const& item = Scene::itemOf(*wrapping);
+    CHECK(item.property("contentMinimumWidth").toReal() >= segment);
+    CHECK(item.property("contentMinimumWidth").toReal() <= segment + 2.5);
+    CHECK(Scene::itemOf(*oneLine).property("contentMinimumWidth").toReal() < 0);
+}
+
+// Mutation: leave `contentMinimumWidth` unset on MorphKeyValue (the kind keeps -1), or the value's
+// `Layout.minimumWidth` unset (a value narrows below its widest segment inside the pair).
+TEST_CASE(
+    "qt_quick widgets: a key-value is raised to its widest value segment, and an inline one by its caption column",
+    "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(700, 300);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setAlign(ui::Align::Start);
+    auto const stacked = scene.backend().createKeyValue(column.get());
+    stacked->setCaptionPlacement(ui::CaptionPlacement::Above);
+    stacked->setItems({{.label = "Lot", .value = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"}, {.label = "Owner", .value = "a b c"}});
+    auto const inlined = scene.backend().createKeyValue(column.get());
+    inlined->setItems({{.label = "Lot", .value = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"}, {.label = "Owner", .value = "a b c"}});
+    scene.settle();
+    QObject* const theme = themeOf(scene);
+    auto const body = theme->property("bodyFont").value<QFont>();
+    qreal const segment = measuredSegment(*theme, {pieceOf(QStringLiteral("ABCDEFGHIJKLMNOPQRSTUVWXYZ"), body)});
+    qreal const unit = theme->property("unitWidth").toReal();
+    qreal const caption = QFontMetricsF{body}.horizontalAdvance(QStringLiteral("Owner"));
+    CHECK(Scene::itemOf(*stacked).property("contentMinimumWidth").toReal() >= segment - 0.5);
+    CHECK(Scene::itemOf(*inlined).property("contentMinimumWidth").toReal() >= caption + (2 * unit) + segment - 0.5);
+    // The value itself is held at its segment inside the grid, even where the kind's own minimum is not honoured.
+    Scene::itemOf(*inlined).setProperty("honoursContentMinimum", false);
+    inlined->setLayout({.width = ui::Sizing::fixed(8)});
+    scene.settle();
+    QQuickItem const* value = nullptr;
+    for (QQuickItem const* const label : Scene::itemsOf(Scene::itemOf(*inlined), "QQuickText")) {
+        if (label->property("text").toString() == QStringLiteral("ABCDEFGHIJKLMNOPQRSTUVWXYZ")) {
+            value = label;
+        }
+    }
+    REQUIRE(value != nullptr);
+    CHECK(value->width() >= segment - 1.0);
+}

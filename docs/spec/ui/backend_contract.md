@@ -311,7 +311,10 @@ fixed one. A percent child adds its natural width to its row's natural width, ne
 out does not depend on the row's own natural width. A table, a scroll and every leaf take
 their own overflow; a table's cells are placed at their column's width and do not raise it. A badge's minimum is its
 natural width, so a stack or a panel that holds one is raised with it, on the terminal as on Qt Quick, whether the badge
-is sized `fixed` or `percent`; a push button's minimum is its natural width too (a list item, a select, an input and a
+is sized `fixed` or `percent`; on a frontend that wraps text, a text that wraps, and a key-value's value, are never laid
+out narrower than their widest unbreakable segment, so a stack or a panel that holds one is raised with it, as with a
+badge; a one-line text, which elides, has no such minimum. The terminal does not wrap a text: it cuts each line at its
+width and keeps no minimum for it. A push button's minimum is its natural width too (a list item, a select, an input and a
 menu trigger have none), so a stretch push button gives up share before it gives up its label; only a table cell, which is not raised, is placed narrower. On the terminal the minimum
 reaches along a row through the stack's gaps and padding, and across a column and through a panel's frame and padding; a
 stack that holds no badge has none, and a table row, which its table places, has none. A page (a slot) whose

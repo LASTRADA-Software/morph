@@ -21,6 +21,7 @@
 
 #include "qt_quick/keys.hpp"
 #include "qt_quick/relay.hpp"
+#include "qt_quick/text_measure.hpp"
 #include "qt_quick/widget.hpp"
 
 namespace morph::qt_quick::detail {
@@ -84,6 +85,12 @@ Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
     if (auto* const theme = _engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))) {
         static_cast<void>(writePlatformMonoFamily(*theme));
         static_cast<void>(writeIconGlyphs(*theme));
+        // A text that wraps and a key-value's value are never laid out narrower than their widest unbreakable
+        // segment, which only C++ can measure; until the measure is there they keep no minimum.
+        _textMeasure = std::make_unique<TextMeasure>();
+        if (!theme->setProperty("textMeasure", QVariant::fromValue<QObject*>(_textMeasure.get()))) {
+            report("Theme", "textMeasure is not declared: a wrapping text keeps no minimum width");
+        }
     }
     _roots = std::make_unique<Roots>(qobject_cast<QQuickItem*>(_holder->property("content").value<QObject*>()));
     // The roots item reports its width in units, which follows both the host's width and the theme's font.
@@ -95,6 +102,12 @@ Context::Context(QQmlEngine& engine, QQuickItem& host, BackendOptions options)
 }
 
 Context::~Context() {
+    // The theme belongs to the engine and may outlive this context: it must not keep a measure that is gone.
+    if (auto* const theme = _engine->singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"))) {
+        if (theme->property("textMeasure").value<QObject*>() == _textMeasure.get()) {
+            theme->setProperty("textMeasure", QVariant::fromValue<QObject*>(nullptr));
+        }
+    }
     if (_rootsRelay != nullptr) {
         _rootsRelay->kill();
     }

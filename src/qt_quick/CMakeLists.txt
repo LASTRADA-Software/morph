@@ -108,6 +108,8 @@ add_library(morph_qt_quick STATIC
     relay.hpp
     scheduler.cpp
     table.cpp
+    text_measure.cpp
+    text_measure.hpp
     theme.cpp
     widget.cpp
     widget.hpp

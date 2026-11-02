@@ -22,6 +22,50 @@ MorphWidget {
     implicitWidth: captionsAbove ? stack.implicitWidth : grid.implicitWidth
     implicitHeight: captionsAbove ? stack.implicitHeight : grid.implicitHeight
 
+    // The widest unbreakable segment of a pair's value, drawn in @p base with its runs in their faces; 0 until the
+    // backend's measure is there.
+    function valueMinimumOf(pair: var, base: font): real {
+        if (!Theme.textMeasure || !pair)
+            return 0
+        const pieces = []
+        if (pair.runs.length > 0) {
+            for (const run of pair.runs)
+                pieces.push({"text": root.plainOf(run.text), "font": root.runFontOf(base, Theme.families, run.strong === true, run.mono === true)})
+        } else {
+            pieces.push({"text": pair.value, "font": base})
+        }
+        return Theme.textMeasure.widestSegment(pieces)
+    }
+    // The widest of the values' minimums, each in the font the value is drawn in.
+    readonly property real widestValueMinimum: {
+        let widest = 0
+        for (const pair of root.items)
+            widest = Math.max(widest, root.valueMinimumOf(pair, pair.tone !== 0 ? Theme.strongFont : Theme.bodyFont))
+        return widest
+    }
+    // The widest caption on one line, in the font it is drawn in. Reading the face's height makes a binding that
+    // measures through here depend on the font: a method call alone registers no dependency.
+    function widestCaption(): real {
+        let widest = 0
+        for (const pair of root.items)
+            widest = Math.max(widest, captionMetrics.height < 0 ? 0 : captionMetrics.advanceWidth(pair.label))
+        return widest
+    }
+    // Beside its values a caption is as wide as the caption column, a column and a gap of two units before the widest
+    // value segment; above, the widest caption or value segment.
+    contentMinimumWidth: {
+        if (!Theme.textMeasure)
+            return -1
+        if (root.captionsAbove)
+            return Math.max(root.widestValueMinimum, root.widestCaption())
+        const column = root.captionSet ? root.captionUnits * Theme.unitWidth : root.widestCaption()
+        return column + 2 * Theme.unitWidth + root.widestValueMinimum
+    }
+    FontMetrics {
+        id: captionMetrics
+        font: root.captionsAbove ? Theme.captionFont : Theme.bodyFont
+    }
+
     // A pair's value: its runs or its text, toned or not.
     component Value: Label {
         required property var pair
@@ -31,6 +75,8 @@ MorphWidget {
         font: pair && pair.tone !== 0 ? Theme.strongFont : Theme.bodyFont
         color: pair && pair.tone !== 0 ? root.toneOf(pair.tone) : root.scheme.text
         wrapMode: Text.Wrap
+        // Never narrower than its widest unbreakable segment, whatever room the layout offers.
+        Layout.minimumWidth: root.valueMinimumOf(pair, font)
         Accessible.ignored: true
     }
 

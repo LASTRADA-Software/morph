@@ -55,26 +55,27 @@ MorphField {
                                          (widest, line) => Math.max(widest, root.advanceOf(metrics, line)), 0) +
                                      root.wrapSlack) +
                    (root.required ? root.markerRoom : 0)
-    // The narrowest this text can be laid out: a text that wraps breaks only between words, so it can be as narrow as
-    // its widest word, each measured in its own face (a run may be strong or mono); a text on one line is as wide as it
-    // is. Read from advances for the reason `implicitWidth` is, and in the same fonts, so it follows them.
+    // The narrowest this text can be laid out: a text that wraps breaks only where Qt's line breaker allows it, so it
+    // can be as narrow as its widest unbreakable segment, each part measured in the face it is drawn in (a run may be
+    // strong or mono); a text on one line is as wide as it is. Read from advances for the reason `implicitWidth` is,
+    // and in the same fonts, so it follows them. Without the backend's measure there is no segment to read, and the
+    // text is as wide as it asks to be.
     readonly property real wrapMinimumWidth: {
-        if (root.oneLine)
+        if (root.oneLine || !Theme.textMeasure)
             return root.implicitWidth
-        let widest = 0
+        const pieces = []
         if (root.hasRuns) {
-            for (const run of root.runs) {
-                const face = run.mono ? monoMetrics : run.strong ? strongMetrics : metrics
-                for (const word of run.text.split(/\s+/))
-                    widest = Math.max(widest, root.advanceOf(face, word))
-            }
+            for (const run of root.runs)
+                pieces.push({"text": root.plainOf(run.text), "font": root.faceOf(run).font})
         } else {
-            for (const word of root.text.split(/\s+/))
-                widest = Math.max(widest, root.advanceOf(metrics, word))
+            pieces.push({"text": root.text, "font": metrics.font})
         }
-        return widest + root.wrapSlack + (root.required ? root.markerRoom : 0)
+        return Theme.textMeasure.widestSegment(pieces) + root.wrapSlack + (root.required ? root.markerRoom : 0)
     }
     shrinkWidth: root.wrapMinimumWidth
+    // A text that wraps is never laid out narrower than its widest unbreakable segment, so a container that holds one
+    // is raised with it; one on one line elides and has no minimum.
+    contentMinimumWidth: root.oneLine || !Theme.textMeasure ? -1 : root.wrapMinimumWidth
     // What the text asks for however wide it is laid out. Runs that wrap are rich text, whose own implicit width
     // follows the width given, so it is the widest of their lines read from advances: a run's text can hold line
     // feeds, which start a new line.

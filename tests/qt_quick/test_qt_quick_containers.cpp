@@ -2671,6 +2671,61 @@ TEST_CASE("qt_quick containers: content that does not fit is reported once as a 
     CHECK(layoutWarnings().isEmpty());
 }
 
+// Mutation: leave `contentMinimumWidth` out of MorphText (the 60-letter word keeps no minimum, so the page has nothing
+// to report and the word breaks inside itself).
+TEST_CASE("qt_quick containers: a word wider than the window raises its page's minimum and is reported once",
+          "[qt_quick]") {
+    LayoutWatch const watch;
+    Scene scene;
+    scene.window().resize(300, 300);
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setTestId("page");
+    auto word = scene.backend().createText(column.get());
+    word->setText(std::string(60, 'W'));
+    auto sentence = scene.backend().createText(column.get());
+    sentence->setText("A sentence of ordinary words breaks wherever it has to");
+    scene.settle();
+    QTest::qWait(150);
+    REQUIRE(layoutWarnings().size() == 1);
+    CHECK(layoutWarnings().front().contains(QStringLiteral("the window needs")));
+    CHECK(layoutWarnings().front().contains(QStringLiteral("`page`")));
+
+    // The same page with only the sentence has nothing to report.
+    layoutWarnings().clear();
+    Scene roomy;
+    roomy.window().resize(300, 300);
+    auto fitting = roomy.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto words = roomy.backend().createText(fitting.get());
+    words->setText("A sentence of ordinary words breaks wherever it has to");
+    roomy.settle();
+    QTest::qWait(150);
+    CHECK(layoutWarnings().isEmpty());
+}
+
+// Mutation: leave `contentMinimumWidth` out of MorphText (the text takes the 4 units its row leaves it and breaks
+// inside "105.0").
+TEST_CASE("qt_quick containers: a stretch text beside a fixed input is not narrowed below its widest segment",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(900, 300);
+    auto row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    row->setLayout({.width = ui::Sizing::fixed(24)});
+    auto text = scene.backend().createText(row.get());
+    text->setText("Assay \u00b7 95.0\u2013105.0");
+    text->setLayout({.width = ui::Sizing::stretch()});
+    auto input = scene.backend().createTextInput(row.get(), ui::TextInputMode::SingleLine);
+    input->setLayout({.width = ui::Sizing::fixed(20)});
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal const unit = theme->property("unitWidth").toReal();
+    QQuickItem const& item = Scene::itemOf(*text);
+    CHECK(item.width() >= item.property("wrapMinimumWidth").toReal() - 0.5);
+    // The room the row leaves it is 4 units; the widest segment, "105.0", is wider.
+    CHECK(item.property("wrapMinimumWidth").toReal() > 4 * unit);
+    CHECK(item.width() > 4 * unit);
+}
+
 // Mutation: report from a tab page that is not shown.
 TEST_CASE("qt_quick containers: a hidden tab page reports its overflow when it is shown, not before", "[qt_quick]") {
     LayoutWatch const watch;
