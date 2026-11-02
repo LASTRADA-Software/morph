@@ -1,0 +1,9 @@
+# Lane Q-F: batch Q framework items
+
+Read $S/lg-q-common.md (S=/tmp/claude-1000/-home-yaraslau-repo-morph/8742d70b-a059-4ed6-9415-5f45a5067fd9/scratchpad) first; its rules bind.
+Worktree `/home/yaraslau/repo/morph-lims-lf` (on `lg-pf`, clean). Create branch `lg-qf` from `3ec962528` (batch P fold, lane V7 still verifying it: `git checkout -b lg-qf 3ec962528`), rebuild build/linux-everything under the lock.
+You own include/morph, src, tests, docs/spec — not examples/lims_gallery (lane Q-S owns it; other examples only if a test there must change, and say so).
+
+Implement the framework items of $S/lg-q-design.md as revised (read "Review round 2" and $S/lg-q-review.md), one commit per item in the design's "Q-F" order. Issues: Q1 Fixes #1078 (state in the commit what part of #1078 stays open, per the design), Q2 Fixes #1079, Q6a Fixes #1081, Q6b Fixes #1080. **Build every commit on its own** before moving on (commit, build `morph_tests morph_qt_quick_tests morph_tui_tests lims_gallery_tests`, then continue) — the last lane split commits afterwards and they were never built alone. Run every mutation control the design lists and report each as failing.
+Every new branch in include/morph/ui needs a test (ui branch coverage floor 92 %, thin margin); measure coverage at the end on the clang-coverage preset with examples and ladder ON as CI does, `PATH=/usr/lib/llvm21/bin:$PATH` for scripts/coverage.sh and `LLVM_PROFILE_FILE=<build>/prof/%m.profraw` under ctest -j10; if coverage.sh refuses example binaries, say how you resolved it.
+Before reporting: every suite with a touched test, the three conformance runners, the docs target (clang, WARN_AS_ERROR), clang-tidy on touched TUs, qmllint, clang-format 22, the branch-coverage allowlist check. Hand back the grabs the design asks for in $S/lg-qf/; gallery-test failures you cannot fix in scope go to $S/lg-qf-handoff.md. Do not push.

@@ -6,28 +6,30 @@ side branches, each in its own worktree, and is rebased onto `feat/lims-gallery`
 The live tracker is `status/STATUS.md` in this folder, published as a phone-friendly page (see "The status board"
 below). It lists every lane, its commits, the decisions and the follow-ups; read it first.
 
-## Resume here (2026-11-01, batch O implemented, not yet folded)
+## Resume here (2026-11-02, paused during batch S)
 
 Everything below this section is older history; this section is current.
 
 | Branch | Worktree | Holds | State |
 |---|---|---|---|
-| `feat/lims-gallery` (PR #1045) | `../morph-lims-e1` (`lg-fold-n`) | batches A–N, verified by lane V5 (all CI checks local-green, ui coverage 92.08%, every commit builds on its own) | pushed |
-| `lg-of` | `../morph-lims-lf` | batch O framework lane O-F (O5, O1b, O4, O1), 4 commits from `227b4f06b` | done; pushed as a backup branch |
-| `lg-os` | `../morph-lims-e2` | batch O screen lanes O-S and O-S2, rebased onto `lg-of` | done; pushed as a backup branch |
+| `feat/lims-gallery` (PR #1045) | `../morph-lims-e1` (`lg-fold-r`) | batches A–R, each verified (V5–V9); head `6aea42a98` | pushed; CI not yet seen on this head |
+| `lg-sf` | `../morph-lims-lf` | batch S framework: S1 `b1f9aa188` (head trail and overlay footer are action rows), S2 `01934fd8e` (`color.table.headerRule`), from `116a62056` | committed and pushed as a backup; full build green; its final ctest, reduced-font run, mutations and coverage were NOT finished |
+| `lg-ss` | `../morph-lims-e2` | batch S screen items U1–U3 (+ samples' desktop bulk bar), from `lg-rs` | done, pushed as a backup |
 
-Batch O's design is `docs/superpowers/specs/2026-11-01-lims-gallery-batch-o-design.md` (review in
-`handoff/batch-o-review.md`). Issues it fixes: #1075 (terminal badge), #1076 (panel fill corners). It came from the
-after-N comparison (`handoff/after-n-findings-{A,B}.md`).
+Batch S design: `docs/superpowers/specs/2026-11-02-lims-gallery-batch-s-design.md` (review `handoff/batch-s-review.md`).
+Batches P–R designs are beside it; the after-O/P/Q/R comparisons are `handoff/after-{o,p,q,r}-findings-{A,B}.md`.
+Issues filed by this run and fixed on the branch: #1077, #1078 (rows/columns part; panels etc. stay open), #1079,
+#1080, #1081, #1082. #1083 (a Qt 6.12.0 incremental-GC crash) is worked around in `Frontend::run`
+(`QV4_GC_TIMELIMIT=0` unless set); re-test on Qt 6.12.1+ and 6.8.1 before removing it.
 
 Next steps, in order:
-1. Fold batch O: cherry-pick `lg-of`'s commits from `227b4f06b`, then `lg-os`'s commits above `lg-of`, onto
-   `feat/lims-gallery`. Verify as lane V5 did (`handoff/lane-v5-brief.md`), including that every commit builds alone.
-2. Push, drive CI green (Qt6 WebSockets exit 143 is a runner shutdown: rerun).
-3. Known gap: a text input has no size option, so review's phone textarea draws 13 px text against the mockup's 14.
-   Batch it with whatever the next comparison finds.
-4. Re-grab every screen at 1000x830, 1215x830, 390x844 (and 1920x1080 for capped panes), compare with two reviewers,
-   batch any remaining gap.
+1. Finish S-F's checks on `lg-sf` (`handoff/lane-sf-brief.md`): full ctest, `[qt_quick]` under gsfonts only, every
+   mutation in the design, ui branch coverage (floor 92 %, it was 92.03 % after R: add tests for new branches).
+2. Rebase `lg-ss` onto `lg-sf` (`git rebase --onto lg-sf lg-rs lg-ss`) and do U4–U6 of the design, plus tests that pin
+   the U1 rows as `actionBar`s with a mutation (S-S ran none).
+3. Fold onto `feat/lims-gallery` (cherry-pick `116a62056..lg-sf`; the PR head already holds V9's fixes on top of
+   `116a62056`), verify as V9 did (`handoff/lane-v9-brief.md`), push, drive CI green.
+4. Final two-reviewer comparison of all 34 grabs; after R it was 0 high, 0 medium.
 5. Merge PR #1045 once no known gaps remain, then remove the worktrees `../morph-lims-{e1,e2,e3,lf,gallery}` and run
    `git worktree prune`.
 

@@ -262,3 +262,70 @@
 {"logged": "2026-11-01 22:43:31", "event": "start", "task": "O.S2", "title": "Lane O-S2: review columns, control height, re-grabs", "group": "O"}
 {"logged": "2026-11-01 23:35:01", "event": "done", "task": "O.S2"}
 {"logged": "2026-11-01 23:35:02", "event": "done", "task": "N.V"}
+{"logged": "2026-11-01 23:46:46", "event": "start", "task": "O.V", "title": "Lane V6: verify the batch O fold", "group": "O"}
+{"logged": "2026-11-01 23:48:36", "event": "start", "task": "O.C", "title": "After-O comparison (two reviewers)", "group": "O"}
+{"logged": "2026-11-01 23:53:47", "event": "done", "task": "O.C"}
+{"logged": "2026-11-01 23:53:47", "event": "start", "task": "P.D", "title": "Batch P design", "group": "P"}
+{"logged": "2026-11-02 00:07:06", "event": "done", "task": "P.D"}
+{"logged": "2026-11-02 00:07:06", "event": "start", "task": "P.R", "title": "Batch P design review", "group": "P"}
+{"logged": "2026-11-02 00:07:47", "event": "start", "task": "P.S", "title": "Lane P-S: screen items S1–S10", "group": "P"}
+{"logged": "2026-11-02 00:20:56", "event": "done", "task": "P.R"}
+{"logged": "2026-11-02 00:20:56", "event": "start", "task": "P.D2", "title": "Batch P design revision", "group": "P"}
+{"logged": "2026-11-02 00:25:04", "event": "done", "task": "P.D2"}
+{"logged": "2026-11-02 00:25:04", "event": "start", "task": "P.F", "title": "Lane P-F: framework", "group": "P"}
+{"logged": "2026-11-02 02:34:19", "event": "done", "task": "O.V"}
+{"logged": "2026-11-02 02:47:52", "event": "done", "task": "P.S"}
+{"logged": "2026-11-02 04:30:19", "event": "done", "task": "P.F"}
+{"logged": "2026-11-02 04:30:19", "event": "start", "task": "P.S2", "title": "Lane P-S2: screen items S11–S19", "group": "P"}
+{"logged": "2026-11-02 05:36:28", "event": "done", "task": "P.S2"}
+{"logged": "2026-11-02 05:36:28", "event": "start", "task": "P.V", "title": "Lane V7: verify the batch P fold", "group": "P"}
+{"logged": "2026-11-02 05:37:52", "event": "start", "task": "P.C", "title": "After-P comparison (two reviewers)", "group": "P"}
+{"logged": "2026-11-02 05:43:01", "event": "done", "task": "P.C"}
+{"logged": "2026-11-02 05:43:01", "event": "start", "task": "Q.D", "title": "Batch Q design", "group": "Q"}
+{"logged": "2026-11-02 05:58:58", "event": "done", "task": "Q.D"}
+{"logged": "2026-11-02 05:58:58", "event": "start", "task": "Q.R", "title": "Batch Q design review", "group": "Q"}
+{"logged": "2026-11-02 05:59:25", "event": "start", "task": "Q.S", "title": "Lane Q-S: screen items S1–S4", "group": "Q"}
+{"logged": "2026-11-02 06:13:50", "event": "done", "task": "Q.R"}
+{"logged": "2026-11-02 06:13:50", "event": "start", "task": "Q.D2", "title": "Batch Q design revision", "group": "Q"}
+{"logged": "2026-11-02 06:19:01", "event": "done", "task": "Q.D2"}
+{"logged": "2026-11-02 06:19:01", "event": "start", "task": "Q.F", "title": "Lane Q-F: framework", "group": "Q"}
+{"logged": "2026-11-02 07:04:10", "event": "done", "task": "Q.S"}
+{"logged": "2026-11-02 07:26:24", "event": "done", "task": "P.V"}
+{"logged": "2026-11-02 09:13:06", "event": "done", "task": "Q.F"}
+{"logged": "2026-11-02 09:13:06", "event": "start", "task": "Q.S2", "title": "Lane Q-S2: screen items S5–S11", "group": "Q"}
+{"logged": "2026-11-02 09:14:05", "event": "start", "task": "CI.9", "title": "Lane CI9: three Qt tests failing on CI fonts", "group": "CI"}
+{"logged": "2026-11-02 09:52:44", "event": "done", "task": "CI.9"}
+{"logged": "2026-11-02 10:17:27", "event": "done", "task": "Q.S2"}
+{"logged": "2026-11-02 10:17:27", "event": "start", "task": "Q.V", "title": "Lane V8: verify the batch Q fold", "group": "Q"}
+{"logged": "2026-11-02 10:18:42", "event": "start", "task": "Q.C", "title": "After-Q comparison (two reviewers)", "group": "Q"}
+{"logged": "2026-11-02 10:24:23", "event": "done", "task": "Q.C"}
+{"logged": "2026-11-02 10:24:23", "event": "start", "task": "R.D", "title": "Batch R design", "group": "R"}
+{"logged": "2026-11-02 10:39:10", "event": "done", "task": "R.D"}
+{"logged": "2026-11-02 10:39:10", "event": "start", "task": "R.R", "title": "Batch R design review", "group": "R"}
+{"logged": "2026-11-02 10:39:38", "event": "start", "task": "R.S", "title": "Lane R-S: screen items T1–T4", "group": "R"}
+{"logged": "2026-11-02 10:50:11", "event": "done", "task": "R.R"}
+{"logged": "2026-11-02 10:50:11", "event": "start", "task": "R.D2", "title": "Batch R design revision", "group": "R"}
+{"logged": "2026-11-02 10:53:51", "event": "done", "task": "R.D2"}
+{"logged": "2026-11-02 10:53:51", "event": "start", "task": "R.F", "title": "Lane R-F: framework", "group": "R"}
+{"logged": "2026-11-02 11:08:33", "event": "done", "task": "R.S"}
+{"logged": "2026-11-02 11:08:33", "event": "start", "task": "R.I", "title": "Lane INV: smoke crash and plate head", "group": "R"}
+{"logged": "2026-11-02 11:57:18", "event": "done", "task": "R.I"}
+{"logged": "2026-11-02 13:46:49", "event": "done", "task": "Q.V"}
+{"logged": "2026-11-02 13:46:49", "event": "start", "task": "Q.G", "title": "Lane GC: the render-smoke segfault (#1083)", "group": "Q"}
+{"logged": "2026-11-02 15:15:12", "event": "done", "task": "R.F"}
+{"logged": "2026-11-02 15:15:12", "event": "start", "task": "R.S2", "title": "Lane R-S2: screen items T5–T10", "group": "R"}
+{"logged": "2026-11-02 16:13:53", "event": "done", "task": "Q.G"}
+{"logged": "2026-11-02 16:15:06", "event": "done", "task": "R.S2"}
+{"logged": "2026-11-02 16:15:06", "event": "start", "task": "R.V", "title": "Lane V9: verify the batch R fold", "group": "R"}
+{"logged": "2026-11-02 16:16:23", "event": "start", "task": "R.C", "title": "After-R comparison (two reviewers)", "group": "R"}
+{"logged": "2026-11-02 16:20:54", "event": "done", "task": "R.C"}
+{"logged": "2026-11-02 16:20:54", "event": "start", "task": "S.D", "title": "Batch S design", "group": "S"}
+{"logged": "2026-11-02 16:27:53", "event": "done", "task": "S.D"}
+{"logged": "2026-11-02 16:27:54", "event": "start", "task": "S.R", "title": "Batch S design review", "group": "S"}
+{"logged": "2026-11-02 16:27:54", "event": "start", "task": "S.S", "title": "Lane S-S: screen items U1–U3", "group": "S"}
+{"logged": "2026-11-02 16:42:03", "event": "done", "task": "S.R"}
+{"logged": "2026-11-02 16:42:03", "event": "start", "task": "S.D2", "title": "Batch S design revision", "group": "S"}
+{"logged": "2026-11-02 16:43:39", "event": "done", "task": "S.D2"}
+{"logged": "2026-11-02 16:43:39", "event": "start", "task": "S.F", "title": "Lane S-F: framework", "group": "S"}
+{"logged": "2026-11-02 17:21:41", "event": "done", "task": "S.S"}
+{"logged": "2026-11-02 19:17:41", "event": "done", "task": "R.V"}
