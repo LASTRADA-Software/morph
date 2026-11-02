@@ -132,5 +132,5 @@ TEST_CASE("console, expanded: a result input shares its row, from 9 to 10 units"
     GalleryScreen screen{kScreen, "expanded"};
     auto const layout = screen.prop("TextInput", "pane-result", "layout");
     REQUIRE(layout.has_value());
-    CHECK(layout->starts_with("stretch(1) min=9 max=10/"));
+    CHECK(layout.value_or("").starts_with("stretch(1) min=9 max=10/"));
 }
