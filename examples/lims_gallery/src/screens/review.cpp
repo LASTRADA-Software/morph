@@ -807,7 +807,7 @@ ui::Node worksheetPane(Review const& review) {
                             // never asks the worksheet for more than its buttons.
                             ui::text({.text = ui::cond(review.self, Text{"Another reviewer must approve"},
                                                        Text{"Approving needs your signature"}),
-                                      .role = "muted",
+                                      .role = "caption",
                                       .align = morph::ui::TextAlign::End})
                                 .sizing(ui::stretch())
                                 .testId("approve-note"),
