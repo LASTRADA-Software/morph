@@ -28,7 +28,8 @@ MorphField {
     defaultRole: Accessible.EditableText
 
     TextArea {
-        font: root.mono ? Theme.monoFontOf(Theme.monoPixels, Font.Normal) : Theme.bodyFont
+        font: root.mono ? Theme.monoFontOf(Theme.monoPixels, Font.Normal)
+                                  : Theme.controlFontOf(Font.Normal)
         id: area
         width: root.controlWidth
         // The widget's own chords come before the control's handling of the key.

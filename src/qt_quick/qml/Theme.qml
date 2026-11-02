@@ -194,6 +194,15 @@ QtObject {
     property bool touchTargets: false
     // The height every control is drawn at: `controlHeight`, or at least `touchHeight` while `touchTargets` holds.
     readonly property real targetHeight: touchTargets ? Math.max(controlHeight, touchHeight) : controlHeight
+    // The size of a control's own text while `touchTargets` holds: `control.touchTextSize`; 0 keeps the body size.
+    property real touchTextSize: 0
+    // The height of a small button: `button.smallHeight`, 0 keeping the control height.
+    property real smallHeight: 0
+    // The height of a small button while `touchTargets` holds: `button.smallTouchHeight`, 0 keeping the touch target.
+    property real smallTouchHeight: 0
+    // The height a small button is drawn at.
+    readonly property real smallButtonHeight: touchTargets ? (smallTouchHeight > 0 ? smallTouchHeight : targetHeight)
+                                                           : (smallHeight > 0 ? smallHeight : controlHeight)
     // A table cell's and a header label's inset: `table.cellPaddingX`, `table.cellPaddingY`.
     property real tableCellPaddingX: 8
     property real tableCellPaddingY: 4
@@ -236,6 +245,9 @@ QtObject {
     readonly property real bodyPixels: bodySize > 0 ? bodySize : platformMetrics.font.pixelSize > 0
                                                                    ? platformMetrics.font.pixelSize
                                                                    : platformMetrics.height * 0.75
+    // The size a control's own text is drawn at: the touch text size while `touchTargets` holds and it is set, else
+    // the body size.
+    readonly property real controlTextPixels: touchTargets && touchTextSize > 0 ? touchTextSize : bodyPixels
     readonly property real headingPixels: headingSize > 0 ? headingSize : bodyPixels * 1.3
     readonly property real smallPixels: smallSize > 0 ? smallSize : Math.round(bodyPixels * 0.85)
     readonly property real captionPixels: captionSize > 0 ? captionSize : Math.round(bodyPixels * 0.92)
@@ -292,6 +304,19 @@ QtObject {
         })
     }
 
+    // A control's own text at @p weight: the body, strong or button font while the control's size is the body size,
+    // which keeps the platform font when the theme names no family, else the text font at the control's size.
+    function controlFontOf(weight: int): font {
+        if (controlTextPixels === bodyPixels) {
+            if (weight === Font.Normal)
+                return bodyFont
+            if (weight === buttonWeight)
+                return buttonFont
+            if (weight === strongWeight)
+                return strongFont
+        }
+        return fontOf(controlTextPixels, weight)
+    }
     // The text font at a size and a weight, in the families text is drawn in.
     function fontOf(pixels: real, weight: int): font {
         return Qt.font({

@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace ui = morph::ui;
@@ -330,6 +331,27 @@ TEST_CASE("ui theme values: an input's inner padding defaults to 8 and a negativ
     auto const refused = ui::checkTheme(index, files);
     REQUIRE(refused.has_value());
     CHECK(refused->contains("input.paddingX: must not be negative"));
+}
+
+// Mutation: drop the three paths from `kNonNegativePaths` (a negative size or height is accepted).
+TEST_CASE("ui theme values: a negative touch text size or small button height is refused", "[ui][theme]") {
+    for (auto const& [group, name, path] :
+         {std::tuple{"control", "touchTextSize", "control.touchTextSize"},
+          std::tuple{"button", "smallHeight", "button.smallHeight"},
+          std::tuple{"button", "smallTouchHeight", "button.smallTouchHeight"}}) {
+        auto const tokens = ui::parseTokens(std::string{R"({")"} + group + R"(": {")" + name +
+                                            R"(": {"$type": "dimension", "$value": {"value": -2, "unit": "px"}}}})");
+        REQUIRE(tokens.has_value());
+        ui::ThemeIndex index;
+        index.base = "base";
+        ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+            return id == "base" ? &*tokens : nullptr;
+        };
+        auto const refused = ui::checkTheme(index, files);
+        INFO(path);
+        REQUIRE(refused.has_value());
+        CHECK(refused->contains(std::string{path} + ": must not be negative"));
+    }
 }
 
 // Mutation: leave `head.paddingY` out of `kThemeTokens` (the bundle's 12 is dropped and 0 reads), or drop its check (a

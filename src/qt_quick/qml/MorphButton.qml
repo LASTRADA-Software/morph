@@ -81,9 +81,15 @@ MorphWidget {
                                                   : root.strongCaption ? Theme.buttonWeight : Font.Normal
             return root.mono ? Theme.monoFontOf(pixels, weight) : Theme.fontOf(pixels, weight)
         }
+        // An item-style button keeps the body size; a push button's caption follows the touch text size.
+        if (root.style !== 0) {
+            if (root.captionWeight > 0)
+                return Theme.fontOf(Theme.bodyPixels, root.captionWeight)
+            return root.strongCaption ? Theme.buttonFont : Theme.bodyFont
+        }
         if (root.captionWeight > 0)
-            return Theme.fontOf(Theme.bodyPixels, root.captionWeight)
-        return root.strongCaption ? Theme.buttonFont : Theme.bodyFont
+            return Theme.controlFontOf(root.captionWeight)
+        return Theme.controlFontOf(root.strongCaption ? Theme.buttonWeight : Font.Normal)
     }
 
     // An item's content: the icon, then the label at the start of the line, in the accent while selected. The push

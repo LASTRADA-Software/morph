@@ -52,7 +52,7 @@ MorphField {
     }
 
     ComboBox {
-        font: Theme.bodyFont
+        font: Theme.controlFontOf(Font.Normal)
         id: combo
         // An option is a row of the control height less 2 px; the list shows at most `maxRows` of them.
         readonly property real optionHeight: Theme.targetHeight - 2
@@ -313,7 +313,7 @@ MorphField {
                     topPadding: 0
                     bottomPadding: 0
                     text: modelData
-                    font: segment.marked ? Theme.strongFont : Theme.bodyFont
+                    font: Theme.controlFontOf(segment.marked ? Theme.strongWeight : Font.Normal)
                     contentItem: MorphPlainContent {
                         control: segment
                         color: segment.marked ? root.scheme.text : root.scheme.muted

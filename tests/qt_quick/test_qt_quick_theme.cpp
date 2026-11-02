@@ -2059,3 +2059,172 @@ TEST_CASE("qt_quick theme: a declared surface sets its own placeholder", "[qt_qu
     CHECK(sidebar.property("placeholderText").value<QColor>() == QColor{"#010203"});
     CHECK_FALSE(builtinScheme(theme, "cardScheme").property("hasPlaceholder").toBool());
 }
+
+namespace {
+
+/// A theme that names a font family, so the body font is built from the body size rather than taken from the
+/// platform: a body of 13 px, a touch text size of 14 px, and a button weight apart from the strong one.
+ui::ThemeValues touchTextTheme(double touchTextSize) {
+    std::string document = R"({"font": {"family": {"$type": "fontFamily", "$value": ")";
+    document += QFontDatabase::families().first().toStdString();
+    document += R"("},
+        "size": {"$type": "dimension", "body": {"$value": {"value": 13, "unit": "px"}}},
+        "weight": {"button": {"$type": "fontWeight", "$value": 600}}},
+      "control": {"$type": "dimension", "touchTextSize": {"$value": {"value": )";
+    document += std::to_string(touchTextSize);
+    document += R"(, "unit": "px"}}}})";
+    return valuesOfDocument(document);
+}
+
+/// The pixel size and the weight of @p item's font.
+std::pair<int, int> fontOfItem(QQuickItem const& item) {
+    auto const font = item.property("font").value<QFont>();
+    return {font.pixelSize(), font.weight()};
+}
+
+/// The first descendant of @p root named @p name.
+QQuickItem* namedBelow(QQuickItem& root, QString const& name) {
+    for (QQuickItem* const child : root.childItems()) {
+        if (child->objectName() == name) {
+            return child;
+        }
+        if (QQuickItem* const found = namedBelow(*child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+/// The `Button` inside a push button widget.
+QQuickItem& buttonOf(ui::Widget const& widget) {
+    auto* const button = Scene::itemOf(widget).property("focusTarget").value<QQuickItem*>();
+    REQUIRE(button != nullptr);
+    return *button;
+}
+
+/// Every descendant of @p root named @p name, depth first.
+void collectNamed(QQuickItem& root, QString const& name, QList<QQuickItem*>& found) {
+    for (QQuickItem* const child : root.childItems()) {
+        if (child->objectName() == name) {
+            found.append(child);
+        }
+        collectNamed(*child, name, found);
+    }
+}
+
+struct TouchControls {
+    explicit TouchControls(Scene& scene)
+        : column{scene.backend().createStack(nullptr, ui::Axis::Vertical)},
+          input{scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine)},
+          area{scene.backend().createTextInput(column.get(), ui::TextInputMode::Multiline)},
+          prominent{scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine)},
+          date{scene.backend().createDateTimeInput(column.get(), ui::DateMode::Date, 0)},
+          dropdown{scene.backend().createSelect(column.get(), ui::SelectStyle::Dropdown)},
+          segmented{scene.backend().createSelect(column.get(), ui::SelectStyle::Segmented)},
+          push{scene.backend().createButton(column.get())},
+          primary{scene.backend().createButton(column.get())},
+          small{scene.backend().createButton(column.get())},
+          item{scene.backend().createButton(column.get())} {
+        input->setUnit("kg");
+        input->setText("1");
+        area->setText("note");
+        prominent->setEmphasis(ui::InputEmphasis::Prominent);
+        dropdown->setOptions({{.key = std::string{"a"}, .label = "Alpha"}});
+        dropdown->setSelected(ui::Key{std::string{"a"}});
+        segmented->setOptions({{.key = std::string{"a"}, .label = "Alpha"}, {.key = std::string{"b"}, .label = "Beta"}});
+        segmented->setSelected(ui::Key{std::string{"b"}});
+        push->setLabel("Push");
+        primary->setLabel("Primary");
+        primary->setEmphasis(ui::ButtonEmphasis::Primary);
+        small->setLabel("Small");
+        small->setSize(ui::ButtonSize::Small);
+        item->setLabel("Item");
+        item->setStyle(ui::ButtonStyle::Item);
+        scene.settle();
+    }
+    std::unique_ptr<ui::StackWidget> column;
+    std::unique_ptr<ui::TextInputWidget> input;
+    std::unique_ptr<ui::TextInputWidget> area;
+    std::unique_ptr<ui::TextInputWidget> prominent;
+    std::unique_ptr<ui::DateTimeInputWidget> date;
+    std::unique_ptr<ui::SelectWidget> dropdown;
+    std::unique_ptr<ui::SelectWidget> segmented;
+    std::unique_ptr<ui::ButtonWidget> push;
+    std::unique_ptr<ui::ButtonWidget> primary;
+    std::unique_ptr<ui::ButtonWidget> small;
+    std::unique_ptr<ui::ButtonWidget> item;
+};
+
+}  // namespace
+
+// Mutation: read `Theme.bodyFont` in MorphTextArea (its size stays 13), or `Theme.buttonFont` in the strong branch of
+// MorphButton's caption (the primary button stays 13).
+TEST_CASE("qt_quick theme: a control's own text takes the touch text size while the window is compact",
+          "[qt_quick][touch]") {
+    Scene scene;
+    auto const errors = morph::qt_quick::applyTheme(scene.engine(), touchTextTheme(14));
+    INFO((errors.empty() ? std::string{} : errors.front()));
+    REQUIRE(errors.empty());
+    QObject& theme = themeSingleton(scene);
+    TouchControls controls{scene};
+    int const body = static_cast<int>(theme.property("bodyPixels").toReal());
+    REQUIRE(body == 13);
+
+    auto const sizes = [&controls] {
+        std::vector<int> pixels;
+        pixels.push_back(fontOfItem(Scene::controlOf(*controls.input)).first);
+        QQuickItem* const unit = namedBelow(Scene::controlOf(*controls.input), QStringLiteral("unit"));
+        pixels.push_back(unit == nullptr ? -1 : fontOfItem(*unit).first);
+        pixels.push_back(fontOfItem(Scene::controlOf(*controls.area)).first);
+        pixels.push_back(fontOfItem(Scene::controlOf(*controls.date)).first);
+        pixels.push_back(fontOfItem(Scene::controlOf(*controls.dropdown)).first);
+        QQuickItem* const segment = namedBelow(Scene::itemOf(*controls.segmented), QStringLiteral("segment"));
+        pixels.push_back(segment == nullptr ? -1 : fontOfItem(*segment).first);
+        pixels.push_back(fontOfItem(buttonOf(*controls.push)).first);
+        pixels.push_back(fontOfItem(buttonOf(*controls.primary)).first);
+        return pixels;
+    };
+
+    SECTION("compact") {
+        theme.setProperty("touchTargets", true);
+        scene.settle();
+        CHECK(sizes() == std::vector<int>(8, 14));
+        // Left alone: a small button's step, a prominent input's heading size, an item button's body size.
+        CHECK(fontOfItem(buttonOf(*controls.small)).first == static_cast<int>(theme.property("smallPixels").toReal()));
+        CHECK(fontOfItem(Scene::controlOf(*controls.prominent)).first == static_cast<int>(std::lround(theme.property("headingPixels").toReal())));
+        CHECK(fontOfItem(buttonOf(*controls.item)).first == 13);
+        // The primary caption keeps the button weight, and a marked segment the strong weight.
+        CHECK(fontOfItem(buttonOf(*controls.primary)).second == theme.property("buttonFont").value<QFont>().weight());
+        CHECK(fontOfItem(buttonOf(*controls.push)).second == QFont::Normal);
+        QList<QQuickItem*> segments;
+        collectNamed(Scene::itemOf(*controls.segmented), QStringLiteral("segment"), segments);
+        REQUIRE(segments.size() == 2);
+        CHECK(fontOfItem(*segments.at(0)) == std::pair{14, static_cast<int>(QFont::Normal)});
+        CHECK(fontOfItem(*segments.at(1)).first == 14);
+        CHECK(fontOfItem(*segments.at(1)).second == theme.property("strongFont").value<QFont>().weight());
+        CHECK(fontOfItem(*segments.at(1)).second > fontOfItem(*segments.at(0)).second);
+    }
+    SECTION("not compact") {
+        CHECK(sizes() == std::vector<int>(8, 13));
+        CHECK(fontOfItem(buttonOf(*controls.primary)).second == theme.property("buttonFont").value<QFont>().weight());
+    }
+    SECTION("the token at 0 keeps the body size") {
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), touchTextTheme(0)).empty());
+        theme.setProperty("touchTargets", true);
+        scene.settle();
+        CHECK(sizes() == std::vector<int>(8, 13));
+        CHECK(theme.property("controlTextPixels").toReal() == 13.0);
+    }
+}
+
+// Mutation: leave `control.touchTextSize` out of the dimension table in theme.cpp (the Theme keeps 0).
+TEST_CASE("qt_quick theme: the touch text size reaches the Theme singleton", "[qt_quick][touch]") {
+    Scene scene;
+    QObject& theme = themeSingleton(scene);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    CHECK(theme.property("touchTextSize").toReal() == 0.0);
+    auto const errors = morph::qt_quick::applyTheme(scene.engine(), touchTextTheme(14));
+    INFO((errors.empty() ? std::string{} : errors.front()));
+    REQUIRE(errors.empty());
+    CHECK(theme.property("touchTextSize").toReal() == 14.0);
+}

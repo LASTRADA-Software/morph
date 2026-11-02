@@ -995,7 +995,8 @@ inline constexpr std::array<KeywordSpec, 4> kKeywords = {{
 }};
 
 /// @brief The dimension tokens of the set that may not be negative: an inset has no meaning below zero.
-inline constexpr std::array<std::string_view, 2> kNonNegativePaths = {"input.paddingX", "head.paddingY"};
+inline constexpr std::array<std::string_view, 5> kNonNegativePaths = {
+    "input.paddingX", "head.paddingY", "control.touchTextSize", "button.smallHeight", "button.smallTouchHeight"};
 
 /// @brief Whether @p name is one of the names of the keyword at @p path.
 /// @param path The keyword's path.
@@ -1192,7 +1193,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 79> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 82> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1264,6 +1265,13 @@ inline constexpr std::array<ThemeTokenSpec, 79> kThemeTokens = {{
     // The least height of a control while the window is compact: the common minimum touch target. A sibling of
     // `control.height`: the set keeps one spelling per path.
     {.path = "control.touchHeight", .kind = ThemeTokenKind::Dimension, .color = "", .number = 44.0},
+    // The size of a control's own text while the window is compact: a text input's, a text area's, a date input's, a
+    // select's and a push button's. 0 keeps the body size.
+    {.path = "control.touchTextSize", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    // The height of a `size: small` button, which may be above or below the control height; 0 keeps the control
+    // height. Its touch counterpart applies while the window is compact; 0 keeps the touch target.
+    {.path = "button.smallHeight", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    {.path = "button.smallTouchHeight", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.size.body", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.size.heading", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     // The sizes below are derived from the body size while 0, as the two above are; none derives from another.

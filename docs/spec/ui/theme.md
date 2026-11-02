@@ -193,8 +193,10 @@ built in nor in the theme draws nothing and changes no colour.
 | `color.background` (`#f2f3f7`) | colour |
 | `radius.control` (6), `radius.card` (10), `radius.badge` (4: a tag, a chip and a select option), `control.height` (32) | dimension, in px |
 | `control.touchHeight` (44, the common minimum touch target): a sibling of `control.height` | dimension, in px |
+| `control.touchTextSize` (0): the size of a control's own text while the window's width class is compact; 0 keeps the body size. A negative value is refused by `checkTheme`. The terminal draws no text sizes and ignores it | dimension, in px |
+| `button.smallHeight` (0), `button.smallTouchHeight` (0): the height of a `size: small` button, on the desktop and while the window is compact; 0 keeps the control height and the touch target. They apply to every small button in the theme, and either may be above or below `control.height` and `control.touchHeight`: a theme that sets `button.smallTouchHeight` below `control.touchHeight` takes the touch target onto itself. A negative value is refused by `checkTheme`. The terminal draws a small button on one row and ignores them | dimension, in px |
 | `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3) | dimension, in px |
-| `font.size.small` (0: the body size ×0.85, rounded): a table header's label, the `small` text role; `font.size.caption` (0: ×0.92, rounded): a field's caption above its control; `font.size.mono` (0: the body size): the `mono` role; `font.size.display` (0: ×1.7, rounded): the `display` role. Each derives from the body size, none from another new token, so what a theme leaves unset never depends on what else it sets | dimension, in px |
+| `font.size.small` (0: the body size ×0.85, rounded): a table header's label, the `small` text role; `font.size.caption` (0: ×0.92, rounded): a field's caption above its control, a stacked key-value's captions and the `caption` text role; `font.size.mono` (0: the body size): the `mono` role; `font.size.display` (0: ×1.7, rounded): the `display` role. Each derives from the body size, none from another new token, so what a theme leaves unset never depends on what else it sets | dimension, in px |
 | `font.weight.strong` (700): the weight of every strong font (`strongFont`, `headingFont`, the table header, a section, a strong run) | font weight: a number from 1 to 1000 or a DTCG weight name (`semi-bold` is 600), read into `ThemeValues::numbers` |
 | `font.weight.button` (700): the weight of a button's strong caption (a filled, small or square button); `font.weight.strong` stays the weight of every other strong font | font weight, as `font.weight.strong` |
 | `font.family` (none: the platform font) | font family: a name, or a list of names in order of preference |
@@ -238,6 +240,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `staleOpacity` | `opacity.stale` |
 | `space` (six px lengths) | `space.0` … `space.5` |
 | `background` | `color.background` |
+| `touchTextSize`, `smallHeight`, `smallTouchHeight` | `control.touchTextSize`, `button.smallHeight`, `button.smallTouchHeight` |
 | `radiusControl`, `radiusCard`, `radiusBadge`, `controlHeight`, `touchHeight`, `bodySize`, `headingSize` | `radius.control`, `radius.card`, `radius.badge`, `control.height`, `control.touchHeight`, `font.size.body`, `font.size.heading` |
 | `tableCellPaddingX`, `tableCellPaddingY` | `table.cellPaddingX`, `table.cellPaddingY` |
 | `smallSize`, `captionSize`, `monoSize`, `displaySize` | `font.size.small`, `font.size.caption`, `font.size.mono`, `font.size.display` |
@@ -271,7 +274,14 @@ own four, as it sets every colour.
 `control.height`. A button's and an input's background, a text area (twice it) and a table row (8 px less) read it;
 a check box and a tab button take it as their least height while `touchTargets` holds, their indicator and label
 keeping their size. The width class stands in for touch input, and is not a density layer: it is a fact about the
-window, not a choice. The terminal is unchanged: a cell is the target.
+window, not a choice. While `touchTargets` holds and `control.touchTextSize` is above 0, a control's own text is drawn
+at that size (`Theme.controlTextPixels`, through `Theme.controlFontOf(weight)`): the text of a text input with its
+prefix and unit label, of a text area, a date input and a select with its segments, and a push button's caption at
+`size: normal`. The prominent input keeps the heading size, a `mono` control the mono size, a small button the small
+step, and an item-style button, a field's caption, a popup list and the labels of radio selects, check boxes and tabs
+the body size. Units keep reading the body font, so no unit moves. A `size: small` button is drawn at
+`Theme.smallButtonHeight`: `button.smallTouchHeight` while `touchTargets` holds and it is set, else the touch target;
+`button.smallHeight` otherwise, else the control height. The terminal is unchanged: a cell is the target.
 
 `Theme.bodyPixels`, `headingPixels`, `smallPixels`, `captionPixels`, `monoPixels` and `displayPixels` are the font
 sizes the components use: a size of 0 derives from the platform font (`Theme.platformMetrics`), the body its size, a

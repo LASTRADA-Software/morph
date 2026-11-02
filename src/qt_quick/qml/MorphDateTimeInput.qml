@@ -70,7 +70,7 @@ MorphField {
     }
 
     TextField {
-        font: Theme.bodyFont
+        font: Theme.controlFontOf(Font.Normal)
         id: field
         width: root.controlWidth
         // A field not being edited shows its text from the start; while it has the focus it follows the cursor.

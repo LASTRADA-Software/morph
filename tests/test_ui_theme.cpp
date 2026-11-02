@@ -173,6 +173,27 @@ TEST_CASE("theme: control.height and control.touchHeight are siblings, each read
     CHECK(values.dimensions.at("control.touchHeight") == 48.0);
 }
 
+// Mutation: leave one of the three tokens out of `kThemeTokens` (it is missing from the defaults and a theme's value
+// is dropped).
+TEST_CASE("theme: the touch text size and the small button heights default to 0 and are read from a file",
+          "[ui][theme]") {
+    for (char const* const path : {"control.touchTextSize", "button.smallHeight", "button.smallTouchHeight"}) {
+        INFO(path);
+        CHECK(morph::ui::themeValues().dimensions.at(path) == 0.0);
+    }
+    TokenSet const tokens = parsed(R"({"control": {"$type": "dimension",
+        "touchTextSize": {"$value": {"value": 14, "unit": "px"}}},
+      "button": {"$type": "dimension",
+        "smallHeight": {"$value": {"value": 40, "unit": "px"}},
+        "smallTouchHeight": {"$value": {"value": 36, "unit": "px"}}}})");
+    auto const resolved = morph::ui::resolveTokens({&tokens});
+    REQUIRE(resolved);
+    morph::ui::ThemeValues const values = morph::ui::themeValues(*resolved);
+    CHECK(values.dimensions.at("control.touchTextSize") == 14.0);
+    CHECK(values.dimensions.at("button.smallHeight") == 40.0);
+    CHECK(values.dimensions.at("button.smallTouchHeight") == 36.0);
+}
+
 // Mutation: name the mono token `font.family.mono` (readGroup reads `font.family` as a token and never descends into
 // it, so the mono family is the default).
 TEST_CASE("theme: font.mono is a sibling of font.family, and themeValues gives both family lists", "[ui][theme]") {

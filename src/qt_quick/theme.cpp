@@ -131,12 +131,15 @@ constexpr std::array<std::pair<std::string_view, char const*>, 39> kSchemeProper
 }};
 
 /// The `Theme` property each dimension token of the set sets, besides the spacing scale.
-constexpr std::array<std::pair<std::string_view, char const*>, 15> kDimensionProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 18> kDimensionProperties = {{
     {"radius.control", "radiusControl"},
     {"radius.card", "radiusCard"},
     {"radius.badge", "radiusBadge"},
     {"control.height", "controlHeight"},
     {"control.touchHeight", "touchHeight"},
+    {"control.touchTextSize", "touchTextSize"},
+    {"button.smallHeight", "smallHeight"},
+    {"button.smallTouchHeight", "smallTouchHeight"},
     {"font.size.body", "bodySize"},
     {"font.size.heading", "headingSize"},
     {"font.size.small", "smallSize"},

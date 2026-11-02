@@ -65,7 +65,7 @@ MorphField {
         if (root.mono)
             return Theme.figuresOf(Theme.monoFontOf(Theme.monoPixels, Font.Normal), Theme.monoFamilies,
                                    root.tabularFigures)
-        return Theme.figuresOf(Theme.bodyFont, Theme.families, root.tabularFigures)
+        return Theme.figuresOf(Theme.controlFontOf(Font.Normal), Theme.families, root.tabularFigures)
     }
 
     TextField {
@@ -133,6 +133,7 @@ MorphField {
             anchors.verticalCenter: parent.verticalCenter
             visible: root.unit !== ""
             text: root.unit
+            font: root.textFont
             color: root.scheme.muted
         }
 
