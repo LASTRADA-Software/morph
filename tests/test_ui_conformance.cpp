@@ -107,12 +107,20 @@ std::string spansText(std::string_view recorded) {
 // How a probe, or the backend behind it, breaks the contract on purpose. A suite that passes a correct backend
 // measures something only if it fails a broken one.
 enum class Fault : std::uint8_t {
-    None,           // the reference probe
-    NoChildren,     // a container reports its children but hands none of them out
-    WrongText,      // every widget reads as showing other text
-    DeadInput,      // user actions never reach the widgets
-    EchoingSelect,  // the backend's Select reports a choice when its options are replaced
-    NoModifiers,    // a click on a table row arrives without its modifiers, as a plain click
+    None,            // the reference probe
+    NoChildren,      // a container reports its children but hands none of them out
+    WrongText,       // every widget reads as showing other text
+    DeadInput,       // user actions never reach the widgets
+    EchoingSelect,   // the backend's Select reports a choice when its options are replaced
+    NoModifiers,     // a click on a table row arrives without its modifiers, as a plain click
+    NarrowBadge,     // a badge sized by a fixed or percent width is laid out narrower than its label
+    OverlappedText,  // the text after a badge starts inside it
+    TinyBounds,      // every widget is 5 units wide
+    HugeBounds,      // every widget is 40 units wide
+    HollowGrid,      // a grid reports no cells
+    SecondMissing,   // a column hands out only its first child
+    HollowNarrow,    // a row whose first child is sized by a fixed or percent width reports no children
+    HollowNatural,   // a row whose first child is sized by its content reports no children
 };
 
 // The reference probe: what a TUI or Qt Quick probe does with a rendered screen or a QQuickItem tree, this one does
@@ -126,6 +134,26 @@ public:
     }
     morph::reactive::Runtime& runtime() override { return _rt; }
     void settle() override { _owner.runAll(); }
+
+    // Only the narrow-badge fault reads geometry: a badge told a fixed or percent width is 5 units wide against 11 for
+    // its content, and the text after it starts at 2, inside it.
+    [[nodiscard]] std::optional<ui::testing::WidgetBounds> boundsOf(ui::Widget const& widget) override {
+        if (_fault == Fault::TinyBounds || _fault == Fault::HugeBounds) {
+            return ui::testing::WidgetBounds{
+                .x = 0, .y = 0, .width = _fault == Fault::TinyBounds ? 5.0 : 40.0, .height = 1};
+        }
+        if (_fault != Fault::NarrowBadge && _fault != Fault::OverlappedText) {
+            return std::nullopt;
+        }
+        int const widgetId = _backend.idOf(widget);
+        std::string const layout = _backend.prop(widgetId, "layout");
+        bool const sized =
+            _fault == Fault::NarrowBadge && (layout.starts_with("fixed") || layout.starts_with("percent"));
+        if (_backend.kindOf(widgetId) == "Badge") {
+            return ui::testing::WidgetBounds{.x = 0, .y = 0, .width = sized ? 5.0 : 11.0, .height = 1};
+        }
+        return ui::testing::WidgetBounds{.x = 2, .y = 0, .width = 20, .height = 1};
+    }
 
     [[nodiscard]] std::string textOf(ui::Widget const& widget) override {
         if (_fault == Fault::WrongText) {
@@ -175,13 +203,28 @@ public:
         return _backend.prop(_backend.idOf(widget), "enabled") != "false";
     }
     [[nodiscard]] std::size_t childCount(ui::ContainerWidget const& container) override {
-        return _backend.children(_backend.idOf(container)).size();
+        int const id = _backend.idOf(container);
+        if (_fault == Fault::HollowGrid && _backend.kindOf(id) == "Grid") {
+            return 0;
+        }
+        if ((_fault == Fault::HollowNarrow || _fault == Fault::HollowNatural) && _backend.kindOf(id) == "Row" &&
+            !_backend.children(id).empty()) {
+            std::string const layout = _backend.prop(_backend.children(id).front(), "layout");
+            bool const content = layout.empty() || layout.starts_with("content");
+            if (content == (_fault == Fault::HollowNatural)) {
+                return 0;
+            }
+        }
+        return _backend.children(id).size();
     }
     [[nodiscard]] ui::Widget* childAt(ui::ContainerWidget const& container, std::size_t index) override {
         if (_fault == Fault::NoChildren) {
             return nullptr;
         }
         auto const children = _backend.children(_backend.idOf(container));
+        if (_fault == Fault::SecondMissing && index == 1 && _backend.kindOf(_backend.idOf(container)) == "Column") {
+            return nullptr;
+        }
         return index < children.size() ? _backend.widget(children.at(index)) : nullptr;
     }
     void click(ui::Widget& widget) override {
@@ -488,4 +531,59 @@ TEST_CASE("ui conformance: a probe that drives and reads nothing fails every cas
     }
     CHECK(passed ==
           std::set<std::string>{"a drag onto a refusing target delivers nothing", "no setter calls a handler"});
+}
+
+// Mutation: make `badgeRaisedTo` check nothing (the narrow badge, or the text inside it, passes).
+TEST_CASE("ui conformance: the badge cases flag a badge laid out narrower than its label, or text inside it",
+          "[ui][conformance]") {
+    std::size_t cases = 0;
+    for (auto const& testCase : ui::testing::layoutConformanceCases()) {
+        if (!std::string_view{testCase.name}.contains("below its label")) {
+            continue;
+        }
+        ++cases;
+        INFO(testCase.name);
+        RecordingProbe narrow{Fault::NarrowBadge};
+        std::optional<std::string> const tooNarrow = testCase.run(narrow);
+        REQUIRE(tooNarrow.has_value());
+        CHECK(tooNarrow->contains("against its content width"));
+        for (Fault const fault :
+             {Fault::NoChildren, Fault::SecondMissing, Fault::HollowNarrow, Fault::HollowNatural}) {
+            RecordingProbe broken{fault};
+            std::optional<std::string> const failure = testCase.run(broken);
+            INFO(static_cast<int>(fault));
+            REQUIRE(failure.has_value());
+            CHECK(failure->contains("two rows of a badge and a text"));
+        }
+        RecordingProbe overlapped{Fault::OverlappedText};
+        std::optional<std::string> const inside = testCase.run(overlapped);
+        REQUIRE(inside.has_value());
+        CHECK(inside->contains("inside the badge"));
+    }
+    CHECK(cases == 2);
+}
+
+// Mutation: make the three cases check nothing (a grid, or a key-value, laid out wrongly passes).
+TEST_CASE("ui conformance: the grid and key-value width cases flag a wrong size and a missing cell",
+          "[ui][conformance]") {
+    std::size_t cases = 0;
+    for (auto const& testCase : ui::testing::layoutConformanceCases()) {
+        std::string_view const name{testCase.name};
+        bool const grid =
+            name.contains("grid's columns without tracks") || name.contains("content-sized grid without");
+        if (!grid && !name.contains("caption width sets")) {
+            continue;
+        }
+        ++cases;
+        INFO(testCase.name);
+        for (Fault const fault : {Fault::TinyBounds, Fault::HugeBounds, Fault::NoChildren}) {
+            RecordingProbe probe{fault};
+            CHECK(testCase.run(probe).has_value());
+        }
+        if (grid) {
+            RecordingProbe hollow{Fault::HollowGrid};
+            CHECK(testCase.run(hollow).has_value());
+        }
+    }
+    CHECK(cases == 3);
 }
