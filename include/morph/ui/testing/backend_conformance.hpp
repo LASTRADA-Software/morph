@@ -3162,8 +3162,9 @@ struct WrappingRow {
 }
 
 /// @brief Case: a content-sized grid of two columns and no tracks is as wide as its widest cell times its columns:
-///        for cells of one and ten characters, between 16 and 21 units (20 where a character is a unit), where the
-///        sum of the columns' naturals is about 11, and its second cell keeps most of its ten characters.
+///        for cells of one and ten characters, twice the width the ten characters have on their own (within a unit),
+///        where the sum of the columns' naturals is about once, and the second cell keeps most of its ten
+///        characters.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> gridColumnsNaturalIsWidestTimesColumns(ConformanceProbe& probe) {
@@ -3171,15 +3172,26 @@ struct WrappingRow {
     grid.cells = {GridCell{.node = sizedText("a", {})}, GridCell{.node = sizedText(std::string(10, 'b'), {})}};
     grid.common.layout = {.alignSelf = Align::Start};
     Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::grid(std::move(grid)))};
+    // The same ten characters on their own: how wide they are in this backend's font, which a character is a unit
+    // wide of only in a monospace one.
+    Mounted const alone{probe.runtime(), probe.backend(),
+                        insideColumn(sizedText(std::string(10, 'b'), {.alignSelf = Align::Start}))};
     probe.settle();
     Checks checks;
     Geometry geometry{probe, checks};
     Measured const found = measured(probe, view);
-    checks.that(found.container != nullptr && found.children.size() == 2, "the grid holds two cells");
-    if (found.container != nullptr && found.children.size() == 2) {
+    Widget const* const cell = measured(probe, alone).container;
+    checks.that(found.container != nullptr && found.children.size() == 2 && cell != nullptr,
+                "the grid holds two cells");
+    if (found.container != nullptr && found.children.size() == 2 && cell != nullptr) {
         double const width = geometry.of(*found.container).width;
-        checks.that(width >= 16 && width <= 21, "the grid is " + std::to_string(width) +
-                                                    " units wide, not twice its ten-character cell (16 to 21)");
+        double const natural = geometry.of(*cell).width;
+        checks.that(natural >= 8, "ten characters are " + std::to_string(natural) + " units wide on their own");
+        // The columns are as wide as the widest cell, rounded up to a whole pixel at most, so the grid is two of it;
+        // the sum of the columns' naturals would be about one.
+        checks.that(width >= (2 * natural) - 0.5 && width <= (2 * natural) + 1,
+                    "the grid is " + std::to_string(width) + " units wide, not twice its ten-character cell (" +
+                        std::to_string(natural) + " units)");
         double const second = geometry.of(*found.children.at(1)).width;
         checks.that(second >= 8,
                     "the second cell keeps its ten characters: it is " + std::to_string(second) + " units wide");

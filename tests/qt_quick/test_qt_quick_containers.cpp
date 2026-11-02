@@ -192,7 +192,11 @@ TEST_CASE("qt_quick containers: a content-sized grid without tracks is its wides
     Scene scene;
     GridInColumn shown{scene, 2, {"a", std::string(10, 'b')}, {}};
     qreal const widest = Scene::itemOf(*shown.cells.at(1)).implicitWidth();
-    CHECK(Scene::itemOf(*shown.grid).implicitWidth() == Catch::Approx(2 * widest).margin(1.5));
+    // Each column is the widest natural rounded up to a whole pixel, so the grid exceeds twice the widest cell by
+    // under a pixel per column; the sum of the columns' naturals would fall about a widest cell short.
+    qreal const width = Scene::itemOf(*shown.grid).implicitWidth();
+    CHECK(width >= (2 * widest) - 0.01);
+    CHECK(width < (2 * widest) + 2);
     CHECK(Scene::itemOf(*shown.cells.at(1)).width() >= widest - 0.5);
 }
 
