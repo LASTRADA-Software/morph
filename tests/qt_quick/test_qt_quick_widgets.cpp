@@ -252,6 +252,185 @@ TEST_CASE("qt_quick widgets: the pointer coming to rest over a watched widget re
     CHECK(hovers == 1);
 }
 
+namespace {
+
+/// A value of forty characters, wider than any ten-unit input in any font.
+constexpr char const* kLongValue = "Release, finished product of the batch 1";
+
+/// The label an input draws its cut text in, the one named `elision`.
+QQuickItem* elisionOf(QQuickItem& widget) { return widget.findChild<QQuickItem*>(QStringLiteral("elision")); }
+
+/// Whether @p label is drawing the cut text.
+bool isCut(QQuickItem const* label) {
+    return label != nullptr && label->isVisible() && label->property("truncated").toBool();
+}
+
+/// Whether the TextField @p field draws its own text (an opaque colour) rather than leaving it to the elision.
+bool drawsText(QQuickItem const& field) { return field.property("color").value<QColor>().alpha() > 0; }
+
+}  // namespace
+
+// Mutation: `shown` always false (no label, the field keeps its colour), or the label not truncated (a text that
+// fits).
+TEST_CASE("qt_quick widgets: an input without the focus marks a cut with an ellipsis, and the value is untouched",
+          "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    int changes = 0;
+    input->setOnChange([&changes](std::string const&) { ++changes; });
+    input->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
+    input->setReadOnly(true);
+    input->setText(kLongValue);
+    scene.settle();
+    QQuickItem& widget = Scene::itemOf(*input);
+    QQuickItem& field = Scene::controlOf(*input);
+    QQuickItem* const label = elisionOf(widget);
+    REQUIRE(label != nullptr);
+    CHECK(isCut(label));
+    CHECK_FALSE(drawsText(field));
+    CHECK(field.property("text").toString() == QString::fromLatin1(kLongValue));
+    CHECK(widget.property("tooltipText").toString() == QString::fromLatin1(kLongValue));
+    CHECK(base(*input).shownText() == kLongValue);
+    CHECK(changes == 0);
+    // The label is the editor's text box: the same left edge, width and line of text.
+    CHECK(label->x() == Catch::Approx(field.property("leftPadding").toReal()).margin(0.5));
+    CHECK(label->width() == Catch::Approx(field.width() - field.property("leftPadding").toReal() -
+                                          field.property("rightPadding").toReal())
+                                .margin(0.5));
+    // Both draw the line of text at the same height: the editor's first character cell, in its text box (below the
+    // top padding), starts where the label's text starts in the label.
+    QRectF cell;
+    REQUIRE(QMetaObject::invokeMethod(&field, "positionToRectangle", Q_RETURN_ARG(QRectF, cell), Q_ARG(int, 0)));
+    CHECK(label->y() + ((label->height() - label->property("contentHeight").toReal()) / 2.0) ==
+          Catch::Approx(field.property("topPadding").toReal() + cell.y()).margin(0.5));
+
+    // An editable input without the focus is cut too; a short value, and a masked one, are not.
+    auto editable = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    editable->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
+    editable->setText(kLongValue);
+    auto shortValue = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    shortValue->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
+    shortValue->setText("short");
+    auto password = scene.backend().createTextInput(column.get(), ui::TextInputMode::Password);
+    password->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
+    password->setText(kLongValue);
+    scene.settle();
+    CHECK(isCut(elisionOf(Scene::itemOf(*editable))));
+    CHECK_FALSE(isCut(elisionOf(Scene::itemOf(*shortValue))));
+    CHECK(drawsText(Scene::controlOf(*shortValue)));
+    CHECK_FALSE(isCut(elisionOf(Scene::itemOf(*password))));
+    CHECK(drawsText(Scene::controlOf(*password)));
+}
+
+// Mutation: leave the focus term out of `shown` (the label stays over the editor), or never write the colour back.
+TEST_CASE("qt_quick widgets: a focused input shows its editor, and the elided copy is never written into the value",
+          "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto other = scene.backend().createButton(column.get());
+    std::vector<std::string> changes;
+    input->setOnChange([&changes](std::string const& text) { changes.push_back(text); });
+    input->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
+    input->setText(kLongValue);
+    scene.settle();
+    QQuickItem& widget = Scene::itemOf(*input);
+    QQuickItem& field = Scene::controlOf(*input);
+    QQuickItem* const label = elisionOf(widget);
+    REQUIRE(label != nullptr);
+    QColor const textColor = widget.property("textColor").value<QColor>();
+    for (int round = 0; round < 2; ++round) {
+        CAPTURE(round);
+        CHECK(isCut(label));
+        scene.click(field);
+        CHECK(field.hasActiveFocus());
+        CHECK_FALSE(label->isVisible());
+        CHECK(field.property("color").value<QColor>() == textColor);
+        other->focus();
+        scene.settle();
+    }
+    CHECK(isCut(label));
+    CHECK(field.property("text").toString() == QString::fromLatin1(kLongValue));
+    CHECK(changes.empty());
+}
+
+// Mutation: leave the selection term out of `shown` (the label draws under the selection a popup left behind).
+TEST_CASE("qt_quick widgets: a selection that outlives the focus is drawn by the editor, not under the elided copy",
+          "[qt_quick]") {
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    input->setLayout({.width = ui::Sizing::fixed(10), .height = {}});
+    input->setText(kLongValue);
+    scene.settle();
+    QQuickItem& widget = Scene::itemOf(*input);
+    QQuickItem& field = Scene::controlOf(*input);
+    QQuickItem* const label = elisionOf(widget);
+    REQUIRE(label != nullptr);
+    scene.click(field);
+    REQUIRE(QMetaObject::invokeMethod(&field, "select", Q_ARG(int, 3), Q_ARG(int, 20)));
+    // A popup takes the focus and leaves the selection in place, as a context menu does.
+    QQmlComponent component{&scene.engine()};
+    component.setData("import QtQuick\nimport QtQuick.Controls\nPopup { focus: true; width: 40; height: 40 }", QUrl{});
+    std::unique_ptr<QObject> popup{component.create()};
+    REQUIRE(popup != nullptr);
+    popup->setProperty("parent", QVariant::fromValue(scene.window().contentItem()));
+    REQUIRE(QMetaObject::invokeMethod(popup.get(), "open"));
+    scene.settle();
+    REQUIRE_FALSE(field.hasActiveFocus());
+    REQUIRE(field.property("selectionStart").toInt() != field.property("selectionEnd").toInt());
+    CHECK_FALSE(label->isVisible());
+    CHECK(field.property("color").value<QColor>() == widget.property("textColor").value<QColor>());
+}
+
+// Mutation: compare the text with the field's width instead of its text room (a value between the two is not cut).
+TEST_CASE("qt_quick widgets: a value wider than the text room but narrower than the field is cut", "[qt_quick]") {
+    Scene scene;
+    // A wide inset, so the room is well under the field's width whatever the unit.
+    ui::ThemeValues wide = ui::themeValues();
+    wide.dimensions.insert_or_assign("input.paddingX", 14.0);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), wide).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal const unit = theme->property("unitWidth").toReal();
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto probe = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    probe->setLayout({.width = ui::Sizing::fixed(80), .height = {}});
+    probe->setText(kLongValue);
+    scene.settle();
+    qreal const contentWidth = Scene::controlOf(*probe).property("contentWidth").toReal();
+    auto input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    input->setText(kLongValue);
+    input->setLayout(
+        {.width = ui::Sizing::fixed(static_cast<int>(std::lround((contentWidth + 14.0) / unit))), .height = {}});
+    scene.settle();
+    QQuickItem& field = Scene::controlOf(*input);
+    qreal const room =
+        field.width() - field.property("leftPadding").toReal() - field.property("rightPadding").toReal();
+    INFO("the text is " << contentWidth << " px in a room of " << room << " in a field of " << field.width());
+    REQUIRE(room < contentWidth);
+    REQUIRE(contentWidth < field.width());
+    CHECK(isCut(elisionOf(Scene::itemOf(*input))));
+}
+
+// Mutation: leave the elision out of MorphDateTimeInput (the pattern is clipped with no mark).
+TEST_CASE("qt_quick widgets: a date-time input too narrow for its text marks the cut", "[qt_quick]") {
+    using namespace std::chrono;
+    Scene scene;
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto input = scene.backend().createDateTimeInput(column.get(), ui::DateMode::DateTime, 0);
+    input->setLayout({.width = ui::Sizing::fixed(6), .height = {}});
+    input->setValue(morph::time::Timestamp{
+        morph::time::DateTime{year{2026}, month{10}, day{11}, hours{22}, minutes{30}, seconds{0}}});
+    scene.settle();
+    QQuickItem& field = Scene::controlOf(*input);
+    CHECK(isCut(elisionOf(Scene::itemOf(*input))));
+    CHECK_FALSE(drawsText(field));
+    CHECK(field.property("text").toString() == QStringLiteral("2026-10-11 22:30"));
+    CHECK(Scene::itemOf(*input).property("tooltipText").toString() == QStringLiteral("2026-10-11 22:30"));
+}
+
 TEST_CASE("qt_quick widgets: typing into a text input reports each edit, Enter commits then submits", "[qt_quick]") {
     Scene scene;
     auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);

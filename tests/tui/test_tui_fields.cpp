@@ -177,6 +177,54 @@ TEST_CASE("tui fields: a password field never shows what was typed", "[tui][fiel
     CHECK(harness.draw() == Rows{"***"});
 }
 
+// Mutation: leave the elided branch out of `paintElidedField` (the text is cut with no ellipsis), or draw a focused
+// field cut.
+TEST_CASE("tui fields: an unfocused one-line text wider than the field is cut with an ellipsis, not changed",
+          "[tui][fields]") {
+    Harness harness{10, 1};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    input->setText("Release, finished product");
+    CHECK(harness.draw() == Rows{"Release, …"});
+    CHECK(input->probeText() == "Release, finished product");
+    // The editor shows the text whole once it has the focus.
+    harness.focus(*input);
+    Rows const focused = harness.draw();
+    REQUIRE(focused.size() == 1);
+    CHECK_FALSE(focused.front().contains("…"));
+    CHECK(input->probeText() == "Release, finished product");
+
+    // A text that fits is drawn as it is.
+    Harness fitting{10, 1};
+    auto const shortInput = fitting.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    shortInput->setText("short");
+    CHECK(fitting.draw() == Rows{"short"});
+}
+
+// Mutation: take the room without the marks (the ellipsis is drawn under the `*`), or elide a masked field.
+TEST_CASE("tui fields: the ellipsis stands before the marks, and a masked field is never cut", "[tui][fields]") {
+    Harness harness{10, 1};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
+    input->setRequired(true);
+    input->setText("Release, finished product");
+    CHECK(harness.draw() == Rows{"Release,…*"});
+
+    Harness masked{10, 1};
+    auto const password = masked.make<TextInputImpl>(nullptr, ui::TextInputMode::Password);
+    password->setText("Release, finished product");
+    for (std::string const& row : masked.draw()) {
+        CHECK_FALSE(row.contains("…"));
+    }
+}
+
+// Mutation: leave the date input on `paintField` (a pattern wider than the field is cut with no ellipsis).
+TEST_CASE("tui fields: a date-time field too narrow for its text is cut with an ellipsis", "[tui][fields]") {
+    Harness harness{10, 1};
+    auto const field = harness.make<DateTimeInputImpl>(nullptr, ui::DateMode::DateTime, 0);
+    field->setValue(Timestamp{at(2026, 10, 4, 13, 5)});
+    CHECK(harness.draw() == Rows{"2026-10-0…"});
+    CHECK(field->probeText() == "2026-10-04 13:05");
+}
+
 TEST_CASE("tui fields: local date-time text in a display zone", "[tui][fields]") {
     auto const instant = at(2026, 10, 4, 13, 5);
     CHECK(formatLocal(instant, ui::DateMode::DateTime, 0) == "2026-10-04 13:05");
@@ -1097,13 +1145,11 @@ TEST_CASE("tui fields: a prominent input draws its text bold", "[tui][fields]") 
     CHECK(harness.screen().renderedBuffer().at(0, 0).style.bold);
 }
 
-// A field narrower than a text it was given draws the text's first cells. core-cpp's `InputField` puts the cursor at
-// the end of a programmatic text and scrolls to it, so today the field shows the text's tail; the case is expected to
-// fail until the field is told to show the start, and starts failing the build when it does not any more.
-TEST_CASE("tui fields: a field narrower than a text it was given draws the text's first cells",
-          "[tui][fields][!shouldfail]") {
+// A field narrower than a text it was given draws the text's first cells and an ellipsis, not the tail the editor's
+// cursor would scroll to.
+TEST_CASE("tui fields: a field narrower than a text it was given draws the text's first cells", "[tui][fields]") {
     Harness harness{10, 1};
     auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
     input->setText("Ease, finished product of a lot of letters");
-    CHECK(harness.draw() == Rows{"Ease, fini"});
+    CHECK(harness.draw() == Rows{"Ease, fin…"});
 }

@@ -41,6 +41,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphRoots.qml
         qml/MorphText.qml
         qml/MorphButton.qml
+        qml/MorphFieldElision.qml
         qml/MorphTextInput.qml
         qml/MorphTextArea.qml
         qml/MorphCheckbox.qml

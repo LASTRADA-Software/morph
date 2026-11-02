@@ -69,6 +69,11 @@ MorphField {
         picker.close()
     }
 
+    // The colour of the text: the scheme's.
+    readonly property color textColor: root.scheme.text
+    // While the text is cut, its whole is the tooltip, unless the node gives its own.
+    tooltipText: root.tooltip !== "" ? root.tooltip : elision.shown && elision.truncated ? field.text : ""
+
     TextField {
         font: Theme.controlFontOf(Font.Normal)
         id: field
@@ -78,7 +83,8 @@ MorphField {
         // The widget's own chords come before the control's handling of the key.
         Keys.priority: Keys.BeforeItem
         Keys.onPressed: event => event.accepted = root.takeOwnChord(event)
-        color: root.scheme.text
+        // The elided copy draws the text in its place while it shows.
+        color: elision.shown ? "transparent" : root.textColor
         placeholderTextColor: root.scheme.placeholderText
         leftPadding: Theme.inputPaddingX
         // The text stops before the calendar button.
@@ -102,6 +108,12 @@ MorphField {
                 return
             root.edited = false
             root.fire("edit", text)
+        }
+
+        MorphFieldElision {
+            id: elision
+            editor: field
+            textColor: root.textColor
         }
 
         ToolButton {

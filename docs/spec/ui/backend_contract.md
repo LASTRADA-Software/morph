@@ -76,6 +76,12 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   editable again. It is drawn so that it does not look editable: on Qt Quick on the page's background colour
   instead of the input fill, keeping its border and focus ring; on the terminal, where no field has an input fill,
   as its text in place in the normal text colour, distinct from a disabled field's muted text.
+- **A cut single-line text.** A single-line text input (not masked) and a date input's typed field that has neither the
+  focus nor a selection and holds text wider than the room it has for it show the text from the start, cut at the end
+  with an ellipsis, as a one-line text is, read-only or editable. The cut is only drawn: it is never written into the
+  value, and the value, the accessible name and value, a probe's text, the selection and every event are those of the
+  whole text. With the focus, or while a selection exists, the editor shows the text as it does otherwise. A text area
+  wraps and is not cut.
 - **Date inputs.** A graphical backend offers a calendar beside the typed date field, opening on
   the field's date or on today in the display zone. A day chosen produces the same text an edit
   would and reaches `onChange` the same way, so the field's text is the one source of the value.
@@ -306,7 +312,8 @@ table scrolls sideways on Qt Quick, with a bar that shows while it can; on the t
 wraps is the document's choice (`wrap`, `minWidth`, a stretch). A container's minimum width is its content's: a stack
 or a panel is never laid out narrower than its padding and its children's minimums, so a row of content-sized children
 that cannot fit raises its column's minimum, and so on up to the first container whose width its parent does not
-choose (a page, a splitter's pane, a window root). A document's `minWidth` wins. A child sized by a `percent` is placed as a fixed child is, on both
+choose (a page, a splitter's pane, a window root). A document's `minWidth` wins. A single-line input elides like a
+one-line text while it has neither the focus nor a selection. A child sized by a `percent` is placed as a fixed child is, on both
 frontends: a stack's or a panel's content minimum raises it; only a `stretch` sibling takes the spare width, and in a row with none `justify` packs a percent child as it packs a
 fixed one. A percent child adds its natural width to its row's natural width, never its share, so the share a row hands
 out does not depend on the row's own natural width. A table, a scroll and every leaf take

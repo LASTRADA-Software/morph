@@ -67,6 +67,16 @@ public:
 void paintField(::core::tui::InputField& field, FieldOwner const& fields, bool reachable, ::core::tui::Canvas& canvas,
                 bool strong = false);
 
+/// Draws @p field as `paintField` does, except that an @p elidable field that has no focus and holds text wider than
+/// its room is drawn from the start, cut with an ellipsis, as a one-line text is: the value is not changed, and the
+/// editor shows it whole once it has the focus. The room is the canvas less @p reserved cells (the control's marks
+/// that `paintMarks` draws over the canvas's last cells) and one more while @p fields marks the field invalid, where
+/// `paintField` puts its `!`, so the ellipsis is never under a mark.
+/// @param elidable Whether the field is a single-line, unmasked one.
+/// @param reserved The cells at the canvas's right edge that something else draws over.
+void paintElidedField(::core::tui::InputField& field, FieldOwner const& fields, bool reachable,
+                      ::core::tui::Canvas& canvas, bool strong, bool elidable, int reserved);
+
 /// @p instant as text in the display zone @p offsetMinutes east of UTC: `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`.
 [[nodiscard]] std::string formatLocal(morph::time::DateTime instant, ui::DateMode mode, int offsetMinutes);
 /// The instant @p text names in the display zone, or nullopt; DateTime mode accepts a space or a `T`.
@@ -127,7 +137,8 @@ protected:
     void paintControl(::core::tui::Canvas& canvas) override;
 
 private:
-    void paintText(::core::tui::Canvas& canvas);
+    /// Draws the text in @p canvas; @p reserved cells at its right edge are drawn over by the control's marks.
+    void paintText(::core::tui::Canvas& canvas, int reserved);
     void edited() override;
     void submitted() override;
     /// Only a field given a submit handler takes Enter for itself.

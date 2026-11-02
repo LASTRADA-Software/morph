@@ -193,6 +193,22 @@ void paintField(::core::tui::InputField& field, FieldOwner const& fields, bool r
     }
 }
 
+void paintElidedField(::core::tui::InputField& field, FieldOwner const& fields, bool reachable,
+                      ::core::tui::Canvas& canvas, bool strong, bool elidable, int reserved) {
+    int const room = canvas.width() - reserved - (fields.invalid() ? 1 : 0);
+    if (!elidable || field.focused() || displayWidth(field.text()) <= room) {
+        paintField(field, fields, reachable, canvas, strong);
+        return;
+    }
+    auto const& theme = canvas.theme();
+    ::core::tui::Style text = reachable ? theme.inputNormal : theme.textMuted;
+    text.bold = text.bold || (reachable && strong);
+    canvas.putString(0, 0, elidedLine(field.text(), room), text);
+    if (fields.invalid() && canvas.width() > 0) {
+        canvas.put(0, canvas.width() - 1, "!", theme.error);
+    }
+}
+
 std::string formatLocal(morph::time::DateTime instant, ui::DateMode mode, int offsetMinutes) {
     auto const local = std::chrono::floor<std::chrono::minutes>(instant.value + std::chrono::minutes{offsetMinutes});
     auto const days = std::chrono::floor<std::chrono::days>(local);
@@ -388,11 +404,11 @@ void TextInputImpl::paintControl(::core::tui::Canvas& canvas) {
     auto field = control.subcanvas(
         {.x = start, .y = 0, .width = std::max(0, control.width() - start), .height = control.height()});
     if (_unit.empty()) {
-        paintText(field);
+        paintText(field, marksWidth());
     } else {
         int const unitX = std::max(0, field.width() - marksWidth() - displayWidth(_unit));
         auto text = field.subcanvas({.x = 0, .y = 0, .width = std::max(0, unitX - 1), .height = field.height()});
-        paintText(text);
+        paintText(text, 0);
         field.putString(0, unitX, _unit, field.theme().textMuted);
     }
     paintMarks(control);
@@ -401,12 +417,15 @@ void TextInputImpl::paintControl(::core::tui::Canvas& canvas) {
 // The editable text in @p canvas. An end-aligned single-line field shows its text against the right edge while the
 // text fits: as it is when unfocused, with the cursor's cell after it while focused. Another text, an empty field
 // and a masked one are drawn from the start.
-void TextInputImpl::paintText(::core::tui::Canvas& canvas) {
+void TextInputImpl::paintText(::core::tui::Canvas& canvas, int reserved) {
     int const textWidth = displayWidth(_field->text());
     int const room = canvas.width() - (_field->focused() ? 1 : 0);
     bool const aligned = _alignEnd && _mode == ui::TextInputMode::SingleLine && textWidth > 0 && textWidth < room;
     if (!aligned) {
-        paintField(*_field, *this, actionable(), canvas, _prominent);
+        // Without the focus, a text wider than the field is cut with an ellipsis, as a one-line text is: the editor
+        // shows it whole once focused.
+        paintElidedField(*_field, *this, actionable(), canvas, _prominent, _mode == ui::TextInputMode::SingleLine,
+                         reserved);
         return;
     }
     int const x = room - textWidth;
@@ -507,7 +526,7 @@ std::string DateTimeInputImpl::probeText() const { return std::string{_field->te
 
 void DateTimeInputImpl::paintControl(::core::tui::Canvas& canvas) {
     auto control = paintCaption(canvas);
-    paintField(*_field, *this, actionable(), control);
+    paintElidedField(*_field, *this, actionable(), control, false, true, marksWidth());
     paintMarks(control);
 }
 

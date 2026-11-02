@@ -68,6 +68,11 @@ MorphField {
         return Theme.figuresOf(Theme.controlFontOf(Font.Normal), Theme.families, root.tabularFigures)
     }
 
+    // The colour of the text: the scheme's.
+    readonly property color textColor: root.scheme.text
+    // While the text is cut, its whole is the tooltip, unless the node gives its own.
+    tooltipText: root.tooltip !== "" ? root.tooltip : elision.shown && elision.truncated ? field.text : ""
+
     TextField {
         font: root.textFont
         id: field
@@ -83,7 +88,8 @@ MorphField {
             if (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter)
                 event.accepted = root.takeOwnChord(event)
         }
-        color: root.scheme.text
+        // The elided copy draws the text in its place while it shows.
+        color: elision.shown ? "transparent" : root.textColor
         placeholderTextColor: root.scheme.placeholderText
         // The text starts after the icon and the prefix.
         leftPadding: Theme.inputPaddingX + (iconImage.visible ? iconImage.width + Theme.spaceOf(1) : 0) +
@@ -122,6 +128,12 @@ MorphField {
                 root.edited = false
                 root.fire("commit", text)
             }
+        }
+
+        MorphFieldElision {
+            id: elision
+            editor: field
+            textColor: root.textColor
         }
 
         Label {
