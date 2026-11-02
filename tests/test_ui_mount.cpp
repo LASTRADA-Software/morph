@@ -105,6 +105,23 @@ TEST_CASE("ui::Mounted: a constant tree is built once and makes no reactive node
     CHECK(owner.pending() == 0);
 }
 
+// Mutation: call `setMinColumnWidth` whatever the key (a plain grid records it as 0), or for a grid with tracks (which
+// size their own columns).
+TEST_CASE("ui::Mounted: a grid's least column width reaches only a grid of equal columns that gives one", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Mounted const mounted{
+        runtime, backend,
+        ui::column({.children = {ui::grid({.columns = 3, .minColumnWidth = 25}), ui::grid({.columns = 3}),
+                                 ui::grid({.tracks = {{.width = ui::Sizing::fixed(5)}, {}}, .minColumnWidth = 25})}})};
+    std::vector<int> const grids = backend.all("Grid");
+    REQUIRE(grids.size() == 3);
+    CHECK(backend.prop(grids.at(0), "minColumnWidth") == "25");
+    CHECK_FALSE(backend.hasProp(grids.at(1), "minColumnWidth"));
+    CHECK_FALSE(backend.hasProp(grids.at(2), "minColumnWidth"));
+}
+
 TEST_CASE("ui::Mounted: a gap or padding reaches the backend as a spacing step in 0..5", "[ui]") {
     Owner owner;
     Runtime runtime{owner};

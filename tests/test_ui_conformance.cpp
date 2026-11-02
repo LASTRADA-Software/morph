@@ -595,6 +595,31 @@ TEST_CASE("ui conformance: the grid and key-value width cases flag a wrong size 
     CHECK(cases == 3);
 }
 
+// Mutation: make the five least-column-width cases check nothing (a grid that ignores the key, drops no column or
+// leaves the text after it overlapping passes).
+TEST_CASE("ui conformance: the grid least-column-width cases flag a wrong size, a missing cell and a hollow grid",
+          "[ui][conformance]") {
+    std::set<std::string_view> const names{"a grid's columns follow its width when it gives a least column width",
+                                           "a grid keeps all its columns when its width holds them exactly",
+                                           "a grid narrower than one least column shows one column",
+                                           "a grid's gap counts in how many least columns fit",
+                                           "a grid whose columns drop grows down and pushes what follows it"};
+    std::size_t cases = 0;
+    for (auto const& testCase : ui::testing::layoutConformanceCases()) {
+        if (!names.contains(testCase.name)) {
+            continue;
+        }
+        ++cases;
+        INFO(testCase.name);
+        for (Fault const fault : {Fault::TinyBounds, Fault::HugeBounds, Fault::NoChildren, Fault::HollowGrid}) {
+            RecordingProbe probe{fault};
+            INFO(static_cast<int>(fault));
+            CHECK(testCase.run(probe).has_value());
+        }
+    }
+    CHECK(cases == 5);
+}
+
 // Mutation: make the stretch cases check nothing (a row that shares by content, a row that sums its naturals or a
 // button narrowed below its label passes).
 TEST_CASE("ui conformance: the stretch cases flag a wrong width, a missing child and a narrowed button",

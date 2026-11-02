@@ -145,6 +145,12 @@ constexpr std::string_view kTrailEnd = R"({
     { "kind": "button", "testId": "hideMore", "label": "hide", "onClick": [ { "set": "moreShown", "value": false } ] }
   ] } })";
 
+/// A screen whose head ends in a ghost action that shows a label.
+constexpr std::string_view kGhostEnd = R"({
+  "vocab": "ui/1", "id": "ghostend", "title": "Audit",
+  "actions": [ { "id": "later", "label": "Later", "emphasis": "ghost", "onClick": [] } ],
+  "view": { "kind": "text", "text": "x" } })";
+
 /// A screen whose head has only a menu: an entry, a separator, an entry shown while `retireShown`, and a submenu.
 constexpr std::string_view kMenued = R"({
   "vocab": "ui/1", "id": "menued", "title": "Instrument", "menuLabel": "More instrument actions",
@@ -294,6 +300,7 @@ private:
             {"edgeroot", loadOrFail(kEdgeRoot, morph::ui::testing::corpusCatalog())},
             {"leadplaced", loadOrFail(kLeadPlaced, morph::ui::testing::corpusCatalog())},
             {"trailend", loadOrFail(kTrailEnd, morph::ui::testing::corpusCatalog())},
+            {"ghostend", loadOrFail(kGhostEnd, morph::ui::testing::corpusCatalog())},
             {"menued", loadOrFail(kMenued, morph::ui::testing::corpusCatalog())},
             {"tooled", loadOrFail(kTooled, morph::ui::testing::corpusCatalog())},
             {"asker", loadOrFail(kAsker, morph::ui::testing::corpusCatalog())},
@@ -1527,12 +1534,16 @@ TEST_CASE("workspace: the head's trail end is what its last shown element draws"
     REQUIRE(shell.open("headed", {}) == 1U);
     harness.settle();
     CHECK(shell.activeHeadTrailEnd() == HeadTrailEnd::Framed);
+    // A ghost action draws no frame even with its label.
+    REQUIRE(shell.open("ghostend", {}) == 2U);
+    harness.settle();
+    CHECK(shell.activeHeadTrailEnd() == HeadTrailEnd::Unframed);
     // The head menu's trigger is an icon button that ends the trail unframed.
-    REQUIRE(shell.open("menued", {}) == 2U);
+    REQUIRE(shell.open("menued", {}) == 3U);
     harness.settle();
     CHECK(shell.activeHeadTrailEnd() == HeadTrailEnd::Unframed);
     // A head with a tool alone ends in the tool, which draws a frame.
-    REQUIRE(shell.open("tooled", {}) == 3U);
+    REQUIRE(shell.open("tooled", {}) == 4U);
     harness.settle();
     CHECK(shell.activeHeadTrailEnd() == HeadTrailEnd::Framed);
 }

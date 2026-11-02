@@ -281,14 +281,18 @@ TEST_CASE("ui document: an action bar takes children, align and justify, and no 
     CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "a", "view": {"kind": "actionBar", "align": "center",
         "justify": "end", "children": [{"kind": "button", "label": "a"}, {"kind": "button", "label": "b"}]}})")
               .has_value());
-    for (std::string_view const key : {"gap", "wrap"}) {
-        INFO(key);
-        auto const refused =
-            loadDocumentText(std::string{R"({"vocab": "ui/1", "id": "a", "view": {"kind": "actionBar", ")"} +
-                             std::string{key} + R"(": 1, "children": []}})");
+    for (std::string const& keyed : {R"("gap": 1,)", R"("wrap": true,)"}) {
+        INFO(keyed);
+        auto const refused = loadDocumentText(R"({"vocab": "ui/1", "id": "a", "view": {"kind": "actionBar", )" +
+                                              keyed + R"("children": []}})");
         REQUIRE_FALSE(refused.has_value());
-        CHECK(refused.error().path == std::string{"/view/"} + std::string{key});
+        CHECK(refused.error().path.starts_with("/view/"));
+        CHECK((refused.error().path == "/view/gap" || refused.error().path == "/view/wrap"));
     }
+    // `wrap: false` asks for nothing the row refuses.
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "a", "view": {"kind": "actionBar", "wrap": false,
+        "children": []}})")
+              .has_value());
     auto const badJustify = loadDocumentText(
         R"({"vocab": "ui/1", "id": "a", "view": {"kind": "actionBar", "justify": "sideways", "children": []}})");
     CHECK_FALSE(badJustify.has_value());

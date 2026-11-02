@@ -541,6 +541,13 @@ TEST_CASE("a grid's tracks are written as parts, each key only when given", "[ui
           R"({}]})");
 }
 
+// Mutation: leave `align` or `justify` out of actionBar (a row of actions is written with neither).
+TEST_CASE("an actionBar is written with its children, and its alignment only when given", "[ui][author]") {
+    CHECK(text(ui::actionBar(ui::Nodes{}).json()) == R"({"kind":"actionBar"})");
+    CHECK(text(ui::actionBar(ui::Nodes{}, {.align = morph::ui::Align::Center, .justify = morph::ui::Justify::End})
+                   .json()) == R"({"kind":"actionBar","align":"center","justify":"end"})");
+}
+
 // Mutation: leave `minColumnWidth` out of grid (it is not written), or write it for a row too.
 TEST_CASE("a grid's least column width is written, a row's options do not carry it", "[ui][author]") {
     CHECK(text(ui::grid(ui::Nodes{}, {.columns = 3, .minColumnWidth = 25}).json()) ==

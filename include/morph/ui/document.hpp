@@ -4562,7 +4562,7 @@ private:
             refuse(pointerAppend(node.path, "gap"),
                    "an action bar's gap is the theme's `actions.gap`; set it there, not on the row");
         }
-        if (node.flags.contains("wrap")) {
+        if (node.flag("wrap")) {
             refuse(pointerAppend(node.path, "wrap"), "an action bar is one row of actions and does not wrap");
         }
     }
