@@ -35,7 +35,8 @@ constexpr char const* kThemeIndex = R"({
 // Green is the accent. The status tones keep their meaning — err out of spec, warn out of trend or due, ok within
 // spec, info and neutral for workflow state — so a tone is never mistaken for the accent: an `ok` tag is a tinted
 // label, a primary button a filled one with its own text. A control is 30 px high, as in the designs; a small
-// button (a plate well) is 40 px, and 36 px while the window is compact.
+// button (a plate well) is 40 px, and 36 px while the window is compact. A control's own text is 14 px while the
+// window is compact.
 constexpr char const* kThemeBase = R"({
   "color": { "$type": "color",
     "accent": { "$value": "#17784A" }, "focus": { "$value": "#17784A" },
@@ -68,7 +69,8 @@ constexpr char const* kThemeBase = R"({
             "overline": { "case": { "$type": "keyword", "$value": "uppercase" } } },
   "shape": { "iconOnly": { "$type": "keyword", "$value": "square" } },
   "collapsible": { "marker": { "$type": "keyword", "$value": "none" } },
-  "control": { "$type": "dimension", "height": { "$value": { "value": 30, "unit": "px" } } },
+  "control": { "$type": "dimension", "height": { "$value": { "value": 30, "unit": "px" } },
+              "touchTextSize": { "$value": { "value": 14, "unit": "px" } } },
   "button": { "$type": "dimension", "smallHeight": { "$value": { "value": 40, "unit": "px" } },
               "smallTouchHeight": { "$value": { "value": 36, "unit": "px" } } },
   "table": { "$type": "dimension", "cellPaddingY": { "$value": { "value": 6, "unit": "px" } } },
