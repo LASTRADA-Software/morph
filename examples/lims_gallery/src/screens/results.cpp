@@ -636,19 +636,19 @@ ui::Node compactLayout(Worksheet const& sheet) {
                                 [&sheet](ui::DeclScope&) { return ui::Nodes{resultField(sheet)}; })
                         .testId("fields")},
                    {.gap = 3}),
-        {.top = {ui::actionBar({ui::button({.label = "‹ Previous", .onClick = ui::set(sheet.current, sheet.current - 1)})
-                              .enabled(sheet.current > 0)
-                              .sizing(ui::stretch())
-                              .testId("previous"),
-                          ui::button({.label = "Next ›", .onClick = ui::set(sheet.current, sheet.current + 1)})
-                              .enabled(sheet.current < last)
-                              .sizing(ui::stretch())
-                              .testId("next")})
+        {.top = {ui::actionBar(
+                     {ui::button({.label = "‹ Previous", .onClick = ui::set(sheet.current, sheet.current - 1)})
+                          .enabled(sheet.current > 0)
+                          .sizing(ui::stretch())
+                          .testId("previous"),
+                      ui::button({.label = "Next ›", .onClick = ui::set(sheet.current, sheet.current + 1)})
+                          .enabled(sheet.current < last)
+                          .sizing(ui::stretch())
+                          .testId("next")})
                      .testId("pager")},
-         .bottom = {
-             ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).testId("oos"),
-             ui::actionBar({saveButton().sizing(ui::stretch()), submitButton(sheet).sizing(ui::stretch())})
-                 .testId("actions")}});
+         .bottom = {ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).testId("oos"),
+                    ui::actionBar({saveButton().sizing(ui::stretch()), submitButton(sheet).sizing(ui::stretch())})
+                        .testId("actions")}});
 }
 
 }  // namespace

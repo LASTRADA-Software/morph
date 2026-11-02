@@ -374,19 +374,19 @@ ui::Node section(ui::AnyHandle const& title, ui::Node const& content, ui::Handle
 }
 
 ui::Node compactLayout(Instrument const& instrument) {
-    auto const actions = ui::actionBar(
-        {ui::button({.label = "Book", .emphasis = ButtonEmphasis::Primary, .onClick = book(instrument)})
-             .enabled(instrument.inService)
-             .sizing(ui::stretch())
-             .testId("book"),
-         ui::button(
-             {.label = "Log maintenance",
-              .onClick = {ui::set(instrument.logKind, std::string{"maintenance"}), ui::open(instrument.logDialog)}})
-             .sizing(ui::stretch())
-             .testId("maintenance"),
-         moreMenu(instrument)},
-        {.align = Align::Center})
-        .testId("actions");
+    auto const actions =
+        ui::actionBar({ui::button({.label = "Book", .emphasis = ButtonEmphasis::Primary, .onClick = book(instrument)})
+                           .enabled(instrument.inService)
+                           .sizing(ui::stretch())
+                           .testId("book"),
+                       ui::button({.label = "Log maintenance",
+                                   .onClick = {ui::set(instrument.logKind, std::string{"maintenance"}),
+                                               ui::open(instrument.logDialog)}})
+                           .sizing(ui::stretch())
+                           .testId("maintenance"),
+                       moreMenu(instrument)},
+                      {.align = Align::Center})
+            .testId("actions");
     auto const overview =
         ui::column({compactDetails(),
                     section("Current booking", currentBooking(true), instrument.bookingOpen).testId("booking-section"),

@@ -686,14 +686,14 @@ ui::Node compactLayout(Samples const& list) {
                         ui::cond(ui::isEmpty(list.priority), ui::Handle<std::int64_t>{0}, ui::Handle<std::int64_t>{1});
     // The search, Filters and Sort stay at the top of the phone screen in the head's block, and the bulk bar at the
     // bottom, while the cards scroll between them.
-    auto const controls = ui::Nodes{ui::column(
-        {searchField(list),
-         ui::actionBar({ui::button({.label = ui::format("Filters · {0}", {active}), .onClick = ui::open(list.filtersDrawer)})
-                            .sizing(ui::stretch())
-                            .testId("open-filters"),
-                        sortChoice(list).sizing(ui::stretch())})
-             .testId("actions")},
-        {.gap = 2})};
+    auto const controls = ui::Nodes{
+        ui::column({searchField(list), ui::actionBar({ui::button({.label = ui::format("Filters · {0}", {active}),
+                                                                  .onClick = ui::open(list.filtersDrawer)})
+                                                          .sizing(ui::stretch())
+                                                          .testId("open-filters"),
+                                                      sortChoice(list).sizing(ui::stretch())})
+                                           .testId("actions")},
+                   {.gap = 2})};
     return ui::pinned(
         ui::column({ui::panel({ui::forEach(ui::slice(cardOrder(list), std::int64_t{0}, list.cardCount),
                                            {.key = ui::row("id"), .gap = 0, .divided = true},

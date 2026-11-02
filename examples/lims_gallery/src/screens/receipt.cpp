@@ -302,7 +302,8 @@ ui::Node conditions(Receipt const& receipt, bool compact) {
         check(receipt.labelled, compact ? "Label legible and matches" : "Label legible and matches the request",
               "labelled"),
         check(receipt.logger, "Temperature logger attached", "logger")};
-    ui::Node const boxes = compact ? ui::column(checks, {.gap = 1}) : ui::grid(checks, {.gap = 1, .columns = 2, .minColumnWidth = 32}).testId("checks");
+    ui::Node const boxes = compact ? ui::column(checks, {.gap = 1})
+                                   : ui::grid(checks, {.gap = 1, .columns = 2, .minColumnWidth = 32}).testId("checks");
     return ui::group({boxes}, {.label = "Condition on receipt", .required = true, .gap = 1}).testId("conditions");
 }
 

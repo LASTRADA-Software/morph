@@ -734,10 +734,9 @@ ui::Node compactLayout(Plate const& plate) {
     }
     // The buttons sit in the head's white block, and the root's rule draws the line under it.
     auto const buttons =
-        ui::column(
-            {ui::actionBar({autoFill(plate).sizing(ui::stretch()), saveLayout(plate).sizing(ui::stretch())})
-                 .testId("layout-buttons")},
-            {.padding = ui::padding(2, 4)})
+        ui::column({ui::actionBar({autoFill(plate).sizing(ui::stretch()), saveLayout(plate).sizing(ui::stretch())})
+                        .testId("layout-buttons")},
+                   {.padding = ui::padding(2, 4)})
             .surface("bar");
     return ui::column({buttons, ui::column({ui::column(rows, {.divided = true}), assignDialog(plate)},
                                            {.gap = 2, .padding = 4})},
