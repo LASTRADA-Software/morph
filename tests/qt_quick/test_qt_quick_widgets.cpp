@@ -2202,6 +2202,36 @@ TEST_CASE("qt_quick widgets: a caption text is the caption size, regular and mut
     CHECK(Scene::controlOf(*caption).property("color").value<QColor>() == scheme->property("muted").value<QColor>());
 }
 
+// Mutation: read `Theme.bodyFont` for a stacked caption again (its size is the body's).
+TEST_CASE("qt_quick widgets: a stacked key-value caption is the caption size, an inline one the body size",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 200);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const stacked = scene.backend().createKeyValue(column.get());
+    stacked->setCaptionPlacement(ui::CaptionPlacement::Above);
+    stacked->setItems({{.label = "Serial", .value = "S"}});
+    auto const inlined = scene.backend().createKeyValue(column.get());
+    inlined->setItems({{.label = "Lot", .value = "L"}});
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.settle();
+    QObject const* const theme = themeOf(scene);
+    auto const fontOfLabel = [](QQuickItem const* label) { return label->property("font").value<QFont>(); };
+    QList<QQuickItem*> const captions = named(Scene::itemOf(*stacked), QStringLiteral("caption"));
+    REQUIRE(captions.size() == 1);
+    CHECK(fontOfLabel(captions.front()).pixelSize() ==
+          static_cast<int>(std::lround(theme->property("captionPixels").toReal())));
+    QQuickItem const* inlineCaption = nullptr;
+    for (QQuickItem const* const label : Scene::itemsOf(Scene::itemOf(*inlined), "QQuickText")) {
+        if (label->property("text").toString() == QStringLiteral("Lot")) {
+            inlineCaption = label;
+        }
+    }
+    REQUIRE(inlineCaption != nullptr);
+    CHECK(fontOfLabel(inlineCaption) == theme->property("bodyFont").value<QFont>());
+    CHECK(fontOfLabel(inlineCaption) != fontOfLabel(captions.front()));
+}
+
 // Mutation: draw an overline as a section whatever the token (the size check fails).
 TEST_CASE(
     "qt_quick widgets: an overline is small, strong, muted capitals under font.overline.case, and a section otherwise",

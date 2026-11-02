@@ -4,8 +4,9 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// Captions beside their values, one pair per row; or, while `captionsAbove`, each caption over its value, the pairs
-// divided by rules. A toned value is drawn in its tone's colour and the strong weight; a value with runs draws them.
+// Captions beside their values, one pair per row; or, while `captionsAbove`, each caption over its value in the caption
+// size, as a form's stacked caption is, the pairs divided by rules. A toned value is drawn in its tone's colour and the
+// strong weight; a value with runs draws them.
 MorphWidget {
     id: root
 
@@ -98,7 +99,7 @@ MorphWidget {
                 Label {
                     objectName: "caption"
                     textFormat: Text.PlainText
-                    font: Theme.bodyFont
+                    font: Theme.captionFont
                     text: pairColumn.pair ? pairColumn.pair.label : ""
                     color: root.scheme.muted
                     Layout.fillWidth: true
