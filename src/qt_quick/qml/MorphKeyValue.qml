@@ -105,6 +105,9 @@ MorphWidget {
                 wrapMode: root.captionSet ? Text.Wrap : Text.NoWrap
                 Layout.row: index
                 Layout.column: 0
+                // A caption shares its value's first baseline, whichever of the two wraps and whatever face the
+                // value is drawn in; a top or centre alignment would put a mono or toned value's line off the caption's.
+                Layout.alignment: Qt.AlignBaseline
                 Layout.minimumWidth: root.captionSet ? root.captionUnits * Theme.unitWidth : implicitWidth
                 Layout.preferredWidth: root.captionSet ? root.captionUnits * Theme.unitWidth : -1
                 Layout.maximumWidth: root.captionSet ? root.captionUnits * Theme.unitWidth : -1
@@ -121,6 +124,7 @@ MorphWidget {
                 pair: root.items[index]
                 Layout.row: index
                 Layout.column: 1
+                Layout.alignment: Qt.AlignBaseline
                 Layout.fillWidth: true
             }
         }

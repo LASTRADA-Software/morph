@@ -1693,6 +1693,63 @@ TEST_CASE("qt_quick widgets: a key-value's caption column has the set width and 
     CHECK(value->mapToItem(&item, QPointF{0, 0}).x() == Catch::Approx(14 * unit).margin(1.0));
 }
 
+namespace {
+
+/// The first baseline of @p label, in @p item's coordinates.
+qreal firstBaselineIn(QQuickItem const& item, QQuickItem const& label) {
+    return label.mapToItem(&item, QPointF{0, 0}).y() + label.property("baselineOffset").toReal();
+}
+
+}  // namespace
+
+// Mutation: remove `Layout.alignment` from the caption and the value (the caption is centred on a taller value); use
+// `Qt.AlignTop` for both (a mono value, drawn smaller than the body text, has its baseline off the caption's).
+TEST_CASE("qt_quick widgets: an inline key-value caption sits on its value's first baseline", "[qt_quick]") {
+    Scene scene;
+    // The gallery's sizes: a mono value is smaller than the body text, so the two faces' baselines differ.
+    ui::ThemeValues sizes = ui::themeValues();
+    sizes.dimensions.insert_or_assign("font.size.body", 13.0);
+    sizes.dimensions.insert_or_assign("font.size.mono", 12.0);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), sizes).empty());
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const kv = scene.backend().createKeyValue(column.get());
+    kv->setLayout({.width = ui::Sizing::fixed(20), .height = {}});
+    kv->setItems({{.label = "Lot", .spans = {{.text = "L-26-0001 L-26-0002 L-26-0003 L-26-0004", .mono = true}}}});
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*kv);
+    QQuickItem const* caption = nullptr;
+    QQuickItem const* value = nullptr;
+    for (QQuickItem const* const label : Scene::itemsOf(item, "QQuickText")) {
+        (label->property("text").toString() == QStringLiteral("Lot") ? caption : value) = label;
+    }
+    REQUIRE(caption != nullptr);
+    REQUIRE(value != nullptr);
+    // Rich text reports no line count; a value that wraps is taller than the one-line caption.
+    REQUIRE(value->height() > 1.5 * caption->height());
+    CHECK(firstBaselineIn(item, *caption) == Catch::Approx(firstBaselineIn(item, *value)).margin(0.5));
+}
+
+// Mutation: remove `Layout.alignment` from the caption (a caption that wraps to two lines is centred against a
+// one-line value).
+TEST_CASE("qt_quick widgets: a wrapped caption's first line is on its one-line value's baseline", "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const kv = scene.backend().createKeyValue(column.get());
+    kv->setCaptionWidth(4);
+    kv->setItems({{.label = "Serial number here", .value = "S"}});
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*kv);
+    QQuickItem const* caption = nullptr;
+    QQuickItem const* value = nullptr;
+    for (QQuickItem const* const label : Scene::itemsOf(item, "QQuickText")) {
+        (label->property("text").toString() == QStringLiteral("S") ? value : caption) = label;
+    }
+    REQUIRE(caption != nullptr);
+    REQUIRE(value != nullptr);
+    REQUIRE(caption->property("lineCount").toInt() >= 2);
+    CHECK(firstBaselineIn(item, *caption) == Catch::Approx(firstBaselineIn(item, *value)).margin(0.5));
+}
+
 // Mutation: put the mark back at the right edge under the caption (its `y` is then the caption's height); bind a
 // text's mark to the label's `contentWidth` (its `x` is then after the first, longer line).
 TEST_CASE("qt_quick widgets: a required mark follows a caption, or a text's last line", "[qt_quick]") {

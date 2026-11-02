@@ -112,7 +112,8 @@ What the mount does with these widgets is [`view_tree.md`](view_tree.md).
   width; without a caption it sits beside the control. A required text's mark follows the end of its last line.
 - **Key-values.** Each caption sits beside its value, or above it once `setCaptionPlacement(Above)` is called. `setCaptionWidth(units)` fixes the width of the caption column beside the values; without it the column is as wide as the widest caption, and a caption longer than the column wraps where the backend can and is cut with an ellipsis where it cannot. A
   toned value (`KeyValueItem::tone` other than `Neutral`) is drawn in the tone's colour and the strong weight, and a
-  value with spans draws them as a text does; its accessible text is the runs' text joined.
+  value with spans draws them as a text does; its accessible text is the runs' text joined. A caption beside its value is on
+  the value's first line, whichever of the two wraps.
 - **Text is characters.** Every setter's text is shown as the characters it holds: a backend never interprets a
   document's or a value's text as markup, so a name or a comment that holds `<b>` or `<a href=…>` shows those
   characters.
