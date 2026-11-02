@@ -3140,6 +3140,53 @@ struct WrappingRow {
     return checks.result();
 }
 
+/// @brief Case: a 60-unit grid of two columns and no tracks gives a one-character cell and a thirty-character cell
+///        30 units each: the columns are equal, whatever their content.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> gridColumnsAreEqual(ConformanceProbe& probe) {
+    Grid grid{.columns = 2};
+    grid.cells = {GridCell{.node = sizedText("a", {})}, GridCell{.node = sizedText(std::string(30, 'b'), {})}};
+    grid.common.layout = {.width = Sizing::fixed(60)};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::grid(std::move(grid)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    std::vector<Widget*> const children = measured(probe, view).children;
+    checks.that(children.size() == 2, "the grid holds two cells");
+    if (children.size() == 2) {
+        geometry.near("the short cell's width", 30, geometry.of(*children.at(0)).width);
+        geometry.near("the long cell's width", 30, geometry.of(*children.at(1)).width);
+    }
+    return checks.result();
+}
+
+/// @brief Case: a content-sized grid of two columns and no tracks is as wide as its widest cell times its columns:
+///        for cells of one and ten characters, between 16 and 21 units (20 where a character is a unit), where the
+///        sum of the columns' naturals is about 11, and its second cell keeps most of its ten characters.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> gridColumnsNaturalIsWidestTimesColumns(ConformanceProbe& probe) {
+    Grid grid{.columns = 2};
+    grid.cells = {GridCell{.node = sizedText("a", {})}, GridCell{.node = sizedText(std::string(10, 'b'), {})}};
+    grid.common.layout = {.alignSelf = Align::Start};
+    Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::grid(std::move(grid)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Measured const found = measured(probe, view);
+    checks.that(found.container != nullptr && found.children.size() == 2, "the grid holds two cells");
+    if (found.container != nullptr && found.children.size() == 2) {
+        double const width = geometry.of(*found.container).width;
+        checks.that(width >= 16 && width <= 21, "the grid is " + std::to_string(width) +
+                                                    " units wide, not twice its ten-character cell (16 to 21)");
+        double const second = geometry.of(*found.children.at(1)).width;
+        checks.that(second >= 8,
+                    "the second cell keeps its ten characters: it is " + std::to_string(second) + " units wide");
+    }
+    return checks.result();
+}
+
 /// @brief Case: a badge in a `fixed(12)` track with `align: Center` has as much space before it as after it, within
 ///        a unit.
 /// @param probe The backend under test.
@@ -3468,7 +3515,7 @@ struct WrappingRow {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 37> const cases{{
+    static std::array<ConformanceCase, 39> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -3487,6 +3534,9 @@ struct WrappingRow {
         {.name = "a scrollable slot scrolls a content-height child and fills with a stretching one",
          .run = detail::scrollableSlotScrolls},
         {.name = "grid tracks of fixed and stretch width", .run = detail::gridTracksSizeColumns},
+        {.name = "a grid's columns without tracks are equal", .run = detail::gridColumnsAreEqual},
+        {.name = "a content-sized grid without tracks is its widest cell times its columns",
+         .run = detail::gridColumnsNaturalIsWidestTimesColumns},
         {.name = "a centred track centres a label-width cell", .run = detail::centredTrackCentresBadge},
         {.name = "a chart's content size is 40 by 8 units", .run = detail::chartHasContentSize},
         {.name = "a sheet fills the surface", .run = detail::sheetFillsSurface},

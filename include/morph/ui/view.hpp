@@ -870,8 +870,8 @@ struct GridTrack {
 struct Grid {
     /// @brief The column count; ignored when `tracks` is not empty.
     int columns = 1;
-    /// @brief The column tracks, set once; empty gives `columns` columns sharing the width. Given, the column count
-    ///        is their number.
+    /// @brief The column tracks, set once; empty gives `columns` equal columns, a content-sized grid as wide as its
+    ///        widest cell times the columns. Given, the column count is their number.
     std::vector<GridTrack> tracks;
     /// @brief The cells, row-major.
     std::vector<GridCell> cells;

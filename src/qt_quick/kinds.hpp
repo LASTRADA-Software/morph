@@ -353,11 +353,11 @@ public:
 protected:
     /// A cell's content is placed vertically in its row.
     [[nodiscard]] int alignsAcross() const noexcept override { return 2; }
-    /// A grid with tracks places its cells itself, again whenever one's size, visibility or span changes.
+    /// A grid places its cells itself, again whenever one's size, visibility or span changes.
     void adopted(ItemBase& child) override;
 
 private:
-    /// Lays a grid with tracks out again; a grid without them leaves it to its GridLayout.
+    /// Lays the grid out again.
     void place() const;
 };
 

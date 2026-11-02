@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <QMetaMethod>
 #include <QMetaObject>
+#include <QMetaProperty>
 #include <QPointer>
 #include <QQuickItem>
 #include <QStringList>
@@ -103,6 +105,20 @@ void GridImpl::adopted(ItemBase& child) {
         return;
     }
     placeOnChange(item(), cell);
+    // The sizes a cell requests arrive after it is adopted, and each one changes where the grid puts it.
+    QMetaObject const* const cellType = cell->metaObject();
+    QMetaObject const* const gridType = item()->metaObject();
+    int const place = gridType->indexOfMethod("place()");
+    if (place < 0) {
+        return;
+    }
+    for (char const* const name : {"widthKind", "widthAmount", "heightKind", "heightAmount", "minWidthUnits",
+                                   "maxWidthUnits", "minHeightUnits", "maxHeightUnits", "alignSelf"}) {
+        QMetaProperty const property = cellType->property(cellType->indexOfProperty(name));
+        if (property.isValid() && property.hasNotifySignal()) {
+            QObject::connect(cell, property.notifySignal(), item(), gridType->method(place), Qt::QueuedConnection);
+        }
+    }
 }
 
 void GridImpl::place() const {

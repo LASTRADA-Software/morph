@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Layouts
 
-// A grid: children row-major in `columns` columns, `gap` (a spacing step) apart; a child's span widens it. With
-// `tracks`, each column is sized and aligned by its track, and `place` lays the cells out instead of a GridLayout.
+// A grid: children row-major in its tracks, `gap` (a spacing step) apart; a child's span widens it. Without `tracks`
+// it has `columns` equal stretch tracks, as wide by nature as `columns` times the widest cell. `place` lays every
+// grid out itself, so both frontends share one rule.
 MorphWidget {
     id: root
 
@@ -14,17 +14,39 @@ MorphWidget {
     // `crossAlign`.
     property int align: 0
     // The column tracks, each {kind, amount, align}: a `ui::Sizing` kind (0 content, 1 fixed, 2 stretch) and amount,
-    // and a `ui::Align` index across the column. Empty lays the cells out in a GridLayout of `columns` columns.
+    // and a `ui::Align` index across the column. Empty gives `columns` equal stretch tracks of weight 1.
     property var tracks: []
     readonly property bool tracked: tracks.length > 0
-    // C++ sets the tracks before it adopts any child, so every child lands in the content the grid lays out with.
-    readonly property Item content: tracked ? free : layout
+    readonly property var placedTracks: {
+        if (tracked)
+            return tracks
+        const equal = []
+        for (let i = 0; i < Math.max(1, columns); ++i)
+            equal.push({"kind": 2, "amount": 1, "align": 0})
+        return equal
+    }
+    readonly property Item content: free
 
-    implicitWidth: tracked ? free.implicitWidth : layout.implicitWidth
-    implicitHeight: tracked ? free.implicitHeight : layout.implicitHeight
+    implicitWidth: free.implicitWidth
+    implicitHeight: free.implicitHeight
 
     onWidthChanged: place()
-    onTracksChanged: place()
+    onPlacedTracksChanged: place()
+    onGapChanged: place()
+
+    // The spacing scale and the unit sizes feed every extent `place` computes.
+    Connections {
+        target: Theme
+        function onUnitWidthChanged() {
+            root.place()
+        }
+        function onUnitHeightChanged() {
+            root.place()
+        }
+        function onSpaceChanged() {
+            root.place()
+        }
+    }
 
     // A cell's own extent along one dimension: its fixed amount, else its implicit extent, within its bounds.
     function extentOf(kind: int, amount: int, implicit: real, minimum: int, maximum: int, unit: real): real {
@@ -55,13 +77,13 @@ MorphWidget {
     // Lays the shown cells out by the tracks, as the terminal does: row-major, a cell whose span does not fit the
     // rest of its row starting the next one. Fixed tracks take their amount, content tracks their widest one-track
     // cell, and stretch tracks share what is left by weight. Across its track a label-width cell keeps its natural
-    // width at the track's start, centre or end, a text draws its text there, and any other cell fills the track. Down
-    // its row a cell sits by its own `alignSelf`, else the grid's `align`. C++ calls it again whenever a cell's
+    // width at the track's start, centre or end, a text draws its text there, and any other cell fills the track, up
+    // to its own maximum width. Without tracks the natural width is the terminal's: the widest cell, a span divided
+    // out, times the columns, so a content-sized grid never squeezes its own cells. Down its row a cell sits by its own `alignSelf`, else the grid's `align`. C++ calls it again whenever a cell's
     // implicit size, visibility or span changes.
     function place() {
-        if (!root.tracked)
-            return
-        const count = root.tracks.length
+        const tracks = root.placedTracks
+        const count = tracks.length
         const space = Theme.spaceOf(root.gap)
         const cells = []
         let column = 0
@@ -92,7 +114,7 @@ MorphWidget {
         let natural = used
         let weights = 0
         for (let t = 0; t < count; ++t) {
-            const track = root.tracks[t]
+            const track = tracks[t]
             const w = track.kind === 1 ? track.amount * Theme.unitWidth : track.kind === 0 ? naturals[t] : 0
             widths.push(w)
             used += w
@@ -102,7 +124,7 @@ MorphWidget {
         }
         const left = Math.max(0, root.width - used)
         for (let t = 0; t < count; ++t) {
-            const track = root.tracks[t]
+            const track = tracks[t]
             if (track.kind === 2)
                 widths[t] = left * Math.max(1, track.amount) / weights
         }
@@ -132,16 +154,18 @@ MorphWidget {
             let room = space * (placed.span - 1)
             for (let t = placed.column; t < placed.column + placed.span; ++t)
                 room += widths[t]
-            const across = root.tracks[placed.column].align
+            const across = tracks[placed.column].align
             let width = room
             if (widget && widget.fillsAcross === false)
                 width = Math.min(root.naturalWidth(cell), room)
             else if (widget && widget.widthKind === 1)
                 width = Math.min(root.naturalWidth(cell), room)
+            else if (widget && widget.maxWidthUnits >= 0)
+                width = Math.min(room, widget.maxWidthUnits * Theme.unitWidth)
             const spare = room - width
             cell.x = xs[placed.column] + (across === 3 ? spare : across === 2 ? Math.floor(spare / 2) : 0)
             cell.width = width
-            if (cell.textAlign !== undefined && !cell.ownAlign)
+            if (root.tracked && cell.textAlign !== undefined && !cell.ownAlign)
                 cell.textAlign = across === 3 ? Qt.AlignRight : across === 2 ? Qt.AlignHCenter : Qt.AlignLeft
 
             const rowHeight = heights[placed.row]
@@ -153,23 +177,21 @@ MorphWidget {
             cell.y = ys[placed.row] + (down === 3 ? below : down === 2 ? Math.floor(below / 2) : 0)
             cell.height = height
         }
+        if (!root.tracked) {
+            let unit = 0
+            for (const placed of cells) {
+                const covered = space * (placed.span - 1)
+                unit = Math.max(unit, Math.ceil(Math.max(0, root.naturalWidth(placed.item) - covered) / placed.span))
+            }
+            natural = unit * count + space * (count - 1)
+        }
         free.implicitWidth = Math.max(0, natural)
         free.implicitHeight = heights.length > 0 ? y - space : 0
-    }
-
-    GridLayout {
-        id: layout
-        anchors.fill: parent
-        visible: !root.tracked
-        columns: Math.max(1, root.columns)
-        rowSpacing: Theme.spaceOf(root.gap)
-        columnSpacing: Theme.spaceOf(root.gap)
     }
 
     Item {
         id: free
         anchors.fill: parent
-        visible: root.tracked
         onChildrenChanged: root.place()
     }
 }

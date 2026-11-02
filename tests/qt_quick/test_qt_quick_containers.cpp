@@ -153,6 +153,88 @@ TEST_CASE("qt_quick containers: a grid lays children in its columns and widens a
     CHECK(Scene::itemOf(*grid).property("columns").toInt() == 1);
 }
 
+namespace {
+
+/// A grid of @p columns in a column, holding one text per entry of @p texts.
+struct GridInColumn {
+    GridInColumn(Scene& scene, int columns, std::vector<std::string> const& texts, ui::LayoutHints layout)
+        : column{scene.backend().createStack(nullptr, ui::Axis::Vertical)},
+          grid{scene.backend().createGrid(column.get())} {
+        column->setAlign(ui::Align::Start);
+        grid->setColumns(columns);
+        grid->setLayout(layout);
+        for (std::string const& text : texts) {
+            cells.push_back(scene.backend().createText(grid.get()));
+            cells.back()->setText(text);
+        }
+        scene.settle();
+    }
+    std::unique_ptr<ui::StackWidget> column;
+    std::unique_ptr<ui::GridWidget> grid;
+    std::vector<std::unique_ptr<ui::TextWidget>> cells;
+};
+
+}  // namespace
+
+// Mutation: restore the GridLayout path (the cells follow their content, 2 and 58 units), or sum the column naturals.
+TEST_CASE("qt_quick containers: a grid without tracks shares its width in equal columns", "[qt_quick][grid]") {
+    Scene scene;
+    GridInColumn shown{scene, 2, {"a", std::string(30, 'b')}, {.width = ui::Sizing::fixed(60)}};
+    qreal const unit = Scene::itemOf(*shown.grid).width() / 60;
+    CHECK(Scene::itemOf(*shown.cells.at(0)).width() == Catch::Approx(30 * unit).margin(1.0));
+    CHECK(Scene::itemOf(*shown.cells.at(1)).width() == Catch::Approx(30 * unit).margin(1.0));
+    CHECK(Scene::itemOf(*shown.cells.at(1)).x() == Catch::Approx(30 * unit).margin(1.0));
+}
+
+// Mutation: sum the columns' naturals (a content-sized grid of one and ten characters is then 11 units).
+TEST_CASE("qt_quick containers: a content-sized grid without tracks is its widest cell times its columns",
+          "[qt_quick][grid]") {
+    Scene scene;
+    GridInColumn shown{scene, 2, {"a", std::string(10, 'b')}, {}};
+    qreal const widest = Scene::itemOf(*shown.cells.at(1)).implicitWidth();
+    CHECK(Scene::itemOf(*shown.grid).implicitWidth() == Catch::Approx(2 * widest).margin(1.5));
+    CHECK(Scene::itemOf(*shown.cells.at(1)).width() >= widest - 0.5);
+}
+
+// Mutation: drop the span term (a span-2 cell then counts as its whole width for one column).
+TEST_CASE("qt_quick containers: a spanning cell's width is divided among its columns in a content-sized grid",
+          "[qt_quick][grid]") {
+    Scene scene;
+    GridInColumn shown{scene, 2, {std::string(30, 'b'), "a", "c"}, {}};
+    shown.grid->setSpan(*shown.cells.at(0), 2);
+    scene.settle();
+    qreal const wide = Scene::itemOf(*shown.cells.at(0)).implicitWidth();
+    CHECK(Scene::itemOf(*shown.grid).implicitWidth() == Catch::Approx(wide).margin(1.5));
+}
+
+// Mutation: drop the maximum clamp (the cell then fills its 30-unit track).
+TEST_CASE("qt_quick containers: a stretch cell stops at its maximum at its track's start", "[qt_quick][grid]") {
+    Scene scene;
+    GridInColumn shown{scene, 2, {"a", "b"}, {.width = ui::Sizing::fixed(60)}};
+    shown.cells.at(0)->setLayout({.width = ui::Sizing::stretch(), .maxWidth = 10});
+    scene.settle();
+    qreal const unit = Scene::itemOf(*shown.grid).width() / 60;
+    CHECK(Scene::itemOf(*shown.cells.at(0)).width() == Catch::Approx(10 * unit).margin(1.0));
+    CHECK(Scene::itemOf(*shown.cells.at(0)).x() == Catch::Approx(0).margin(0.5));
+}
+
+// Mutation: leave out `onGapChanged` or the column count's re-placement.
+TEST_CASE("qt_quick containers: a grid places its cells again when its columns or its gap change after adoption",
+          "[qt_quick][grid]") {
+    Scene scene;
+    GridInColumn shown{scene, 2, {"a", "b", "c"}, {.width = ui::Sizing::fixed(60)}};
+    qreal const unit = Scene::itemOf(*shown.grid).width() / 60;
+    shown.grid->setColumns(3);
+    scene.settle();
+    CHECK(Scene::itemOf(*shown.cells.at(2)).x() == Catch::Approx(40 * unit).margin(1.0));
+    CHECK(Scene::itemOf(*shown.cells.at(0)).width() == Catch::Approx(20 * unit).margin(1.0));
+    shown.grid->setGap(3);
+    scene.settle();
+    // Three columns and two 12 px gaps share the width, and the second column starts one column and one gap in.
+    qreal const column = ((60 * unit) - 24) / 3;
+    CHECK(Scene::itemOf(*shown.cells.at(1)).x() == Catch::Approx(column + 12).margin(1.0));
+}
+
 TEST_CASE("qt_quick containers: a collapsible panel reports the state the user asks for and hides its content",
           "[qt_quick]") {
     Scene scene;
