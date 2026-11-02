@@ -14,6 +14,7 @@
 #include <QSGRendererInterface>
 #include <QVariant>
 #include <QVariantList>
+#include <QtEnvironmentVariables>
 #include <algorithm>
 #include <array>
 #include <iostream>
@@ -152,6 +153,13 @@ int Frontend::run(ui::AppSource& source) {
     qt::QtExecutor executor{&anchor};
     reactive::Runtime runtime{executor};
     QtScheduler scheduler{executor, &anchor};
+    // With Qt 6.12.0's incremental garbage collector, which interleaves its steps with the event loop, a process
+    // running this module's QML crashes in a later collection, on an object whose memory is corrupt; a collector that
+    // runs each collection to its end in one step does not. So the engine is made with the collector's time slice at
+    // zero (`QV4_GC_TIMELIMIT`, which Qt reads when an engine is made), unless the environment already chose one.
+    if (!qEnvironmentVariableIsSet("QV4_GC_TIMELIMIT")) {
+        qputenv("QV4_GC_TIMELIMIT", "0");
+    }
     QQmlEngine engine;
     QQuickWindow window;
     window.setTitle(detail::toQString(_config.title));

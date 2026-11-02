@@ -54,7 +54,8 @@ builds `qt_quick::Backend` itself ([`backend.md`](backend.md)).
 2. a `qt::QtExecutor`, the reactive runtime's owner and every bridge handler's callback executor;
 3. the `reactive::Runtime`;
 4. a `QtScheduler`;
-5. the `QQmlEngine`, the `QQuickWindow` (1024 × 768, the configured title), then `onEngine(engine, window)`, then the
+5. the `QQmlEngine` (with the garbage collector's time slice at zero, below), the `QQuickWindow` (1024 × 768, the
+   configured title), then `onEngine(engine, window)`, then the
    `Backend` on the window's content item, which first takes the window's size: a window not yet shown has not sized
    it, and the shell reads the backend's width class before the first mount. Restyles and `applyTheme` made in the hook reach every widget the shell
    creates, since the backend resolves a kind's component on its first use;
@@ -76,6 +77,14 @@ window; it reads the mounted shell through `inspectFocused`, and is hidden when 
 destroyed. On the `offscreen` platform the window renders in software. Teardown is the reverse: `runApp`
 destroys the screens and closes the source; then the backend, the window and the engine go, then the scheduler, the
 runtime and the executor, and Qt last. A task posted to the executor after that runs nothing.
+
+## Garbage collection
+
+Before it makes the engine, `run` sets `QV4_GC_TIMELIMIT` to `0` unless the environment already sets it, which Qt
+reads when an engine is made: the engine's garbage collector then runs each collection to its end in one step. With
+Qt 6.12.0's incremental collector, whose steps interleave with the event loop, a process running this module's QML
+crashes in a later collection, on an object whose memory is corrupt; a collection in one step does not. A value the
+environment gives is kept, so an application can choose the incremental collector back.
 
 ## Quit
 

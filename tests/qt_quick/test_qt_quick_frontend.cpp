@@ -3,6 +3,7 @@
 // qt_quick::Frontend: run, quit and the teardown order (docs/spec/qt_quick/frontend.md). This executable owns no
 // QGuiApplication: each run makes its own, as a client's main does.
 
+#include <QByteArray>
 #include <QColor>
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -11,6 +12,7 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QWindow>
+#include <QtEnvironmentVariables>
 #include <array>
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -265,6 +267,41 @@ TEST_CASE("qt_quick frontend: onEngine runs with the engine and the window befor
     CHECK(seen != nullptr);
     REQUIRE_FALSE(log.empty());
     CHECK(log.front() == "onEngine");  // before the source opens
+}
+
+// Mutation: make the engine without touching QV4_GC_TIMELIMIT (the first case reads it unset), or always write 0 (the
+// second reads 0 instead of the 7 it chose).
+TEST_CASE("qt_quick frontend: the engine is made with the garbage collector's time slice at zero",
+          "[qt_quick][frontend]") {
+    qunsetenv("QV4_GC_TIMELIMIT");
+    std::vector<std::string> log;
+    RecordingSource source{log};
+    qt_quick::FrontendConfig config =
+        configWith(log, [](ui::AppContext& context) { context.executor().post([&context] { context.quit(0); }); });
+    std::optional<QByteArray> seen;
+    config.onEngine = [&seen](QQmlEngine&, QQuickWindow&) {
+        seen =
+            qEnvironmentVariableIsSet("QV4_GC_TIMELIMIT") ? std::optional{qgetenv("QV4_GC_TIMELIMIT")} : std::nullopt;
+    };
+    qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
+    CHECK(frontend.run(source) == 0);
+    REQUIRE(seen.has_value());
+    CHECK(*seen == QByteArrayLiteral("0"));
+}
+
+TEST_CASE("qt_quick frontend: a garbage collector time slice the environment chose is kept", "[qt_quick][frontend]") {
+    qputenv("QV4_GC_TIMELIMIT", "7");
+    std::vector<std::string> log;
+    RecordingSource source{log};
+    qt_quick::FrontendConfig config =
+        configWith(log, [](ui::AppContext& context) { context.executor().post([&context] { context.quit(0); }); });
+    std::optional<QByteArray> seen;
+    config.onEngine = [&seen](QQmlEngine&, QQuickWindow&) { seen = qgetenv("QV4_GC_TIMELIMIT"); };
+    qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
+    CHECK(frontend.run(source) == 0);
+    qunsetenv("QV4_GC_TIMELIMIT");
+    REQUIRE(seen.has_value());
+    CHECK(*seen == QByteArrayLiteral("7"));
 }
 
 TEST_CASE("qt_quick frontend: an onEngine that throws ends the run after the teardown, with nothing mounted",
