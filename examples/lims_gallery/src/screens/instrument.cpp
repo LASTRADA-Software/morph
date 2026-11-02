@@ -331,16 +331,20 @@ ui::Node dialogs(Instrument const& instrument) {
 // ── The layouts ──────────────────────────────────────────────────────────────────────────────────────────────────
 
 ui::Node expandedLayout(Instrument const& instrument) {
-    auto const overview = ui::row(
-        {ui::column({detailsCard(), ui::panel({eventList(instrument)}, {.title = "Recent events", .padding = 3})},
-                    {.gap = 2})
-             .sizing(ui::stretch(2)),
-         ui::column({ui::panel({qualificationList()}, {.title = "Qualification", .padding = 3}),
-                     ui::panel({currentBooking(false)}, {.title = "Current booking", .padding = 3})},
-                    {.gap = 2})
-             // A third of the page, as the design draws it (320 of its 1000 px).
-             .sizing(ui::stretch(1))},
-        {.gap = 2, .align = Align::Start});
+    auto const overview =
+        ui::row(
+            {ui::column({detailsCard(), ui::panel({eventList(instrument)}, {.title = "Recent events", .padding = 3})},
+                        {.gap = 3})
+                 .sizing(ui::stretch(2))
+                 .testId("overview-main"),
+             ui::column({ui::panel({qualificationList()}, {.title = "Qualification", .padding = 3}),
+                         ui::panel({currentBooking(false)}, {.title = "Current booking", .padding = 3})},
+                        {.gap = 3})
+                 // A third of the page, as the design draws it (320 of its 1000 px).
+                 .sizing(ui::stretch(1))
+                 .testId("overview-side")},
+            {.gap = 3, .align = Align::Start})
+            .testId("overview");
     // The root is the page's edge: the strip sits in the head's white block, and the tabs inset their own pages.
     return ui::column({recordTabs(instrument, overview), dialogs(instrument)},
                       {.gap = 0, .pageEdge = true, .headJoined = true});

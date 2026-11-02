@@ -57,6 +57,10 @@ TEST_CASE("instrument, expanded: the head's status and actions, the overflow men
     CHECK(screen.shows("Panel", "details"));
     // The details' captions take the design's 17-unit column.
     CHECK(screen.backend().find("KeyValue", "captionWidth", "17").has_value());
+    // The overview's cards sit 12 px apart, across and down.
+    CHECK(screen.prop("Row", "overview", "gap") == "3");
+    CHECK(screen.prop("Column", "overview-main", "gap") == "3");
+    CHECK(screen.prop("Column", "overview-side", "gap") == "3");
     CHECK(screen.find("Column", "qualification").has_value());
     CHECK(screen.prop("Progress", "booking-elapsed", "value") == "0.29");
 }
