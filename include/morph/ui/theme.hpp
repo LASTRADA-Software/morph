@@ -1194,7 +1194,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 83> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 84> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1318,6 +1318,9 @@ inline constexpr std::array<ThemeTokenSpec, 83> kThemeTokens = {{
      .shadow = {.color = "#00000024", .offsetX = 0.0, .offsetY = 8.0, .blur = 24.0, .spread = 0.0}},
     // Transparent: an unset theme fills a table's header with nothing, matching today's appearance exactly.
     {.path = "color.table.header", .kind = ThemeTokenKind::Color, .color = "#00000000", .number = 0.0},
+    // The 1 px rule under a table's header, in the header's last pixel row. Transparent: a theme that draws a header
+    // band says how it closes.
+    {.path = "color.table.headerRule", .kind = ThemeTokenKind::Color, .color = "#00000000", .number = 0.0},
     // How the outline of a button, a badge and an input is stroked on a surface: solid, or dashed. Read per surface.
     {.path = "border.style",
      .kind = ThemeTokenKind::Stroke,

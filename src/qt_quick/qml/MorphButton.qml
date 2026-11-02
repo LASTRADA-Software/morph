@@ -152,6 +152,7 @@ MorphWidget {
             infoBorder: root.scheme.infoBorder
             infoDot: root.scheme.infoDot
             tableHeader: root.scheme.tableHeader
+            tableHeaderRule: root.scheme.tableHeaderRule
             chart1: root.scheme.chart1
             chart2: root.scheme.chart2
             chart3: root.scheme.chart3

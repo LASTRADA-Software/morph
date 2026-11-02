@@ -22,6 +22,7 @@
 #include <QTest>
 #include <QUrl>
 #include <QVariant>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
@@ -2520,4 +2521,99 @@ TEST_CASE("qt_quick theme: a round button placed narrower than tall draws a circ
     CHECK(background->height() == item.width());
     CHECK(background->y() == (item.height() - item.width()) / 2);
     CHECK(background->property("radius").toReal() == item.width() / 2);
+}
+
+namespace {
+
+/// The rule a table's header draws, or null: the header background part's `headerRule` child.
+QQuickItem* headerRuleOf(ui::TableWidget& table) {
+    auto* const background = Scene::itemOf(table).property("headerBackgroundItem").value<QObject*>();
+    return background == nullptr ? nullptr : background->findChild<QQuickItem*>(QStringLiteral("headerRule"));
+}
+
+/// A table of one row under @p parent, with the keys and cells a mount makes.
+struct OneRowTable {
+    std::unique_ptr<ui::TableWidget> table;
+    std::unique_ptr<ui::StackWidget> row;
+    std::unique_ptr<ui::TextWidget> cell;
+};
+
+OneRowTable makeOneRowTable(Scene& scene, ui::ContainerWidget* parent) {
+    OneRowTable made;
+    made.table = scene.backend().createTable(parent);
+    made.table->setColumns({{.label = "Name"}});
+    made.row = scene.backend().createStack(made.table.get(), ui::Axis::Horizontal);
+    made.table->setRowKey(*made.row, ui::Key{std::string{"a"}});
+    made.cell = scene.backend().createText(made.row.get());
+    made.cell->setText("cell");
+    scene.settle();
+    return made;
+}
+
+ui::ThemeValues headerRuleTheme(char const* hex) {
+    auto const tokens = ui::parseTokens(
+        std::string{R"({"color": {"$type": "color", "table": {"headerRule": {"$value": ")"} + hex + R"("}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    return ui::themeValues(*resolved);
+}
+
+}  // namespace
+
+// Mutation: bind the rule to `scheme.divider`, anchor it at the header's top, leave `cardScheme` without the binding
+// (the panel case), or leave `kSchemeProperties` without the entry (the declared-surface case).
+TEST_CASE("qt_quick theme: a table's header draws a 1 px rule in color.table.headerRule, in a card and on a surface",
+          "[qt_quick]") {
+    qreal firstRowTop = 0;
+    {
+        Scene scene;
+        auto panel = scene.backend().createPanel(nullptr);
+        OneRowTable table = makeOneRowTable(scene, panel.get());
+        QQuickItem const* const rule = headerRuleOf(*table.table);
+        REQUIRE(rule != nullptr);
+        // The stock theme draws no rule: it is transparent.
+        CHECK(rule->property("color").value<QColor>().alpha() == 0);
+        firstRowTop = Scene::itemOf(*table.row).mapToItem(&Scene::itemOf(*table.table), QPointF{0, 0}).y();
+    }
+    {
+        Scene scene;
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), headerRuleTheme("#DDE1E6")).empty());
+        // A table in a panel with no surface of its own draws with the card scheme.
+        auto panel = scene.backend().createPanel(nullptr);
+        OneRowTable table = makeOneRowTable(scene, panel.get());
+        QQuickItem const* const rule = headerRuleOf(*table.table);
+        REQUIRE(rule != nullptr);
+        CHECK(rule->isVisible());
+        CHECK(rule->height() == 1.0);
+        CHECK(rule->property("color").value<QColor>() == QColor{"#dde1e6"});
+        // Every built-in scheme takes it, the joined toolbar's from the bar's.
+        auto* const theme =
+            scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+        REQUIRE(theme != nullptr);
+        for (char const* const name : {"themeScheme", "pageScheme", "cardScheme", "sidebarScheme", "toolbarScheme",
+                                       "barScheme", "toolbarJoinedScheme"}) {
+            CAPTURE(name);
+            auto* const scheme = theme->property(name).value<QObject*>();
+            REQUIRE(scheme != nullptr);
+            CHECK(scheme->property("tableHeaderRule").value<QColor>() == QColor{"#dde1e6"});
+        }
+        auto* const background = Scene::itemOf(*table.table).property("headerBackgroundItem").value<QQuickItem*>();
+        REQUIRE(background != nullptr);
+        CHECK(rule->mapToItem(background, QPointF{0, rule->height()}).y() == Catch::Approx(background->height()));
+        // The rule lies inside the header's height: the first row is where it was.
+        CHECK(Scene::itemOf(*table.row).mapToItem(&Scene::itemOf(*table.table), QPointF{0, 0}).y() ==
+              Catch::Approx(firstRowTop));
+    }
+    {
+        Scene scene;
+        std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"sidebar", headerRuleTheme("#405060")}};
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), headerRuleTheme("#DDE1E6"), surfaces).empty());
+        auto side = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+        side->setSurface("sidebar");
+        OneRowTable table = makeOneRowTable(scene, side.get());
+        QQuickItem const* const rule = headerRuleOf(*table.table);
+        REQUIRE(rule != nullptr);
+        CHECK(rule->property("color").value<QColor>() == QColor{"#405060"});
+    }
 }

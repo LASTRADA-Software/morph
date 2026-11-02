@@ -180,6 +180,8 @@ QtObject {
     property color infoDot: "#1565c0"
     // A table's header background; transparent draws no fill, matching a table with no theme-set header.
     property color tableHeader: "#00000000"
+    // The rule under a table's header; transparent draws none.
+    property color tableHeaderRule: "#00000000"
     // A chart's series colours, in drawing order: `color.chart.1` to `color.chart.4`.
     property color chart1: "#0072b2"
     property color chart2: "#c25400"
@@ -414,6 +416,7 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        tableHeaderRule: theme.tableHeaderRule
         chart1: theme.chart1
         chart2: theme.chart2
         chart3: theme.chart3
@@ -459,6 +462,7 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        tableHeaderRule: theme.tableHeaderRule
         chart1: theme.chart1
         chart2: theme.chart2
         chart3: theme.chart3
@@ -504,6 +508,7 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        tableHeaderRule: theme.tableHeaderRule
         chart1: theme.chart1
         chart2: theme.chart2
         chart3: theme.chart3
@@ -544,6 +549,7 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        tableHeaderRule: theme.tableHeaderRule
         chart1: theme.chart1
         chart2: theme.chart2
         chart3: theme.chart3
@@ -589,6 +595,7 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        tableHeaderRule: theme.tableHeaderRule
         chart1: theme.chart1
         chart2: theme.chart2
         chart3: theme.chart3
@@ -633,6 +640,7 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        tableHeaderRule: theme.tableHeaderRule
         chart1: theme.chart1
         chart2: theme.chart2
         chart3: theme.chart3
@@ -680,6 +688,7 @@ QtObject {
         infoBorder: theme.barScheme.infoBorder
         infoDot: theme.barScheme.infoDot
         tableHeader: theme.barScheme.tableHeader
+        tableHeaderRule: theme.barScheme.tableHeaderRule
         chart1: theme.barScheme.chart1
         chart2: theme.barScheme.chart2
         chart3: theme.barScheme.chart3

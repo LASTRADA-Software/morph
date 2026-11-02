@@ -183,6 +183,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `color.scrim` (`#0000004d`, black at 30 %): the dim over the window behind a modal dialog or drawer; a sheet draws none | colour |
 | `color.track` (`#e5e5ea`): the unfilled part of a progress bar, and the segmented select's track | colour |
 | `color.table.header` (transparent) | colour |
+| `color.table.headerRule` (transparent): the 1 px rule under a table's header, in the header's last pixel row. It maps to `Theme.tableHeaderRule` and from there to every built-in scheme (`toolbarJoinedScheme` takes `barScheme`'s) and every surface a theme declares, so a table draws it whether it sits on the page, in a card or on a declared surface. It is its own colour because a header is often closed in a darker line than the rules between rows. The terminal reads no table colour and draws no rule | colour |
 | `color.disabled.text` (`#8e8e93`), `color.disabled.bg` (`#f2f2f7`), `color.disabled.border` (`#e5e5ea`): a disabled button's caption and icon, fill and outline. Read once for the whole theme, not per surface. The terminal draws a disabled button dim and reads no token | colour |
 | `input.paddingX` (8): the inner inset of every input on each side, the distance from a text input's, a text area's, a date input's or a select's border to its text (and to its prefix, icon and unit); a negative value is refused by `checkTheme` as `input.paddingX: must not be negative`. The terminal pads its inputs by cells and reads no dimension | dimension, in px |
 | `head.paddingY` (0): the space above and below the line of the shell's expanded head bar, in px; 0 keeps the bar's own gap (spacing step 2, 8 px), and any value above 0 replaces it, a smaller one included. The compact bar is unchanged. A negative value is refused by `checkTheme` as `head.paddingY: must not be negative`. The terminal reads no dimension, so its head keeps its rows | dimension, in px |
@@ -236,6 +237,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `errorBg`, `errorBorder`, `errorDot` | `color.err.bg`, `color.err.border`, `color.err.dot` |
 | `infoBg`, `infoBorder`, `infoDot` | `color.info.bg`, `color.info.border`, `color.info.dot` |
 | `tableHeader` | `color.table.header` |
+| `tableHeaderRule` | `color.table.headerRule` |
 | `chart1` … `chart4` | `color.chart.1` … `color.chart.4` |
 | `scrim` | `color.scrim` |
 | `staleOpacity` | `opacity.stale` |

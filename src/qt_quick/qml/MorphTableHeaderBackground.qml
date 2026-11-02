@@ -14,4 +14,13 @@ Item {
         anchors.fill: parent
         color: root.scheme.tableHeader
     }
+    // The rule under the header, in the theme's `color.table.headerRule`, over the band's last pixel row.
+    Rectangle {
+        objectName: "headerRule"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 1
+        color: root.scheme.tableHeaderRule
+    }
 }

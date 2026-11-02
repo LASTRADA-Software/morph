@@ -336,8 +336,10 @@ select-all box is partly checked.
 
 The header row draws its own background part (`headerBackground`, the `tableHeader` part restyle) behind the column
 labels, and hands it only `scheme`: the header has no selection, hover, focus or tone of its own. The stock
-background fills with `scheme.tableHeader` (`color.table.header`, transparent by default), so a table draws no
-header fill until a theme sets one. A document-authored column's `role` (a `TextRole`) styles its default cell's
+background fills with `scheme.tableHeader` (`color.table.header`, transparent by default) and draws a 1 px rule
+(`headerRule`) over its last pixel row in `scheme.tableHeaderRule` (`color.table.headerRule`, transparent by default),
+so a table draws no header fill and no rule until a theme sets them. The rule lies inside the header's height, so no
+row moves. A document-authored column's `role` (a `TextRole`) styles its default cell's
 text and has no effect on a column with its own `cell`.
 
 **Virtualized tables.** A table whose row count has crossed its `Virtualization::threshold`

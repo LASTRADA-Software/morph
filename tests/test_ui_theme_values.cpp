@@ -123,6 +123,28 @@ TEST_CASE("ui theme values: the neutral tone has its parts, and the hover fill a
     CHECK(popup.spread == 0.0);
 }
 
+// Mutation: leave `color.table.headerRule` out of `kThemeTokens` (a bundle's value is dropped and the token is
+// reported as unread), or accept a token of another type as the colour.
+TEST_CASE("ui theme values: the rule under a table's header is a colour token, transparent by default",
+          "[ui][theme]") {
+    CHECK(ui::themeValues().colors.at("color.table.headerRule").hex() == "#00000000");
+    CHECK(valuesOf(R"({"color": {"$type": "color", "table": {"headerRule": {"$value": "#DDE1E6"}}}})")
+              .colors.at("color.table.headerRule")
+              .hex() == "#dde1e6");
+    CHECK(valuesOf(
+              R"({"color": {"table": {"headerRule": {"$type": "dimension", "$value": {"value": 2, "unit": "px"}}}}})")
+              .colors.at("color.table.headerRule")
+              .hex() == "#00000000");
+    auto tokens = ui::parseTokens(R"({"color": {"$type": "color", "table": {"headerRule": {"$value": "#DDE1E6"}}}})");
+    REQUIRE(tokens.has_value());
+    ui::ThemeIndex index;
+    index.base = "base";
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        return id == "base" ? &*tokens : nullptr;
+    };
+    CHECK(ui::unreadThemeTokens(index, files).empty());
+}
+
 // Mutation: leave `radius.badge` out of `kThemeTokens` (a bundle's value is dropped and the default 4 reads).
 TEST_CASE("ui theme values: the badge radius is a token with a default", "[ui][theme]") {
     CHECK(ui::themeValues().dimensions.at("radius.badge") == 4.0);
