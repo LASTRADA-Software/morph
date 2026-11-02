@@ -4244,9 +4244,9 @@ private:
         if (role == nullptr || role->kind != ExprKind::Literal) {
             return;
         }
-        static constexpr std::array<std::string_view, 11> kRoles = {"normal",  "muted", "heading", "title",
-                                                                    "section", "error", "success", "mono",
-                                                                    "display", "small", "overline"};
+        static constexpr std::array<std::string_view, 12> kRoles = {
+            "normal", "muted", "heading", "title", "section", "error", "success", "mono", "display", "small",
+            "overline", "caption"};
         std::string const* const name = role->literal.asString();
         if (name == nullptr) {
             refuse(pointerAppend(node.path, "role"), "`role` is a name");

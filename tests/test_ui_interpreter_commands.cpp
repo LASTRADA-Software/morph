@@ -928,6 +928,19 @@ TEST_CASE("button: a push button's selected follows its condition", "[ui][interp
     CHECK(h.backend.prop(well, "selected") == "false");
 }
 
+// Mutation: leave "caption" out of `roleNamed` (a literal role is refused, a computed one drawn Normal).
+TEST_CASE("text: the caption role lowers to Caption, written literally or computed", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "roles", "state": { "r": { "init": "caption" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "text", "testId": "literal", "text": "x", "role": "caption" },
+        { "kind": "text", "testId": "computed", "text": "y", "role": { "ref": "r" } } ] } })");
+    CHECK(h.diagnostics.empty());
+    CHECK(h.backend.prop(h.byTestId("Text", "literal"), "role") == "Caption");
+    CHECK(h.backend.prop(h.byTestId("Text", "computed"), "role") == "Caption");
+}
+
 // Mutation: lower a computed role through roleOf (an unknown name is drawn Normal, unreported).
 TEST_CASE("text: a computed role of no known name is reported once for its path and drawn Normal",
           "[ui][interpreter]") {

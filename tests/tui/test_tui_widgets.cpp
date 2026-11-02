@@ -965,6 +965,19 @@ TEST_CASE("tui widgets: a square push button drops the spaces inside its bracket
     CHECK(harness.draw() == Rows{"[\xE2\x80\xB9]"});
 }
 
+// Mutation: map Caption to Normal in roleStyle (the note is drawn in the normal text style).
+TEST_CASE("tui widgets: a caption text is drawn in the muted style", "[tui][widgets]") {
+    Harness harness{20, 1};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const caption = harness.make<TextImpl>(column.get());
+    caption->setText("Needs a reason");
+    caption->setRole(ui::TextRole::Caption);
+    CHECK(harness.draw() == Rows{"Needs a reason"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.fg == harness.screen().theme().textMuted.fg);
+    CHECK_FALSE(buffer.at(0, 0).style.bold);
+}
+
 // Mutation: map Overline to Normal in roleStyle (the label is neither bold nor muted).
 TEST_CASE("tui widgets: an overline text is bold and muted, written as it reads", "[tui][widgets]") {
     Harness harness{20, 1};

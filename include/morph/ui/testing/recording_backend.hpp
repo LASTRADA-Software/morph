@@ -311,6 +311,8 @@ template <typename T, typename F>
             return "Small";
         case TextRole::Overline:
             return "Overline";
+        case TextRole::Caption:
+            return "Caption";
         default:
             return "unknown";
     }

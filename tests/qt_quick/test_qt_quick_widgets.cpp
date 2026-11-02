@@ -2182,6 +2182,26 @@ TEST_CASE("qt_quick widgets: under shape.iconOnly an icon-only menu trigger is s
     CHECK(Scene::itemOf(*labelled).width() > Scene::itemOf(*labelled).height());
 }
 
+// Mutation: map role 10 to the body font in MorphText (the size check fails), or to the text colour (the colour check).
+TEST_CASE("qt_quick widgets: a caption text is the caption size, regular and muted", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 200);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const caption = scene.backend().createText(column.get());
+    caption->setText("Needs a reason");
+    caption->setRole(ui::TextRole::Caption);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.settle();
+    QObject const* const theme = themeOf(scene);
+    auto const font = Scene::controlOf(*caption).property("font").value<QFont>();
+    CHECK(font.pixelSize() == static_cast<int>(std::lround(theme->property("captionPixels").toReal())));
+    CHECK(font.pixelSize() != static_cast<int>(std::lround(theme->property("bodyPixels").toReal())));
+    CHECK(font.weight() == QFont::Normal);
+    QObject const* const scheme = Scene::itemOf(*caption).property("scheme").value<QObject*>();
+    REQUIRE(scheme != nullptr);
+    CHECK(Scene::controlOf(*caption).property("color").value<QColor>() == scheme->property("muted").value<QColor>());
+}
+
 // Mutation: draw an overline as a section whatever the token (the size check fails).
 TEST_CASE(
     "qt_quick widgets: an overline is small, strong, muted capitals under font.overline.case, and a section otherwise",

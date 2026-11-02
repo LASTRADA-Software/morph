@@ -249,6 +249,8 @@ enum class TextRole : std::uint8_t {
     Overline,  ///< A short label over a group: as `Section` unless the theme's `font.overline.case` is `uppercase`,
                ///< which draws it at `font.size.small`, strong, muted, in letter-spaced capitals. Written as it
                ///< reads; the terminal draws it as `Section`, whatever the theme.
+    Caption,   ///< A note under a control or a figure: `font.size.caption`, regular, muted. The terminal draws it as
+               ///< `Muted`.
 };
 
 /// @brief How a `TextInput` edits.
