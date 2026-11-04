@@ -59,7 +59,7 @@ constexpr char const* kThemeBase = R"({
              "dot": { "$value": "#B42318" } },
     "info": { "$root": { "$value": "#1F3A8A" }, "bg": { "$value": "#EAF0FB" }, "border": { "$value": "#C7D5F0" },
               "dot": { "$value": "#1F3A8A" } },
-    "table": { "header": { "$value": "#FAFBFC" } } },
+    "table": { "header": { "$value": "#FAFBFC" }, "headerRule": { "$value": "#DDE1E6" } } },
   "font": { "size": { "$type": "dimension",
               "body": { "$value": { "value": 13, "unit": "px" } }, "small": { "$value": { "value": 11, "unit": "px" } },
               "caption": { "$value": { "value": 12, "unit": "px" } }, "mono": { "$value": { "value": 12, "unit": "px" } },

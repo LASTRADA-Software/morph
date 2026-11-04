@@ -125,6 +125,9 @@ TEST_CASE("lims gallery: the sidebar surface fills the current entry and the bas
     CHECK(baseValues.dimensions.at("button.smallTouchHeight") == 36.0);
     CHECK(sidebarValues.keywords.at("list.selection") == "fill");
     CHECK(sidebarValues.colors.at("color.selection").hex() == "#2b3038");
+    // A table's header is a band closed by a rule in the design's border colour.
+    CHECK(baseValues.colors.at("color.table.header").hex() == "#fafbfc");
+    CHECK(baseValues.colors.at("color.table.headerRule").hex() == "#dde1e6");
 }
 
 // Seven designs draw their compact window on a white page; samples and console keep the grey one.
