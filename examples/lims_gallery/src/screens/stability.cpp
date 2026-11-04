@@ -582,7 +582,8 @@ ui::StepperParts wizard(Study const& study, bool compact, ui::Node const& condit
 ui::Node expandedConditions(Study const& study) {
     auto const fields = ui::panel({ui::grid({startField(study), windowField(study), perPullField(study, false)},
                                             {.gap = 2, .columns = 3, .align = Align::Start})},
-                                  {.padding = 2});
+                                  {.padding = 3})
+                            .testId("fields-card");
     auto const conditions =
         ui::panel({ui::row({layout::section("Storage conditions and timepoints (months)").sizing(ui::stretch()),
                             ui::button({.label = "Apply ICH Q1A template",
@@ -593,8 +594,9 @@ ui::Node expandedConditions(Study const& study) {
                            {.gap = 1, .align = Align::Center}),
                    // The table runs to the card's edges, its header band and rules with it.
                    matrix(study).bleed(), layout::muted("T0 is tested once, from the long-term condition.")},
-                  {.padding = 2});
-    auto const aside = ui::panel({summary(study)}, {.title = "Summary", .padding = 2})
+                  {.padding = 3})
+            .testId("conditions-card");
+    auto const aside = ui::panel({summary(study)}, {.title = "Summary", .padding = 3})
                            // 26 % of the row, at most 33 units: 250 px on the 1000 px page. No floor: on the 785 px
                            // page the share is wide enough for the longest value segment beside the 13-unit caption
                            // column, so none breaks; the conditions' labels wrap between words there.
@@ -603,8 +605,8 @@ ui::Node expandedConditions(Study const& study) {
                            .a11y("Summary")
                            .testId("summary-panel");
     return ui::row(
-        {ui::column({attention(study, false), fields, conditions}, {.gap = 2}).sizing(ui::stretch()), aside},
-        {.gap = 2, .align = Align::Start});
+        {ui::column({attention(study, false), fields, conditions}, {.gap = 3}).sizing(ui::stretch()), aside},
+        {.gap = 3, .align = Align::Start});
 }
 
 ui::Node expandedLayout(Study const& study) {

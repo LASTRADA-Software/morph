@@ -175,3 +175,11 @@ TEST_CASE("stability: tests per timepoint, then review and sign", "[lims-gallery
         screen.requireNoProblems();
     }
 }
+
+// Mutation: put one card's padding back to step 2.
+TEST_CASE("stability, expanded: the cards are inset 12 px, the design's 14", "[lims-gallery]") {
+    GalleryScreen screen{"lims-gallery.stability", "expanded"};
+    CHECK(screen.prop("Panel", "fields-card", "padding") == "3");
+    CHECK(screen.prop("Panel", "conditions-card", "padding") == "3");
+    CHECK(screen.prop("Panel", "summary-panel", "padding") == "3");
+}
