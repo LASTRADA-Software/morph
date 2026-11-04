@@ -44,16 +44,17 @@ std::size_t indentOf(std::string const& line) { return line.find_first_not_of(' 
 
 }  // namespace
 
-// Mutation: leave `bleed` off the session table, or lower the panel's two children without a holder column (the
-// table's parent is then the panel, or a column that hides the panel's padding).
-TEST_CASE("receipt, expanded: the session table bleeds, and its parent column passes the panel's padding on",
+// Mutation: draw the session card with padding again (the table then needs `bleed`), or split the table and its
+// footnote into two children of the ruled column (a second rule then stands under the last row).
+TEST_CASE("receipt, expanded: the session table fills an unpadded card, sharing a child with its footnote",
           "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
     std::vector<std::string> const lines = linesOf(screen.backend().dump());
     auto const table = std::ranges::find_if(
         lines, [](std::string const& line) { return line.contains("Table#") && line.contains("testId=session"); });
     REQUIRE(table != lines.end());
-    CHECK(table->contains(" bleed"));
+    // The card has no padding, so there is nothing to bleed past.
+    CHECK_FALSE(table->contains(" bleed"));
     // Sample and Outcome both stretch, so the spare width is shared between them.
     CHECK(table->contains("Sample:stretch"));
     CHECK(table->contains("Outcome:stretch"));
@@ -64,7 +65,7 @@ TEST_CASE("receipt, expanded: the session table bleeds, and its parent column pa
     }
     REQUIRE(parent != lines.rend());
     CHECK(parent->contains("Column#"));
-    CHECK(parent->contains("passesBleed=true"));
+    CHECK_FALSE(parent->contains("divided=true"));
 }
 
 TEST_CASE("receipt, expanded: scan field, duplicate notice, the sample's card and the session", "[lims-gallery]") {
@@ -87,6 +88,10 @@ TEST_CASE("receipt, expanded: scan field, duplicate notice, the sample's card an
     CHECK(screen.find("Column", "conditions").has_value());
     CHECK(screen.find("Checkbox", "logger").has_value());
     CHECK(screen.shows("Table", "session"));
+    // The title is ruled off from the table, and the table and footnote share one child, so no rule stands twice.
+    CHECK(screen.prop("Column", "session-rules", "divided") == "true");
+    CHECK(screen.prop("Text", "session-title", "spans") == "[This session;strong]");
+    CHECK(screen.prop("Panel", "session-panel", "a11yName") == "This session");
     CHECK(screen.prop("Text", "last-rejection", "spans") == rejection("S-26-104228", "seal broken"));
     CHECK(screen.text("head_subtitle") == "Session since 08:30");
     CHECK(screen.prop("Badge", "head_status_0", "text") == "12 received");

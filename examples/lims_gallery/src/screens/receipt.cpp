@@ -427,15 +427,26 @@ ui::Node rejectDialog(Receipt const& receipt) {
 ui::Node expandedLayout(Receipt const& receipt) {
     auto const left = ui::column({scanField(receipt, false), notices(receipt), sampleCard(receipt)}, {.gap = 2})
                           .sizing(ui::stretch());
-    auto const session = ui::panel({sessionTable(receipt, true), rejectionLine(receipt).testId("last-rejection")},
-                                   {.title = "This session", .padding = 2})
-                             // 31 % of the row, at most 39 units (about 300 px): 234 px on the 1000 px page beside the
-                             // sidebar, the least that shows the table's Received badge whole, which leaves the sample
-                             // card's fields a few pixels short of the longest sample type; the width of the mockup's
-                             // pane from a wider page up.
-                             .sizing(ui::percent(33))
-                             .maxWidth(39)
-                             .testId("session-panel");
+    // The title is ruled off from the table under it, across the card. The table draws a rule under its own last row,
+    // so it and the footnote are one child of the ruled column: a rule of the column's own would stand beside it.
+    auto const title = ui::column(
+        {ui::text({.text = "This session", .spans = ui::spans({ui::strong("This session")})}).testId("session-title")},
+        {.padding = ui::padding(2, 3)});
+    auto const footnote =
+        ui::column({rejectionLine(receipt).testId("last-rejection")}, {.padding = ui::padding(2, 3)});
+    auto const session =
+        ui::panel({ui::column({title, ui::column({sessionTable(receipt, false), footnote}, {.gap = 0})},
+                              {.gap = 0, .divided = true})
+                       .testId("session-rules")},
+                  {.padding = 0})
+            .a11y("This session")
+            // 31 % of the row, at most 39 units (about 300 px): 234 px on the 1000 px page beside the
+            // sidebar, the least that shows the table's Received badge whole, which leaves the sample
+            // card's fields a few pixels short of the longest sample type; the width of the mockup's
+            // pane from a wider page up.
+            .sizing(ui::percent(33))
+            .maxWidth(39)
+            .testId("session-panel");
     return ui::pinned(
         ui::column({ui::row({left, session}, {.gap = 2, .align = Align::Start}), rejectDialog(receipt)}));
 }
