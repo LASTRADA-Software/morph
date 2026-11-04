@@ -594,7 +594,8 @@ ui::Node expandedConditions(Study const& study) {
                            {.gap = 1, .align = Align::Center}),
                    // The table runs to the card's edges, its header band and rules with it.
                    matrix(study).bleed(), layout::muted("T0 is tested once, from the long-term condition.")},
-                  {.padding = 3})
+                  // Step 2, the width of a table cell's own inset, so the title and footnote line up with the cells.
+                  {.padding = 2})
             .testId("conditions-card");
     auto const aside = ui::panel({summary(study)}, {.title = "Summary", .padding = 3})
                            // 26 % of the row, at most 33 units: 250 px on the 1000 px page. No floor: on the 785 px
