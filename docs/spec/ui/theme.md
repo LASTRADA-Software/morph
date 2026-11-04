@@ -188,6 +188,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `input.paddingX` (8): the inner inset of every input on each side, the distance from a text input's, a text area's, a date input's or a select's border to its text (and to its prefix, icon and unit); a negative value is refused by `checkTheme` as `input.paddingX: must not be negative`. The terminal pads its inputs by cells and reads no dimension | dimension, in px |
 | `head.paddingY` (0): the space above and below the line of the shell's expanded head bar, in px; 0 keeps the bar's own gap (spacing step 2, 8 px), and any value above 0 replaces it, a smaller one included. The compact bar is unchanged. A negative value is refused by `checkTheme` as `head.paddingY: must not be negative`. The terminal reads no dimension, so its head keeps its rows | dimension, in px |
 | `actions.gap` (0): the space between the actions of a row of actions, in px: an overlay's footer and an `actionBar` placed in a page, which the head's trail and the workspace's overlay footer (`overlay_actions`) are, as is a horizontal `forEach` directly in an `actionBar`; 0 keeps spacing step 2 (8 px). A negative value is refused by `checkTheme` as `actions.gap: must not be negative`. The terminal reads no dimension, so a row of actions keeps its step 2 between its buttons | dimension, in px |
+| `tabs.paddingX` (0), `tabs.gap` (0): a tab's inset on each side of its label, which is also how far the active underline runs past the label, and the space between two tabs, drawn as a leading inset on each tab after the first so that it stays clickable; 0 keeps spacing step 3 for the padding and no gap. A negative value is refused by `checkTheme` as `tabs.paddingX: must not be negative`. The terminal reads no dimension | dimension, in px |
 | `table.cellPaddingX` (8), `table.cellPaddingY` (4): the inset of a table cell and of a header label on each axis; a row is as tall as its tallest cell plus twice the vertical inset, and at least `Theme.targetHeight − 8`. The terminal keeps its one-column gap between cells and no vertical padding | dimension, in px |
 | `color.chart.1` … `color.chart.4` (`#0072b2`, `#c25400`, `#00805e`, `#a8508a`): a chart's series colours, in drawing order | colour |
 | `opacity.stale` | number |
@@ -265,6 +266,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `inputPaddingX` | `input.paddingX` |
 | `headPaddingY` | `head.paddingY` |
 | `actionsGap`, `actionSpacing` (`actionsGap` while above 0, else `spaceOf(2)`) | `actions.gap` |
+| `tabPaddingX`, `tabGap`, `tabInsetX` (`tabPaddingX` while above 0, else `spaceOf(3)`) | `tabs.paddingX`, `tabs.gap` |
 
 **A chart's colours.** A series reads `chart1` to `chart4` of its widget's scheme in order; a reference line and a
 marked point read their tone's colour (`muted` for neutral). Each default holds 3:1 against `color.surface` and

@@ -49,9 +49,10 @@ MorphWidget {
             list.positionViewAtIndex(bar.currentIndex, ListView.Contain)
     }
 
-    // The More button's width for a label: the label and the chevron, in the padding a tab has.
-    function moreWidthFor(label: string): real {
-        return metrics.advanceWidth(label + " ▾") + 2 * Theme.spaceOf(3)
+    // The More button's width for a label when it follows @p shown tabs: the label and the chevron, in the padding a tab
+    // has, and the gap a tab after the first has, which More takes only while a tab precedes it.
+    function moreWidthFor(label: string, shown: int): real {
+        return metrics.advanceWidth(label + " ▾") + 2 * Theme.tabInsetX + (shown > 0 ? Theme.tabGap : 0)
     }
 
     // Shows the leading tabs that fit beside More when the tabs together are wider than the row. More is measured at
@@ -74,13 +75,13 @@ MorphWidget {
             return
         }
         for (let shown = count - 1; shown >= 0; --shown) {
-            let widest = root.moreWidthFor(root.moreLabel)
+            let widest = root.moreWidthFor(root.moreLabel, shown)
             let used = 0
             for (let i = 0; i < count; ++i) {
                 if (i < shown)
                     used += widths[i]
                 else
-                    widest = Math.max(widest, root.moreWidthFor(root.labels[i]))
+                    widest = Math.max(widest, root.moreWidthFor(root.labels[i], shown))
             }
             if (used + widest <= room || shown === 0) {
                 root.shownCount = shown
@@ -175,8 +176,11 @@ MorphWidget {
                             // compact; its label keeps its own size.
                             implicitHeight: Math.max(implicitContentHeight + topPadding + bottomPadding,
                                                      Theme.targetHeight)
-                            leftPadding: Theme.spaceOf(3)
-                            rightPadding: Theme.spaceOf(3)
+                            // Each tab after the first draws `tabGap` in from its leading edge, inside its own button,
+                            // so a hidden tab at width 0 takes no gap and the gap stays clickable.
+                            leftInset: index > 0 ? Theme.tabGap : 0
+                            leftPadding: Theme.tabInsetX + leftInset
+                            rightPadding: Theme.tabInsetX
                             Keys.onRightPressed: event => {
                                 if (index === root.shownCount - 1 && more.visible) {
                                     more.forceActiveFocus()
@@ -196,6 +200,7 @@ MorphWidget {
                                 color: "transparent"
 
                                 Rectangle {
+                                    objectName: "tabUnderline"
                                     anchors.bottom: parent.bottom
                                     width: parent.width
                                     height: 2
@@ -219,8 +224,9 @@ MorphWidget {
                     font: Theme.bodyFont
                     implicitHeight: bar.implicitHeight
                     implicitWidth: contentItem.implicitWidth + leftPadding + rightPadding
-                    leftPadding: Theme.spaceOf(3)
-                    rightPadding: Theme.spaceOf(3)
+                    leftInset: root.shownCount > 0 ? Theme.tabGap : 0
+                    leftPadding: Theme.tabInsetX + leftInset
+                    rightPadding: Theme.tabInsetX
                     Layout.alignment: Qt.AlignBottom
                     Accessible.role: Accessible.Button
                     Accessible.name: text

@@ -400,6 +400,29 @@ TEST_CASE("ui theme values: the head padding defaults to 0 and a negative one is
     CHECK(refused->contains("head.paddingY: must not be negative"));
 }
 
+// Mutation: leave either token out of `kThemeTokens` (the set value is dropped and 0 reads), or out of
+// `kNonNegativePaths` (a negative one is accepted).
+TEST_CASE("ui theme values: the tab padding and gap default to 0 and a negative one is refused", "[ui][theme]") {
+    for (auto const& [name, path] : {std::pair{"paddingX", "tabs.paddingX"}, std::pair{"gap", "tabs.gap"}}) {
+        INFO(path);
+        CHECK(ui::themeValues().dimensions.at(path) == 0.0);
+        CHECK(valuesOf(std::string{R"({"tabs": {")"} + name +
+                       R"(": {"$type": "dimension", "$value": {"value": 6, "unit": "px"}}}})")
+                  .dimensions.at(path) == 6.0);
+        auto const tokens = ui::parseTokens(std::string{R"({"tabs": {")"} + name +
+                                            R"(": {"$type": "dimension", "$value": {"value": -1, "unit": "px"}}}})");
+        REQUIRE(tokens.has_value());
+        ui::ThemeIndex index;
+        index.base = "base";
+        ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+            return id == "base" ? &*tokens : nullptr;
+        };
+        auto const refused = ui::checkTheme(index, files);
+        REQUIRE(refused.has_value());
+        CHECK(refused->contains(std::string{path} + ": must not be negative"));
+    }
+}
+
 // Mutation: treat a token of another type as the keyword (a colour at `shape.iconOnly` is then reported), or let a
 // non-string value through as a valid name.
 TEST_CASE("ui theme values: the keyword, dimension and stroke checks skip tokens of other types and refuse non-names",

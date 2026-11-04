@@ -2142,7 +2142,7 @@ TEST_CASE("qt_quick containers: tabs that do not fit go into a More menu that ch
     }
     CHECK(shown > 0);
     CHECK(shown < 5);
-    // A tab is a step of 3 in from its label on each side, as the design's tabs are.
+    // The stock look: a tab is a step of 3 in from its label on each side, with no gap between tabs.
     CHECK(buttons.at(0)->property("leftPadding").toReal() == Catch::Approx(12));
     auto* const more = root.findChild<QQuickItem*>(QStringLiteral("more"));
     REQUIRE(more != nullptr);
@@ -2204,6 +2204,147 @@ TEST_CASE("qt_quick containers: tabs that do not fit go into a More menu that ch
     for (QQuickItem const* const button : Scene::itemsOf(root, "QQuickTabButton")) {
         CHECK(button->isVisible());
     }
+}
+
+namespace {
+
+/// The theme with the tab tokens @p padding and @p gap, applied to @p scene.
+void applyTabTokens(Scene& scene, double padding, double gap) {
+    ui::ThemeValues values = ui::themeValues();
+    values.dimensions.insert_or_assign("tabs.paddingX", padding);
+    values.dimensions.insert_or_assign("tabs.gap", gap);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    scene.settle();
+}
+
+/// The label of a tab button (its content item), in window coordinates.
+QRectF tabLabelOf(QQuickItem const& button) {
+    auto const* const content = button.property("contentItem").value<QQuickItem*>();
+    REQUIRE(content != nullptr);
+    return QRectF{content->mapToScene(QPointF{0, 0}), QSizeF{content->width(), content->height()}};
+}
+
+/// The active underline of a tab button, in window coordinates.
+QRectF tabUnderlineOf(QQuickItem const& button) {
+    auto const* const background = button.property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    auto const* const underline = background->findChild<QQuickItem*>(QStringLiteral("tabUnderline"));
+    REQUIRE(underline != nullptr);
+    return QRectF{underline->mapToScene(QPointF{0, 0}), QSizeF{underline->width(), underline->height()}};
+}
+
+}  // namespace
+
+// Mutation: hard-code step 3 for the padding (the first label stands 12 in, not 2), draw the gap as the bar's spacing
+// (the hidden tabs keep theirs and More moves away, which the overflow test measures), or put the gap outside the
+// button (a click in it selects nothing).
+TEST_CASE("qt_quick containers: the theme's tab padding and gap place the labels, the underline and the click targets",
+          "[qt_quick][tabs]") {
+    Scene scene;
+    scene.window().resize(800, 300);
+    applyTabTokens(scene, 2, 20);
+    auto tabs = scene.backend().createTabs(nullptr);
+    tabs->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    tabs->setInset(4);
+    tabs->setTabs({"One", "Two", "Three"});
+    std::vector<std::size_t> picks;
+    tabs->setOnSelect([&picks](std::size_t index) { picks.push_back(index); });
+    tabs->setSelected(1);
+    static_cast<void>(settledButton(scene, *tabs, 1));
+    QQuickItem& root = Scene::itemOf(*tabs);
+    QList<QQuickItem*> const buttons = Scene::itemsOf(root, "QQuickTabButton");
+    REQUIRE(buttons.size() == 3);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal step = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, step), Q_ARG(int, 4)));
+
+    QRectF const first = tabLabelOf(*buttons.at(0));
+    QRectF const second = tabLabelOf(*buttons.at(1));
+    QRectF const third = tabLabelOf(*buttons.at(2));
+    CHECK(first.left() == Catch::Approx(root.mapToScene(QPointF{0, 0}).x() + step + 2).margin(0.5));
+    CHECK(second.left() - first.right() == Catch::Approx(24).margin(0.5));
+    CHECK(third.left() - second.right() == Catch::Approx(24).margin(0.5));
+    // The underline of the chosen tab runs 2 past its label on each side, and not under the gap.
+    QRectF const underline = tabUnderlineOf(*buttons.at(1));
+    CHECK(underline.width() == Catch::Approx(second.width() + 4).margin(0.5));
+    CHECK(underline.left() == Catch::Approx(second.left() - 2).margin(0.5));
+    // A click in the gap before a tab chooses that tab.
+    QPoint const inGap = buttons.at(2)->mapToScene(QPointF{10, buttons.at(2)->height() / 2}).toPoint();
+    REQUIRE(inGap.x() < third.left() - 2);
+    QTest::mouseClick(&scene.window(), Qt::LeftButton, {}, inGap);
+    scene.settle();
+    CHECK(picks == std::vector<std::size_t>{2});
+
+    // The stock look has no gap and a padding of step 3.
+    applyTabTokens(scene, 0, 0);
+    static_cast<void>(settledButton(scene, *tabs, 1));
+    QRectF const stockFirst = tabLabelOf(*buttons.at(0));
+    QRectF const stockSecond = tabLabelOf(*buttons.at(1));
+    CHECK(stockFirst.left() == Catch::Approx(root.mapToScene(QPointF{0, 0}).x() + step + 12).margin(0.5));
+    CHECK(stockSecond.left() - stockFirst.right() == Catch::Approx(24).margin(0.5));
+    CHECK(tabUnderlineOf(*buttons.at(1)).width() == Catch::Approx(stockSecond.width() + 24).margin(0.5));
+}
+
+// Mutation: leave the gap out of `moreWidthFor` (at the derived width the fit shows one tab too many and More passes
+// the row's edge), apply the gap to More whatever precedes it (a row too narrow for any tab puts More's label 20 in),
+// or draw the gap as the bar's spacing (More's label lies further than 24 from the last tab's).
+TEST_CASE("qt_quick containers: More follows the last shown tab by the same padding and gap, and leads the row alone",
+          "[qt_quick][tabs]") {
+    Scene scene;
+    scene.window().resize(800, 300);
+    applyTabTokens(scene, 2, 20);
+    auto tabs = scene.backend().createTabs(nullptr);
+    tabs->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    tabs->setInset(4);
+    tabs->setTabs({"Aa", "Bb", "Cc", "Dd", "Ee", "Ff"});
+    tabs->setSelected(0);
+    QQuickItem& root = Scene::itemOf(*tabs);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal step = 0;
+    REQUIRE(QMetaObject::invokeMethod(theme, "spaceOf", Q_RETURN_ARG(qreal, step), Q_ARG(int, 4)));
+    auto* const more = root.findChild<QQuickItem*>(QStringLiteral("more"));
+    REQUIRE(more != nullptr);
+
+    // Narrow enough to overflow, with a tab before More: read the tabs' widths and More's own.
+    scene.window().resize(150, 300);
+    static_cast<void>(settledButton(scene, *tabs, 0));
+    QList<QQuickItem*> const buttons = Scene::itemsOf(root, "QQuickTabButton");
+    REQUIRE(buttons.size() == 6);
+    REQUIRE(more->isVisible());
+    std::vector<double> widths;
+    for (QQuickItem const* const button : buttons) {
+        widths.push_back(button->property("implicitWidth").toDouble());
+    }
+    double const moreWidth = more->property("implicitWidth").toDouble();
+
+    // A row that holds the first three tabs and More, less 10: the fit shows two.
+    double const row = widths.at(0) + widths.at(1) + widths.at(2) + moreWidth - 10;
+    scene.window().resize(static_cast<int>(std::lround(row + 2 * step)), 300);
+    static_cast<void>(settledButton(scene, *tabs, 0));
+    qsizetype shown = 0;
+    QQuickItem const* lastShown = nullptr;
+    for (QQuickItem const* const button : buttons) {
+        if (button->isVisible()) {
+            ++shown;
+            lastShown = button;
+        }
+    }
+    REQUIRE(lastShown != nullptr);
+    CHECK(shown == 2);
+    CHECK(tabLabelOf(*more).left() - tabLabelOf(*lastShown).right() == Catch::Approx(24).margin(1.0));
+    CHECK(more->mapToScene(QPointF{more->width(), 0}).x() <=
+          root.mapToScene(QPointF{root.width() - step, 0}).x() + 1.0);
+
+    // A row too narrow for any tab: More leads the row, at the padding from the strip's inset and with no gap.
+    scene.window().resize(static_cast<int>(std::lround(2 * step + 40)), 300);
+    static_cast<void>(settledButton(scene, *tabs, 0));
+    for (QQuickItem const* const button : buttons) {
+        CHECK_FALSE(button->isVisible());
+    }
+    REQUIRE(more->isVisible());
+    CHECK(tabLabelOf(*more).left() == Catch::Approx(root.mapToScene(QPointF{0, 0}).x() + step + 2).margin(1.0));
 }
 
 // Mutation: ignore `inset` (the first tab's button starts at x = 0, and the page keeps its edge).

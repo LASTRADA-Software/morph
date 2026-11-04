@@ -254,6 +254,10 @@ QtObject {
     // The space between the actions of a row of actions: `actions.gap`; 0 keeps spacing step 2.
     property real actionsGap: 0
     readonly property real actionSpacing: actionsGap > 0 ? actionsGap : spaceOf(2)
+    // A tab's inset on each side of its label (`tabs.paddingX`; 0 is spacing step 3) and the space between two tabs.
+    property real tabPaddingX: 0
+    property real tabGap: 0
+    readonly property real tabInsetX: tabPaddingX > 0 ? tabPaddingX : spaceOf(3)
     // Whether the `overline` text role is drawn in small capitals: `font.overline.case`.
     property bool overlineCaps: false
     readonly property real bodyPixels: bodySize > 0 ? bodySize : platformMetrics.font.pixelSize > 0
