@@ -1,8 +1,0 @@
-# Lane Q-S2: batch Q screen items after the framework (S5–S11)
-
-Read $S/lg-q-common.md (S=/tmp/claude-1000/-home-yaraslau-repo-morph/8742d70b-a059-4ed6-9415-5f45a5067fd9/scratchpad) first; its rules bind.
-Worktree `/home/yaraslau/repo/morph-lims-e2`, branch `lg-qs`, already rebased onto `lg-qf` (Q-F's framework: Q2 body fonts 13 px, Q1 stretch by weight + button minimum, Q3 button fonts, Q5 collapsible spacing, Q4 `label` role, Q6a run faces, Q6b widest-segment minimums). Rebuild build/linux-everything (ALL targets, including `lims_gallery_render_smoke` and `morph_examples_client`) under the lock. Only edit examples/lims_gallery.
-Read Q-F's hand-off $S/lg-qf-handoff.md first. Then:
-1. **Fix the failing render smoke**: console@expanded 1000x830 "a scroll inside `work-split` needs 271 px and has 269 px" (badges cut at the pane edge), and stability 1000 `summary-panel` needs 209 px has 204. Screen-side fixes (pane minimums / fixed widths); check 1215 and 1920 stay as they are.
-2. Items S5–S11 of the screen-item table in $S/lg-q-design.md (as revised, "Review round 2"), one commit per item that changes code; measuring items get reported. S11 re-grabs every screen at 1215, 1000 and 390 (1920 for receipt, audit, stability, review) — Q2 moved body text 12 → 13 px: report every new wrap, clip, overflow log or mid-word break, and fix what is breakage. Re-check stability's summary without its 29-unit pane minimum as the design says, and keep whichever is right.
-Grabs in $S/lg-qs2/; compare with $S/lg-cmp/mock/*.png and $S/lg-cmp/app-p/; report before/after px. Full ctest green (not only the gallery subset). One mutation control. clang-format 22 and clang-tidy on changed files. Do not push.

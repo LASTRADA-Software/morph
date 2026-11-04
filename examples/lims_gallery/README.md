@@ -3,7 +3,7 @@
 Ten laboratory screens from a set of design mockups (an e-signature, sample receipt, an instrument record, an audit
 trail, …), written as ui/1 documents with the C++ authoring API. The point is to find what morph's declarative UI can
 and cannot express: where a design asks for something ui/1 has no word for, the screen uses the closest honest
-workaround and the gap is recorded.
+workaround.
 
 There is no backend. Each screen keeps its sample records in its own `state`, and its actions only change that state.
 
@@ -28,9 +28,4 @@ tests set the class on the recording backend, and the render smoke resizes the w
 - `tests/` holds one test file per design, over `GalleryScreen` (`tests/gallery_harness.hpp`), which mounts a screen
   by id at a width class on the recording backend. `lims_gallery_render_smoke` mounts every screen at both widths in
   Qt Quick, offscreen.
-
-## The gap log
-
-The findings are kept in a gap log beside this work rather than here: one entry per need a design has that ui/1
-cannot meet, with the evidence, the workaround the screen uses, and how much it matters to a LIMS. It is the input
-for framework changes, which are made in batches from it, not in this example.
+- `design/mockups/` holds the mockups the screens are drawn from.
