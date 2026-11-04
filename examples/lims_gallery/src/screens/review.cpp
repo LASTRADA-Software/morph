@@ -649,8 +649,10 @@ ui::Node recordTabs(Review const& review, bool compact) {
     // them; the phone's column gap is room enough, and its results page has no cards.
     auto const spaced = [](ui::Node const& cards) { return ui::column({cards}, {.padding = ui::padding(3, 0)}); };
     // The phone's banners sit in the page that scrolls with the results; the expanded ones sit above the tabs.
-    ui::Nodes resultsPage{showChoice(review, compact), resultTable(review), spaced(commentCards(review)),
-                          reviewComment(review)};
+    // The table is a card with a frame, as the design draws it; the phone's results are rows on the page.
+    ui::Nodes resultsPage{showChoice(review, compact),
+                          ui::panel({resultTable(review)}, {.padding = 0}).testId("results-card"),
+                          spaced(commentCards(review)), reviewComment(review)};
     if (compact) {
         // The comments have their own tab on the phone, so the results page goes straight to the comment field.
         resultsPage = ui::Nodes{selfBanner(review), signedBanner(review), showChoice(review, true), resultRows(review),

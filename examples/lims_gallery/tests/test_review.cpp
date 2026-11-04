@@ -175,3 +175,9 @@ TEST_CASE("review, compact: the pinned worksheet and queue pages take the page's
     REQUIRE(screen.waitFor([&screen] { return screen.find("Column", "queue").has_value(); }));
     CHECK_FALSE(pageInset(screen));
 }
+
+// Mutation: remove the panel around the results table.
+TEST_CASE("review, expanded: the results table is a card", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    CHECK(screen.shows("Panel", "results-card"));
+}
