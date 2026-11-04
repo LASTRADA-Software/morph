@@ -181,3 +181,13 @@ TEST_CASE("review, expanded: the results table is a card", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
     CHECK(screen.shows("Panel", "results-card"));
 }
+
+// Mutation: write every value as a strong run.
+TEST_CASE("review, expanded: only a value out of specification is strong", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    auto const dump = screen.backend().dump();
+    // Impurity B is out of specification, Assay's mean is within.
+    CHECK(dump.contains("[0.21 %;strong]"));
+    CHECK(dump.contains("[99.4 % LC]"));
+    CHECK_FALSE(dump.contains("[99.4 % LC;strong]"));
+}

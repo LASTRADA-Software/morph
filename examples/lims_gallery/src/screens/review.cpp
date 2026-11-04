@@ -533,7 +533,10 @@ ui::Node resultTable(Review const& review) {
          .label = "Result",
          .width = ui::content(),
          .align = Align::End,
-         .cell = ui::text({.text = ui::row("value"), .spans = ui::spans({ui::strong(ui::row("value"))})}),
+         // Only a value out of specification is strong.
+         .cell = ui::text({.text = ui::row("value"),
+                           .spans = ui::cond(ui::eq(ui::row("tone"), "err"), ui::spans({ui::strong(ui::row("value"))}),
+                                             ui::spans({ui::row("value")}))}),
          .wrap = false},
         {.name = "spec", .label = "Spec.", .width = ui::content(), .wrap = false},
         {.name = "previous", .label = "Prior lot", .width = ui::content(), .align = Align::End, .wrap = false},
