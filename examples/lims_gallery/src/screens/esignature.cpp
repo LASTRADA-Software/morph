@@ -215,7 +215,7 @@ ui::Node signatureDialog(ui::AnyHandle const& width, Signature const& sign) {
                 .sheet = compact,
                 .dismissLabel = "Cancel"})
         // The design's 480 px, in the frontend's character widths; a sheet is the window's width.
-        .sizing(ui::fixed(64))
+        .sizing(ui::fixed(63))
         .testId("signature");
 }
 
