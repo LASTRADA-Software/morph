@@ -752,14 +752,24 @@ ui::Node rerunDialog(Console const& console) {
 
 ui::Node samplePane(Console const& console) {
     auto const last = static_cast<std::int64_t>(kSamples.size()) - 1;
+    // The priority is an outlined tag, as in the worklist, so a red outline (STAT) reads apart from a red fill.
     auto const tags = ui::concatLists(
-        {ui::list({ui::obj({{"text", field(console, "priority")}, {"tone", field(console, "priorityTone")}}),
-                   ui::obj({{"text", field(console, "status")}, {"tone", field(console, "statusTone")}})}),
-         ui::cond(console.held, ui::list({ui::obj({{"text", "Run on suitability hold"}, {"tone", "err"}})}),
+        {ui::list(
+             {ui::obj({{"text", field(console, "priority")},
+                       {"tone", field(console, "priorityTone")},
+                       {"priority", true}}),
+              ui::obj(
+                  {{"text", field(console, "status")}, {"tone", field(console, "statusTone")}, {"priority", false}})}),
+         ui::cond(console.held,
+                  ui::list({ui::obj({{"text", "Run on suitability hold"}, {"tone", "err"}, {"priority", false}})}),
                   ui::AnyHandle{std::vector<std::string>{}})});
     return ui::column(
                {ui::row(
-                    {ui::text({.text = console.selected, .role = "section"}).sizing(ui::stretch()).testId("pane-id"),
+                    // The id is an identifier: a strong run in the mono face, in the text colour.
+                    {ui::text({.text = console.selected,
+                               .spans = ui::spans({ui::styled(console.selected, {.strong = true, .mono = true})})})
+                         .sizing(ui::stretch())
+                         .testId("pane-id"),
                      ui::button({.icon = "nav.back",
                                  .onClick = ui::set(console.current, console.current - 1),
                                  .shape = ControlShape::Square})
@@ -777,7 +787,11 @@ ui::Node samplePane(Console const& console) {
                                                                      field(console, "instrument")})})
                     .testId("pane-line"),
                 ui::forEach(tags, {.key = ui::row("text"), .axis = "horizontal", .gap = 1, .wrap = true},
-                            [](ui::DeclScope&) { return ui::Nodes{layout::tag(ui::row("text"), ui::row("tone"))}; })
+                            [](ui::DeclScope&) {
+                                Flag const priority{ui::row("priority")};
+                                return ui::Nodes{layout::priorityTag(ui::row("text")).visible(priority),
+                                                 layout::tag(ui::row("text"), ui::row("tone")).visible(!priority)};
+                            })
                     .testId("pane-tags"),
                 paneResults(console), custodyLines(console),
                 ui::text({.text = kHoldReason, .role = "error"}).visible(console.held).testId("hold-reason"),

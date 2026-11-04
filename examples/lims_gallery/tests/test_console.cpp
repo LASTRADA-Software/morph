@@ -158,3 +158,22 @@ TEST_CASE("console, expanded: the sample pane is 38 % of the card up to the desi
     REQUIRE(side.has_value());
     CHECK(side.value_or("").starts_with("percent(38) max=47"));
 }
+
+// Mutation: restore the id's `section` role, or draw the priority as a filled tag.
+TEST_CASE("console, expanded: the pane's id is a strong mono run and its priority an outlined tag", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    CHECK(screen.prop("Text", "pane-id", "spans").value_or("").contains("S-26-104170;strong;mono"));
+    // The `section` role is muted; the id is in the text colour.
+    CHECK(screen.prop("Text", "pane-id", "role") != "Section");
+    CHECK(screen.text("pane-id") == "S-26-104170");
+    std::size_t outlined = 0;
+    for (int const badge : screen.backend().all("Badge")) {
+        if (screen.backend().prop(badge, "text") != "STAT" || screen.backend().prop(badge, "visible") == "false") {
+            continue;
+        }
+        CHECK(screen.backend().prop(badge, "style") == "Outline");
+        ++outlined;
+    }
+    // The worklist's row and the pane's tag.
+    CHECK(outlined >= 2);
+}
