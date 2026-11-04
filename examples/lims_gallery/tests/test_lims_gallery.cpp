@@ -130,6 +130,10 @@ TEST_CASE("lims gallery: the sidebar surface fills the current entry and the bas
     CHECK(baseValues.colors.at("color.table.headerRule").hex() == "#dde1e6");
     // The console's control chart draws its line in the design's green, the accent.
     CHECK(baseValues.colors.at("color.chart.1").hex() == "#17784a");
+    // A page's headline is 18 px, and a tab sits 2 px in from its label with 20 px between tabs.
+    CHECK(baseValues.dimensions.at("font.size.headline") == 18.0);
+    CHECK(baseValues.dimensions.at("tabs.paddingX") == 2.0);
+    CHECK(baseValues.dimensions.at("tabs.gap") == 20.0);
 }
 
 // Seven designs draw their compact window on a white page; samples and console keep the grey one.
