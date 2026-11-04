@@ -633,6 +633,8 @@ struct Evaluation {
     ui::AnyHandle shown;
     Text label;
     Text tone;
+    // Whether the value is outside its limits, which the input outlines in the error tone.
+    Flag outOfSpec;
 };
 
 Evaluation evaluate(Console const& console) {
@@ -647,7 +649,8 @@ Evaluation evaluate(Console const& console) {
     return Evaluation{
         .shown = shown,
         .label = ui::cond(empty, Text{"To enter"}, ui::cond(above || below, Text{"Out of spec"}, Text{"Within"})),
-        .tone = ui::cond(empty, Text{"neutral"}, ui::cond(above || below, Text{"err"}, Text{"ok"}))};
+        .tone = ui::cond(empty, Text{"neutral"}, ui::cond(above || below, Text{"err"}, Text{"ok"})),
+        .outOfSpec = above || below};
 }
 
 ui::Commands enterResult(Console const& console) {
@@ -673,6 +676,9 @@ ui::Node resultLine(Console const& console) {
                         .align = morph::ui::Align::End,
                         .onCommit = enterResult(console)})
              .readonly(Flag{ui::row("total")})
+             // An out of specification value is valid, so the input is outlined, not marked invalid; the evaluation's
+             // own tone is `ok` for a value within, which the design draws with no outline.
+             .tone(ui::cond(evaluation.outOfSpec, Text{"err"}, Text{"neutral"}))
              // Beside the name, a stretch input takes an equal share, capped at 10 units where there is room; where
              // the name's widest segment needs more it gives down to 9. The inputs of every line then end at one edge.
              .sizing(ui::stretch())

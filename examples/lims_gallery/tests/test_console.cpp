@@ -134,3 +134,16 @@ TEST_CASE("console, expanded: a result input shares its row, from 9 to 10 units"
     REQUIRE(layout.has_value());
     CHECK(layout.value_or("").starts_with("stretch(1) min=9 max=10/"));
 }
+
+// Mutation: pass the evaluation's own tone to the input, or take `.tone` off it.
+TEST_CASE("console, expanded: only an out of specification result's input is outlined in the error tone",
+          "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    auto const impurityB = screen.backend().find("TextInput", "a11yName", "Impurity B result");
+    auto const assay = screen.backend().find("TextInput", "a11yName", "Assay result");
+    REQUIRE(impurityB.has_value());
+    REQUIRE(assay.has_value());
+    CHECK(screen.backend().prop(impurityB.value_or(0), "tone") == "Err");
+    CHECK(screen.backend().prop(assay.value_or(0), "tone") != "Err");
+    CHECK(screen.backend().prop(assay.value_or(0), "tone") != "Ok");
+}
