@@ -128,6 +128,8 @@ TEST_CASE("lims gallery: the sidebar surface fills the current entry and the bas
     // A table's header is a band closed by a rule in the design's border colour.
     CHECK(baseValues.colors.at("color.table.header").hex() == "#fafbfc");
     CHECK(baseValues.colors.at("color.table.headerRule").hex() == "#dde1e6");
+    // The console's control chart draws its line in the design's green, the accent.
+    CHECK(baseValues.colors.at("color.chart.1").hex() == "#17784a");
 }
 
 // Seven designs draw their compact window on a white page; samples and console keep the grey one.
