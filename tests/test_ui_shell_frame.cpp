@@ -341,7 +341,8 @@ TEST_CASE("shell frame: the top bar's title takes the role it is given, and a ne
     CHECK(backend.prop(title, "role") == "Heading");
 }
 
-// Mutation: leave the gaps alone (the compact top line keeps steps 3 and 3).
+// Mutation: leave the compact gaps alone (the line keeps step 4 and the items step 3), or give the expanded line step
+// 3 again.
 TEST_CASE("shell frame: the compact top line pads its ends by step 1 and spaces its items by step 2", "[ui][shell]") {
     RecordingBackend backend;
     std::vector<std::string> opened;
@@ -349,7 +350,7 @@ TEST_CASE("shell frame: the compact top line pads its ends by step 1 and spaces 
     ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
     int const line = backend.find("Row", "testId", "shell_topbar_line").value();
     int const main = backend.find("Row", "testId", "shell_topbar_main").value();
-    CHECK(backend.prop(line, "gap") == "3");
+    CHECK(backend.prop(line, "gap") == "4");
     CHECK(backend.prop(main, "gap") == "3");
 
     frame.setCompact(true);
@@ -357,7 +358,7 @@ TEST_CASE("shell frame: the compact top line pads its ends by step 1 and spaces 
     CHECK(backend.prop(main, "gap") == "2");
 
     frame.setCompact(false);
-    CHECK(backend.prop(line, "gap") == "3");
+    CHECK(backend.prop(line, "gap") == "4");
     CHECK(backend.prop(main, "gap") == "3");
 }
 
@@ -561,7 +562,7 @@ TEST_CASE("shell frame: the trailing inset follows what ends the compact line", 
     CHECK(at(inset) == at(main) + 1);
     CHECK(backend.prop(inset, "visible") == "false");
 
-    // Expanded, whatever ends the line: the bar's own step-3 end pad already stands the page's gutter from the edge.
+    // Expanded, whatever ends the line: the line's own end pad, step 4, is the page's gutter.
     for (HeadTrailEnd const end : {HeadTrailEnd::None, HeadTrailEnd::Unframed, HeadTrailEnd::Framed}) {
         frame.setTrailEnd(end);
         CHECK(backend.prop(inset, "visible") == "false");

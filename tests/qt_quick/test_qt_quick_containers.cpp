@@ -2029,6 +2029,43 @@ TEST_CASE("qt_quick containers: a joined head bar with the head padding set meet
     CHECK(headRectOf("shell_topbar_line").top() - bar.top() == Catch::Approx(12).margin(0.6));
 }
 
+// Mutation: give the expanded line step 3 again (both edges of the head sit 4 px inside the page's), or step 4 to the
+// compact line too (the compact check fails).
+TEST_CASE(
+    "qt_quick containers: the expanded head's title and trail stand on the page's gutter, the compact one's do not",
+    "[qt_quick][head]") {
+    Scene scene;
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setTitle("Console");
+    frame.setHeadShown(true);
+    ui::Column body;
+    body.common.testId = "gutter_body";
+    body.common.layout.width = ui::Sizing::stretch();
+    body.children.push_back(ui::text(ui::Text{.text = "Page content"}));
+    ui::Mounted const bodyMount{scene.runtime(), scene.backend(), ui::column(std::move(body)), &frame.page()};
+    ui::Button action{.label = "Export"};
+    action.common.testId = "gutter_action";
+    ui::Mounted const trailMount{scene.runtime(), scene.backend(),
+                                 ui::row(ui::Row{.children = {ui::button(std::move(action))}, .gap = 1}),
+                                 &frame.headSlot()};
+    scene.window().resize(1200, 600);
+    scene.settle();
+    QRectF const page = headRectOf("gutter_body");
+    QRectF const title = headRectOf("shell_title");
+    QRectF const trail = headRectOf("gutter_action");
+    INFO("the page " << page.left() << ".." << page.right() << ", the title at " << title.left()
+                     << ", the action ends at " << trail.right());
+    CHECK(title.left() == Catch::Approx(page.left()).margin(0.5));
+    CHECK(trail.right() == Catch::Approx(page.right()).margin(0.5));
+
+    // Compact, the line pads its ends by step 1: the navigation menu is nearer the window's edge than the page is.
+    frame.setCompact(true);
+    scene.window().resize(390, 600);
+    scene.settle();
+    CHECK(headRectOf("shell_nav_menu").left() < headRectOf("gutter_body").left() - 2.0);
+}
+
 // Mutation: draw the rules in the scheme's border colour, leave `divided` unread (no rules), or put the rule on the
 // lower child's edge instead of in the gap.
 TEST_CASE("qt_quick containers: a divided column draws a divider rule in each gap and a plain one none",

@@ -149,10 +149,11 @@ public:
         _topBar->setHeadBar(true);
         _topAbove->setLayout({.width = {}, .height = Sizing::fixed(0)});
         _topBelow->setLayout({.width = {}, .height = Sizing::fixed(0)});
-        _topLine->setGap(3);
+        _topLine->setGap(4);
         _topLine->setAlign(Align::Center);
         _topLine->setTestId("shell_topbar_line");
-        // Spacers at both ends pad the line's content by its gap, left and right.
+        // Spacers at both ends pad the line's content by its gap: expanded, the page's gutter, so the head's text and
+        // the page's content share their edges.
         _topStart->setLayout({.width = Sizing::fixed(0), .height = {}});
         _topEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
         _topMain->setLayout({.width = Sizing::stretch(), .height = {}});
@@ -382,7 +383,7 @@ public:
         // steps, so the bar pads its line by step 1 above and below (more for a head that is not one plain line, see
         // showBarInset), and the line pads its ends by step 1 and spaces its items by step 2.
         showBarInset();
-        _topLine->setGap(compact ? 1 : 3);
+        _topLine->setGap(compact ? 1 : 4);
         _topMain->setGap(compact ? 2 : 3);
         showChrome();
     }
@@ -391,7 +392,7 @@ public:
     ///        whole inset a button that pads itself needs; anything else that ends the line (text, a badge, a select
     ///        or a button that draws a frame) stands step 4 from the edge, the page's gutter, so the frame adds step 3
     ///        after the trail. A trail that ends in a framed button or a tool also takes the larger vertical padding
-    ///        of the bar. The expanded bar's step-3 end pad already matches.
+    ///        of the bar. The expanded line's own end pad is that gutter already.
     /// @param end What ends the trail. A new frame has `None`.
     void setTrailEnd(HeadTrailEnd end) {
         _trailEnd = end;
