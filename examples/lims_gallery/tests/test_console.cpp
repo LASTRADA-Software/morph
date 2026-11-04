@@ -147,3 +147,14 @@ TEST_CASE("console, expanded: only an out of specification result's input is out
     CHECK(screen.backend().prop(assay.value_or(0), "tone") != "Err");
     CHECK(screen.backend().prop(assay.value_or(0), "tone") != "Ok");
 }
+
+// Mutation: restore the splitter's `sizes`, or change the pane's percent (the render smoke then fails at 1000).
+TEST_CASE("console, expanded: the sample pane is 38 % of the card up to the design's 360 px", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    // `sizes` would win over the panes' own sizing.
+    auto const sizes = screen.prop("Splitter", "work-split", "sizes");
+    CHECK(sizes.value_or("[]") == "[]");
+    auto const side = screen.prop("Column", "sample-side", "layout");
+    REQUIRE(side.has_value());
+    CHECK(side.value_or("").starts_with("percent(38) max=47"));
+}

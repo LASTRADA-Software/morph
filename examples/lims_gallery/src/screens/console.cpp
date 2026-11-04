@@ -809,10 +809,10 @@ ui::Node samplePane(Console const& console) {
 constexpr int kExpandedMinHeight = 40;
 
 ui::Node expandedLayout(Console const& console) {
-    // The sample pane takes 38 of 98 units beside the worklist: room for an analyte's label on one line. The
-    // worklist's Test column keeps its full text and the table clips its last column, Status, as the design does. The
-    // splitter takes the page's height under the charts.
-    auto const sizes = ui::AnyHandle{std::vector<std::int64_t>{60, 38}};
+    // The sample pane takes 38 % of the card, up to 47 units (the design's 360 px), and the worklist the rest, so a
+    // wide window gives the table room and the pane stops growing. The bound sits on the percent pane: the stretching
+    // worklist takes whatever is left. The worklist's Test column keeps its full text, and Status, last, takes what
+    // remains. The splitter takes the page's height under the charts.
     return ui::column(
                {alert(false), kpis(false),
                 ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
@@ -820,12 +820,15 @@ ui::Node expandedLayout(Console const& console) {
                         {.gap = 1, .align = Align::Stretch}),
                 // The two panes are one card: the splitter fills a panel with no padding, and each pane pads itself.
                 ui::panel(
-                    {ui::splitter({worklistTabs(console),
+                    {ui::splitter({worklistTabs(console).sizing(ui::stretch()),
                                    // The pane scrolls on its own: its results and chain of custody may be
                                    // taller than what the window leaves the splitter.
                                    ui::column({ui::scroll({samplePane(console)}).sizing(ui::stretch(), ui::stretch())},
-                                              {.padding = 2})},
-                                  ui::AnyHandle{"horizontal"}, sizes)
+                                              {.padding = 2})
+                                       .sizing(ui::percent(38))
+                                       .maxWidth(47)
+                                       .testId("sample-side")},
+                                  ui::AnyHandle{"horizontal"})
                          .sizing(ui::stretch(), ui::stretch())
                          .a11y("Worklist and sample")
                          .testId("work-split")},
