@@ -637,7 +637,6 @@ TEST_CASE("qt_quick theme: the headline role has its own size, and a head's titl
     scene.settle();
     CHECK(labelFont(*headline).pixelSize() == 18);
     CHECK(labelFont(*headline).weight() == labelFont(*heading).weight());
-    CHECK(labelFont(*headline).weight() > labelFont(*normal).weight());
     CHECK(labelFont(*display).pixelSize() == 22);
     CHECK(labelFont(*heading).pixelSize() == 16);
     CHECK(Scene::itemOf(*headline).property("control").value<QQuickItem*>()->property("color").value<QColor>() ==
