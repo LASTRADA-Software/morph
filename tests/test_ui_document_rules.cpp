@@ -353,7 +353,7 @@ TEST_CASE("ui document rules: a horizontal forEach directly in an action bar tak
     CHECK(refusal(document(each(R"("axis": "horizontal", "gap": 1,)"))) == "loads");
     // No axis is vertical; an axis that is no name is refused for itself, not as a gap.
     CHECK(refusal(bar(each(R"("gap": 1,)"))) == "loads");
-    CHECK(refusal(bar(each(R"("axis": 3, "gap": 1,)"))).find("/gap") == std::string::npos);
+    CHECK_FALSE(refusal(bar(each(R"("axis": 3, "gap": 1,)"))).contains("/gap"));
     // A child that is no forEach is left alone.
     CHECK(refusal(bar(R"({"kind": "button", "label": "x"})")) == "loads");
 }
