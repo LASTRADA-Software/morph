@@ -3732,10 +3732,9 @@ struct MinColumnGridSpec {
     return stretchPairWidths(probe, 1, 2, 20, 40);
 }
 
-/// @brief Case: a content-sized row of two stretch texts of one and ten characters is as wide as ten characters
-///        times its two weights (16 to 25 units: 20 where a character is a unit, more where a proportional
-///        face draws a letter wider than the unit), where the sum of their naturals is
-///        about 11, and the ten-character text keeps nearly all of its characters.
+/// @brief Case: a content-sized row of two stretch texts of one and ten characters is as wide as the ten characters
+///        on their own times its two weights, where the sum of their naturals would be little more than one of
+///        them, and the ten-character text keeps its characters.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> stretchRowNaturalGivesEachItsNatural(ConformanceProbe& probe) {
@@ -3743,24 +3742,34 @@ struct MinColumnGridSpec {
                          sizedText(std::string(10, 'b'), {.width = Sizing::stretch()})}};
     row.common.layout = {.alignSelf = Align::Start};
     Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(row)))};
+    // The same ten characters on their own: how wide they are in this backend's font, which a character is a unit
+    // wide of only in a monospace one.
+    Mounted const alone{probe.runtime(), probe.backend(),
+                        insideColumn(sizedText(std::string(10, 'b'), {.alignSelf = Align::Start}))};
     probe.settle();
     Checks checks;
     Geometry geometry{probe, checks};
     Measured const found = measured(probe, view);
-    checks.that(found.container != nullptr && found.children.size() == 2, "the row holds two texts");
-    if (found.container != nullptr && found.children.size() == 2) {
+    Widget const* const text = measured(probe, alone).container;
+    checks.that(found.container != nullptr && found.children.size() == 2 && text != nullptr,
+                "the row holds two texts");
+    if (found.container != nullptr && found.children.size() == 2 && text != nullptr) {
         double const width = geometry.of(*found.container).width;
-        checks.that(width >= 16 && width <= 25,
-                    "the row is " + std::to_string(width) + " units wide, not the sum of its children (16 to 25)");
+        double const natural = geometry.of(*text).width;
+        checks.that(natural >= 8, "ten characters are " + std::to_string(natural) + " units wide on their own");
+        checks.that(width >= (2 * natural) - 0.5 && width <= (2 * natural) + 1,
+                    "the row is " + std::to_string(width) + " units wide, not twice its ten-character text (" +
+                        std::to_string(natural) + " units)");
         double const second = geometry.of(*found.children.at(1)).width;
-        checks.that(second >= 8,
-                    "the second text keeps its ten characters: it is " + std::to_string(second) + " units wide");
+        checks.that(second >= natural - 0.5, "the second text keeps its ten characters: it is " +
+                                                 std::to_string(second) + " units wide, " + std::to_string(natural) +
+                                                 " on its own");
     }
     return checks.result();
 }
 
 /// @brief Case: a stretch row nested in a content-sized stretch row keeps its children's naturals: the ten-character
-///        text in it keeps its characters (a character is about a unit; the ten of this text are a little under).
+///        text in it is as wide as the same characters on their own.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> stretchRowNestedKeepsNaturals(ConformanceProbe& probe) {
@@ -3770,18 +3779,25 @@ struct MinColumnGridSpec {
     Row outer{.children = {sizedText("a", {.width = Sizing::stretch()}), ui::row(std::move(inner))}};
     outer.common.layout = {.alignSelf = Align::Start};
     Mounted const view{probe.runtime(), probe.backend(), insideColumn(ui::row(std::move(outer)))};
+    Mounted const alone{probe.runtime(), probe.backend(),
+                        insideColumn(sizedText(std::string(10, 'b'), {.alignSelf = Align::Start}))};
     probe.settle();
     Checks checks;
     Geometry geometry{probe, checks};
     Measured const found = measured(probe, view);
     ContainerWidget const* const nested =
         found.children.size() == 2 && found.children.at(1) != nullptr ? asContainer(*found.children.at(1)) : nullptr;
-    checks.that(nested != nullptr && probe.childCount(*nested) == 2,
+    Widget const* const text = measured(probe, alone).container;
+    checks.that(nested != nullptr && probe.childCount(*nested) == 2 && text != nullptr,
                 "the outer row holds the nested row of two texts");
-    if (nested != nullptr && probe.childCount(*nested) == 2) {
+    if (nested != nullptr && probe.childCount(*nested) == 2 && text != nullptr) {
         double const second = geometry.of(*probe.childAt(*nested, 1)).width;
-        checks.that(second >= 8, "the nested ten-character text is " + std::to_string(second) +
-                                     " units wide: the nested row asked for less than its children's naturals");
+        double const natural = geometry.of(*text).width;
+        checks.that(natural >= 8, "ten characters are " + std::to_string(natural) + " units wide on their own");
+        checks.that(second >= natural - 0.5,
+                    "the nested ten-character text is " + std::to_string(second) + " units wide, " +
+                        std::to_string(natural) +
+                        " on its own: the nested row asked for less than its children's naturals");
     }
     return checks.result();
 }
