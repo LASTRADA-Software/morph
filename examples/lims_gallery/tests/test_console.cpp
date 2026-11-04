@@ -128,11 +128,11 @@ TEST_CASE("console, expanded: the sample pager is square glyph buttons", "[lims-
 }
 
 // Mutation: give the pane's result input a fixed width again.
-TEST_CASE("console, expanded: a result input shares its row, from 9 to 10 units", "[lims-gallery]") {
+TEST_CASE("console, expanded: a result input shares its row, from 8 to 10 units", "[lims-gallery]") {
     GalleryScreen screen{kScreen, "expanded"};
     auto const layout = screen.prop("TextInput", "pane-result", "layout");
     REQUIRE(layout.has_value());
-    CHECK(layout.value_or("").starts_with("stretch(1) min=9 max=10/"));
+    CHECK(layout.value_or("").starts_with("stretch(1) min=8 max=10/"));
 }
 
 // Mutation: pass the evaluation's own tone to the input, or take `.tone` off it.
@@ -176,4 +176,40 @@ TEST_CASE("console, expanded: the pane's id is a strong mono run and its priorit
     }
     // The worklist's row and the pane's tag.
     CHECK(outlined >= 2);
+}
+
+// Mutation: size the caption's columns apart from the lines' (a size changed in one place only), drop `align` from
+// "Result", or drop `divided` from the results.
+TEST_CASE("console, expanded: the results' caption stands over the lines' columns, ruled off", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    // The caption's cells are sized as the line's, so they stand over its columns whatever wraps.
+    auto const resultLayout = screen.prop("TextInput", "pane-result", "layout");
+    REQUIRE(resultLayout.has_value());
+    CHECK(screen.prop("Text", "pane-caption-result", "layout") == resultLayout);
+    CHECK(screen.prop("Text", "pane-caption-evaluation", "layout") ==
+          screen.prop("Badge", "pane-evaluation", "layout"));
+    // "Result" ends at the inputs' right edge.
+    CHECK(screen.prop("Text", "pane-caption-result", "align") == "End");
+    CHECK(screen.prop("Text", "pane-caption-result", "role") == "Caption");
+    CHECK(screen.prop("Column", "pane-result-block", "divided") == "true");
+    CHECK(screen.prop("Column", "sample-pane", "divided") == "true");
+    CHECK(screen.shows("Column", "pane-result-block"));
+}
+
+// Mutation: drop the message, or leave the caption standing over it.
+TEST_CASE("console, expanded: a sample with no results says so and shows no caption", "[lims-gallery]") {
+    GalleryScreen screen{kScreen, "expanded"};
+    auto const shown = [&screen] {
+        auto const message = screen.backend().find("Text", "text", "No results to enter yet.");
+        return message.has_value() && screen.backend().prop(message.value_or(0), "visible") != "false";
+    };
+    CHECK_FALSE(shown());
+    CHECK(screen.shows("Column", "pane-result-block"));
+    // The fourth sample, S-26-104221, has no analytes.
+    for (std::string_view const sampleId : {"S-26-104198", "S-26-104176", "S-26-104221"}) {
+        screen.click("next");
+        CHECK(screen.waitForText("pane-id", std::string{sampleId}));
+    }
+    CHECK(screen.waitFor(shown));
+    CHECK_FALSE(screen.shows("Column", "pane-result-block"));
 }

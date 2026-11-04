@@ -667,40 +667,61 @@ ui::Commands enterResult(Console const& console) {
     return ui::set(console.analytes, updated);
 }
 
-ui::Node resultLine(Console const& console) {
-    Evaluation const evaluation = evaluate(console);
-    return ui::row(
-        {ui::text({.text = ui::format("{0} · {1}", {ui::row("name"), ui::row("spec")})}).sizing(ui::stretch()),
-         ui::textInput({.value = evaluation.shown,
-                        .label = ui::format("{0} result", {ui::row("name")}),
-                        .align = morph::ui::Align::End,
-                        .onCommit = enterResult(console)})
-             .readonly(Flag{ui::row("total")})
-             // An out of specification value is valid, so the input is outlined, not marked invalid; the evaluation's
-             // own tone is `ok` for a value within, which the design draws with no outline.
-             .tone(ui::cond(evaluation.outOfSpec, Text{"err"}, Text{"neutral"}))
-             // Beside the name, a stretch input takes an equal share, capped at 10 units where there is room; where
-             // the name's widest segment needs more it gives down to 9. The inputs of every line then end at one edge.
-             .sizing(ui::stretch())
-             .minWidth(9)
-             .maxWidth(10)
-             .testId("pane-result"),
-         // The unit is its own column beside the input, so the inputs of every line end at one edge.
-         layout::muted(ui::row("unit")).sizing(ui::fixed(5)),
-         // A fixed width, wide enough for "Out of spec", keeps the result inputs of every line in one column.
-         layout::tag(evaluation.label, evaluation.tone).sizing(ui::fixed(10)).testId("pane-evaluation")},
-        {.gap = 1, .align = Align::Center});
+// One line of the pane's results, and the caption above them: the sizes live here, so the caption's columns stand over
+// the lines' however a line's label wraps. The name and the value stretch beside two fixed columns, so the value's
+// right edge is the row's width less those columns and their gaps, the same on every line.
+ui::Node resultColumns(ui::Node const& name, ui::Node const& value, ui::Node const& unit, ui::Node const& evaluation) {
+    return ui::row({name.sizing(ui::stretch()),
+                    // Beside the name, a stretch value takes an equal share, capped at 10 units where there is room;
+                    // where the name's widest segment needs more it gives down to 8, which holds a value and its sign.
+                    value.sizing(ui::stretch()).minWidth(8).maxWidth(10),
+                    // The unit is its own column beside the value.
+                    unit.sizing(ui::fixed(5)),
+                    // A fixed width, wide enough for "Out of spec".
+                    evaluation.sizing(ui::fixed(10))},
+                   {.gap = 1, .align = Align::Center});
 }
 
+ui::Node resultLine(Console const& console) {
+    Evaluation const evaluation = evaluate(console);
+    return resultColumns(
+        ui::text({.text = ui::format("{0} · {1}", {ui::row("name"), ui::row("spec")})}),
+        ui::textInput({.value = evaluation.shown,
+                       .label = ui::format("{0} result", {ui::row("name")}),
+                       .align = morph::ui::Align::End,
+                       .onCommit = enterResult(console)})
+            .readonly(Flag{ui::row("total")})
+            // An out of specification value is valid, so the input is outlined, not marked invalid; the evaluation's
+            // own tone is `ok` for a value within, which the design draws with no outline.
+            .tone(ui::cond(evaluation.outOfSpec, Text{"err"}, Text{"neutral"}))
+            .testId("pane-result"),
+        layout::muted(ui::row("unit")), layout::tag(evaluation.label, evaluation.tone).testId("pane-evaluation"));
+}
+
+ui::Node captionText(char const* text, std::string const& testId,
+                     morph::ui::TextAlign align = morph::ui::TextAlign::Start) {
+    return ui::text({.text = text, .role = "caption", .align = align}).testId(testId);
+}
+
+// The results of the sample in the pane under their caption, ruled off from one another; a sample with none says so.
 ui::Node paneResults(Console const& console) {
     auto const mine = ui::filter(console.analytes, "analyte", [&console](ui::AnyHandle const& analyte) {
         return ui::eq(analyte.at("sample"), console.selected);
     });
+    Flag const any = ui::call("count", {mine}) > std::int64_t{0};
+    // The caption's cells are the lines' columns: "Result" is right-aligned over the inputs' right edge.
+    auto const caption = resultColumns(captionText("Analyte · spec", "pane-caption-name"),
+                                       captionText("Result", "pane-caption-result", morph::ui::TextAlign::End),
+                                       ui::text({.text = ""}), captionText("Evaluation", "pane-caption-evaluation"));
+    // 30 px for an input and 8 + 1 for the gaps and the rule: the design's 39 px between lines of one row each.
     return ui::column(
-        {ui::forEach(mine, {.key = ui::row("key"), .gap = 1},
-                     [&console](ui::DeclScope&) { return ui::Nodes{resultLine(console)}; })
-             .testId("pane-results"),
-         layout::muted("No results to enter yet.").visible(ui::eq(ui::call("count", {mine}), std::int64_t{0}))},
+        {ui::column({caption, ui::forEach(mine, {.key = ui::row("key"), .gap = 2, .divided = true},
+                                          [&console](ui::DeclScope&) { return ui::Nodes{resultLine(console)}; })
+                                  .testId("pane-results")},
+                    {.gap = 2, .divided = true})
+             .visible(any)
+             .testId("pane-result-block"),
+         layout::muted("No results to enter yet.").visible(!any)},
         {.gap = 1});
 }
 
@@ -763,55 +784,60 @@ ui::Node samplePane(Console const& console) {
          ui::cond(console.held,
                   ui::list({ui::obj({{"text", "Run on suitability hold"}, {"tone", "err"}, {"priority", false}})}),
                   ui::AnyHandle{std::vector<std::string>{}})});
-    return ui::column(
-               {ui::row(
-                    // The id is an identifier: a strong run in the mono face, in the text colour.
-                    {ui::text({.text = console.selected,
-                               .spans = ui::spans({ui::styled(console.selected, {.strong = true, .mono = true})})})
-                         .sizing(ui::stretch())
-                         .testId("pane-id"),
-                     ui::button({.icon = "nav.back",
-                                 .onClick = ui::set(console.current, console.current - 1),
-                                 .shape = ControlShape::Square})
-                         .a11y("Previous sample")
-                         .enabled(console.current > 0)
-                         .testId("previous"),
-                     ui::button({.icon = "nav.forward",
-                                 .onClick = ui::set(console.current, console.current + 1),
-                                 .shape = ControlShape::Square})
-                         .a11y("Next sample")
-                         .enabled(console.current < last)
-                         .testId("next")},
-                    {.gap = 1, .align = Align::Center}),
-                ui::text({.text = ui::format("{0} · lot {1} · {2}", {field(console, "product"), field(console, "lot"),
-                                                                     field(console, "instrument")})})
-                    .testId("pane-line"),
-                ui::forEach(tags, {.key = ui::row("text"), .axis = "horizontal", .gap = 1, .wrap = true},
-                            [](ui::DeclScope&) {
-                                Flag const priority{ui::row("priority")};
-                                return ui::Nodes{layout::priorityTag(ui::row("text")).visible(priority),
-                                                 layout::tag(ui::row("text"), ui::row("tone")).visible(!priority)};
-                            })
-                    .testId("pane-tags"),
-                paneResults(console), custodyLines(console),
-                ui::text({.text = kHoldReason, .role = "error"}).visible(console.held).testId("hold-reason"),
-                ui::row(
-                    {ui::button({.label = "Request rerun…", .onClick = ui::set(console.rerunOpen, true)})
-                         .enabled(console.held)
-                         .testId("rerun-open"),
-                     ui::spacer().sizing(ui::stretch()),
-                     ui::button({.label = "Save draft",
-                                 .onClick = ui::notify(ui::format("{0} is saved as a draft.", {console.selected}))}),
-                     ui::button(
-                         {.label = "Submit for review",
-                          .emphasis = ButtonEmphasis::Primary,
-                          .onClick = ui::notify(ui::format("{0} is submitted for review.", {console.selected}))})
-                         .enabled(!console.held)
-                         .tooltip(ui::cond(console.held, Text{kHoldReason}, Text{""}))
-                         .testId("submit")},
-                    {.gap = 1, .align = Align::Center, .wrap = true}),
-                rerunDialog(console)},
-               {.gap = 2})
+    // Three blocks ruled off from one another across the pane's width: the sample, its results and custody, and the
+    // actions. Each pads itself, so the rules run to the pane's edges. The inset is 8 px.
+    auto const identity = ui::column(
+        {ui::row(
+             // The id is an identifier: a strong run in the mono face, in the text colour.
+             {ui::text({.text = console.selected,
+                        .spans = ui::spans({ui::styled(console.selected, {.strong = true, .mono = true})})})
+                  .sizing(ui::stretch())
+                  .testId("pane-id"),
+              ui::button({.icon = "nav.back",
+                          .onClick = ui::set(console.current, console.current - 1),
+                          .shape = ControlShape::Square})
+                  .a11y("Previous sample")
+                  .enabled(console.current > 0)
+                  .testId("previous"),
+              ui::button({.icon = "nav.forward",
+                          .onClick = ui::set(console.current, console.current + 1),
+                          .shape = ControlShape::Square})
+                  .a11y("Next sample")
+                  .enabled(console.current < last)
+                  .testId("next")},
+             {.gap = 1, .align = Align::Center}),
+         ui::text({.text = ui::format("{0} · lot {1} · {2}", {field(console, "product"), field(console, "lot"),
+                                                              field(console, "instrument")})})
+             .testId("pane-line"),
+         ui::forEach(tags, {.key = ui::row("text"), .axis = "horizontal", .gap = 1, .wrap = true},
+                     [](ui::DeclScope&) {
+                         Flag const priority{ui::row("priority")};
+                         return ui::Nodes{layout::priorityTag(ui::row("text")).visible(priority),
+                                          layout::tag(ui::row("text"), ui::row("tone")).visible(!priority)};
+                     })
+             .testId("pane-tags")},
+        {.gap = 2, .padding = ui::padding(2, 2)});
+    auto const results = ui::column({paneResults(console), custodyLines(console)},
+                                    {.gap = 2, .divided = true, .padding = ui::padding(2, 2)});
+    // The dialog sits in the last block: as a child of the ruled column it would be one more shown child, with a rule.
+    auto const actions = ui::column(
+        {ui::text({.text = kHoldReason, .role = "error"}).visible(console.held).testId("hold-reason"),
+         ui::row({ui::button({.label = "Request rerun…", .onClick = ui::set(console.rerunOpen, true)})
+                      .enabled(console.held)
+                      .testId("rerun-open"),
+                  ui::spacer().sizing(ui::stretch()),
+                  ui::button({.label = "Save draft",
+                              .onClick = ui::notify(ui::format("{0} is saved as a draft.", {console.selected}))}),
+                  ui::button({.label = "Submit for review",
+                              .emphasis = ButtonEmphasis::Primary,
+                              .onClick = ui::notify(ui::format("{0} is submitted for review.", {console.selected}))})
+                      .enabled(!console.held)
+                      .tooltip(ui::cond(console.held, Text{kHoldReason}, Text{""}))
+                      .testId("submit")},
+                 {.gap = 1, .align = Align::Center, .wrap = true}),
+         rerunDialog(console)},
+        {.gap = 2, .padding = ui::padding(2, 2)});
+    return ui::column({identity, results, actions}, {.gap = 0, .divided = true})
         .a11y(ui::format("Sample {0}", {console.selected}))
         .testId("sample-pane");
 }
@@ -824,9 +850,11 @@ constexpr int kExpandedMinHeight = 40;
 
 ui::Node expandedLayout(Console const& console) {
     // The sample pane takes 38 % of the card, up to 47 units (the design's 360 px), and the worklist the rest, so a
-    // wide window gives the table room and the pane stops growing. The bound sits on the percent pane: the stretching
-    // worklist takes whatever is left. The worklist's Test column keeps its full text, and Status, last, takes what
-    // remains. The splitter takes the page's height under the charts.
+    // wide window gives the table room and the pane stops growing. On the 1000 px window that is about 285 px, which a
+    // result's line fits at its narrowest, and the worklist keeps the room its columns need with Status at its floor.
+    // The bound sits on the percent pane: the stretching worklist takes whatever is left. The worklist's Test column
+    // keeps its full text, and Status, last, takes what remains. The splitter takes the page's height under the
+    // charts.
     return ui::column(
                {alert(false), kpis(false),
                 ui::row({ui::panel({controlChart()}, {.padding = 2}).sizing(ui::stretch(17)),
@@ -837,8 +865,7 @@ ui::Node expandedLayout(Console const& console) {
                     {ui::splitter({worklistTabs(console).sizing(ui::stretch()),
                                    // The pane scrolls on its own: its results and chain of custody may be
                                    // taller than what the window leaves the splitter.
-                                   ui::column({ui::scroll({samplePane(console)}).sizing(ui::stretch(), ui::stretch())},
-                                              {.padding = 2})
+                                   ui::column({ui::scroll({samplePane(console)}).sizing(ui::stretch(), ui::stretch())})
                                        .sizing(ui::percent(38))
                                        .maxWidth(47)
                                        .testId("sample-side")},
