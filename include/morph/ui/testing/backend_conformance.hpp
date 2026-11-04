@@ -8,6 +8,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <initializer_list>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <span>
@@ -3732,6 +3734,14 @@ struct MinColumnGridSpec {
     return stretchPairWidths(probe, 1, 2, 20, 40);
 }
 
+/// @brief Whether every condition holds, all of them evaluated: a case reports "the setup is wrong" and skips its
+///        measurements on one flag, without a short-circuit arm per condition that only a failing backend takes.
+/// @param conditions The conditions.
+/// @return True when none is false.
+[[nodiscard]] inline bool allHold(std::initializer_list<bool> conditions) {
+    return std::ranges::count(conditions, true) == std::ssize(conditions);
+}
+
 /// @brief Case: a content-sized row of two stretch texts of one and ten characters is as wide as the ten characters
 ///        on their own times its two weights, where the sum of their naturals would be little more than one of
 ///        them, and the ten-character text keeps its characters.
@@ -3751,9 +3761,9 @@ struct MinColumnGridSpec {
     Geometry geometry{probe, checks};
     Measured const found = measured(probe, view);
     Widget const* const text = measured(probe, alone).container;
-    checks.that(found.container != nullptr && found.children.size() == 2 && text != nullptr,
-                "the row holds two texts");
-    if (found.container != nullptr && found.children.size() == 2 && text != nullptr) {
+    bool const ready = allHold({found.container != nullptr, found.children.size() == 2, text != nullptr});
+    checks.that(ready, "the row holds two texts");
+    if (ready) {
         double const width = geometry.of(*found.container).width;
         double const natural = geometry.of(*text).width;
         checks.that(natural >= 8, "ten characters are " + std::to_string(natural) + " units wide on their own");
@@ -3788,9 +3798,10 @@ struct MinColumnGridSpec {
     ContainerWidget const* const nested =
         found.children.size() == 2 && found.children.at(1) != nullptr ? asContainer(*found.children.at(1)) : nullptr;
     Widget const* const text = measured(probe, alone).container;
-    checks.that(nested != nullptr && probe.childCount(*nested) == 2 && text != nullptr,
-                "the outer row holds the nested row of two texts");
-    if (nested != nullptr && probe.childCount(*nested) == 2 && text != nullptr) {
+    std::size_t const nestedCount = nested != nullptr ? probe.childCount(*nested) : 0;
+    bool const ready = allHold({nestedCount == 2, text != nullptr});
+    checks.that(ready, "the outer row holds the nested row of two texts");
+    if (ready) {
         double const second = geometry.of(*probe.childAt(*nested, 1)).width;
         double const natural = geometry.of(*text).width;
         checks.that(natural >= 8, "ten characters are " + std::to_string(natural) + " units wide on their own");
