@@ -100,6 +100,26 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> placementBun
     return served.build();
 }
 
+/// A screen whose head asks for the headline role for its title.
+constexpr std::string_view kHeadline = R"({
+  "vocab": "ui/1", "id": "probe.headline", "title": "Instrument", "titleRole": "headline",
+  "view": { "kind": "text", "testId": "headline", "text": "headline" } })";
+
+/// The headline screen and the plain one, neither public.
+/// @return It, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> headlineBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    for (auto const& [screenId, text] : {std::pair{"probe.headline", kHeadline}, std::pair{"probe.plain", kPlain}}) {
+        ui::CatalogEntry entry;
+        entry.id = screenId;
+        entry.title = screenId;
+        if (auto added = served.addScreen(std::move(entry), std::string{text}); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    return served.build();
+}
+
 /// A screen that asks for the white page surface.
 constexpr std::string_view kPlainPage = R"({
   "vocab": "ui/1", "id": "probe.plainpage", "pageSurface": "plainPage",
@@ -601,6 +621,38 @@ TEST_CASE("Client shell: a screen's page surface is the page area's, and the nex
         backend.click(*plain);
         CHECK(pumpUntil(context.owner(),
                         [&backend] { return propOf(backend, "Column", "shell_page", "surface") == "page"; }));
+    }
+    source.close();
+}
+
+// Control: a client that never calls `setTitleRole`, or one that calls it outside the head's layout effect, which a
+// tab change recreates (the role stays `Headline` on the plain screen).
+TEST_CASE("Client shell: a screen's title role is the top bar's title, and the next screen restores the heading",
+          "[client][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &headlineBundle},
+                               client::LocalSetup{.db = {}, .user = "Dr. A. Meyer"}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "probe.headline"});
+        REQUIRE(pumpUntil(context.owner(),
+                          [&backend] { return propOf(backend, "Text", "shell_title", "role") == "Headline"; }));
+        auto const plain = backend.find("Button", "testId", "nav_probe.plain");
+        REQUIRE(plain.has_value());
+        backend.click(*plain);
+        CHECK(pumpUntil(context.owner(),
+                        [&backend] { return propOf(backend, "Text", "shell_title", "role") == "Heading"; }));
+        auto const headline = backend.find("Button", "testId", "nav_probe.headline");
+        REQUIRE(headline.has_value());
+        backend.click(*headline);
+        CHECK(pumpUntil(context.owner(),
+                        [&backend] { return propOf(backend, "Text", "shell_title", "role") == "Headline"; }));
     }
     source.close();
 }

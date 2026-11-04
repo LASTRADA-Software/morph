@@ -84,6 +84,11 @@ public:
     ///         `below`. It keeps its last value once the screen is closed.
     [[nodiscard]] virtual reactive::Computed<LeadPlacement> const* leadPlacement() const { return nullptr; }
 
+    /// @brief The text role of the head's title.
+    /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default, which is
+    ///         `Heading`. It keeps its last value once the screen is closed.
+    [[nodiscard]] virtual reactive::Computed<TextRole> const* titleRole() const { return nullptr; }
+
     /// @brief The name of the surface a shell draws its top bar on while the screen is shown.
     /// @return It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps
     ///         its last value once the screen is closed. An empty name is none.
@@ -789,6 +794,7 @@ private:
         [[nodiscard]] reactive::Computed<LeadPlacement> const* leadPlacement() const override {
             return &_state->leadPlacement;
         }
+        [[nodiscard]] reactive::Computed<TextRole> const* titleRole() const override { return &_state->titleRole; }
         [[nodiscard]] reactive::Computed<std::string> const* headSurface() const override {
             return &_state->headSurface;
         }
@@ -939,6 +945,7 @@ private:
                   headJoined{*runtime, remembered(lastHeadJoined, [](Screen& open) { return open.headJoined(); })},
                   leadPlacement{*runtime,
                                 remembered(lastLeadPlacement, [](Screen& open) { return open.leadPlacement(); })},
+                  titleRole{*runtime, remembered(lastTitleRole, [](Screen& open) { return open.titleRole(); })},
                   headSurface{*runtime, remembered(lastHeadSurface, [](Screen& open) { return open.headSurface(); })},
                   pageSurface{*runtime, remembered(lastPageSurface, [](Screen& open) { return open.pageSurface(); })},
                   eyebrow{*runtime, remembered(lastEyebrow,
@@ -1113,6 +1120,7 @@ private:
                     lastPageEdge = screen->pageEdge();
                     lastHeadJoined = screen->headJoined();
                     lastLeadPlacement = screen->leadPlacement();
+                    lastTitleRole = screen->titleRole();
                     lastHeadSurface = screen->headSurface();
                     lastPageSurface = screen->pageSurface();
                     lastEyebrow = detail::host::titleText(screen->eyebrow());
@@ -1157,6 +1165,7 @@ private:
             bool lastPageEdge = false;
             bool lastHeadJoined = false;
             LeadPlacement lastLeadPlacement = LeadPlacement::Below;
+            TextRole lastTitleRole = TextRole::Heading;
             std::string lastHeadSurface;
             std::string lastPageSurface;
             std::string lastEyebrow;
@@ -1177,6 +1186,7 @@ private:
             reactive::Computed<bool> pageEdge;
             reactive::Computed<bool> headJoined;
             reactive::Computed<LeadPlacement> leadPlacement;
+            reactive::Computed<TextRole> titleRole;
             reactive::Computed<std::string> headSurface;
             reactive::Computed<std::string> pageSurface;
             reactive::Computed<std::string> eyebrow;

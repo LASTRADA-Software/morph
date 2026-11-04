@@ -315,6 +315,8 @@ template <typename T, typename F>
             return "Caption";
         case TextRole::Label:
             return "Label";
+        case TextRole::Headline:
+            return "Headline";
         default:
             return "unknown";
     }

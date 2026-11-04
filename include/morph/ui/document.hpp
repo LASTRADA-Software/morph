@@ -588,6 +588,9 @@ struct Document {
     /// @brief Where the head's lead (subtitle and badges) sits: an expression of `below`, `inline` or `end`;
     ///        `nullptr` when none is declared, which is `below`.
     ExprPtr leadPlacement;
+    /// @brief The text role of the head's title: an expression of `heading` or `headline`; `nullptr` when none is
+    ///        declared, which is `heading`.
+    ExprPtr titleRole;
     /// @brief The surface the shell draws the top bar on while the screen is shown: an expression of a surface's
     ///        name; `nullptr` when none is declared.
     ExprPtr headSurface;
@@ -1314,6 +1317,8 @@ public:
         doc.subtitleSpans = optionalExpr(*object, "subtitleSpans", "");
         doc.leadPlacement = optionalExpr(*object, "leadPlacement", "");
         checkLeadPlacementLiteral(doc.leadPlacement);
+        doc.titleRole = optionalExpr(*object, "titleRole", "");
+        checkTitleRoleLiteral(doc.titleRole);
         doc.headSurface = optionalExpr(*object, "headSurface", "");
         doc.pageSurface = optionalExpr(*object, "pageSurface", "");
         doc.status = topParts(*object, "status", "headBadge");
@@ -1515,8 +1520,8 @@ private:
     // The head belongs to a screen's tab; the app document has no view and so no head.
     static void refuseScreenHead(Json::object_t const& object) {
         for (std::string_view const key :
-             {"titleSpans", "eyebrow", "eyebrowSpans", "subtitle", "subtitleSpans", "leadPlacement", "headSurface",
-              "pageSurface", "status", "actions", "menu", "menuLabel", "tools"}) {
+             {"titleSpans", "eyebrow", "eyebrowSpans", "subtitle", "subtitleSpans", "leadPlacement", "titleRole",
+              "headSurface", "pageSurface", "status", "actions", "menu", "menuLabel", "tools"}) {
             if (member(object, key) != nullptr) {
                 refuse(pointerAppend("", key), "`" + std::string{key} + "` is a screen's; the app document has none");
             }
@@ -1531,6 +1536,18 @@ private:
         std::string const* const name = placement->literal.asString();
         if (name == nullptr || (*name != "below" && *name != "inline" && *name != "end")) {
             refuse(placement->path, "`leadPlacement` is `below`, `inline` or `end`");
+        }
+    }
+
+    // A `titleRole` written as a literal is one of the two roles a head's title takes; a computed one is read at run
+    // time.
+    static void checkTitleRoleLiteral(ExprPtr const& role) {
+        if (role == nullptr || role->kind != ExprKind::Literal) {
+            return;
+        }
+        std::string const* const name = role->literal.asString();
+        if (name == nullptr || (*name != "heading" && *name != "headline")) {
+            refuse(role->path, "`titleRole` is `heading` or `headline`");
         }
     }
 
@@ -2625,6 +2642,9 @@ public:
         }
         if (_doc->leadPlacement) {
             checkExpr(*_doc->leadPlacement, root);
+        }
+        if (_doc->titleRole) {
+            checkExpr(*_doc->titleRole, root);
         }
         if (_doc->headSurface) {
             checkExpr(*_doc->headSurface, root);
@@ -4257,9 +4277,9 @@ private:
         if (role == nullptr || role->kind != ExprKind::Literal) {
             return;
         }
-        static constexpr std::array<std::string_view, 13> kRoles = {
+        static constexpr std::array<std::string_view, 14> kRoles = {
             "normal", "muted",   "heading", "title",    "section", "error", "success",
-            "mono",   "display", "small",   "overline", "caption", "label"};
+            "mono",   "display", "small",   "overline", "caption", "label", "headline"};
         std::string const* const name = role->literal.asString();
         if (name == nullptr) {
             refuse(pointerAppend(node.path, "role"), "`role` is a name");

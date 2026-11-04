@@ -600,6 +600,66 @@ TEST_CASE("qt_quick theme: the small and caption sizes, the display role and the
     CHECK(labelFont(*small).weight() == QFont::Normal);
 }
 
+// Mutation: leave the headline out of MorphText's font ladder (it draws the body size), insert the role before
+// `Display` in the enum (a display text takes the headline's size), drop `font.size.headline` from the theme's map
+// (the token is read as unset), or draw the title at the headline whatever `setTitleRole` says.
+TEST_CASE("qt_quick theme: the headline role has its own size, and a head's title takes it only where asked",
+          "[qt_quick]") {
+    Scene scene;
+    ui::ThemeValues values = ui::themeValues();
+    values.dimensions.insert_or_assign("font.size.body", 13.0);
+    values.dimensions.insert_or_assign("font.size.heading", 16.0);
+    values.dimensions.insert_or_assign("font.size.display", 22.0);
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    // Unset, the headline derives from the body size alone: 13 x 1.5 rounds to 20.
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    CHECK(theme->property("headlinePixels").toReal() == 20.0);
+    values.dimensions.insert_or_assign("font.size.headline", 18.0);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    CHECK(theme->property("headlinePixels").toReal() == 18.0);
+
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const makeText = [&](ui::TextRole role) {
+        auto text = scene.backend().createText(column.get());
+        text->setText("Instrument");
+        text->setRole(role);
+        return text;
+    };
+    auto const normal = makeText(ui::TextRole::Normal);
+    auto const headline = makeText(ui::TextRole::Headline);
+    auto const display = makeText(ui::TextRole::Display);
+    auto const heading = makeText(ui::TextRole::Heading);
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, morph::ui::ShellFrameOptions{.applicationName = "App"}};
+    frame.showSignedIn(true);
+    frame.setTitle("Instrument");
+    frame.setHeadShown(true);
+    scene.settle();
+    CHECK(labelFont(*headline).pixelSize() == 18);
+    CHECK(labelFont(*headline).weight() == labelFont(*heading).weight());
+    CHECK(labelFont(*headline).weight() > labelFont(*normal).weight());
+    CHECK(labelFont(*display).pixelSize() == 22);
+    CHECK(labelFont(*heading).pixelSize() == 16);
+    CHECK(Scene::itemOf(*headline).property("control").value<QQuickItem*>()->property("color").value<QColor>() ==
+          Scene::itemOf(*normal).property("control").value<QQuickItem*>()->property("color").value<QColor>());
+
+    auto const titlePixels = [] {
+        morph::qt_quick::detail::ItemBase const* const widget =
+            morph::qt_quick::detail::findWidget(QStringLiteral("shell_title"));
+        REQUIRE(widget != nullptr);
+        auto const* const control = widget->item()->property("control").value<QQuickItem*>();
+        REQUIRE(control != nullptr);
+        return control->property("font").value<QFont>().pixelSize();
+    };
+    CHECK(titlePixels() == 16);
+    frame.setTitleRole(ui::TextRole::Headline);
+    scene.settle();
+    CHECK(titlePixels() == 18);
+    frame.setTitleRole(ui::TextRole::Heading);
+    scene.settle();
+    CHECK(titlePixels() == 16);
+}
+
 // Mutation: return @p wanted whenever it is not available, or look heavier first for a weight under 400.
 TEST_CASE("qt_quick theme: a weight the family lacks moves to the nearest upright one in CSS order", "[qt_quick]") {
     using morph::qt_quick::detail::uprightWeight;

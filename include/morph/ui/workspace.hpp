@@ -445,6 +445,15 @@ public:
         return joined != nullptr && joined->get();
     }
 
+    /// @brief The text role the active screen asks for its head's title. A tracked read.
+    /// @return `Heading`, or `Headline` where the screen asks for it; `Heading` with no active tab.
+    [[nodiscard]] TextRole activeTitleRole() const {
+        std::optional<WorkspaceTabId> const tab = _model->active().get();
+        ScreenHead const* const head = tab ? headOf(*tab) : nullptr;
+        reactive::Computed<TextRole> const* const role = head == nullptr ? nullptr : head->titleRole();
+        return role == nullptr ? TextRole::Heading : role->get();
+    }
+
     /// @brief The surface the active screen asks the shell to draw its top bar on. A tracked read.
     /// @return The surface's name; empty with no active tab and while the screen names none.
     [[nodiscard]] std::string activeHeadSurface() const {

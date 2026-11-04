@@ -3166,6 +3166,11 @@ public:
     /// @return The place; `Below` when the document declares none.
     [[nodiscard]] LeadPlacement leadPlacement() const;
 
+    /// @brief The text role of the head's title: the document's `titleRole`, read now. A tracked read. A value that
+    ///        names neither role is reported once at its path and taken as `heading`.
+    /// @return `Heading`, or `Headline` where the document asks for it; `Heading` when it declares none.
+    [[nodiscard]] TextRole titleRole() const;
+
     /// @brief The name of the surface the shell draws the top bar on while this screen is shown: the document's
     ///        `headSurface`, read now. A tracked read.
     /// @return The name; empty for none.
@@ -6523,7 +6528,8 @@ namespace detail {
 }
 
 /// @brief A text role by name.
-/// @param name `normal`, `muted`, `heading` (or `title`), `section`, `error`, `success`, `mono`, `display`, `small`.
+/// @param name `normal`, `muted`, `heading` (or `title`), `section`, `error`, `success`, `mono`, `display`, `small`,
+/// `overline`, `caption`, `label`, `headline`.
 /// @return The role; `nullopt` for any other name.
 [[nodiscard]] inline std::optional<TextRole> roleNamed(std::string_view name) {
     if (name == "normal") {
@@ -6562,12 +6568,16 @@ namespace detail {
     if (name == "label") {
         return TextRole::Label;
     }
+    if (name == "headline") {
+        return TextRole::Headline;
+    }
     return std::nullopt;
 }
 
 /// @brief What a role that names none is told: the names `roleNamed` reads.
 inline constexpr std::string_view kRoleNames =
-    "a role is normal, muted, heading, section, error, success, mono, display, small, overline, caption or label";
+    "a role is normal, muted, heading, section, error, success, mono, display, small, overline, caption, label or "
+    "headline";
 
 /// @brief A text role by name, as `roleNamed` reads it.
 /// @param value  The name.
@@ -10285,6 +10295,26 @@ inline LeadPlacement Screen::leadPlacement() const {
         _core->report(placement->path, "`leadPlacement` is `below`, `inline` or `end`");
     }
     return LeadPlacement::Below;
+}
+
+inline TextRole Screen::titleRole() const {
+    ExprPtr const& role = _core->doc().titleRole;
+    if (role == nullptr) {
+        return TextRole::Heading;
+    }
+    Value const value = detail::evalIn(*_scope, nullptr, role);
+    if (std::string const* const name = value.asString()) {
+        if (*name == "headline") {
+            return TextRole::Headline;
+        }
+        if (*name == "heading") {
+            return TextRole::Heading;
+        }
+    }
+    if (!value.isNull()) {
+        _core->report(role->path, "`titleRole` is `heading` or `headline`");
+    }
+    return TextRole::Heading;
 }
 
 inline std::string Screen::headSurface() const {

@@ -253,6 +253,8 @@ enum class TextRole : std::uint8_t {
                ///< `Muted`.
     Label,  ///< A field's or a group's caption: `font.size.caption`, regular, the text colour. The terminal draws it
             ///< as `Normal`.
+    Headline,  ///< A record's identity: `font.size.headline`, strong, the text colour. It sits between `Heading` and
+               ///< `Display`; the terminal draws it as `Heading`.
 };
 
 /// @brief How a `TextInput` edits.

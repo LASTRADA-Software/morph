@@ -198,7 +198,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `control.touchTextSize` (0): the size of a control's own text while the window's width class is compact; 0 keeps the body size. A negative value is refused by `checkTheme`. The terminal draws no text sizes and ignores it | dimension, in px |
 | `button.smallHeight` (0), `button.smallTouchHeight` (0): the height of a `size: small` button, on the desktop and while the window is compact; 0 keeps the control height and the touch target. They apply to every small button in the theme, and either may be above or below `control.height` and `control.touchHeight`: a theme that sets `button.smallTouchHeight` below `control.touchHeight` takes the touch target onto itself. A negative value is refused by `checkTheme`. The terminal draws a small button on one row and ignores them | dimension, in px |
 | `font.size.body`, `font.size.heading` (0: the platform font's size, and the body size ×1.3): a body size alone, with no `font.family`, draws the body text in the platform family at that size | dimension, in px |
-| `font.size.small` (0: the body size ×0.85, rounded): a table header's label, the `small` text role; `font.size.caption` (0: ×0.92, rounded): a field's caption above its control, a stacked key-value's captions and the `caption` and `label` text roles; `font.size.mono` (0: the body size): the `mono` role; `font.size.display` (0: ×1.7, rounded): the `display` role. Each derives from the body size, none from another new token, so what a theme leaves unset never depends on what else it sets | dimension, in px |
+| `font.size.small` (0: the body size ×0.85, rounded): a table header's label, the `small` text role; `font.size.caption` (0: ×0.92, rounded): a field's caption above its control, a stacked key-value's captions and the `caption` and `label` text roles; `font.size.mono` (0: the body size): the `mono` role; `font.size.display` (0: ×1.7, rounded): the `display` role; `font.size.headline` (0: ×1.5, rounded): the `headline` role, which a screen's `titleRole` selects for the head's title. Each derives from the body size, none from another new token, so what a theme leaves unset never depends on what else it sets | dimension, in px |
 | `font.weight.strong` (700): the weight of every strong font (`strongFont`, `headingFont`, the table header, a section, a strong run) | font weight: a number from 1 to 1000 or a DTCG weight name (`semi-bold` is 600), read into `ThemeValues::numbers` |
 | `font.weight.button` (700): the weight of a button's strong caption (a filled, small or square button); `font.weight.strong` stays the weight of every other strong font | font weight, as `font.weight.strong` |
 | `font.family` (none: the platform font) | font family: a name, or a list of names in order of preference |
@@ -246,7 +246,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `touchTextSize`, `smallHeight`, `smallTouchHeight` | `control.touchTextSize`, `button.smallHeight`, `button.smallTouchHeight` |
 | `radiusControl`, `radiusCard`, `radiusBadge`, `controlHeight`, `touchHeight`, `bodySize`, `headingSize` | `radius.control`, `radius.card`, `radius.badge`, `control.height`, `control.touchHeight`, `font.size.body`, `font.size.heading` |
 | `tableCellPaddingX`, `tableCellPaddingY` | `table.cellPaddingX`, `table.cellPaddingY` |
-| `smallSize`, `captionSize`, `monoSize`, `displaySize` | `font.size.small`, `font.size.caption`, `font.size.mono`, `font.size.display` |
+| `smallSize`, `captionSize`, `monoSize`, `displaySize`, `headlineSize` | `font.size.small`, `font.size.caption`, `font.size.mono`, `font.size.display`, `font.size.headline` |
 | `strongWeight` | `font.weight.strong` |
 | `buttonWeight` | `font.weight.button` |
 | `disabledText`, `disabledFill`, `disabledBorder` | `color.disabled.text`, `color.disabled.bg`, `color.disabled.border` |
@@ -291,12 +291,12 @@ the body size. Units keep reading the body font, so no unit moves. A `size: smal
 `Theme.smallButtonHeight`: `button.smallTouchHeight` while `touchTargets` holds and it is set, else the touch target;
 `button.smallHeight` otherwise, else the control height. The terminal is unchanged: a cell is the target.
 
-`Theme.bodyPixels`, `headingPixels`, `smallPixels`, `captionPixels`, `monoPixels` and `displayPixels` are the font
+`Theme.bodyPixels`, `headingPixels`, `smallPixels`, `captionPixels`, `monoPixels`, `displayPixels` and `headlinePixels` are the font
 sizes the components use: a size of 0 derives from the platform font (`Theme.platformMetrics`), the body its size, a
 heading 1.3 times the body, and the others as the closed set lists. Every `MorphUi` text and control draws in
 `Theme.bodyFont` (`strongFont` where it is emphasised and for a `section` text, which is also muted, `headingFont`
 for a heading, `smallFont` and `smallStrongFont` for a table header's label and a `small` text, `captionFont` for a
-field's caption, `displayFont` for a `display` text): the theme's families at the font's size, or the platform font
+field's caption, `displayFont` for a `display` text, `headlineFont` for a `headline` text): the theme's families at the font's size, or the platform font
 untouched while the theme names no family and sets no `font.size.body`. Every strong font draws at `Theme.strongWeight`, moved to the nearest weight the family has an upright face of
 (`Theme.textWeightOf`, `monoWeightOf` for the mono families; the CSS font-matching order: a request under 400 looks
 lighter first, one over 500 heavier first, one from 400 to 500 up to 500, then lighter): Qt asked for a weight a family

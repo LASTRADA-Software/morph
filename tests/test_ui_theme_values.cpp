@@ -248,7 +248,7 @@ TEST_CASE("ui theme values: the type steps and the strong weight have defaults, 
           "[ui][theme]") {
     ui::ThemeValues const defaults = ui::themeValues();
     for (std::string_view const path :
-         {"font.size.small", "font.size.caption", "font.size.mono", "font.size.display"}) {
+         {"font.size.small", "font.size.caption", "font.size.mono", "font.size.display", "font.size.headline"}) {
         CHECK(defaults.dimensions.at(std::string{path}) == 0.0);
     }
     CHECK(defaults.numbers.at("font.weight.strong") == 700.0);

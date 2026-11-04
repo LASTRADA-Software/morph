@@ -326,6 +326,21 @@ TEST_CASE("shell frame: the navigator's group headings are overlines", "[ui][she
     CHECK(backend.prop(heading, "role") == "Overline");
 }
 
+// Mutation: ignore the role (the title keeps `Heading`), or set it on the window's title and not the top bar's.
+TEST_CASE("shell frame: the top bar's title takes the role it is given, and a new frame draws a heading",
+          "[ui][shell]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    int signOuts = 0;
+    ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
+    int const title = backend.find("Text", "testId", "shell_title").value();
+    CHECK(backend.prop(title, "role") == "Heading");
+    frame.setTitleRole(morph::ui::TextRole::Headline);
+    CHECK(backend.prop(title, "role") == "Headline");
+    frame.setTitleRole(morph::ui::TextRole::Heading);
+    CHECK(backend.prop(title, "role") == "Heading");
+}
+
 // Mutation: leave the gaps alone (the compact top line keeps steps 3 and 3).
 TEST_CASE("shell frame: the compact top line pads its ends by step 1 and spaces its items by step 2", "[ui][shell]") {
     RecordingBackend backend;

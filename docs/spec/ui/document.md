@@ -64,7 +64,7 @@ refused: a lab writes dates one way everywhere, so the pattern is the applicatio
 | `id` | `id` | Non-empty |
 | `title`, `identity`, `dirty` | same | Expressions; `dirty` is a condition |
 | `titleSpans`, `eyebrow`, `eyebrowSpans`, `subtitle`, `subtitleSpans`, `status`, `tools`, `actions`, `menu`, `menuLabel` | same | The screen's head beside its title, in the screen scope ([The head](#the-head)); a screen's only |
-| `leadPlacement`, `headSurface`, `pageSurface` | same | Where the head's lead sits, the surface the shell draws its top bar on while the screen is shown, and the surface it draws the page area on, in the screen scope ([The head](#the-head)); a screen's only |
+| `leadPlacement`, `titleRole`, `headSurface`, `pageSurface` | same | Where the head's lead sits, the text role of its title (`heading`, or `headline` for a record's identity), the surface the shell draws its top bar on while the screen is shown, and the surface it draws the page area on, in the screen scope ([The head](#the-head)); a screen's only |
 | `principalPlacement` | `principalPlacement` | Where the shell shows who is signed in: `sidebar` (the default, at the sidebar's foot) or `head` (at the top bar's trailing end); a literal name, the app document's only, and any other name is refused at load |
 | `navigation` | `navigation` | The counts on the navigator's entries, in the app scope ([The app document's navigation](#the-app-documents-navigation)); the app document's only |
 | `params` | `params` | Name to type, in declaration order |
@@ -112,6 +112,12 @@ the menu.
 A literal other than these three is refused at load (`` `leadPlacement` is `below`, `inline` or `end` ``); a computed value
 that names none is reported once at its path and taken as `below`. The placement may change at run time, so a width
 class can pick one.
+
+`titleRole` (an expression of a name) is the text role of the top bar's title: `heading`, the default, or `headline`,
+which sets a record's identity a step larger (`font.size.headline`). A literal of any other name is refused at load
+(`` `titleRole` is `heading` or `headline` ``); a computed value that names neither is reported once at its path and
+drawn as `heading`. Only the top bar's title reads it: a tab's caption, the window's title and an overlay's title keep
+their own. It holds for `titleSpans` too, whose runs sit inside the role. `text`'s `role` also accepts `headline`.
 
 `headSurface` (an expression of a surface's name, `null` or absent for none) is the surface the shell draws its top bar
 on while the screen is shown; a name that is no surface draws as none does. The built-in `toolbarJoined` surface wins

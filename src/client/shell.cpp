@@ -513,6 +513,7 @@ private:
         // screen asks for.
         _headLayout = std::make_unique<reactive::Effect>(_context->runtime(), [this] {
             _frame->setLeadInline(_workspace->activeLeadPlacement() == ui::LeadPlacement::Inline);
+            _frame->setTitleRole(_workspace->activeTitleRole());
             _frame->setHeadOneLine(_workspace->activeHeadOneLine());
             _frame->setTrailEnd(_workspace->activeHeadTrailEnd());
             _frame->setHeadJoined(_workspace->activeHeadJoined());

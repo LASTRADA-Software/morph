@@ -1194,7 +1194,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 84> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 85> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1276,11 +1276,13 @@ inline constexpr std::array<ThemeTokenSpec, 84> kThemeTokens = {{
     {.path = "font.size.body", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.size.heading", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     // The sizes below are derived from the body size while 0, as the two above are; none derives from another.
-    // A tag's and a table header's size, a field's caption, the `mono` role's and the `display` role's.
+    // A tag's and a table header's size, a field's caption, the `mono` role's, the `display` role's and the `headline`
+    // role's.
     {.path = "font.size.small", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.size.caption", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.size.mono", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     {.path = "font.size.display", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
+    {.path = "font.size.headline", .kind = ThemeTokenKind::Dimension, .color = "", .number = 0.0},
     // The weight of every strong font: a section, a header, a heading, a strong text.
     {.path = "font.weight.strong", .kind = ThemeTokenKind::FontWeight, .color = "", .number = 700.0},
     // The weight of a button's caption where it is drawn strong: a filled button, a small one, a square one.

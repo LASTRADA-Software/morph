@@ -2896,6 +2896,12 @@ public:
     /// @param placement The expression.
     void leadPlacement(AnyHandle const& placement) { detail::put(_head, "leadPlacement", placement.json()); }
 
+    /// @brief The text role of the head's title: an expression of `"heading"` (the default) or `"headline"`, a
+    /// record's
+    ///        identity set a step larger. A literal is checked at load.
+    /// @param role The expression.
+    void titleRole(AnyHandle const& role) { detail::put(_head, "titleRole", role.json()); }
+
     /// @brief The surface the shell draws its top bar on while the screen is shown: an expression of a surface's
     ///        name, `null` for none.
     /// @param surface The expression.

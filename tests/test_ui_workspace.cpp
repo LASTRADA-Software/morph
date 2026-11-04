@@ -132,6 +132,16 @@ constexpr std::string_view kLeadPlaced = R"({
     { "kind": "button", "testId": "wide", "label": "wide", "onClick": [ { "set": "compact", "value": false } ] }
   ] } })";
 
+/// A screen whose head asks for the title role in `role`, which a button flips.
+constexpr std::string_view kTitleRoled = R"({
+  "vocab": "ui/1", "id": "titleroled", "title": "Instrument",
+  "titleRole": { "ref": "role" },
+  "state": { "role": { "init": "headline" } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "plainrole", "label": "plain", "onClick": [ { "set": "role", "value": "heading" } ] },
+    { "kind": "button", "testId": "badrole", "label": "bad", "onClick": [ { "set": "role", "value": "display" } ] }
+  ] } })";
+
 /// A screen whose head ends in a primary action, then a ghost icon-only one shown while `moreShown`.
 constexpr std::string_view kTrailEnd = R"({
   "vocab": "ui/1", "id": "trailend", "title": "Audit",
@@ -302,6 +312,7 @@ private:
             {"eyebrowonly", loadOrFail(kEyebrowOnly, morph::ui::testing::corpusCatalog())},
             {"edgeroot", loadOrFail(kEdgeRoot, morph::ui::testing::corpusCatalog())},
             {"leadplaced", loadOrFail(kLeadPlaced, morph::ui::testing::corpusCatalog())},
+            {"titleroled", loadOrFail(kTitleRoled, morph::ui::testing::corpusCatalog())},
             {"trailend", loadOrFail(kTrailEnd, morph::ui::testing::corpusCatalog())},
             {"ghostend", loadOrFail(kGhostEnd, morph::ui::testing::corpusCatalog())},
             {"menued", loadOrFail(kMenued, morph::ui::testing::corpusCatalog())},
@@ -1469,6 +1480,32 @@ TEST_CASE("workspace: the lead is built once per place and shown only in the pla
     CHECK(shell.activeLeadPlacement() == LeadPlacement::Below);
     CHECK(backend.prop(below, "visible") == "true");
     CHECK(backend.prop(inlined, "visible") == "false");
+}
+
+// Mutation: read `Heading` whatever the document says (the first check fails), ignore a value that names neither role
+// (the report is missing), or stop reporting it (the last check fails).
+TEST_CASE("workspace: the head's title role is read from the screen, and a role of no name is reported",
+          "[ui][workspace]") {
+    using morph::ui::TextRole;
+    reported().clear();
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog(), nullptr, morph::ui::HeadPlacement::External};
+    CHECK(shell.activeTitleRole() == TextRole::Heading);
+    REQUIRE(shell.open("titleroled", {}) == 0U);
+    harness.settle();
+    CHECK(shell.activeTitleRole() == TextRole::Headline);
+    harness.backend.click(harness.byTestId("Button", "plainrole"));
+    harness.settle();
+    CHECK(shell.activeTitleRole() == TextRole::Heading);
+    CHECK(reported().empty());
+    harness.backend.click(harness.byTestId("Button", "badrole"));
+    harness.settle();
+    CHECK(shell.activeTitleRole() == TextRole::Heading);
+    CHECK(std::ranges::count(reported(), "`titleRole` is `heading` or `headline`") == 1);
+    REQUIRE(shell.open("leadplaced", {}) == 1U);
+    harness.settle();
+    CHECK(shell.activeTitleRole() == TextRole::Heading);
 }
 
 // Mutation: ignore the eyebrow (the second check fails), or treat an inline or end lead as one under the title (the

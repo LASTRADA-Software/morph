@@ -93,6 +93,8 @@ QtObject {
     readonly property font captionFont: fontOf(captionPixels, Font.Normal)
     // A figure that stands out, such as a KPI's number: the display size, strong.
     readonly property font displayFont: fontOf(displayPixels, strongWeight)
+    // A record's identity, such as a head's title where the screen asks for it: the headline size, strong.
+    readonly property font headlineFont: fontOf(headlinePixels, strongWeight)
     // What measures the unbreakable segments of a text (`widestSegment(pieces)`): the backend writes it, since only
     // C++ can ask Qt's line breaker. Null until then, and a wrapping text keeps no minimum width. A `var`, not a
     // `QtObject`: qmllint reads a call on a plain QObject as a missing member.
@@ -216,11 +218,12 @@ QtObject {
     property real tableCellPaddingY: 4
     property real bodySize: 0
     property real headingSize: 0
-    // The other sizes, derived from the body size while 0: `font.size.small`, `.caption`, `.mono` and `.display`.
+    // The other sizes, derived from the body size while 0: `font.size.small`, `.caption`, `.mono`, `.display` and `.headline`.
     property real smallSize: 0
     property real captionSize: 0
     property real monoSize: 0
     property real displaySize: 0
+    property real headlineSize: 0
     // The weight of every strong font: `font.weight.strong`.
     property int strongWeight: Font.Bold
     // The weight of a button's strong caption: `font.weight.button`.
@@ -264,6 +267,7 @@ QtObject {
     readonly property real captionPixels: captionSize > 0 ? captionSize : Math.round(bodyPixels * 0.92)
     readonly property real monoPixels: monoSize > 0 ? monoSize : bodyPixels
     readonly property real displayPixels: displaySize > 0 ? displaySize : Math.round(bodyPixels * 1.7)
+    readonly property real headlinePixels: headlineSize > 0 ? headlineSize : Math.round(bodyPixels * 1.5)
 
     // @p base in bold, at its own size: a pixel size, or else a point size, whichever it was given in.
     function boldOf(base: font): font {

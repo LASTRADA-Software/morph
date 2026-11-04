@@ -161,7 +161,7 @@ and the placement), so a hidden copy is in neither the layout nor the accessibil
 A lead at the `end` counts as trail content. In the page (`HeadPlacement::InPage`) the tab bar carries the title, so
 `inline` draws as `below` there, and `end` sits in the trail. `activeLeadPlacement()` is a tracked read of the active
 head's place (`Below` with no active tab), `activeHeadOneLine()` of whether the head has no eyebrow and nothing under the
-title (`true` with no active tab), `activeHeadJoined()` of whether the page continues the head's block (the screen's
+title (`true` with no active tab), `activeTitleRole()` of the role the screen asks for its title (`Heading` with no active tab), `activeHeadJoined()` of whether the page continues the head's block (the screen's
 `headJoined`, and the page not inset: two tabs inset it), and `activeHeadSurface()` of the surface the screen asks the
 top bar to be drawn on (empty with none); `activePageSurface()` is the same read of the surface it asks the page area
 to be drawn on (empty with none or with no active tab). `activeHeadTrailEnd()` is a tracked read of what ends the trail, as `HeadTrailEnd`: the last element in the trail's order (tools, actions, then the head menu). A head menu, or a last action that is icon-only or ghost, is `Unframed`; any other last action is `Framed`; with no action and no menu a head tool is `Framed`; an empty trail, or no active tab, is `None`. The shell tells the frame, which stands the line's end step 4 from a compact bar's edge unless the end is `Unframed`. A trail button of an `actionButton` with `iconOnly` has an empty label, and the

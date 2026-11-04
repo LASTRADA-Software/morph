@@ -765,6 +765,26 @@ TEST_CASE("tui widgets: a display text is bold as a heading is, and a small text
     CHECK(buffer.at(0, 1).style.fg == harness.screen().theme().textNormal.fg);
 }
 
+// Mutation: map Headline to Normal in roleStyle (the title is not bold, and differs from a heading).
+TEST_CASE("tui widgets: a headline text is drawn as a heading is: a cell has one size", "[tui][widgets]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const headline = harness.make<TextImpl>(column.get());
+    headline->setText("Instrument");
+    headline->setRole(ui::TextRole::Headline);
+    auto const heading = harness.make<TextImpl>(column.get());
+    heading->setText("Instrument");
+    heading->setRole(ui::TextRole::Heading);
+    auto const normal = harness.make<TextImpl>(column.get());
+    normal->setText("Instrument");
+    static_cast<void>(harness.draw());
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.bold);
+    CHECK(buffer.at(0, 0).style.fg == buffer.at(1, 0).style.fg);
+    CHECK(buffer.at(0, 0).style.bold == buffer.at(1, 0).style.bold);
+    CHECK_FALSE(buffer.at(2, 0).style.bold);
+}
+
 // Mutation: draw an item as a push button (its line shows `[ ... ]`).
 TEST_CASE("tui widgets: an item button paints its label unbracketed across its line, selected in the list's style",
           "[tui][widgets]") {

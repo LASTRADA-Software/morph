@@ -270,6 +270,11 @@ public:
         showTrail();
     }
 
+    /// @brief Sets the role the top bar's title is drawn in: `Heading`, or `Headline` for a record's identity. A
+    ///        tab's caption, the window's title and an overlay's title keep their own.
+    /// @param role The role. A new frame draws `Heading`.
+    void setTitleRole(TextRole role) { _title->setRole(role); }
+
     /// @brief Shows the head's lead on the title's line (`headInlineSlot()`), or hides that slot. The slot is a
     ///        content-sized item of a wrapping line inside the lead block, which always stretches from
     ///        `kShellHeadLeadMinimum` units: the lead follows the title while both fit the block, and wraps to a line
@@ -340,7 +345,7 @@ public:
     }
 
     /// @brief Shows the shown screen's title as runs in the top bar, in place of the plain title: an identifier in the
-    ///        monospace face beside plain words. The heading role gives every run its size and weight.
+    ///        monospace face beside plain words. The title's role gives every run its size and weight.
     /// @param spans The runs; empty draws `setTitle`'s text.
     void setTitleSpans(std::vector<TextSpan> const& spans) {
         _titleSpans = spans;

@@ -109,7 +109,7 @@ Item {
     // The item keyboard focus goes to.
     property Item focusTarget: root
 
-    // A text role's colour in this widget's scheme: Normal, Muted, Heading, Error, Success, Section, Mono, Overline, Caption, Label.
+    // A text role's colour in this widget's scheme: Normal, Muted, Heading, Error, Success, Section, Mono, Overline, Caption, Label, Headline.
     function textColorOf(role: int): color {
         switch (role) {
         case 1:

@@ -139,7 +139,7 @@ workspace sets the title to the tab's caption and `Navigator::setCurrent` to its
 bar's head slots (`headPartsForActive()`: the lead under the title, the inline lead on the title line, the trail at the
 line's trailing edge, with an `end` lead inside it), which the shell shows through an effect beside those mounts
 (`ShellFrame::setHeadShown(Workspace::activeHeadShown())`). A second effect lays the head and the page area out for the active screen:
-`setLeadInline` from `activeLeadPlacement()`, `setHeadOneLine` from `activeHeadOneLine()`, `setHeadJoined` from
+`setLeadInline` from `activeLeadPlacement()`, `setTitleRole` from `activeTitleRole()`, `setHeadOneLine` from `activeHeadOneLine()`, `setHeadJoined` from
 `activeHeadJoined()`, `setHeadSurface` from `activeHeadSurface()` and `setPageSurface` from `activePageSurface()`. After mounting the app document the shell moves
 the principal into the top bar when `AppRoot::principalPlacement()` is `Head`. The slots
 follow the active tab the same way, but only
