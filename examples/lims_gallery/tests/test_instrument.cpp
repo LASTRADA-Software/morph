@@ -40,6 +40,8 @@ TEST_CASE("instrument, expanded: the head's status and actions, the overflow men
     // The breadcrumb is the head's eyebrow, above the title.
     CHECK(screen.text("head_eyebrow") == "Instruments › EQ-0142");
     CHECK_FALSE(screen.shows("Text", "head_subtitle"));
+    // The title is drawn in the headline role, one step above a page's heading.
+    CHECK(screen.prop("Text", "shell_title", "role") == "Headline");
     CHECK(screen.prop("Badge", "head_status_0", "text") == "In service");
     CHECK(screen.prop("Badge", "head_status_1", "text") == "Qualified: IQ, OQ, PQ");
     CHECK(screen.prop("Badge", "head_status_2", "text") == "Calibration due 27-Oct-2026, in 3 days");
