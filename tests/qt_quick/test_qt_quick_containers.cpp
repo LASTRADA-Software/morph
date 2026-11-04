@@ -3303,7 +3303,8 @@ TEST_CASE("qt_quick containers: the principal ends the head's trail, centred on 
     bool sawTogether = false;
     bool sawWrapped = false;
     // Down to where the trail itself no longer fits beside the sidebar: alone on a line narrower than itself it wraps
-    // inside, and the principal goes under the action by design.
+    // inside, and the principal goes under the action by design. Where that happens depends on the font, so the sweep
+    // ends at the first width where the principal is no longer to the right of the action.
     for (int width = 1000; width >= 460; width -= 10) {
         scene.window().resize(width, 600);
         scene.settle();
@@ -3312,6 +3313,9 @@ TEST_CASE("qt_quick containers: the principal ends the head's trail, centred on 
         QRectF const principal = sceneRectOf("shell_head_principal");
         INFO("width " << width << ": the title " << title.y() << ".." << title.bottom() << ", the action at "
                       << button.center().y() << ", the principal at " << principal.center().y());
+        if (principal.left() < button.right()) {
+            break;
+        }
         CHECK(std::abs(principal.center().y() - button.center().y()) < 1.5);
         (button.y() < title.bottom() ? sawTogether : sawWrapped) = true;
     }
