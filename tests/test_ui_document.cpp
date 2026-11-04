@@ -264,7 +264,7 @@ TEST_CASE("ui document: a grid's least column width is a literal 1 to 64 for a g
     CHECK(grid(R"("columns": 3, "minColumnWidth": 64,)").has_value());
     // A computed column count is not known at load, so it is not judged.
     CHECK(grid(R"("columns": {"env": "widthClass"}, "minColumnWidth": 25,)").has_value());
-    for (std::string const& refused :
+    for (char const* const refused :
          {R"("columns": 3, "minColumnWidth": 0,)", R"("columns": 3, "minColumnWidth": 65,)",
           R"("columns": 3, "minColumnWidth": {"env": "widthClass"},)", R"("minColumnWidth": 25,)",
           R"("columns": 1, "minColumnWidth": 25,)", R"("tracks": [{}, {}], "minColumnWidth": 25,)"}) {
