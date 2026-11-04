@@ -40,6 +40,8 @@ TEST_CASE("results, expanded: the worksheet grid, its calculations and the chang
               .contains("WS-2026-0412;mono"));
     CHECK(screen.find("Panel", "suitability").has_value());
     CHECK(screen.shows("Table", "results"));
+    // Save and Submit sit 8 px apart.
+    CHECK(screen.isActionRow("Row", "footer-actions"));
     // Each sample's results sit under a heading row across the worksheet.
     std::size_t headings = 0;
     for (int const row : screen.backend().all("Row")) {

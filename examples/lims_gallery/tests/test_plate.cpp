@@ -170,6 +170,17 @@ TEST_CASE("plate, compact: the wells listed by row, empty wells as one line a ru
     // The well, its label and its button sit 8 px apart; the two layout buttons too.
     CHECK(screen.prop("Row", "run-line", "gap") == "2");
     CHECK(screen.prop("Row", "layout-buttons", "gap") == "2");
+    // A run line has no side inset: a selected well's ring stands in the page's gutter. A line with an Assign button
+    // has none, one without it a line's height of it (vertical/horizontal).
+    std::size_t runLinesChecked = 0;
+    for (int const line : screen.backend().all("Row")) {
+        if (screen.backend().prop(line, "testId") == "run-line") {
+            std::string const padding = screen.backend().prop(line, "padding");
+            CHECK((padding.empty() || padding == "0" || padding == "1/0"));
+            ++runLinesChecked;
+        }
+    }
+    CHECK(runLinesChecked > 0);
     CHECK(screen.prop("Collapsible", "row-A", "title") == "Row A · 1 standard, 2 controls, 9 empty");
     CHECK(screen.prop("Collapsible", "row-B", "title") == "Row B · 1 standard, 1 blank, 10 samples");
     CHECK(screen.prop("Collapsible", "row-D", "title") == "Row D · 1 standard, 10 samples, 1 empty");

@@ -52,6 +52,8 @@ TEST_CASE("samples, expanded: the table, its out-of-spec tone, and three rows se
     CHECK(screen.prop("Table", "samples", "selectAllLabel") == "Select all on this page");
     CHECK(screen.prop("Table", "samples", "selection") == R"(["S-26-104170","S-26-104221","S-26-104176"])");
     CHECK(screen.shows("Panel", "bulk"));
+    // The bar's three framed buttons sit 8 px apart.
+    CHECK(screen.isActionRow("Row", "bulk-actions"));
     CHECK(screen.text("selected") == "3 selected on this page ·");
     // Only the count is strong, and a lot number is a mono run.
     CHECK(screen.backend().dump().contains("[3 selected;strong, on this page ·]"));
@@ -170,6 +172,8 @@ TEST_CASE("samples, compact: the bulk bar is the pinned bottom bar, and takes no
     int const bar = lastBar();
     REQUIRE(bar != 0);
     CHECK(screen.shows("Row", "bulk"));
+    // The count, Assign and the menu sit 8 px apart.
+    CHECK(screen.isActionRow("Row", "bulk"));
     CHECK(screen.backend().prop(bar, "visible") != "false");
     // "Clear selection" is the menu's third entry.
     screen.backend().chooseMenuEntry(screen.find("Menu", "more-bulk").value_or(0), std::vector<std::size_t>{2});

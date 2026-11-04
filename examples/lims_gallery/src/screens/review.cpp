@@ -814,7 +814,8 @@ ui::Node worksheetPane(Review const& review) {
                                       .sizing(ui::stretch())
                                       .testId("approve-note"),
                                   approveButton(review, "Approve and sign…")},
-                                 {.align = Align::Center})});
+                                 {.align = Align::Center})
+                       .testId("footer-actions")});
 }
 
 ui::Node expandedLayout(Review const& review) {

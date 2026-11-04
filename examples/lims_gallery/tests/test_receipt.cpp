@@ -54,6 +54,9 @@ TEST_CASE("receipt, expanded: the session table bleeds, and its parent column pa
         lines, [](std::string const& line) { return line.contains("Table#") && line.contains("testId=session"); });
     REQUIRE(table != lines.end());
     CHECK(table->contains(" bleed"));
+    // Sample and Outcome both stretch, so the spare width is shared between them.
+    CHECK(table->contains("Sample:stretch"));
+    CHECK(table->contains("Outcome:stretch"));
     // The table's parent: the nearest line above it that is indented less.
     auto parent = std::make_reverse_iterator(table);
     while (parent != lines.rend() && indentOf(*parent) >= indentOf(*table)) {
@@ -155,6 +158,8 @@ TEST_CASE("receipt, compact: one column, every field kept, the session folded aw
     CHECK(screen.prop("Collapsible", "session-panel", "title") == "This session · 13 scans");
     CHECK(screen.prop("Badge", "head_status_0", "text") == "12");
     CHECK(screen.prop("Collapsible", "session-panel", "open") == "false");
+    // Reject and Receive sit 8 px apart.
+    CHECK(screen.isActionRow("Row", "footer-actions"));
     screen.click("receive");
     CHECK(screen.waitFor(
         [&screen] { return screen.prop("Collapsible", "session-panel", "title") == "This session · 14 scans"; }));

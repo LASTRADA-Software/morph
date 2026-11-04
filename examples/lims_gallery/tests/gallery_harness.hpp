@@ -62,6 +62,14 @@ public:
         return backend().prop(*found, name);
     }
 
+    /// @brief Whether the widget of @p kind with @p testId is a row of actions: the theme's action gap (8 px) apart.
+    /// @param kind   The widget kind.
+    /// @param testId The test id.
+    /// @return Whether it is.
+    [[nodiscard]] bool isActionRow(std::string_view kind, std::string_view testId) {
+        return prop(kind, testId, "actionRow") == "true" && prop(kind, testId, "gap") == "2";
+    }
+
     /// @brief Types @p text into the text input with @p testId and presses Enter, as a scanner does.
     /// @param testId The test id.
     /// @param text   The text.

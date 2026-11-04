@@ -342,30 +342,31 @@ ui::Node bulkBar(Samples const& list) {
     return ui::panel(
                {ui::column(
                    {ui::actionBar(
-                       {ui::text(
-                            {.text = selectedLabel(list, false),
-                             .spans = ui::cond(
-                                 list.everySelected,
-                                 ui::AnyHandle{ui::spans({ui::strong(selectedLabel(list, false)), " ·"})},
-                                 ui::AnyHandle{ui::spans({ui::strong(ui::format("{0} selected", {list.selectedCount})),
-                                                          " on this page ·"})})})
-                            .testId("selected"),
-                        ui::button(
-                            {.label = ui::format("Select all {0}", {ui::AnyHandle{kTotal}}),
-                             .emphasis = ButtonEmphasis::Ghost,
-                             .onClick = {ui::set(list.selected, ids(list.shown)), ui::set(list.everySelected, true)}})
-                            .visible(!list.everySelected)
-                            .testId("select-all"),
-                        ui::spacer().sizing(ui::stretch()),
-                        ui::button({.label = "Assign to worksheet…", .onClick = ui::open(list.assignDialog)})
-                            .testId("assign"),
-                        ui::button({.label = "Change priority…", .onClick = ui::open(list.priorityDialog)})
-                            .testId("change-priority"),
-                        ui::button({.label = "Print labels", .onClick = printLabels(list)}),
-                        ui::button(
-                            {.label = "Clear", .emphasis = ButtonEmphasis::Ghost, .onClick = clearSelection(list)})
-                            .testId("clear")},
-                       {.align = Align::Center})},
+                        {ui::text({.text = selectedLabel(list, false),
+                                   .spans = ui::cond(
+                                       list.everySelected,
+                                       ui::AnyHandle{ui::spans({ui::strong(selectedLabel(list, false)), " ·"})},
+                                       ui::AnyHandle{
+                                           ui::spans({ui::strong(ui::format("{0} selected", {list.selectedCount})),
+                                                      " on this page ·"})})})
+                             .testId("selected"),
+                         ui::button(
+                             {.label = ui::format("Select all {0}", {ui::AnyHandle{kTotal}}),
+                              .emphasis = ButtonEmphasis::Ghost,
+                              .onClick = {ui::set(list.selected, ids(list.shown)), ui::set(list.everySelected, true)}})
+                             .visible(!list.everySelected)
+                             .testId("select-all"),
+                         ui::spacer().sizing(ui::stretch()),
+                         ui::button({.label = "Assign to worksheet…", .onClick = ui::open(list.assignDialog)})
+                             .testId("assign"),
+                         ui::button({.label = "Change priority…", .onClick = ui::open(list.priorityDialog)})
+                             .testId("change-priority"),
+                         ui::button({.label = "Print labels", .onClick = printLabels(list)}),
+                         ui::button(
+                             {.label = "Clear", .emphasis = ButtonEmphasis::Ghost, .onClick = clearSelection(list)})
+                             .testId("clear")},
+                        {.align = Align::Center})
+                        .testId("bulk-actions")},
                    {.padding = ui::padding(0, 2)})},
                {.padding = 1})
         .surface("selected")

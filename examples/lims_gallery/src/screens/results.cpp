@@ -563,10 +563,12 @@ ui::Node expandedLayout(Worksheet const& sheet) {
                               {.padding = 0}),
                     changeDialog(sheet)},
                    {.gap = 2}),
-        {.bottom = ui::actionBar(
-             {ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).sizing(ui::stretch()).testId("oos"),
-              saveButton(), submitButton(sheet)},
-             {.align = Align::Center})});
+        {.bottom =
+             ui::actionBar(
+                 {ui::text({.text = outOfSpecMessage(sheet), .role = "error"}).sizing(ui::stretch()).testId("oos"),
+                  saveButton(), submitButton(sheet)},
+                 {.align = Align::Center})
+                 .testId("footer-actions")});
 }
 
 // ── Compact: one sample at a time ────────────────────────────────────────────────────────────────────────────────
