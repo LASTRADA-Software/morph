@@ -2321,7 +2321,7 @@ TEST_CASE("qt_quick containers: More follows the last shown tab by the same padd
 
     // A row that holds the first three tabs and More, less 10: the fit shows two.
     double const row = widths.at(0) + widths.at(1) + widths.at(2) + moreWidth - 10;
-    scene.window().resize(static_cast<int>(std::lround(row + 2 * step)), 300);
+    scene.window().resize(static_cast<int>(std::lround(row + (2 * step))), 300);
     static_cast<void>(settledButton(scene, *tabs, 0));
     qsizetype shown = 0;
     QQuickItem const* lastShown = nullptr;
@@ -2338,7 +2338,7 @@ TEST_CASE("qt_quick containers: More follows the last shown tab by the same padd
           root.mapToScene(QPointF{root.width() - step, 0}).x() + 1.0);
 
     // A row too narrow for any tab: More leads the row, at the padding from the strip's inset and with no gap.
-    scene.window().resize(static_cast<int>(std::lround(2 * step + 40)), 300);
+    scene.window().resize(static_cast<int>(std::lround((2 * step) + 40)), 300);
     static_cast<void>(settledButton(scene, *tabs, 0));
     for (QQuickItem const* const button : buttons) {
         CHECK_FALSE(button->isVisible());

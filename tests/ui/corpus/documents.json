@@ -302,6 +302,7 @@
     { "name": "a page surface chosen by the width class", "doc": { "vocab": "ui/1", "id": "t", "pageSurface": { "if": [ { "fn": "eq", "args": [ { "env": "widthClass" }, "compact" ] }, "plainPage", null ] }, "view": { "kind": "text", "text": "x" } } },
     { "name": "a lead placed at the end and a head surface", "doc": { "vocab": "ui/1", "id": "t", "leadPlacement": "end", "headSurface": { "if": [ { "fn": "eq", "args": [ { "env": "widthClass" }, "compact" ] }, "darkHead", null ] }, "subtitle": "x", "view": { "kind": "text", "text": "x" } } },
     { "name": "a head title as a headline", "doc": { "vocab": "ui/1", "id": "t", "titleRole": "headline", "view": { "kind": "text", "text": "x" } } },
+    { "name": "a head title as a heading", "doc": { "vocab": "ui/1", "id": "t", "titleRole": "heading", "view": { "kind": "text", "text": "x" } } },
     { "name": "a computed title role", "doc": { "vocab": "ui/1", "id": "t", "titleRole": { "if": [ { "fn": "eq", "args": [ { "env": "widthClass" }, "compact" ] }, "heading", "headline" ] }, "view": { "kind": "text", "text": "x" } } },
     { "name": "a headline text", "doc": { "vocab": "ui/1", "id": "t", "view": { "kind": "text", "text": "Instrument", "role": "headline" } } },
     { "name": "a computed lead placement", "doc": { "vocab": "ui/1", "id": "t", "leadPlacement": { "if": [ { "fn": "eq", "args": [ { "env": "widthClass" }, "compact" ] }, "below", "inline" ] }, "view": { "kind": "text", "text": "x" } } },

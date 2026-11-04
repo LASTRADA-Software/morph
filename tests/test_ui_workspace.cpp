@@ -135,11 +135,14 @@ constexpr std::string_view kLeadPlaced = R"({
 /// A screen whose head asks for the title role in `role`, which a button flips.
 constexpr std::string_view kTitleRoled = R"({
   "vocab": "ui/1", "id": "titleroled", "title": "Instrument",
-  "titleRole": { "ref": "role" },
-  "state": { "role": { "init": "headline" } },
+  "titleRole": { "if": [ { "fn": "eq", "args": [ { "ref": "mode" }, "number" ] }, { "ref": "count" },
+                         { "if": [ { "fn": "eq", "args": [ { "ref": "mode" }, "none" ] }, null, { "ref": "role" } ] } ] },
+  "state": { "role": { "init": "headline" }, "mode": { "init": "name" }, "count": { "init": 5 } },
   "view": { "kind": "column", "children": [
     { "kind": "button", "testId": "plainrole", "label": "plain", "onClick": [ { "set": "role", "value": "heading" } ] },
-    { "kind": "button", "testId": "badrole", "label": "bad", "onClick": [ { "set": "role", "value": "display" } ] }
+    { "kind": "button", "testId": "badrole", "label": "bad", "onClick": [ { "set": "role", "value": "display" }, { "set": "mode", "value": "name" } ] },
+    { "kind": "button", "testId": "nullrole", "label": "none", "onClick": [ { "set": "mode", "value": "none" } ] },
+    { "kind": "button", "testId": "numrole", "label": "num", "onClick": [ { "set": "mode", "value": "number" } ] }
   ] } })";
 
 /// A screen whose head ends in a primary action, then a ghost icon-only one shown while `moreShown`.
@@ -1499,6 +1502,15 @@ TEST_CASE("workspace: the head's title role is read from the screen, and a role 
     harness.settle();
     CHECK(shell.activeTitleRole() == TextRole::Heading);
     CHECK(reported().empty());
+    // A value of no name is reported once at its path, whatever its type; none is not a value.
+    harness.backend.click(harness.byTestId("Button", "numrole"));
+    harness.settle();
+    CHECK(shell.activeTitleRole() == TextRole::Heading);
+    CHECK(std::ranges::count(reported(), "`titleRole` is `heading` or `headline`") == 1);
+    harness.backend.click(harness.byTestId("Button", "nullrole"));
+    harness.settle();
+    CHECK(shell.activeTitleRole() == TextRole::Heading);
+    CHECK(std::ranges::count(reported(), "`titleRole` is `heading` or `headline`") == 1);
     harness.backend.click(harness.byTestId("Button", "badrole"));
     harness.settle();
     CHECK(shell.activeTitleRole() == TextRole::Heading);
