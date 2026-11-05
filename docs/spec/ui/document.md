@@ -186,7 +186,7 @@ A scope's declarations are a `ScopeDecl`, each kind in declaration order.
 | Declaration | JSON | Model |
 |---|---|---|
 | Model alias | `"alias": {"type": "T", "instance": "private" \| "shared" \| e \| {"from": alias}}` | `ModelDecl`, `InstanceMode` `Default`, `Private`, `Shared`, `Keyed` (a key expression) or `Borrowed`; `"shared"` on a model the catalog does not mark stateless is refused |
-| State | `"name": {"type": "T"?, "init": e?}` | `StateDecl`; without a type, the type is the init's |
+| State | `"name": {"type": "T"?, "init": e?}` | `StateDecl`; without a type, the type is the init's, and a declared `any` is a type: the state stays `any` beside its init (`StateDecl::typeDeclared`) |
 | Derived | `"name": e` under `let` | `LetDecl` |
 | Query | `{"model": alias, "action" \| "evaluate": id, "body", "when", "debounce", "refreshEvery", "staleTime"}` | `QueryDecl`; exactly one of `action` and `evaluate` |
 | Mutation | `{"model", "action", "body", "concurrency", "serialKey", "optimistic", "onSuccess", "onError", "offline"}` | `MutationDecl`, `Concurrency` |

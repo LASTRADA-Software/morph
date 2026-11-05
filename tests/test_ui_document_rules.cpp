@@ -291,13 +291,12 @@ TEST_CASE("ui document rules: the app document's formatting holds a date and a d
     CHECK(refusal(app(R"({"date": "dd-MM-yyyy HH:mm"})")) == "/formatting/date: a date pattern holds no time token");
 }
 
-// A known defect, kept failing so it is not lost: the loader reads `"type": "any"` as no type at all, so a state
-// declared `any` with an init takes the init's type, and a `set` of another type is refused. The specification
-// says only a state *without* a type takes its init's type. When the loader keeps a declared `any`, this passes and
-// the `[!shouldfail]` tag comes off.
-TEST_CASE("ui document rules: a state declared any keeps any beside its init", "[ui][document][!shouldfail]") {
-    CHECK(refusal(document(R"({"kind": "button", "label": "x", "onClick": [{"set": "s", "value": "two"}]})",
-                           R"("state": {"s": {"type": "any", "init": 2}},)")) == "loads");
+// Mutation: derive a state's type from its init even when the document declares one (the `set` is then refused).
+TEST_CASE("ui document rules: a state declared any keeps any beside its init", "[ui][document]") {
+    char const* const button = R"({"kind": "button", "label": "x", "onClick": [{"set": "s", "value": "two"}]})";
+    CHECK(refusal(document(button, R"("state": {"s": {"type": "any", "init": 2}},)")) == "loads");
+    // A state with no type still takes its init's type.
+    CHECK(refusal(document(button, R"("state": {"s": {"init": 2}},)")) != "loads");
 }
 
 // Mutation: drop the weight check from checkButtonValues (a made-up name loads).
