@@ -497,6 +497,22 @@ public:
         });
     }
 
+    /// @brief Installs the handler run when an established connection drops.
+    ///
+    /// Stored on the loop, and run there: once per drop, before the pending
+    /// calls are failed and before any reconnect is scheduled, so an observer
+    /// sees the outage even when the retry that follows connects at once. It
+    /// does not run for a connect attempt that fails, nor for the backend's
+    /// own close. A handler that throws is logged; the backend carries on.
+    /// @param handler Callable run on the backend's I/O loop. Pass `nullptr`
+    ///                to clear.
+    void setDisconnectHandler(const std::function<void()>& handler) override {
+        _loop->post([core = _core, handler] {
+            core->note("SocketBackend::setDisconnectHandler");
+            core->disconnectHandler = handler;
+        });
+    }
+
     /// @brief Installs the handler each server-initiated event is posted to.
     ///        See `IBackend::setEventHandler`.
     ///
@@ -985,7 +1001,16 @@ private:
         }
 
         void onDisconnected() {
-            connected.store(false);
+            bool const wasConnected = connected.exchange(false);
+            if (wasConnected && disconnectHandler) {
+                try {
+                    disconnectHandler();
+                } catch (const std::exception& exc) {
+                    ::morph::log::logWarn("[SocketBackend] disconnect handler threw: {}", exc.what());
+                } catch (...) {
+                    ::morph::log::logWarn("[SocketBackend] disconnect handler threw a non-standard exception");
+                }
+            }
             cancelAdvertised = false;
             if (conn) {
                 ::morph::net::detail::closeAfterFlush(conn);
@@ -1034,6 +1059,7 @@ private:
             connectWaiters.clear();
             reconnectHandler = nullptr;
             connectHandler = nullptr;
+            disconnectHandler = nullptr;
             eventHandler = nullptr;
             cancelAll(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
         }
@@ -1230,6 +1256,8 @@ private:
         ::morph::exec::IExecutor* reconnectExec{nullptr};
         /// Run on the loop after every connect; cleared by `close()`.
         std::function<void()> connectHandler;
+        /// Run on the loop when an established connection drops; cleared by `close()`.
+        std::function<void()> disconnectHandler;
         /// Posted to `eventExec` for each `event` envelope; cleared by `close()`.
         /// Shared, so each posted delivery holds it without copying it.
         std::shared_ptr<std::function<void(::morph::wire::EventBody)>> eventHandler;
