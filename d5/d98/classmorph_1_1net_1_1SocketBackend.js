@@ -19,6 +19,7 @@ var classmorph_1_1net_1_1SocketBackend =
     [ "cancelPending", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#a0d389a1f727cd538d2366d620eb304d5", null ],
     [ "setReconnectHandler", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#a7d71bd27960963577df9ff8490fb2f03", null ],
     [ "setConnectHandler", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#ac813770a36bdfb356eb81e8ad17cc78c", null ],
+    [ "setDisconnectHandler", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#a444e8d5b5dca8065d41709ea065f3973", null ],
     [ "setEventHandler", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#a4e742423f4c6180184a8522e59fb56b6", null ],
     [ "setSession", "d5/d98/classmorph_1_1net_1_1SocketBackend.html#a80e37124e8a3792b6b07541f64d0e690", null ]
 ];

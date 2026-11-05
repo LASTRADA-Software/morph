@@ -1,5 +1,13 @@
 var NAVTREEINDEX12 =
 {
+"d5/d98/classmorph_1_1net_1_1SocketBackend.html#aecb66ba53780b9762d8fd8caa489dad2":[3,0,0,15,0,6],
+"d5/d98/classmorph_1_1net_1_1SocketBackend.html#aef17a873379873c4eaee0cf8cf0e7ba1":[3,0,0,15,0,11],
+"d5/d98/shell_8hpp.html":[4,0,0,0,1],
+"d5/d98/shell_8hpp_source.html":[4,0,0,0,1],
+"d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel.html":[1,0,0,1,0,4],
+"d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel.html":[3,0,0,28,1,6],
+"d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel.html#a0837c5b105e87f518bcbe5e323cf06c3":[1,0,0,1,0,4,2],
+"d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel.html#a0837c5b105e87f518bcbe5e323cf06c3":[3,0,0,28,1,6,2],
 "d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel.html#a2300f78ee5c07348de2326f75e8e24f7":[1,0,0,1,0,4,0],
 "d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel.html#a2300f78ee5c07348de2326f75e8e24f7":[3,0,0,28,1,6,0],
 "d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel.html#aa20ffde557c836610df48f9661991736":[1,0,0,1,0,4,3],
@@ -241,13 +249,5 @@ var NAVTREEINDEX12 =
 "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#ad71f9edaadff16c45ee3a4386c72c8a0":[3,0,0,19,0,32],
 "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#ae9c1165ae4d8eb745e3249c6dccde6f4":[3,0,0,19,0,21],
 "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#af52d2f06f31dda620055849bed27ceb7":[3,0,0,19,0,5],
-"d5/df0/classmorph_1_1qt__quick_1_1Backend.html#afa41f91973a4cf36cb090445998ca07c":[3,0,0,19,0,3],
-"d5/df5/file__offline__queue_8hpp_source.html":[4,0,0,6,0],
-"d5/dfb/structmorph_1_1ui_1_1ChartTick.html":[1,0,0,1,38],
-"d5/dfb/structmorph_1_1ui_1_1ChartTick.html":[3,0,0,28,40],
-"d5/dfb/structmorph_1_1ui_1_1ChartTick.html#a267ac94f8fb505b20f09fdc6b64d713b":[1,0,0,1,38,2],
-"d5/dfb/structmorph_1_1ui_1_1ChartTick.html#a267ac94f8fb505b20f09fdc6b64d713b":[3,0,0,28,40,2],
-"d5/dfb/structmorph_1_1ui_1_1ChartTick.html#aa8d0439251e7adc1bfeb6ec4787dee0f":[1,0,0,1,38,1],
-"d5/dfb/structmorph_1_1ui_1_1ChartTick.html#aa8d0439251e7adc1bfeb6ec4787dee0f":[3,0,0,28,40,1],
-"d5/dfb/structmorph_1_1ui_1_1ChartTick.html#acf83eabbc96acc97dfd5f3a8f08773bb":[1,0,0,1,38,0]
+"d5/df0/classmorph_1_1qt__quick_1_1Backend.html#afa41f91973a4cf36cb090445998ca07c":[3,0,0,19,0,3]
 };

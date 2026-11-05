@@ -1,5 +1,13 @@
 var NAVTREEINDEX28 =
 {
+"db/de0/structmorph_1_1backend_1_1HandlerDestroyedError.html":[3,0,0,2,6],
+"db/de0/structmorph_1_1backend_1_1HandlerDestroyedError.html#aeb7ea3ec3ee7314334d129945e54e91e":[3,0,0,2,6,0],
+"db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html":[3,0,0,28,0,58],
+"db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#a1ba73badce97f8000557a2de27178db2":[3,0,0,28,0,58,1],
+"db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#a2996c9227088e9a96be532f243cdd574":[3,0,0,28,0,58,7],
+"db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#a3db80487783e02a9b413c5f5ddaf7cdb":[3,0,0,28,0,58,3],
+"db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#a45ee7a238efa8726083a705c9674daec":[3,0,0,28,0,58,8],
+"db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#a4a0756cb1948ecfdd704956df81384d1":[3,0,0,28,0,58,10],
 "db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#a4e87e6ab5b6fe6f1cc20adce51ef6ff3":[3,0,0,28,0,58,0],
 "db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#a991809514438d9558edd8d82cba5ecae":[3,0,0,28,0,58,9],
 "db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#abc30439af066bd5116b35b7f3b826388":[3,0,0,28,0,58,5],
@@ -241,13 +249,5 @@ var NAVTREEINDEX28 =
 "dc/d63/structmorph_1_1effects_1_1Changes.html#ae0de2c7b906e15a6f9f1e7b5d2f61e4d":[3,0,0,7,2,2],
 "dc/d69/structmorph_1_1table_1_1RowOrder_1_1Key.html":[3,0,0,24,33,0],
 "dc/d69/structmorph_1_1table_1_1RowOrder_1_1Key.html#a1b1f232dd42e268dbe3a1efd15eef0a9":[3,0,0,24,33,0,1],
-"dc/d69/structmorph_1_1table_1_1RowOrder_1_1Key.html#a2611523c9d41a527fde4e959e63789de":[3,0,0,24,33,0,0],
-"dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html":[1,0,0,1,277],
-"dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html":[3,0,0,28,279],
-"dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html#a104a940f08e6c3620deb9d81e748a4c6":[1,0,0,1,277,5],
-"dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html#a104a940f08e6c3620deb9d81e748a4c6":[3,0,0,28,279,5],
-"dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html#a69ff5b45eb5eb5e5cbd9f54f2525ec68":[1,0,0,1,277,1],
-"dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html#a69ff5b45eb5eb5e5cbd9f54f2525ec68":[3,0,0,28,279,1],
-"dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html#a89aaf4c4e6566849d22cec7d6bbd8684":[1,0,0,1,277,2],
-"dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html#a89aaf4c4e6566849d22cec7d6bbd8684":[3,0,0,28,279,2]
+"dc/d69/structmorph_1_1table_1_1RowOrder_1_1Key.html#a2611523c9d41a527fde4e959e63789de":[3,0,0,24,33,0,0]
 };

@@ -1,5 +1,13 @@
 var NAVTREEINDEX35 =
 {
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a9ca4bf6f47ab3438eebbabde2fb9807a":[3,0,0,11,4,12],
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07":[3,0,0,11,4,10],
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#ada474537fac0bac3b932d4fde686f42e":[3,0,0,11,4,6],
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d":[3,0,0,11,4,0],
+"de/d2f/structmorph_1_1ui_1_1Route.html":[1,0,0,1,197],
+"de/d2f/structmorph_1_1ui_1_1Route.html":[3,0,0,28,199],
+"de/d2f/structmorph_1_1ui_1_1Route.html#a772726c633dcdb338c6fd212fd1285b1":[1,0,0,1,197,0],
+"de/d2f/structmorph_1_1ui_1_1Route.html#a772726c633dcdb338c6fd212fd1285b1":[3,0,0,28,199,0],
 "de/d2f/structmorph_1_1ui_1_1Route.html#a89437978540bf09f908b56ab7374c79a":[1,0,0,1,197,1],
 "de/d2f/structmorph_1_1ui_1_1Route.html#a89437978540bf09f908b56ab7374c79a":[3,0,0,28,199,1],
 "de/d2f/structmorph_1_1ui_1_1Route.html#aae5d07215539c264d85a3573bed39364":[1,0,0,1,197,2],
@@ -241,13 +249,5 @@ var NAVTREEINDEX35 =
 "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a82b96b25ab0f85f61109999d12b3a5c2":[1,0,0,1,211,5],
 "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a82b96b25ab0f85f61109999d12b3a5c2":[3,0,0,28,213,5],
 "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a9753af171d05e310b61428b051b338f8":[1,0,0,1,211,10],
-"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a9753af171d05e310b61428b051b338f8":[3,0,0,28,213,10],
-"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a9bf33f1a83cbbcbc86b6f0a652ce0526":[1,0,0,1,211,12],
-"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a9bf33f1a83cbbcbc86b6f0a652ce0526":[3,0,0,28,213,12],
-"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#aacfbd08f66653f21263b10bdb7cafa87":[1,0,0,1,211,0],
-"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#aacfbd08f66653f21263b10bdb7cafa87":[3,0,0,28,213,0],
-"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#ad4361dcdfb3772ee0e69c001d1bf4897":[1,0,0,1,211,9],
-"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#ad4361dcdfb3772ee0e69c001d1bf4897":[3,0,0,28,213,9],
-"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#ae89676c8fbb3239bd78b145f1367733f":[1,0,0,1,211,6],
-"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#ae89676c8fbb3239bd78b145f1367733f":[3,0,0,28,213,6]
+"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a9753af171d05e310b61428b051b338f8":[3,0,0,28,213,10]
 };

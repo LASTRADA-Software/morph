@@ -1,5 +1,7 @@
 var NAVTREEINDEX5 =
 {
+"d2/d7e/structmorph_1_1ui_1_1FileInfo.html#a4a56cd14adfdbfa0b39d7a62565c98b2":[3,0,0,28,86,0],
+"d2/d7e/structmorph_1_1ui_1_1FileInfo.html#aeb5b67cf84526709d33806b9daf2cd5a":[1,0,0,1,84,2],
 "d2/d7e/structmorph_1_1ui_1_1FileInfo.html#aeb5b67cf84526709d33806b9daf2cd5a":[3,0,0,28,86,2],
 "d2/d80/structmorph_1_1ui_1_1detail_1_1catalogue_1_1TitleParts.html":[3,0,0,28,1,0,0],
 "d2/d80/structmorph_1_1ui_1_1detail_1_1catalogue_1_1TitleParts.html#a175b14a00c7662a5647f339dce8bc078":[3,0,0,28,1,0,0,0],
@@ -225,8 +227,10 @@ var NAVTREEINDEX5 =
 "d2/de9/structmorph_1_1ui_1_1StateDecl.html":[3,0,0,28,230],
 "d2/de9/structmorph_1_1ui_1_1StateDecl.html#a4f22b8e61a93a1a1028ef1b71698eecb":[1,0,0,1,228,0],
 "d2/de9/structmorph_1_1ui_1_1StateDecl.html#a4f22b8e61a93a1a1028ef1b71698eecb":[3,0,0,28,230,0],
-"d2/de9/structmorph_1_1ui_1_1StateDecl.html#acaf817c61a5b39feebc2bbc5f7ed2fc5":[1,0,0,1,228,3],
-"d2/de9/structmorph_1_1ui_1_1StateDecl.html#acaf817c61a5b39feebc2bbc5f7ed2fc5":[3,0,0,28,230,3],
+"d2/de9/structmorph_1_1ui_1_1StateDecl.html#acaf817c61a5b39feebc2bbc5f7ed2fc5":[1,0,0,1,228,4],
+"d2/de9/structmorph_1_1ui_1_1StateDecl.html#acaf817c61a5b39feebc2bbc5f7ed2fc5":[3,0,0,28,230,4],
+"d2/de9/structmorph_1_1ui_1_1StateDecl.html#ad88b65c404db9a0770a7156323a3c5ed":[1,0,0,1,228,3],
+"d2/de9/structmorph_1_1ui_1_1StateDecl.html#ad88b65c404db9a0770a7156323a3c5ed":[3,0,0,28,230,3],
 "d2/de9/structmorph_1_1ui_1_1StateDecl.html#ae9e85dfd4b6ca538eb572026b240a704":[1,0,0,1,228,1],
 "d2/de9/structmorph_1_1ui_1_1StateDecl.html#ae9e85dfd4b6ca538eb572026b240a704":[3,0,0,28,230,1],
 "d2/de9/structmorph_1_1ui_1_1StateDecl.html#aebf50575f89e108b212d91def353d8f1":[1,0,0,1,228,2],
@@ -245,9 +249,5 @@ var NAVTREEINDEX5 =
 "d2/df7/classmorph_1_1ui_1_1IBundleStore.html":[1,0,0,1,116],
 "d2/df7/classmorph_1_1ui_1_1IBundleStore.html":[3,0,0,28,118],
 "d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a339f33571a4ce349661fecf135256810":[1,0,0,1,116,0],
-"d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a339f33571a4ce349661fecf135256810":[3,0,0,28,118,0],
-"d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a4d8e804d2ac5e24eaab39757bcd96897":[1,0,0,1,116,4],
-"d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a4d8e804d2ac5e24eaab39757bcd96897":[3,0,0,28,118,4],
-"d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a6f3928b88bad00e272f370e28d8e42eb":[1,0,0,1,116,2],
-"d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a6f3928b88bad00e272f370e28d8e42eb":[3,0,0,28,118,2]
+"d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a339f33571a4ce349661fecf135256810":[3,0,0,28,118,0]
 };

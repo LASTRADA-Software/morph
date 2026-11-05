@@ -1,5 +1,13 @@
 var NAVTREEINDEX34 =
 {
+"dd/dd5/structmorph_1_1ui_1_1Manifest.html#aac5c69ec759858db2dac5f51df053d5e":[3,0,0,28,140,2],
+"dd/dd9/classmorph_1_1ui_1_1author_1_1InstanceSpec.html":[3,0,0,28,0,17],
+"dd/dd9/classmorph_1_1ui_1_1author_1_1InstanceSpec.html#a5374d48ef3def527509aa913b2b37e90":[3,0,0,28,0,17,2],
+"dd/dd9/classmorph_1_1ui_1_1author_1_1InstanceSpec.html#a55cf9e239090025b2080ebdd1eca45df":[3,0,0,28,0,17,3],
+"dd/dd9/classmorph_1_1ui_1_1author_1_1InstanceSpec.html#a562bdc86ab5e9344de07246bef135c40":[3,0,0,28,0,17,4],
+"dd/dd9/classmorph_1_1ui_1_1author_1_1InstanceSpec.html#af1e741d7bd4bc4907fbe60cfec1634d4":[3,0,0,28,0,17,0],
+"dd/dd9/classmorph_1_1ui_1_1author_1_1InstanceSpec.html#afb235170381d5ba11cc48ce1b278f091":[3,0,0,28,0,17,1],
+"dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html":[1,0,0,1,273],
 "dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html":[3,0,0,28,275],
 "dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html#a2bb42fbccc5e03a9a9a46fbd8b3c092f":[1,0,0,1,273,0],
 "dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html#a2bb42fbccc5e03a9a9a46fbd8b3c092f":[3,0,0,28,275,0],
@@ -241,13 +249,5 @@ var NAVTREEINDEX34 =
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#a4bf6f8bdd1b73a40955203c9e45dd992":[3,0,0,11,4,5],
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#a646cb97e461dcd84d20260cecab748a8":[3,0,0,11,4,8],
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#a64eb9f5a32f498759160e5e2697cdfae":[3,0,0,11,4,3],
-"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a65b1a905d7736eaf3cb6ae8f112de353":[3,0,0,11,4,7],
-"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a9ca4bf6f47ab3438eebbabde2fb9807a":[3,0,0,11,4,12],
-"de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07":[3,0,0,11,4,10],
-"de/d2a/structmorph_1_1journal_1_1LogEntry.html#ada474537fac0bac3b932d4fde686f42e":[3,0,0,11,4,6],
-"de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d":[3,0,0,11,4,0],
-"de/d2f/structmorph_1_1ui_1_1Route.html":[1,0,0,1,197],
-"de/d2f/structmorph_1_1ui_1_1Route.html":[3,0,0,28,199],
-"de/d2f/structmorph_1_1ui_1_1Route.html#a772726c633dcdb338c6fd212fd1285b1":[1,0,0,1,197,0],
-"de/d2f/structmorph_1_1ui_1_1Route.html#a772726c633dcdb338c6fd212fd1285b1":[3,0,0,28,199,0]
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a65b1a905d7736eaf3cb6ae8f112de353":[3,0,0,11,4,7]
 };

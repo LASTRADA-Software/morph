@@ -46,9 +46,10 @@ var searchData=
   ['holdersizing_43',['holderSizing',['../db/d42/interpreter_8hpp.html#ae1a0b103ea784b017897eb61528ea872',1,'morph::ui::detail']]],
   ['holding_44',['holding',['../dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a37afe2e2be0c5dc925f31a6215e031bc',1,'morph::ui::detail::CacheEntry::holding()'],['../db/d42/interpreter_8hpp.html#a5ce728e7a9335438538b5e722b5c7d84',1,'morph::ui::detail::holding(std::vector&lt; Node &gt; children, std::shared_ptr&lt; RtScope &gt; scope, std::vector&lt; KeyBinding &gt; keys={}, int gap=0)']]],
   ['holdsalias_45',['holdsAlias',['../d9/df6/ui_2theme_8hpp.html#a4b507ea6bdcfded23b19ecbbaeac252c',1,'morph::ui::detail']]],
-  ['host_46',['host',['../d1/dc0/author_8hpp.html#a43f619a034a1943138185f0cef94e699',1,'morph::ui::author']]],
-  ['hostcommand_47',['hostCommand',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a4a3ac15aaee933dad03faa59b4dfe819',1,'morph::ui::InterpreterHost']]],
-  ['hostcommandrunner_48',['hostCommandRunner',['../df/d20/classmorph_1_1ui_1_1Session.html#a00496e47156244dc93749a10466eea84',1,'morph::ui::Session']]],
-  ['hostvalue_49',['hostValue',['../d1/dc0/author_8hpp.html#a2d619b2972a70072c26e34ff3201a88b',1,'morph::ui::author']]],
-  ['hover_50',['hover',['../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#ac5a5e5a45ee5aa1ad66f4255c5daf77d',1,'morph::ui::testing::RecordingBackend']]]
+  ['horizontalscrollstretchheightssharebyweight_46',['horizontalScrollStretchHeightsShareByWeight',['../d8/d3e/backend__conformance_8hpp.html#ac6491c3f5d69e2674d294ec9b1f9c8d5',1,'morph::ui::testing::detail']]],
+  ['host_47',['host',['../d1/dc0/author_8hpp.html#a43f619a034a1943138185f0cef94e699',1,'morph::ui::author']]],
+  ['hostcommand_48',['hostCommand',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a4a3ac15aaee933dad03faa59b4dfe819',1,'morph::ui::InterpreterHost']]],
+  ['hostcommandrunner_49',['hostCommandRunner',['../df/d20/classmorph_1_1ui_1_1Session.html#a00496e47156244dc93749a10466eea84',1,'morph::ui::Session']]],
+  ['hostvalue_50',['hostValue',['../d1/dc0/author_8hpp.html#a2d619b2972a70072c26e34ff3201a88b',1,'morph::ui::author']]],
+  ['hover_51',['hover',['../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#ac5a5e5a45ee5aa1ad66f4255c5daf77d',1,'morph::ui::testing::RecordingBackend']]]
 ];

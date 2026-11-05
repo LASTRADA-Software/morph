@@ -186,6 +186,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a7d71bd27960963577df9ff8490fb2f03"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the handler posted to <code class="param">exec</code> after each <em>subsequent</em> successful (re)connect.  <br /></td></tr>
 <tr class="memitem:ac813770a36bdfb356eb81e8ad17cc78c" id="r_ac813770a36bdfb356eb81e8ad17cc78c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ac813770a36bdfb356eb81e8ad17cc78c">setConnectHandler</a> (const std::function&lt; void()&gt; &amp;handler) override</td></tr>
 <tr class="memdesc:ac813770a36bdfb356eb81e8ad17cc78c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the handler run after every successful connect, the first included.  <br /></td></tr>
+<tr class="memitem:a444e8d5b5dca8065d41709ea065f3973" id="r_a444e8d5b5dca8065d41709ea065f3973"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a444e8d5b5dca8065d41709ea065f3973">setDisconnectHandler</a> (const std::function&lt; void()&gt; &amp;handler) override</td></tr>
+<tr class="memdesc:a444e8d5b5dca8065d41709ea065f3973"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the handler run when an established connection drops.  <br /></td></tr>
 <tr class="memitem:a4e742423f4c6180184a8522e59fb56b6" id="r_a4e742423f4c6180184a8522e59fb56b6"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4e742423f4c6180184a8522e59fb56b6">setEventHandler</a> (std::function&lt; void(<a class="el" href="../../d7/db7/structmorph_1_1wire_1_1EventBody.html">::morph::wire::EventBody</a>)&gt; handler, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *exec) override</td></tr>
 <tr class="memdesc:a4e742423f4c6180184a8522e59fb56b6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the handler each server-initiated event is posted to. See <span class="tt">IBackend::setEventHandler</span>.  <br /></td></tr>
 <tr class="memitem:a80e37124e8a3792b6b07541f64d0e690" id="r_a80e37124e8a3792b6b07541f64d0e690"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a80e37124e8a3792b6b07541f64d0e690">setSession</a> (<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session) override</td></tr>
@@ -970,6 +972,41 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 
 </div>
 </div>
+<a id="a444e8d5b5dca8065d41709ea065f3973" name="a444e8d5b5dca8065d41709ea065f3973"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a444e8d5b5dca8065d41709ea065f3973">&#9670;&#160;</a></span>setDisconnectHandler()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::net::SocketBackend::setDisconnectHandler </td>
+          <td>(</td>
+          <td class="paramtype">const std::function&lt; void()&gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Installs the handler run when an established connection drops. </p>
+<p>Stored on the loop, and run there: once per drop, before the pending calls are failed and before any reconnect is scheduled, so an observer sees the outage even when the retry that follows connects at once. It does not run for a connect attempt that fails, nor for the backend's own close. A handler that throws is logged; the backend carries on. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handler</td><td>Callable run on the backend's I/O loop. Pass <span class="tt">nullptr</span> to clear. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00509">509</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a4e742423f4c6180184a8522e59fb56b6" name="a4e742423f4c6180184a8522e59fb56b6"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4e742423f4c6180184a8522e59fb56b6">&#9670;&#160;</a></span>setEventHandler()</h2>
 
@@ -1006,7 +1043,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00511">511</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00527">527</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1041,7 +1078,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00530">530</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../d9/db7/socket__backend_8hpp_source.html">socket_backend.hpp</a>.</p>
 
 </div>
 </div>

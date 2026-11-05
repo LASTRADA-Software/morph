@@ -178,6 +178,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a90b03baea4c26cc9dbdf69164c5627f6"><td class="mdescLeft">&#160;</td><td class="mdescRight">One step of development reload (spec 5 §12): sends <span class="tt">ui-hello</span>, and when the manifest digest changed, fetches the changed bundle and the catalog for it. Nothing is sent while a poll is still in flight.  <br /></td></tr>
 <tr class="memitem:a41879aec8ab4bbb284c524ec69cfc690" id="r_a41879aec8ab4bbb284c524ec69cfc690"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a41879aec8ab4bbb284c524ec69cfc690">onConnected</a> (std::function&lt; void()&gt; const &amp;listener) final</td></tr>
 <tr class="memdesc:a41879aec8ab4bbb284c524ec69cfc690"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds a listener called on the owner after each successful connect, the first included. On a reconnect the source first sends <span class="tt">ui-hello</span> again, so the new connection negotiates events, then calls the listeners.  <br /></td></tr>
+<tr class="memitem:ae13bf2f6323fab34402960ac2edc5a0e" id="r_ae13bf2f6323fab34402960ac2edc5a0e"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ae13bf2f6323fab34402960ac2edc5a0e">online</a> () const noexcept</td></tr>
+<tr class="memdesc:ae13bf2f6323fab34402960ac2edc5a0e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the source's transport is connected now: false from the moment the transport drops until it connects again. An in-process source has no transport to lose and stays true.  <br /></td></tr>
+<tr class="memitem:a1cd025a9aa24c2ba2c131f845dbf6731" id="r_a1cd025a9aa24c2ba2c131f845dbf6731"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1cd025a9aa24c2ba2c131f845dbf6731">onOnline</a> (std::function&lt; void(bool <a class="el" href="#ae13bf2f6323fab34402960ac2edc5a0e">online</a>)&gt; listener)</td></tr>
+<tr class="memdesc:a1cd025a9aa24c2ba2c131f845dbf6731"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds a listener called on the owner each time <span class="tt"><a class="el" href="#ae13bf2f6323fab34402960ac2edc5a0e" title="Whether the source&#39;s transport is connected now: false from the moment the transport drops until it c...">online</a></span> changes.  <br /></td></tr>
+<tr class="memitem:a5ad2a981175d1953d0e1f85981fe6a3b" id="r_a5ad2a981175d1953d0e1f85981fe6a3b"><td class="memItemLeft">virtual std::string&#160;</td><td class="memItemRight"><a class="el" href="#a5ad2a981175d1953d0e1f85981fe6a3b">backendName</a> () const</td></tr>
+<tr class="memdesc:a5ad2a981175d1953d0e1f85981fe6a3b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name of the backend this source's models run on, which <span class="tt">{"env": "backend"}</span> reads: the application's <span class="tt"><a class="el" href="../../d3/d00/structmorph_1_1ui_1_1Backend.html" title="The application&#39;s opaque handle for one of its backends. Its name is what {&quot;env&quot;: &quot;backend&quot;}...">ui::Backend</a></span> names are <span class="tt">primary</span>, <span class="tt">local</span> and <span class="tt">remote</span>.  <br /></td></tr>
 <tr class="memitem:aaced127408e2c1571846dbbaf5f7f571" id="r_aaced127408e2c1571846dbbaf5f7f571"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aaced127408e2c1571846dbbaf5f7f571">onEvent</a> (std::function&lt; void(<a class="el" href="../../d7/db7/structmorph_1_1wire_1_1EventBody.html">wire::EventBody</a> const &amp;)&gt; listener)</td></tr>
 <tr class="memdesc:aaced127408e2c1571846dbbaf5f7f571"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds a listener for the events the server sends: what a shell hands to <span class="tt">Session::deliverEvent</span>.  <br /></td></tr>
 <tr class="memitem:afdfba1674160333501f20f4bfcf02fab" id="r_afdfba1674160333501f20f4bfcf02fab"><td class="memItemLeft"><a class="el" href="../../db/d42/interpreter_8hpp.html#ab1da6e62f0770d24628900fab76a3b58">ui::Watcher</a>&#160;</td><td class="memItemRight"><a class="el" href="#afdfba1674160333501f20f4bfcf02fab">watcher</a> ()</td></tr>
@@ -749,6 +755,93 @@ Protected Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="ae13bf2f6323fab34402960ac2edc5a0e" name="ae13bf2f6323fab34402960ac2edc5a0e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae13bf2f6323fab34402960ac2edc5a0e">&#9670;&#160;</a></span>online()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::client::Source::online </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether the source's transport is connected now: false from the moment the transport drops until it connects again. An in-process source has no transport to lose and stays true. </p>
+<dl class="section return"><dt>Returns</dt><dd>The state. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00167">167</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1cd025a9aa24c2ba2c131f845dbf6731" name="a1cd025a9aa24c2ba2c131f845dbf6731"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1cd025a9aa24c2ba2c131f845dbf6731">&#9670;&#160;</a></span>onOnline()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::client::Source::onOnline </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void(bool <a class="el" href="#ae13bf2f6323fab34402960ac2edc5a0e">online</a>)&gt;</td>          <td class="paramname"><span class="paramname"><em>listener</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Adds a listener called on the owner each time <span class="tt"><a class="el" href="#ae13bf2f6323fab34402960ac2edc5a0e" title="Whether the source&#39;s transport is connected now: false from the moment the transport drops until it c...">online</a></span> changes. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">listener</td><td>Called with the new state; it must stay callable while the source is open. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a5ad2a981175d1953d0e1f85981fe6a3b" name="a5ad2a981175d1953d0e1f85981fe6a3b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5ad2a981175d1953d0e1f85981fe6a3b">&#9670;&#160;</a></span>backendName()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual std::string morph::client::Source::backendName </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The name of the backend this source's models run on, which <span class="tt">{"env": "backend"}</span> reads: the application's <span class="tt"><a class="el" href="../../d3/d00/structmorph_1_1ui_1_1Backend.html" title="The application&#39;s opaque handle for one of its backends. Its name is what {&quot;env&quot;: &quot;backend&quot;}...">ui::Backend</a></span> names are <span class="tt">primary</span>, <span class="tt">local</span> and <span class="tt">remote</span>. </p>
+<dl class="section return"><dt>Returns</dt><dd>The name; <span class="tt">primary</span> unless a concrete source says otherwise. </dd></dl>
+
+<p>Reimplemented in <a class="el" href="../../d1/d98/classmorph_1_1client_1_1LocalSource.html#a269e1ddb653265e435e2d999c9e0683b">morph::client::LocalSource</a>, and <a class="el" href="../../d2/d13/classmorph_1_1client_1_1RemoteSource.html#a0a9a81c60c8d4e6f4d3afa276860a56d">morph::client::RemoteSource</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00176">176</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+
+</div>
+</div>
 <a id="aaced127408e2c1571846dbbaf5f7f571" name="aaced127408e2c1571846dbbaf5f7f571"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aaced127408e2c1571846dbbaf5f7f571">&#9670;&#160;</a></span>onEvent()</h2>
 
@@ -830,7 +923,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d1/d98/classmorph_1_1client_1_1LocalSource.html#a186bfa54800603e503af579499bd026f">morph::client::LocalSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00176">176</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00190">190</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -898,7 +991,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d2/d13/classmorph_1_1client_1_1RemoteSource.html#aaf58b97837f7d5217dda96ae7d16e7dc">morph::client::RemoteSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00197">197</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -929,7 +1022,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d1/d98/classmorph_1_1client_1_1LocalSource.html#aecef09617452f1b38080912d72268f25">morph::client::LocalSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00214">214</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -999,7 +1092,7 @@ Protected Member Functions</h2></td></tr>
 <p>The session every request carries, for a source to fill before <span class="tt"><a class="el" href="#a9d81d8a1c64187d1be0b70aafc11011c" title="Opens the source: the transport, the bridge and the bundle, verified.">open</a></span> sends anything. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00225">225</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>

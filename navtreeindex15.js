@@ -1,5 +1,13 @@
 var NAVTREEINDEX15 =
 {
+"d6/db2/classmorph_1_1ui_1_1ScreenHead.html#af47c98f80d8766b6f917421a05412c57":[3,0,0,28,205,11],
+"d6/db2/classmorph_1_1ui_1_1ScreenHead.html#aff742f3ae126f276ba823500d7840e31":[1,0,0,1,203,0],
+"d6/db2/classmorph_1_1ui_1_1ScreenHead.html#aff742f3ae126f276ba823500d7840e31":[3,0,0,28,205,0],
+"d6/db2/structmorph_1_1ui_1_1author_1_1detail_1_1LiteralOf_3_01std_1_1string__view_01_4.html":[3,0,0,28,0,0,11],
+"d6/db2/structmorph_1_1ui_1_1author_1_1detail_1_1LiteralOf_3_01std_1_1string__view_01_4.html#ad71f95099b03361c903b3e190527ea44":[3,0,0,28,0,0,11,0],
+"d6/db3/text_8hpp.html":[4,0,0,3,1,0,0],
+"d6/db3/text_8hpp_source.html":[4,0,0,3,1,0,0],
+"d6/db7/conceptmorph_1_1units_1_1UnitEnum.html":[2,0,5,0],
 "d6/db9/structmorph_1_1table_1_1TableQuery.html":[3,0,0,24,44],
 "d6/db9/structmorph_1_1table_1_1TableQuery.html#aca0fe7d246eb6c34e6f840e0396763e9":[3,0,0,24,44,0],
 "d6/db9/structmorph_1_1table_1_1TableQuery.html#aecd4e381705f8cf80a1e76f7ab59c546":[3,0,0,24,44,1],
@@ -241,13 +249,5 @@ var NAVTREEINDEX15 =
 "d7/d2a/classmorph_1_1ui_1_1SplitterWidget.html#af9b4bfab987641a282b2b8debff28334":[3,0,0,28,228,0],
 "d7/d2a/structmorph_1_1ui_1_1DateValue.html":[1,0,0,1,60],
 "d7/d2a/structmorph_1_1ui_1_1DateValue.html":[3,0,0,28,62],
-"d7/d2a/structmorph_1_1ui_1_1DateValue.html#a1c225301aeb02e4bc6e7101644efbe6d":[1,0,0,1,60,1],
-"d7/d2a/structmorph_1_1ui_1_1DateValue.html#a1c225301aeb02e4bc6e7101644efbe6d":[3,0,0,28,62,1],
-"d7/d2a/structmorph_1_1ui_1_1DateValue.html#a78ffb0917941d6290ceace1bf3f4a8c2":[1,0,0,1,60,0],
-"d7/d2a/structmorph_1_1ui_1_1DateValue.html#a78ffb0917941d6290ceace1bf3f4a8c2":[3,0,0,28,62,0],
-"d7/d2a/structmorph_1_1ui_1_1DateValue.html#af94f95c768aecff5b8ef48e079e077c9":[1,0,0,1,60,2],
-"d7/d2a/structmorph_1_1ui_1_1DateValue.html#af94f95c768aecff5b8ef48e079e077c9":[3,0,0,28,62,2],
-"d7/d2c/structmorph_1_1table_1_1ApplyOptions.html":[3,0,0,24,1],
-"d7/d2c/structmorph_1_1table_1_1ApplyOptions.html#a2c1dd9a17ec8db228b59b3d3059503e1":[3,0,0,24,1,1],
-"d7/d2c/structmorph_1_1table_1_1ApplyOptions.html#aa4f55e55189ef974127ebfbadbef3c6c":[3,0,0,24,1,0]
+"d7/d2a/structmorph_1_1ui_1_1DateValue.html#a1c225301aeb02e4bc6e7101644efbe6d":[1,0,0,1,60,1]
 };

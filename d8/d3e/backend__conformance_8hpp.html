@@ -454,6 +454,24 @@ Functions</h2></td></tr>
 <tr class="memdesc:a2af1bb2278b53b0a708713653f4b1590"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a content-sized spacer in a row shares the spare width as a stretch child of weight 1: beside a stretch text in a 40-unit row, each is 20.  <br /></td></tr>
 <tr class="memitem:a8775417ac305c1b007bc04eabb148713" id="r_a8775417ac305c1b007bc04eabb148713"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8775417ac305c1b007bc04eabb148713">morph::ui::testing::detail::stretchHeightsShareByWeight</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
 <tr class="memdesc:a8775417ac305c1b007bc04eabb148713"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: two stretch-height children of one and ten lines share a 20-unit column equally.  <br /></td></tr>
+<tr class="memitem:a90c14bd17afaeab3f9c42159ac98b03b" id="r_a90c14bd17afaeab3f9c42159ac98b03b"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a90c14bd17afaeab3f9c42159ac98b03b">morph::ui::testing::detail::linesOf</a> (int lines)</td></tr>
+<tr class="memdesc:a90c14bd17afaeab3f9c42159ac98b03b"><td class="mdescLeft">&#160;</td><td class="mdescRight"><code class="param">lines</code> one-character lines, as one text.  <br /></td></tr>
+<tr class="memitem:ae1b9ec451b44560b1d846f69543d5314" id="r_ae1b9ec451b44560b1d846f69543d5314"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae1b9ec451b44560b1d846f69543d5314">morph::ui::testing::detail::panelStretchHeightsShareByWeight</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:ae1b9ec451b44560b1d846f69543d5314"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: two stretch-height children of a panel of fixed height 24, of one and eight lines, share what is left under its header equally, whatever their content.  <br /></td></tr>
+<tr class="memitem:ab589d822a05abfdcea4330827fa5aedf" id="r_ab589d822a05abfdcea4330827fa5aedf"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab589d822a05abfdcea4330827fa5aedf">morph::ui::testing::detail::dialogStretchHeightsShareByWeight</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:ab589d822a05abfdcea4330827fa5aedf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: two stretch-height children of an open dialog, of one and eight lines, share the dialog's height equally, and the eight-line child keeps its eight lines: the dialog asks for twice the larger natural.  <br /></td></tr>
+<tr class="memitem:ab2dd0e3a8d0c8893ab500940d1a628c7" id="r_ab2dd0e3a8d0c8893ab500940d1a628c7"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab2dd0e3a8d0c8893ab500940d1a628c7">morph::ui::testing::detail::contentSizedPanelKeepsItsStretchChildren</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:ab2dd0e3a8d0c8893ab500940d1a628c7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a content-sized panel of two stretch-height children of four lines each, weighted one and two, is tall enough for each to keep its four lines: the stretching children ask for <span class="tt">3 * max(4 / 1, 4 / 2)</span>, where the sum of their naturals would squeeze the first to under three lines.  <br /></td></tr>
+<tr class="memitem:a462c928c860d8bd829f40d065a580ef9" id="r_a462c928c860d8bd829f40d065a580ef9"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a462c928c860d8bd829f40d065a580ef9">morph::ui::testing::detail::contentContainersShareStretchHeights</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a462c928c860d8bd829f40d065a580ef9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: two stretch-height children of a content-sized scroll area, slot and collapsible, of one and four lines, are as tall as each other and the four-line one keeps its four lines: each container asks for twice the larger natural, which the equal shares then fill.  <br /></td></tr>
+<tr class="memitem:a50721f053b416d24c0205acf3045da58" id="r_a50721f053b416d24c0205acf3045da58"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a50721f053b416d24c0205acf3045da58">morph::ui::testing::detail::checkStretchPair</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe, <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;container, std::string_view what)</td></tr>
+<tr class="memdesc:a50721f053b416d24c0205acf3045da58"><td class="mdescLeft">&#160;</td><td class="mdescRight">Gives <code class="param">container</code> two stretch-height texts of one and four lines, and checks that they are as tall as each other once the probe has settled, and that the four-line one keeps its four lines.  <br /></td></tr>
+<tr class="memitem:a20d4ec7ccd0d5601f9a838f434a24427" id="r_a20d4ec7ccd0d5601f9a838f434a24427"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a20d4ec7ccd0d5601f9a838f434a24427">morph::ui::testing::detail::drawerStretchHeightsShareByWeight</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a20d4ec7ccd0d5601f9a838f434a24427"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: two stretch-height children of an open drawer, of one and four lines, are as tall as each other.  <br /></td></tr>
+<tr class="memitem:a946368079d3b1854ad9d5cfd4ebffc3f" id="r_a946368079d3b1854ad9d5cfd4ebffc3f"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a946368079d3b1854ad9d5cfd4ebffc3f">morph::ui::testing::detail::tabPageStretchHeightsShareByWeight</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:a946368079d3b1854ad9d5cfd4ebffc3f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: two stretch-height children of a tab page, of one and four lines, are as tall as each other.  <br /></td></tr>
+<tr class="memitem:ac6491c3f5d69e2674d294ec9b1f9c8d5" id="r_ac6491c3f5d69e2674d294ec9b1f9c8d5"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac6491c3f5d69e2674d294ec9b1f9c8d5">morph::ui::testing::detail::horizontalScrollStretchHeightsShareByWeight</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
+<tr class="memdesc:ac6491c3f5d69e2674d294ec9b1f9c8d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: two stretch-height children of a horizontal scroll area of fixed height 20, of one and four lines, are as tall as each other.  <br /></td></tr>
 <tr class="memitem:a9c60bc5637967524d558fd736c0d6cc4" id="r_a9c60bc5637967524d558fd736c0d6cc4"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9c60bc5637967524d558fd736c0d6cc4">morph::ui::testing::detail::stretchButtonKeepsItsLabel</a> (<a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;probe)</td></tr>
 <tr class="memdesc:a9c60bc5637967524d558fd736c0d6cc4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Case: a stretch push button is not narrowed below its label: in a 60-unit row it is as wide as the same button sized by its content, and the button beside it gives up the width.  <br /></td></tr>
 <tr class="memitem:aecf398a21dce6aeb7feecf89f6d25313" id="r_aecf398a21dce6aeb7feecf89f6d25313"><td class="memItemLeft">std::span&lt; <a class="el" href="../../db/dbc/structmorph_1_1ui_1_1testing_1_1ConformanceCase.html">ConformanceCase</a> const &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aecf398a21dce6aeb7feecf89f6d25313">morph::ui::testing::layoutConformanceCases</a> ()</td></tr>
@@ -5548,6 +5566,341 @@ Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="a90c14bd17afaeab3f9c42159ac98b03b" name="a90c14bd17afaeab3f9c42159ac98b03b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a90c14bd17afaeab3f9c42159ac98b03b">&#9670;&#160;</a></span>linesOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::testing::detail::linesOf </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>lines</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p><code class="param">lines</code> one-character lines, as one text. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">lines</td><td>How many lines. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l03885">3885</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae1b9ec451b44560b1d846f69543d5314" name="ae1b9ec451b44560b1d846f69543d5314"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae1b9ec451b44560b1d846f69543d5314">&#9670;&#160;</a></span>panelStretchHeightsShareByWeight()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::panelStretchHeightsShareByWeight </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: two stretch-height children of a panel of fixed height 24, of one and eight lines, share what is left under its header equally, whatever their content. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l03897">3897</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab589d822a05abfdcea4330827fa5aedf" name="ab589d822a05abfdcea4330827fa5aedf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab589d822a05abfdcea4330827fa5aedf">&#9670;&#160;</a></span>dialogStretchHeightsShareByWeight()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::dialogStretchHeightsShareByWeight </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: two stretch-height children of an open dialog, of one and eight lines, share the dialog's height equally, and the eight-line child keeps its eight lines: the dialog asks for twice the larger natural. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l03924">3924</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab2dd0e3a8d0c8893ab500940d1a628c7" name="ab2dd0e3a8d0c8893ab500940d1a628c7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab2dd0e3a8d0c8893ab500940d1a628c7">&#9670;&#160;</a></span>contentSizedPanelKeepsItsStretchChildren()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::contentSizedPanelKeepsItsStretchChildren </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: a content-sized panel of two stretch-height children of four lines each, weighted one and two, is tall enough for each to keep its four lines: the stretching children ask for <span class="tt">3 * max(4 / 1, 4 / 2)</span>, where the sum of their naturals would squeeze the first to under three lines. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l03950">3950</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a462c928c860d8bd829f40d065a580ef9" name="a462c928c860d8bd829f40d065a580ef9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a462c928c860d8bd829f40d065a580ef9">&#9670;&#160;</a></span>contentContainersShareStretchHeights()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::contentContainersShareStretchHeights </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: two stretch-height children of a content-sized scroll area, slot and collapsible, of one and four lines, are as tall as each other and the four-line one keeps its four lines: each container asks for twice the larger natural, which the equal shares then fill. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l03977">3977</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a50721f053b416d24c0205acf3045da58" name="a50721f053b416d24c0205acf3045da58"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a50721f053b416d24c0205acf3045da58">&#9670;&#160;</a></span>checkStretchPair()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::checkStretchPair </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>container</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>what</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Gives <code class="param">container</code> two stretch-height texts of one and four lines, and checks that they are as tall as each other once the probe has settled, and that the four-line one keeps its four lines. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+    <tr><td class="paramname">container</td><td>The container to fill. </td></tr>
+    <tr><td class="paramname">what</td><td>What the container is, for the messages. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l04016">4016</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a20d4ec7ccd0d5601f9a838f434a24427" name="a20d4ec7ccd0d5601f9a838f434a24427"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a20d4ec7ccd0d5601f9a838f434a24427">&#9670;&#160;</a></span>drawerStretchHeightsShareByWeight()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::drawerStretchHeightsShareByWeight </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: two stretch-height children of an open drawer, of one and four lines, are as tall as each other. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l04037">4037</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a946368079d3b1854ad9d5cfd4ebffc3f" name="a946368079d3b1854ad9d5cfd4ebffc3f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a946368079d3b1854ad9d5cfd4ebffc3f">&#9670;&#160;</a></span>tabPageStretchHeightsShareByWeight()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::tabPageStretchHeightsShareByWeight </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: two stretch-height children of a tab page, of one and four lines, are as tall as each other. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l04047">4047</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac6491c3f5d69e2674d294ec9b1f9c8d5" name="ac6491c3f5d69e2674d294ec9b1f9c8d5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac6491c3f5d69e2674d294ec9b1f9c8d5">&#9670;&#160;</a></span>horizontalScrollStretchHeightsShareByWeight()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::testing::detail::horizontalScrollStretchHeightsShareByWeight </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html">ConformanceProbe</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>probe</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Case: two stretch-height children of a horizontal scroll area of fixed height 20, of one and four lines, are as tall as each other. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">probe</td><td>The backend under test. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l04060">4060</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a9c60bc5637967524d558fd736c0d6cc4" name="a9c60bc5637967524d558fd736c0d6cc4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a9c60bc5637967524d558fd736c0d6cc4">&#9670;&#160;</a></span>stretchButtonKeepsItsLabel()</h2>
 
@@ -5580,7 +5933,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">nullopt</span>, or what went wrong. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l03886">3886</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l04071">4071</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -5610,7 +5963,7 @@ Functions</h2></td></tr>
 <p>The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose <span class="tt">boundsOf</span> reads geometry; a probe that reads none fails every one. </p>
 <dl class="section return"><dt>Returns</dt><dd>The cases. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l03925">3925</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l04110">4110</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -5640,7 +5993,7 @@ Functions</h2></td></tr>
 <p>Every conformance case, in a fixed order. </p>
 <p>Run each on a fresh probe; <span class="tt">nullopt</span> is a pass, anything else is the failure message. A backend's test suite loops over these with its own <span class="tt">ConformanceProbe</span>. </p><dl class="section return"><dt>Returns</dt><dd>The cases. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l04022">4022</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l04221">4221</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>

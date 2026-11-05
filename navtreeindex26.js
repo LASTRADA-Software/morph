@@ -1,5 +1,13 @@
 var NAVTREEINDEX26 =
 {
+"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a4b4e76ef96a31a865bc976dcd1e44c66":[1,0,0,1,229,4],
+"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a4b4e76ef96a31a865bc976dcd1e44c66":[3,0,0,28,231,4],
+"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a4f2d74f4117fb52dfc5ec80e9b745fcb":[1,0,0,1,229,0],
+"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a4f2d74f4117fb52dfc5ec80e9b745fcb":[3,0,0,28,231,0],
+"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a67382ea7d14be9bc52e42cd385007897":[1,0,0,1,229,15],
+"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a67382ea7d14be9bc52e42cd385007897":[3,0,0,28,231,15],
+"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a6ab091c63b7ff58c334ee49e443d1d01":[1,0,0,1,229,11],
+"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a6ab091c63b7ff58c334ee49e443d1d01":[3,0,0,28,231,11],
 "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a72bf9166442c5fb0eb2edac67e328e39":[1,0,0,1,229,8],
 "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a72bf9166442c5fb0eb2edac67e328e39":[3,0,0,28,231,8],
 "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a895b06f177ead40173fd872787c74033":[1,0,0,1,229,7],
@@ -241,13 +249,5 @@ var NAVTREEINDEX26 =
 "db/d42/interpreter_8hpp_source.html":[4,0,0,15,26],
 "db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html":[1,0,0,1,205],
 "db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html":[3,0,0,28,207],
-"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#a03e87a3aac761763d1ac4866c4f7bf65":[1,0,0,1,205,1],
-"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#a03e87a3aac761763d1ac4866c4f7bf65":[3,0,0,28,207,1],
-"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#a3d287f98c9f10c056c284d4777ba3038":[1,0,0,1,205,0],
-"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#a3d287f98c9f10c056c284d4777ba3038":[3,0,0,28,207,0],
-"db/d4c/structmorph_1_1ui_1_1FormatContext.html":[1,0,0,1,94],
-"db/d4c/structmorph_1_1ui_1_1FormatContext.html":[3,0,0,28,96],
-"db/d4c/structmorph_1_1ui_1_1FormatContext.html#a1f53181cc9f4e3d350ac475fd489dba3":[1,0,0,1,94,6],
-"db/d4c/structmorph_1_1ui_1_1FormatContext.html#a1f53181cc9f4e3d350ac475fd489dba3":[3,0,0,28,96,6],
-"db/d4c/structmorph_1_1ui_1_1FormatContext.html#a80461eca883dc3f4cb8cb808c24e8368":[1,0,0,1,94,4]
+"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#a03e87a3aac761763d1ac4866c4f7bf65":[1,0,0,1,205,1]
 };

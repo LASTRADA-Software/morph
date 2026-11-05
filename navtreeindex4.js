@@ -1,5 +1,6 @@
 var NAVTREEINDEX4 =
 {
+"d1/df1/structmorph_1_1ui_1_1Badge.html#a1b4056c708657d59df0077f640cf1471":[3,0,0,28,17,8],
 "d1/df1/structmorph_1_1ui_1_1Badge.html#a5424287032d8cab7d287d1620c904e7f":[1,0,0,1,15,0],
 "d1/df1/structmorph_1_1ui_1_1Badge.html#a5424287032d8cab7d287d1620c904e7f":[3,0,0,28,17,0],
 "d1/df1/structmorph_1_1ui_1_1Badge.html#a89a8da31fc726843398afc7b5a99c842":[1,0,0,1,15,3],
@@ -62,8 +63,9 @@ var NAVTREEINDEX4 =
 "d2/d12/structmorph_1_1qt__quick_1_1CustomRequest.html#a804489760fd95a7944c9604b46e4c060":[3,0,0,19,4,2],
 "d2/d12/structmorph_1_1qt__quick_1_1CustomRequest.html#aa56a7aaab0e292c415443de718fec601":[3,0,0,19,4,1],
 "d2/d13/classmorph_1_1client_1_1RemoteSource.html":[3,0,0,4,5],
-"d2/d13/classmorph_1_1client_1_1RemoteSource.html#a21221954c4f3223f2653b0383b50f575":[3,0,0,4,5,1],
-"d2/d13/classmorph_1_1client_1_1RemoteSource.html#aaf58b97837f7d5217dda96ae7d16e7dc":[3,0,0,4,5,2],
+"d2/d13/classmorph_1_1client_1_1RemoteSource.html#a0a9a81c60c8d4e6f4d3afa276860a56d":[3,0,0,4,5,1],
+"d2/d13/classmorph_1_1client_1_1RemoteSource.html#a21221954c4f3223f2653b0383b50f575":[3,0,0,4,5,2],
+"d2/d13/classmorph_1_1client_1_1RemoteSource.html#aaf58b97837f7d5217dda96ae7d16e7dc":[3,0,0,4,5,3],
 "d2/d13/classmorph_1_1client_1_1RemoteSource.html#af8fbbb1a35723f5800d017fa656ad102":[3,0,0,4,5,0],
 "d2/d14/structmorph_1_1model_1_1ModelTraits.html":[3,0,0,14,10],
 "d2/d20/structmorph_1_1ui_1_1ActionField.html":[1,0,0,1,5],
@@ -247,7 +249,5 @@ var NAVTREEINDEX4 =
 "d2/d7e/structmorph_1_1ui_1_1FileInfo.html":[3,0,0,28,86],
 "d2/d7e/structmorph_1_1ui_1_1FileInfo.html#a07829dcfdbebb69f6d42ea161e2d3dd1":[1,0,0,1,84,1],
 "d2/d7e/structmorph_1_1ui_1_1FileInfo.html#a07829dcfdbebb69f6d42ea161e2d3dd1":[3,0,0,28,86,1],
-"d2/d7e/structmorph_1_1ui_1_1FileInfo.html#a4a56cd14adfdbfa0b39d7a62565c98b2":[1,0,0,1,84,0],
-"d2/d7e/structmorph_1_1ui_1_1FileInfo.html#a4a56cd14adfdbfa0b39d7a62565c98b2":[3,0,0,28,86,0],
-"d2/d7e/structmorph_1_1ui_1_1FileInfo.html#aeb5b67cf84526709d33806b9daf2cd5a":[1,0,0,1,84,2]
+"d2/d7e/structmorph_1_1ui_1_1FileInfo.html#a4a56cd14adfdbfa0b39d7a62565c98b2":[1,0,0,1,84,0]
 };

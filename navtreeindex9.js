@@ -1,5 +1,12 @@
 var NAVTREEINDEX9 =
 {
+"d4/d28/structmorph_1_1ui_1_1NavigatorBadge.html#af9bc4334791e0e133e8ea29e864700a2":[3,0,0,28,171,0],
+"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html":[1,0,0,1,86],
+"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html":[3,0,0,28,88],
+"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html#a14b96cba86de7417c184bb6c913705d4":[1,0,0,1,86,0],
+"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html#a14b96cba86de7417c184bb6c913705d4":[3,0,0,28,88,0],
+"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html#a698981c59383e16055e9e1a288380344":[1,0,0,1,86,1],
+"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html#a698981c59383e16055e9e1a288380344":[3,0,0,28,88,1],
 "d4/d2d/classmorph_1_1testing_1_1OwnerProbeRecorder.html":[3,0,0,25,0],
 "d4/d2d/classmorph_1_1testing_1_1OwnerProbeRecorder.html#a00553dd05f8ff6b9051447ca8dabf3a8":[3,0,0,25,0,3],
 "d4/d2d/classmorph_1_1testing_1_1OwnerProbeRecorder.html#a08103889f7cfafab635d2198064b9106":[3,0,0,25,0,5],
@@ -242,12 +249,5 @@ var NAVTREEINDEX9 =
 "d4/d86/classmorph_1_1tui_1_1LoopExecutor.html#a95caf19df519ac2b7a37312792309466":[3,0,0,27,3,2],
 "d4/d86/classmorph_1_1tui_1_1LoopExecutor.html#af743b9cd7861eb49be24438c82bb2597":[3,0,0,27,3,1],
 "d4/d8d/structmorph_1_1forms_1_1Or.html":[3,0,0,10,43],
-"d4/d8d/structmorph_1_1forms_1_1Or.html#a637fff1e1257ce2f4c099b77191b712b":[3,0,0,10,43,2],
-"d4/d8d/structmorph_1_1forms_1_1Or.html#a9979e8bd51f8a306f05ca8d052500f77":[3,0,0,10,43,0],
-"d4/d8d/structmorph_1_1forms_1_1Or.html#af1edfb3b1c070ef250a86da18e8eb316":[3,0,0,10,43,1],
-"d4/d90/structmorph_1_1ui_1_1PrefLoad.html":[1,0,0,1,182],
-"d4/d90/structmorph_1_1ui_1_1PrefLoad.html":[3,0,0,28,184],
-"d4/d90/structmorph_1_1ui_1_1PrefLoad.html#a12aba7aaef9ebb799300eca31d60a720":[1,0,0,1,182,2],
-"d4/d90/structmorph_1_1ui_1_1PrefLoad.html#a12aba7aaef9ebb799300eca31d60a720":[3,0,0,28,184,2],
-"d4/d90/structmorph_1_1ui_1_1PrefLoad.html#a5824b40a6d04304f394ac10326a4058b":[1,0,0,1,182,0]
+"d4/d8d/structmorph_1_1forms_1_1Or.html#a637fff1e1257ce2f4c099b77191b712b":[3,0,0,10,43,2]
 };

@@ -1,5 +1,9 @@
 var NAVTREEINDEX6 =
 {
+"d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a4d8e804d2ac5e24eaab39757bcd96897":[1,0,0,1,116,4],
+"d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a4d8e804d2ac5e24eaab39757bcd96897":[3,0,0,28,118,4],
+"d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a6f3928b88bad00e272f370e28d8e42eb":[1,0,0,1,116,2],
+"d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a6f3928b88bad00e272f370e28d8e42eb":[3,0,0,28,118,2],
 "d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a8511f99865623c9abb495ff15b879777":[1,0,0,1,116,3],
 "d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a8511f99865623c9abb495ff15b879777":[3,0,0,28,118,3],
 "d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a91b9dea9c499d74ffa2b0fc024916dc7":[1,0,0,1,116,1],
@@ -245,9 +249,5 @@ var NAVTREEINDEX6 =
 "d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bcacf220632b6c3b4876d924d00ac2fee54":[4,0,0,11,1,8,1],
 "d3/d6a/session__auth_8hpp_source.html":[4,0,0,11,1],
 "d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html":[3,0,0,7,0,2],
-"d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html#a1ce303800f18fc0827afdb3bc8e7e170":[3,0,0,7,0,2,1],
-"d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html#a2a4a86568b646327ab6616b2fd7fda4a":[3,0,0,7,0,2,4],
-"d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html#a43ce5ea40cbe2a2a8f85244964f70986":[3,0,0,7,0,2,2],
-"d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html#a44020f9685c00c710b3c0c2889ec15b0":[3,0,0,7,0,2,6],
-"d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html#a55e843bbb18cea16d2d08edc6b889518":[3,0,0,7,0,2,3]
+"d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html#a1ce303800f18fc0827afdb3bc8e7e170":[3,0,0,7,0,2,1]
 };

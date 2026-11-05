@@ -1,5 +1,13 @@
 var NAVTREEINDEX27 =
 {
+"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#a03e87a3aac761763d1ac4866c4f7bf65":[3,0,0,28,207,1],
+"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#a3d287f98c9f10c056c284d4777ba3038":[1,0,0,1,205,0],
+"db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#a3d287f98c9f10c056c284d4777ba3038":[3,0,0,28,207,0],
+"db/d4c/structmorph_1_1ui_1_1FormatContext.html":[1,0,0,1,94],
+"db/d4c/structmorph_1_1ui_1_1FormatContext.html":[3,0,0,28,96],
+"db/d4c/structmorph_1_1ui_1_1FormatContext.html#a1f53181cc9f4e3d350ac475fd489dba3":[1,0,0,1,94,6],
+"db/d4c/structmorph_1_1ui_1_1FormatContext.html#a1f53181cc9f4e3d350ac475fd489dba3":[3,0,0,28,96,6],
+"db/d4c/structmorph_1_1ui_1_1FormatContext.html#a80461eca883dc3f4cb8cb808c24e8368":[1,0,0,1,94,4],
 "db/d4c/structmorph_1_1ui_1_1FormatContext.html#a80461eca883dc3f4cb8cb808c24e8368":[3,0,0,28,96,4],
 "db/d4c/structmorph_1_1ui_1_1FormatContext.html#a8543ebe7f842ee3648a1550ef01b50a2":[1,0,0,1,94,1],
 "db/d4c/structmorph_1_1ui_1_1FormatContext.html#a8543ebe7f842ee3648a1550ef01b50a2":[3,0,0,28,96,1],
@@ -241,13 +249,5 @@ var NAVTREEINDEX27 =
 "db/ddd/structmorph_1_1ui_1_1Virtualization.html#abc2a767de62b6cb46520ea68858c4142":[1,0,0,1,265,1],
 "db/ddd/structmorph_1_1ui_1_1Virtualization.html#abc2a767de62b6cb46520ea68858c4142":[3,0,0,28,267,1],
 "db/ddd/structmorph_1_1ui_1_1Virtualization.html#ae4a626d58a451b0ccaf116350449c5cc":[1,0,0,1,265,0],
-"db/ddd/structmorph_1_1ui_1_1Virtualization.html#ae4a626d58a451b0ccaf116350449c5cc":[3,0,0,28,267,0],
-"db/de0/structmorph_1_1backend_1_1HandlerDestroyedError.html":[3,0,0,2,6],
-"db/de0/structmorph_1_1backend_1_1HandlerDestroyedError.html#aeb7ea3ec3ee7314334d129945e54e91e":[3,0,0,2,6,0],
-"db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html":[3,0,0,28,0,58],
-"db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#a1ba73badce97f8000557a2de27178db2":[3,0,0,28,0,58,1],
-"db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#a2996c9227088e9a96be532f243cdd574":[3,0,0,28,0,58,7],
-"db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#a3db80487783e02a9b413c5f5ddaf7cdb":[3,0,0,28,0,58,3],
-"db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#a45ee7a238efa8726083a705c9674daec":[3,0,0,28,0,58,8],
-"db/de2/structmorph_1_1ui_1_1author_1_1TableColumn.html#a4a0756cb1948ecfdd704956df81384d1":[3,0,0,28,0,58,10]
+"db/ddd/structmorph_1_1ui_1_1Virtualization.html#ae4a626d58a451b0ccaf116350449c5cc":[3,0,0,28,267,0]
 };

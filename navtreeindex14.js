@@ -1,5 +1,13 @@
 var NAVTREEINDEX14 =
 {
+"d6/d77/classmorph_1_1ui_1_1Workspace.html#a17070c044a2f7b20059d4a181165e1a8":[3,0,0,28,270,24],
+"d6/d77/classmorph_1_1ui_1_1Workspace.html#a17854af92ed7887d7938b618bf8eea76":[1,0,0,1,268,31],
+"d6/d77/classmorph_1_1ui_1_1Workspace.html#a17854af92ed7887d7938b618bf8eea76":[3,0,0,28,270,31],
+"d6/d77/classmorph_1_1ui_1_1Workspace.html#a1fdfed590ac3019f0c93e8e40616b3da":[1,0,0,1,268,23],
+"d6/d77/classmorph_1_1ui_1_1Workspace.html#a1fdfed590ac3019f0c93e8e40616b3da":[3,0,0,28,270,23],
+"d6/d77/classmorph_1_1ui_1_1Workspace.html#a20905db6ad9a8347936a52870a23ea6a":[1,0,0,1,268,19],
+"d6/d77/classmorph_1_1ui_1_1Workspace.html#a20905db6ad9a8347936a52870a23ea6a":[3,0,0,28,270,19],
+"d6/d77/classmorph_1_1ui_1_1Workspace.html#a275a2594b0c3c45b75133aaf576e8083":[1,0,0,1,268,4],
 "d6/d77/classmorph_1_1ui_1_1Workspace.html#a275a2594b0c3c45b75133aaf576e8083":[3,0,0,28,270,4],
 "d6/d77/classmorph_1_1ui_1_1Workspace.html#a2a051e32780eed67419f5867d1dbc713":[1,0,0,1,268,12],
 "d6/d77/classmorph_1_1ui_1_1Workspace.html#a2a051e32780eed67419f5867d1dbc713":[3,0,0,28,270,12],
@@ -241,13 +249,5 @@ var NAVTREEINDEX14 =
 "d6/db2/classmorph_1_1ui_1_1ScreenHead.html#ae6a7ecfe44e67c0db1b7f758bf43411f":[3,0,0,28,205,10],
 "d6/db2/classmorph_1_1ui_1_1ScreenHead.html#aec9605dea3d8b38ffb794963b51237e4":[1,0,0,1,203,6],
 "d6/db2/classmorph_1_1ui_1_1ScreenHead.html#aec9605dea3d8b38ffb794963b51237e4":[3,0,0,28,205,6],
-"d6/db2/classmorph_1_1ui_1_1ScreenHead.html#af47c98f80d8766b6f917421a05412c57":[1,0,0,1,203,11],
-"d6/db2/classmorph_1_1ui_1_1ScreenHead.html#af47c98f80d8766b6f917421a05412c57":[3,0,0,28,205,11],
-"d6/db2/classmorph_1_1ui_1_1ScreenHead.html#aff742f3ae126f276ba823500d7840e31":[1,0,0,1,203,0],
-"d6/db2/classmorph_1_1ui_1_1ScreenHead.html#aff742f3ae126f276ba823500d7840e31":[3,0,0,28,205,0],
-"d6/db2/structmorph_1_1ui_1_1author_1_1detail_1_1LiteralOf_3_01std_1_1string__view_01_4.html":[3,0,0,28,0,0,11],
-"d6/db2/structmorph_1_1ui_1_1author_1_1detail_1_1LiteralOf_3_01std_1_1string__view_01_4.html#ad71f95099b03361c903b3e190527ea44":[3,0,0,28,0,0,11,0],
-"d6/db3/text_8hpp.html":[4,0,0,3,1,0,0],
-"d6/db3/text_8hpp_source.html":[4,0,0,3,1,0,0],
-"d6/db7/conceptmorph_1_1units_1_1UnitEnum.html":[2,0,5,0]
+"d6/db2/classmorph_1_1ui_1_1ScreenHead.html#af47c98f80d8766b6f917421a05412c57":[1,0,0,1,203,11]
 };

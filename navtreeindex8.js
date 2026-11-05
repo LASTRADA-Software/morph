@@ -1,5 +1,12 @@
 var NAVTREEINDEX8 =
 {
+"d3/df7/structmorph_1_1ui_1_1Drawer.html#a8ddc4cbbc0cd507cde0ed765e39c1f5d":[1,0,0,1,70,0],
+"d3/df7/structmorph_1_1ui_1_1Drawer.html#a8ddc4cbbc0cd507cde0ed765e39c1f5d":[3,0,0,28,72,0],
+"d3/df7/structmorph_1_1ui_1_1Drawer.html#abf906e416d3f87c34707a47cf99eacba":[1,0,0,1,70,4],
+"d3/df7/structmorph_1_1ui_1_1Drawer.html#abf906e416d3f87c34707a47cf99eacba":[3,0,0,28,72,4],
+"d3/df7/structmorph_1_1ui_1_1Drawer.html#adcd925ac474420204bca971f8e749345":[1,0,0,1,70,1],
+"d3/df7/structmorph_1_1ui_1_1Drawer.html#adcd925ac474420204bca971f8e749345":[3,0,0,28,72,1],
+"d3/df7/structmorph_1_1ui_1_1Drawer.html#ae6f1765b950f7f6059f507ae6f26e905":[1,0,0,1,70,6],
 "d3/df7/structmorph_1_1ui_1_1Drawer.html#ae6f1765b950f7f6059f507ae6f26e905":[3,0,0,28,72,6],
 "d3/dfc/structmorph_1_1ui_1_1author_1_1RunOptions.html":[3,0,0,28,0,37],
 "d3/dfc/structmorph_1_1ui_1_1author_1_1RunOptions.html#a0c4bb4ffe4cd5f824e6dda469ff91855":[3,0,0,28,0,37,1],
@@ -242,12 +249,5 @@ var NAVTREEINDEX8 =
 "d4/d28/structmorph_1_1ui_1_1NavigatorBadge.html#a0a7fe3ab6ac19792467cc3a13ccc56d4":[3,0,0,28,171,2],
 "d4/d28/structmorph_1_1ui_1_1NavigatorBadge.html#a816730ca5df3898d2b98a0015823eaf5":[1,0,0,1,169,1],
 "d4/d28/structmorph_1_1ui_1_1NavigatorBadge.html#a816730ca5df3898d2b98a0015823eaf5":[3,0,0,28,171,1],
-"d4/d28/structmorph_1_1ui_1_1NavigatorBadge.html#af9bc4334791e0e133e8ea29e864700a2":[1,0,0,1,169,0],
-"d4/d28/structmorph_1_1ui_1_1NavigatorBadge.html#af9bc4334791e0e133e8ea29e864700a2":[3,0,0,28,171,0],
-"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html":[1,0,0,1,86],
-"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html":[3,0,0,28,88],
-"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html#a14b96cba86de7417c184bb6c913705d4":[1,0,0,1,86,0],
-"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html#a14b96cba86de7417c184bb6c913705d4":[3,0,0,28,88,0],
-"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html#a698981c59383e16055e9e1a288380344":[1,0,0,1,86,1],
-"d4/d2a/classmorph_1_1ui_1_1FilePickerWidget.html#a698981c59383e16055e9e1a288380344":[3,0,0,28,88,1]
+"d4/d28/structmorph_1_1ui_1_1NavigatorBadge.html#af9bc4334791e0e133e8ea29e864700a2":[1,0,0,1,169,0]
 };
