@@ -893,11 +893,11 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
-      # GCC with debug info takes about 6 GB on one heavy test file, and ninja
-      # runs four at once at the end of the build: some 24 GB on a runner with
-      # 16 GB and little swap. Running out shows only as the runner's "shutdown
-      # signal", exit 143, with no compiler error. Swap is used for those last
-      # few minutes; lowering -j would slow the whole build instead.
+      # The build ends with several heavy test files at once, close to what the
+      # runner's 16 GB and 3 GB of swap can hold. The likely sign of going past
+      # it is the runner's "shutdown signal", exit 143, with no compiler error.
+      # The Build step prints the swap used. Extra swap costs nothing unless it
+      # is needed; lowering -j would slow the whole build instead.
       - name: Add swap for the build's heaviest compiles
         run: |
           sudo fallocate -l 12G /mnt/build-swap
