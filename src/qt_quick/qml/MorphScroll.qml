@@ -49,7 +49,7 @@ MorphWidget {
     }
 
     implicitWidth: root.axis === 0 ? column.implicitWidth : Math.min(column.implicitWidth, 40 * Theme.unitWidth)
-    implicitHeight: root.axis === 0 ? Math.min(column.implicitHeight, 20 * Theme.unitHeight) : column.implicitHeight
+    implicitHeight: root.axis === 0 ? Math.min(column.naturalHeight, 20 * Theme.unitHeight) : column.naturalHeight
     clip: true
 
     Flickable {
@@ -57,7 +57,7 @@ MorphWidget {
         objectName: "flick"
         anchors.fill: parent
         contentWidth: root.axis === 0 ? (root.overX ? root.needX : width) : column.width
-        contentHeight: root.axis === 0 ? column.implicitHeight : height
+        contentHeight: root.axis === 0 ? column.naturalHeight : height
         flickableDirection: root.axis === 1 ? Flickable.HorizontalFlick
                                             : root.overX ? Flickable.HorizontalAndVerticalFlick
                                                          : Flickable.VerticalFlick
@@ -67,8 +67,9 @@ MorphWidget {
 
         // Along a horizontal axis the content is at least the viewport's width, so a child that stretches fills the
         // viewport while it is narrower, and scrolls once it is wider; the terminal sizes it the same way.
-        ColumnLayout {
+        MorphShareColumn {
             id: column
+            height: column.naturalHeight
             width: root.axis === 0 ? (root.overX ? root.needX : flick.width) : Math.max(implicitWidth, flick.width)
         }
     }

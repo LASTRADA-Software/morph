@@ -2,6 +2,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import "MorphShares.js" as Shares
 
 // A column or a row: children in order along the axis, `gap` (a spacing step) apart. With `wrap` (a row only), the
 // children fill lines in order and `place` lays them out instead of a GridLayout.
@@ -239,8 +240,7 @@ MorphWidget {
     // natural. @p natural gives a stretching child's natural along the axis.
     function naturalAlong(natural: var): real {
         let others = 0
-        let weights = 0
-        let ratio = 0
+        const stretching = []
         let shown = 0
         for (const object of layout.children) {
             const child = object as Item
@@ -248,15 +248,13 @@ MorphWidget {
                 continue
             ++shown
             if (root.stretchesIn(child)) {
-                const weight = root.weightIn(child)
-                const basis = Math.min(Math.max(natural(child), root.leastOf(child)), root.mostOf(child))
-                weights += weight
-                ratio = Math.max(ratio, basis / weight)
+                stretching.push({"natural": Math.min(Math.max(natural(child), root.leastOf(child)), root.mostOf(child)),
+                                    "weight": root.weightIn(child)})
             } else {
                 others += root.lengthOf(child, false)
             }
         }
-        return others + weights * ratio + root.gapLength * Math.max(0, shown - 1)
+        return others + Shares.stretchNatural(stretching) + root.gapLength * Math.max(0, shown - 1)
     }
 
     // The length each shown child along the axis has, aligned with the layout's children: -1 for a child that does not
@@ -287,7 +285,7 @@ MorphWidget {
             ++index
         }
         const length = root.axis === 0 ? root.height - 2 * root.insetY : root.width - 2 * root.insetX
-        const given = root.shareByWeight(members, length - used - root.gapLength * Math.max(0, shown - 1))
+        const given = Shares.shareByWeight(members, length - used - root.gapLength * Math.max(0, shown - 1))
         for (let i = 0; i < owners.length; ++i)
             shares[owners[i]] = given[i]
         return shares
@@ -304,41 +302,6 @@ MorphWidget {
             ++index
         }
         return -1
-    }
-    // Shares @p room among @p members, which hold a `weight`, a `minimum` and a `maximum`, by weight from zero. A
-    // share outside its bounds is held at the bound and the rest is shared again among the others (the bounds of a
-    // flex layout): each pass shares the room among the open members and clamps; when the clamps added length in
-    // total the members raised to their minimum are held, when they removed length the members cut to their maximum
-    // are, and when they changed nothing every member is. A pass holds at least one member, so there are at most as
-    // many passes as members.
-    function shareByWeight(members: var, room: real): var {
-        const lengths = members.map(() => 0)
-        let open = members.map((member, i) => i)
-        let spare = room
-        while (open.length > 0) {
-            let weights = 0
-            for (const i of open)
-                weights += members[i].weight
-            const clamped = {}
-            let added = 0
-            for (const i of open) {
-                const raw = Math.max(0, spare) * members[i].weight / weights
-                clamped[i] = Math.min(Math.max(raw, members[i].minimum), members[i].maximum)
-                added += clamped[i] - raw
-            }
-            const frozen = []
-            for (const i of open) {
-                const raw = Math.max(0, spare) * members[i].weight / weights
-                if (Math.abs(added) < 1e-6 || (added > 0 ? clamped[i] > raw : clamped[i] < raw))
-                    frozen.push(i)
-            }
-            for (const i of frozen) {
-                lengths[i] = clamped[i]
-                spare -= clamped[i]
-            }
-            open = open.filter(i => !frozen.includes(i))
-        }
-        return lengths
     }
     readonly property real betweenSpacing: {
         const count = root.shownLengths.length

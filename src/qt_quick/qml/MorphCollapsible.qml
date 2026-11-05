@@ -47,7 +47,7 @@ MorphWidget {
             }
         }
 
-        ColumnLayout {
+        MorphShareColumn {
             id: body
             Layout.fillWidth: true
             Layout.fillHeight: root.bodyStretches

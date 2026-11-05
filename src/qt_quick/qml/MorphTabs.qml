@@ -102,7 +102,7 @@ MorphWidget {
     implicitWidth: Math.max(bar.visible ? bar.implicitWidth + (more.visible ? more.implicitWidth : 0) + 2 * root.insetPx
                                         : 0,
                             pages.implicitWidth)
-    implicitHeight: (bar.visible ? bar.implicitHeight + layout.spacing : 0) + pages.implicitHeight
+    implicitHeight: (bar.visible ? bar.implicitHeight + layout.spacing : 0) + pages.naturalHeight
 
     FontMetrics {
         id: metrics
@@ -267,7 +267,7 @@ MorphWidget {
         }
 
         // The pages fill the area under the strip; each pads its own content by `pageInset`.
-        ColumnLayout {
+        MorphShareColumn {
             id: pages
             Layout.fillWidth: true
             Layout.fillHeight: true

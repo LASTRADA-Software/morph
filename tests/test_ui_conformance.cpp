@@ -632,6 +632,13 @@ TEST_CASE("ui conformance: the stretch cases flag a wrong width, a missing child
         "a stretch child held at its minimum leaves the others to share the rest",
         "a content-sized spacer shares a row as a stretch child of weight 1",
         "stretch-height children share a column by weight, whatever their content",
+        "a panel's stretch-height children share its height by weight, whatever their content",
+        "a dialog's stretch-height children share its height by weight, whatever their content",
+        "a content-sized panel is tall enough for each of its stretch-height children's content",
+        "a content-sized scroll area, slot and collapsible share their stretch-height children by weight",
+        "a drawer's stretch-height children share its height by weight, whatever their content",
+        "a tab page's stretch-height children share its height by weight, whatever their content",
+        "a horizontal scroll area's stretch-height children share its height by weight",
         "a stretch push button keeps its label's width"};
     std::size_t cases = 0;
     for (auto const& testCase : ui::testing::layoutConformanceCases()) {

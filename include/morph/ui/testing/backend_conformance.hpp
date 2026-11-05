@@ -3879,6 +3879,191 @@ struct MinColumnGridSpec {
     return checks.result();
 }
 
+/// @brief @p lines one-character lines, as one text.
+/// @param lines How many lines.
+/// @return The text.
+[[nodiscard]] inline std::string linesOf(int lines) {
+    std::string text = "l";
+    for (int line = 1; line < lines; ++line) {
+        text += "\nl";
+    }
+    return text;
+}
+
+/// @brief Case: two stretch-height children of a panel of fixed height 24, of one and eight lines, share what is left
+///        under its header equally, whatever their content.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> panelStretchHeightsShareByWeight(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    IViewBackend& backend = probe.backend();
+    auto const root = backend.createStack(nullptr, Axis::Vertical);
+    auto const panel = backend.createPanel(root.get());
+    panel->setTitle("panel");
+    panel->setLayout({.width = Sizing::fixed(30), .height = Sizing::fixed(24)});
+    auto const shortText = backend.createText(panel.get());
+    shortText->setText(linesOf(1));
+    shortText->setLayout({.height = Sizing::stretch()});
+    auto const tallText = backend.createText(panel.get());
+    tallText->setText(linesOf(8));
+    tallText->setLayout({.height = Sizing::stretch()});
+    probe.settle();
+    double const first = geometry.of(*shortText).height;
+    double const second = geometry.of(*tallText).height;
+    checks.that(first >= 3 && second >= 3, "the panel's stretch children are " + std::to_string(first) + " and " +
+                                               std::to_string(second) + " units tall, where about 10 are left");
+    geometry.near("the one-line child's height, as tall as its sibling", second, first);
+    return checks.result();
+}
+
+/// @brief Case: two stretch-height children of an open dialog, of one and eight lines, share the dialog's height
+///        equally, and the eight-line child keeps its eight lines: the dialog asks for twice the larger natural.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> dialogStretchHeightsShareByWeight(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    IViewBackend& backend = probe.backend();
+    auto const dialog = backend.createDialog(nullptr);
+    dialog->setTitle("dialog");
+    auto const shortText = backend.createText(dialog.get());
+    shortText->setText(linesOf(1));
+    shortText->setLayout({.height = Sizing::stretch()});
+    auto const tallText = backend.createText(dialog.get());
+    tallText->setText(linesOf(8));
+    tallText->setLayout({.height = Sizing::stretch()});
+    dialog->setOpen(true);
+    probe.settle();
+    double const first = geometry.of(*shortText).height;
+    double const second = geometry.of(*tallText).height;
+    checks.that(second >= 7.5, "the eight-line child is " + std::to_string(second) + " units tall");
+    geometry.near("the one-line child's height, as tall as its sibling", second, first);
+    return checks.result();
+}
+
+/// @brief Case: a content-sized panel of two stretch-height children of four lines each, weighted one and two, is
+///        tall enough for each to keep its four lines: the stretching children ask for `3 * max(4 / 1, 4 / 2)`, where
+///        the sum of their naturals would squeeze the first to under three lines.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> contentSizedPanelKeepsItsStretchChildren(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    IViewBackend& backend = probe.backend();
+    auto const root = backend.createStack(nullptr, Axis::Vertical);
+    auto const panel = backend.createPanel(root.get());
+    panel->setTitle("panel");
+    panel->setLayout({.width = Sizing::fixed(30), .alignSelf = Align::Start});
+    auto const light = backend.createText(panel.get());
+    light->setText(linesOf(4));
+    light->setLayout({.height = Sizing::stretch(1)});
+    auto const heavy = backend.createText(panel.get());
+    heavy->setText(linesOf(4));
+    heavy->setLayout({.height = Sizing::stretch(2)});
+    probe.settle();
+    double const first = geometry.of(*light).height;
+    double const second = geometry.of(*heavy).height;
+    checks.that(first >= 3.5, "the weight-1 child is " + std::to_string(first) + " units tall, its text four");
+    geometry.near("the weight-2 child's height, twice the first", 2 * first, second);
+    return checks.result();
+}
+
+/// @brief Case: two stretch-height children of a content-sized scroll area, slot and collapsible, of one and four
+///        lines, are as tall as each other and the four-line one keeps its four lines: each container asks for twice
+///        the larger natural, which the equal shares then fill.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> contentContainersShareStretchHeights(ConformanceProbe& probe) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    IViewBackend& backend = probe.backend();
+    auto const root = backend.createStack(nullptr, Axis::Vertical);
+    auto const scroll = backend.createScroll(root.get(), Axis::Vertical);
+    auto const slot = backend.createSlot(root.get());
+    auto const collapsible = backend.createCollapsible(root.get());
+    collapsible->setTitle("section");
+    collapsible->setOpen(true);
+    std::vector<std::unique_ptr<TextWidget>> texts;
+    for (ContainerWidget* const container :
+         {static_cast<ContainerWidget*>(scroll.get()), static_cast<ContainerWidget*>(slot.get()),
+          static_cast<ContainerWidget*>(collapsible.get())}) {
+        for (int const lines : {1, 4}) {
+            texts.push_back(backend.createText(container));
+            texts.back()->setText(linesOf(lines));
+            texts.back()->setLayout({.height = Sizing::stretch()});
+        }
+    }
+    probe.settle();
+    std::array<std::string_view, 3> const names{"scroll", "slot", "collapsible"};
+    for (std::size_t container = 0; container < names.size(); ++container) {
+        double const first = geometry.of(*texts.at(2 * container)).height;
+        double const second = geometry.of(*texts.at((2 * container) + 1)).height;
+        checks.that(second >= 3.5, "a " + std::string{names.at(container)} + "'s four-line child is " +
+                                       std::to_string(second) + " units tall");
+        geometry.near("a " + std::string{names.at(container)} + "'s one-line child, as tall as its sibling", second,
+                      first);
+    }
+    return checks.result();
+}
+
+/// @brief Gives @p container two stretch-height texts of one and four lines, and checks that they are as tall as each
+///        other once the probe has settled, and that the four-line one keeps its four lines.
+/// @param probe     The backend under test.
+/// @param container The container to fill.
+/// @param what      What the container is, for the messages.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> checkStretchPair(ConformanceProbe& probe, ContainerWidget& container,
+                                                                 std::string_view what) {
+    Checks checks;
+    Geometry geometry{probe, checks};
+    auto const shortText = probe.backend().createText(&container);
+    shortText->setText(linesOf(1));
+    shortText->setLayout({.height = Sizing::stretch()});
+    auto const tallText = probe.backend().createText(&container);
+    tallText->setText(linesOf(4));
+    tallText->setLayout({.height = Sizing::stretch()});
+    probe.settle();
+    double const first = geometry.of(*shortText).height;
+    double const second = geometry.of(*tallText).height;
+    checks.that(second >= 3.5, std::string{what} + "'s four-line child is " + std::to_string(second) + " units tall");
+    geometry.near(std::string{what} + "'s one-line child, as tall as its sibling", second, first);
+    return checks.result();
+}
+
+/// @brief Case: two stretch-height children of an open drawer, of one and four lines, are as tall as each other.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> drawerStretchHeightsShareByWeight(ConformanceProbe& probe) {
+    auto const drawer = probe.backend().createDrawer(nullptr, Side::End);
+    drawer->setTitle("drawer");
+    drawer->setOpen(true);
+    return checkStretchPair(probe, *drawer, "a drawer");
+}
+
+/// @brief Case: two stretch-height children of a tab page, of one and four lines, are as tall as each other.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> tabPageStretchHeightsShareByWeight(ConformanceProbe& probe) {
+    auto const root = probe.backend().createStack(nullptr, Axis::Vertical);
+    auto const tabs = probe.backend().createTabs(root.get());
+    tabs->setTabs({"one"});
+    auto const page = probe.backend().createSlot(tabs.get());
+    tabs->setSelected(0);
+    return checkStretchPair(probe, *page, "a tab page");
+}
+
+/// @brief Case: two stretch-height children of a horizontal scroll area of fixed height 20, of one and four lines,
+///        are as tall as each other.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> horizontalScrollStretchHeightsShareByWeight(ConformanceProbe& probe) {
+    auto const root = probe.backend().createStack(nullptr, Axis::Vertical);
+    auto const scroll = probe.backend().createScroll(root.get(), Axis::Horizontal);
+    scroll->setLayout({.width = Sizing::fixed(40), .height = Sizing::fixed(20)});
+    return checkStretchPair(probe, *scroll, "a horizontal scroll area");
+}
+
 /// @brief Case: a stretch push button is not narrowed below its label: in a 60-unit row it is as wide as the same
 ///        button sized by its content, and the button beside it gives up the width.
 /// @param probe The backend under test.
@@ -3923,7 +4108,7 @@ struct MinColumnGridSpec {
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 53> const cases{{
+    static std::array<ConformanceCase, 60> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -4009,6 +4194,20 @@ struct MinColumnGridSpec {
          .run = detail::spacerCountsAsStretch},
         {.name = "stretch-height children share a column by weight, whatever their content",
          .run = detail::stretchHeightsShareByWeight},
+        {.name = "a panel's stretch-height children share its height by weight, whatever their content",
+         .run = detail::panelStretchHeightsShareByWeight},
+        {.name = "a dialog's stretch-height children share its height by weight, whatever their content",
+         .run = detail::dialogStretchHeightsShareByWeight},
+        {.name = "a content-sized panel is tall enough for each of its stretch-height children's content",
+         .run = detail::contentSizedPanelKeepsItsStretchChildren},
+        {.name = "a content-sized scroll area, slot and collapsible share their stretch-height children by weight",
+         .run = detail::contentContainersShareStretchHeights},
+        {.name = "a drawer's stretch-height children share its height by weight, whatever their content",
+         .run = detail::drawerStretchHeightsShareByWeight},
+        {.name = "a tab page's stretch-height children share its height by weight, whatever their content",
+         .run = detail::tabPageStretchHeightsShareByWeight},
+        {.name = "a horizontal scroll area's stretch-height children share its height by weight",
+         .run = detail::horizontalScrollStretchHeightsShareByWeight},
         {.name = "a stretch push button keeps its label's width", .run = detail::stretchButtonKeepsItsLabel},
     }};
     return cases;

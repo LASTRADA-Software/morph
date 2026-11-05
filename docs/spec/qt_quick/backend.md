@@ -397,15 +397,20 @@ Along its axis a `MorphStack` without `wrap` shares its length among the childre
 the contract says. `stretchShares` is the binding that does it: an array aligned with the layout's children, -1 for a
 child that does not stretch, built from the length inside the padding, the other children's lengths, `gapLength` and
 each stretching child's weight and `Layout.minimum*`/`maximum*`, never from a stretching child's preferred length;
-`shareByWeight` is the pass loop. A stretching child's `Layout.preferredWidth` (`stretchWidth`) or `preferredHeight`
-(`stretchHeight`) is its share (`MorphStack.shareOf`, duck-typed as `roomOf` is), so the `GridLayout` places the shares
+`Shares.shareByWeight` (`MorphShares.js`) is the pass loop. A stretching child's `Layout.preferredWidth` (`stretchWidth`) or `preferredHeight`
+(`stretchHeight`) is its share (`shareOf` of the layout it is in, duck-typed as `roomOf` is: `MorphStack.shareOf`, or the content column of a container, below), so the `GridLayout` places the shares
 exactly. The stack's own implicit length along the axis is `naturalLength` while a child stretches: the other
-children's lengths, the gaps and `W * max(n / w)` for the stretching ones (`naturalAlong`), which never reads a share,
+children's lengths, the gaps and `W * max(n / w)` for the stretching ones (`naturalAlong`, with `Shares.stretchNatural`), which never reads a share,
 since the shares follow the length a parent derives from the natural. `widthFreeNatural` along a row is the same
 function over each child's `widthFreeNatural` where it has one, else its `implicitWidth`, so a stretch row in a content
-sized context, a table cell or a panel still asks for its children's naturals. The containers that lay their children
-out with a plain `ColumnLayout` (panel, collapsible, scroll, slot, tab page, dialog and drawer) keep the layout's own
-growth for stretch-height children. A push button (`style` 0) is not narrowed below its natural width
+sized context, a table cell or a panel still asks for its children's naturals. The containers that hold their children
+in a column (panel, collapsible, scroll, slot, tab page, dialog and drawer) hold them in a `MorphShareColumn`, a
+`ColumnLayout` that applies the same rule down: a stretch-height child (or a spacer) takes a share of the column's
+height by weight from zero (`stretchShares`, `shareOf`), and `naturalHeight` is the others' heights, the spacing and
+`Shares.stretchNatural` of the stretching ones. A container reads `naturalHeight`, never the column's `implicitHeight`,
+which sums the shares and follows the height the column is given: a scroll's, a dialog's and a drawer's content
+column is `naturalHeight` tall (the scroll's `contentHeight`, and the dialog's and drawer's `ScrollView` `contentHeight`, follow it), a slot's is the viewport's height less its inset where a child stretches (never less than the children's `minHeight`) and `naturalHeight` otherwise, and a
+panel's, a collapsible's and a tabs node's pages column asks its parent for `naturalHeight` as its preferred height (`MorphTabs.implicitHeight` reads `pages.naturalHeight`). A push button (`style` 0) is not narrowed below its natural width
 (`contentMinimumWidth`), as a badge is; a list item, a select, an input and a menu trigger have no minimum.
 
 **Unbreakable segments.** Qt's line breaker is not reachable from QML, so the backend writes a `TextMeasure`

@@ -242,10 +242,12 @@ MorphWidget {
                                (root.description === "" ? 0 : descriptionLabel.height + headRule.height +
                                                               contentColumn.spacing * 2))
                 clip: true
+                contentHeight: column.naturalHeight
 
-                ColumnLayout {
+                MorphShareColumn {
                     id: column
                     width: scroll.availableWidth
+                    height: column.naturalHeight
                 }
             }
 
