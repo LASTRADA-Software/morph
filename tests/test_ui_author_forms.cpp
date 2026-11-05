@@ -109,6 +109,17 @@ TEST_CASE("collection<View> and wizard<Wizard> write the presentation keys they 
           R"({"kind":"wizard","model":"rows","action":"Af_AddRow","showStatus":true})");
 }
 
+// Mutation: leave captionWidth out of detail::present (the key is not written).
+TEST_CASE("a presentation's captionWidth is written only when given", "[ui][author]") {
+    auto const model = ui::ModelHandle<af::Model>{"rows"};
+    ui::Node const wide =
+        ui::wizard<af::AddWizard>(model, {.fieldLayout = morph::forms::FieldLayout::Inline, .captionWidth = 20});
+    CHECK(glz::write_json(wide.json()).value_or("") ==
+          R"({"kind":"wizard","model":"rows","action":"Af_AddRow","fieldLayout":"inline","captionWidth":20})");
+    ui::Node const plain = ui::wizard<af::AddWizard>(model, {});
+    CHECK_FALSE(glz::write_json(plain.json()).value_or("").contains("captionWidth"));
+}
+
 // Mutation: leave fieldLayout out of detail::present (the key is not written).
 TEST_CASE("a presentation's fieldLayout is written by name", "[ui][author]") {
     auto const model = ui::ModelHandle<af::Model>{"rows"};

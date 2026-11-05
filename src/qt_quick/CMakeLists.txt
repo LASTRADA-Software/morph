@@ -35,16 +35,21 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphScheme.qml
         qml/MorphInputBackground.qml
         qml/MorphButtonBackground.qml
+        qml/MorphPlainContent.qml
         qml/MorphWidget.qml
         qml/MorphField.qml
         qml/MorphRoots.qml
         qml/MorphText.qml
         qml/MorphButton.qml
+        qml/MorphFieldElision.qml
         qml/MorphTextInput.qml
         qml/MorphTextArea.qml
         qml/MorphCheckbox.qml
         qml/MorphSelect.qml
         qml/MorphMenu.qml
+        qml/MorphDashedOutline.qml
+        qml/MorphPopupBackground.qml
+        qml/MorphPopupPlacement.qml
         qml/MorphStack.qml
         qml/MorphGrid.qml
         qml/MorphSpacer.qml
@@ -56,6 +61,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphTabs.qml
         qml/MorphDialog.qml
         qml/MorphDrawer.qml
+        qml/MorphShadow.qml
         qml/MorphToast.qml
         qml/MorphBusy.qml
         qml/MorphTable.qml
@@ -70,11 +76,15 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphProgress.qml
         qml/MorphSteps.qml
         qml/MorphKeyValue.qml
+        qml/MorphChart.qml
         qml/MorphEmptyState.qml
         qml/MorphSplitter.qml
         qml/MorphSplitterHandle.qml
         qml/MorphCollapsible.qml
+        qml/MorphSectionHeader.qml
         qml/MorphDropZone.qml
+        qml/MorphCheckIndicator.qml
+        qml/MorphChevron.qml
     OUTPUT_TARGETS morph_qt_quick_qml_output_targets
 )
 set(MORPH_QT_QUICK_QML_OUTPUT_TARGETS ${morph_qt_quick_qml_output_targets} PARENT_SCOPE)
@@ -99,6 +109,8 @@ add_library(morph_qt_quick STATIC
     relay.hpp
     scheduler.cpp
     table.cpp
+    text_measure.cpp
+    text_measure.hpp
     theme.cpp
     widget.cpp
     widget.hpp

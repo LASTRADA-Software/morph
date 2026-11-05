@@ -250,13 +250,16 @@ TEST_CASE("ApplicationHost: a hand-built document host runs a document's sign-in
 
 namespace {
 
-/// A public screen that signs in and declares a head action: signed in, the shell's top bar shows it once.
+/// A public screen that signs in and declares a head action, a head search and a head menu: signed in, the shell's top
+/// bar shows each once.
 constexpr std::string_view kHeadedLogin = R"({
   "vocab": "ui/1", "id": "probe.headed",
   "models": { "probe": { "type": "Probe_Model" } },
   "mutations": { "login": { "model": "probe", "action": "Probe_Login",
                             "onSuccess": [ { "signIn": { "from": "login" } } ] } },
   "actions": [ { "id": "refresh", "label": "Refresh", "onClick": [] } ],
+  "tools": [ { "id": "q", "kind": "search", "label": "Search" } ],
+  "menu": [ { "id": "export", "label": "Export", "onClick": [] } ],
   "view": { "kind": "column", "children": [
     { "kind": "button", "testId": "login", "label": "Log in", "onClick": [ { "run": "login" } ] },
     { "kind": "text", "testId": "headed", "text": "headed" } ] } })";
@@ -286,8 +289,10 @@ bool descendsFrom(ui::testing::RecordingBackend const& backend, int ancestor, in
 
 }  // namespace
 
-// Control: the shell mounts the head in the page as well (the action shows twice).
-TEST_CASE("Client shell: a screen's head action shows once, in the shell's head slot", "[client][sign-in][shell]") {
+// Control: the shell mounts the head in the page as well (the action shows twice); leave the tools or the menu out of
+// the head row (no head_tool_q or head_menu in the slot).
+TEST_CASE("Client shell: a screen's head action, tool and menu show once, in the shell's head slot",
+          "[client][sign-in][shell]") {
     FakeAppContext context;
     ui::testing::RecordingBackend backend;
     client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &headedBundle}, client::LocalSetup{}};
@@ -318,6 +323,12 @@ TEST_CASE("Client shell: a screen's head action shows once, in the shell's head 
         auto const slot = backend.find("Row", "testId", "shell_head");
         REQUIRE(slot.has_value());
         CHECK(descendsFrom(backend, *slot, actions.front()));
+        auto const tool = backend.find("TextInput", "testId", "head_tool_q");
+        auto const menu = backend.find("Menu", "testId", "head_menu");
+        REQUIRE(tool.has_value());
+        REQUIRE(menu.has_value());
+        CHECK(descendsFrom(backend, *slot, *tool));
+        CHECK(descendsFrom(backend, *slot, *menu));
     }
     source.close();
 }

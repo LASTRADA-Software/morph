@@ -112,6 +112,53 @@ TEST_CASE("tui splitter: sizes asked for are kept, the last pane taking the rest
     CHECK(splitter->extents() == std::vector<int>{9, 9, 11});
 }
 
+// Mutation: read Percent as Content in the splitter's placement (the first pane takes half the cells, not 28).
+TEST_CASE("tui splitter: a percent pane is that share of the splitter, its handle included, at least one cell",
+          "[tui][regions]") {
+    Harness harness{101, 2};
+    auto const splitter = harness.make<SplitterImpl>(nullptr, ui::Axis::Horizontal);
+    auto const queue = harness.make<TextImpl>(splitter.get());
+    auto const page = harness.make<TextImpl>(splitter.get());
+    queue->setLayout({.width = ui::Sizing::percent(28)});
+    static_cast<void>(harness.draw());
+    CHECK(splitter->extents() == std::vector<int>{28, 72});
+    queue->setLayout({.width = ui::Sizing::percent(1)});
+    static_cast<void>(harness.draw());
+    CHECK(splitter->extents().front() == 1);
+    // A share of nothing is still a cell.
+    Harness narrow{51, 2};
+    auto const small = narrow.make<SplitterImpl>(nullptr, ui::Axis::Horizontal);
+    auto const first = narrow.make<TextImpl>(small.get());
+    auto const second = narrow.make<TextImpl>(small.get());
+    first->setLayout({.width = ui::Sizing::percent(1)});
+    static_cast<void>(narrow.draw());
+    CHECK(small->extents() == std::vector<int>{1, 49});
+    static_cast<void>(second);
+    static_cast<void>(page);
+}
+
+// Mutation: leave the bounds out of SplitterImpl::layoutExtents or dragTo (the pane takes its share, and a drag passes
+// the maximum).
+TEST_CASE("tui splitter: a pane stays within its bounds, a drag included, and matching sizes still win",
+          "[tui][regions]") {
+    Harness harness{41, 2};
+    auto const splitter = harness.make<SplitterImpl>(nullptr, ui::Axis::Horizontal);
+    auto const left = harness.make<TextImpl>(splitter.get());
+    auto const right = harness.make<TextImpl>(splitter.get());
+    left->setLayout({.width = ui::Sizing::stretch(), .maxWidth = 10});
+    right->setLayout({.width = ui::Sizing::stretch()});
+    static_cast<void>(harness.draw());
+    CHECK(splitter->extents() == std::vector<int>{10, 30});
+    harness.sgr(report(0, {.x = 10, .y = 0}, 'M'));
+    harness.sgr(report(32, {.x = 20, .y = 0}, 'M'));
+    harness.sgr(report(0, {.x = 20, .y = 0}, 'm'));
+    static_cast<void>(harness.draw());
+    CHECK(splitter->extents() == std::vector<int>{10, 30});
+    splitter->setSizes({6, 34});
+    static_cast<void>(harness.draw());
+    CHECK(splitter->extents() == std::vector<int>{6, 34});
+}
+
 // Mutation: split the pasted text at every space (a path with an escaped space is then cut in two).
 TEST_CASE("tui drop zone: pasted paths, quoted, escaped or as file URIs", "[tui][regions]") {
     CHECK(parsePastedPaths("/a/b.csv") == Paths{"/a/b.csv"});
@@ -200,10 +247,10 @@ TEST_CASE("tui fields: a read-only checkbox takes the focus and reports no toggl
     static_cast<void>(harness.draw());
     harness.focus(*box);
     CHECK(harness.focused(*box));
-    static_cast<void>(harness.key(core::tui::KeyCode::Enter));
+    static_cast<void>(harness.type(" "));
     CHECK(toggles.empty());
     box->setReadOnly(false);
-    static_cast<void>(harness.key(core::tui::KeyCode::Enter));
+    static_cast<void>(harness.type(" "));
     CHECK(toggles == std::vector<bool>{true});
 }
 
@@ -258,8 +305,9 @@ TEST_CASE("tui menu: Right opens a submenu, Left goes back, and a choice reports
     CHECK(menu->level().empty());
 }
 
-// Mutation: run the chords of a widget whose own key took the event (Enter on the button then runs both).
-TEST_CASE("tui chords: a button's own key wins over its chord, an ignored key reaches the chord", "[tui][chords]") {
+// Mutation: try the button's own key before its chords (Enter then clicks it, and the chord never runs).
+TEST_CASE("tui chords: a button's chord wins over its own key, and a key it does not declare clicks",
+          "[tui][chords]") {
     Harness harness{30, 3};
     auto const button = harness.make<ButtonImpl>(nullptr);
     std::vector<std::string> chords;
@@ -270,14 +318,17 @@ TEST_CASE("tui chords: a button's own key wins over its chord, an ignored key re
     static_cast<void>(harness.draw());
     harness.focus(*button);
     CHECK(harness.key(core::tui::KeyCode::Enter) == core::tui::EventResult::Handled);
-    CHECK(clicks == 1);
-    CHECK(chords.empty());
+    CHECK(clicks == 0);
+    CHECK(chords == std::vector<std::string>{"Enter"});
     CHECK(harness.key(core::tui::KeyCode::F5) == core::tui::EventResult::Handled);
-    CHECK(chords == std::vector<std::string>{"F5"});
+    CHECK(chords == std::vector<std::string>{"Enter", "F5"});
+    CHECK(harness.type(" ") == core::tui::EventResult::Handled);
+    CHECK(clicks == 1);
 }
 
-// Mutation: leave a field's chords out of the keys its view leaves (Ctrl+S then reaches nothing).
-TEST_CASE("tui chords: a field's own key wins over its chord, an ignored key reaches the chord", "[tui][chords]") {
+// Mutation: try the field's own keys before its chords (Enter then submits, and the chord never runs).
+TEST_CASE("tui chords: a field's chord wins over its own key, and a key no editing takes reaches the chord",
+          "[tui][chords]") {
     Harness harness{30, 3};
     auto const field = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::SingleLine);
     std::vector<std::string> chords;
@@ -287,12 +338,12 @@ TEST_CASE("tui chords: a field's own key wins over its chord, an ignored key rea
     static_cast<void>(harness.draw());
     harness.focus(*field);
     CHECK(harness.key(core::tui::KeyCode::Enter) == core::tui::EventResult::Handled);
-    CHECK(submits.size() == 1);
-    CHECK(chords.empty());
+    CHECK(submits.empty());
+    CHECK(chords == std::vector<std::string>{"Enter"});
     CHECK(harness.send(core::tui::KeyEvent{.key = core::tui::keyCodeFromCodepoint(U's'),
                                            .modifiers = core::tui::Modifier::Ctrl,
                                            .codepoint = U's'}) == core::tui::EventResult::Handled);
-    CHECK(chords == std::vector<std::string>{"Ctrl+S"});
+    CHECK(chords == std::vector<std::string>{"Enter", "Ctrl+S"});
 }
 
 // Mutation: give every root the whole screen (the second root is then drawn over the first).

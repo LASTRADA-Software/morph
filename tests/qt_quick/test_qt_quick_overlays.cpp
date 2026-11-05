@@ -3,12 +3,23 @@
 // Dialogs and drawers on the real Qt Quick engine: opened and closed by code without a dismissal, dismissed by
 // Escape or a click outside with one, and holding their content out of reach while closed.
 
+#include <QColor>
+#include <QFont>
+#include <QMetaObject>
+#include <QPointF>
 #include <QQuickItem>
 #include <QTest>
+#include <QVariant>
+#include <QVariantList>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <map>
 #include <memory>
+#include <morph/qt_quick/theme.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/theme.hpp>
+#include <morph/ui/view.hpp>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -254,4 +265,812 @@ TEST_CASE("qt_quick dialog: an explicit Fixed width overrides the content-driven
     qreal const wideWidth = widePopup->property("width").toReal();
 
     CHECK(wideWidth > narrowWidth);
+}
+
+namespace {
+
+/// The first item named @p name under @p root, depth first.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+QQuickItem* namedIn(QQuickItem const& root, QString const& name) {
+    for (QQuickItem* const child : root.childItems()) {
+        if (child->objectName() == name) {
+            return child;
+        }
+        if (QQuickItem* const found = namedIn(*child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+/// The item named @p name at or below @p root, by its object name; null when there is none.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+QQuickItem* namedItem(QQuickItem* root, QString const& name) {
+    if (root == nullptr || root->objectName() == name) {
+        return root;
+    }
+    for (QQuickItem* const child : root->childItems()) {
+        if (QQuickItem* const found = namedItem(child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Mutation: leave the footer unstretched on a sheet (its action keeps its own width), or stretch it on a dialog too.
+TEST_CASE("qt_quick dialog: a sheet's footer action fills the sheet's width, a dialog's keeps its own", "[qt_quick]") {
+    Scene scene;
+    auto const dialog = scene.backend().createDialog(nullptr);
+    dialog->setTitle("Sign");
+    auto const body = scene.backend().createText(dialog.get());
+    body->setText("Sure?");
+    auto const sign = scene.backend().createButton(&dialog->footer());
+    sign->setLabel("Sign and approve");
+    dialog->setOpen(true);
+    scene.settle();
+    qreal const natural = Scene::itemOf(*sign).width();
+    CHECK(natural < 300);
+    dialog->setSheet(true);
+    scene.settle();
+    CHECK(Scene::itemOf(*sign).width() > 600);
+    dialog->setSheet(false);
+    scene.settle();
+    CHECK(Scene::itemOf(*sign).width() < 600);
+
+    // An overlay's actions arrive as a row of them, which shares the footer's width too.
+    auto const barred = scene.backend().createDialog(nullptr);
+    barred->setSheet(true);
+    auto const bar = scene.backend().createStack(&barred->footer(), ui::Axis::Horizontal);
+    auto const inBar = scene.backend().createButton(bar.get());
+    inBar->setLabel("Sign");
+    barred->setOpen(true);
+    scene.settle();
+    CHECK(Scene::itemOf(*inBar).width() > 600);
+
+    // A dialog that is a sheet before its footer holds anything stretches the action that arrives.
+    auto const first = scene.backend().createDialog(nullptr);
+    first->setSheet(true);
+    auto const late = scene.backend().createButton(&first->footer());
+    late->setLabel("Sign and approve");
+    first->setOpen(true);
+    scene.settle();
+    CHECK(Scene::itemOf(*late).width() > 600);
+}
+
+namespace {
+
+/// The space between @p first's right edge and @p second's left edge, in @p second's coordinates' parent-free scene.
+qreal gapBetween(QQuickItem const& first, QQuickItem const& second) {
+    return second.mapToScene(QPointF{0, 0}).x() - first.mapToScene(QPointF{first.width(), 0}).x();
+}
+
+}  // namespace
+
+// Mutation: ignore `setActionRow` in StackImpl (a row of actions keeps step 2 whatever the theme says), keep
+// `Theme.spaceOf(2)` in MorphFooter (the dialog's footer actions stay 8 px apart), or read the gap at 0 as no gap.
+TEST_CASE("qt_quick dialog: the theme's action gap spaces a footer's actions and an action row, and 0 keeps step 2",
+          "[qt_quick]") {
+    for (double const gap : {0.0, 12.0}) {
+        CAPTURE(gap);
+        Scene scene;
+        ui::ThemeValues values = ui::themeValues();
+        values.dimensions.insert_or_assign("actions.gap", gap);
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+        qreal const expected = gap > 0 ? gap : 8.0;
+
+        auto const dialog = scene.backend().createDialog(nullptr);
+        auto const body = scene.backend().createText(dialog.get());
+        body->setText("Sure? This text is long enough that the dialog is wider than its two actions together.");
+        auto const undo = scene.backend().createButton(&dialog->footer());
+        undo->setLabel("Undo");
+        auto const sign = scene.backend().createButton(&dialog->footer());
+        sign->setLabel("Confirm");
+        dialog->setOpen(true);
+
+        auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+        auto const row = scene.backend().createStack(column.get(), ui::Axis::Horizontal);
+        row->setActionRow();
+        row->setGap(2);
+        auto const back = scene.backend().createButton(row.get());
+        back->setLabel("Back");
+        auto const next = scene.backend().createButton(row.get());
+        next->setLabel("Continue");
+        auto const plain = scene.backend().createStack(column.get(), ui::Axis::Horizontal);
+        plain->setGap(2);
+        auto const left = scene.backend().createButton(plain.get());
+        left->setLabel("Back");
+        auto const right = scene.backend().createButton(plain.get());
+        right->setLabel("Continue");
+        scene.settle();
+
+        CHECK(gapBetween(Scene::itemOf(*undo), Scene::itemOf(*sign)) == Catch::Approx(expected).margin(0.5));
+        CHECK(gapBetween(Scene::itemOf(*back), Scene::itemOf(*next)) == Catch::Approx(expected).margin(0.5));
+        // A stack that is not a row of actions keeps its own step whatever the theme's gap.
+        CHECK(gapBetween(Scene::itemOf(*left), Scene::itemOf(*right)) == Catch::Approx(8.0).margin(0.5));
+    }
+}
+
+// Mutation: make the footer fill its area only while it stretches (a dialog's actions then sit at the footer's left).
+TEST_CASE("qt_quick dialog: a dialog's footer actions sit against the footer's right edge", "[qt_quick]") {
+    Scene scene;
+    auto const dialog = scene.backend().createDialog(nullptr);
+    dialog->setTitle("Sign");
+    auto const body = scene.backend().createText(dialog.get());
+    body->setText("Sure? This text is long enough that the dialog is wider than its two actions together.");
+    auto const undo = scene.backend().createButton(&dialog->footer());
+    undo->setLabel("Undo");
+    auto const sign = scene.backend().createButton(&dialog->footer());
+    sign->setLabel("Confirm");
+    dialog->setOpen(true);
+    scene.settle();
+    // The footer spans the content's width: its actions end at its right edge.
+    auto* const footer =
+        qvariant_cast<QQuickItem*>(Scene::itemOf(static_cast<ui::Widget&>(*dialog)).property("footer"));
+    REQUIRE(footer != nullptr);
+    qreal const right = footer->mapToScene(QPointF{footer->width(), 0}).x();
+    QQuickItem const& last = Scene::itemOf(*sign);
+    CHECK(last.mapToScene(QPointF{last.width(), 0}).x() == Catch::Approx(right).margin(1));
+    CHECK(Scene::itemOf(*undo).mapToScene(QPointF{0, 0}).x() > footer->mapToScene(QPointF{0, 0}).x() + 20);
+}
+
+// Mutation: draw the title in `strongFont`; draw no rule, or draw it while the footer holds nothing.
+TEMPLATE_TEST_CASE("qt_quick overlays: the title is heading-sized and a footer holding an action has a rule above it",
+                   "[qt_quick]", ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    std::unique_ptr<TestType> overlay;
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(nullptr);
+    } else {
+        overlay = scene.backend().createDrawer(nullptr, ui::Side::End);
+    }
+    overlay->setTitle("Sign the results");
+    auto const body = scene.backend().createText(overlay.get());
+    body->setText("Sure?");
+    overlay->setOpen(true);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QQuickItem const& contentRoot = *scene.window().contentItem();
+    QQuickItem const* const rule = namedIn(contentRoot, QStringLiteral("footerRule"));
+    REQUIRE(rule != nullptr);
+    CHECK_FALSE(rule->isVisible());
+    // The title is the visible label with the title's text.
+    QQuickItem const* title = nullptr;
+    for (QQuickItem const* const label : contentRoot.findChildren<QQuickItem*>()) {
+        if (label->property("text").toString() == QStringLiteral("Sign the results") && label->isVisible()) {
+            title = label;
+        }
+    }
+    REQUIRE(title != nullptr);
+    CHECK(title->property("font").value<QFont>() == theme->property("headingFont").value<QFont>());
+    auto const save = scene.backend().createButton(&overlay->footer());
+    save->setLabel("Done");
+    scene.settle();
+    CHECK(rule->isVisible());
+    CHECK(rule->height() == 1);
+    CHECK(rule->property("color").value<QColor>() == theme->property("divider").value<QColor>());
+}
+
+// Mutation: put the description inside the scroll's column (it then scrolls away); leave the scroll's cap without the
+// description's height (the footer is pushed past the window).
+TEMPLATE_TEST_CASE("qt_quick overlays: a description sits in the head under the title, ruled off and not scrolled",
+                   "[qt_quick]", ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    std::unique_ptr<TestType> overlay;
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(nullptr);
+    } else {
+        overlay = scene.backend().createDrawer(nullptr, ui::Side::End);
+    }
+    overlay->setTitle("Sign");
+    // Tall enough that a scroll area capped without it would push the footer past the window.
+    overlay->setDescription(
+        "Enter your password to sign the results.\nSecond line\nThird line\nFourth line\n"
+        "Fifth line\nSixth line\nSeventh line\nEighth line");
+    std::vector<std::unique_ptr<ui::TextWidget>> rows;
+    for (int i = 0; i < 60; ++i) {
+        rows.push_back(scene.backend().createText(overlay.get()));
+        rows.back()->setText("row " + std::to_string(i));
+    }
+    auto const save = scene.backend().createButton(&overlay->footer());
+    save->setLabel("Done");
+    overlay->setOpen(true);
+    scene.settle();
+    QQuickItem const& overlayItem = Scene::itemOf(static_cast<ui::Widget&>(*overlay));
+    QQuickItem const& contentRoot = *scene.window().contentItem();
+    QQuickItem const* const description = namedIn(contentRoot, QStringLiteral("description"));
+    QQuickItem const* const rule = namedIn(contentRoot, QStringLiteral("headRule"));
+    REQUIRE(description != nullptr);
+    REQUIRE(rule != nullptr);
+    CHECK(rule->isVisible());
+    QQuickItem const& first = Scene::itemOf(*rows.front());
+    qreal const descriptionY = description->mapToScene(QPointF{0, 0}).y();
+    CHECK(descriptionY + description->height() <= rule->mapToScene(QPointF{0, 0}).y());
+    CHECK(rule->mapToScene(QPointF{0, 0}).y() < first.mapToScene(QPointF{0, 0}).y());
+    // Scrolled to the end, the head stays put and the footer stays inside the window.
+    rows.back()->focus();
+    scene.settle();
+    CHECK(description->mapToScene(QPointF{0, 0}).y() == descriptionY);
+    QQuickItem const& button = Scene::itemOf(*save);
+    CHECK(button.mapToScene(QPointF{0, 0}).y() + button.height() <= 600);
+    // The content column is the overlay's accessible node, named by the title.
+    auto* const node = qobject_cast<QQuickItem*>(detail::baseOf(*overlay)->part("accessibleItem"));
+    REQUIRE(node != nullptr);
+    CHECK(overlayItem.property("accessibleName").toString() == QStringLiteral("Sign"));
+}
+
+// Mutation: ignore `sheet` in MorphDialog (the popup keeps its content's size and shows no dismiss button).
+TEST_CASE(
+    "qt_quick dialog: a sheet fills the window, its dismiss button dismisses once, and turning it off keeps "
+    "the content",
+    "[qt_quick]") {
+    Scene scene;
+    auto dialog = scene.backend().createDialog(nullptr);
+    dialog->setTitle("Sign to approve");
+    int dismissals = 0;
+    dialog->setOnDismiss([&dismissals] { ++dismissals; });
+    auto const input = scene.backend().createTextInput(dialog.get(), ui::TextInputMode::SingleLine);
+    dialog->setSheet(true);
+    dialog->setDismissLabel("Cancel");
+    dialog->setOpen(true);
+    scene.settle();
+    QObject const* const popup = popupOf(Scene::itemOf(static_cast<ui::Widget&>(*dialog)));
+    REQUIRE(popup != nullptr);
+    CHECK(popup->property("width").toReal() == scene.window().width());
+    CHECK(popup->property("height").toReal() == scene.window().height());
+    QQuickItem const* const dismiss = namedItem(scene.window().contentItem(), QStringLiteral("sheetDismiss"));
+    REQUIRE(dismiss != nullptr);
+    CHECK(dismiss->isVisible());
+    CHECK(dismiss->property("text").toString() == QStringLiteral("Cancel"));
+
+    // Escape still dismisses a sheet.
+    scene.key(Qt::Key_Escape);
+    CHECK(dismissals == 1);
+    dialog->setOpen(true);
+    scene.settle();
+
+    // Typed text survives turning the sheet off while it is open.
+    scene.click(Scene::itemOf(*input));
+    scene.type(QStringLiteral("abc"));
+    dialog->setSheet(false);
+    scene.settle();
+    CHECK(Scene::controlOf(*input).property("text").toString() == QStringLiteral("abc"));
+    CHECK(popup->property("width").toReal() < scene.window().width());
+    dialog->setSheet(true);
+    scene.settle();
+
+    scene.click(*dismiss);
+    CHECK(dismissals == 2);
+    CHECK_FALSE(dynamic_cast<detail::DialogImpl&>(*dialog).open());
+}
+
+namespace {
+
+// A popup's left and right edges in window coordinates; the popup is placed in its parent item's coordinates.
+struct Span {
+    qreal left = 0;
+    qreal right = 0;
+};
+
+Span spanOf(QObject const& popup) {
+    auto const* const parent = qobject_cast<QQuickItem*>(popup.property("parent").value<QObject*>());
+    REQUIRE(parent != nullptr);
+    qreal const left = parent->mapToScene(QPointF{popup.property("x").toReal(), 0}).x();
+    return {.left = left, .right = left + popup.property("width").toReal()};
+}
+
+// The popup `item` declares.
+QObject* firstPopup(QQuickItem& item) {
+    QObject* const found = popupOf(item);
+    REQUIRE(found != nullptr);
+    return found;
+}
+
+bool framedByMorph(QObject const& popup) {
+    auto const* const background = popup.property("background").value<QObject*>();
+    return background != nullptr && QString::fromLatin1(background->metaObject()->className())
+                                        .startsWith(QStringLiteral("MorphPopupBackground"));
+}
+
+// A button-style menu in a row across a 400 px window: at the row's start, or at its end with a unit of room after it.
+struct MenuAtEdge {
+    std::unique_ptr<ui::ContainerWidget> row;
+    std::vector<std::unique_ptr<ui::Widget>> fillers;
+    std::unique_ptr<ui::MenuWidget> menu;
+};
+
+MenuAtEdge menuAt(Scene& scene, bool atEnd) {
+    scene.window().resize(400, 300);
+    MenuAtEdge made;
+    made.row = scene.backend().createStack(nullptr, ui::Axis::Horizontal);
+    if (atEnd) {
+        made.fillers.push_back(scene.backend().createSpacer(made.row.get()));
+        made.fillers.back()->setLayout({.width = ui::Sizing::stretch()});
+    }
+    made.menu = scene.backend().createMenu(made.row.get(), ui::MenuStyle::Button);
+    made.menu->setTrigger({.label = "Actions"});
+    made.menu->setItems({{.label = "A rather long entry label"}, {.label = "Another entry"}});
+    made.fillers.push_back(scene.backend().createSpacer(made.row.get()));
+    made.fillers.back()->setLayout({.width = atEnd ? ui::Sizing::fixed(1) : ui::Sizing::stretch()});
+    scene.settle();
+    return made;
+}
+
+}  // namespace
+
+TEST_CASE("qt_quick overlays: a menu at the window's right edge opens ending at its trigger, inside the window",
+          "[qt_quick]") {
+    Scene scene;
+    auto const made = menuAt(scene, true);
+    QQuickItem& item = Scene::itemOf(*made.menu);
+    qreal const triggerRight = item.mapToScene(QPointF{item.width(), 0}).x();
+    REQUIRE(triggerRight > 380);
+    REQUIRE(triggerRight < 396);
+    QMetaObject::invokeMethod(&item, "openFromTrigger");
+    scene.settle();
+    QObject const& popup = *firstPopup(item);
+    REQUIRE(popup.property("visible").toBool());
+    Span const span = spanOf(popup);
+    CHECK(span.right == Catch::Approx(triggerRight).margin(1));
+    CHECK(span.right <= 400);
+    CHECK(span.left >= 0);
+    CHECK(framedByMorph(popup));
+}
+
+TEST_CASE("qt_quick overlays: a menu at the window's left edge opens starting at its trigger", "[qt_quick]") {
+    Scene scene;
+    auto const made = menuAt(scene, false);
+    QQuickItem& item = Scene::itemOf(*made.menu);
+    qreal const triggerLeft = item.mapToScene(QPointF{0, 0}).x();
+    QMetaObject::invokeMethod(&item, "openFromTrigger");
+    scene.settle();
+    Span const span = spanOf(*firstPopup(item));
+    // The popup keeps its margin from the window's edge, so a trigger flush with it starts the popup a margin in.
+    CHECK(span.left == Catch::Approx(triggerLeft).margin(4.5));
+    CHECK(span.left >= 0);
+}
+
+TEST_CASE("qt_quick overlays: a menu bar's popup opens under the entry that was chosen", "[qt_quick]") {
+    Scene scene;
+    auto menu = scene.backend().createMenu(nullptr, ui::MenuStyle::Bar);
+    menu->setItems({{.label = "File", .items = {{.label = "Open"}}},
+                    {.label = "Edit", .items = {{.label = "A rather long entry label"}}}});
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*menu);
+    QList<QQuickItem*> const buttons = Scene::itemsOf(item, "QQuickToolButton");
+    REQUIRE(buttons.size() == 2);
+    scene.click(*buttons.at(1));
+    QObject const& popup = *firstPopup(item);
+    REQUIRE(popup.property("visible").toBool());
+    CHECK(spanOf(popup).left == Catch::Approx(buttons.at(1)->mapToScene(QPointF{0, 0}).x()).margin(1));
+    CHECK(framedByMorph(popup));
+}
+
+TEST_CASE("qt_quick overlays: a dropdown select's list and a date input's calendar open inside the window",
+          "[qt_quick]") {
+    using ui::Align;
+    Scene scene;
+    scene.window().resize(400, 300);
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto select = scene.backend().createSelect(column.get(), ui::SelectStyle::Dropdown);
+    select->setOptions({{.key = std::string{"a"}, .label = "Alpha"}, {.key = std::string{"b"}, .label = "Beta"}});
+    select->setLayout({.alignSelf = Align::End});
+    auto date = scene.backend().createDateTimeInput(column.get(), ui::DateMode::Date, 0);
+    date->setLayout({.alignSelf = Align::Start});
+    scene.settle();
+    QQuickItem& selectItem = Scene::itemOf(*select);
+    QQuickItem* control = nullptr;
+    for (QQuickItem* const candidate : Scene::itemsOf(selectItem, "QQuickComboBox")) {
+        control = candidate;
+    }
+    REQUIRE(control != nullptr);
+    auto* const dropdown = control->property("popup").value<QObject*>();
+    REQUIRE(dropdown != nullptr);
+    QMetaObject::invokeMethod(dropdown, "open");
+    scene.settle();
+    REQUIRE(dropdown->property("visible").toBool());
+    Span const list = spanOf(*dropdown);
+    CHECK(list.left >= 0);
+    CHECK(list.right <= 400);
+    CHECK(framedByMorph(*dropdown));
+    QMetaObject::invokeMethod(dropdown, "close");
+
+    QMetaObject::invokeMethod(&Scene::itemOf(*date), "openPicker");
+    scene.settle();
+    auto const* const picker = scene.window().contentItem()->findChild<QObject*>(QStringLiteral("datePickerPopup"));
+    REQUIRE(picker != nullptr);
+    REQUIRE(picker->property("visible").toBool());
+    Span const calendar = spanOf(*picker);
+    CHECK(calendar.left >= 0);
+    CHECK(calendar.right <= 400);
+    CHECK(framedByMorph(*picker));
+}
+
+namespace {
+
+/// The `Theme` step @p step in px.
+qreal spaceOf(QObject& theme, int step) {
+    QVariantList const steps = theme.property("space").toList();
+    REQUIRE(step >= 0);
+    REQUIRE(static_cast<qsizetype>(step) < steps.size());
+    return steps.at(step).toReal();
+}
+
+/// The colour role @p role of the theme's card scheme, which a popup is drawn with.
+QColor cardRole(QObject& theme, char const* role) {
+    auto* const card = theme.property("cardScheme").value<QObject*>();
+    REQUIRE(card != nullptr);
+    return card->property(role).value<QColor>();
+}
+
+}  // namespace
+
+// Mutations: put the Basic style's content item back (the value sits 12 px in); take the popup's own frame out (the
+// style's plain Rectangle, radius 0); drop the row cap (all twelve rows show); draw the current option at
+// `Font.DemiBold` and without the check; take the palette's highlight for `scheme.hover`.
+TEST_CASE(
+    "qt_quick overlays: a select's value is inset a step of 2, and its list is a framed list of at most eight "
+    "rows with the current option marked",
+    "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 600);
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto select = scene.backend().createSelect(column.get(), ui::SelectStyle::Dropdown);
+    std::vector<ui::SelectOption> options;
+    for (int number = 1; number <= 12; ++number) {
+        options.push_back(
+            {.key = std::string{"o"} + std::to_string(number), .label = "Option " + std::to_string(number)});
+    }
+    select->setOptions(options);
+    select->setSelected(std::string{"o3"});
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    QQuickItem* control = nullptr;
+    for (QQuickItem* const candidate : Scene::itemsOf(Scene::itemOf(*select), "QQuickComboBox")) {
+        control = candidate;
+    }
+    REQUIRE(control != nullptr);
+    auto* const value = control->property("contentItem").value<QObject*>();
+    REQUIRE(value != nullptr);
+    CHECK(value->property("leftPadding").toReal() == spaceOf(*theme, 2));
+
+    auto* const popup = control->property("popup").value<QObject*>();
+    REQUIRE(popup != nullptr);
+    QMetaObject::invokeMethod(popup, "open");
+    scene.settle();
+    REQUIRE(popup->property("visible").toBool());
+    auto* const frame = popup->property("background").value<QObject*>();
+    REQUIRE(frame != nullptr);
+    CHECK(framedByMorph(*popup));
+    CHECK(frame->property("radius").toReal() == theme->property("radiusControl").toReal());
+    CHECK(frame->property("border").value<QObject*>()->property("color").value<QColor>() ==
+          cardRole(*theme, "divider"));
+
+    auto* const list = popup->property("contentItem").value<QQuickItem*>();
+    REQUIRE(list != nullptr);
+    qreal const row = theme->property("targetHeight").toReal() - 2;
+    qreal const inset = spaceOf(*theme, 1);
+    CHECK(popup->property("height").toReal() <= (8 * row) + (2 * inset) + 0.5);
+    CHECK(list->property("contentHeight").toReal() > list->height());
+
+    auto const optionAt = [&list](int index) {
+        QQuickItem* item = nullptr;
+        REQUIRE(QMetaObject::invokeMethod(list, "itemAtIndex", Qt::DirectConnection, qReturnArg(item), index));
+        REQUIRE(item != nullptr);
+        return item;
+    };
+    QQuickItem const* const current = optionAt(2);
+    QQuickItem* const other = optionAt(3);
+    CHECK(current->height() == row);
+    auto const currentFont = current->property("font").value<QFont>();
+    CHECK(static_cast<int>(currentFont.weight()) == theme->property("strongWeight").toInt());
+    CHECK(static_cast<int>(other->property("font").value<QFont>().weight()) == static_cast<int>(QFont::Normal));
+    auto const* const mark = current->findChild<QQuickItem*>(QStringLiteral("check"));
+    auto const* const otherMark = other->findChild<QQuickItem*>(QStringLiteral("check"));
+    REQUIRE(mark != nullptr);
+    REQUIRE(otherMark != nullptr);
+    CHECK(mark->isVisible());
+    CHECK_FALSE(otherMark->isVisible());
+
+    auto const* const fill = other->property("background").value<QQuickItem*>();
+    REQUIRE(fill != nullptr);
+    CHECK(fill->property("color").value<QColor>().alpha() == 0);
+    other->setProperty("highlighted", true);
+    scene.settle();
+    CHECK(fill->property("color").value<QColor>() == cardRole(*theme, "hover"));
+    CHECK(fill->property("radius").toReal() == theme->property("radiusBadge").toReal());
+}
+
+// Control: drop `Overlay.modal` from MorphDialog and MorphDrawer (no item named "scrim" exists, and the Basic style's
+// own dim shows).
+TEMPLATE_TEST_CASE("qt_quick overlays: a modal overlay dims the window behind it in color.scrim", "[qt_quick]",
+                   ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    std::unique_ptr<TestType> overlay;
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(nullptr);
+    } else {
+        overlay = scene.backend().createDrawer(nullptr, ui::Side::End);
+    }
+    overlay->setTitle("Confirm");
+    overlay->setOpen(true);
+    scene.settle();
+    auto const scrimColor = [&scene] {
+        // The modal item is a child item of the window's overlay, not a QObject child of it.
+        QList<QQuickItem const*> pending{scene.window().contentItem()};
+        while (!pending.isEmpty()) {
+            QQuickItem const* const node = pending.takeLast();
+            if (node->objectName() == QStringLiteral("scrim")) {
+                return node->property("color").value<QColor>();
+            }
+            for (QQuickItem const* const child : node->childItems()) {
+                pending.append(child);
+            }
+        }
+        FAIL("no scrim item");
+        return QColor{};
+    };
+    CHECK(scrimColor() == QColor{0, 0, 0, 0x4d});
+
+    ui::ThemeValues values = ui::themeValues();
+    values.colors.insert_or_assign("color.scrim", ui::Rgba{.r = 0x14, .g = 0x18, .b = 0x1f, .a = 0x59});
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    scene.settle();
+    CHECK(scrimColor() == QColor{0x14, 0x18, 0x1f, 0x59});
+}
+
+// Mutation: leave the rules inside the popup's padding (they start a step of 4 in and stop short of the right edge).
+TEMPLATE_TEST_CASE("qt_quick overlays: the head's and the footer's rules span the overlay", "[qt_quick]",
+                   ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    std::unique_ptr<TestType> overlay;
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(nullptr);
+    } else {
+        overlay = scene.backend().createDrawer(nullptr, ui::Side::End);
+    }
+    overlay->setTitle("Change");
+    overlay->setDescription("Why it changes");
+    auto const body = scene.backend().createText(overlay.get());
+    body->setText("Body");
+    auto const save = scene.backend().createButton(&overlay->footer());
+    save->setLabel("Save");
+    overlay->setOpen(true);
+    scene.settle();
+    QObject const* const popup = popupOf(Scene::itemOf(static_cast<ui::Widget&>(*overlay)));
+    REQUIRE(popup != nullptr);
+    auto* const background = popup->property("background").value<QQuickItem*>();
+    REQUIRE(background != nullptr);
+    for (char const* const name : {"headRule", "footerRule"}) {
+        INFO(name);
+        QQuickItem const* const rule = namedIn(*scene.window().contentItem(), QString::fromLatin1(name));
+        REQUIRE(rule != nullptr);
+        CHECK(rule->isVisible());
+        CHECK(rule->mapToItem(background, QPointF{0, 0}).x() == Catch::Approx(0).margin(0.5));
+        CHECK(rule->mapToItem(background, QPointF{rule->width(), 0}).x() ==
+              Catch::Approx(background->width()).margin(0.5));
+    }
+}
+
+// Mutation: leave the sheet's head as it was (the title left-aligned beside the dismiss button, no rule without a
+// description).
+TEST_CASE("qt_quick dialog: a sheet's title is centred on the sheet as plain characters, with a rule under the head",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(390, 600);
+    auto dialog = scene.backend().createDialog(nullptr);
+    dialog->setTitle("<b>Sign</b>");
+    dialog->setSheet(true);
+    dialog->setDismissLabel("Cancel");
+    auto const body = scene.backend().createText(dialog.get());
+    body->setText("Body");
+    dialog->setOpen(true);
+    scene.settle();
+    QQuickItem const* const title = namedIn(*scene.window().contentItem(), QStringLiteral("sheetTitle"));
+    REQUIRE(title != nullptr);
+    CHECK(title->property("text").toString() == QStringLiteral("<b>Sign</b>"));
+    CHECK(title->property("textFormat").toInt() == 0);  // Text.PlainText
+    qreal const centre = title->mapToScene(QPointF{title->width() / 2, 0}).x();
+    CHECK(centre == Catch::Approx(195).margin(1));
+    CHECK(title->property("horizontalAlignment").toInt() == Qt::AlignHCenter);
+    QQuickItem const* const rule = namedIn(*scene.window().contentItem(), QStringLiteral("headRule"));
+    REQUIRE(rule != nullptr);
+    CHECK(rule->isVisible());
+    CHECK(rule->mapToScene(QPointF{0, 0}).x() == Catch::Approx(0).margin(0.5));
+    CHECK(rule->mapToScene(QPointF{rule->width(), 0}).x() == Catch::Approx(390).margin(0.5));
+}
+
+// Mutation: drop the rules' margins (the gaps are the layout's 5 px), or leave the popup's bottom padding at step 4.
+TEMPLATE_TEST_CASE(
+    "qt_quick overlays: a rule stands step 3 off its neighbours and the actions sit step 3 off the edge", "[qt_quick]",
+    ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    std::unique_ptr<TestType> overlay;
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(nullptr);
+    } else {
+        overlay = scene.backend().createDrawer(nullptr, ui::Side::End);
+    }
+    overlay->setTitle("Sign the results");
+    overlay->setDescription("Enter your password to sign the results.");
+    auto const field = scene.backend().createTextInput(overlay.get(), ui::TextInputMode::SingleLine);
+    auto const done = scene.backend().createButton(&overlay->footer());
+    done->setLabel("Done");
+    auto const cancel = scene.backend().createButton(&overlay->footer());
+    cancel->setLabel("Cancel");
+    overlay->setOpen(true);
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    qreal const step = theme->property("space").value<QList<qreal>>().at(3);
+    QQuickItem const& contentRoot = *scene.window().contentItem();
+    QQuickItem const* const headRule = namedIn(contentRoot, QStringLiteral("headRule"));
+    QQuickItem const* const footerRule = namedIn(contentRoot, QStringLiteral("footerRule"));
+    REQUIRE((headRule != nullptr && footerRule != nullptr));
+    REQUIRE(footerRule->isVisible());
+    auto const top = [](QQuickItem const& item) { return item.mapToScene(QPointF{0, 0}).y(); };
+    auto const bottom = [&top](QQuickItem const& item) { return top(item) + item.height(); };
+    QQuickItem const& fieldItem = Scene::itemOf(*field);
+    QQuickItem const& doneItem = Scene::itemOf(*done);
+    QQuickItem const* const description = namedIn(contentRoot, QStringLiteral("description"));
+    REQUIRE(description != nullptr);
+    CHECK(top(fieldItem) == Catch::Approx(bottom(*headRule) + step).margin(0.6));
+    CHECK(top(*headRule) == Catch::Approx(bottom(*description) + step).margin(0.6));
+    if constexpr (std::is_same_v<TestType, ui::DialogWidget>) {
+        // A drawer's body fills its height, so only a dialog's footer follows its body closely.
+        CHECK(top(*footerRule) == Catch::Approx(bottom(fieldItem) + step).margin(0.6));
+    }
+    CHECK(top(doneItem) == Catch::Approx(bottom(*footerRule) + step).margin(0.6));
+    // The actions end where the content does, and the popup pads step 3 below them.
+    QObject const* const popup = popupOf(Scene::itemOf(static_cast<ui::Widget&>(*overlay)));
+    REQUIRE(popup != nullptr);
+    auto const* const popupContent = qobject_cast<QQuickItem const*>(popup->property("contentItem").value<QObject*>());
+    REQUIRE(popupContent != nullptr);
+    CHECK(bottom(Scene::itemOf(*cancel)) == Catch::Approx(bottom(*popupContent)).margin(0.6));
+    CHECK(popup->property("bottomPadding").toReal() == Catch::Approx(step));
+}
+
+namespace {
+
+template <typename Overlay>
+std::unique_ptr<Overlay> openedOverlay(Scene& scene) {
+    std::unique_ptr<Overlay> overlay;
+    if constexpr (std::is_same_v<Overlay, ui::DialogWidget>) {
+        overlay = scene.backend().createDialog(nullptr);
+    } else {
+        overlay = scene.backend().createDrawer(nullptr, ui::Side::End);
+    }
+    overlay->setTitle("Change");
+    overlay->setDescription("Why it changes");
+    auto const body = scene.backend().createText(overlay.get());
+    body->setText("Body");
+    auto const save = scene.backend().createButton(&overlay->footer());
+    save->setLabel("Save");
+    overlay->setOpen(true);
+    scene.settle();
+    return overlay;
+}
+
+}  // namespace
+
+// Mutation: draw the head's rule in the border colour, or the footer's in the theme-level divider while a card
+// surface redefines its own.
+TEMPLATE_TEST_CASE("qt_quick overlays: both rules draw the card's divider", "[qt_quick]", ui::DialogWidget,
+                   ui::DrawerWidget) {
+    Scene scene;
+    ui::ThemeValues values = ui::themeValues();
+    values.colors.insert_or_assign("color.divider", ui::Rgba{.r = 0x11, .g = 0x22, .b = 0x33, .a = 0xff});
+    values.colors.insert_or_assign("color.border", ui::Rgba{.r = 0x44, .g = 0x55, .b = 0x66, .a = 0xff});
+    ui::ThemeValues card = ui::themeValues();
+    card.colors.insert_or_assign("color.divider", ui::Rgba{.r = 0x77, .g = 0x88, .b = 0x99, .a = 0xff});
+    card.colors.insert_or_assign("color.border", ui::Rgba{.r = 0x44, .g = 0x55, .b = 0x66, .a = 0xff});
+    std::map<std::string, ui::ThemeValues, std::less<>> const surfaces{{"card", card}};
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values, surfaces).empty());
+    auto const overlay = openedOverlay<TestType>(scene);
+    for (char const* const name : {"headRule", "footerRule"}) {
+        INFO(name);
+        QQuickItem const* const rule = namedIn(*scene.window().contentItem(), QString::fromLatin1(name));
+        REQUIRE(rule != nullptr);
+        CHECK(rule->property("color").value<QColor>() == QColor{0x77, 0x88, 0x99});
+    }
+}
+
+// Mutation: draw the rules in the divider whatever the token, or read the token whether or not it is set (an unset
+// theme draws the default grey, not the card's divider).
+TEMPLATE_TEST_CASE("qt_quick overlays: the rules are color.dialogRule, and the card's divider while it is unset",
+                   "[qt_quick]", ui::DialogWidget, ui::DrawerWidget) {
+    for (bool const set : {false, true}) {
+        INFO("token set: " << set);
+        Scene scene;
+        ui::ThemeValues values = ui::themeValues();
+        values.colors.insert_or_assign("color.divider", ui::Rgba{.r = 0x11, .g = 0x22, .b = 0x33, .a = 0xff});
+        if (set) {
+            values.colors.insert_or_assign("color.dialogRule", ui::Rgba{.r = 0xE6, .g = 0xE9, .b = 0xED, .a = 0xff});
+        }
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+        auto const overlay = openedOverlay<TestType>(scene);
+        for (char const* const name : {"headRule", "footerRule"}) {
+            INFO(name);
+            QQuickItem const* const rule = namedIn(*scene.window().contentItem(), QString::fromLatin1(name));
+            REQUIRE(rule != nullptr);
+            CHECK(rule->property("color").value<QColor>() ==
+                  (set ? QColor{0xE6, 0xE9, 0xED} : QColor{0x11, 0x22, 0x33}));
+        }
+    }
+}
+
+// Mutation: draw the shadow as one rectangle (the layers are one, with no blur), give every layer the colour's full
+// alpha (the composite then exceeds it), or split the strength evenly over the layers (the outermost layer's alpha is
+// 1/16 of the shadow's).
+TEMPLATE_TEST_CASE("qt_quick overlays: the shadow is blurred, its layers growing outward and compositing to its alpha",
+                   "[qt_quick]", ui::DialogWidget, ui::DrawerWidget) {
+    Scene scene;
+    ui::ThemeValues values = ui::themeValues();
+    values.shadows.insert_or_assign("elevation.dialog",
+                                    ui::ThemeShadow{.color = ui::Rgba{.r = 20, .g = 24, .b = 31, .a = 128},
+                                                    .offsetX = 0,
+                                                    .offsetY = 18,
+                                                    .blur = 48,
+                                                    .spread = 0});
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    auto const overlay = openedOverlay<TestType>(scene);
+    QQuickItem const* const shadow = namedIn(*scene.window().contentItem(), QStringLiteral("dialogShadow"));
+    REQUIRE(shadow != nullptr);
+    std::vector<QQuickItem const*> layers;
+    for (QQuickItem const* const child : shadow->childItems()) {
+        if (child->property("radius").isValid()) {
+            layers.push_back(child);
+        }
+    }
+    REQUIRE(layers.size() == 16);
+    double uncovered = 1.0;
+    for (std::size_t index = 0; index < layers.size(); ++index) {
+        if (index > 0) {
+            CHECK(layers[index]->width() < layers[index - 1]->width());
+        }
+        uncovered *= 1.0 - static_cast<double>(layers[index]->property("color").value<QColor>().alphaF());
+    }
+    // The outermost layer reaches about two deviations (blur / 2 each) past the outline, the innermost as far inside.
+    CHECK(layers.front()->width() > shadow->width() + 24);
+    CHECK(layers.back()->width() < shadow->width());
+    CHECK(1.0 - uncovered == Catch::Approx(128.0 / 255.0).margin(0.01));
+    // The outermost layer adds a sliver of the shadow, far under the 1/16 a uniform split would give it, so the shadow
+    // fades out and ends in no visible edge.
+    CHECK(static_cast<double>(layers.front()->property("color").value<QColor>().alphaF()) < 0.005);
+}
+
+// Mutation: read the card's shadow (the dialog's shadow is the transparent card colour), or read the dialog's shadow
+// without the card fallback.
+TEMPLATE_TEST_CASE("qt_quick overlays: the shadow is elevation.dialog, and the card's while it is unset", "[qt_quick]",
+                   ui::DialogWidget, ui::DrawerWidget) {
+    ui::ThemeShadow const flat{.color = ui::Rgba{}, .offsetX = 0, .offsetY = 0, .blur = 0, .spread = 0};
+    ui::ThemeShadow const lifted{.color = ui::Rgba{.r = 0x10, .g = 0x20, .b = 0x30, .a = 0x40},
+                                 .offsetX = 0,
+                                 .offsetY = 6,
+                                 .blur = 12,
+                                 .spread = 0};
+    {
+        Scene scene;
+        ui::ThemeValues values = ui::themeValues();
+        values.shadows.insert_or_assign("elevation.card", flat);
+        values.shadows.insert_or_assign("elevation.dialog", lifted);
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+        auto const overlay = openedOverlay<TestType>(scene);
+        QQuickItem const* const shadow = namedIn(*scene.window().contentItem(), QStringLiteral("dialogShadow"));
+        REQUIRE(shadow != nullptr);
+        CHECK(shadow->property("color").value<QColor>() == QColor{0x10, 0x20, 0x30, 0x40});
+    }
+    {
+        Scene scene;
+        ui::ThemeValues values = ui::themeValues();
+        values.shadows.insert_or_assign("elevation.card", lifted);
+        REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+        auto const overlay = openedOverlay<TestType>(scene);
+        QQuickItem const* const shadow = namedIn(*scene.window().contentItem(), QStringLiteral("dialogShadow"));
+        REQUIRE(shadow != nullptr);
+        CHECK(shadow->property("color").value<QColor>() == QColor{0x10, 0x20, 0x30, 0x40});
+    }
 }

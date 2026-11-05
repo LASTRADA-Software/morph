@@ -29,6 +29,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "tui/chord.hpp"
@@ -38,6 +39,7 @@
 #include "tui/region_widgets.hpp"
 #include "tui/table_widget.hpp"
 #include "tui/widget.hpp"
+#include "tui_harness.hpp"
 
 namespace ui = morph::ui;
 using core::tui::KeyCode;
@@ -80,6 +82,9 @@ public:
 
     [[nodiscard]] std::string textOf(ui::Widget const& widget) override {
         return _fault == Fault::WrongText ? "?" : WidgetBase::of(widget).probeText();
+    }
+    [[nodiscard]] std::optional<std::string> descriptionOf(ui::Widget const& widget) override {
+        return WidgetBase::of(widget).accessibleDescription();
     }
     [[nodiscard]] bool visibleOf(ui::Widget const& widget) override { return WidgetBase::of(widget).userVisible(); }
     [[nodiscard]] bool enabledOf(ui::Widget const& widget) override { return WidgetBase::of(widget).enabled(); }
@@ -138,7 +143,15 @@ public:
     }
 
     // Esc: on a banner, which the probe focuses first; in a dialog or a drawer, whose opening moved the focus inside.
+    // Esc, as a dialog or a focused banner takes it; a removable badge is focused and removed with Delete.
     void dismiss(ui::Widget& widget) override {
+        if (dynamic_cast<morph::tui::detail::BadgeImpl*>(&WidgetBase::of(widget)) != nullptr) {
+            focusByClick(widget);
+            settle();
+            send(special(KeyCode::Delete));
+            settle();
+            return;
+        }
         if (dynamic_cast<morph::tui::detail::BannerImpl*>(&WidgetBase::of(widget)) != nullptr) {
             focusByClick(widget);
         }
@@ -177,6 +190,42 @@ public:
             }
         }
     }
+    // A mouse click on the row's drawn cell, with Ctrl or Shift held as the terminal reports it in SGR mouse mode.
+    void clickRow(ui::Widget& table, std::size_t row, ui::RowClick click) override {
+        settle();
+        ui::Widget const* const rowWidget = childAt(dynamic_cast<ui::ContainerWidget&>(table), row);
+        auto const cell = rowWidget == nullptr ? std::nullopt : drawnCell(*rowWidget);
+        if (!cell || _fault == Fault::DeadInput) {
+            return;
+        }
+        Modifier modifiers = Modifier::None;
+        if (click == ui::RowClick::Toggle) {
+            modifiers = Modifier::Ctrl;
+        } else if (click == ui::RowClick::Range) {
+            modifiers = Modifier::Shift;
+        }
+        send(core::tui::MouseEvent{
+            .type = Type::Press, .button = 0, .x = cell->x + 1, .y = cell->y + 1, .modifiers = modifiers});
+        send(core::tui::MouseEvent{
+            .type = Type::Release, .button = 0, .x = cell->x + 1, .y = cell->y + 1, .modifiers = modifiers});
+        settle();
+    }
+    // A mouse click on the header line, over the column's first cell: the header sits on the line above the rows.
+    void clickHeader(ui::Widget& table, std::size_t column) override {
+        settle();
+        auto const* const container = dynamic_cast<ui::ContainerWidget*>(&table);
+        ui::Widget const* const firstRow = container == nullptr ? nullptr : childAt(*container, 0);
+        auto const* const rowContainer = dynamic_cast<ui::ContainerWidget const*>(firstRow);
+        ui::Widget const* const cell = rowContainer == nullptr ? nullptr : childAt(*rowContainer, column);
+        auto const at = cell == nullptr ? std::nullopt : drawnCell(*cell);
+        auto const top = drawnCell(table);
+        if (!at || !top || _fault == Fault::DeadInput) {
+            return;
+        }
+        send(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = at->x + 1, .y = top->y + 1});
+        send(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = at->x + 1, .y = top->y + 1});
+        settle();
+    }
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         return tableOf(table).markedRows();
     }
@@ -212,6 +261,28 @@ public:
     // Backspace back to the top level, then a click on each level's row: a submenu's opens it, a leaf's chooses it.
     void chooseMenuEntry(ui::Widget& menu, std::vector<std::size_t> const& path) override {
         settle();
+        // A button-style menu: a click on the trigger opens the list, from its top, and each index is a click on that
+        // row of the list. A list left open by an earlier path is closed first.
+        if (auto const* const button =
+                dynamic_cast<morph::tui::detail::MenuButtonImpl const*>(&WidgetBase::of(menu))) {
+            if (button->isOpen()) {
+                send(special(KeyCode::Escape));
+                settle();
+            }
+            click(menu);
+            for (std::size_t const index : path) {
+                auto const* const popup = button->openPopup();
+                if (popup == nullptr) {
+                    return;
+                }
+                auto const area = popup->screenBounds();
+                int const row = area.y + static_cast<int>(index);
+                send(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = area.x + 1, .y = row + 1});
+                send(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = area.x + 1, .y = row + 1});
+                settle();
+            }
+            return;
+        }
         auto const* const impl = dynamic_cast<morph::tui::detail::MenuImpl const*>(&WidgetBase::of(menu));
         if (impl != nullptr && !impl->level().empty() && focus(menu)) {
             for (std::size_t depth = impl->level().size(); depth > 0; --depth) {
@@ -260,6 +331,29 @@ public:
         return ui::testing::WidgetBounds{.x = static_cast<double>(bounds.x),
                                          .y = static_cast<double>(bounds.y),
                                          .width = static_cast<double>(bounds.width),
+                                         .height = static_cast<double>(bounds.height)};
+    }
+
+    // In cells: the box around the non-blank cells the widget drew, read from the last frame.
+    std::optional<ui::testing::WidgetBounds> textExtentOf(ui::Widget const& widget) override {
+        settle();
+        auto const bounds = WidgetBase::of(widget).view().screenBounds();
+        std::vector<std::string> const rows = morph::tui::testing::rowsOf(_screen);
+        int left = bounds.x + bounds.width;
+        int right = bounds.x;
+        for (int row = bounds.y; row < bounds.y + bounds.height && std::cmp_less(row, rows.size()); ++row) {
+            std::string const& line = rows.at(static_cast<std::size_t>(row));
+            for (int column = bounds.x; column < bounds.x + bounds.width && std::cmp_less(column, line.size());
+                 ++column) {
+                if (line.at(static_cast<std::size_t>(column)) != ' ') {
+                    left = std::min(left, column);
+                    right = std::max(right, column + 1);
+                }
+            }
+        }
+        return ui::testing::WidgetBounds{.x = static_cast<double>(left),
+                                         .y = static_cast<double>(bounds.y),
+                                         .width = static_cast<double>(std::max(0, right - left)),
                                          .height = static_cast<double>(bounds.height)};
     }
 

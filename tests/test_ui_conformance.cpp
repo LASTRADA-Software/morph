@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <morph/reactive/runtime.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/testing/backend_conformance.hpp>
@@ -12,6 +14,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -78,14 +81,47 @@ ui::Key parseKey(std::string_view text) {
     return ui::Key{std::int64_t{std::stoll(std::string{text})}};
 }
 
+// The characters of runs as `formatSpans` records them: each run's text up to its first unescaped `;`, joined.
+std::string spansText(std::string_view recorded) {
+    std::string joined;
+    std::string_view const inner = recorded.substr(1, recorded.size() - 2);
+    bool flags = false;
+    for (std::size_t i = 0; i < inner.size(); ++i) {
+        char const character = inner.at(i);
+        if (character == '\\' && i + 1 < inner.size()) {
+            if (!flags) {
+                joined += unescape(inner.substr(i, 2));
+            }
+            ++i;
+        } else if (character == ',') {
+            flags = false;
+        } else if (character == ';') {
+            flags = true;
+        } else if (!flags) {
+            joined += character;
+        }
+    }
+    return joined;
+}
+
 // How a probe, or the backend behind it, breaks the contract on purpose. A suite that passes a correct backend
 // measures something only if it fails a broken one.
 enum class Fault : std::uint8_t {
-    None,           // the reference probe
-    NoChildren,     // a container reports its children but hands none of them out
-    WrongText,      // every widget reads as showing other text
-    DeadInput,      // user actions never reach the widgets
-    EchoingSelect,  // the backend's Select reports a choice when its options are replaced
+    None,            // the reference probe
+    NoChildren,      // a container reports its children but hands none of them out
+    WrongText,       // every widget reads as showing other text
+    DeadInput,       // user actions never reach the widgets
+    EchoingSelect,   // the backend's Select reports a choice when its options are replaced
+    NoModifiers,     // a click on a table row arrives without its modifiers, as a plain click
+    NarrowBadge,     // a badge sized by a fixed or percent width is laid out narrower than its label
+    OverlappedText,  // the text after a badge starts inside it
+    TinyBounds,      // every widget is 5 units wide
+    HugeBounds,      // every widget is 40 units wide
+    HollowGrid,      // a grid reports no cells
+    SecondMissing,   // a column hands out only its first child
+    HollowNarrow,    // a row whose first child is sized by a fixed or percent width reports no children
+    HollowNatural,   // a row whose first child is sized by its content reports no children
+    NarrowStretch,   // a button sized by a stretch width is laid out narrower than its label
 };
 
 // The reference probe: what a TUI or Qt Quick probe does with a rendered screen or a QQuickItem tree, this one does
@@ -100,6 +136,32 @@ public:
     morph::reactive::Runtime& runtime() override { return _rt; }
     void settle() override { _owner.runAll(); }
 
+    // Only the narrow-badge fault reads geometry: a badge told a fixed or percent width is 5 units wide against 11 for
+    // its content, and the text after it starts at 2, inside it.
+    [[nodiscard]] std::optional<ui::testing::WidgetBounds> boundsOf(ui::Widget const& widget) override {
+        if (_fault == Fault::TinyBounds || _fault == Fault::HugeBounds) {
+            return ui::testing::WidgetBounds{
+                .x = 0, .y = 0, .width = _fault == Fault::TinyBounds ? 5.0 : 40.0, .height = 1};
+        }
+        if (_fault == Fault::NarrowStretch) {
+            int const buttonId = _backend.idOf(widget);
+            bool const narrow =
+                _backend.kindOf(buttonId) == "Button" && _backend.prop(buttonId, "layout").starts_with("stretch");
+            return ui::testing::WidgetBounds{.x = 0, .y = 0, .width = narrow ? 5.0 : 20.0, .height = 1};
+        }
+        if (_fault != Fault::NarrowBadge && _fault != Fault::OverlappedText) {
+            return std::nullopt;
+        }
+        int const widgetId = _backend.idOf(widget);
+        std::string const layout = _backend.prop(widgetId, "layout");
+        bool const sized =
+            _fault == Fault::NarrowBadge && (layout.starts_with("fixed") || layout.starts_with("percent"));
+        if (_backend.kindOf(widgetId) == "Badge") {
+            return ui::testing::WidgetBounds{.x = 0, .y = 0, .width = sized ? 5.0 : 11.0, .height = 1};
+        }
+        return ui::testing::WidgetBounds{.x = 2, .y = 0, .width = 20, .height = 1};
+    }
+
     [[nodiscard]] std::string textOf(ui::Widget const& widget) override {
         if (_fault == Fault::WrongText) {
             return "?";
@@ -109,7 +171,37 @@ public:
         if (kind == "Select") {
             return markedLabel(widgetId);
         }
-        return unescape(_backend.prop(widgetId, kind == "Button" || kind == "Checkbox" ? "label" : "text"));
+        if (std::string const spans = _backend.prop(widgetId, "spans"); !spans.empty()) {
+            return spansText(spans);
+        }
+        if (kind == "Tabs") {
+            return highlightedLabel(widgetId);
+        }
+        if (kind == "Chart") {
+            return unescape(_backend.prop(widgetId, "summary"));
+        }
+        if (kind == "Steps") {
+            return currentStepLabel(widgetId);
+        }
+        return unescape(
+            _backend.prop(widgetId, kind == "Button" || kind == "Checkbox" || kind == "Menu" ? "label" : "text"));
+    }
+    // A field's messages, then its description, as assistive technology would read them.
+    [[nodiscard]] std::optional<std::string> descriptionOf(ui::Widget const& widget) override {
+        int const widgetId = _backend.idOf(widget);
+        // A field's messages, then its description; an overlay has only its description.
+        std::vector<std::string> lines;
+        for (std::string const& error : listItems(_backend.prop(widgetId, "errors"))) {
+            lines.push_back(unescape(error));
+        }
+        if (std::string const description = unescape(_backend.prop(widgetId, "description")); !description.empty()) {
+            lines.push_back(description);
+        }
+        std::string joined;
+        for (std::string const& line : lines) {
+            joined += (joined.empty() ? "" : "\n") + line;
+        }
+        return joined;
     }
     [[nodiscard]] bool visibleOf(ui::Widget const& widget) override {
         return _backend.prop(_backend.idOf(widget), "visible") != "false";
@@ -118,13 +210,28 @@ public:
         return _backend.prop(_backend.idOf(widget), "enabled") != "false";
     }
     [[nodiscard]] std::size_t childCount(ui::ContainerWidget const& container) override {
-        return _backend.children(_backend.idOf(container)).size();
+        int const id = _backend.idOf(container);
+        if (_fault == Fault::HollowGrid && _backend.kindOf(id) == "Grid") {
+            return 0;
+        }
+        if ((_fault == Fault::HollowNarrow || _fault == Fault::HollowNatural) && _backend.kindOf(id) == "Row" &&
+            !_backend.children(id).empty()) {
+            std::string const layout = _backend.prop(_backend.children(id).front(), "layout");
+            bool const content = layout.empty() || layout.starts_with("content");
+            if (content == (_fault == Fault::HollowNatural)) {
+                return 0;
+            }
+        }
+        return _backend.children(id).size();
     }
     [[nodiscard]] ui::Widget* childAt(ui::ContainerWidget const& container, std::size_t index) override {
         if (_fault == Fault::NoChildren) {
             return nullptr;
         }
         auto const children = _backend.children(_backend.idOf(container));
+        if (_fault == Fault::SecondMissing && index == 1 && _backend.kindOf(_backend.idOf(container)) == "Column") {
+            return nullptr;
+        }
         return index < children.size() ? _backend.widget(children.at(index)) : nullptr;
     }
     void click(ui::Widget& widget) override {
@@ -165,6 +272,19 @@ public:
             keys.push_back(parseKey(_backend.prop(children.at(row), "rowKey")));
         }
         _backend.selectRows(tableId, std::move(keys));
+    }
+    void clickRow(ui::Widget& table, std::size_t row, ui::RowClick click) override {
+        if (_fault == Fault::DeadInput) {
+            return;
+        }
+        int const tableId = _backend.idOf(table);
+        ui::Key const key = parseKey(_backend.prop(_backend.children(tableId).at(row), "rowKey"));
+        _backend.clickRow(tableId, key, _fault == Fault::NoModifiers ? ui::RowClick::Only : click);
+    }
+    void clickHeader(ui::Widget& table, std::size_t column) override {
+        if (_fault != Fault::DeadInput) {
+            _backend.clickHeader(_backend.idOf(table), column);
+        }
     }
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         int const tableId = _backend.idOf(table);
@@ -217,6 +337,34 @@ private:
         return {};
     }
 
+    // The label of the tab `selected` highlights, from `tabs`' elements; empty when it highlights none.
+    [[nodiscard]] std::string highlightedLabel(int tabsId) const {
+        std::string const selected = _backend.prop(tabsId, "selected");
+        std::size_t index = 0;
+        char const* const first = selected.data();
+        if (std::from_chars(first, std::next(first, std::ssize(selected)), index).ec != std::errc{}) {
+            return {};
+        }
+        std::vector<std::string> const labels = listItems(_backend.prop(tabsId, "tabs"));
+        return index < labels.size() ? unescape(labels.at(index)) : std::string{};
+    }
+
+    // The label of a steps indicator's current step: the entries read `label:State`.
+    [[nodiscard]] std::string currentStepLabel(int stepsId) const {
+        std::string const current = _backend.prop(stepsId, "current");
+        std::size_t index = 0;
+        char const* const first = current.data();
+        if (std::from_chars(first, std::next(first, std::ssize(current)), index).ec != std::errc{}) {
+            return {};
+        }
+        std::vector<std::string> const entries = listItems(_backend.prop(stepsId, "steps"));
+        if (index >= entries.size()) {
+            return {};
+        }
+        std::string const& entry = entries.at(index);
+        return unescape(entry.substr(0, entry.rfind(':')));
+    }
+
     Fault _fault;
     morph::testing::StepExecutor _owner;
     morph::testing::EchoingBackend _echoing;
@@ -241,6 +389,8 @@ public:
     void drag(ui::Widget&, ui::Widget&) override {}
     void dismiss(ui::Widget&) override {}
     void selectRows(ui::Widget&, std::vector<std::size_t> const&) override {}
+    void clickRow(ui::Widget&, std::size_t, ui::RowClick) override {}
+    void clickHeader(ui::Widget&, std::size_t) override {}
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const&) override { return {}; }
     void moveCursor(ui::Widget&, std::size_t) override {}
     [[nodiscard]] std::size_t cursorOf(ui::Widget const&) override { return 0; }
@@ -272,7 +422,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 34);
+    REQUIRE(cases.size() == 56);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -314,7 +464,9 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
     for (std::string_view const name :
          {"a Text shows its constant text", "a bound Text updates once per batch and not for an equal write",
           "a Switch shows the selected case and nothing for a key without one",
-          "a text field shows what the document makes of an edit"}) {
+          "a text field shows what the document makes of an edit",
+          "a button-style menu reports the entry past a separator, and never the separator",
+          "a chart shows its current summary"}) {
         INFO(name);
         CHECK(wrongText.contains(name));
     }
@@ -328,12 +480,30 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
           "a dismissal the document refuses leaves the dialog open",
           "a chord goes to the innermost widget that declares it",
           "a chord pressed inside a hidden container runs nothing",
-          "a menu reports only an enabled entry without a submenu", "a read-only input takes no edit",
+          "a chord the focused widget declares comes before its own key",
+          "a focused button takes Enter before its ancestors' chords",
+          "a submitting field in a dialog takes Enter from the dialog",
+          "a field without a submit commits on Enter and lets the dialog have it",
+          "a check box toggles on Space and lets the dialog have Enter",
+          "a field's own Enter chord comes before its commit and submit",
+          "a menu reports only an enabled entry without a submenu",
+          "a read-only input takes no edit",
           "a dismissed banner reports it and stays shown",
           "a closed collapsible's content takes no input, its header does",
-          "a drop zone takes a drop whole or refuses it whole"}) {
+          "a drop zone takes a drop whole or refuses it whole",
+          "a click on a sortable header asks to sort by it, and no other header or setter does",
+          "a button-style menu reports the entry past a separator, and never the separator",
+          "a removable badge reports its removal once"}) {
         INFO(name);
         CHECK(deadInput.contains(name));
+    }
+
+    std::set<std::string_view> const noModifiers = failingCases(Fault::NoModifiers);
+    for (std::string_view const name :
+         {"a click selects only its row, and a Ctrl-click toggles one and keeps the rest",
+          "a Shift-click selects the rows from the anchor, in place of the rest"}) {
+        INFO(name);
+        CHECK(noModifiers.contains(name));
     }
 
     // Only the setter case is run against the echoing backend: the probe reads widgets through the recording
@@ -368,4 +538,116 @@ TEST_CASE("ui conformance: a probe that drives and reads nothing fails every cas
     }
     CHECK(passed ==
           std::set<std::string>{"a drag onto a refusing target delivers nothing", "no setter calls a handler"});
+}
+
+// Mutation: make `badgeRaisedTo` check nothing (the narrow badge, or the text inside it, passes).
+TEST_CASE("ui conformance: the badge cases flag a badge laid out narrower than its label, or text inside it",
+          "[ui][conformance]") {
+    std::size_t cases = 0;
+    for (auto const& testCase : ui::testing::layoutConformanceCases()) {
+        if (!std::string_view{testCase.name}.contains("below its label")) {
+            continue;
+        }
+        ++cases;
+        INFO(testCase.name);
+        RecordingProbe narrow{Fault::NarrowBadge};
+        std::optional<std::string> const tooNarrow = testCase.run(narrow);
+        REQUIRE(tooNarrow.has_value());
+        CHECK(tooNarrow->contains("against its content width"));
+        for (Fault const fault :
+             {Fault::NoChildren, Fault::SecondMissing, Fault::HollowNarrow, Fault::HollowNatural}) {
+            RecordingProbe broken{fault};
+            std::optional<std::string> const failure = testCase.run(broken);
+            INFO(static_cast<int>(fault));
+            REQUIRE(failure.has_value());
+            CHECK(failure->contains("two rows of a badge and a text"));
+        }
+        RecordingProbe overlapped{Fault::OverlappedText};
+        std::optional<std::string> const inside = testCase.run(overlapped);
+        REQUIRE(inside.has_value());
+        CHECK(inside->contains("inside the badge"));
+    }
+    CHECK(cases == 2);
+}
+
+// Mutation: make the three cases check nothing (a grid, or a key-value, laid out wrongly passes).
+TEST_CASE("ui conformance: the grid and key-value width cases flag a wrong size and a missing cell",
+          "[ui][conformance]") {
+    std::size_t cases = 0;
+    for (auto const& testCase : ui::testing::layoutConformanceCases()) {
+        std::string_view const name{testCase.name};
+        bool const grid =
+            name.contains("grid's columns without tracks") || name.contains("content-sized grid without");
+        if (!grid && !name.contains("caption width sets")) {
+            continue;
+        }
+        ++cases;
+        INFO(testCase.name);
+        for (Fault const fault : {Fault::TinyBounds, Fault::HugeBounds, Fault::NoChildren}) {
+            RecordingProbe probe{fault};
+            CHECK(testCase.run(probe).has_value());
+        }
+        if (grid) {
+            RecordingProbe hollow{Fault::HollowGrid};
+            CHECK(testCase.run(hollow).has_value());
+        }
+    }
+    CHECK(cases == 3);
+}
+
+// Mutation: make the five least-column-width cases check nothing (a grid that ignores the key, drops no column or
+// leaves the text after it overlapping passes).
+TEST_CASE("ui conformance: the grid least-column-width cases flag a wrong size, a missing cell and a hollow grid",
+          "[ui][conformance]") {
+    std::set<std::string_view> const names{"a grid's columns follow its width when it gives a least column width",
+                                           "a grid keeps all its columns when its width holds them exactly",
+                                           "a grid narrower than one least column shows one column",
+                                           "a grid's gap counts in how many least columns fit",
+                                           "a grid whose columns drop grows down and pushes what follows it"};
+    std::size_t cases = 0;
+    for (auto const& testCase : ui::testing::layoutConformanceCases()) {
+        if (!names.contains(testCase.name)) {
+            continue;
+        }
+        ++cases;
+        INFO(testCase.name);
+        for (Fault const fault : {Fault::TinyBounds, Fault::HugeBounds, Fault::NoChildren, Fault::HollowGrid}) {
+            RecordingProbe probe{fault};
+            INFO(static_cast<int>(fault));
+            CHECK(testCase.run(probe).has_value());
+        }
+    }
+    CHECK(cases == 5);
+}
+
+// Mutation: make the stretch cases check nothing (a row that shares by content, a row that sums its naturals or a
+// button narrowed below its label passes).
+TEST_CASE("ui conformance: the stretch cases flag a wrong width, a missing child and a narrowed button",
+          "[ui][conformance]") {
+    std::set<std::string_view> const names{
+        "two stretch siblings of weight 1 share a row equally, whatever their content",
+        "stretch siblings share a row in proportion to their weights",
+        "a content-sized row of stretch children gives each its natural width",
+        "a stretch row nested in a content-sized stretch row keeps its children's naturals",
+        "a stretch child held at its minimum leaves the others to share the rest",
+        "a content-sized spacer shares a row as a stretch child of weight 1",
+        "stretch-height children share a column by weight, whatever their content",
+        "a stretch push button keeps its label's width"};
+    std::size_t cases = 0;
+    for (auto const& testCase : ui::testing::layoutConformanceCases()) {
+        if (!names.contains(testCase.name)) {
+            continue;
+        }
+        ++cases;
+        INFO(testCase.name);
+        RecordingProbe none{Fault::NoChildren};
+        CHECK(testCase.run(none).has_value());
+        RecordingProbe tiny{Fault::TinyBounds};
+        RecordingProbe huge{Fault::HugeBounds};
+        RecordingProbe narrow{Fault::NarrowStretch};
+        bool const flagged =
+            testCase.run(tiny).has_value() || testCase.run(huge).has_value() || testCase.run(narrow).has_value();
+        CHECK(flagged);
+    }
+    CHECK(cases == names.size());
 }

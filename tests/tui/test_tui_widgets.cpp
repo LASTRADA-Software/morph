@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <core/tui/InputEvent.hpp>
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Rect.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <morph/ui/backend.hpp>
@@ -29,6 +31,81 @@ using morph::tui::detail::TextImpl;
 using morph::tui::testing::Harness;
 using morph::tui::testing::ResizableOutput;
 using Rows = std::vector<std::string>;
+
+// Mutation: ignore `setSize` in ButtonImpl (the small button keeps its inner spaces).
+TEST_CASE("tui widgets: a small push button drops the spaces inside its brackets", "[tui][widgets]") {
+    Harness harness{20, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const small = harness.make<ButtonImpl>(column.get());
+    small->setLabel("S1");
+    small->setSize(ui::ButtonSize::Small);
+    small->setShape(ui::ControlShape::Round);
+    small->setMono(true);
+    auto const normal = harness.make<ButtonImpl>(column.get());
+    normal->setLabel("S1");
+    CHECK(harness.draw() == Rows{"[S1]", "[ S1 ]"});
+}
+
+// Mutation: ignore `setWeight` in ButtonImpl (the caption is not bold), or bold from 700 (the 600 caption is plain).
+TEST_CASE("tui widgets: a button weight of 600 or more draws its caption bold, a lighter one plain",
+          "[tui][widgets]") {
+    Harness harness{20, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const semi = harness.make<ButtonImpl>(column.get());
+    semi->setLabel("S1");
+    semi->setWeight(600);
+    auto const light = harness.make<ButtonImpl>(column.get());
+    light->setLabel("S2");
+    light->setEmphasis(ui::ButtonEmphasis::Primary);
+    light->setWeight(500);
+    static_cast<void>(harness.draw());
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 2).style.bold);
+    CHECK_FALSE(buffer.at(1, 2).style.bold);
+}
+
+// Mutation: ignore the alignment in TextImpl::paintControl (each line starts at cell 0).
+TEST_CASE("tui widgets: a text places each of its lines at its alignment within its width", "[tui][widgets][align]") {
+    Harness harness{20, 4};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const ended = harness.make<TextImpl>(column.get());
+    ended->setText("abc");
+    ended->setAlign(ui::TextAlign::End);
+    auto const centred = harness.make<TextImpl>(column.get());
+    centred->setText("abcd");
+    centred->setAlign(ui::TextAlign::Center);
+    auto const lines = harness.make<TextImpl>(column.get());
+    lines->setText("abcdef\nab");
+    lines->setAlign(ui::TextAlign::End);
+    CHECK(harness.draw() ==
+          Rows{"                 abc", "        abcd", "              abcdef", "                  ab"});
+}
+
+// Mutation: paint runs from column 0 whatever the alignment, or measure the line without its strong run.
+TEST_CASE("tui widgets: a text with runs is placed by the width of all its runs", "[tui][widgets][align]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const runs = harness.make<TextImpl>(column.get());
+    runs->setSpans(
+        {ui::TextSpan{.text = "a "}, ui::TextSpan{.text = "b", .strong = true}, ui::TextSpan{.text = " c"}});
+    runs->setAlign(ui::TextAlign::End);
+    auto const multi = harness.make<TextImpl>(column.get());
+    multi->setSpans({ui::TextSpan{.text = "xyz\nx"}});
+    multi->setAlign(ui::TextAlign::End);
+    // "a b c" is five cells wide, so it starts at cell 15.
+    CHECK(harness.draw() == Rows{"               a b c", "                 xyz", "                   x"});
+}
+
+// Mutation: place the required mark at the end of the unaligned text (cell 3, inside the aligned text's cells).
+TEST_CASE("tui widgets: a required text's mark follows its aligned text", "[tui][widgets][align]") {
+    Harness harness{20, 1};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const note = harness.make<TextImpl>(column.get());
+    note->setText("abc");
+    note->setRequired(true);
+    note->setAlign(ui::TextAlign::Center);
+    CHECK(harness.draw() == Rows{"        abc *"});
+}
 
 TEST_CASE("tui widgets: a column renders its children top to bottom", "[tui][widgets]") {
     Harness harness{20, 4};
@@ -171,7 +248,8 @@ TEST_CASE("tui widgets: Enter, Space and a click activate a button; a disabled o
     CHECK(clicks == 3);
 }
 
-TEST_CASE("tui widgets: a checkbox toggles on Enter and reports the new state; setChecked reports nothing",
+// Mutation: activate the checkbox on Enter too (Enter then toggles it).
+TEST_CASE("tui widgets: a checkbox toggles on Space, not Enter, and reports the new state; setChecked reports nothing",
           "[tui][widgets]") {
     Harness harness{20, 1};
     auto const box = harness.make<CheckboxImpl>(nullptr);
@@ -181,7 +259,9 @@ TEST_CASE("tui widgets: a checkbox toggles on Enter and reports the new state; s
     box->setOnToggle([&](bool checked) { toggles.push_back(checked); });
     CHECK(harness.draw() == Rows{"[ ] Done"});
     harness.focus(*box);
-    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
+    CHECK(toggles.empty());
+    static_cast<void>(harness.type(" "));
     CHECK(toggles == std::vector<bool>{true});
     CHECK(harness.draw() == Rows{"[x] Done"});
     box->setChecked(false);
@@ -276,12 +356,12 @@ TEST_CASE("tui widgets: a focused widget inside a hidden container takes no key 
     harness.focus(*box);
 
     outer->setVisible(false);
-    CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
+    CHECK(harness.type(" ") == EventResult::Ignored);
     CHECK(toggles.empty());
     CHECK(harness.draw().empty());
 
     outer->setVisible(true);
-    CHECK(harness.key(KeyCode::Enter) == EventResult::Handled);
+    CHECK(harness.type(" ") == EventResult::Handled);
     CHECK(toggles == std::vector<bool>{true});
 }
 
@@ -460,7 +540,7 @@ TEST_CASE("tui widgets: no handler runs after its widget was destroyed", "[tui][
 TEST_CASE("tui widgets: with column extents, a hidden child keeps its slot", "[tui][widgets]") {
     Harness harness{20, 1};
     auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
-    row->setColumnLayout({3, 3, 3}, 1);
+    row->setColumnLayout({3, 3, 3}, 1, {});
     auto const first = harness.make<TextImpl>(row.get());
     first->setText("a");
     auto const second = harness.make<TextImpl>(row.get());
@@ -551,10 +631,12 @@ TEST_CASE("tui widgets: a child squeezed out of a row takes no click at its old 
     int clicks = 0;
     auto const text = harness.make<TextImpl>(row.get());
     text->setText("ab");
+    // A list item, which has no minimum width: a push button keeps its label and takes the room from the text.
     auto const button = harness.make<ButtonImpl>(row.get());
+    button->setStyle(ui::ButtonStyle::Item);
     button->setLabel("B");
     button->setOnClick([&] { ++clicks; });
-    CHECK(harness.draw() == Rows{"ab[ B ]"});
+    CHECK(harness.draw().front().starts_with("ab B"));
     text->setText("abcdefgh");
     CHECK(harness.draw() == Rows{"abcdefgh"});
     CHECK(WidgetBase::of(*button).view().screenBounds().empty());
@@ -666,6 +748,43 @@ TEST_CASE("tui widgets: a section text is bold and muted, a step below a heading
     CHECK_FALSE(theme.textMuted.fg == theme.textBold.fg);
 }
 
+// Mutation: map Display to Normal in roleStyle (the figure is not bold).
+TEST_CASE("tui widgets: a display text is bold as a heading is, and a small text is normal", "[tui][widgets]") {
+    Harness harness{20, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const display = harness.make<TextImpl>(column.get());
+    display->setText("7");
+    display->setRole(ui::TextRole::Display);
+    auto const small = harness.make<TextImpl>(column.get());
+    small->setText("note");
+    small->setRole(ui::TextRole::Small);
+    static_cast<void>(harness.draw());
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.bold);
+    CHECK_FALSE(buffer.at(0, 1).style.bold);
+    CHECK(buffer.at(0, 1).style.fg == harness.screen().theme().textNormal.fg);
+}
+
+// Mutation: map Headline to Normal in roleStyle (the title is not bold, and differs from a heading).
+TEST_CASE("tui widgets: a headline text is drawn as a heading is: a cell has one size", "[tui][widgets]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const headline = harness.make<TextImpl>(column.get());
+    headline->setText("Instrument");
+    headline->setRole(ui::TextRole::Headline);
+    auto const heading = harness.make<TextImpl>(column.get());
+    heading->setText("Instrument");
+    heading->setRole(ui::TextRole::Heading);
+    auto const normal = harness.make<TextImpl>(column.get());
+    normal->setText("Instrument");
+    static_cast<void>(harness.draw());
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.bold);
+    CHECK(buffer.at(0, 0).style.fg == buffer.at(1, 0).style.fg);
+    CHECK(buffer.at(0, 0).style.bold == buffer.at(1, 0).style.bold);
+    CHECK_FALSE(buffer.at(2, 0).style.bold);
+}
+
 // Mutation: draw an item as a push button (its line shows `[ ... ]`).
 TEST_CASE("tui widgets: an item button paints its label unbracketed across its line, selected in the list's style",
           "[tui][widgets]") {
@@ -697,6 +816,32 @@ TEST_CASE("tui widgets: an item button paints its label unbracketed across its l
     CHECK_FALSE(same(theme.listItemSelected, theme.textNormal));
 }
 
+// Mutation: draw a selected push button's caption in the button's own style.
+TEST_CASE("tui widgets: a selected push button draws its caption in the list's selected style, as wide as another",
+          "[tui][widgets]") {
+    Harness harness{20, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const plain = harness.make<ButtonImpl>(column.get());
+    plain->setLabel("A1");
+    auto const picked = harness.make<ButtonImpl>(column.get());
+    picked->setLabel("A2");
+    picked->setSelected(true);
+    Rows const rows = harness.draw();
+    REQUIRE(rows.size() == 2);
+    CHECK(rows.at(0).starts_with("[ A1 ]"));
+    CHECK(rows.at(1).starts_with("[ A2 ]"));
+    CHECK(plain->naturalSize().width == picked->naturalSize().width);
+    auto const& buffer = harness.screen().renderedBuffer();
+    auto const& theme = harness.screen().theme();
+    auto const same = [](::core::tui::Style const& lhs, ::core::tui::Style const& rhs) {
+        return lhs.fg == rhs.fg && lhs.bg == rhs.bg && lhs.bold == rhs.bold && lhs.inverse == rhs.inverse;
+    };
+    CHECK(same(buffer.at(1, 2).style, theme.listItemSelected));
+    CHECK(same(buffer.at(1, 3).style, theme.listItemSelected));
+    CHECK_FALSE(same(buffer.at(1, 0).style, theme.listItemSelected));
+    CHECK_FALSE(same(buffer.at(0, 2).style, theme.listItemSelected));
+}
+
 TEST_CASE("tui widgets: a sidebar surface draws its subtree inverse; a card draws nothing", "[tui][widgets]") {
     Harness harness{20, 3};
     auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
@@ -715,4 +860,299 @@ TEST_CASE("tui widgets: a sidebar surface draws its subtree inverse; a card draw
     CHECK(buffer.at(0, 0).style.inverse);
     CHECK_FALSE(buffer.at(1, 0).style.inverse);
     CHECK_FALSE(buffer.at(2, 0).style.inverse);
+}
+
+// Mutation: ignore `strong` in paintRuns (the strong run is not bold).
+TEST_CASE("tui widgets: a text's runs draw in order, a strong run bold and its neighbours not, a line feed breaking",
+          "[tui][widgets]") {
+    Harness harness{30, 3};
+    auto const text = harness.make<TextImpl>(nullptr);
+    text->setSpans({{.text = "Lot "}, {.text = "L-26", .strong = true}, {.text = " ok\nnext", .mono = true}});
+    CHECK(harness.draw() == Rows{"Lot L-26 ok", "next"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK_FALSE(buffer.at(0, 3).style.bold);
+    CHECK(buffer.at(0, 4).style.bold);
+    CHECK(buffer.at(0, 7).style.bold);
+    CHECK_FALSE(buffer.at(0, 8).style.bold);
+    CHECK(text->probeText() == "Lot L-26 ok\nnext");
+    text->setText("plain");
+    CHECK(harness.draw() == Rows{"plain"});
+}
+
+// Mutation: draw a mono text with no ellipsis (it is cut like any text), or elide every role (the normal text ends
+// in one too).
+TEST_CASE("tui widgets: a mono text wider than its row ends in an ellipsis, and a normal text is cut",
+          "[tui][widgets]") {
+    Harness harness{8, 2};
+    auto const text = harness.make<TextImpl>(nullptr);
+    text->setRole(ui::TextRole::Mono);
+    text->setText("S-26-104170");
+    CHECK(harness.draw() == Rows{"S-26-10…"});
+    CHECK(text->probeText() == "S-26-104170");
+    text->setRole(ui::TextRole::Normal);
+    CHECK(harness.draw() == Rows{"S-26-104"});
+}
+
+// Mutation: ignore a run's tone in paintRuns (the run keeps the text's colour), or let a text's tone replace its
+// boldness (a heading is no longer bold).
+TEST_CASE("tui widgets: a toned run takes the tone's colour, and a toned text keeps its role's boldness",
+          "[tui][widgets]") {
+    Harness harness{30, 3};
+    auto const& theme = harness.screen().theme();
+    auto const text = harness.make<TextImpl>(nullptr);
+    text->setSpans({{.text = "Past due "}, {.text = "7", .tone = ui::Tone::Err}});
+    CHECK(harness.draw() == Rows{"Past due 7"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK_FALSE(buffer.at(0, 0).style.fg == theme.error.fg);
+    CHECK(buffer.at(0, 9).style.fg == theme.error.fg);
+    text->setText("Past due 7");
+    text->setRole(ui::TextRole::Heading);
+    text->setTone(ui::Tone::Err);
+    static_cast<void>(harness.draw());
+    auto const& drawn = harness.screen().renderedBuffer();
+    CHECK(drawn.at(0, 0).style.fg == theme.error.fg);
+    CHECK(drawn.at(0, 0).style.bold);
+}
+
+// Mutation: leave the mark's cells out of the text's natural size (the mark then overwrites its last characters).
+TEST_CASE("tui widgets: a required text draws its mark after its last line, at its natural width in a row",
+          "[tui][widgets]") {
+    Harness harness{40, 2};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    auto const text = harness.make<TextImpl>(row.get());
+    text->setText("Condition on receipt");
+    text->setRequired(true);
+    auto const after = harness.make<TextImpl>(row.get());
+    after->setText("|");
+    CHECK(harness.draw().at(0).starts_with("Condition on receipt *"));
+}
+
+// Mutation: make dangerOutline bold (it then reads as danger).
+TEST_CASE("tui widgets: a danger outlined button is red and not bold, a danger one red and bold", "[tui][widgets]") {
+    Harness harness{30, 2};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const outlined = harness.make<ButtonImpl>(column.get());
+    outlined->setLabel("Reject");
+    outlined->setEmphasis(ui::ButtonEmphasis::DangerOutline);
+    auto const danger = harness.make<ButtonImpl>(column.get());
+    danger->setLabel("Drop");
+    danger->setEmphasis(ui::ButtonEmphasis::Danger);
+    static_cast<void>(harness.draw());
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 2).style.fg == harness.screen().theme().error.fg);
+    CHECK_FALSE(buffer.at(0, 2).style.bold);
+    CHECK(buffer.at(1, 2).style.fg == harness.screen().theme().error.fg);
+    CHECK(buffer.at(1, 2).style.bold);
+}
+
+// Mutation: leave out the fill of the line's style under the content (its rows lose the selected line's colour).
+TEST_CASE("tui widgets: a selected list entry with content paints its line on every row, and takes a click on any",
+          "[tui][widgets]") {
+    Harness harness{30, 4};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const item = harness.make<ButtonImpl>(column.get());
+    item->setLabel("WS-2026-0412");
+    item->setStyle(ui::ButtonStyle::Item);
+    item->setSelected(true);
+    int clicks = 0;
+    item->setOnClick([&clicks] { ++clicks; });
+    auto& content = item->content();
+    auto const lines = harness.make<StackImpl>(&content, ui::Axis::Vertical);
+    auto const first = harness.make<TextImpl>(lines.get());
+    first->setText("WS-2026-0412");
+    auto const second = harness.make<TextImpl>(lines.get());
+    second->setText("Assay");
+    auto const third = harness.make<TextImpl>(lines.get());
+    third->setText("Tags");
+    CHECK(harness.draw() == Rows{" WS-2026-0412", " Assay", " Tags"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    // The line's style is under every row: in the leading cell and past the content's text.
+    auto const& selected = harness.screen().theme().listItemSelected;
+    for (int row = 0; row < 3; ++row) {
+        INFO("row " << row);
+        for (int const cell : {0, 20}) {
+            CHECK(buffer.at(row, cell).style.fg == selected.fg);
+            CHECK(buffer.at(row, cell).style.bold == selected.bold);
+        }
+    }
+    static_cast<void>(harness.click({.x = 3, .y = 2}));
+    CHECK(clicks == 1);
+}
+
+// Mutation: draw `square` as `default` ([ ‹ ]).
+TEST_CASE("tui widgets: a square push button drops the spaces inside its brackets", "[tui][widgets]") {
+    Harness harness{8, 1};
+    auto const button = harness.make<ButtonImpl>(nullptr);
+    button->setLabel("\xE2\x80\xB9");
+    CHECK(harness.draw() == Rows{"[ \xE2\x80\xB9 ]"});
+    button->setShape(ui::ControlShape::Square);
+    CHECK(harness.draw() == Rows{"[\xE2\x80\xB9]"});
+}
+
+// Mutation: map Caption to Normal in roleStyle (the note is drawn in the normal text style).
+TEST_CASE("tui widgets: a caption text is drawn in the muted style", "[tui][widgets]") {
+    Harness harness{20, 1};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const caption = harness.make<TextImpl>(column.get());
+    caption->setText("Needs a reason");
+    caption->setRole(ui::TextRole::Caption);
+    CHECK(harness.draw() == Rows{"Needs a reason"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.fg == harness.screen().theme().textMuted.fg);
+    CHECK_FALSE(buffer.at(0, 0).style.bold);
+}
+
+// Guard: a label is the normal text style on the terminal. It passes without the role too (an unknown role falls
+// through to the normal style), and says what the terminal does with it.
+TEST_CASE("tui widgets: a label text is drawn in the normal style", "[tui][widgets]") {
+    Harness harness{20, 1};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const label = harness.make<TextImpl>(column.get());
+    label->setText("Sample type");
+    label->setRole(ui::TextRole::Label);
+    CHECK(harness.draw() == Rows{"Sample type"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.fg == harness.screen().theme().textNormal.fg);
+    CHECK_FALSE(buffer.at(0, 0).style.bold);
+}
+
+// Mutation: map Overline to Normal in roleStyle (the label is neither bold nor muted).
+TEST_CASE("tui widgets: an overline text is bold and muted, written as it reads", "[tui][widgets]") {
+    Harness harness{20, 1};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const overline = harness.make<TextImpl>(column.get());
+    overline->setText("Record type");
+    overline->setRole(ui::TextRole::Overline);
+    CHECK(harness.draw() == Rows{"Record type"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.bold);
+    CHECK(buffer.at(0, 0).style.fg == harness.screen().theme().textMuted.fg);
+}
+
+// Mutation: draw `[  ]` for an icon-only button whose icon has no glyph (the caption ignores the accessible name).
+TEST_CASE("tui widgets: an icon-only button with no glyph draws its accessible name", "[tui][widgets]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const glyph = harness.make<ButtonImpl>(column.get());
+    glyph->setIcon("nav.back");
+    glyph->setAccessibleName("Previous page");
+    auto const named = harness.make<ButtonImpl>(column.get());
+    named->setIcon("scan");
+    named->setAccessibleName("Scan");
+    auto const labelled = harness.make<ButtonImpl>(column.get());
+    labelled->setIcon("scan");
+    labelled->setLabel("Go");
+    labelled->setAccessibleName("Start");
+    CHECK(harness.draw() == Rows{"[ ‹  ]", "[ Scan ]", "[ Go ]"});
+}
+
+// Mutation: leave `toolbarJoined` out of the inverted surfaces (the joined top bar then draws plain).
+TEST_CASE("tui widgets: the toolbar surfaces, joined to the head's block or not, draw their subtree inverse",
+          "[tui][widgets]") {
+    Harness harness{20, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const toolbar = harness.make<StackImpl>(column.get(), ui::Axis::Vertical);
+    toolbar->setSurface("toolbar");
+    auto const toolbarText = harness.make<TextImpl>(toolbar.get());
+    toolbarText->setText("toolbar");
+    auto const joined = harness.make<StackImpl>(column.get(), ui::Axis::Vertical);
+    joined->setSurface("toolbarJoined");
+    auto const joinedText = harness.make<TextImpl>(joined.get());
+    joinedText->setText("joined");
+    auto const bar = harness.make<StackImpl>(column.get(), ui::Axis::Vertical);
+    bar->setSurface("bar");
+    auto const barText = harness.make<TextImpl>(bar.get());
+    barText->setText("bar");
+    CHECK(harness.draw() == Rows{"toolbar", "joined", "bar"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.inverse);
+    CHECK(buffer.at(1, 0).style.inverse);
+    CHECK_FALSE(buffer.at(2, 0).style.inverse);
+}
+
+namespace {
+
+/// What @p naturals ask for as stretch children of the weights @p weights: the weights' sum times the largest natural
+/// per weight, rounded up to a whole cell.
+int stretchNaturalOf(std::vector<int> const& naturals, std::vector<int> const& weights) {
+    int sum = 0;
+    for (int const weight : weights) {
+        sum += weight;
+    }
+    int asked = 0;
+    for (std::size_t index = 0; index < naturals.size(); ++index) {
+        asked = std::max(asked, ((naturals.at(index) * sum) + weights.at(index) - 1) / weights.at(index));
+    }
+    return asked;
+}
+
+}  // namespace
+
+// Mutation: sum the stretching children's naturals in `weightedNaturalSize` (a row of two stretch texts asks for
+// less than every share needs, so the first case's 20 is 11).
+TEST_CASE("tui widgets: a row of stretch children asks for the weights' sum times the largest natural per weight",
+          "[tui][widgets]") {
+    struct Case {
+        std::vector<int> naturals;
+        std::vector<int> weights;
+        int expected;
+    };
+    // The expected widths are written out beside the formula, which computes them again.
+    for (auto const& testCase : {Case{.naturals = {1, 10}, .weights = {1, 1}, .expected = 20},
+                                 Case{.naturals = {10, 10}, .weights = {1, 2}, .expected = 30},
+                                 Case{.naturals = {10, 10}, .weights = {2, 1}, .expected = 30},
+                                 Case{.naturals = {4, 10}, .weights = {1, 2}, .expected = 15},
+                                 Case{.naturals = {10}, .weights = {3}, .expected = 10}}) {
+        INFO(testCase.expected);
+        Harness harness{80, 1};
+        auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+        std::vector<std::unique_ptr<TextImpl>> texts;
+        for (std::size_t index = 0; index < testCase.naturals.size(); ++index) {
+            texts.push_back(harness.make<TextImpl>(row.get()));
+            texts.back()->setText(std::string(static_cast<std::size_t>(testCase.naturals.at(index)), 'x'));
+            texts.back()->setLayout(ui::LayoutHints{.width = ui::Sizing::stretch(testCase.weights.at(index))});
+        }
+        CHECK(stretchNaturalOf(testCase.naturals, testCase.weights) == testCase.expected);
+        CHECK(row->naturalSize().width == testCase.expected);
+    }
+}
+
+// Mutation: leave a spacer out of `stretchSizingOf` (the row asks for the text's 4 cells, not 8), or drop the gaps.
+TEST_CASE("tui widgets: a spacer counts as a stretch child of weight 1 and no natural size in a stack's natural size",
+          "[tui][widgets]") {
+    Harness harness{80, 1};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    row->setGap(1);
+    auto const text = harness.make<TextImpl>(row.get());
+    text->setText("abcd");
+    text->setLayout(ui::LayoutHints{.width = ui::Sizing::stretch()});
+    auto const spacer = harness.make<SpacerImpl>(row.get());
+    auto const fixed = harness.make<TextImpl>(row.get());
+    fixed->setText("zz");
+    // 2 stretching children of weight 1, the larger natural 4: 8 cells, then the fixed text and two gaps.
+    CHECK(row->naturalSize().width == 8 + 2 + (2 * row->gap()));
+}
+
+// Mutation: leave `contentMinimumWidth` off ButtonImpl (a stretch push button is narrowed below its label).
+TEST_CASE("tui widgets: a push button's minimum width is its label's, and a list item's is none", "[tui][widgets]") {
+    Harness harness{40, 1};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    auto const push = harness.make<ButtonImpl>(row.get());
+    push->setLabel("Approve");
+    auto const item = harness.make<ButtonImpl>(row.get());
+    item->setLabel("Approve");
+    item->setStyle(ui::ButtonStyle::Item);
+    CHECK(push->contentMinimumWidth() == push->naturalSize().width);
+    CHECK(push->contentMinimumWidth() > 7);
+    CHECK(item->contentMinimumWidth() == 0);
+}
+
+// Guard: a text is cut at its width on the terminal, which never wraps it, so it keeps no minimum. It passes with or
+// without a minimum on a text that wraps on another frontend.
+TEST_CASE("tui widgets: a text keeps no minimum width", "[tui][widgets]") {
+    Harness harness{40, 1};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const text = harness.make<TextImpl>(column.get());
+    text->setText("Assay 95.0-105.0 and a longer word");
+    CHECK(text->contentMinimumWidth() == 0);
 }

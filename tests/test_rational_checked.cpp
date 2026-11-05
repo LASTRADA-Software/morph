@@ -3,6 +3,7 @@
 // Rational's checked arithmetic: report overflow instead of committing it.
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstdint>
 #include <limits>
 #include <morph/core/logger.hpp>
 #include <morph/util/rational.hpp>
@@ -457,4 +458,241 @@ TEST_CASE("mulWouldOverflow answers false for a 0/0 operand built by writing its
     const Rational zero{Numerator{0}, Denominator{1}, DecimalPlaces{0}};
     CHECK_FALSE(broken.mulWouldOverflow(broken));
     CHECK_FALSE(zero.mulWouldOverflow(broken));
+}
+
+using morph::math::detail::U128;
+
+#ifdef __SIZEOF_INT128__
+namespace {
+
+/// A deterministic 64-bit sequence (splitmix64), so a failure names a reproducible case.
+struct Sequence {
+    std::uint64_t state;
+    std::uint64_t next() {
+        state += 0x9e3779b97f4a7c15ULL;
+        std::uint64_t mixed = state;
+        mixed = (mixed ^ (mixed >> 30U)) * 0xbf58476d1ce4e5b9ULL;
+        mixed = (mixed ^ (mixed >> 27U)) * 0x94d049bb133111ebULL;
+        return mixed ^ (mixed >> 31U);
+    }
+    /// A 128-bit value whose width varies, so carries, borrows and both division paths are all reached.
+    U128 wide() {
+        std::uint64_t const shape = next() % 4U;
+        std::uint64_t const high = next();
+        std::uint64_t const low = next();
+        if (shape == 0) {
+            return U128{.hi = 0, .lo = low};
+        }
+        if (shape == 1) {
+            return U128{.hi = high >> (next() % 64U), .lo = low};
+        }
+        if (shape == 2) {
+            return U128{.hi = 0, .lo = low >> (next() % 64U)};
+        }
+        return U128{.hi = high, .lo = low};
+    }
+};
+
+}  // namespace
+#endif
+
+TEST_CASE("The 128-bit integer adds, subtracts, multiplies and divides exactly", "[rational][checked][u128]") {
+    using morph::math::detail::checkedAddU128;
+    using morph::math::detail::checkedMulU128;
+    using morph::math::detail::checkedSubU128;
+    using morph::math::detail::divModU128;
+    using morph::math::detail::mulU64;
+    constexpr auto kAll = std::numeric_limits<std::uint64_t>::max();
+    constexpr U128 kTop{.hi = kAll, .lo = kAll};
+
+    CHECK(mulU64(kAll, kAll) == U128{.hi = kAll - 1, .lo = 1});
+    CHECK(checkedAddU128(U128{.hi = 0, .lo = kAll}, U128{.hi = 0, .lo = 1}) == U128{.hi = 1, .lo = 0});
+    CHECK_FALSE(checkedAddU128(kTop, U128{.hi = 0, .lo = 1}).has_value());
+    CHECK_FALSE(checkedAddU128(U128{.hi = kAll, .lo = 0}, U128{.hi = 1, .lo = 0}).has_value());
+    CHECK(checkedSubU128(U128{.hi = 1, .lo = 0}, U128{.hi = 0, .lo = 1}) == U128{.hi = 0, .lo = kAll});
+    CHECK_FALSE(checkedSubU128(U128{.hi = 0, .lo = 1}, U128{.hi = 0, .lo = 2}).has_value());
+    CHECK(checkedMulU128(U128{.hi = 1, .lo = 0}, U128{.hi = 0, .lo = kAll}) == U128{.hi = kAll, .lo = 0});
+    CHECK_FALSE(checkedMulU128(U128{.hi = 1, .lo = 0}, U128{.hi = 1, .lo = 0}).has_value());
+    CHECK_FALSE(checkedMulU128(U128{.hi = 2, .lo = 0}, U128{.hi = 0, .lo = kAll}).has_value());
+    CHECK_FALSE(divModU128(kTop, U128{}).has_value());
+    // A divisor past 2^127, which the remainder reaches only at the last bit.
+    auto const large = divModU128(kTop, U128{.hi = 0x8000000000000000ULL, .lo = 1});
+    REQUIRE(large.has_value());
+    CHECK(large->quotient == U128{.hi = 0, .lo = 1});
+    CHECK(large->remainder == U128{.hi = 0x7fffffffffffffffULL, .lo = kAll - 1});
+    CHECK(U128{.hi = 1, .lo = 0} > U128{.hi = 0, .lo = kAll});
+}
+
+#ifdef __SIZEOF_INT128__
+// Mutation: drop the carry in checkedAddU128 -> the native comparison fails on the first sum that needs it.
+TEST_CASE("The 128-bit integer agrees with unsigned __int128", "[rational][checked][u128]") {
+    using morph::math::detail::checkedAddU128;
+    using morph::math::detail::checkedMulU128;
+    using morph::math::detail::checkedSubU128;
+    __extension__ using Native = unsigned __int128;
+    auto const native = [](U128 value) { return (static_cast<Native>(value.hi) << 64U) | value.lo; };
+    auto const limbs = [](Native value) {
+        return U128{.hi = static_cast<std::uint64_t>(value >> 64U), .lo = static_cast<std::uint64_t>(value)};
+    };
+    Sequence sequence{.state = 20261025};
+    for (int round = 0; round < 20000; ++round) {
+        U128 const lhs = sequence.wide();
+        U128 const rhs = sequence.wide();
+        CAPTURE(lhs.hi, lhs.lo, rhs.hi, rhs.lo);
+        Native sum = 0;
+        bool const sumOverflows = __builtin_add_overflow(native(lhs), native(rhs), &sum);
+        auto const added = checkedAddU128(lhs, rhs);
+        CHECK(added.has_value() == !sumOverflows);
+        if (added && !sumOverflows) {
+            CHECK(*added == limbs(sum));
+        }
+        Native product = 0;
+        bool const productOverflows = __builtin_mul_overflow(native(lhs), native(rhs), &product);
+        auto const multiplied = checkedMulU128(lhs, rhs);
+        CHECK(multiplied.has_value() == !productOverflows);
+        if (multiplied && !productOverflows) {
+            CHECK(*multiplied == limbs(product));
+        }
+        auto const subtracted = checkedSubU128(lhs, rhs);
+        CHECK(subtracted.has_value() == (native(lhs) >= native(rhs)));
+        if (subtracted) {
+            CHECK(*subtracted == limbs(native(lhs) - native(rhs)));
+        }
+        CHECK((lhs < rhs) == (native(lhs) < native(rhs)));
+#ifndef _MSC_VER
+        // A native 128-bit divide compiles to a call to __udivti3/__umodti3. clang-cl defines __SIZEOF_INT128__,
+        // but the MSVC runtime it links against provides neither, so the division oracle runs on the other compilers.
+        if (native(rhs) != 0) {
+            auto const divided = morph::math::detail::divModU128(lhs, rhs);
+            REQUIRE(divided.has_value());
+            CHECK(divided->quotient == limbs(native(lhs) / native(rhs)));
+            CHECK(divided->remainder == limbs(native(lhs) % native(rhs)));
+        }
+#endif
+    }
+}
+#endif
+
+// Mutation: round through the saturating roundToDecimalPlaces in checkedRoundToDecimalPlaces -> `10/3` at 18 places
+// is clamped and `28/3` is not empty.
+TEST_CASE("checkedRoundToDecimalPlaces rounds as roundToDecimalPlaces does, and reports what does not fit",
+          "[rational][checked][round]") {
+    using morph::math::checkedRoundToDecimalPlaces;
+    using morph::math::RoundingMode;
+    using morph::math::roundToDecimalPlaces;
+    std::vector<std::pair<Rational, std::uint32_t>> const fitting = {
+        {Rational{Numerator{1}, Denominator{8}, DecimalPlaces{3}}, 2},
+        {Rational{Numerator{-1}, Denominator{8}, DecimalPlaces{3}}, 2},
+        {Rational{Numerator{27}, Denominator{200}, DecimalPlaces{3}}, 2},
+        {Rational{Numerator{-27}, Denominator{200}, DecimalPlaces{3}}, 2},
+        {Rational{Numerator{5}, Denominator{2}, DecimalPlaces{1}}, 0},
+        {Rational{Numerator{-5}, Denominator{2}, DecimalPlaces{1}}, 0},
+        {Rational{Numerator{1}, Denominator{3}, DecimalPlaces{1}}, 3},
+        {Rational{Numerator{-2}, Denominator{3}, DecimalPlaces{1}}, 3},
+        {Rational{Numerator{2469}, Denominator{2000}, DecimalPlaces{4}}, 3},
+        {Rational{Numerator{1}, Denominator{3}, DecimalPlaces{1}}, 18},
+        {Rational{Numerator{9'000'000'000'000'000'000}, Denominator{1}, DecimalPlaces{0}}, 18},
+        {Rational{Numerator{-7}, Denominator{1}, DecimalPlaces{0}}, 2},
+    };
+    for (auto const& [value, places] : fitting) {
+        for (RoundingMode const mode : {RoundingMode::HalfEven, RoundingMode::HalfAwayFromZero}) {
+            CAPTURE(value.numerator, value.denominator, places, mode == RoundingMode::HalfEven);
+            auto const checked = checkedRoundToDecimalPlaces(value, DecimalPlaces{places}, mode);
+            REQUIRE(checked.has_value());
+            auto const saturating = roundToDecimalPlaces(value, DecimalPlaces{places}, mode);
+            CHECK(*checked == saturating);
+            CHECK(checked->decimalPlaces == saturating.decimalPlaces);
+        }
+    }
+    // The product passes int64 on the way, but the result fits.
+    auto const tenThirds = checkedRoundToDecimalPlaces(Rational{Numerator{10}, Denominator{3}, DecimalPlaces{1}},
+                                                       DecimalPlaces{18}, RoundingMode::HalfEven);
+    REQUIRE(tenThirds.has_value());
+    CHECK(*tenThirds ==
+          Rational{Numerator{3'333'333'333'333'333'333}, Denominator{1'000'000'000'000'000'000}, DecimalPlaces{18}});
+    // 9.333333333333333333 has a numerator past int64.
+    CHECK_FALSE(checkedRoundToDecimalPlaces(Rational{Numerator{28}, Denominator{3}, DecimalPlaces{18}},
+                                            DecimalPlaces{18}, RoundingMode::HalfEven)
+                    .has_value());
+    CHECK(checkedRoundToDecimalPlaces(Rational{Numerator{1}, Denominator{8}, DecimalPlaces{3}}, DecimalPlaces{99},
+                                      RoundingMode::HalfEven)
+              ->decimalPlaces == DecimalPlaces{18});
+}
+
+// Mutation: let isqrtU128 round to the nearest root instead of down -> `squares - 1` fails.
+TEST_CASE("The 128-bit integer square root is the floor of the root", "[rational][checked][u128]") {
+    using morph::math::detail::isqrtU128;
+    using morph::math::detail::mulU64;
+    constexpr auto kAll = std::numeric_limits<std::uint64_t>::max();
+    for (std::uint64_t const root :
+         {std::uint64_t{0}, std::uint64_t{1}, std::uint64_t{2}, std::uint64_t{3}, std::uint64_t{1'000'000'007},
+          std::uint64_t{0xffffffffULL}, std::uint64_t{0x100000000ULL}, std::uint64_t{3'037'000'499},
+          std::uint64_t{9'223'372'036'854'775'807ULL}, kAll}) {
+        CAPTURE(root);
+        U128 const square = mulU64(root, root);
+        CHECK(isqrtU128(square) == root);
+        if (root > 0) {
+            // One below a square is below the root: the floor, not the nearest.
+            U128 const below = morph::math::detail::wrappingSubU128(square, U128{.hi = 0, .lo = 1});
+            CHECK(isqrtU128(below) == root - 1);
+        }
+        // One above a square of 1 or more is still below the next square.
+        if (root > 0 && root < kAll) {
+            U128 const above = morph::math::detail::checkedAddU128(square, U128{.hi = 0, .lo = 1}).value_or(square);
+            CHECK(isqrtU128(above) == root);
+        }
+    }
+    CHECK(isqrtU128(U128{.hi = std::uint64_t{1} << 62U, .lo = 0}) == std::uint64_t{1} << 63U);  // 2^126
+    CHECK(isqrtU128(U128{.hi = kAll, .lo = kAll}) == kAll);
+}
+
+#ifdef __SIZEOF_INT128__
+TEST_CASE("The 128-bit integer square root agrees with unsigned __int128", "[rational][checked][u128]") {
+    using morph::math::detail::isqrtU128;
+    __extension__ using Native = unsigned __int128;
+    Sequence sequence{.state = 1065};
+    for (int round = 0; round < 20000; ++round) {
+        U128 const value = sequence.wide();
+        CAPTURE(value.hi, value.lo);
+        Native const native = (static_cast<Native>(value.hi) << 64U) | value.lo;
+        Native const root = isqrtU128(value);
+        CHECK(root * root <= native);
+        // (root + 1)^2 is past 2^128 only when root is 2^64 - 1, and then it is past every value.
+        Native const next = root + 1;
+        if (root < std::numeric_limits<std::uint64_t>::max()) {
+            CHECK(next * next > native);
+        }
+    }
+}
+#endif
+
+// Mutation: drop the tie test (raise only when strictly above) -> sqrt(6.25) at 0 places gives 3 half to even; read
+// the tie from the truncated quotient alone -> sqrt(6.3) gives 2.
+TEST_CASE("A square root of a fraction is rounded once, correctly, at its places", "[rational][checked][sqrt]") {
+    using morph::math::RoundingMode;
+    using morph::math::detail::roundSqrtOfFraction;
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a numerator, then a denominator, as every Rational reads them.
+    auto const root = [](std::uint64_t numerator, std::uint64_t denominator, std::uint32_t places, RoundingMode mode) {
+        // The numerator is scaled by 10^(2 * places) here, as the statistics scale theirs.
+        U128 scaled{.hi = 0, .lo = numerator};
+        for (std::uint32_t digit = 0; digit < 2 * places; ++digit) {
+            scaled = morph::math::detail::checkedMulU128(scaled, U128{.hi = 0, .lo = 10}).value_or(U128{});
+        }
+        return roundSqrtOfFraction(scaled, U128{.hi = 0, .lo = denominator}, places, mode);
+    };
+    auto const decimal = [](std::int64_t numerator, std::int64_t denominator, std::uint32_t places) {
+        return Rational{Numerator{numerator}, Denominator{denominator}, DecimalPlaces{places}};
+    };
+    CHECK(root(2, 1, 4, RoundingMode::HalfEven) == decimal(14142, 10000, 4));
+    CHECK(root(2025, 10000, 1, RoundingMode::HalfEven) == decimal(4, 10, 1));
+    CHECK(root(2025, 10000, 1, RoundingMode::HalfAwayFromZero) == decimal(5, 10, 1));
+    CHECK(root(625, 100, 0, RoundingMode::HalfEven) == decimal(2, 1, 0));
+    CHECK(root(625, 100, 0, RoundingMode::HalfAwayFromZero) == decimal(3, 1, 0));
+    CHECK(root(1225, 100, 0, RoundingMode::HalfEven) == decimal(4, 1, 0));
+    CHECK(root(63, 10, 0, RoundingMode::HalfEven) == decimal(3, 1, 0));
+    // A root whose numerator does not fit an int64 is empty: sqrt(10^38) at 0 places is 10^19.
+    U128 const big = morph::math::detail::checkedMulU128(U128{.hi = 0, .lo = 10'000'000'000'000'000'000ULL},
+                                                         U128{.hi = 0, .lo = 10'000'000'000'000'000'000ULL})
+                         .value_or(U128{});
+    CHECK_FALSE(roundSqrtOfFraction(big, U128{.hi = 0, .lo = 1}, 0, RoundingMode::HalfEven).has_value());
 }

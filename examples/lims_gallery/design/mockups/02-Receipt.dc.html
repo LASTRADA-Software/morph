@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sample receipt</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;font-size:13px;color:#1C1E21;background:#EEF0F3;font-variant-numeric:tabular-nums}
+a{color:#17784A}a:hover{color:#0F5A36}
+.cap{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#4D5461;margin:0 0 12px}
+.win{background:#F6F7F9;border:1px solid #D2D7DE;border-radius:8px;overflow:hidden;box-sizing:border-box}
+.card{background:#fff;border:1px solid #DDE1E6;border-radius:6px;box-sizing:border-box}
+.btn{font:500 13px Inter,system-ui,sans-serif;height:30px;padding:0 12px;border-radius:6px;border:1px solid #C3C9D2;background:#fff;color:#1C1E21;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.primary{background:#17784A;border-color:#17784A;color:#fff}
+.btn.danger{color:#A61B1B;border-color:#E8B4B4}
+.btn.lg{height:44px;font-size:14px}
+.input{height:30px;border:1px solid #C3C9D2;border-radius:6px;padding:0 8px;font:13px Inter,system-ui,sans-serif;background:#fff;box-sizing:border-box;color:#1C1E21;width:100%}
+.input.lg{height:44px;font-size:14px}
+.input[readonly]{background:#F3F5F7}
+.lbl{font-size:12px;font-weight:500;color:#363C46;display:block;margin-bottom:4px}
+.req{color:#A61B1B}
+.muted{color:#4D5461}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px}
+.tag{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;display:inline-block;white-space:nowrap}
+.t-err{background:#FDE7E7;color:#9B1C1C}.t-warn{background:#FFF1D6;color:#7A4A00}.t-ok{background:#E2F4E8;color:#17602F}.t-neu{background:#EEF0F3;color:#363C46}
+.banner{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:6px;font-size:13px;line-height:1.4}
+.b-warn{background:#FFF6E5;color:#6B4100;border:1px solid #F1D49A}
+.scan{display:flex;align-items:center;gap:10px;border:2px solid #17784A;box-shadow:0 0 0 3px #CDEBD8;border-radius:8px;background:#fff;padding:0 12px}
+.scan input{border:none;outline:none;font:600 16px "JetBrains Mono",ui-monospace,monospace;flex:1;height:44px;background:transparent;color:#1C1E21}
+.ck{display:flex;align-items:center;gap:8px;padding:3px 0}
+.ck input{width:15px;height:15px;accent-color:#17784A;margin:0}
+table{border-collapse:collapse;width:100%}
+th{text-align:left;font-size:11px;font-weight:600;color:#4D5461;padding:6px 8px;border-bottom:1px solid #DDE1E6;background:#FAFBFC}
+td{padding:6px 8px;border-bottom:1px solid #EDF0F3;white-space:nowrap}
+.unit{position:relative}.unit span{position:absolute;right:8px;top:7px;color:#4D5461}
+</style>
+</helmet>
+<div style="width: 1520px; height: 1080px; box-sizing: border-box; padding: 40px; display: flex; gap: 48px; align-items: flex-start">
+  <div>
+    <p class="cap">Expanded · scan, check, receive, next</p>
+    <div class="win" style="width: 1000px; height: 880px; display: flex; flex-direction: column">
+      <div style="padding: 14px 18px; background: #fff; border-bottom: 1px solid #E1E5EA; display: flex; align-items: center; gap: 12px">
+        <h1 style="margin: 0; font-size: 16px; font-weight: 600; flex: 1">Receive samples</h1>
+        <span class="muted">Session since 08:30</span>
+        <span class="tag t-ok">12 received</span><span class="tag t-err">1 rejected</span>
+      </div>
+      <div style="flex: 1; padding: 16px 18px; display: flex; gap: 16px; align-items: flex-start">
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+          <div>
+            <label class="lbl" for="sc">Scan a sample barcode</label>
+            <div class="scan"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#17784A" stroke-width="1.6" aria-hidden="true"><path d="M2 6V2h4M14 2h4v4M18 14v4h-4M6 18H2v-4M6 6v8M9 6v8M12 6v8M15 6v8"></path></svg><input id="sc" value="" placeholder="Waiting for scan…" aria-describedby="scH"></div>
+            <p id="scH" class="muted" style="margin: 4px 0 0; font-size: 12px">The field keeps focus after every scan. Press Enter to look up a typed ID.</p>
+          </div>
+          <div class="banner b-warn" role="status"><span><b>Already received:</b> <span class="mono">S-26-104217</span> was received at 09:07 by J. Ruiz. Nothing was changed.</span></div>
+          <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+            <div style="display: flex; align-items: center; gap: 8px"><h2 style="margin: 0; font-size: 14px; font-weight: 600">Sample <span class="mono" style="font-size: 13px">S-26-104230</span></h2><span class="tag t-neu">Registered</span><span style="flex: 1"></span><span class="muted">Lot <span class="mono">L-26-0381</span> · Tablets, 20 mg</span></div>
+            <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px">
+              <div><label class="lbl" for="ty">Sample type</label><input class="input" id="ty" readonly value="Release, finished product"></div>
+              <div><label class="lbl" for="tm">Temperature on arrival <span class="req">*</span></label><div class="unit"><input class="input" id="tm" value="5.4" aria-describedby="tmH" style="padding-right: 32px"><span>°C</span></div><p id="tmH" class="muted" style="margin: 3px 0 0; font-size: 12px">Required range 2–8 °C</p></div>
+              <div><label class="lbl" for="ra">Received at <span class="req">*</span></label><input class="input" id="ra" value="24-Oct-2026 09:41"></div>
+              <div><label class="lbl" for="lo">Storage location <span class="req">*</span></label><select class="input" id="lo"><option>Fridge F-03 · shelf 2</option></select></div>
+              <div><label class="lbl" for="qt">Containers</label><input class="input" id="qt" value="3"></div>
+              <div><label class="lbl" for="cu">Courier</label><select class="input" id="cu"><option>Internal, QA sampling</option></select></div>
+            </div>
+            <fieldset style="border: none; margin: 0; padding: 0"><legend class="lbl">Condition on receipt <span class="req">*</span></legend>
+              <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px">
+                <label class="ck"><input type="checkbox" checked>Container intact</label>
+                <label class="ck"><input type="checkbox" checked>Seal unbroken</label>
+                <label class="ck"><input type="checkbox" checked>Label legible and matches the request</label>
+                <label class="ck"><input type="checkbox">Temperature logger attached</label>
+              </div>
+            </fieldset>
+            <div><label class="lbl" for="no">Note</label><input class="input" id="no" placeholder="Optional"></div>
+            <div style="display: flex; gap: 8px; border-top: 1px solid #EDF0F3; padding-top: 12px">
+              <button class="btn danger">Reject sample…</button><span style="flex: 1"></span><button class="btn primary">Receive and scan next</button>
+            </div>
+          </div>
+        </div>
+        <section class="card" aria-label="This session" style="width: 300px; flex: none">
+          <h2 style="margin: 0; padding: 10px 12px; font-size: 13px; font-weight: 600; border-bottom: 1px solid #DDE1E6">This session</h2>
+          <table>
+            <thead><tr><th>Time</th><th>Sample</th><th>Outcome</th></tr></thead>
+            <tbody>
+              <tr><td>09:39</td><td class="mono">S-26-104229</td><td><span class="tag t-ok">Received</span></td></tr>
+              <tr><td>09:37</td><td class="mono">S-26-104228</td><td><span class="tag t-err">Rejected</span></td></tr>
+              <tr><td>09:35</td><td class="mono">S-26-104227</td><td><span class="tag t-ok">Received</span></td></tr>
+              <tr><td>09:34</td><td class="mono">S-26-104226</td><td><span class="tag t-ok">Received</span></td></tr>
+              <tr><td>09:30</td><td class="mono">S-26-104225</td><td><span class="tag t-ok">Received</span></td></tr>
+            </tbody>
+          </table>
+          <p class="muted" style="margin: 0; padding: 8px 12px; font-size: 12px">S-26-104228 rejected: seal broken.</p>
+        </section>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="cap">Compact · one column, every field kept</p>
+    <div class="win" style="width: 390px; height: 960px; display: flex; flex-direction: column; background: #fff">
+      <div style="padding: 12px 16px; border-bottom: 1px solid #E1E5EA; display: flex; align-items: center; gap: 8px">
+        <h1 style="margin: 0; font-size: 16px; font-weight: 600; flex: 1">Receive samples</h1><span class="tag t-ok">12</span><span class="tag t-err">1</span>
+      </div>
+      <div style="flex: 1; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+        <div class="scan"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#17784A" stroke-width="1.6" aria-hidden="true"><path d="M2 6V2h4M14 2h4v4M18 14v4h-4M6 18H2v-4M6 6v8M9 6v8M12 6v8M15 6v8"></path></svg><input aria-label="Scan a sample barcode" placeholder="Waiting for scan…"></div>
+        <div class="banner b-warn" role="status"><span><b>Already received:</b> <span class="mono">S-26-104217</span>, 09:07, J. Ruiz.</span></div>
+        <h2 style="margin: 4px 0 0; font-size: 14px; font-weight: 600">Sample <span class="mono">S-26-104230</span> <span class="tag t-neu">Registered</span></h2>
+        <p class="muted" style="margin: -4px 0 0">Release, finished product · Lot <span class="mono">L-26-0381</span></p>
+        <div><label class="lbl" for="tm2">Temperature on arrival <span class="req">*</span> · 2–8 °C</label><div class="unit"><input class="input lg" id="tm2" value="5.4" style="padding-right: 32px"><span style="top: 13px">°C</span></div></div>
+        <div><label class="lbl" for="ra2">Received at <span class="req">*</span></label><input class="input lg" id="ra2" value="24-Oct-2026 09:41"></div>
+        <div><label class="lbl" for="lo2">Storage location <span class="req">*</span></label><select class="input lg" id="lo2"><option>Fridge F-03 · shelf 2</option></select></div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px"><div><label class="lbl" for="qt2">Containers</label><input class="input lg" id="qt2" value="3"></div><div><label class="lbl" for="cu2">Courier</label><select class="input lg" id="cu2"><option>Internal</option></select></div></div>
+        <fieldset style="border: none; margin: 0; padding: 0"><legend class="lbl">Condition on receipt <span class="req">*</span></legend>
+          <label class="ck" style="min-height: 40px"><input type="checkbox" checked style="width: 20px; height: 20px">Container intact</label>
+          <label class="ck" style="min-height: 40px"><input type="checkbox" checked style="width: 20px; height: 20px">Seal unbroken</label>
+          <label class="ck" style="min-height: 40px"><input type="checkbox" checked style="width: 20px; height: 20px">Label legible and matches</label>
+          <label class="ck" style="min-height: 40px"><input type="checkbox" style="width: 20px; height: 20px">Temperature logger attached</label>
+        </fieldset>
+        <div><label class="lbl" for="no2">Note</label><input class="input lg" id="no2" placeholder="Optional"></div>
+        <details style="border: 1px solid #DDE1E6; border-radius: 6px; padding: 0 12px"><summary style="min-height: 44px; display: flex; align-items: center; font-weight: 600">This session · 13 scans</summary></details>
+      </div>
+      <div style="padding: 12px 16px; border-top: 1px solid #E1E5EA; display: flex; gap: 8px"><button class="btn danger lg" style="width: 110px">Reject…</button><button class="btn primary lg" style="flex: 1">Receive, next</button></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1520,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

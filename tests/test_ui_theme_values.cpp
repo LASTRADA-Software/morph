@@ -1,0 +1,504 @@
+// SPDX-License-Identifier: Apache-2.0
+
+// The theme's value readers: icon names, DTCG dimensions, shadows and font families, read from the JSON a theme
+// holds, and the shapes each refuses.
+
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <morph/ui/theme.hpp>
+#include <morph/ui/value.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <vector>
+
+namespace ui = morph::ui;
+
+namespace {
+
+ui::Json json(std::string_view text) {
+    auto parsed = ui::parseJson(text);
+    REQUIRE(parsed.has_value());
+    return *parsed;
+}
+
+constexpr std::string_view kLayer = R"({"color": "#00000080", "offsetX": {"value": 0, "unit": "px"},
+    "offsetY": {"value": 2, "unit": "px"}, "blur": {"value": 4, "unit": "px"}, "spread": {"value": 0, "unit": "px"}})";
+
+}  // namespace
+
+// Mutation: accept an upper-case letter (`Icon` then passes).
+TEST_CASE("ui theme values: an icon name is a lower-case letter, then up to 63 of a-z, 0-9, . and -", "[ui][theme]") {
+    CHECK(ui::isIconName("a"));
+    CHECK(ui::isIconName("nav.back-2"));
+    CHECK(ui::isIconName("z" + std::string(63, '9')));
+    CHECK_FALSE(ui::isIconName(""));
+    CHECK_FALSE(ui::isIconName("z" + std::string(64, '9')));
+    CHECK_FALSE(ui::isIconName("Icon"));
+    CHECK_FALSE(ui::isIconName("1con"));
+    CHECK_FALSE(ui::isIconName(".nav"));
+    CHECK_FALSE(ui::isIconName("naV"));
+    CHECK_FALSE(ui::isIconName("nav_back"));
+    CHECK_FALSE(ui::isIconName("nav back"));
+}
+
+// Mutation: read `rem` as px (2rem then reads 2).
+TEST_CASE("ui theme values: a dimension is a number of px or rem", "[ui][theme]") {
+    CHECK(ui::detail::pixelsOf(json(R"({"value": 2, "unit": "px"})")) == 2.0);
+    CHECK(ui::detail::pixelsOf(json(R"({"value": 2, "unit": "rem"})")) == 2.0 * ui::detail::kPixelsPerRem);
+    CHECK(ui::detail::pixelsOf(json(R"({"value": 2, "unit": "em"})")) == std::nullopt);
+    CHECK(ui::detail::pixelsOf(json(R"({"value": 2, "unit": 1})")) == std::nullopt);
+    CHECK(ui::detail::pixelsOf(json(R"({"value": "2", "unit": "px"})")) == std::nullopt);
+    CHECK(ui::detail::pixelsOf(json(R"({"value": 2})")) == std::nullopt);
+    CHECK(ui::detail::pixelsOf(json(R"({"unit": "px"})")) == std::nullopt);
+    CHECK(ui::detail::pixelsOf(json(R"("2px")")) == std::nullopt);
+}
+
+// Mutation: take the last layer of a list (the blur then reads 8).
+TEST_CASE("ui theme values: a shadow is one layer, or the first of a list, with a colour and four dimensions",
+          "[ui][theme]") {
+    auto const one = ui::detail::shadowOf(json(kLayer));
+    REQUIRE(one.has_value());
+    CHECK(one->offsetY == 2.0);
+    CHECK(one->blur == 4.0);
+    CHECK(one->color.a == 0x80);
+    std::string const second = R"({"color": "#fff", "offsetX": {"value": 1, "unit": "px"},
+        "offsetY": {"value": 1, "unit": "px"}, "blur": {"value": 8, "unit": "px"}, "spread": {"value": 0, "unit": "px"}})";
+    auto const first = ui::detail::shadowOf(json("[" + std::string{kLayer} + "," + second + "]"));
+    REQUIRE(first.has_value());
+    CHECK(first->blur == 4.0);
+    CHECK_FALSE(ui::detail::shadowOf(json("[]")).has_value());
+    CHECK_FALSE(ui::detail::shadowOf(json(R"("#000")")).has_value());
+    CHECK_FALSE(ui::detail::shadowOf(json(R"({"color": "#000", "offsetX": {"value": 0, "unit": "px"},
+        "offsetY": {"value": 2, "unit": "px"}, "blur": {"value": 4, "unit": "px"}})"))
+                    .has_value());
+    CHECK_FALSE(ui::detail::shadowOf(json(R"({"color": "black", "offsetX": {"value": 0, "unit": "px"},
+        "offsetY": {"value": 2, "unit": "px"}, "blur": {"value": 4, "unit": "px"}, "spread": {"value": 0, "unit": "px"}})"))
+                    .has_value());
+
+    CHECK(ui::detail::checkShadow(json(kLayer)) == std::nullopt);
+    CHECK(ui::detail::checkShadow(json("[" + std::string{kLayer} + "]")) == std::nullopt);
+    CHECK(ui::detail::checkShadow(json("[]")).has_value());
+    CHECK(ui::detail::checkShadow(json("[" + std::string{kLayer} + R"(, "#000"])")).has_value());
+    CHECK(ui::detail::checkShadow(json(R"({"offsetX": {"value": 0, "unit": "px"}})")).has_value());
+}
+
+// Mutation: keep a list's non-string entries as empty names (the list then reads three names).
+TEST_CASE("ui theme values: a font family is one name or a list of them", "[ui][theme]") {
+    CHECK(ui::detail::familiesOf(json(R"("Inter")")) == std::vector<std::string>{"Inter"});
+    CHECK(ui::detail::familiesOf(json(R"(["Inter", 3, "Arial"])")) == std::vector<std::string>{"Inter", "Arial"});
+    CHECK(ui::detail::familiesOf(json("3")).empty());
+}
+
+namespace {
+
+ui::ThemeValues valuesOf(std::string_view text) {
+    auto tokens = ui::parseTokens(text);
+    REQUIRE(tokens.has_value());
+    auto resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved.has_value());
+    return ui::themeValues(*resolved);
+}
+
+}  // namespace
+
+TEST_CASE("ui theme values: the neutral tone has its parts, and the hover fill and the track are their own tokens",
+          "[ui][theme]") {
+    ui::ThemeValues const defaults = ui::themeValues();
+    CHECK(defaults.colors.at("color.neutral").hex() == "#6e6e73");
+    CHECK(defaults.colors.at("color.neutral.bg").hex() == "#6e6e7326");
+    CHECK(defaults.colors.at("color.neutral.border").hex() == "#6e6e73");
+    CHECK(defaults.colors.at("color.neutral.dot").hex() == "#6e6e73");
+    CHECK(defaults.colors.at("color.hover").hex() == "#1d1d1f14");
+    CHECK(defaults.colors.at("color.track").hex() == "#e5e5ea");
+    CHECK(defaults.colors.at("color.controlSurface").hex() == "#ffffff");
+    CHECK(defaults.colors.at("color.controlBorder").hex() == "#c7c7cc");
+    CHECK(defaults.colors.at("color.divider").hex() == "#dcdce0");
+    ui::ThemeShadow const& popup = defaults.shadows.at("elevation.popup");
+    CHECK(popup.color.hex() == "#00000024");
+    CHECK(popup.offsetX == 0.0);
+    CHECK(popup.offsetY == 8.0);
+    CHECK(popup.blur == 24.0);
+    CHECK(popup.spread == 0.0);
+}
+
+// Mutation: leave `color.table.headerRule` out of `kThemeTokens` (a bundle's value is dropped and the token is
+// reported as unread), or accept a token of another type as the colour.
+TEST_CASE("ui theme values: the rule under a table's header is a colour token, transparent by default",
+          "[ui][theme]") {
+    CHECK(ui::themeValues().colors.at("color.table.headerRule").hex() == "#00000000");
+    CHECK(valuesOf(R"({"color": {"$type": "color", "table": {"headerRule": {"$value": "#DDE1E6"}}}})")
+              .colors.at("color.table.headerRule")
+              .hex() == "#dde1e6");
+    CHECK(valuesOf(
+              R"({"color": {"table": {"headerRule": {"$type": "dimension", "$value": {"value": 2, "unit": "px"}}}}})")
+              .colors.at("color.table.headerRule")
+              .hex() == "#00000000");
+    auto tokens = ui::parseTokens(R"({"color": {"$type": "color", "table": {"headerRule": {"$value": "#DDE1E6"}}}})");
+    REQUIRE(tokens.has_value());
+    ui::ThemeIndex index;
+    index.base = "base";
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        return id == "base" ? &*tokens : nullptr;
+    };
+    CHECK(ui::unreadThemeTokens(index, files).empty());
+}
+
+// Mutation: leave `radius.badge` out of `kThemeTokens` (a bundle's value is dropped and the default 4 reads).
+TEST_CASE("ui theme values: the badge radius is a token with a default", "[ui][theme]") {
+    CHECK(ui::themeValues().dimensions.at("radius.badge") == 4.0);
+    ui::ThemeValues const values =
+        valuesOf(R"({"radius": {"$type": "dimension", "badge": {"$value": {"value": 2, "unit": "px"}}}})");
+    CHECK(values.dimensions.at("radius.badge") == 2.0);
+}
+
+// Mutation: accept any string as a stroke style (`dotted` reads), or leave `border.style` out of `kThemeTokens` (the
+// bundle's `dashed` is dropped).
+TEST_CASE("ui theme values: a surface's border style is solid or dashed, and any other is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().strokes.at("border.style") == "solid");
+    ui::ThemeValues const dashed = valuesOf(R"({"border": {"style": {"$type": "strokeStyle", "$value": "dashed"}}})");
+    CHECK(dashed.strokes.at("border.style") == "dashed");
+
+    auto const parse = [](std::string_view text) {
+        auto tokens = ui::parseTokens(text);
+        REQUIRE(tokens.has_value());
+        return std::move(*tokens);
+    };
+    ui::TokenSet const base = parse(R"({"border": {"style": {"$type": "strokeStyle", "$value": "dashed"}}})");
+    ui::TokenSet const dotted = parse(R"({"border": {"style": {"$type": "strokeStyle", "$value": "dotted"}}})");
+    ui::ThemeIndex index;
+    index.base = "base";
+    index.surfaces.emplace("empty", "dotted");
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        if (id == "base") {
+            return &base;
+        }
+        return id == "dotted" ? &dotted : nullptr;
+    };
+    auto const refused = ui::checkTheme(index, files);
+    REQUIRE(refused.has_value());
+    CHECK(refused->contains("border.style: only solid and dashed are drawn"));
+    index.surfaces.clear();
+    CHECK_FALSE(ui::checkTheme(index, files).has_value());
+}
+
+// Mutation: accept any string as a keyword (`round` reads), or leave the paths out of `kThemeTokens` (the bundle's
+// values are dropped).
+TEST_CASE("ui theme values: a keyword is one of the names its spec lists, and any other is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().keywords.at("shape.iconOnly") == "default");
+    CHECK(ui::themeValues().keywords.at("font.overline.case") == "none");
+    CHECK(valuesOf(R"({"shape": {"iconOnly": {"$type": "keyword", "$value": "square"}}})")
+              .keywords.at("shape.iconOnly") == "square");
+    CHECK(valuesOf(R"({"font": {"overline": {"case": {"$type": "keyword", "$value": "uppercase"}}}})")
+              .keywords.at("font.overline.case") == "uppercase");
+
+    auto const parse = [](std::string_view text) {
+        auto tokens = ui::parseTokens(text);
+        REQUIRE(tokens.has_value());
+        return std::move(*tokens);
+    };
+    ui::TokenSet const base = parse(R"({"shape": {"iconOnly": {"$type": "keyword", "$value": "square"}}})");
+    ui::TokenSet const round = parse(R"({"shape": {"iconOnly": {"$type": "keyword", "$value": "round"}}})");
+    ui::ThemeIndex index;
+    index.base = "base";
+    index.surfaces.emplace("odd", "round");
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        if (id == "base") {
+            return &base;
+        }
+        return id == "round" ? &round : nullptr;
+    };
+    auto const refused = ui::checkTheme(index, files);
+    REQUIRE(refused.has_value());
+    CHECK(refused->contains("shape.iconOnly: only default and square are drawn"));
+    index.surfaces.clear();
+    CHECK_FALSE(ui::checkTheme(index, files).has_value());
+    CHECK(ui::unreadThemeTokens(index, files).empty());
+}
+
+// Mutation: drop the fill's alpha before comparing (the translucent default reads as opaque near-black).
+TEST_CASE("ui theme values: text that cannot be read on a fill is reported", "[ui][theme]") {
+    CHECK(ui::themeContrastProblems(ui::themeValues()).empty());
+
+    // The gallery's neutral text colour used as the hover fill: dark text on a dark fill.
+    auto const dark = ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color",
+        "text": {"$value": "#1C1E21"}, "hover": {"$value": "#363C46"}}})"));
+    REQUIRE_FALSE(dark.empty());
+    CHECK(dark.front().starts_with("color.hover: color.text is 1.5"));
+    CHECK(dark.front().ends_with(":1 on it, below 4.5:1"));
+
+    // A control fill the text cannot be read on.
+    auto const pale = ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color",
+        "text": {"$value": "#c9ccd6"}, "controlSurface": {"$value": "#ffffff"}}})"));
+    CHECK(std::ranges::any_of(
+        pale, [](std::string const& line) { return line.starts_with("color.controlSurface: color.text is 1.6"); }));
+
+    // Muted holds 3:1, not 4.5:1: the default muted on the default track is 4.04:1 and passes.
+    CHECK(ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color", "track": {"$value": "#e5e5ea"}}})"))
+              .empty());
+    auto const faint = ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color",
+        "muted": {"$value": "#9a9aa0"}, "track": {"$value": "#e5e5ea"}}})"));
+    CHECK(std::ranges::any_of(faint, [](std::string const& line) {
+        return line.starts_with("color.track: color.muted is ") && line.ends_with(":1 on it, below 3:1");
+    }));
+}
+
+TEST_CASE("ui theme values: the type steps and the strong weight have defaults, and a weight name reads as its number",
+          "[ui][theme]") {
+    ui::ThemeValues const defaults = ui::themeValues();
+    for (std::string_view const path :
+         {"font.size.small", "font.size.caption", "font.size.mono", "font.size.display", "font.size.headline"}) {
+        CHECK(defaults.dimensions.at(std::string{path}) == 0.0);
+    }
+    CHECK(defaults.numbers.at("font.weight.strong") == 700.0);
+    CHECK(defaults.numbers.at("font.weight.button") == 700.0);
+    CHECK(defaults.colors.at("color.disabled.text").hex() == "#8e8e93");
+    CHECK(defaults.colors.at("color.disabled.bg").hex() == "#f2f2f7");
+    CHECK(defaults.colors.at("color.disabled.border").hex() == "#e5e5ea");
+    CHECK(valuesOf(R"({"font": {"weight": {"button": {"$type": "fontWeight", "$value": "medium"}}}})")
+              .numbers.at("font.weight.button") == 500.0);
+    CHECK(valuesOf(R"({"color": {"disabled": {"bg": {"$type": "color", "$value": "#eef0f3"}}}})")
+              .colors.at("color.disabled.bg")
+              .hex() == "#eef0f3");
+
+    CHECK(valuesOf(R"({"font": {"weight": {"strong": {"$type": "fontWeight", "$value": "semi-bold"}}}})")
+              .numbers.at("font.weight.strong") == 600.0);
+    CHECK(valuesOf(R"({"font": {"weight": {"strong": {"$type": "fontWeight", "$value": 650}}}})")
+              .numbers.at("font.weight.strong") == 650.0);
+    // A weight of another type keeps the default.
+    CHECK(valuesOf(R"({"font": {"weight": {"strong": {"$type": "number", "$value": 300}}}})")
+              .numbers.at("font.weight.strong") == 700.0);
+    CHECK(valuesOf(R"({"font": {"size": {"small": {"$type": "dimension", "$value": {"value": 11, "unit": "px"}}}}})")
+              .dimensions.at("font.size.small") == 11.0);
+}
+
+// Mutation: accept any string as the marker (`hidden` reads), or leave `collapsible.marker` out of `kThemeTokens` (the
+// bundle's `none` is dropped).
+TEST_CASE("ui theme values: a collapsible's marker is shown or none, and any other is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().keywords.at("collapsible.marker") == "shown");
+    CHECK(valuesOf(R"({"collapsible": {"marker": {"$type": "keyword", "$value": "none"}}})")
+              .keywords.at("collapsible.marker") == "none");
+
+    auto const parse = [](std::string_view text) {
+        auto tokens = ui::parseTokens(text);
+        REQUIRE(tokens.has_value());
+        return std::move(*tokens);
+    };
+    ui::TokenSet const base = parse(R"({"collapsible": {"marker": {"$type": "keyword", "$value": "none"}}})");
+    ui::TokenSet const hidden = parse(R"({"collapsible": {"marker": {"$type": "keyword", "$value": "hidden"}}})");
+    ui::ThemeIndex index;
+    index.base = "base";
+    index.surfaces.emplace("odd", "hidden");
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        if (id == "base") {
+            return &base;
+        }
+        return id == "hidden" ? &hidden : nullptr;
+    };
+    auto const refused = ui::checkTheme(index, files);
+    REQUIRE(refused.has_value());
+    CHECK(refused->contains("collapsible.marker: only shown and none are drawn"));
+    index.surfaces.clear();
+    CHECK_FALSE(ui::checkTheme(index, files).has_value());
+    CHECK(ui::unreadThemeTokens(index, files).empty());
+}
+
+// Mutation: accept any string as the selection look (`bar` reads), or leave `list.selection` out of `kThemeTokens` (a
+// bundle's `fill` is dropped).
+TEST_CASE("ui theme values: a list selection is accent or fill, and any other is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().keywords.at("list.selection") == "accent");
+    CHECK(
+        valuesOf(R"({"list": {"selection": {"$type": "keyword", "$value": "fill"}}})").keywords.at("list.selection") ==
+        "fill");
+
+    auto const parse = [](std::string_view text) {
+        auto tokens = ui::parseTokens(text);
+        REQUIRE(tokens.has_value());
+        return std::move(*tokens);
+    };
+    ui::TokenSet const base = parse(R"({"list": {"selection": {"$type": "keyword", "$value": "fill"}}})");
+    ui::TokenSet const bar = parse(R"({"list": {"selection": {"$type": "keyword", "$value": "bar"}}})");
+    ui::ThemeIndex index;
+    index.base = "base";
+    index.surfaces.emplace("odd", "bar");
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        if (id == "base") {
+            return &base;
+        }
+        return id == "bar" ? &bar : nullptr;
+    };
+    auto const refused = ui::checkTheme(index, files);
+    REQUIRE(refused.has_value());
+    CHECK(refused->contains("list.selection: only accent and fill are drawn"));
+    index.surfaces.clear();
+    CHECK_FALSE(ui::checkTheme(index, files).has_value());
+}
+
+// Mutation: leave `input.paddingX` out of `kThemeTokens` (the bundle's 10 is dropped and 8 reads), or drop its check
+// (a negative inset is accepted).
+TEST_CASE("ui theme values: an input's inner padding defaults to 8 and a negative one is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().dimensions.at("input.paddingX") == 8.0);
+    CHECK(valuesOf(R"({"input": {"paddingX": {"$type": "dimension", "$value": {"value": 10, "unit": "px"}}}})")
+              .dimensions.at("input.paddingX") == 10.0);
+
+    auto const tokens =
+        ui::parseTokens(R"({"input": {"paddingX": {"$type": "dimension", "$value": {"value": -2, "unit": "px"}}}})");
+    REQUIRE(tokens.has_value());
+    ui::ThemeIndex index;
+    index.base = "base";
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        return id == "base" ? &*tokens : nullptr;
+    };
+    auto const refused = ui::checkTheme(index, files);
+    REQUIRE(refused.has_value());
+    CHECK(refused->contains("input.paddingX: must not be negative"));
+}
+
+// Mutation: drop the four paths from `kNonNegativePaths` (a negative size, height or gap is accepted), or leave
+// `actions.gap` out of `kThemeTokens` (the default and a set value are lost).
+TEST_CASE("ui theme values: a negative touch text size, small button height or action gap is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().dimensions.at("actions.gap") == 0.0);
+    CHECK(valuesOf(R"({"actions": {"gap": {"$type": "dimension", "$value": {"value": 12, "unit": "px"}}}})")
+              .dimensions.at("actions.gap") == 12.0);
+    for (auto const& [group, name, path] :
+         {std::tuple{"actions", "gap", "actions.gap"}, std::tuple{"control", "touchTextSize", "control.touchTextSize"},
+          std::tuple{"button", "smallHeight", "button.smallHeight"},
+          std::tuple{"button", "smallTouchHeight", "button.smallTouchHeight"}}) {
+        auto const tokens = ui::parseTokens(std::string{R"({")"} + group + R"(": {")" + name +
+                                            R"(": {"$type": "dimension", "$value": {"value": -2, "unit": "px"}}}})");
+        REQUIRE(tokens.has_value());
+        ui::ThemeIndex index;
+        index.base = "base";
+        ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+            return id == "base" ? &*tokens : nullptr;
+        };
+        auto const refused = ui::checkTheme(index, files);
+        INFO(path);
+        REQUIRE(refused.has_value());
+        CHECK(refused->contains(std::string{path} + ": must not be negative"));
+    }
+}
+
+// Mutation: leave `head.paddingY` out of `kThemeTokens` (the bundle's 12 is dropped and 0 reads), or drop its check (a
+// negative padding is accepted).
+TEST_CASE("ui theme values: the head padding defaults to 0 and a negative one is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().dimensions.at("head.paddingY") == 0.0);
+    CHECK(valuesOf(R"({"head": {"paddingY": {"$type": "dimension", "$value": {"value": 12, "unit": "px"}}}})")
+              .dimensions.at("head.paddingY") == 12.0);
+
+    auto const tokens =
+        ui::parseTokens(R"({"head": {"paddingY": {"$type": "dimension", "$value": {"value": -1, "unit": "px"}}}})");
+    REQUIRE(tokens.has_value());
+    ui::ThemeIndex index;
+    index.base = "base";
+    ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+        return id == "base" ? &*tokens : nullptr;
+    };
+    auto const refused = ui::checkTheme(index, files);
+    REQUIRE(refused.has_value());
+    CHECK(refused->contains("head.paddingY: must not be negative"));
+}
+
+// Mutation: leave either token out of `kThemeTokens` (the set value is dropped and 0 reads), or out of
+// `kNonNegativePaths` (a negative one is accepted).
+TEST_CASE("ui theme values: the tab padding and gap default to 0 and a negative one is refused", "[ui][theme]") {
+    for (auto const& [name, path] : {std::pair{"paddingX", "tabs.paddingX"}, std::pair{"gap", "tabs.gap"}}) {
+        INFO(path);
+        CHECK(ui::themeValues().dimensions.at(path) == 0.0);
+        CHECK(valuesOf(std::string{R"({"tabs": {")"} + name +
+                       R"(": {"$type": "dimension", "$value": {"value": 6, "unit": "px"}}}})")
+                  .dimensions.at(path) == 6.0);
+        auto const tokens = ui::parseTokens(std::string{R"({"tabs": {")"} + name +
+                                            R"(": {"$type": "dimension", "$value": {"value": -1, "unit": "px"}}}})");
+        REQUIRE(tokens.has_value());
+        ui::ThemeIndex index;
+        index.base = "base";
+        ui::TokenFileLookup const files = [&](std::string_view id) -> ui::TokenSet const* {
+            return id == "base" ? &*tokens : nullptr;
+        };
+        auto const refused = ui::checkTheme(index, files);
+        REQUIRE(refused.has_value());
+        CHECK(refused->contains(std::string{path} + ": must not be negative"));
+    }
+}
+
+// Mutation: treat a token of another type as the keyword (a colour at `shape.iconOnly` is then reported), or let a
+// non-string value through as a valid name.
+TEST_CASE("ui theme values: the keyword, dimension and stroke checks skip tokens of other types and refuse non-names",
+          "[ui][theme]") {
+    ui::TokenSet set;
+    CHECK_FALSE(ui::detail::keywordProblem(set).has_value());
+    CHECK_FALSE(ui::detail::dimensionProblem(set).has_value());
+    CHECK_FALSE(ui::detail::strokeProblem(set).has_value());
+
+    set["shape.iconOnly"] = {.type = "color", .value = json(R"("#000000")")};
+    set["input.paddingX"] = {.type = "color", .value = json(R"("#000000")")};
+    set["border.style"] = {.type = "color", .value = json(R"("#000000")")};
+    CHECK_FALSE(ui::detail::keywordProblem(set).has_value());
+    CHECK_FALSE(ui::detail::dimensionProblem(set).has_value());
+    CHECK_FALSE(ui::detail::strokeProblem(set).has_value());
+
+    set["shape.iconOnly"] = {.type = "keyword", .value = json("3")};
+    set["border.style"] = {.type = "strokeStyle", .value = json("3")};
+    CHECK(ui::detail::keywordProblem(set).has_value());
+    CHECK(ui::detail::strokeProblem(set).has_value());
+
+    set["shape.iconOnly"] = {.type = "keyword", .value = json(R"("square")")};
+    set["border.style"] = {.type = "strokeStyle", .value = json(R"("dashed")")};
+    CHECK_FALSE(ui::detail::keywordProblem(set).has_value());
+    CHECK_FALSE(ui::detail::strokeProblem(set).has_value());
+
+    set["input.paddingX"] = {.type = "dimension", .value = json(R"({"value": 4, "unit": "px"})")};
+    CHECK_FALSE(ui::detail::dimensionProblem(set).has_value());
+    set["input.paddingX"] = {.type = "dimension", .value = json(R"("4px")")};
+    CHECK_FALSE(ui::detail::dimensionProblem(set).has_value());
+    set["input.paddingX"] = {.type = "dimension", .value = json(R"({"value": -4, "unit": "px"})")};
+    CHECK(ui::detail::dimensionProblem(set).has_value());
+}
+
+// Mutation: read a non-string, non-number weight as a number.
+TEST_CASE("ui theme values: a weight that is neither a number nor a known name is refused", "[ui][theme]") {
+    CHECK(ui::detail::weightOf(json(R"("bold")")) == 700.0);
+    CHECK(ui::detail::weightOf(json(R"("heavier")")) == std::nullopt);
+    CHECK(ui::detail::weightOf(json("true")) == std::nullopt);
+}
+
+// Mutation: give `color.selectionText` or `elevation.dialog` a default (an unset theme then carries a value that
+// stands in for the surface's text or the card's shadow), or leave either out of `kThemeTokens`.
+TEST_CASE("ui theme values: the selection text and the dialog shadow are absent until a theme sets them",
+          "[ui][theme]") {
+    ui::ThemeValues const none = ui::themeValues();
+    // The dialog's rules and the placeholder stand in for the divider and the muted colour, and are absent too.
+    CHECK_FALSE(none.colors.contains("color.dialogRule"));
+    CHECK_FALSE(none.colors.contains("color.placeholder"));
+    CHECK(std::ranges::any_of(ui::kThemeTokens, [](auto const& spec) { return spec.path == "color.dialogRule"; }));
+    CHECK(std::ranges::any_of(ui::kThemeTokens, [](auto const& spec) { return spec.path == "color.placeholder"; }));
+    CHECK_FALSE(none.colors.contains("color.selectionText"));
+    CHECK_FALSE(none.shadows.contains("elevation.dialog"));
+    CHECK(none.shadows.contains("elevation.card"));
+    CHECK(std::ranges::any_of(ui::kThemeTokens, [](auto const& spec) { return spec.path == "color.selectionText"; }));
+    CHECK(std::ranges::any_of(ui::kThemeTokens, [](auto const& spec) { return spec.path == "elevation.dialog"; }));
+
+    auto const set = valuesOf(
+        R"({"color": {"selectionText": {"$type": "color", "$value": "#112233"}},)"
+        R"( "elevation": {"dialog": {"$type": "shadow", "$value": {"color": "#00000014", "offsetX": {"value": 0, "unit": "px"},)"
+        R"( "offsetY": {"value": 4, "unit": "px"}, "blur": {"value": 8, "unit": "px"}, "spread": {"value": 0, "unit": "px"}}}}})");
+    REQUIRE(set.colors.contains("color.selectionText"));
+    CHECK(set.colors.at("color.selectionText").hex() == "#112233");
+    REQUIRE(set.shadows.contains("elevation.dialog"));
+    CHECK(set.shadows.at("elevation.dialog").offsetY == 4.0);
+}
+
+// Mutation: leave `color.selectionText` out of the contrast rule's fills.
+TEST_CASE("ui theme values: a selection text that cannot be read on the selection colour is reported", "[ui][theme]") {
+    auto const pale = ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color",
+        "selection": {"$value": "#ffffff"}, "selectionText": {"$value": "#eeeeee"}}})"));
+    CHECK(std::ranges::any_of(pale, [](std::string const& line) {
+        return line.starts_with("color.selection: color.selectionText is ") && line.ends_with(":1 on it, below 4.5:1");
+    }));
+    CHECK(ui::themeContrastProblems(valuesOf(R"({"color": {"$type": "color",
+        "selection": {"$value": "#ffffff"}, "selectionText": {"$value": "#101010"}}})"))
+              .empty());
+    CHECK(ui::themeContrastProblems(ui::themeValues()).empty());
+}

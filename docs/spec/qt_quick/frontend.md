@@ -32,9 +32,8 @@ int main(int argc, char** argv) {
 
 - `qt_quick::ShellFactory` is `ui::ShellFactory` with the backend the shell mounts on, since `ui::AppContext` names
   no renderer: `(AppContext&, IViewBackend&, expected<Bundle, ConnectError>) -> unique_ptr<MountedShell>`.
-- `FrontendConfig{mountShell, components, title, onWidthClass}`: the shell factory (it must not be empty), the
-  components and restyle map the backend uses (borrowed), the window's title, and the width class callback
-  (`BackendOptions::onWidthClass`), and `devTools`, a `ui::DevelopmentTools`: with `On`, Ctrl+Shift+I in the
+- `FrontendConfig{mountShell, components, title}`: the shell factory (it must not be empty), the
+  components and restyle map the backend uses (borrowed), the window's title, and `devTools`, a `ui::DevelopmentTools`: with `On`, Ctrl+Shift+I in the
   window opens the inspector over the shell's focused screen ([`../ui/inspector.md`](../ui/inspector.md)).
 - `onEngine`, `std::function<void(QQmlEngine&, QQuickWindow&)>`: called once per run with the engine and the window,
   after both exist and before the backend is built, where an application registers its QML modules, maps its
@@ -55,8 +54,10 @@ builds `qt_quick::Backend` itself ([`backend.md`](backend.md)).
 2. a `qt::QtExecutor`, the reactive runtime's owner and every bridge handler's callback executor;
 3. the `reactive::Runtime`;
 4. a `QtScheduler`;
-5. the `QQmlEngine`, the `QQuickWindow` (1024 × 768, the configured title), then `onEngine(engine, window)`, then the
-   `Backend` on the window's content item. Restyles and `applyTheme` made in the hook reach every widget the shell
+5. the `QQmlEngine` (with the garbage collector's time slice at zero, below), the `QQuickWindow` (1024 × 768, the
+   configured title), then `onEngine(engine, window)`, then the
+   `Backend` on the window's content item, which first takes the window's size: a window not yet shown has not sized
+   it, and the shell reads the backend's width class before the first mount. Restyles and `applyTheme` made in the hook reach every widget the shell
    creates, since the backend resolves a kind's component on its first use;
 6. the `AppContext` it lends: `runtime()`, `executor()`, `scheduler()`, `ioLoop()` (null: Qt's loop is the only one),
    `quit()`.
@@ -76,6 +77,14 @@ window; it reads the mounted shell through `inspectFocused`, and is hidden when 
 destroyed. On the `offscreen` platform the window renders in software. Teardown is the reverse: `runApp`
 destroys the screens and closes the source; then the backend, the window and the engine go, then the scheduler, the
 runtime and the executor, and Qt last. A task posted to the executor after that runs nothing.
+
+## Garbage collection
+
+Before it makes the engine, `run` sets `QV4_GC_TIMELIMIT` to `0` unless the environment already sets it, which Qt
+reads when an engine is made: the engine's garbage collector then runs each collection to its end in one step. With
+Qt 6.12.0's incremental collector, whose steps interleave with the event loop, a process running this module's QML
+crashes in a later collection, on an object whose memory is corrupt; a collection in one step does not. A value the
+environment gives is kept, so an application can choose the incremental collector back.
 
 ## Quit
 

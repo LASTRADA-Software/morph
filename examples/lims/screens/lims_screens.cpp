@@ -393,7 +393,7 @@ ui::Screen sampleScreen() {
                       {.key = ui::row(&ProjectRow::id),
                        .columns = {{.name = "code", .label = "Code", .cell = ui::text({.text = ui::row("code")})},
                                    {.name = "name", .label = "Name", .cell = ui::text({.text = ui::row("name")})}},
-                       .selection = ui::Selection::Single,
+                       .selectionMode = ui::Selection::Single,
                        .onActivate = {ui::run(pick, {{&SelectProject::projectId, ui::row(&ProjectRow::id)}})}})
                       .a11y("Projects")
                       .testId("projects")},

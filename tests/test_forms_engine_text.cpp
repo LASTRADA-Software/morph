@@ -72,6 +72,16 @@ TEST_CASE("engine text: decimalText rounds half away from zero at the requested 
     CHECK(engine::decimalText(Rational{Numerator{7}, Denominator{1}, DecimalPlaces{0}}, 0) == "7");
 }
 
+// Mutation: round through the saturating roundToDecimalPlaces -> both read 9.223372036854775807.
+TEST_CASE("engine text: decimalText is exact at 18 places, past an int64 numerator", "[forms-engine][text]") {
+    CHECK(engine::decimalText(Rational{Numerator{10}, Denominator{3}, DecimalPlaces{1}}, 18) ==
+          "3.333333333333333333");
+    CHECK(engine::decimalText(Rational{Numerator{-28}, Denominator{3}, DecimalPlaces{1}}, 18) ==
+          "-9.333333333333333333");
+    CHECK(engine::decimalText(Rational{Numerator{9'000'000'000'000'000'000}, Denominator{7}, DecimalPlaces{0}}, 18) ==
+          "1285714285714285714.285714285714285714");
+}
+
 TEST_CASE("engine text: wall-clock and instant conversion", "[forms-engine][text]") {
     using namespace std::chrono_literals;
     auto const wall = engine::parseWallClock("2026-07-05T14:30");

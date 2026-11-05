@@ -135,7 +135,8 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     return date ? text.substr(0, 10) : text;
 }
 
-/// @brief The view-tree field state of a field: read-only, required, and its error as the one message shown.
+/// @brief The view-tree field state of a field: read-only, required, its error as the one message shown, and its
+///        help as the control's description, which assistive technology associates with the control.
 /// @param field The field.
 /// @return The state, bound to the field.
 [[nodiscard]] inline ui::FieldState fieldState(FieldState const* field) {
@@ -148,6 +149,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
                 return error.has_value() ? std::vector<std::string>{error->message} : std::vector<std::string>{};
             },
         .stale = false,
+        .description = field->help(),
     };
 }
 
@@ -400,15 +402,17 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 }
 
 /// @brief The inline form of a cell's content: a row centred across, the label at the caption's width (a spacer for
-///        a Boolean, whose checkbox carries its label) and the control stretching; the help is a second row under the
-///        control, indented by the caption's width.
-/// @param state   The field.
-/// @param control The control.
-/// @param options The view options.
-/// @param common  The cell's own visibility and test id.
+///        a Boolean, whose checkbox carries its label) and the control stretching. The help is the control's
+///        description, under the control already; a control that does not read the field state (an override's)
+///        has it as a second row under the control, indented by the caption's width.
+/// @param state       The field.
+/// @param control     The control.
+/// @param options     The view options.
+/// @param common      The cell's own visibility and test id.
+/// @param helpOutside Whether the cell draws the help, because the control does not.
 /// @return The row, or a column of the row and the help's row.
 [[nodiscard]] inline ui::Node inlineCell(FieldState const& state, ui::Node control, ViewOptions const& options,
-                                         ui::Common common) {
+                                         ui::Common common, bool helpOutside) {
     FieldState const* const field = &state;
     int const width = options->inlineLabelWidth;
     ui::Node caption;
@@ -425,7 +429,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     holder.common.layout = {.width = ui::Sizing::stretch(), .height = {}};
     ui::Row line{
         .children = {std::move(caption), ui::column(std::move(holder))}, .gap = 3, .align = ui::Align::Center};
-    if (state.help().empty()) {
+    if (!helpOutside || state.help().empty()) {
         line.common = std::move(common);
         return ui::row(std::move(line));
     }
@@ -438,9 +442,12 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 }
 
 /// @brief One field's cell: the label, the control (an override's, else the built-in) and the help text; shown while
-///        the field is visible. The control marks a required field, so the label carries no mark of its own. The
-///        options' `fieldLayout` puts the label over the control, or beside it (`inlineCell`); an Object's panel and
-///        an ObjectArray's rows are stacked either way, and their members follow the form's layout.
+///        the field is visible. A built-in control draws the help as its description, so it is tied to the control
+///        on every kit; a control an override draws, an Object's panel and an ObjectArray's rows are not one control
+///        that reads the field state, so the cell draws their help as a muted text. The control marks a required
+///        field, so the label carries no mark of its own. The options' `fieldLayout` puts the label over the control,
+///        or beside it (`inlineCell`); an Object's panel and an ObjectArray's rows are stacked either way, and their
+///        members follow the form's layout.
 /// @param session The session.
 /// @param state   The field.
 /// @param options The view options.
@@ -449,17 +456,19 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 inline ui::Node fieldCell(FormSession& session, FieldState& state, ViewOptions const& options) {
     FieldState const* const field = &state;
     ui::Node control;
+    FieldKind const kind = state.spec().kind;
+    bool helpOutside = kind == FieldKind::Object || kind == FieldKind::ObjectArray;
     if (Overrides::Render const* const render = options->overrides.resolve(state.spec())) {
         control = (*render)(FieldView{session, state, options});
+        helpOutside = true;
     } else {
         control = fieldControl(session, state, options);
     }
     ui::Common common{};
     common.visible = [field] { return field->visible().get(); };
     common.testId = "cell_" + state.path();
-    FieldKind const kind = state.spec().kind;
     if (options->fieldLayout == FieldLayout::Inline && kind != FieldKind::Object && kind != FieldKind::ObjectArray) {
-        return inlineCell(state, std::move(control), options, std::move(common));
+        return inlineCell(state, std::move(control), options, std::move(common), helpOutside);
     }
     std::vector<ui::Node> children;
     if (state.spec().kind != FieldKind::Boolean && state.spec().kind != FieldKind::Object) {
@@ -468,7 +477,7 @@ inline ui::Node fieldCell(FormSession& session, FieldState& state, ViewOptions c
         children.push_back(ui::text(std::move(label)));
     }
     children.push_back(std::move(control));
-    if (!state.help().empty()) {
+    if (helpOutside && !state.help().empty()) {
         children.push_back(ui::text(ui::Text{.text = state.help(), .role = ui::TextRole::Muted}));
     }
     ui::Column cell{.children = std::move(children), .common = std::move(common)};

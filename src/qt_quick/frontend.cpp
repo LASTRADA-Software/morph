@@ -14,6 +14,7 @@
 #include <QSGRendererInterface>
 #include <QVariant>
 #include <QVariantList>
+#include <QtEnvironmentVariables>
 #include <algorithm>
 #include <array>
 #include <iostream>
@@ -152,6 +153,13 @@ int Frontend::run(ui::AppSource& source) {
     qt::QtExecutor executor{&anchor};
     reactive::Runtime runtime{executor};
     QtScheduler scheduler{executor, &anchor};
+    // With Qt 6.12.0's incremental garbage collector, which interleaves its steps with the event loop, a process
+    // running this module's QML crashes in a later collection, on an object whose memory is corrupt; a collector that
+    // runs each collection to its end in one step does not. So the engine is made with the collector's time slice at
+    // zero (`QV4_GC_TIMELIMIT`, which Qt reads when an engine is made), unless the environment already chose one.
+    if (!qEnvironmentVariableIsSet("QV4_GC_TIMELIMIT")) {
+        qputenv("QV4_GC_TIMELIMIT", "0");
+    }
     QQmlEngine engine;
     QQuickWindow window;
     window.setTitle(detail::toQString(_config.title));
@@ -164,8 +172,10 @@ int Frontend::run(ui::AppSource& source) {
         _config.onEngine(engine, window);
         hookChangedTheme = themeSnapshot(engine) != before;
     }
-    Backend backend{engine, *window.contentItem(),
-                    BackendOptions{.components = _config.components, .onWidthClass = _config.onWidthClass}};
+    // A window not yet shown has not sized its content item; the backend classes the window's width from that item,
+    // and the shell reads the class before the first mount, so the item takes the window's size now.
+    window.contentItem()->setSize(window.size());
+    Backend backend{engine, *window.contentItem(), BackendOptions{.components = _config.components}};
     Context context{runtime, executor, scheduler};
     QObject::connect(&window, &QQuickWindow::closing, &anchor, [&context] { context.quit(0); });
     // The shell the inspector reads; cleared once the loop has ended, before runApp destroys the shell.

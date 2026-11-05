@@ -3,6 +3,7 @@
 // qt_quick::Frontend: run, quit and the teardown order (docs/spec/qt_quick/frontend.md). This executable owns no
 // QGuiApplication: each run makes its own, as a client's main does.
 
+#include <QByteArray>
 #include <QColor>
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -11,6 +12,7 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QWindow>
+#include <QtEnvironmentVariables>
 #include <array>
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -98,8 +100,7 @@ qt_quick::FrontendConfig configWith(std::vector<std::string>& log, std::function
             return shell;
         },
         .components = nullptr,
-        .title = "test",
-        .onWidthClass = {}};
+        .title = "test"};
 }
 
 }  // namespace
@@ -149,8 +150,7 @@ TEST_CASE("qt_quick frontend: a shell factory that throws ends the run after the
         .mountShell = [](ui::AppContext&, ui::IViewBackend&, std::expected<ui::Bundle, ui::ConnectError>)
             -> std::unique_ptr<ui::MountedShell> { throw std::runtime_error{"no shell"}; },
         .components = nullptr,
-        .title = "test",
-        .onWidthClass = {}};
+        .title = "test"};
     qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
     CHECK_THROWS_WITH(frontend.run(source), "no shell");
     CHECK(log.back() == "close");
@@ -269,6 +269,41 @@ TEST_CASE("qt_quick frontend: onEngine runs with the engine and the window befor
     CHECK(log.front() == "onEngine");  // before the source opens
 }
 
+// Mutation: make the engine without touching QV4_GC_TIMELIMIT (the first case reads it unset), or always write 0 (the
+// second reads 0 instead of the 7 it chose).
+TEST_CASE("qt_quick frontend: the engine is made with the garbage collector's time slice at zero",
+          "[qt_quick][frontend]") {
+    qunsetenv("QV4_GC_TIMELIMIT");
+    std::vector<std::string> log;
+    RecordingSource source{log};
+    qt_quick::FrontendConfig config =
+        configWith(log, [](ui::AppContext& context) { context.executor().post([&context] { context.quit(0); }); });
+    std::optional<QByteArray> seen;
+    config.onEngine = [&seen](QQmlEngine&, QQuickWindow&) {
+        seen =
+            qEnvironmentVariableIsSet("QV4_GC_TIMELIMIT") ? std::optional{qgetenv("QV4_GC_TIMELIMIT")} : std::nullopt;
+    };
+    qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
+    CHECK(frontend.run(source) == 0);
+    REQUIRE(seen.has_value());
+    CHECK(*seen == QByteArrayLiteral("0"));
+}
+
+TEST_CASE("qt_quick frontend: a garbage collector time slice the environment chose is kept", "[qt_quick][frontend]") {
+    qputenv("QV4_GC_TIMELIMIT", "7");
+    std::vector<std::string> log;
+    RecordingSource source{log};
+    qt_quick::FrontendConfig config =
+        configWith(log, [](ui::AppContext& context) { context.executor().post([&context] { context.quit(0); }); });
+    std::optional<QByteArray> seen;
+    config.onEngine = [&seen](QQmlEngine&, QQuickWindow&) { seen = qgetenv("QV4_GC_TIMELIMIT"); };
+    qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
+    CHECK(frontend.run(source) == 0);
+    qunsetenv("QV4_GC_TIMELIMIT");
+    REQUIRE(seen.has_value());
+    CHECK(*seen == QByteArrayLiteral("7"));
+}
+
 TEST_CASE("qt_quick frontend: an onEngine that throws ends the run after the teardown, with nothing mounted",
           "[qt_quick][frontend]") {
     std::vector<std::string> log;
@@ -370,4 +405,65 @@ TEST_CASE("qt_quick frontend: Ctrl+Shift+I opens the inspector only in developme
         // The application's window, and in development mode the inspector's window over it.
         CHECK(frontend.run(source) == (mode == ui::DevelopmentTools::On ? 2 : 1));
     }
+}
+
+namespace {
+
+/// A shell that records the backend's width class when it mounts and each change after.
+class WidthShell final : public ui::MountedShell {
+public:
+    WidthShell(ui::IViewBackend& backend, std::vector<std::string>& heard) : _backend{&backend} {
+        heard.push_back(backend.widthClass());
+        backend.setOnWidthClass([&heard](std::string const& widthClass) { heard.push_back(widthClass); });
+    }
+    ~WidthShell() override { _backend->setOnWidthClass({}); }
+    WidthShell(WidthShell const&) = delete;
+    WidthShell& operator=(WidthShell const&) = delete;
+    WidthShell(WidthShell&&) = delete;
+    WidthShell& operator=(WidthShell&&) = delete;
+
+private:
+    ui::IViewBackend* _backend;
+};
+
+// The window's width for @p units of the engine's Theme.
+int widthFor(QQmlEngine& engine, double units) {
+    auto* const theme = engine.singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    return static_cast<int>(units * theme->property("unitWidth").toDouble()) + 1;
+}
+
+}  // namespace
+
+// Mutation: class the window by its width in pixels (60 units, some 450 px, is then expanded), never tell the listener
+// (it hears the first class only), or leave the content item unsized until the window shows (the shell first reads
+// compact for a window that is not).
+TEST_CASE("qt_quick frontend: the shell reads the window's width class, and hears it change", "[qt_quick][frontend]") {
+    std::vector<std::string> log;
+    RecordingSource source{log};
+    std::vector<std::string> heard;
+    QQuickWindow* shown = nullptr;
+    QQmlEngine* engineOf = nullptr;
+    qt_quick::FrontendConfig config{
+        .mountShell = [&heard, &shown, &engineOf](ui::AppContext& context, ui::IViewBackend& backend,
+                                                  std::expected<ui::Bundle, ui::ConnectError> /*opened*/)
+            -> std::unique_ptr<ui::MountedShell> {
+            auto shell = std::make_unique<WidthShell>(backend, heard);
+            context.executor().post([&context, &shown, &engineOf] {
+                shown->resize(widthFor(*engineOf, 60), 900);
+                context.executor().post([&context] { context.quit(0); });
+            });
+            return shell;
+        },
+        .components = nullptr,
+        .title = "test",
+        .onEngine =
+            [&shown, &engineOf](QQmlEngine& engine, QQuickWindow& window) {
+                shown = &window;
+                engineOf = &engine;
+                window.resize(widthFor(engine, 100), 900);
+            }};
+    qt_quick::Frontend frontend{argCount(), argValues(), std::move(config)};
+    CHECK(frontend.run(source) == 0);
+    CHECK(heard == std::vector<std::string>{"medium", "compact"});
 }

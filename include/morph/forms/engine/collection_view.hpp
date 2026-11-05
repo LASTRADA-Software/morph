@@ -160,7 +160,8 @@ namespace detail::engine {
             std::optional<std::string> const& open = view->openRow();
             return open.has_value() ? std::vector<ui::Key>{ui::Key{*open}} : std::vector<ui::Key>{};
         };
-        table.onSelectionChange = [view](std::vector<ui::Key> const& keys) {
+        // The table holds every row, so either kind of change reports the whole selection.
+        table.onSelectionChange = [view](std::vector<ui::Key> const& keys, ui::SelectionChange /*change*/) {
             auto const* const text = keys.empty() ? nullptr : std::get_if<std::string>(&keys.front());
             if (text == nullptr) {
                 view->close();

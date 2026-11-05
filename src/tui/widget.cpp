@@ -10,12 +10,16 @@
 #include <core/tui/Modifier.hpp>
 #include <core/tui/Screen.hpp>
 #include <core/tui/Unicode.hpp>
+#include <cstdint>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <ranges>
 #include <stdexcept>
+#include <utility>
 #include <variant>
+#include <vector>
 
 #include "tui/container_widgets.hpp"
 #include "tui/display_widgets.hpp"
@@ -208,9 +212,10 @@ std::optional<ui::Tone> WidgetBase::effectiveRowTone() const noexcept {
 
 namespace {
 
-/// Whether the terminal draws a surface inverted: the dark navigator column and the top bar of the app shell.
+/// Whether the terminal draws a surface inverted: the dark navigator column and the top bar of the app shell, joined
+/// to the head's block or not.
 [[nodiscard]] bool invertsSurface(std::string_view surface) noexcept {
-    return surface == "sidebar" || surface == "toolbar";
+    return surface == "sidebar" || surface == "toolbar" || surface == "toolbarJoined";
 }
 
 /// Marks every cell of @p area inverse: what an inverted surface does to what a widget on it painted. Set rather than
@@ -344,11 +349,13 @@ EventResult WidgetBase::dispatch(::core::tui::InputEvent const& event) {
     }
     if (auto const* pressed = std::get_if<::core::tui::KeyEvent>(&event);
         pressed != nullptr && actionable() && !blockedByDialog()) {
-        // A handler of the widget's own key may destroy it; only an ignored key goes on to its chords.
-        if (EventResult const result = key(*pressed); result != EventResult::Ignored) {
+        // A chord the widget declares comes before its own handling of the key: declaring it on this very node is
+        // how an author says the key means something else here. Either handler may destroy the widget, so a handled
+        // key returns at once.
+        if (EventResult const result = chord(*pressed); result != EventResult::Ignored) {
             return result;
         }
-        return chord(*pressed);
+        return key(*pressed);
     }
     return EventResult::Ignored;
 }
@@ -387,21 +394,44 @@ void paintFieldMarks(::core::tui::Canvas& canvas, std::string_view marks) {
     canvas.putString(0, canvas.width() - width, marks, canvas.theme().warning);
 }
 
-::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption) {
+void paintFieldDescription(::core::tui::Canvas& canvas, std::string_view description, ui::Tone tone) {
+    ::core::tui::Style const& style =
+        tone == ui::Tone::Neutral ? canvas.theme().textMuted : toneStyle(canvas.theme(), tone);
+    int row = 0;
+    for (auto const line : splitLines(description)) {
+        if (row >= canvas.height()) {
+            return;
+        }
+        canvas.putString(row, 0, line, style);
+        ++row;
+    }
+}
+
+::core::tui::Canvas paintFieldCaption(::core::tui::Canvas& canvas, std::string_view caption, bool required,
+                                      std::string_view hint) {
     if (caption.empty()) {
         return canvas.subcanvas({.x = 0, .y = 0, .width = canvas.width(), .height = canvas.height()});
     }
     if (canvas.height() > 0) {
-        canvas.putString(0, 0, caption, canvas.theme().textNormal);
+        int end = canvas.putString(0, 0, caption, canvas.theme().textNormal);
+        if (required) {
+            end += canvas.putString(0, end, kRequiredMark, canvas.theme().error);
+        }
+        if (!hint.empty()) {
+            canvas.putString(0, end, std::string{kHintSeparator} + std::string{hint}, canvas.theme().textNormal);
+        }
     }
     return canvas.subcanvas({.x = 0, .y = 1, .width = canvas.width(), .height = std::max(0, canvas.height() - 1)});
 }
 
-::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption) {
+::core::tui::Size withFieldCaption(::core::tui::Size control, std::string_view caption, bool required,
+                                   std::string_view hint) {
     if (caption.empty()) {
         return control;
     }
-    return {.width = std::max(control.width, displayWidth(caption)), .height = control.height + 1};
+    int const mark = required ? displayWidth(kRequiredMark) : 0;
+    int const hinted = hint.empty() ? 0 : displayWidth(kHintSeparator) + displayWidth(hint);
+    return {.width = std::max(control.width, displayWidth(caption) + mark + hinted), .height = control.height + 1};
 }
 
 EventResult WidgetBase::pointer(::core::tui::MouseEvent const& mouse) {
@@ -500,7 +530,7 @@ EventResult WidgetBase::release(::core::tui::MouseEvent const& mouse) {
     auto const bounds = _view->screenBounds();
     bool const inside = cell.x >= 0 && cell.y >= 0 && cell.x < bounds.width && cell.y < bounds.height;
     if (inside && actionable()) {
-        click({.x = cell.x + _drawShift.x, .y = cell.y + _drawShift.y});
+        clickWith({.x = cell.x + _drawShift.x, .y = cell.y + _drawShift.y}, mouse.modifiers);
     }
     return EventResult::Handled;
 }
@@ -607,7 +637,8 @@ void ContainerBase::childForgotten(WidgetBase& /*child*/) {}
         if (!child->shown()) {
             continue;
         }
-        auto const natural = requestedSize(*child);
+        auto natural = requestedSize(*child);
+        natural.width = std::max(natural.width, child->contentMinimumWidth());
         along += vertical ? natural.height : natural.width;
         across = std::max(across, vertical ? natural.width : natural.height);
         ++count;
@@ -617,6 +648,57 @@ void ContainerBase::childForgotten(WidgetBase& /*child*/) {}
     }
     return vertical ? ::core::tui::Size{.width = across, .height = along}
                     : ::core::tui::Size{.width = along, .height = across};
+}
+
+ui::Sizing stretchSizingOf(WidgetBase const& child, bool vertical) {
+    ui::Sizing sizing = vertical ? child.layout().height : child.layout().width;
+    if (sizing.kind == ui::Sizing::Kind::Content && child.expandsByDefault()) {
+        sizing = ui::Sizing::stretch(1);
+    }
+    return sizing;
+}
+
+::core::tui::Size weightedNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap) {
+    bool const vertical = axis == ui::Axis::Vertical;
+    std::int64_t others = 0;
+    std::int64_t weights = 0;
+    std::vector<std::pair<std::int64_t, std::int64_t>> stretching;  // each one's natural and weight
+    int across = 0;
+    int count = 0;
+    for (auto const* child : children) {
+        if (!child->shown()) {
+            continue;
+        }
+        auto natural = requestedSize(*child);
+        natural.width = std::max(natural.width, child->contentMinimumWidth());
+        int along = vertical ? natural.height : natural.width;
+        across = std::max(across, vertical ? natural.width : natural.height);
+        ++count;
+        ui::Sizing const sizing = stretchSizingOf(*child, vertical);
+        if (sizing.kind != ui::Sizing::Kind::Stretch) {
+            others += along;
+            continue;
+        }
+        // A spacer asks for nothing: it is empty, and takes only what the others leave.
+        if ((vertical ? child->layout().height : child->layout().width).kind == ui::Sizing::Kind::Content &&
+            child->expandsByDefault()) {
+            along = 0;
+        }
+        std::int64_t const weight = std::max(1, sizing.amount);
+        weights += weight;
+        stretching.emplace_back(along, weight);
+    }
+    // Each child needs a share of at least its natural, and the shares are proportional to the weights, so the
+    // stretching children together need the largest of `n * W / w`, rounded up to a whole cell.
+    std::int64_t shared = 0;
+    for (auto const& [natural, weight] : stretching) {
+        shared = std::max(shared, ((natural * weights) + weight - 1) / weight);
+    }
+    std::int64_t total = others + shared + (count > 1 ? std::int64_t{gap} * (count - 1) : 0);
+    total = std::min<std::int64_t>(total, std::numeric_limits<int>::max());
+    int const length = static_cast<int>(total);
+    return vertical ? ::core::tui::Size{.width = across, .height = length}
+                    : ::core::tui::Size{.width = length, .height = across};
 }
 
 namespace {
@@ -639,8 +721,11 @@ int mainExtent(::core::tui::Size size, bool vertical) { return vertical ? size.h
     ui::Align const placed = hints.alignSelf.value_or(align);
     ::core::tui::Size const requested = requestedSize(child);
     if (placement.vertical) {
-        int const width = alignedExtent(placed, hints.width, requested.width, area.width,
-                                        layout::boundsOf(hints.minWidth, hints.maxWidth));
+        // Across a column the content minimum raises the child's width as it does along a row.
+        layout::Bounds bounds = layout::boundsOf(hints.minWidth, hints.maxWidth);
+        bounds.minimum = std::max(bounds.minimum, child.contentMinimumWidth());
+        int const width =
+            alignedExtent(placed, hints.width, std::max(requested.width, bounds.minimum), area.width, bounds);
         return {.x = area.x + alignedOffset(placed, width, area.width),
                 .y = area.y + offset,
                 .width = width,
@@ -667,15 +752,16 @@ void solvedAreas(std::span<WidgetBase* const> children, Placement const& placeme
         if (!child->shown()) {
             continue;
         }
-        auto sizing = placement.vertical ? child->layout().height : child->layout().width;
-        if (sizing.kind == ui::Sizing::Kind::Content && child->expandsByDefault()) {
-            sizing = ui::Sizing::stretch(1);
-        }
+        ui::Sizing const sizing = stretchSizingOf(*child, placement.vertical);
         placed.push_back(child);
         slots.push_back(&area);
         ui::LayoutHints const& hints = child->layout();
-        layout::Bounds const bounds = placement.vertical ? layout::boundsOf(hints.minHeight, hints.maxHeight)
-                                                         : layout::boundsOf(hints.minWidth, hints.maxWidth);
+        layout::Bounds bounds = placement.vertical ? layout::boundsOf(hints.minHeight, hints.maxHeight)
+                                                   : layout::boundsOf(hints.minWidth, hints.maxWidth);
+        if (!placement.vertical) {
+            // A badge, or a stack holding one, is raised to the room its content needs.
+            bounds.minimum = std::max(bounds.minimum, child->contentMinimumWidth());
+        }
         items.push_back(layout::Item{.sizing = sizing,
                                      .natural = mainExtent(child->naturalSize(), placement.vertical),
                                      .minimum = bounds.minimum,
@@ -716,6 +802,7 @@ void solvedAreas(std::span<WidgetBase* const> children, Placement const& placeme
 void columnAreas(std::span<WidgetBase* const> children, Placement const& placement, StackSpec const& spec,
                  std::span<::core::tui::Rect> areas) {
     auto given = spec.extents.begin();
+    auto place = spec.places.begin();
     int offset = 0;
     for (auto const [child, area] : std::views::zip(children, areas)) {
         int extent = 0;
@@ -725,8 +812,18 @@ void columnAreas(std::span<WidgetBase* const> children, Placement const& placeme
         } else {
             extent = mainExtent(child->naturalSize(), placement.vertical);
         }
+        CellPlace const placed =
+            place != spec.places.end() ? *place++ : CellPlace{.across = ui::Align::Start, .down = spec.align};
         if (child->shown()) {
-            area = slotOf(*child, placement, offset, extent, spec.align);
+            area = slotOf(*child, placement, offset, extent, placed.down);
+            // A cell placed at its natural width sits where its column asks; a wider one fills the column.
+            if (!placement.vertical && child->placedAcrossColumn() &&
+                (placed.across == ui::Align::Center || placed.across == ui::Align::End)) {
+                int const space = extent;
+                int const natural = std::min(requestedSize(*child).width, space);
+                area.x += alignedOffset(placed.across, natural, space);
+                area.width = natural;
+            }
         }
         offset += extent + spec.gap;
     }
@@ -753,6 +850,15 @@ int alignedExtent(ui::Align align, ui::Sizing sizing, int requested, int space, 
         return std::clamp(requested, 0, std::max(0, space));
     }
     return layout::crossExtent(sizing, space, bounds);
+}
+
+void bleedAreas(std::span<WidgetBase* const> children, std::vector<::core::tui::Rect>& areas, ::core::tui::Rect span) {
+    for (auto const [child, area] : std::views::zip(children, areas)) {
+        if (child->shown() && (child->layout().bleed || child->passesBleed()) && area.width > 0 && area.height > 0) {
+            area.x = span.x;
+            area.width = span.width;
+        }
+    }
 }
 
 std::vector<::core::tui::Rect> stackAreas(std::span<WidgetBase* const> children, ::core::tui::Rect area,
@@ -787,6 +893,106 @@ std::vector<std::string_view> splitLines(std::string_view text) {
 }
 
 int displayWidth(std::string_view text) { return ::core::tui::stringWidth(text); }
+
+std::string elidedLine(std::string_view line, int width) {
+    if (displayWidth(line) <= width) {
+        return std::string{line};
+    }
+    if (width <= 0) {
+        return {};
+    }
+    std::size_t kept = 0;
+    while (kept < line.size()) {
+        std::size_t next = kept + 1;
+        while (next < line.size() && (static_cast<unsigned char>(line.at(next)) & 0xC0U) == 0x80U) {
+            ++next;
+        }
+        if (displayWidth(line.substr(0, next)) > width - 1) {
+            break;
+        }
+        kept = next;
+    }
+    return std::string{line.substr(0, kept)} + "…";
+}
+
+ui::Align alignOfText(ui::TextAlign align) noexcept {
+    switch (align) {
+        case ui::TextAlign::Center:
+            return ui::Align::Center;
+        case ui::TextAlign::End:
+            return ui::Align::End;
+        case ui::TextAlign::Start:
+        default:
+            return ui::Align::Start;
+    }
+}
+
+namespace {
+
+// The width in cells of each line @p runs break into: a line break starts the next line while @p multiline, and is a
+// space otherwise.
+std::vector<int> runLineWidths(std::vector<ui::TextSpan> const& runs, bool multiline) {
+    std::vector<int> widths{0};
+    for (ui::TextSpan const& run : runs) {
+        bool first = true;
+        for (auto const line : splitLines(run.text)) {
+            if (!first) {
+                if (multiline) {
+                    widths.push_back(0);
+                } else {
+                    ++widths.back();
+                }
+            }
+            first = false;
+            widths.back() += displayWidth(line);
+        }
+    }
+    return widths;
+}
+
+}  // namespace
+
+void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& runs, ::core::tui::Style const& style,
+               bool multiline, int row, int column, ui::TextAlign align) {
+    std::vector<int> widths;
+    int const firstRow = row;
+    ui::Align const place = alignOfText(align);
+    auto const offsetOf = [&](int line) {
+        return alignedOffset(place, widths.at(static_cast<std::size_t>(line)), canvas.width());
+    };
+    if (align != ui::TextAlign::Start) {
+        widths = runLineWidths(runs, multiline);
+        column = offsetOf(0);
+    }
+    for (ui::TextSpan const& run : runs) {
+        ::core::tui::Style runStyle = style;
+        runStyle.bold = style.bold || run.strong;
+        if (run.action) {
+            // The banner's link: the accent, underlined.
+            runStyle.fg = canvas.theme().textAccent.fg;
+            runStyle.underline = true;
+        }
+        if (run.tone != ui::Tone::Neutral) {
+            runStyle.fg = toneStyle(canvas.theme(), run.tone).fg;
+        }
+        bool first = true;
+        for (auto const line : splitLines(run.text)) {
+            if (!first) {
+                if (multiline) {
+                    ++row;
+                    column = widths.empty() ? 0 : offsetOf(row - firstRow);
+                } else {
+                    column += canvas.putString(row, column, " ", runStyle);
+                }
+            }
+            first = false;
+            if (row >= canvas.height()) {
+                return;
+            }
+            column += canvas.putString(row, column, line, runStyle);
+        }
+    }
+}
 
 bool isActivation(::core::tui::KeyEvent const& key) noexcept {
     return ::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None &&

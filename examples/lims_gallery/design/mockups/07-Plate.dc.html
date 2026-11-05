@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plate layout</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;font-size:13px;color:#1C1E21;background:#EEF0F3;font-variant-numeric:tabular-nums}
+a{color:#17784A}a:hover{color:#0F5A36}
+.cap{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#4D5461;margin:0 0 12px}
+.win{background:#F6F7F9;border:1px solid #D2D7DE;border-radius:8px;overflow:hidden;box-sizing:border-box}
+.card{background:#fff;border:1px solid #DDE1E6;border-radius:6px;box-sizing:border-box}
+.btn{font:500 13px Inter,system-ui,sans-serif;height:30px;padding:0 12px;border-radius:6px;border:1px solid #C3C9D2;background:#fff;color:#1C1E21;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.primary{background:#17784A;border-color:#17784A;color:#fff}
+.btn.ghost{border-color:transparent;background:transparent;color:#17784A;padding:0 4px}
+.btn.lg{height:44px;font-size:14px}
+.input{height:30px;border:1px solid #C3C9D2;border-radius:6px;padding:0 8px;font:13px Inter,system-ui,sans-serif;background:#fff;box-sizing:border-box;color:#1C1E21}
+.muted{color:#4D5461}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px}
+.plate{display:grid;grid-template-columns:22px repeat(12,44px);gap:4px;align-items:center}
+.hd{font-size:11px;font-weight:600;color:#4D5461;text-align:center}
+.well{height:40px;border-radius:20px;border:1.5px solid #9AA2AE;background:#fff;font:600 10px "JetBrains Mono",ui-monospace,monospace;color:#1C1E21;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.w-std{background:#E6ECFF;border-color:#5B7BE0;color:#1F3FA8}
+.w-qc{background:#FFF1D6;border-color:#D19100;color:#6B4100}
+.w-blk{background:#EEF0F3;border-color:#7A828F;color:#363C46}
+.w-emp{border-style:dashed;border-color:#C3C9D2;color:#5F6673;font-weight:400}
+.w-sel{box-shadow:0 0 0 3px #17784A}
+.w-drop{border:2px dashed #17784A;background:#EAF5EE;color:#1F3FA8}
+.lg-i{display:inline-flex;align-items:center;gap:6px;margin-right:14px}
+.lg-i span.well{width:26px;height:26px;border-radius:13px;font-size:9px}
+.src{display:flex;align-items:center;gap:8px;padding:6px 8px;border-top:1px solid #EDF0F3}
+.grip{color:#7A828F;cursor:grab;letter-spacing:-2px}
+.wl{display:flex;align-items:center;gap:10px;min-height:44px;border-top:1px solid #EDF0F3}
+.wl .well{width:36px;height:36px;border-radius:18px;flex:none}
+</style>
+</helmet>
+<div style="width: 1520px; height: 1000px; box-sizing: border-box; padding: 40px; display: flex; gap: 48px; align-items: flex-start">
+  <div>
+    <p class="cap">Expanded · drag samples into wells, or select wells and assign</p>
+    <div class="win" style="width: 1000px; height: 880px; display: flex; flex-direction: column">
+      <div style="padding: 12px 16px; background: #fff; border-bottom: 1px solid #E1E5EA; display: flex; align-items: center; gap: 8px">
+        <h1 style="margin: 0; font-size: 16px; font-weight: 600">Plate <span class="mono" style="font-size: 14px">PL-0193</span></h1>
+        <span class="muted" style="flex: 1">ELISA, host cell protein · worksheet <span class="mono">WS-2026-0415</span></span>
+        <select class="input" aria-label="Template" style="width: 200px"><option>Template: HCP 96, 8 standards</option></select>
+        <button class="btn">Auto-fill samples</button><button class="btn primary">Save layout</button>
+      </div>
+      <div style="flex: 1; display: flex; gap: 14px; padding: 14px 16px; align-items: flex-start">
+        <section class="card" aria-label="Samples to place" style="width: 230px; flex: none; overflow: hidden">
+          <div style="padding: 8px; display: flex; align-items: center"><h2 style="margin: 0; font-size: 13px; font-weight: 600; flex: 1">To place · 14</h2></div>
+          <div class="src"><span class="grip" aria-hidden="true">⋮⋮</span><span class="mono" style="flex: 1">S-26-104301</span><button class="btn" style="height: 26px">Assign…</button></div>
+          <div class="src" style="opacity: .55"><span class="grip" aria-hidden="true">⋮⋮</span><span class="mono" style="flex: 1">S-26-104302</span><span class="muted" style="font-size: 12px">dragging</span></div>
+          <div class="src"><span class="grip" aria-hidden="true">⋮⋮</span><span class="mono" style="flex: 1">S-26-104303</span><button class="btn" style="height: 26px">Assign…</button></div>
+          <div class="src"><span class="grip" aria-hidden="true">⋮⋮</span><span class="mono" style="flex: 1">S-26-104304</span><button class="btn" style="height: 26px">Assign…</button></div>
+          <div class="src"><span class="grip" aria-hidden="true">⋮⋮</span><span class="mono" style="flex: 1">S-26-104305</span><button class="btn" style="height: 26px">Assign…</button></div>
+          <div class="src muted" style="justify-content: center">+ 9 more</div>
+        </section>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; align-items: center; gap: 8px; background: #EAF5EE; border: 1px solid #BCDFC9; border-radius: 6px; padding: 5px 8px" role="region" aria-label="Selected wells">
+            <span style="flex: 1"><b>6 wells selected</b> · A3–A8</span>
+            <label for="fill" class="muted">Fill with</label><select class="input" id="fill" style="width: 150px"><option>Samples, in order</option></select>
+            <button class="btn">Apply</button><button class="btn ghost">Clear wells</button>
+          </div>
+          <div class="card" style="padding: 12px">
+            <div class="plate" role="grid" aria-label="96-well plate PL-0193">
+              <span></span>
+              <sc-for list="{{cols}}" as="c" hint-placeholder-count="12"><span class="hd">{{c}}</span></sc-for>
+              <sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+                <span class="hd">{{r.name}}</span>
+                <sc-for list="{{r.cells}}" as="w" hint-placeholder-count="12"><button class="{{w.cls}}" aria-label="{{w.aria}}">{{w.text}}</button></sc-for>
+              </sc-for>
+            </div>
+          </div>
+          <div style="font-size: 12px">
+            <span class="lg-i"><span class="well w-std">STD</span>Standard</span>
+            <span class="lg-i"><span class="well w-qc">QC</span>Control</span>
+            <span class="lg-i"><span class="well w-blk">B</span>Blank</span>
+            <span class="lg-i"><span class="well">S</span>Sample</span>
+            <span class="lg-i"><span class="well w-emp">·</span>Empty</span>
+          </div>
+          <p class="muted" style="margin: 0; font-size: 12px">Shift-click selects a range. Arrow keys move between wells; Enter opens Assign for the focused well.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="cap">Compact · wells listed by row</p>
+    <div class="win" style="width: 390px; height: 880px; display: flex; flex-direction: column; background: #fff">
+      <div style="padding: 12px 16px; border-bottom: 1px solid #E1E5EA">
+        <h1 style="margin: 0; font-size: 16px; font-weight: 600">Plate <span class="mono" style="font-size: 14px">PL-0193</span></h1>
+        <p class="muted" style="margin: 2px 0 10px">ELISA, host cell protein · 14 samples to place</p>
+        <div style="display: flex; gap: 8px"><button class="btn lg" style="flex: 1">Auto-fill samples</button><button class="btn primary lg" style="flex: 1">Save layout</button></div>
+      </div>
+      <div style="padding: 4px 16px; flex: 1">
+        <details open style="border-bottom: 1px solid #DDE1E6"><summary style="min-height: 44px; display: flex; align-items: center; font-weight: 600">Row A · 1 standard, 2 controls, 9 empty</summary>
+          <div class="wl"><span class="well w-std">STD</span><span style="flex: 1"><b>A1</b> · Standard 1, 100 ng/mL</span></div>
+          <div class="wl"><span class="well w-qc">QC</span><span style="flex: 1"><b>A2</b> · Control, low</span></div>
+          <div class="wl"><span class="well w-sel w-emp">·</span><span style="flex: 1"><b>A3</b> · Empty</span><button class="btn lg">Assign…</button></div>
+          <div class="wl"><span class="well w-sel w-emp">·</span><span style="flex: 1"><b>A4</b> · Empty</span><button class="btn lg">Assign…</button></div>
+          <div class="wl"><span class="well w-emp">·</span><span style="flex: 1"><b>A5–A8</b> · Empty, 4 wells</span><button class="btn lg">Assign…</button></div>
+          <div class="wl"><span class="well w-qc">QC</span><span style="flex: 1"><b>A9</b> · Control, high</span></div>
+          <div class="wl"><span class="well w-emp">·</span><span style="flex: 1"><b>A10–A12</b> · Empty, 3 wells</span><button class="btn lg">Assign…</button></div>
+        </details>
+        <details style="border-bottom: 1px solid #DDE1E6"><summary style="min-height: 44px; display: flex; align-items: center; font-weight: 600">Row B · 1 standard, 1 blank, 10 samples</summary></details>
+        <details style="border-bottom: 1px solid #DDE1E6"><summary style="min-height: 44px; display: flex; align-items: center; font-weight: 600">Row C · 1 standard, 11 samples</summary></details>
+        <details style="border-bottom: 1px solid #DDE1E6"><summary style="min-height: 44px; display: flex; align-items: center; font-weight: 600">Rows D–H · 5 standards, 47 samples, 8 empty</summary></details>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1520,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const names = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+    let sample = 1;
+    const rows = names.map((name, r) => {
+      const cells = [];
+      for (let c = 1; c <= 12; c += 1) {
+        const id = name + c;
+        let text = 'S' + sample;
+        let cls = 'well';
+        let role = 'sample ' + sample;
+        if (c === 1) { text = 'STD' + (r + 1); cls = 'well w-std'; role = 'standard ' + (r + 1); }
+        else if (id === 'A2' || id === 'A9') { text = 'QC'; cls = 'well w-qc'; role = id === 'A2' ? 'control low' : 'control high'; }
+        else if (id === 'B2') { text = 'B'; cls = 'well w-blk'; role = 'blank'; }
+        else if (r === 0 && c >= 3 && c <= 8) { text = '·'; cls = 'well w-emp w-sel'; role = 'empty, selected'; }
+        else if (r === 0) { text = '·'; cls = 'well w-emp'; role = 'empty'; }
+        else if (id === 'D5') { text = '+'; cls = 'well w-drop'; role = 'drop target'; }
+        else if (r === 7 && c >= 5) { text = '·'; cls = 'well w-emp'; role = 'empty'; }
+        else { sample += 1; }
+        cells.push({ text, cls, aria: id + ', ' + role });
+      }
+      return { name, cells };
+    });
+    return { cols: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], rows };
+  }
+}
+</script>
+</body>
+</html>

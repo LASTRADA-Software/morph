@@ -44,13 +44,41 @@ struct Track {
     int gap = 0;     ///< Cells between two neighbours.
 };
 
-/// Extents along a stack's main axis, in item order. Fixed items get their amount and Content items their natural
-/// extent, each clamped into its bounds; Stretch items share what is left by weight (a weight below one counts as
-/// one), the cells a division leaves over going one each to the first Stretch items. A share stops at its item's
-/// maximum and what it leaves goes to the Stretch items not capped, at most one pass per Stretch item; a share
-/// below its item's minimum is raised to it. An overflow is taken from the last item first, down to each item's
-/// minimum, and then the stack overflows. Gaps are never shrunk, so items whose gaps alone overflow the track keep
-/// only their minimums.
+/// One column of a table, for `planColumns`.
+struct ColumnItem {
+    ui::Sizing sizing{};  ///< How the column asks for space.
+    int natural = 0;      ///< The width its widest shown cell and its header ask for.
+    int least = 0;    ///< The narrowest it takes without cutting a word; `natural` for a column that cuts anywhere.
+    int floor = 0;    ///< The narrowest a stretch column goes before the table is short of room.
+    int minimum = 0;  ///< The narrowest any column is squeezed to when the table is short of room.
+    bool shrinks = false;  ///< Whether a stretch column gives up width before the other stretch columns.
+};
+
+/// Widths of a table's columns, in order. Fixed, Percent and Content columns ask for what `distribute` gives an item
+/// of that sizing. What is left, `L`, goes to the Stretch columns, each of which has a natural width `n`, a least
+/// width `l` and a floor `f` (`f <= l <= n`):
+///  1. `L >= sum(n)`: each is `n` plus its weighted share of the spare `L - sum(n)`.
+///  2. `sum(l) <= L < sum(n)`: each is `l` plus the share `(n - l) * (L - sum(l)) / (sum(n) - sum(l))` of the room
+///     between its widths, the cells a division leaves over going one each to the first columns with `n > l`.
+///  3. `sum(f) <= L < sum(l)`: each starts at `l`, and the deficit is taken from the columns that shrink, last first,
+///     each down to `f`, then from the others in the same order.
+///  4. `L < sum(f)`: each is `f`, and then the overflow is taken from every column, last first, down to `minimum`.
+/// In steps 1 to 3 the Stretch columns add up to `L` exactly, and a column's width never falls as the track grows.
+/// @param items The columns.
+/// @param track The cells available and the gap between two columns.
+/// @return One width per column.
+[[nodiscard]] std::vector<int> planColumns(std::span<ColumnItem const> items, Track track);
+
+/// Extents along a stack's main axis, in item order. Fixed items get their amount, Percent items that share of the
+/// track's length (rounded down; the gaps are not taken off first) and Content items their natural extent, each
+/// clamped into its bounds; Stretch items share what is left by weight from zero (a weight below one counts as
+/// one), the cells a division leaves over going one each to the first Stretch items. A share outside its item's
+/// bounds is held at the bound and the rest is shared again among the others by weight: when the clamping of a pass
+/// added length the items raised to their minimum are held, when it removed length the items cut to their maximum
+/// are, and when it changed nothing every item is; at most one pass per Stretch item. Three Stretch items of
+/// weight 1 in 90 cells, the first with a minimum of 50, get 50, 20 and 20. An overflow, which only the minimums
+/// can make, is taken from the last item first, down to each item's minimum, and then the stack overflows. Gaps are
+/// never shrunk, so items whose gaps alone overflow the track keep only their minimums.
 [[nodiscard]] std::vector<int> distribute(std::span<Item const> items, Track track);
 
 /// A child's extent across a stack: a Fixed child's amount, while Content and Stretch fill `space`; then clamped
@@ -89,6 +117,35 @@ struct GridPlan {
 /// `rowGap` rows apart. A cell whose span does not fit the rest of its row starts the next row; a row is as tall as
 /// its tallest cell.
 [[nodiscard]] GridPlan planGrid(int columns, std::span<GridCell const> cells, Track width, int rowGap);
+
+/// As `planGrid` with a column count, with one `Item` per column sizing it as `distribute` sizes a stack's items;
+/// no item counts as one stretch column.
+[[nodiscard]] GridPlan planGrid(std::span<Item const> columns, std::span<GridCell const> cells, Track width,
+                                int rowGap);
+
+/// Where one item of a wrapping row lands.
+struct WrapPlaced {
+    int line = 0;   ///< The line, from 0.
+    int x = 0;      ///< Its leading edge along the line.
+    int width = 0;  ///< Its extent along the line.
+
+    bool operator==(WrapPlaced const&) const = default;
+};
+
+/// A solved wrapping row: one place per item, in item order, and the number of lines.
+struct WrapPlan {
+    std::vector<WrapPlaced> placed;  ///< One per item.
+    int lines = 0;                   ///< How many lines the items fill.
+};
+
+/// Places items along lines of `width.length` cells, `width.gap` cells apart. Each item has a basis: its natural
+/// extent (a Fixed item its amount), and for a Stretch item its minimum when it has one (above 0), else its natural
+/// extent; clamped into its bounds and at most the line's length. Items fill lines in order; an item starts a new line
+/// when its basis, and a gap, does not fit after the items already on the line. A line holds at least one item, and an
+/// item whose basis is 0 takes no gap and starts no line. On a line the Stretch items share the spare length as
+/// `distribute` does; a line with none places it by `justify`. An item wider than the line sits alone, at the line's
+/// length.
+[[nodiscard]] WrapPlan planWrap(std::span<Item const> items, Track width, ui::Justify justify = ui::Justify::Start);
 
 /// The rectangle a slot of `plan` covers, gaps between its columns included.
 [[nodiscard]] ::core::tui::Rect slotArea(GridPlan const& plan, GridSlot const& slot);

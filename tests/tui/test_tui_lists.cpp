@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <core/tui/Canvas.hpp>
@@ -47,6 +48,8 @@ std::vector<morph::ui::MenuEntry> entries(std::initializer_list<char const*> lab
 using morph::tui::detail::PanelImpl;
 using morph::tui::detail::RadioSelectImpl;
 using morph::tui::detail::ScrollImpl;
+using morph::tui::detail::SegmentedSelectImpl;
+using morph::tui::detail::SlotImpl;
 using morph::tui::detail::SpacerImpl;
 using morph::tui::detail::StackImpl;
 using morph::tui::detail::TabsImpl;
@@ -75,6 +78,7 @@ class Gate final : public morph::tui::detail::TuiContainer<ui::SlotWidget> {
 public:
     explicit Gate(Context& context) : TuiContainer{context} { adopt(morph::tui::detail::makeView(*this)); }
     void setOpen(bool open) noexcept { _open = open; }
+    void setScrollable(bool scrollable) override { static_cast<void>(scrollable); }
     [[nodiscard]] core::tui::Size naturalSize() const override {
         return morph::tui::detail::stackNaturalSize(children(), ui::Axis::Vertical, 0);
     }
@@ -198,6 +202,28 @@ TEST_CASE("tui lists: tabs draw a bar over the pages the mount leaves visible; R
     CHECK(harness.draw() == Rows{" One [Two]", "second"});
     static_cast<void>(harness.key(KeyCode::Right));
     CHECK(selected.size() == 1);
+}
+
+// Mutation: paint the bar from the first label always (the chosen `[Training]` is cut off past column 40).
+TEST_CASE("tui lists: a narrow tab bar scrolls to the chosen tab and marks the labels it cuts", "[tui][lists]") {
+    Harness harness{40, 3};
+    auto const tabs = harness.make<TabsImpl>(nullptr);
+    std::vector<std::size_t> picked;
+    tabs->setTabs({"Overview", "Calibration", "Maintenance", "Bookings", "Audit trail", "Documents", "Training"});
+    tabs->setOnSelect([&](std::size_t index) { picked.push_back(index); });
+    tabs->setSelected(6);
+    std::vector<std::string> rows = harness.draw();
+    REQUIRE_FALSE(rows.empty());
+    CHECK(rows.front() == "\u2039 Audit trail  Documents [Training]");
+    // Back at the start, the bar draws from the first label again, and marks the cut end.
+    tabs->setSelected(0);
+    rows = harness.draw();
+    REQUIRE_FALSE(rows.empty());
+    CHECK(rows.front().starts_with("[Overview]"));
+    CHECK(rows.front().ends_with("\u203a"));
+    // A click on the end marker moves the highlight to the next tab, as Right does.
+    harness.click({.x = 39, .y = 0});
+    CHECK(picked == std::vector<std::size_t>{1});
 }
 
 // Mutation: keep the bar's row whatever setBarShown says (the page stays on row 1).
@@ -425,6 +451,41 @@ TEST_CASE("tui lists: a dropdown at the bottom opens its list above itself", "[t
     harness.focus(*select);
     static_cast<void>(harness.key(KeyCode::Enter));
     CHECK(harness.draw() == Rows{"", "▶ Red", "  Green", "[Red ▾]"});
+}
+
+TEST_CASE("tui lists: a dropdown's list opens at the field's start when it fits, else ending at the field's end",
+          "[tui][lists]") {
+    Harness harness{40, 4};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    bool const atRight = GENERATE(true, false);
+    auto const pad = harness.make<SpacerImpl>(row.get());
+    pad->setLayout({.width = atRight ? ui::Sizing::stretch() : ui::Sizing::fixed(0)});
+    auto const select = harness.make<DropdownSelectImpl>(row.get());
+    auto const margin = harness.make<SpacerImpl>(row.get());
+    margin->setLayout({.width = ui::Sizing::fixed(atRight ? 5 : 0)});
+    select->setOptions({{.key = key(1), .label = "Red"}, {.key = key(2), .label = "Green apples"}});
+    select->setSelected(key(2));
+    // Byte offsets into a drawn row, as the screen columns they are at: each glyph is one column.
+    auto const column = [](std::string const& drawn, std::size_t offset) {
+        return static_cast<std::size_t>(std::ranges::count_if(
+            drawn.substr(0, offset), [](char byte) { return (static_cast<unsigned char>(byte) & 0xC0U) != 0x80U; }));
+    };
+    auto const first = harness.draw().at(0);
+    std::size_t const start = column(first, first.find('['));
+    std::size_t const end = column(first, first.rfind(']') + 1);
+    harness.focus(*select);
+    static_cast<void>(harness.key(KeyCode::Enter));
+    std::string const popup = harness.draw().at(2);
+    std::size_t const label = column(popup, popup.find("Green apples"));
+    if (atRight) {
+        REQUIRE(end == 35);
+        // The list ends at the field's last column, not at the screen's edge; its text ends two columns short of that.
+        CHECK(label + std::string{"Green apples"}.size() + 2 == end);
+    } else {
+        REQUIRE(start == 0);
+        // The list's text starts after its marker.
+        CHECK(label == 2);
+    }
 }
 
 TEST_CASE("tui lists: an open list closes when the focus leaves it", "[tui][lists][focus]") {
@@ -1026,4 +1087,58 @@ TEST_CASE("tui lists: an open list that loses its room to a shrinking terminal c
     CHECK_FALSE(select->isOpen());
     CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
     CHECK(chosen == 0);
+}
+
+// Mutation: drop the Right handling in SegmentedSelectImpl::key (the press then chooses nothing).
+TEST_CASE("tui lists: a segmented select draws its options in one row and chooses with the arrows and a click",
+          "[tui][lists]") {
+    Harness harness{40, 2};
+    auto const select = harness.make<SegmentedSelectImpl>(nullptr);
+    select->setOptions({{.key = ui::Key{std::int64_t{1}}, .label = "All 24"},
+                        {.key = ui::Key{std::int64_t{2}}, .label = "Flagged 2"}});
+    select->setSelected(ui::Key{std::int64_t{1}});
+    std::vector<ui::Key> chosen;
+    select->setOnSelect([&chosen](ui::Key key) { chosen.push_back(std::move(key)); });
+    CHECK(harness.draw() == Rows{" All 24 │ Flagged 2"});
+    CHECK(harness.screen().renderedBuffer().at(0, 1).style.bg == harness.screen().theme().listItemSelected.bg);
+    harness.focus(*select);
+    CHECK(harness.key(KeyCode::Right) == EventResult::Handled);
+    CHECK(chosen == std::vector<ui::Key>{ui::Key{std::int64_t{2}}});
+    CHECK(select->probeText() == "Flagged 2");
+    CHECK(harness.key(KeyCode::Right) == EventResult::Handled);
+    CHECK(chosen.size() == 1);
+    CHECK(harness.key(KeyCode::Enter) == EventResult::Ignored);
+    static_cast<void>(harness.draw());
+    static_cast<void>(harness.click({.x = 2, .y = 0}));
+    CHECK(chosen.back() == ui::Key{std::int64_t{1}});
+}
+
+// Mutation: ignore `inset` (the first tab's label starts at column 0).
+TEST_CASE("tui lists: a tabs node's inset starts its first tab and its pages in from the edge", "[tui][lists]") {
+    Harness harness{20, 5};
+    auto const tabs = harness.make<TabsImpl>(nullptr);
+    tabs->setTabs({"One", "Two"});
+    tabs->setSelected(0);
+    auto const slot = harness.make<SlotImpl>(tabs.get());
+    slot->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::stretch()});
+    auto const page = harness.make<TextImpl>(slot.get());
+    page->setText("first");
+    CHECK(harness.draw() == Rows{"[One] Two", "first"});
+    // Step 4: one row above and below, two columns either side; the strip's surface draws nothing new.
+    tabs->setInset(4);
+    tabs->setStripSurface("bar");
+    CHECK(harness.draw() == Rows{"  [One] Two", "", "  first"});
+}
+
+// Mutation: let `setPageInset` change the strip's inset, or ignore it (the page keeps the strip's two columns).
+TEST_CASE("tui lists: a tabs node's page inset pads the pages apart from the strip", "[tui][lists]") {
+    Harness harness{20, 5};
+    auto const tabs = harness.make<TabsImpl>(nullptr);
+    tabs->setTabs({"One", "Two"});
+    tabs->setSelected(0);
+    auto const page = harness.make<TextImpl>(tabs.get());
+    page->setText("first");
+    tabs->setInset(4);
+    tabs->setPageInset(0);
+    CHECK(harness.draw() == Rows{"  [One] Two", "first"});
 }

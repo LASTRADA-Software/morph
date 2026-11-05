@@ -11,13 +11,40 @@ QtObject {
 
     // The bundle's icon set: icon name to the URL of its SVG; empty while the theme declares none.
     property var icons: ({})
+    // The text glyph of each framework icon name that has one, the glyphs the terminal draws: icon name to glyph.
+    property var iconGlyphs: ({})
     // Whether the bundle's theme declares an icon set: a node icon it does not name is then reported.
     property bool iconSet: false
+
+    // The bundle's icon set as SVG text: icon name to text; empty while the theme declares none.
+    property var iconSvgs: ({})
+    // Icons already drawn in a colour, by name and colour.
+    property var tintedIcons: ({})
+    onIconSvgsChanged: theme.tintedIcons = ({})
 
     // The URL an icon draws from: the bundle's set's, or empty, for which a component draws today's text or glyph.
     function iconSource(name: string): string {
         const source = name !== "" ? theme.icons[name] : undefined
         return source !== undefined ? source : ""
+    }
+
+    // The URL an icon draws from, in the colour of the control that shows it: every `currentColor` of the icon's SVG
+    // becomes @p color, since Qt's SVG image has no colour of its own to resolve it against. An icon that never paints
+    // `currentColor` is the set's own URL, and one the set lacks is empty.
+    function iconSourceIn(name: string, color: color): string {
+        const svg = name !== "" ? theme.iconSvgs[name] : undefined
+        if (svg === undefined || svg.indexOf("currentColor") < 0)
+            return theme.iconSource(name)
+        const hex = "#" + [color.r, color.g, color.b].map(channel => {
+            const part = Math.round(channel * 255).toString(16)
+            return part.length < 2 ? "0" + part : part
+        }).join("")
+        const key = name + "|" + hex
+        if (!(key in theme.tintedIcons))
+            theme.tintedIcons[key] = "data:image/svg+xml;base64," +
+                    Qt.btoa(Uint8Array.from(unescape(encodeURIComponent(svg.split("currentColor").join(hex))),
+                                            ch => ch.charCodeAt(0)).buffer)
+        return theme.tintedIcons[key]
     }
 
     // The families `font.family` names, in order of preference; empty draws in the platform font.
@@ -35,13 +62,58 @@ QtObject {
     }
     // The families text is drawn in: the theme's, else the platform font's.
     readonly property list<string> families: fontFamilies.length > 0 ? fontFamilies : [platformMetrics.font.family]
+    // Whether the theme sets the body face: it names a family or gives a body size. Body text and controls then draw
+    // in the theme's families at the body size; otherwise they draw in the platform font untouched.
+    readonly property bool themedBody: fontFamilies.length > 0 || bodySize > 0
     // Body text and controls: the theme's families at the body size, or the platform font untouched.
-    readonly property font bodyFont: fontFamilies.length > 0 ? fontOf(bodyPixels, Font.Normal) : platformMetrics.font
-    // Emphasised text at the body size: a title, a header, the current step.
-    readonly property font strongFont: fontFamilies.length > 0 ? fontOf(bodyPixels, Font.Bold)
-                                                               : boldOf(platformMetrics.font)
-    // A heading: the families at the heading size, bold.
-    readonly property font headingFont: fontOf(headingPixels, Font.Bold)
+    readonly property font bodyFont: themedBody ? fontOf(bodyPixels, Font.Normal) : platformMetrics.font
+    // Emphasised text at the body size: a title, a header, the current step. Every strong font draws at
+    // `strongWeight`.
+    readonly property font strongFont: themedBody ? fontOf(bodyPixels, strongWeight) : boldOf(platformMetrics.font)
+    // A strong button caption at the body size, at `buttonWeight`.
+    readonly property font buttonFont: themedBody ? fontOf(bodyPixels, buttonWeight)
+                                                  : weightedOf(platformMetrics.font, buttonWeight)
+    // A heading: the families at the heading size, strong.
+    readonly property font headingFont: fontOf(headingPixels, strongWeight)
+    // The small size, regular and strong: a table header (strong), a footnote, a timestamp, a tag.
+    readonly property font smallFont: fontOf(smallPixels, Font.Normal)
+    readonly property font smallStrongFont: fontOf(smallPixels, strongWeight)
+    // An overline: a short label over a group. It is drawn as a section (body size, strong) unless `overlineCaps`, when
+    // it is the small size, strong, in capitals, letter-spaced by 0.05 times that size. The font is built whole, with
+    // its capitalisation and letter spacing, since a font rebuilt from it keeps only what it is given.
+    readonly property font overlineFont: overlineCaps ? Qt.font({
+        family: families[0],
+        families: families,
+        pixelSize: Math.round(smallPixels),
+        weight: strongWeight,
+        capitalization: Font.AllUppercase,
+        letterSpacing: 0.05 * smallPixels
+    }) : strongFont
+    // A field's caption above its control.
+    readonly property font captionFont: fontOf(captionPixels, Font.Normal)
+    // A figure that stands out, such as a KPI's number: the display size, strong.
+    readonly property font displayFont: fontOf(displayPixels, strongWeight)
+    // A record's identity, such as a head's title where the screen asks for it: the headline size, strong.
+    readonly property font headlineFont: fontOf(headlinePixels, strongWeight)
+    // What measures the unbreakable segments of a text (`widestSegment(pieces)`): the backend writes it, since only
+    // C++ can ask Qt's line breaker. Null until then, and a wrapping text keeps no minimum width. A `var`, not a
+    // `QtObject`: qmllint reads a call on a plain QObject as a missing member.
+    property var textMeasure: null
+    // The families `font.mono` names, in order of preference; empty draws in the platform's fixed-pitch font.
+    property list<string> monoFontFamilies: []
+    // The family of the platform's fixed-pitch font; the backend writes it, since QML cannot ask the font database.
+    property string platformMonoFamily: ""
+    // The families a `mono` text is drawn in: the theme's, else the platform's fixed-pitch one.
+    readonly property list<string> monoFamilies: monoFontFamilies.length > 0
+                                                 ? monoFontFamilies
+                                                 : platformMonoFamily !== "" ? [platformMonoFamily] : []
+    // An identifier: the mono families at the body size; before the backend wrote the platform's family, the
+    // generic `monospace` alias.
+    readonly property font monoFont: Qt.font({
+        family: monoFamilies.length > 0 ? monoFamilies[0] : "monospace",
+        families: monoFamilies.length > 0 ? monoFamilies : ["monospace"],
+        pixelSize: Math.round(monoPixels)
+    })
     readonly property real unitWidth: metrics.averageCharacterWidth
     readonly property real unitHeight: metrics.height
     readonly property real spacing: unitHeight / 2
@@ -52,10 +124,47 @@ QtObject {
     property color success: "#2e7d32"
     property color info: "#1565c0"
     property color warn: "#b26a00"
-    property color neutral: "#e5e5ea"
+    // The neutral tone's text, fill, outline and marker: `color.neutral` and its `.bg`, `.border` and `.dot`.
+    property color neutral: "#6e6e73"
+    property color neutralBg: "#266e6e73"
+    property color neutralBorder: "#6e6e73"
+    property color neutralDot: "#6e6e73"
+    // The fill under a hovered or pressed item, and the unfilled part of a progress bar: `color.hover`, `color.track`.
+    property color hover: "#141d1d1f"
+    property color track: "#e5e5ea"
+    // The dim behind a modal dialog or drawer: `color.scrim`.
+    property color scrim: "#4d000000"
+    // A disabled button's caption, fill and outline: `color.disabled.text`, `color.disabled.bg`,
+    // `color.disabled.border`.
+    property color disabledText: "#8e8e93"
+    property color disabledFill: "#f2f2f7"
+    property color disabledBorder: "#e5e5ea"
+    // A control's fill and outline, and the rule between rows: `color.controlSurface`, `color.controlBorder`,
+    // `color.divider`.
+    property color controlSurface: "#ffffff"
+    property color controlBorder: "#c7c7cc"
+    property color divider: "#dcdce0"
+    // Whether outlines are stroked in dashes: `border.style`.
+    property bool borderDashed: false
+    // Whether a selected list item is drawn as a plain fill, with its label in the text colour and no accent bar:
+    // `list.selection`.
+    property bool listSelectionFill: false
     property color surface: "#ffffff"
     property color border: "#c7c7cc"
     property color selection: "#cfe3ff"
+    // The text of a selected list item and whether the theme sets one: `color.selectionText`.
+    property color selectionText: "#1d1d1f"
+    property bool hasSelectionText: false
+    // The colour of an input's placeholder and whether the theme sets one: `color.placeholder`. Unset, a placeholder is
+    // drawn in the surface's muted colour.
+    property color placeholder: "#6e6e73"
+    property bool hasPlaceholder: false
+    // The rules of a dialog and a drawer and whether the theme sets them: `color.dialogRule`.
+    property color dialogRule: "#dcdce0"
+    property bool hasDialogRule: false
+    // What a dialog and a drawer draw their rules in: their own colour, or the card surface's divider while the theme
+    // sets none.
+    readonly property color dialogRuleShown: hasDialogRule ? dialogRule : cardScheme.divider
     property color accent: "#1565c0"
     property color focus: "#1565c0"
     // A tone's fill, outline and marker: `color.<ok|warn|err|info>.<bg|border|dot>`.
@@ -73,25 +182,106 @@ QtObject {
     property color infoDot: "#1565c0"
     // A table's header background; transparent draws no fill, matching a table with no theme-set header.
     property color tableHeader: "#00000000"
+    // The rule under a table's header; transparent draws none.
+    property color tableHeaderRule: "#00000000"
+    // A chart's series colours, in drawing order: `color.chart.1` to `color.chart.4`.
+    property color chart1: "#0072b2"
+    property color chart2: "#c25400"
+    property color chart3: "#00805e"
+    property color chart4: "#a8508a"
     property real staleOpacity: 0.55
     // The window behind every surface, the corner radii, the height of an input or a button, and the font sizes, in
     // px. A font size of 0 is derived from the platform font: the body is its size, a heading 1.3 times the body.
     property color background: "#f2f3f7"
     property real radiusControl: 6
     property real radiusCard: 10
+    // A tag's, a chip's and a select option's corners: `radius.badge`.
+    property real radiusBadge: 4
     property real controlHeight: 32
+    // The least height of a control while `touchTargets` holds: `control.touchHeight`.
+    property real touchHeight: 44
+    // Whether controls are sized as touch targets: the backend sets it while the window's width class is compact.
+    property bool touchTargets: false
+    // The height every control is drawn at: `controlHeight`, or at least `touchHeight` while `touchTargets` holds.
+    readonly property real targetHeight: touchTargets ? Math.max(controlHeight, touchHeight) : controlHeight
+    // The size of a control's own text while `touchTargets` holds: `control.touchTextSize`; 0 keeps the body size.
+    property real touchTextSize: 0
+    // The height of a small button: `button.smallHeight`, 0 keeping the control height.
+    property real smallHeight: 0
+    // The height of a small button while `touchTargets` holds: `button.smallTouchHeight`, 0 keeping the touch target.
+    property real smallTouchHeight: 0
+    // The height a small button is drawn at.
+    readonly property real smallButtonHeight: touchTargets ? (smallTouchHeight > 0 ? smallTouchHeight : targetHeight)
+                                                           : (smallHeight > 0 ? smallHeight : controlHeight)
+    // A table cell's and a header label's inset: `table.cellPaddingX`, `table.cellPaddingY`.
+    property real tableCellPaddingX: 8
+    property real tableCellPaddingY: 4
     property real bodySize: 0
     property real headingSize: 0
+    // The other sizes, derived from the body size while 0: `font.size.small`, `.caption`, `.mono`, `.display` and `.headline`.
+    property real smallSize: 0
+    property real captionSize: 0
+    property real monoSize: 0
+    property real displaySize: 0
+    property real headlineSize: 0
+    // The weight of every strong font: `font.weight.strong`.
+    property int strongWeight: Font.Bold
+    // The weight of a button's strong caption: `font.weight.button`.
+    property int buttonWeight: Font.Bold
+    // For each weight a font may be asked for (as a key), the weight of the nearest upright face the text families have,
+    // and the same for the mono families; written with the theme. Asking Qt for a weight a family lacks can draw an
+    // italic face, so a font takes its weight through `textWeightOf` and `monoWeightOf`. Empty, a weight stands as asked.
+    property var textWeights: ({})
+    property var monoWeights: ({})
+    // @p weight, or the nearest weight the text families have an upright face of.
+    function textWeightOf(weight: int): int {
+        const snapped = textWeights[weight]
+        return snapped === undefined ? weight : snapped
+    }
+    // @p weight, or the nearest weight the mono families have an upright face of.
+    function monoWeightOf(weight: int): int {
+        const snapped = monoWeights[weight]
+        return snapped === undefined ? weight : snapped
+    }
+    // Whether an icon-only push button or menu trigger that gives no shape is drawn square: `shape.iconOnly`.
+    property bool iconOnlySquare: false
+    // Whether a collapsible section's and a collapsible panel's header draws its chevron: `collapsible.marker`.
+    property bool collapsibleMarker: true
+    // The inner inset of every input on each side: `input.paddingX`.
+    property real inputPaddingX: 8
+    // The space above and below the line of the shell's expanded head bar: `head.paddingY`; 0 keeps the bar's own gap.
+    property real headPaddingY: 0
+    // The space between the actions of a row of actions: `actions.gap`; 0 keeps spacing step 2.
+    property real actionsGap: 0
+    readonly property real actionSpacing: actionsGap > 0 ? actionsGap : spaceOf(2)
+    // A tab's inset on each side of its label (`tabs.paddingX`; 0 is spacing step 3) and the space between two tabs.
+    property real tabPaddingX: 0
+    property real tabGap: 0
+    readonly property real tabInsetX: tabPaddingX > 0 ? tabPaddingX : spaceOf(3)
+    // Whether the `overline` text role is drawn in small capitals: `font.overline.case`.
+    property bool overlineCaps: false
     readonly property real bodyPixels: bodySize > 0 ? bodySize : platformMetrics.font.pixelSize > 0
                                                                    ? platformMetrics.font.pixelSize
                                                                    : platformMetrics.height * 0.75
+    // The size a control's own text is drawn at: the touch text size while `touchTargets` holds and it is set, else
+    // the body size.
+    readonly property real controlTextPixels: touchTargets && touchTextSize > 0 ? touchTextSize : bodyPixels
     readonly property real headingPixels: headingSize > 0 ? headingSize : bodyPixels * 1.3
+    readonly property real smallPixels: smallSize > 0 ? smallSize : Math.round(bodyPixels * 0.85)
+    readonly property real captionPixels: captionSize > 0 ? captionSize : Math.round(bodyPixels * 0.92)
+    readonly property real monoPixels: monoSize > 0 ? monoSize : bodyPixels
+    readonly property real displayPixels: displaySize > 0 ? displaySize : Math.round(bodyPixels * 1.7)
+    readonly property real headlinePixels: headlineSize > 0 ? headlineSize : Math.round(bodyPixels * 1.5)
 
     // @p base in bold, at its own size: a pixel size, or else a point size, whichever it was given in.
     function boldOf(base: font): font {
+        return weightedOf(base, strongWeight)
+    }
+    // @p base at @p weight, at its own size.
+    function weightedOf(base: font, weight: int): font {
         const spec = {
             family: base.family,
-            weight: Font.Bold
+            weight: textWeightOf(weight)
         }
         if (base.pixelSize > 0)
             spec.pixelSize = base.pixelSize
@@ -100,13 +290,59 @@ QtObject {
         return Qt.font(spec)
     }
 
+    // @p base, drawn in @p families, with tabular figures when @p tabular: every digit one width, so numbers line up
+    // in a column.
+    function figuresOf(base: font, families: list<string>, tabular: bool): font {
+        if (!tabular)
+            return base
+        const spec = {
+            family: base.family,
+            families: families.length > 0 ? families : [base.family],
+            weight: base.weight,
+            italic: base.italic,
+            capitalization: base.capitalization,
+            letterSpacing: base.letterSpacing,
+            features: {
+                "tnum": 1
+            }
+        }
+        if (base.pixelSize > 0)
+            spec.pixelSize = base.pixelSize
+        else
+            spec.pointSize = base.pointSize
+        return Qt.font(spec)
+    }
+
+    // The `mono` role's families at a size and a weight: an identifier in a control.
+    function monoFontOf(pixels: real, weight: int): font {
+        return Qt.font({
+            family: monoFamilies.length > 0 ? monoFamilies[0] : "monospace",
+            families: monoFamilies.length > 0 ? monoFamilies : ["monospace"],
+            pixelSize: Math.round(pixels),
+            weight: monoWeightOf(weight)
+        })
+    }
+
+    // A control's own text at @p weight: the body, strong or button font while the control's size is the body size,
+    // which keeps the platform font when the theme names no family, else the text font at the control's size.
+    function controlFontOf(weight: int): font {
+        if (controlTextPixels === bodyPixels) {
+            if (weight === Font.Normal)
+                return bodyFont
+            if (weight === buttonWeight)
+                return buttonFont
+            if (weight === strongWeight)
+                return strongFont
+        }
+        return fontOf(controlTextPixels, weight)
+    }
     // The text font at a size and a weight, in the families text is drawn in.
     function fontOf(pixels: real, weight: int): font {
         return Qt.font({
             family: theme.families[0],
             families: theme.families,
             pixelSize: Math.round(pixels),
-            weight: weight
+            weight: textWeightOf(weight)
         })
     }
     // The card's shadow: `elevation.card`.
@@ -115,6 +351,27 @@ QtObject {
     property real cardShadowOffsetY: 2
     property real cardShadowBlur: 10
     property real cardShadowSpread: 0
+
+    // The shadow under a dialog and a drawer: `elevation.dialog`, when the theme sets one (`hasDialogShadow`).
+    property color dialogShadowColor: "#14000000"
+    property real dialogShadowOffsetX: 0
+    property real dialogShadowOffsetY: 2
+    property real dialogShadowBlur: 10
+    property real dialogShadowSpread: 0
+    property bool hasDialogShadow: false
+    // What a dialog and a drawer draw: their own shadow, or the card's while the theme sets none.
+    readonly property color dialogShadowShownColor: hasDialogShadow ? dialogShadowColor : cardShadowColor
+    readonly property real dialogShadowShownOffsetX: hasDialogShadow ? dialogShadowOffsetX : cardShadowOffsetX
+    readonly property real dialogShadowShownOffsetY: hasDialogShadow ? dialogShadowOffsetY : cardShadowOffsetY
+    readonly property real dialogShadowShownBlur: hasDialogShadow ? dialogShadowBlur : cardShadowBlur
+    readonly property real dialogShadowShownSpread: hasDialogShadow ? dialogShadowSpread : cardShadowSpread
+
+    // A popup's shadow: `elevation.popup`.
+    property color popupShadowColor: "#24000000"
+    property real popupShadowOffsetX: 0
+    property real popupShadowOffsetY: 8
+    property real popupShadowBlur: 24
+    property real popupShadowSpread: 0
 
     // The spacing scale in px, one entry per spacing step 0 to 5: the `space.<step>` defaults.
     property list<real> space: [0, 4, 8, 12, 16, 24]
@@ -134,8 +391,22 @@ QtObject {
         accent: theme.accent
         focus: theme.focus
         selection: theme.selection
+        selectionText: theme.selectionText
+        hasSelectionText: theme.hasSelectionText
+        placeholder: theme.placeholder
+        hasPlaceholder: theme.hasPlaceholder
         border: theme.border
         neutral: theme.neutral
+        neutralBg: theme.neutralBg
+        neutralBorder: theme.neutralBorder
+        neutralDot: theme.neutralDot
+        hover: theme.hover
+        track: theme.track
+        controlSurface: theme.controlSurface
+        controlBorder: theme.controlBorder
+        divider: theme.divider
+        borderDashed: theme.borderDashed
+        listSelectionFill: theme.listSelectionFill
         error: theme.error
         success: theme.success
         info: theme.info
@@ -153,6 +424,11 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        tableHeaderRule: theme.tableHeaderRule
+        chart1: theme.chart1
+        chart2: theme.chart2
+        chart3: theme.chart3
+        chart4: theme.chart4
     }
     readonly property MorphScheme pageScheme: MorphScheme {
         surface: theme.background
@@ -161,8 +437,22 @@ QtObject {
         accent: theme.accent
         focus: theme.focus
         selection: theme.selection
+        selectionText: theme.selectionText
+        hasSelectionText: theme.hasSelectionText
+        placeholder: theme.placeholder
+        hasPlaceholder: theme.hasPlaceholder
         border: theme.border
         neutral: theme.neutral
+        neutralBg: theme.neutralBg
+        neutralBorder: theme.neutralBorder
+        neutralDot: theme.neutralDot
+        hover: theme.hover
+        track: theme.track
+        controlSurface: theme.controlSurface
+        controlBorder: theme.controlBorder
+        divider: theme.divider
+        borderDashed: theme.borderDashed
+        listSelectionFill: theme.listSelectionFill
         error: theme.error
         success: theme.success
         info: theme.info
@@ -180,6 +470,11 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        tableHeaderRule: theme.tableHeaderRule
+        chart1: theme.chart1
+        chart2: theme.chart2
+        chart3: theme.chart3
+        chart4: theme.chart4
     }
     readonly property MorphScheme cardScheme: MorphScheme {
         surface: theme.surface
@@ -188,8 +483,22 @@ QtObject {
         accent: theme.accent
         focus: theme.focus
         selection: theme.selection
+        selectionText: theme.selectionText
+        hasSelectionText: theme.hasSelectionText
+        placeholder: theme.placeholder
+        hasPlaceholder: theme.hasPlaceholder
         border: theme.border
         neutral: theme.neutral
+        neutralBg: theme.neutralBg
+        neutralBorder: theme.neutralBorder
+        neutralDot: theme.neutralDot
+        hover: theme.hover
+        track: theme.track
+        controlSurface: theme.controlSurface
+        controlBorder: theme.controlBorder
+        divider: theme.divider
+        borderDashed: theme.borderDashed
+        listSelectionFill: theme.listSelectionFill
         error: theme.error
         success: theme.success
         info: theme.info
@@ -207,6 +516,11 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        tableHeaderRule: theme.tableHeaderRule
+        chart1: theme.chart1
+        chart2: theme.chart2
+        chart3: theme.chart3
+        chart4: theme.chart4
     }
     readonly property MorphScheme sidebarScheme: MorphScheme {
         surface: "#1f2430"
@@ -216,7 +530,16 @@ QtObject {
         focus: theme.focus
         selection: "#2f3646"
         border: "#2f3646"
-        neutral: theme.neutral
+        neutral: "#7d8396"
+        neutralBg: "#267d8396"
+        neutralBorder: "#7d8396"
+        neutralDot: "#7d8396"
+        hover: "#14ffffff"
+        track: "#2f3646"
+        controlSurface: "#2a3040"
+        controlBorder: "#3a4152"
+        divider: "#2f3646"
+        listSelectionFill: theme.listSelectionFill
         error: theme.error
         success: theme.success
         info: theme.info
@@ -234,6 +557,11 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        tableHeaderRule: theme.tableHeaderRule
+        chart1: theme.chart1
+        chart2: theme.chart2
+        chart3: theme.chart3
+        chart4: theme.chart4
     }
     readonly property MorphScheme toolbarScheme: MorphScheme {
         surface: theme.surface
@@ -242,8 +570,22 @@ QtObject {
         accent: theme.accent
         focus: theme.focus
         selection: theme.selection
+        selectionText: theme.selectionText
+        hasSelectionText: theme.hasSelectionText
+        placeholder: theme.placeholder
+        hasPlaceholder: theme.hasPlaceholder
         border: "#e3e5ea"
         neutral: theme.neutral
+        neutralBg: theme.neutralBg
+        neutralBorder: theme.neutralBorder
+        neutralDot: theme.neutralDot
+        hover: theme.hover
+        track: theme.track
+        controlSurface: theme.controlSurface
+        controlBorder: theme.controlBorder
+        divider: theme.divider
+        borderDashed: theme.borderDashed
+        listSelectionFill: theme.listSelectionFill
         error: theme.error
         success: theme.success
         info: theme.info
@@ -261,6 +603,104 @@ QtObject {
         infoBorder: theme.infoBorder
         infoDot: theme.infoDot
         tableHeader: theme.tableHeader
+        tableHeaderRule: theme.tableHeaderRule
+        chart1: theme.chart1
+        chart2: theme.chart2
+        chart3: theme.chart3
+        chart4: theme.chart4
+    }
+    readonly property MorphScheme barScheme: MorphScheme {
+        surface: theme.surface
+        text: theme.text
+        muted: theme.muted
+        accent: theme.accent
+        focus: theme.focus
+        selection: theme.selection
+        selectionText: theme.selectionText
+        hasSelectionText: theme.hasSelectionText
+        placeholder: theme.placeholder
+        hasPlaceholder: theme.hasPlaceholder
+        border: theme.border
+        neutral: theme.neutral
+        neutralBg: theme.neutralBg
+        neutralBorder: theme.neutralBorder
+        neutralDot: theme.neutralDot
+        hover: theme.hover
+        track: theme.track
+        controlSurface: theme.controlSurface
+        controlBorder: theme.controlBorder
+        divider: theme.divider
+        listSelectionFill: theme.listSelectionFill
+        error: theme.error
+        success: theme.success
+        info: theme.info
+        warn: theme.warn
+        successBg: theme.successBg
+        successBorder: theme.successBorder
+        successDot: theme.successDot
+        warnBg: theme.warnBg
+        warnBorder: theme.warnBorder
+        warnDot: theme.warnDot
+        errorBg: theme.errorBg
+        errorBorder: theme.errorBorder
+        errorDot: theme.errorDot
+        infoBg: theme.infoBg
+        infoBorder: theme.infoBorder
+        infoDot: theme.infoDot
+        tableHeader: theme.tableHeader
+        tableHeaderRule: theme.tableHeaderRule
+        chart1: theme.chart1
+        chart2: theme.chart2
+        chart3: theme.chart3
+        chart4: theme.chart4
+    }
+    // The shell's top bar while the page continues the head's block: the bar's roles, each bound to the bar's, so a
+    // theme that restyles `bar` restyles it too and one that declares `toolbarJoined` replaces these alone.
+    readonly property MorphScheme toolbarJoinedScheme: MorphScheme {
+        surface: theme.barScheme.surface
+        text: theme.barScheme.text
+        muted: theme.barScheme.muted
+        accent: theme.barScheme.accent
+        focus: theme.barScheme.focus
+        selection: theme.barScheme.selection
+        selectionText: theme.barScheme.selectionText
+        hasSelectionText: theme.barScheme.hasSelectionText
+        placeholder: theme.barScheme.placeholder
+        hasPlaceholder: theme.barScheme.hasPlaceholder
+        border: theme.barScheme.border
+        neutral: theme.barScheme.neutral
+        neutralBg: theme.barScheme.neutralBg
+        neutralBorder: theme.barScheme.neutralBorder
+        neutralDot: theme.barScheme.neutralDot
+        hover: theme.barScheme.hover
+        track: theme.barScheme.track
+        controlSurface: theme.barScheme.controlSurface
+        controlBorder: theme.barScheme.controlBorder
+        divider: theme.barScheme.divider
+        borderDashed: theme.barScheme.borderDashed
+        listSelectionFill: theme.barScheme.listSelectionFill
+        error: theme.barScheme.error
+        success: theme.barScheme.success
+        info: theme.barScheme.info
+        warn: theme.barScheme.warn
+        successBg: theme.barScheme.successBg
+        successBorder: theme.barScheme.successBorder
+        successDot: theme.barScheme.successDot
+        warnBg: theme.barScheme.warnBg
+        warnBorder: theme.barScheme.warnBorder
+        warnDot: theme.barScheme.warnDot
+        errorBg: theme.barScheme.errorBg
+        errorBorder: theme.barScheme.errorBorder
+        errorDot: theme.barScheme.errorDot
+        infoBg: theme.barScheme.infoBg
+        infoBorder: theme.barScheme.infoBorder
+        infoDot: theme.barScheme.infoDot
+        tableHeader: theme.barScheme.tableHeader
+        tableHeaderRule: theme.barScheme.tableHeaderRule
+        chart1: theme.barScheme.chart1
+        chart2: theme.barScheme.chart2
+        chart3: theme.barScheme.chart3
+        chart4: theme.barScheme.chart4
     }
     property var extraSchemes: ({})
     readonly property Component schemeComponent: Component {
@@ -280,6 +720,10 @@ QtObject {
             return sidebarScheme
         case "toolbar":
             return toolbarScheme
+        case "bar":
+            return barScheme
+        case "toolbarJoined":
+            return toolbarJoinedScheme
         default:
             if (!(name in extraSchemes))
                 extraSchemes[name] = schemeComponent.createObject(theme) as MorphScheme
@@ -294,7 +738,7 @@ QtObject {
 
     // Whether a surface name is one the theme draws a background for.
     function draws(name: string): bool {
-        return name === "page" || name === "card" || name === "sidebar" || name === "toolbar" || (name in extraSchemes)
+        return name === "page" || name === "card" || name === "sidebar" || name === "toolbar" || name === "toolbarJoined" || name === "bar" || (name in extraSchemes)
     }
 
     // A text role's colour: Normal, Muted, Heading, Error, Success.
@@ -323,7 +767,14 @@ QtObject {
         case 4:
             return error
         default:
-            return muted
+            return neutral
         }
     }
+
+    // The mono face's character advance: the width unit of a monospace column, whose characters are each this wide.
+    readonly property FontMetrics monoMetrics: FontMetrics {
+        font: theme.monoFont
+    }
+    // `advanceWidth` is a call, which a binding does not follow, so the font is read for the binding to follow it.
+    readonly property real monoAdvance: monoMetrics.font.pixelSize > 0 ? monoMetrics.advanceWidth("0") : 0
 }

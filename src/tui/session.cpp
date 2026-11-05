@@ -7,6 +7,7 @@
 #include <core/async/ExecutorContext.hpp>
 #include <core/async/WhenAny.hpp>
 #include <core/net/EventLoop.hpp>
+#include <core/tui/InputEvent.hpp>
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Modifier.hpp>
 #include <coroutine>
@@ -163,6 +164,9 @@ void Session::handle(::core::tui::InputEvent const& event) {
             handleKey(*key, event);
         } else {
             static_cast<void>(_screen->dispatchEvent(event));
+            if (std::holds_alternative<::core::tui::ResizeEvent>(event)) {
+                _backend.refreshWidthClass();
+            }
         }
     } catch (std::exception const& failure) {
         ::morph::log::logError("[tui] an input handler threw: {}", failure.what());

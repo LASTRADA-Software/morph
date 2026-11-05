@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lab operations console</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;font-size:13px;color:#1C1E21;background:#EEF0F3;font-variant-numeric:tabular-nums}
+a{color:#17784A}a:hover{color:#0F5A36}
+.cap{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#4D5461;margin:0 0 12px}
+.win{background:#F6F7F9;border:1px solid #D2D7DE;border-radius:8px;overflow:hidden;box-sizing:border-box}
+.card{background:#fff;border:1px solid #DDE1E6;border-radius:6px;box-sizing:border-box}
+.btn{font:500 13px Inter,system-ui,sans-serif;height:30px;padding:0 12px;border-radius:6px;border:1px solid #C3C9D2;background:#fff;color:#1C1E21;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.primary{background:#17784A;border-color:#17784A;color:#fff}
+.btn[disabled]{background:#EEF0F3;border-color:#DDE1E6;color:#5F6673;cursor:not-allowed}
+.btn.lg{height:44px;font-size:14px}
+.input{height:30px;border:1px solid #C3C9D2;border-radius:6px;padding:0 8px;font:13px Inter,system-ui,sans-serif;background:#fff;box-sizing:border-box;color:#1C1E21}
+.input.num{text-align:right}
+.input.oos{border-color:#B42318;box-shadow:0 0 0 2px #FBE3E3}
+.muted{color:#4D5461}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px}
+.tag{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;display:inline-block;white-space:nowrap;border:1px solid transparent}
+.t-err{background:#FDE7E7;color:#9B1C1C}.t-warn{background:#FFF1D6;color:#7A4A00}.t-ok{background:#E2F4E8;color:#17602F}.t-neu{background:#EEF0F3;color:#363C46}.t-info{background:#E6ECFF;color:#1F3FA8}
+.pri{background:#fff}.p-stat{color:#9B1C1C;border-color:#D98C8C}.p-urg{color:#7A4A00;border-color:#D9B36A}.p-rou{color:#4D5461;border-color:#C3C9D2}
+.nav{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font:500 13px Inter,system-ui,sans-serif;border:none;background:transparent;color:#C9CFD8;padding:7px 10px;border-radius:4px;cursor:pointer}
+.nav.on{background:#2B3038;color:#fff}
+.navh{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9AA2AE;margin:12px 10px 4px}
+.kpi{padding:10px 12px}.kpi p{margin:0}
+.kv{font-size:22px;font-weight:700;margin:2px 0 0}
+table{border-collapse:collapse;width:100%}
+th{text-align:left;font-size:11px;font-weight:600;color:#4D5461;padding:6px 8px;border-bottom:1px solid #DDE1E6;background:#FAFBFC;white-space:nowrap}
+td{padding:6px 8px;border-bottom:1px solid #EDF0F3;white-space:nowrap}
+tr.sel td{background:#EAF5EE}
+tr.sel td:first-child{box-shadow:inset 3px 0 0 #17784A}
+.tab{font:500 13px Inter,system-ui,sans-serif;background:none;border:none;border-bottom:2px solid transparent;padding:8px 2px;color:#4D5461;cursor:pointer}
+.tab.on{color:#1C1E21;border-bottom-color:#17784A}
+.od{color:#9B1C1C;font-weight:600}
+.res{display:grid;grid-template-columns:minmax(0,1fr) 76px 34px 74px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid #EDF0F3}
+.res input{height:28px;width:100%}
+.tl{display:flex;gap:8px;font-size:12px;padding:3px 0}
+.tl i{width:8px;height:8px;border-radius:4px;background:#17784A;margin-top:4px;flex:none}
+.ins{display:flex;gap:8px;align-items:center;padding:4px 0}
+</style>
+</helmet>
+<div style="width: 1520px; height: 1500px; box-sizing: border-box; padding: 40px; display: flex; gap: 48px; align-items: flex-start">
+  <div>
+    <p class="cap">Expanded · shell, dashboard, worklist beside a non-modal sample pane</p>
+    <div class="win" style="width: 1000px; height: 1380px; display: flex">
+      <nav aria-label="Main" style="width: 176px; flex: none; background: #1C1E21; padding: 12px 8px; box-sizing: border-box">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 2px 6px 8px"><span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 5px; background: #17784A; color: #fff; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center">L</span><span style="color: #fff; font-weight: 600">LabTrack</span></div>
+        <p class="navh">Lab</p>
+        <button class="nav on" aria-current="page">Overview</button><button class="nav">Samples</button><button class="nav">Worksheets</button><button class="nav">Review <span class="tag t-info" style="margin-left: auto">4</span></button>
+        <p class="navh">Quality</p>
+        <button class="nav">Control charts</button><button class="nav">Instruments <span class="tag t-err" style="margin-left: auto">1</span></button><button class="nav">Investigations</button><button class="nav">Stability</button>
+        <p class="navh">Admin</p>
+        <button class="nav">Methods and specs</button><button class="nav">Audit trail</button><button class="nav">Users</button>
+      </nav>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+        <header style="height: 48px; flex: none; background: #fff; border-bottom: 1px solid #E1E5EA; display: flex; align-items: center; gap: 8px; padding: 0 14px">
+          <h1 style="margin: 0; font-size: 15px; font-weight: 600">Overview</h1>
+          <select class="input" aria-label="Lab" style="width: 150px"><option>QC chemistry, site A</option></select>
+          <span style="flex: 1"></span>
+          <input class="input" aria-label="Find a sample" placeholder="Scan or type a sample ID" style="width: 200px">
+          <span class="tag t-ok">Connected</span><span class="muted">Dr. A. Meyer</span>
+        </header>
+        <div style="flex: 1; min-height: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+          <div role="alert" style="display: flex; gap: 10px; align-items: center; background: #FDECEC; border: 1px solid #F2C0C0; color: #8A1C1C; border-radius: 6px; padding: 7px 10px">
+            <span><b>System suitability failed on HPLC-02</b> at 09:40 CEST: tailing 2.3, limit 2.0. 18 results from this run are on hold.</span><span style="flex: 1"></span><button class="btn" style="height: 26px">Open run</button>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+            <div class="card kpi"><p class="muted">Received today</p><p class="kv">64</p><p class="muted" style="font-size: 12px">58 on a typical Thursday</p></div>
+            <div class="card kpi"><p class="muted">In progress</p><p class="kv">38</p><p class="muted" style="font-size: 12px">18 of them on hold</p></div>
+            <div class="card kpi"><p class="muted">Past due</p><p class="kv" style="color: #9B1C1C">7</p><p class="muted" style="font-size: 12px">2 of them STAT</p></div>
+            <div class="card kpi"><p class="muted">Awaiting review</p><p class="kv">4</p><p class="muted" style="font-size: 12px">oldest 2 h 10 min</p></div>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 8px">
+            <div class="card" style="padding: 10px 12px">
+              <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px"><h2 style="margin: 0; font-size: 13px; font-weight: 600; flex: 1">Assay control, HPLC-02 · last 20 runs</h2><span class="muted" style="font-size: 12px">mean 100.0 % · SD 0.4</span></div>
+              <svg role="img" aria-label="Levey-Jennings chart: 19 runs within 2 SD, the latest run at plus 3.4 SD, beyond the 3 SD limit" width="100%" height="150" viewBox="0 0 520 150" preserveAspectRatio="none">
+                <rect x="30" y="15" width="480" height="120" fill="#FAFBFC"></rect>
+                <line x1="30" y1="15" x2="510" y2="15" stroke="#C62828" stroke-dasharray="4 3"></line><text x="26" y="18" text-anchor="end" font-size="9" fill="#9B1C1C">+3SD</text>
+                <line x1="30" y1="35" x2="510" y2="35" stroke="#D19100" stroke-dasharray="4 3"></line><text x="26" y="38" text-anchor="end" font-size="9" fill="#7A4A00">+2SD</text>
+                <line x1="30" y1="55" x2="510" y2="55" stroke="#C3C9D2" stroke-dasharray="2 3"></line><text x="26" y="58" text-anchor="end" font-size="9" fill="#4D5461">+1SD</text>
+                <line x1="30" y1="75" x2="510" y2="75" stroke="#4D5461"></line><text x="26" y="78" text-anchor="end" font-size="9" fill="#4D5461">mean</text>
+                <line x1="30" y1="95" x2="510" y2="95" stroke="#C3C9D2" stroke-dasharray="2 3"></line><text x="26" y="98" text-anchor="end" font-size="9" fill="#4D5461">−1SD</text>
+                <line x1="30" y1="115" x2="510" y2="115" stroke="#D19100" stroke-dasharray="4 3"></line><text x="26" y="118" text-anchor="end" font-size="9" fill="#7A4A00">−2SD</text>
+                <line x1="30" y1="135" x2="510" y2="135" stroke="#C62828" stroke-dasharray="4 3"></line><text x="26" y="138" text-anchor="end" font-size="9" fill="#9B1C1C">−3SD</text>
+                <polyline fill="none" stroke="#17784A" stroke-width="1.5" points="40,80 64,70 88,86 112,74 136,62 160,78 184,90 208,72 232,68 256,84 280,76 304,60 328,82 352,94 376,70 400,66 424,80 448,58 472,48 496,7"></polyline>
+                <circle cx="496" cy="7" r="5" fill="#C62828"></circle><text x="490" y="30" text-anchor="end" font-size="10" font-weight="600" fill="#9B1C1C">+3.4SD, rule 1-3s</text>
+              </svg>
+              <p class="muted" style="margin: 2px 0 0; font-size: 11px">Drawn by a host-provided chart component.</p>
+            </div>
+            <div class="card" style="padding: 10px 12px">
+              <h2 style="margin: 0 0 4px; font-size: 13px; font-weight: 600">Instruments</h2>
+              <div class="ins"><span style="flex: 1">HPLC-02</span><span class="tag t-err">Suitability hold</span></div>
+              <div class="ins"><span style="flex: 1">HPLC-01</span><span class="tag t-ok">Running · 14 queued</span></div>
+              <div class="ins"><span style="flex: 1">Dissolution bath 1</span><span class="tag t-info">Run 2 of 3</span></div>
+              <div class="ins"><span style="flex: 1">Karl Fischer</span><span class="tag t-warn">Calibration due today</span></div>
+              <div class="ins"><span style="flex: 1">UV-Vis 01</span><span class="tag t-neu">Idle</span></div>
+            </div>
+          </div>
+          <div style="flex: 1; min-height: 0; display: flex; gap: 0">
+            <div class="card" style="flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; border-radius: 6px 0 0 6px">
+              <div style="display: flex; align-items: center; gap: 16px; padding: 0 10px; border-bottom: 1px solid #DDE1E6" role="tablist"><button class="tab on" role="tab" aria-selected="true">Worklist 38</button><button class="tab" role="tab">On hold 18</button><button class="tab" role="tab">Review 4</button></div>
+              <table>
+                <thead><tr><th>Sample</th><th>Test</th><th>Priority</th><th>Due</th><th>Status</th></tr></thead>
+                <tbody>
+                  <tr class="sel"><td class="mono">S-26-104170</td><td>Assay, impurities</td><td><span class="tag pri p-stat">STAT</span></td><td><span class="od">22 min overdue</span></td><td><span class="tag t-info">Result entry</span></td></tr>
+                  <tr><td class="mono">S-26-104198</td><td>Water (KF)</td><td><span class="tag pri p-urg">Urgent</span></td><td>10:30</td><td><span class="tag t-neu">Queued</span></td></tr>
+                  <tr><td class="mono">S-26-104176</td><td>Dissolution</td><td><span class="tag pri p-rou">Routine</span></td><td>16:00</td><td><span class="tag t-info">Measured</span></td></tr>
+                  <tr><td class="mono">S-26-104221</td><td>TOC, conductivity</td><td><span class="tag pri p-rou">Routine</span></td><td>14:00</td><td><span class="tag t-neu">Queued</span></td></tr>
+                  <tr><td class="mono">S-26-104159</td><td>Assay</td><td><span class="tag pri p-rou">Routine</span></td><td>25-Oct 09:00</td><td><span class="tag t-warn">On hold</span></td></tr>
+                  <tr><td class="mono">S-26-104150</td><td>Identity (IR)</td><td><span class="tag pri p-rou">Routine</span></td><td>25-Oct 12:00</td><td><span class="tag t-neu">Registered</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div role="separator" aria-orientation="vertical" aria-label="Resize sample pane" style="width: 6px; flex: none; background: #E1E5EA; cursor: col-resize; display: flex; align-items: center; justify-content: center"><span style="width: 2px; height: 28px; border-radius: 1px; background: #9AA2AE"></span></div>
+            <aside class="card" aria-label="Sample S-26-104170" style="width: 360px; flex: none; display: flex; flex-direction: column; border-radius: 0 6px 6px 0">
+              <div style="padding: 10px 12px; border-bottom: 1px solid #DDE1E6">
+                <div style="display: flex; align-items: center; gap: 6px"><span class="mono" style="font-weight: 600; flex: 1">S-26-104170</span><button class="btn" aria-label="Previous sample" style="width: 30px; padding: 0">‹</button><button class="btn" aria-label="Next sample" style="width: 30px; padding: 0">›</button></div>
+                <p style="margin: 2px 0 6px">Paracetamol 500 mg · lot <span class="mono">L-26-0377</span> · HPLC-02</p>
+                <div style="display: flex; gap: 4px; flex-wrap: wrap"><span class="tag pri p-stat">STAT</span><span class="tag t-info">Result entry</span><span class="tag t-err">Run on suitability hold</span></div>
+              </div>
+              <div style="flex: 1; padding: 8px 12px; display: flex; flex-direction: column; gap: 10px">
+                <div>
+                  <div class="res" style="font-size: 11px; font-weight: 600; color: #4D5461"><span>Analyte · spec</span><span style="text-align: right">Result</span><span></span><span>Evaluation</span></div>
+                  <div class="res"><label for="a1">Assay · 95.0–105.0</label><input class="input num" id="a1" value="98.9"><span>% LC</span><span class="tag t-ok">Within</span></div>
+                  <div class="res"><label for="a2">Impurity A · ≤ 0.10</label><input class="input num" id="a2" value="0.03"><span>%</span><span class="tag t-ok">Within</span></div>
+                  <div class="res"><label for="a3">Impurity B · ≤ 0.20</label><input class="input num oos" id="a3" value="0.21" aria-describedby="a3e"><span>%</span><span class="tag t-err" id="a3e">Out of spec</span></div>
+                  <div class="res"><span>Total impurities · ≤ 0.50</span><input class="input num" readonly value="0.24" aria-label="Total impurities, calculated" style="background: #F3F5F7"><span>%</span><span class="tag t-ok">Within</span></div>
+                </div>
+                <div>
+                  <h3 style="margin: 0 0 4px; font-size: 12px; font-weight: 600">Chain of custody</h3>
+                  <div class="tl"><i></i><span><b>Sampled</b> · QA, packaging line 2 · 24-Oct 06:50</span></div>
+                  <div class="tl"><i></i><span><b>Received</b> · J. Ruiz · 07:05</span></div>
+                  <div class="tl"><i></i><span><b>Prepared</b> · 2 preparations · M. Kaur · 08:10</span></div>
+                  <div class="tl"><i style="background: #C62828"></i><span><b>Held</b> · suitability failure on HPLC-02 · 09:40</span></div>
+                </div>
+              </div>
+              <div style="padding: 10px 12px; border-top: 1px solid #DDE1E6; display: flex; flex-direction: column; gap: 6px">
+                <p style="margin: 0; font-size: 12px; color: #8A1C1C">Can't submit: HPLC-02 is on suitability hold. Rerun, or record an assessment of the failure.</p>
+                <div style="display: flex; gap: 6px"><button class="btn">Request rerun…</button><span style="flex: 1"></span><button class="btn">Save draft</button><button class="btn primary" disabled>Submit for review</button></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="cap">Compact · navigation in a menu, sections stack</p>
+    <div class="win" style="width: 390px; height: 1380px; display: flex; flex-direction: column">
+      <header style="height: 52px; background: #1C1E21; color: #fff; display: flex; align-items: center; gap: 6px; padding: 0 4px">
+        <button class="btn lg" aria-label="Open navigation" style="width: 44px; padding: 0; background: transparent; color: #fff; border-color: transparent">☰</button>
+        <h1 style="margin: 0; font-size: 15px; font-weight: 600; flex: 1">Overview</h1>
+        <button class="btn lg" aria-label="Scan a sample" style="width: 44px; padding: 0; background: transparent; color: #fff; border-color: transparent"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 5V2h3M13 2h3v3M16 13v3h-3M5 16H2v-3M5 9h8"></path></svg></button>
+      </header>
+      <div style="padding: 12px; display: flex; flex-direction: column; gap: 10px">
+        <div role="alert" style="background: #FDECEC; border: 1px solid #F2C0C0; color: #8A1C1C; border-radius: 6px; padding: 10px 12px"><b>System suitability failed on HPLC-02</b> at 09:40: tailing 2.3, limit 2.0. 18 results on hold.<div style="margin-top: 8px"><button class="btn lg" style="width: 100%">Open run</button></div></div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+          <div class="card kpi"><p class="muted">Received today</p><p class="kv">64</p></div>
+          <div class="card kpi"><p class="muted">In progress</p><p class="kv">38</p><p class="muted" style="font-size: 12px">18 on hold</p></div>
+          <div class="card kpi"><p class="muted">Past due</p><p class="kv" style="color: #9B1C1C">7</p><p class="muted" style="font-size: 12px">2 STAT</p></div>
+          <div class="card kpi"><p class="muted">Awaiting review</p><p class="kv">4</p></div>
+        </div>
+        <details class="card" style="padding: 0 12px"><summary style="min-height: 44px; display: flex; align-items: center; font-weight: 600">Assay control, HPLC-02 · latest run +3.4 SD</summary></details>
+        <details class="card" style="padding: 0 12px"><summary style="min-height: 44px; display: flex; align-items: center; font-weight: 600">Instruments · 1 on hold, 1 calibration due</summary></details>
+        <div role="tablist" style="display: flex; gap: 16px; border-bottom: 1px solid #DDE1E6"><button class="tab on" role="tab" aria-selected="true" style="min-height: 44px">Worklist 38</button><button class="tab" role="tab" style="min-height: 44px">On hold 18</button><button class="tab" role="tab" style="min-height: 44px">Review 4</button></div>
+        <div class="card" style="overflow: hidden">
+          <div style="padding: 10px 12px; border-bottom: 1px solid #EDF0F3; background: #EAF5EE; box-shadow: inset 3px 0 0 #17784A"><div style="display: flex; justify-content: space-between; align-items: center"><span class="mono" style="font-weight: 600">S-26-104170</span><span class="od">22 min overdue</span></div><div style="margin: 3px 0 6px">Assay, impurities · Paracetamol 500 mg</div><div style="display: flex; gap: 4px"><span class="tag pri p-stat">STAT</span><span class="tag t-info">Result entry</span></div></div>
+          <div style="padding: 10px 12px; border-bottom: 1px solid #EDF0F3"><div style="display: flex; justify-content: space-between; align-items: center"><span class="mono" style="font-weight: 600">S-26-104198</span><span>due 10:30</span></div><div style="margin: 3px 0 6px">Water (KF) · Lactose monohydrate</div><div style="display: flex; gap: 4px"><span class="tag pri p-urg">Urgent</span><span class="tag t-neu">Queued</span></div></div>
+          <div style="padding: 10px 12px"><div style="display: flex; justify-content: space-between; align-items: center"><span class="mono" style="font-weight: 600">S-26-104176</span><span>due 16:00</span></div><div style="margin: 3px 0 6px">Dissolution · Ibuprofen 400 mg</div><div style="display: flex; gap: 4px"><span class="tag pri p-rou">Routine</span><span class="tag t-info">Measured</span></div></div>
+        </div>
+        <p class="muted" style="margin: 0; font-size: 12px">Tapping a sample opens it as its own page, laid out as the compact result entry (design 08).</p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1520,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

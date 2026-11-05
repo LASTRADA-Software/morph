@@ -130,8 +130,14 @@ struct Rig {
 
     /// Runs the frontend over the scripted input until it ends, with @p factory's application mounted.
     int run(AppFactory factory, core::tui::MouseTracking mouseMode = core::tui::MouseTracking::Drag) {
+        return runShell(mounting(std::move(factory)), mouseMode);
+    }
+
+    /// Runs the frontend over the scripted input until it ends, with the shell @p factory makes.
+    int runShell(morph::tui::ShellFactory factory,
+                 core::tui::MouseTracking mouseMode = core::tui::MouseTracking::Drag) {
         morph::tui::FrontendConfig config;
-        config.mountShell = mounting(std::move(factory));
+        config.mountShell = std::move(factory);
         config.terminal = &terminal;
         config.input = &source;
         config.mouse = mouseMode;
@@ -460,4 +466,46 @@ TEST_CASE("tui::Frontend: a resize re-fits the view before the next event is han
         return app;
     }));
     CHECK(clicks == 1);
+}
+
+namespace {
+
+/// A shell that records the backend's width class when it mounts and each change after, and shows nothing else.
+struct WidthShell final : ui::MountedShell {
+    WidthShell(ui::IViewBackend& backend, std::vector<std::string>& heard) : _backend{&backend} {
+        heard.push_back(backend.widthClass());
+        backend.setOnWidthClass([&heard](std::string const& widthClass) { heard.push_back(widthClass); });
+    }
+    ~WidthShell() override { _backend->setOnWidthClass({}); }
+    WidthShell(WidthShell const&) = delete;
+    WidthShell& operator=(WidthShell const&) = delete;
+    WidthShell(WidthShell&&) = delete;
+    WidthShell& operator=(WidthShell&&) = delete;
+
+private:
+    ui::IViewBackend* _backend;
+};
+
+}  // namespace
+
+// Mutation: drop the session's refreshWidthClass after a resize (the listener hears nothing more).
+TEST_CASE("tui::Frontend: the width class is the screen's columns, and a resize reports a new class",
+          "[tui][frontend]") {
+    Rig rig{{.width = 70, .height = 3}};
+    std::vector<std::string> heard;
+    morph::reactive::TimerHandle grow;
+    static_cast<void>(
+        rig.runShell([&rig, &heard, &grow](
+                         ui::AppContext& context, ui::IViewBackend& backend,
+                         std::expected<ui::Bundle, ui::ConnectError> /*opened*/) -> std::unique_ptr<ui::MountedShell> {
+            grow = context.scheduler().after(10ms, [&rig] {
+                rig.output->resize({.width = 90, .height = 3});
+                rig.source.pushEvents({core::tui::ResizeEvent{.columns = 90, .rows = 3},
+                                       core::tui::ResizeEvent{.columns = 100, .rows = 3}});
+                rig.source.closeInput();
+            });
+            return std::make_unique<WidthShell>(backend, heard);
+        }));
+    // 70 columns are compact; 90 and then 100 are both medium, reported once.
+    CHECK(heard == std::vector<std::string>{"compact", "medium"});
 }

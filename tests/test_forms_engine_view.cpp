@@ -191,8 +191,8 @@ TEST_CASE("formView: mounted controls drive the session", "[forms-engine][view]"
 }
 
 TEST_CASE(
-    "formView: explicit mode adds a Submit button bound to readiness; the cell shows help, the control a live "
-    "required mark",
+    "formView: explicit mode adds a Submit button bound to readiness; the control describes itself with the help and "
+    "shows a live required mark",
     "[forms-engine][view]") {
     constexpr std::string_view kSchema = R"({"x-submitMode":"explicit","properties":{
       "label":{"type":"string","description":"What it is called","x-order":0},
@@ -202,7 +202,9 @@ TEST_CASE(
     Mounted mounted{kSchema};
     int const submit = mounted.widget("Button", "form_submit");
     CHECK(mounted.backend.prop(submit, "enabled") == "false");
-    CHECK(mounted.backend.find("Text", "text", "What it is called").has_value());
+    // The help is the control's description, tied to it for assistive technology, and not a text of its own.
+    CHECK(mounted.backend.prop(mounted.widget("TextInput", "field_label"), "description") == "What it is called");
+    CHECK_FALSE(mounted.backend.find("Text", "text", "What it is called").has_value());
     CHECK(mounted.backend.prop(mounted.widget("Text", "label_note"), "text") == "note");
     mounted.backend.toggle(mounted.widget("Checkbox", "field_flag"));
     mounted.harness.settle();
@@ -486,14 +488,10 @@ TEST_CASE("formView: an inline layout puts the label beside the control; a stack
     REQUIRE(flag.size() == 2);
     CHECK(backend.kindOf(flag.at(0)) == "Spacer");
     CHECK(backend.prop(flag.at(0), "layout") == "fixed(16)/content");
-    // The help is a second row, indented by the label's width.
-    std::vector<int> const note = backend.children(inlined.widget("Column", "cell_note"));
-    REQUIRE(note.size() == 2);
-    CHECK(backend.kindOf(note.at(0)) == "Row");
-    std::vector<int> const help = backend.children(note.at(1));
-    REQUIRE(help.size() == 2);
-    CHECK(backend.kindOf(help.at(0)) == "Spacer");
-    CHECK(backend.prop(help.at(1), "text") == "Shown to the customer");
+    // The help is the control's description, under the control, which already starts at the caption's width.
+    CHECK(inlined.has("Row", "cell_note"));
+    CHECK(backend.prop(inlined.widget("TextInput", "field_note"), "description") == "Shown to the customer");
+    CHECK_FALSE(backend.find("Text", "text", "Shown to the customer").has_value());
     // An object's panel stays stacked; its members follow the form's layout.
     CHECK(inlined.has("Column", "cell_address"));
     CHECK(inlined.has("Row", "cell_address.street"));
@@ -513,4 +511,16 @@ TEST_CASE("formView: an inline label narrower than one unit is refused", "[forms
     options.fieldLayout = morph::forms::FieldLayout::Inline;
     options.inlineLabelWidth = 0;
     CHECK_THROWS_AS(morph::forms::formView(*form, std::move(options)), std::invalid_argument);
+}
+
+// Mutation: pass the help as the description for an override too, and drop the cell's text (the help is then gone).
+TEST_CASE("formView: a control an override draws keeps its help as a muted text in the cell", "[forms-engine][view]") {
+    constexpr std::string_view kSchema = R"({"properties":{
+      "note":{"type":"string","description":"Shown to the customer","x-order":0}}})";
+    FormViewOptions options{};
+    options.overrides.byField("note", [](FieldView const&) { return ui::text(ui::Text{.text = "custom"}); });
+    Mounted const mounted{kSchema, std::move(options)};
+    auto const help = mounted.backend.find("Text", "text", "Shown to the customer");
+    REQUIRE(help.has_value());
+    CHECK(mounted.backend.prop(*help, "role") == "Muted");
 }

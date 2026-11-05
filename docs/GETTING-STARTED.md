@@ -642,7 +642,7 @@ auto const archive = screen.mutation<BulkEdit>("archive", marks);
 auto const rows = bookmarks.value().at(&ListBookmarksResult::bookmarks);
 return ui::column({
     ui::form<CreateBookmark>(marks).id(ui::element("createForm")).testId("createForm"),
-    ui::table(rows, {.key = ui::row("id"), /* title and URL columns */, .selection = ui::Selection::Multiple})
+    ui::table(rows, {.key = ui::row("id"), /* title and URL columns */, .selectionMode = ui::Selection::Multiple})
         .id(list).testId("bookmarks"),
     ui::button({.label = "Archive selected",
                 .onClick = ui::run(archive, {{&BulkEdit::ids, list.selection()},

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Review and approval</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;font-size:13px;color:#1C1E21;background:#EEF0F3;font-variant-numeric:tabular-nums}
+a{color:#17784A}a:hover{color:#0F5A36}
+.cap{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#4D5461;margin:0 0 12px}
+.win{background:#F6F7F9;border:1px solid #D2D7DE;border-radius:8px;overflow:hidden;box-sizing:border-box}
+.card{background:#fff;border:1px solid #DDE1E6;border-radius:6px;box-sizing:border-box}
+.btn{font:500 13px Inter,system-ui,sans-serif;height:30px;padding:0 12px;border-radius:6px;border:1px solid #C3C9D2;background:#fff;color:#1C1E21;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.primary{background:#17784A;border-color:#17784A;color:#fff}
+.btn.danger{color:#A61B1B;border-color:#E8B4B4}
+.btn.lg{height:44px;font-size:14px}
+.input{height:30px;border:1px solid #C3C9D2;border-radius:6px;padding:0 8px;font:13px Inter,system-ui,sans-serif;background:#fff;box-sizing:border-box;color:#1C1E21;width:100%}
+.muted{color:#4D5461}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px}
+.tag{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;display:inline-block;white-space:nowrap}
+.t-err{background:#FDE7E7;color:#9B1C1C}.t-warn{background:#FFF1D6;color:#7A4A00}.t-ok{background:#E2F4E8;color:#17602F}.t-neu{background:#EEF0F3;color:#363C46}.t-info{background:#E6ECFF;color:#1F3FA8}
+.qi{display:block;width:100%;text-align:left;border:none;border-bottom:1px solid #EDF0F3;background:#fff;padding:10px 12px;font:inherit;color:inherit;cursor:pointer}
+.qi.sel{background:#EAF5EE;box-shadow:inset 3px 0 0 #17784A}
+.tab{font:500 13px Inter,system-ui,sans-serif;background:none;border:none;border-bottom:2px solid transparent;padding:8px 2px;color:#4D5461;cursor:pointer}
+.tab.on{color:#1C1E21;border-bottom-color:#17784A}
+table{border-collapse:collapse;width:100%}
+th{text-align:left;font-size:11px;font-weight:600;color:#4D5461;padding:6px 8px;border-bottom:1px solid #DDE1E6;background:#FAFBFC;white-space:nowrap}
+td{padding:6px 8px;border-bottom:1px solid #EDF0F3;white-space:nowrap}
+td.num,th.num{text-align:right}
+tr.oos td{background:#FFF5F5}
+.seg{display:inline-flex;background:#E7EAEE;border-radius:6px;padding:2px}
+.seg button{font:500 12px Inter,system-ui,sans-serif;border:none;background:transparent;border-radius:4px;height:24px;padding:0 10px;color:#363C46;cursor:pointer}
+.seg button.on{background:#fff;color:#1C1E21;box-shadow:0 1px 2px rgba(20,24,31,.12)}
+.rr{padding:10px 12px;border-top:1px solid #EDF0F3}
+</style>
+</helmet>
+<div style="width: 1520px; height: 1100px; box-sizing: border-box; padding: 40px; display: flex; gap: 48px; align-items: flex-start">
+  <div>
+    <p class="cap">Expanded · queue and worksheet side by side</p>
+    <div class="win" style="width: 1000px; height: 980px; display: flex">
+      <div style="width: 280px; flex: none; background: #fff; display: flex; flex-direction: column">
+        <div style="padding: 12px; border-bottom: 1px solid #E1E5EA"><h1 style="margin: 0 0 8px; font-size: 15px; font-weight: 600">Awaiting review · 4</h1><input class="input" aria-label="Search the queue" placeholder="Worksheet, lot or analyst"></div>
+        <button class="qi sel"><div style="display: flex; justify-content: space-between"><b class="mono">WS-2026-0412</b><span class="muted">2 h 10 min</span></div><div style="margin: 2px 0 4px">Assay and impurities · M. Kaur</div><div style="display: flex; gap: 4px"><span class="tag t-err">1 out of spec</span><span class="tag t-warn">1 changed</span></div></button>
+        <button class="qi" aria-disabled="true"><div style="display: flex; justify-content: space-between"><b class="mono">WS-2026-0409</b><span class="muted">1 h 05 min</span></div><div style="margin: 2px 0 4px">Water (KF) · A. Meyer</div><div class="muted" style="font-size: 12px">You entered these results, so another reviewer must approve them.</div></button>
+        <button class="qi"><div style="display: flex; justify-content: space-between"><b class="mono">WS-2026-0405</b><span class="muted">48 min</span></div><div style="margin: 2px 0 4px">Dissolution · J. Ruiz</div><span class="tag t-ok">All within spec</span></button>
+        <button class="qi"><div style="display: flex; justify-content: space-between"><b class="mono">WS-2026-0398</b><span class="muted">20 min</span></div><div style="margin: 2px 0 4px">Identity (IR) · M. Kaur</div><span class="tag t-ok">All within spec</span></button>
+      </div>
+      <div role="separator" aria-orientation="vertical" aria-label="Resize queue" style="width: 6px; flex: none; background: #E1E5EA; cursor: col-resize; display: flex; align-items: center; justify-content: center"><span style="width: 2px; height: 28px; border-radius: 1px; background: #9AA2AE"></span></div>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+        <div style="padding: 12px 16px 0; background: #fff; border-bottom: 1px solid #E1E5EA">
+          <p class="muted" style="margin: 0 0 2px"><span class="mono">WS-2026-0412</span> · submitted 24-Oct-2026 07:30 CEST by M. Kaur · HPLC-02</p>
+          <h2 style="margin: 0 0 8px; font-size: 16px; font-weight: 600">Assay and impurities · Paracetamol 500 mg</h2>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px"><span class="tag t-neu">24 results</span><span class="tag t-err">1 out of spec · investigation OOS-2026-031</span><span class="tag t-warn">1 changed after entry</span><span class="tag t-ok">System suitability passed</span></div>
+          <div role="tablist" style="display: flex; gap: 18px"><button class="tab on" role="tab" aria-selected="true">Results</button><button class="tab" role="tab">Previous lots</button><button class="tab" role="tab">Audit trail · 3</button><button class="tab" role="tab">Comments · 1</button></div>
+        </div>
+        <div style="flex: 1; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; align-items: center; gap: 8px"><span class="muted">Show</span><div class="seg" role="radiogroup" aria-label="Show results"><button role="radio" aria-checked="false">All 24</button><button class="on" role="radio" aria-checked="true">Flagged 2</button></div></div>
+          <div class="card" style="overflow: hidden">
+            <table>
+              <thead><tr><th>Sample</th><th>Analyte</th><th class="num">Result</th><th>Specification</th><th class="num">Previous lot</th><th>Evaluation</th><th>Change</th></tr></thead>
+              <tbody>
+                <tr class="oos"><td class="mono">S-26-104170</td><td>Impurity B</td><td class="num"><b>0.21 %</b></td><td>≤ 0.20 %</td><td class="num">0.09 %</td><td><span class="tag t-err">Out of spec: above 0.20</span></td><td>0.12 → 0.21 · integration corrected</td></tr>
+                <tr><td class="mono">S-26-104176</td><td>Assay, mean</td><td class="num">99.4 % LC</td><td>95.0–105.0</td><td class="num">100.1 % LC</td><td><span class="tag t-warn">Out of trend: −0.7 % vs. last 5 lots</span></td><td class="muted">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card" style="padding: 10px 12px"><b style="font-size: 12px">Comment from M. Kaur · 24-Oct-2026 07:31</b><p style="margin: 4px 0 0">Impurity B reintegrated, chromatogram attached to OOS-2026-031. Phase 1 points to a lab error.</p></div>
+          <div><label for="rv" style="font-size: 12px; font-weight: 500; display: block; margin-bottom: 4px">Review comment</label><textarea class="input" id="rv" placeholder="Required to reject or return" style="height: 56px; padding: 6px 8px; resize: none"></textarea></div>
+        </div>
+        <div style="padding: 12px 16px; background: #fff; border-top: 1px solid #E1E5EA; display: flex; gap: 8px; align-items: center">
+          <button class="btn">Return to analyst…</button><button class="btn danger">Reject…</button><span style="flex: 1"></span>
+          <span class="muted" style="font-size: 12px">Approving needs your signature</span><button class="btn primary">Approve and sign…</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="cap">Compact · the worksheet as its own page, actions always visible</p>
+    <div class="win" style="width: 390px; height: 980px; display: flex; flex-direction: column; background: #fff">
+      <div style="padding: 6px 8px 10px; border-bottom: 1px solid #E1E5EA">
+        <button class="btn lg" style="border-color: transparent; background: transparent; color: #17784A; padding: 0 8px">‹ Awaiting review · 4</button>
+        <div style="padding: 0 8px">
+          <p class="muted" style="margin: 0 0 2px"><span class="mono">WS-2026-0412</span> · M. Kaur · 24-Oct-2026 07:30</p>
+          <h1 style="margin: 0 0 8px; font-size: 16px; font-weight: 600">Assay and impurities · Paracetamol 500 mg</h1>
+          <div style="display: flex; gap: 4px; flex-wrap: wrap"><span class="tag t-neu">24 results</span><span class="tag t-err">1 out of spec</span><span class="tag t-warn">1 changed</span><span class="tag t-ok">Suitability passed</span></div>
+        </div>
+      </div>
+      <div role="tablist" style="display: flex; gap: 16px; padding: 0 16px; border-bottom: 1px solid #E1E5EA"><button class="tab on" role="tab" aria-selected="true" style="min-height: 44px">Results</button><button class="tab" role="tab" style="min-height: 44px">Previous</button><button class="tab" role="tab" style="min-height: 44px">Audit 3</button><button class="tab" role="tab" style="min-height: 44px">Comments 1</button></div>
+      <div style="flex: 1">
+        <div style="padding: 10px 16px"><div class="seg" role="radiogroup" aria-label="Show results" style="display: flex"><button role="radio" aria-checked="false" style="flex: 1; height: 36px">All 24</button><button class="on" role="radio" aria-checked="true" style="flex: 1; height: 36px">Flagged 2</button></div></div>
+        <div class="rr" style="background: #FFF5F5"><div style="display: flex; justify-content: space-between"><span class="mono" style="font-weight: 600">S-26-104170</span><b>0.21 %</b></div><div style="margin: 2px 0 6px">Impurity B · spec ≤ 0.20 % · previous lot 0.09 %</div><span class="tag t-err">Out of spec: above 0.20</span><div class="muted" style="margin-top: 6px; font-size: 12px">Changed 0.12 → 0.21 · integration corrected</div></div>
+        <div class="rr"><div style="display: flex; justify-content: space-between"><span class="mono" style="font-weight: 600">S-26-104176</span><b>99.4 % LC</b></div><div style="margin: 2px 0 6px">Assay, mean · spec 95.0–105.0 · previous lot 100.1</div><span class="tag t-warn">Out of trend: −0.7 %</span></div>
+        <div style="padding: 10px 16px"><label for="rv2" style="font-size: 12px; font-weight: 500; display: block; margin-bottom: 4px">Review comment</label><textarea class="input" id="rv2" placeholder="Required to reject or return" style="height: 64px; padding: 8px; font-size: 14px; resize: none"></textarea></div>
+      </div>
+      <div style="padding: 10px 12px; border-top: 1px solid #E1E5EA; display: flex; gap: 8px">
+        <button class="btn lg" style="flex: 1">Return…</button><button class="btn danger lg" style="flex: 1">Reject…</button><button class="btn primary lg" style="flex: 1.4">Approve…</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1520,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

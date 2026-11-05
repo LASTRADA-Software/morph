@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stability study setup</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;font-size:13px;color:#1C1E21;background:#EEF0F3;font-variant-numeric:tabular-nums}
+a{color:#17784A}a:hover{color:#0F5A36}
+.cap{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#4D5461;margin:0 0 12px}
+.win{background:#F6F7F9;border:1px solid #D2D7DE;border-radius:8px;overflow:hidden;box-sizing:border-box}
+.card{background:#fff;border:1px solid #DDE1E6;border-radius:6px;box-sizing:border-box}
+.btn{font:500 13px Inter,system-ui,sans-serif;height:30px;padding:0 12px;border-radius:6px;border:1px solid #C3C9D2;background:#fff;color:#1C1E21;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.primary{background:#17784A;border-color:#17784A;color:#fff}
+.btn.ghost{border-color:transparent;background:transparent;color:#17784A;padding:0 4px}
+.btn.lg{height:44px;font-size:14px}
+.input{height:30px;border:1px solid #C3C9D2;border-radius:6px;padding:0 8px;font:13px Inter,system-ui,sans-serif;background:#fff;box-sizing:border-box;color:#1C1E21;width:100%}
+.input.lg{height:44px;font-size:14px}
+.input.err{border-color:#B42318;box-shadow:0 0 0 2px #FBE3E3}
+.lbl{font-size:12px;font-weight:500;color:#363C46;display:block;margin-bottom:4px}
+.req{color:#A61B1B}
+.errt{font-size:12px;color:#A61B1B;margin:4px 0 0}
+.muted{color:#4D5461}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px}
+.step{display:flex;align-items:center;gap:6px;font-weight:500;color:#4D5461}
+.dot{width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;border:1.5px solid #C3C9D2;background:#fff;color:#4D5461;flex:none}
+.step.done .dot{background:#17784A;border-color:#17784A;color:#fff}
+.step.cur{color:#1C1E21}.step.cur .dot{border-color:#17784A;color:#17784A}
+.line{flex:1;height:2px;background:#D2D7DE;min-width:20px}.line.done{background:#17784A}
+.mx{border-collapse:collapse;width:100%}
+.mx th{font-size:11px;font-weight:600;color:#4D5461;padding:6px 4px;background:#FAFBFC;border-bottom:1px solid #DDE1E6;text-align:center}
+.mx th:first-child{text-align:left;padding-left:10px}
+.mx td{text-align:center;padding:5px 4px;border-bottom:1px solid #EDF0F3}
+.mx td:first-child{text-align:left;padding-left:10px;white-space:nowrap}
+.mx input{width:16px;height:16px;accent-color:#17784A;margin:0}
+.unit{position:relative}.unit span{position:absolute;right:8px;top:7px;color:#4D5461}
+.kv{display:grid;grid-template-columns:100px minmax(0,1fr);gap:5px 10px;margin:0}
+.kv dt{color:#4D5461}.kv dd{margin:0}
+.tp{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px 8px;padding:0 0 10px}
+.tp label{display:flex;align-items:center;gap:8px;min-height:40px}
+.tp input{width:20px;height:20px;accent-color:#17784A;margin:0}
+</style>
+</helmet>
+<div style="width: 1520px; height: 1100px; box-sizing: border-box; padding: 40px; display: flex; gap: 48px; align-items: flex-start">
+  <div>
+    <p class="cap">Expanded · conditions × timepoints grid and a live summary</p>
+    <div class="win" style="width: 1000px; height: 980px; display: flex; flex-direction: column">
+      <div style="padding: 14px 20px; background: #fff; border-bottom: 1px solid #E1E5EA">
+        <h1 style="margin: 0 0 12px; font-size: 16px; font-weight: 600">New stability study · Paracetamol 500 mg tablets</h1>
+        <ol aria-label="Progress" style="list-style: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 10px">
+          <li class="step done"><span class="dot">✓</span>Product and lot</li><li class="line done" aria-hidden="true"></li>
+          <li class="step cur" aria-current="step"><span class="dot">2</span>Conditions and timepoints</li><li class="line" aria-hidden="true"></li>
+          <li class="step"><span class="dot">3</span>Tests per timepoint</li><li class="line" aria-hidden="true"></li>
+          <li class="step"><span class="dot">4</span>Review and sign</li>
+        </ol>
+      </div>
+      <div style="flex: 1; padding: 16px 20px; display: flex; gap: 16px; align-items: flex-start">
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+          <div role="alert" style="background: #FDECEC; border: 1px solid #F2C0C0; color: #8A1C1C; border-radius: 6px; padding: 8px 10px">1 field needs attention: <a href="#cpp">Containers per pull</a>.</div>
+          <div class="card" style="padding: 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+            <div><label class="lbl" for="sd">Study start (T0) <span class="req">*</span></label><input class="input" id="sd" value="03-Nov-2026"></div>
+            <div><label class="lbl" for="pw">Pull window <span class="req">*</span></label><div class="unit"><input class="input" id="pw" value="± 7" style="padding-right: 40px"><span>days</span></div></div>
+            <div><label class="lbl" for="cpp">Containers per pull <span class="req">*</span></label><div class="unit"><input class="input err" id="cpp" value="12" aria-invalid="true" aria-describedby="cppE" style="padding-right: 40px"><span>units</span></div><p class="errt" id="cppE">15 pulls × 12 = 180 units needed, 150 in stock for lot L-26-0381.</p></div>
+          </div>
+          <div class="card" style="overflow: hidden">
+            <div style="display: flex; align-items: center; padding: 10px 10px 8px"><h2 style="margin: 0; font-size: 13px; font-weight: 600; flex: 1">Storage conditions and timepoints (months)</h2><button class="btn ghost">Apply ICH Q1A template</button><button class="btn" style="margin-left: 6px">Add condition</button></div>
+            <table class="mx">
+              <thead><tr><th>Condition</th><th>T0</th><th>1</th><th>3</th><th>6</th><th>9</th><th>12</th><th>18</th><th>24</th><th>36</th><th>Pulls</th></tr></thead>
+              <tbody>
+                <tr><td>25 °C / 60 % RH · long term</td><td><input type="checkbox" checked aria-label="25 °C T0"></td><td><input type="checkbox" aria-label="25 °C 1 month"></td><td><input type="checkbox" checked aria-label="25 °C 3 months"></td><td><input type="checkbox" checked aria-label="25 °C 6 months"></td><td><input type="checkbox" checked aria-label="25 °C 9 months"></td><td><input type="checkbox" checked aria-label="25 °C 12 months"></td><td><input type="checkbox" checked aria-label="25 °C 18 months"></td><td><input type="checkbox" checked aria-label="25 °C 24 months"></td><td><input type="checkbox" checked aria-label="25 °C 36 months"></td><td>8</td></tr>
+                <tr><td>30 °C / 65 % RH · intermediate</td><td><input type="checkbox" aria-label="30 °C T0"></td><td><input type="checkbox" aria-label="30 °C 1 month"></td><td><input type="checkbox" checked aria-label="30 °C 3 months"></td><td><input type="checkbox" checked aria-label="30 °C 6 months"></td><td><input type="checkbox" checked aria-label="30 °C 9 months"></td><td><input type="checkbox" checked aria-label="30 °C 12 months"></td><td><input type="checkbox" aria-label="30 °C 18 months"></td><td><input type="checkbox" aria-label="30 °C 24 months"></td><td><input type="checkbox" aria-label="30 °C 36 months"></td><td>4</td></tr>
+                <tr><td>40 °C / 75 % RH · accelerated</td><td><input type="checkbox" aria-label="40 °C T0"></td><td><input type="checkbox" checked aria-label="40 °C 1 month"></td><td><input type="checkbox" checked aria-label="40 °C 3 months"></td><td><input type="checkbox" checked aria-label="40 °C 6 months"></td><td><input type="checkbox" aria-label="40 °C 9 months"></td><td><input type="checkbox" aria-label="40 °C 12 months"></td><td><input type="checkbox" aria-label="40 °C 18 months"></td><td><input type="checkbox" aria-label="40 °C 24 months"></td><td><input type="checkbox" aria-label="40 °C 36 months"></td><td>3</td></tr>
+              </tbody>
+            </table>
+            <p class="muted" style="margin: 0; padding: 8px 10px; font-size: 12px">T0 is tested once, from the long-term condition.</p>
+          </div>
+        </div>
+        <aside class="card" style="width: 250px; flex: none; padding: 14px" aria-label="Summary">
+          <h2 style="margin: 0 0 10px; font-size: 13px; font-weight: 600">Summary</h2>
+          <dl class="kv"><dt>Product</dt><dd>Paracetamol 500 mg</dd><dt>Lot</dt><dd class="mono">L-26-0381</dd><dt>Protocol</dt><dd class="mono">STP-0114 v2</dd><dt>Pulls</dt><dd>15</dd><dt>First pull</dt><dd>03-Dec-2026 (40 °C, 1 m)</dd><dt>Last pull</dt><dd>03-Nov-2029</dd><dt>Containers</dt><dd style="color: #9B1C1C; font-weight: 600">180 needed, 150 in stock</dd></dl>
+        </aside>
+      </div>
+      <div style="padding: 12px 20px; background: #fff; border-top: 1px solid #E1E5EA; display: flex; gap: 8px"><button class="btn">Back</button><span style="flex: 1"></span><button class="btn ghost">Save draft</button><button class="btn primary">Continue to tests</button></div>
+    </div>
+  </div>
+  <div>
+    <p class="cap">Compact · one condition at a time, every field kept</p>
+    <div class="win" style="width: 390px; height: 980px; display: flex; flex-direction: column; background: #fff">
+      <div style="padding: 12px 16px; border-bottom: 1px solid #E1E5EA">
+        <p class="muted" style="margin: 0 0 2px">Step 2 of 4 · Paracetamol 500 mg</p>
+        <h1 style="margin: 0 0 10px; font-size: 16px; font-weight: 600">Conditions and timepoints</h1>
+        <ol aria-label="Progress" style="list-style: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 6px">
+          <li class="step done"><span class="dot">✓</span></li><li class="line done" aria-hidden="true"></li><li class="step cur" aria-current="step"><span class="dot">2</span></li><li class="line" aria-hidden="true"></li><li class="step"><span class="dot">3</span></li><li class="line" aria-hidden="true"></li><li class="step"><span class="dot">4</span></li>
+        </ol>
+      </div>
+      <div style="flex: 1; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px">
+        <div><label class="lbl" for="sd2">Study start (T0) <span class="req">*</span></label><input class="input lg" id="sd2" value="03-Nov-2026"></div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+          <div><label class="lbl" for="pw2">Pull window <span class="req">*</span></label><div class="unit"><input class="input lg" id="pw2" value="± 7" style="padding-right: 40px"><span style="top: 13px">days</span></div></div>
+          <div><label class="lbl" for="cpp2">Per pull <span class="req">*</span></label><div class="unit"><input class="input lg err" id="cpp2" value="12" aria-invalid="true" style="padding-right: 40px"><span style="top: 13px">units</span></div></div>
+        </div>
+        <p class="errt" style="margin-top: -6px">180 units needed, 150 in stock for lot L-26-0381.</p>
+        <details open style="border: 1px solid #DDE1E6; border-radius: 6px; padding: 0 12px"><summary style="min-height: 44px; display: flex; align-items: center; font-weight: 600">25 °C / 60 % RH · 8 pulls</summary>
+          <div class="tp"><label><input type="checkbox" checked>T0</label><label><input type="checkbox">1 m</label><label><input type="checkbox" checked>3 m</label><label><input type="checkbox" checked>6 m</label><label><input type="checkbox" checked>9 m</label><label><input type="checkbox" checked>12 m</label><label><input type="checkbox" checked>18 m</label><label><input type="checkbox" checked>24 m</label><label><input type="checkbox" checked>36 m</label></div>
+        </details>
+        <details style="border: 1px solid #DDE1E6; border-radius: 6px; padding: 0 12px"><summary style="min-height: 44px; display: flex; align-items: center; font-weight: 600">30 °C / 65 % RH · 4 pulls</summary></details>
+        <details style="border: 1px solid #DDE1E6; border-radius: 6px; padding: 0 12px"><summary style="min-height: 44px; display: flex; align-items: center; font-weight: 600">40 °C / 75 % RH · 3 pulls</summary></details>
+        <button class="btn lg">Add condition</button>
+        <details style="border: 1px solid #DDE1E6; border-radius: 6px; padding: 0 12px"><summary style="min-height: 44px; display: flex; align-items: center; font-weight: 600">Summary · first pull 03-Dec-2026</summary></details>
+      </div>
+      <div style="padding: 12px 16px; border-top: 1px solid #E1E5EA; display: flex; gap: 8px"><button class="btn lg" style="width: 90px">Back</button><button class="btn primary lg" style="flex: 1">Continue</button></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1520,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

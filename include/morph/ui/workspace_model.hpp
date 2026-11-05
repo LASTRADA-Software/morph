@@ -73,6 +73,9 @@ struct WorkspaceOptions {
     /// @brief Called after the open tabs, their titles, unsaved state or identities, or the active tab changed;
     ///        empty calls nothing.
     std::function<void()> onChanged;
+    /// @brief Called with what the workspace reports about what it shows, such as the parts of a screen's head an
+    ///        overlay leaves out; empty reports nothing.
+    std::function<void(Refusal const&)> diagnostics;
 };
 
 /// @brief A tab's identity in a `WorkspaceModel`: issued when it opens, never reused.
@@ -83,6 +86,14 @@ struct WorkspaceTabId {
     /// @brief Ordered by issue.
     /// @return The ordering of the two values.
     auto operator<=>(WorkspaceTabId const&) const = default;
+};
+
+/// @brief What an open did: the tab it opened or focused, and whether it mounted a screen for it.
+struct WorkspaceOpened {
+    /// @brief The tab, now the active one.
+    WorkspaceTabId tab;
+    /// @brief Whether a screen was mounted: `false` when an open tab was focused.
+    bool mounted = false;
 };
 
 /// @brief One open tab, as an application's tab strip binds to it.
@@ -144,11 +155,13 @@ public:
         }
     }
 
-    /// @brief Unmounts every screen without asking, newest first.
+    /// @brief Unmounts every screen without asking, newest first, then cancels every call no mount adopted, as
+    ///        `forceCloseAll` does.
     ~WorkspaceModel() {
         while (!_tabs.empty()) {
             unmountLast();
         }
+        _host->cancelUnclaimedCalls();
     }
 
     WorkspaceModel(WorkspaceModel const&) = delete;
@@ -162,12 +175,21 @@ public:
     /// @return The tab, or why the screen could not be mounted; a refused mount, or a `mountPage` that throws, opens
     ///         nothing.
     std::expected<WorkspaceTabId, MountError> open(std::string_view screenId, ParamMap const& params) {
+        return openTab(screenId, params).transform([](WorkspaceOpened const& opened) { return opened.tab; });
+    }
+
+    /// @brief Opens a screen as `open` does, and says whether it mounted one: what a host needs to settle the call of
+    ///        a navigation that only focused a tab (`DocumentScreenHost::settleCall`).
+    /// @param screenId The screen id.
+    /// @param params   Its params.
+    /// @return The tab and whether a screen was mounted for it, or why the screen could not be mounted.
+    std::expected<WorkspaceOpened, MountError> openTab(std::string_view screenId, ParamMap const& params) {
         WorkspaceScreen const facts = factsOf(screenId);
         std::optional<std::string> const identity = _host->identityOf(screenId, params);
         for (auto const& tab : _tabs) {
             if (tab->screenId == screenId && (facts.singleton || (identity && identityText(*tab) == *identity))) {
                 activateTab(tab->id, false);
-                return tab->id;
+                return WorkspaceOpened{.tab = tab->id, .mounted = false};
             }
         }
         std::optional<WorkspaceTabId> replaced;
@@ -190,7 +212,7 @@ public:
             removeTab(*replaced, true);
         }
         activateTab(tabId, false);
-        return tabId;
+        return WorkspaceOpened{.tab = tabId, .mounted = true};
     }
 
     /// @brief Opens the start screens: with `resume`, every recorded route whose screen is known and available, in
@@ -280,11 +302,13 @@ public:
     }
 
     /// @brief Closes every tab without asking, newest first: what signing out does, since no close guard may keep a
-    ///        screen of the principal who is leaving.
+    ///        screen of the principal who is leaving. Then cancels every call no mount adopted
+    ///        (`DocumentScreenHost::cancelUnclaimedCalls`), so none outlives the screens it was filed among.
     void forceCloseAll() {
         while (!_tabs.empty()) {
             removeTab(_tabs.back()->id, true);
         }
+        _host->cancelUnclaimedCalls();
     }
 
     /// @brief Writes the record now, cancelling a pending debounced write: what sign-out does before the session is

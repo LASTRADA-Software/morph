@@ -47,9 +47,6 @@ struct FrontendConfig {
     Components* components = nullptr;
     /// @brief The window's title.
     std::string title = "morph";
-    /// @brief Called with the window's width class (`widthClassOf`) when the window first has a width and each time
-    ///        the class changes; empty calls nothing. The shell sets it as `{"env": "widthClass"}`.
-    std::function<void(std::string const& widthClass)> onWidthClass;
     /// @brief Development mode (spec 6 §21): with `On`, Ctrl+Shift+I in the window opens the inspector over the screen
     ///        the shell shows (`ui::MountedShell::inspectFocused`). With `Off`, the key does nothing.
     ui::DevelopmentTools devTools = ui::DevelopmentTools::Off;

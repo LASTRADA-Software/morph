@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>E-signature</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;font-size:13px;color:#1C1E21;background:#EEF0F3;font-variant-numeric:tabular-nums}
+a{color:#17784A}a:hover{color:#0F5A36}
+.cap{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#4D5461;margin:0 0 12px}
+.win{background:#F6F7F9;border:1px solid #D2D7DE;border-radius:8px;overflow:hidden;box-sizing:border-box}
+.card{background:#fff;border:1px solid #DDE1E6;border-radius:6px;box-sizing:border-box}
+.btn{font:500 13px Inter,system-ui,sans-serif;height:30px;padding:0 12px;border-radius:6px;border:1px solid #C3C9D2;background:#fff;color:#1C1E21;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.primary{background:#17784A;border-color:#17784A;color:#fff}
+.btn.lg{height:44px;font-size:14px}
+.input{height:30px;border:1px solid #C3C9D2;border-radius:6px;padding:0 8px;font:13px Inter,system-ui,sans-serif;background:#fff;box-sizing:border-box;color:#1C1E21;width:100%}
+.input.lg{height:44px;font-size:14px}
+.input.err{border-color:#B42318;box-shadow:0 0 0 2px #FBE3E3}
+.input[readonly]{background:#F3F5F7}
+.lbl{font-size:12px;font-weight:500;color:#363C46;display:block;margin-bottom:4px}
+.req{color:#A61B1B}
+.muted{color:#4D5461}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px}
+.banner{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:6px;font-size:13px;line-height:1.4}
+.b-err{background:#FDECEC;color:#8A1C1C;border:1px solid #F2C0C0}
+.b-info{background:#EAF5EE;color:#1F3A8A;border:1px solid #BCDFC9}
+.kv{display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 10px;margin:0}
+.kv dt{color:#4D5461}.kv dd{margin:0}
+.ghost-row{height:28px;border-bottom:1px solid #E6E9ED;background:#fff}
+</style>
+</helmet>
+<div style="width: 1520px; height: 900px; box-sizing: border-box; padding: 40px; display: flex; gap: 48px; align-items: flex-start">
+  <div>
+    <p class="cap">Expanded · a dialog over the screen it signs</p>
+    <div class="win" style="width: 1000px; height: 780px; position: relative">
+      <div aria-hidden="true" style="padding: 16px; display: flex; flex-direction: column; gap: 0">
+        <div style="height: 36px; background: #fff; border: 1px solid #E1E5EA; border-radius: 6px; margin-bottom: 12px"></div>
+        <div class="ghost-row"></div><div class="ghost-row"></div><div class="ghost-row"></div><div class="ghost-row"></div><div class="ghost-row"></div><div class="ghost-row"></div><div class="ghost-row"></div><div class="ghost-row"></div>
+      </div>
+      <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(20,24,31,.45)"></div>
+      <div role="dialog" aria-modal="true" aria-labelledby="sigT" class="card" style="position: absolute; left: 260px; top: 70px; width: 480px; box-shadow: 0 18px 48px rgba(20,24,31,.28); display: flex; flex-direction: column">
+        <div style="padding: 16px 18px 12px; border-bottom: 1px solid #E6E9ED">
+          <h1 id="sigT" style="margin: 0; font-size: 16px; font-weight: 600">Sign to approve results</h1>
+          <p class="muted" style="margin: 4px 0 0">Your signature is stored with the record and cannot be removed.</p>
+        </div>
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 12px">
+          <div style="background: #F6F7F9; border: 1px solid #E6E9ED; border-radius: 6px; padding: 10px 12px">
+            <dl class="kv">
+              <dt>Record</dt><dd><span class="mono">WS-2026-0412</span> · worksheet</dd>
+              <dt>Content</dt><dd>24 results · Assay and impurities · Lot <span class="mono">L-26-0381</span></dd>
+              <dt>Flags</dt><dd>2 out of specification, investigation <span class="mono">OOS-2026-031</span> linked</dd>
+            </dl>
+          </div>
+          <div class="banner b-err" role="alert"><b style="flex: none">Password incorrect.</b><span>3 of 5 attempts left before the account locks.</span></div>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+            <div><label class="lbl" for="s1">Signer</label><input class="input" id="s1" readonly value="Dr. Anna Meyer (ameyer)"></div>
+            <div><label class="lbl" for="m1">Meaning <span class="req">*</span></label><select class="input" id="m1"><option>Approved</option><option>Reviewed</option><option>Authored</option></select></div>
+          </div>
+          <div><label class="lbl" for="c1">Reason <span class="req">*</span></label><textarea class="input" id="c1" style="height: 56px; padding: 6px 8px; resize: none">Results within specification except Impurity B; OOS-2026-031 closed as lab error.</textarea></div>
+          <div><label class="lbl" for="p1">Password <span class="req">*</span></label><input class="input err" id="p1" type="password" value="••••••••" aria-invalid="true" aria-describedby="sigE"></div>
+          <p id="sigE" class="muted" style="margin: -4px 0 0; font-size: 12px">Signing at 24-Oct-2026 09:40 CEST as <b>Approved</b>.</p>
+        </div>
+        <div style="padding: 12px 18px; border-top: 1px solid #E6E9ED; display: flex; justify-content: flex-end; gap: 8px">
+          <button class="btn">Cancel</button>
+          <button class="btn primary">Sign and approve</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="cap">Compact · a full-screen sheet, same fields</p>
+    <div class="win" style="width: 390px; height: 780px; background: #fff; display: flex; flex-direction: column">
+      <div style="padding: 8px 8px 10px; border-bottom: 1px solid #E6E9ED; display: flex; align-items: center; gap: 4px">
+        <button class="btn lg" style="border-color: transparent; background: transparent; color: #17784A">Cancel</button>
+        <h1 style="margin: 0; font-size: 15px; font-weight: 600; flex: 1; text-align: center">Sign to approve</h1>
+        <span style="width: 76px"></span>
+      </div>
+      <div style="flex: 1; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px">
+        <div style="background: #F6F7F9; border: 1px solid #E6E9ED; border-radius: 6px; padding: 10px 12px; font-size: 13px; line-height: 1.5">
+          <div><span class="mono" style="font-weight: 600">WS-2026-0412</span> · worksheet</div>
+          <div>24 results · Assay and impurities · Lot <span class="mono">L-26-0381</span></div>
+          <div>2 out of specification, <span class="mono">OOS-2026-031</span> linked</div>
+        </div>
+        <div class="banner b-err" role="alert"><span><b>Password incorrect.</b> 3 of 5 attempts left before the account locks.</span></div>
+        <div><label class="lbl" for="s2">Signer</label><input class="input lg" id="s2" readonly value="Dr. Anna Meyer (ameyer)"></div>
+        <div><label class="lbl" for="m2">Meaning <span class="req">*</span></label><select class="input lg" id="m2"><option>Approved</option></select></div>
+        <div><label class="lbl" for="c2">Reason <span class="req">*</span></label><textarea class="input" id="c2" style="height: 72px; padding: 8px; font-size: 14px; resize: none">Results within specification except Impurity B; OOS-2026-031 closed as lab error.</textarea></div>
+        <div><label class="lbl" for="p2">Password <span class="req">*</span></label><input class="input lg err" id="p2" type="password" value="••••••••" aria-invalid="true"></div>
+        <p class="muted" style="margin: 0; font-size: 12px">Signing at 24-Oct-2026 09:40 CEST as Approved.</p>
+      </div>
+      <div style="padding: 12px 16px; border-top: 1px solid #E6E9ED"><button class="btn primary lg" style="width: 100%">Sign and approve</button></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1520,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

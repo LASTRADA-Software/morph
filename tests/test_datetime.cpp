@@ -145,6 +145,16 @@ TEST_CASE("DateTime::Iso8601::NegativeYearRoundTrip", "[datetime]") {
     CHECK(roundTrip(std::chrono::year{0}));
 }
 
+// Mutation: sum the components before converting to milliseconds (on the MSVC STL, whose minutes count in 32
+// bits, 9999-12-31T23:30 then reads 1833-11-15T19:14).
+TEST_CASE("DateTime: components past year 6053 compose without wrapping", "[datetime]") {
+    DateTime const last{std::chrono::year{9999}, std::chrono::month{12},   std::chrono::day{31},
+                        std::chrono::hours{23},  std::chrono::minutes{30}, std::chrono::seconds{0}};
+    CHECK(last.value.time_since_epoch().count() == 253'402'299'000'000);
+    CHECK(DateTime::fromIso8601("9999-12-31T23:30:00Z") == std::optional<DateTime>{last});
+    CHECK(last.toIso8601() == "9999-12-31T23:30:00.000Z");
+}
+
 TEST_CASE("DateTime::ComparisonAndArithmetic", "[datetime]") {
     auto const earlier = sample();
     auto later = earlier + std::chrono::minutes{5};

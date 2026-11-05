@@ -129,3 +129,51 @@ TEST_CASE("app root: one per session, only the app document, and its names leave
     h.settle();
     CHECK(h.host.log.back() == R"(app tenant "south")");
 }
+
+// Control: lower no navigation badges in mountApp (the list stays empty); or skip a part's `visible`.
+TEST_CASE("app root: its navigation badges follow the app state, and only the visible ones are listed",
+          "[ui][interpreter][app]") {
+    Harness h;
+    auto root = h.interpreter.mountApp(ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "app", "state": { "waiting": { "init": 4 } },
+      "navigation": [
+        { "screen": "lims.review", "text": { "fn": "format", "args": [ "{0}", { "ref": "waiting" } ] }, "tone": "info",
+          "visible": { "fn": "ne", "args": [ { "ref": "waiting" }, 0 ] } },
+        { "screen": "lims.instruments", "text": "1", "tone": "warn" } ] })",
+                                                               ui::testing::corpusCatalog()));
+    REQUIRE(root.has_value());
+    ui::AppRoot const& app = **root;
+    CHECK(app.navigationBadges().peek() ==
+          std::vector<ui::NavigationBadge>{{.screen = "lims.review", .text = "4", .tone = ui::Tone::Info},
+                                           {.screen = "lims.instruments", .text = "1", .tone = ui::Tone::Warn}});
+    auto const screenSetsWaiting = h.mount(R"({ "vocab": "ui/1", "id": "one",
+      "view": { "kind": "button", "testId": "clear", "label": "clear",
+                "onClick": { "set": "app.waiting", "value": 0 } } })");
+    h.backend.click(h.byTestId("Button", "clear"));
+    h.settle();
+    CHECK(app.navigationBadges().peek() ==
+          std::vector<ui::NavigationBadge>{{.screen = "lims.instruments", .text = "1", .tone = ui::Tone::Warn}});
+}
+
+TEST_CASE("app root: `navigation` is the app document's, and each badge names its screen", "[ui][interpreter][app]") {
+    auto const screen = ui::loadDocumentText(
+        R"({"vocab":"ui/1","id":"one","navigation":[{"screen":"x"}],"view":{"kind":"text","text":"t"}})",
+        ui::LoadOptions{.catalog = ui::testing::corpusCatalog()});
+    REQUIRE_FALSE(screen.has_value());
+    CHECK(screen.error().path == "/navigation");
+    CHECK(screen.error().reason == "`navigation` is the app document's; a screen has none");
+    auto const unnamed = ui::loadDocumentText(R"({"vocab":"ui/1","id":"app","navigation":[{"text":"1"}]})",
+                                              ui::LoadOptions{.catalog = ui::testing::corpusCatalog()});
+    REQUIRE_FALSE(unnamed.has_value());
+    CHECK(unnamed.error().path == "/navigation/0");
+    auto const empty = ui::loadDocumentText(R"({"vocab":"ui/1","id":"app","navigation":[{"screen":""}]})",
+                                            ui::LoadOptions{.catalog = ui::testing::corpusCatalog()});
+    REQUIRE_FALSE(empty.has_value());
+    CHECK(empty.error().path == "/navigation/0/screen");
+    CHECK(empty.error().reason == "a navigation badge names the screen of its entry");
+    auto const unknown =
+        ui::loadDocumentText(R"({"vocab":"ui/1","id":"app","navigation":[{"screen":"x","text":{"ref":"nothing"}}]})",
+                             ui::LoadOptions{.catalog = ui::testing::corpusCatalog()});
+    REQUIRE_FALSE(unknown.has_value());
+    CHECK(unknown.error().path == "/navigation/0/text");
+}

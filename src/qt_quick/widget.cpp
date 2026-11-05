@@ -3,6 +3,7 @@
 #include "qt_quick/widget.hpp"
 
 #include <QAccessible>
+#include <QLoggingCategory>
 #include <QMetaObject>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -17,6 +18,28 @@
 #include "qt_quick/keys.hpp"
 
 namespace morph::qt_quick::detail {
+
+namespace {
+
+Q_LOGGING_CATEGORY(lcLayout, "morph.layout")
+
+}  // namespace
+
+void reportOverflow(QVariant const& payload) {
+    QVariantMap const map = payload.toMap();
+    QString const where = map.value(QStringLiteral("where")).toString();
+    int const need = map.value(QStringLiteral("need")).toInt();
+    int const have = map.value(QStringLiteral("have")).toInt();
+    QString const child = map.value(QStringLiteral("child")).toString();
+    if (map.value(QStringLiteral("table")).toBool()) {
+        qCWarning(lcLayout).noquote() << where << "scrolls sideways: its columns need" << need << "px and it has"
+                                      << have << "px";
+        return;
+    }
+    QString const cause = child.isEmpty() ? QStringLiteral("its children neither wrap nor shrink")
+                                          : QStringLiteral("`%1` and its siblings neither wrap nor shrink").arg(child);
+    qCWarning(lcLayout).noquote() << where << "needs" << need << "px and has" << have << "px:" << cause;
+}
 
 QStringList toStringList(std::vector<std::string> const& texts) {
     QStringList list;
@@ -63,6 +86,15 @@ ItemBase::ItemBase(Context& context, Context::Made made, ui::ContainerWidget* pa
         _container = container;
         container->adopt(*this);
     }
+}
+
+ItemBase::ItemBase(Context& context, QString const& type, ContainerCore& container)
+    : _context{&context}, _relay{nullptr}, _container{&container} {
+    Context::Made const made = context.make(type, {});
+    _item = made.item;
+    _relay = made.relay;
+    registry().push_back(this);
+    container.adopt(*this);
 }
 
 ItemBase::~ItemBase() {
@@ -140,6 +172,11 @@ void ItemBase::showLayout(ui::LayoutHints const& hints) const {
         write("alignSelf", static_cast<int>(*hints.alignSelf));
     } else {
         offer("alignSelf", -1);
+    }
+    if (hints.bleed) {
+        write("bleed", true);
+    } else {
+        offer("bleed", false);
     }
     for (auto const& [name, bound] :
          {std::pair{"minWidthUnits", hints.minWidth}, std::pair{"maxWidthUnits", hints.maxWidth},

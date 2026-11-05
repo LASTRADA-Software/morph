@@ -10,16 +10,23 @@
 #include <string>
 #include <vector>
 
+#include "tui/container_widgets.hpp"
 #include "tui/display_widgets.hpp"
+#include "tui/layout.hpp"
+#include "tui/leaf_widgets.hpp"
 #include "tui_harness.hpp"
 
 namespace ui = morph::ui;
+namespace layout = morph::tui::layout;
 using morph::tui::detail::BadgeImpl;
 using morph::tui::detail::BannerImpl;
 using morph::tui::detail::EmptyStateImpl;
 using morph::tui::detail::KeyValueImpl;
+using morph::tui::detail::PanelImpl;
 using morph::tui::detail::ProgressImpl;
+using morph::tui::detail::StackImpl;
 using morph::tui::detail::StepsImpl;
+using morph::tui::detail::TextImpl;
 using morph::tui::testing::Harness;
 using Rows = std::vector<std::string>;
 
@@ -131,6 +138,21 @@ TEST_CASE("tui steps: one row per step with its state's mark", "[tui][display]")
     CHECK(steps->probeText().empty());
 }
 
+// Mutation: draw the unlabelled indicator as the row-per-step list (it then has four rows, not one).
+TEST_CASE("tui steps: unlabelled, the marks sit in one row joined to the width", "[tui][display]") {
+    Harness harness{30, 5};
+    auto const steps = harness.make<StepsImpl>(nullptr);
+    steps->setSteps({{.label = "Plan", .state = ui::StepState::Done},
+                     {.label = "Build", .state = ui::StepState::Active},
+                     {.label = "Ship", .state = ui::StepState::Pending},
+                     {.label = "Undo", .state = ui::StepState::Failed}});
+    steps->setCurrent(1);
+    steps->setLabelled(false);
+    CHECK(harness.draw() == Rows{"[x]──────[>]──────[ ]──────[!]"});
+    CHECK(steps->naturalSize().height == 1);
+    CHECK(steps->probeText() == "Build");
+}
+
 // Mutation: put each value right after its own caption (the values then do not line up).
 TEST_CASE("tui key-value: the values line up after the widest caption", "[tui][display]") {
     Harness harness{30, 3};
@@ -157,4 +179,180 @@ TEST_CASE("tui empty state: title, text and an action that Enter and a click on 
     harness.focus(*empty);
     CHECK(harness.key(core::tui::KeyCode::Enter) == core::tui::EventResult::Handled);
     CHECK(actions == 2);
+}
+
+// Mutation: draw `_text` whatever the runs (the strong run is not bold).
+TEST_CASE("tui banner: a banner's runs draw on its row, a strong run bold", "[tui][display]") {
+    Harness harness{40, 3};
+    auto const banner = harness.make<BannerImpl>(nullptr);
+    banner->setTone(ui::Tone::Err);
+    banner->setSpans({{.text = "Refused.", .strong = true}, {.text = " 3 left"}});
+    CHECK(harness.draw() == Rows{"Refused. 3 left"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 0).style.bold);
+    CHECK_FALSE(buffer.at(0, 10).style.bold);
+    CHECK(banner->probeText() == "Refused. 3 left");
+}
+
+// Mutation: ignore the placement (the stacked pair takes one row).
+TEST_CASE("tui key-value: a stacked pair takes two rows, and a toned value is bold in its tone", "[tui][display]") {
+    Harness harness{30, 5};
+    auto const kv = harness.make<KeyValueImpl>(nullptr);
+    kv->setCaptionPlacement(ui::CaptionPlacement::Above);
+    kv->setItems({{.label = "Serial", .spans = {{.text = "D-9", .mono = true}}},
+                  {.label = "Containers", .value = "180 needed", .tone = ui::Tone::Err}});
+    CHECK(harness.draw() == Rows{"Serial", "D-9", "Containers", "180 needed"});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(3, 0).style.bold);
+    CHECK(buffer.at(3, 0).style.fg == harness.screen().theme().error.fg);
+    CHECK_FALSE(buffer.at(1, 0).style.bold);
+    CHECK(kv->probeText() == "Serial: D-9\nContainers: 180 needed");
+}
+
+// Mutation: ignore the set width (the values start after the widest caption), or leave out the elision (the long
+// caption overwrites its value).
+TEST_CASE("tui key-value: a set caption width places the values, and a longer caption is cut with an ellipsis",
+          "[tui][display]") {
+    Harness harness{30, 3};
+    auto const kv = harness.make<KeyValueImpl>(nullptr);
+    kv->setCaptionWidth(8);
+    kv->setItems({{.label = "Lot", .value = "L-1"}, {.label = "Serial number", .value = "S"}});
+    CHECK(harness.draw() == Rows{"Lot:      L-1", "Serial n… S"});
+    CHECK(kv->probeText() == "Lot: L-1\nSerial number: S");
+    CHECK(kv->naturalSize().width == 8 + 2 + 3);
+}
+
+// Mutation: draw an outline badge in brackets (it then reads as a filled one).
+TEST_CASE("tui badge: an outline badge is drawn in parentheses", "[tui][display]") {
+    Harness harness{20, 1};
+    auto const badge = harness.make<BadgeImpl>(nullptr);
+    badge->setTone(ui::Tone::Err);
+    badge->setText("STAT");
+    badge->setStyle(ui::BadgeStyle::Outline);
+    CHECK(harness.draw() == Rows{"(STAT)"});
+}
+
+// Mutation: leave the elision out of BadgeImpl::paint (the caption is cut by the canvas, the bracket with it), or
+// hit-test the remove control at the whole caption's width (the click on the drawn `×` removes nothing).
+TEST_CASE("tui badge: an elided chip keeps its brackets and is removed by a click on its drawn remove control",
+          "[tui][display]") {
+    Harness harness{8, 1};
+    auto const badge = harness.make<BadgeImpl>(nullptr);
+    badge->setText("Out of trend");
+    int removed = 0;
+    badge->setOnRemove([&removed] { ++removed; }, "Remove Out of trend");
+    badge->setElided(true);
+    CHECK(harness.draw() == Rows{"[Out… ×]"});
+    static_cast<void>(harness.click({.x = 0, .y = 0}));
+    CHECK(removed == 0);
+    static_cast<void>(harness.click({.x = 6, .y = 0}));
+    CHECK(removed == 1);
+    CHECK(badge->probeText() == "Out of trend");
+}
+
+// Mutation: draw a quiet badge in brackets.
+TEST_CASE("tui badge: a quiet badge is drawn in parentheses", "[tui][display]") {
+    Harness harness{20, 1};
+    auto const badge = harness.make<BadgeImpl>(nullptr);
+    badge->setText("Routine");
+    badge->setStyle(ui::BadgeStyle::Quiet);
+    CHECK(harness.draw() == Rows{"(Routine)"});
+}
+
+// Mutation: ignore the style (the link is drawn as the bracketed button after the text, and the stretched button
+// stays on the text's row).
+TEST_CASE("tui banner: a button action is bracketed, a stretched one is on its own row", "[tui][display]") {
+    Harness harness{40, 3};
+    auto const banner = harness.make<BannerImpl>(nullptr);
+    int actions = 0;
+    banner->setText("Run 4 is overdue");
+    banner->setActionLabel("Open run");
+    banner->setOnAction([&] { ++actions; });
+    banner->setActionStyle(ui::BannerActionStyle::Button, false);
+    CHECK(harness.draw() == Rows{"Run 4 is overdue  [ Open run ]"});
+    banner->setActionStyle(ui::BannerActionStyle::Button, true);
+    CHECK(harness.draw() == Rows{"Run 4 is overdue", "[ Open run ]"});
+    static_cast<void>(harness.click({.x = 3, .y = 1}));
+    CHECK(actions == 1);
+    static_cast<void>(harness.click({.x = 3, .y = 0}));
+    CHECK(actions == 1);
+}
+
+// Mutation: draw the link without the underline, or fire on any cell of the row.
+TEST_CASE("tui banner: a link action is underlined inside its sentence and a click on it runs the action",
+          "[tui][display]") {
+    Harness harness{50, 2};
+    auto const banner = harness.make<BannerImpl>(nullptr);
+    int actions = 0;
+    banner->setSpans(
+        {{.text = "1 field needs attention: "}, {.text = "Containers per pull", .action = true}, {.text = "."}});
+    banner->setActionLabel("Containers per pull");
+    banner->setOnAction([&] { ++actions; });
+    banner->setActionStyle(ui::BannerActionStyle::Link, false);
+    CHECK(harness.draw() == Rows{"1 field needs attention: Containers per pull."});
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(0, 25).style.underline);
+    CHECK_FALSE(buffer.at(0, 5).style.underline);
+    CHECK_FALSE(buffer.at(0, 44).style.underline);
+    static_cast<void>(harness.click({.x = 30, .y = 0}));
+    CHECK(actions == 1);
+    static_cast<void>(harness.click({.x = 5, .y = 0}));
+    CHECK(actions == 1);
+
+    auto const plain = harness.make<BannerImpl>(nullptr);
+    plain->setText("Offline");
+    plain->setActionLabel("Retry");
+    plain->setActionStyle(ui::BannerActionStyle::Link, false);
+    CHECK(plain->naturalSize().width == 13);
+}
+
+// Mutation: leave the content minimum out of the stack's placement (the fixed(9) badge is cut at 9 cells, its closing
+// bracket gone).
+TEST_CASE("tui badge: a badge given a width below its natural one is raised to it in a row", "[tui][display]") {
+    Harness harness{30, 2};
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    auto const badge = harness.make<BadgeImpl>(row.get());
+    badge->setText("Out of spec");
+    badge->setLayout(ui::LayoutHints{.width = ui::Sizing::fixed(9)});
+    auto const next = harness.make<TextImpl>(row.get());
+    next->setText("next");
+    CHECK(badge->contentMinimumWidth() == 13);
+    CHECK(harness.draw() == Rows{"[Out of spec]next"});
+}
+
+// Mutation: leave the content minimum out of the cross-axis width of a column (the badge is drawn in 9 cells).
+TEST_CASE("tui badge: a badge given a width below its natural one is raised to it in a column", "[tui][display]") {
+    Harness harness{30, 3};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    column->setAlign(ui::Align::Start);
+    auto const badge = harness.make<BadgeImpl>(column.get());
+    badge->setText("Out of spec");
+    badge->setLayout(ui::LayoutHints{.width = ui::Sizing::fixed(9)});
+    CHECK(harness.draw() == Rows{"[Out of spec]"});
+}
+
+// Mutation: return 0 from StackImpl or PanelImpl (a container holding a badge is not raised with it).
+TEST_CASE("tui badge: a stack or a panel holding a badge has the badge's content minimum, one without has none",
+          "[tui][display]") {
+    Harness harness{40, 5};
+    auto const column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    auto const badge = harness.make<BadgeImpl>(column.get());
+    badge->setText("Out of spec");
+    CHECK(column->contentMinimumWidth() == 13);
+    auto const row = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    row->setGap(1);
+    auto const first = harness.make<BadgeImpl>(row.get());
+    first->setText("ab");
+    auto const second = harness.make<BadgeImpl>(row.get());
+    second->setText("cd");
+    auto const gap = layout::stepCells(1, ui::Axis::Horizontal);
+    CHECK(row->contentMinimumWidth() == 4 + 4 + gap);
+    auto const plain = harness.make<StackImpl>(nullptr, ui::Axis::Horizontal);
+    auto const text = harness.make<TextImpl>(plain.get());
+    text->setText("no badge");
+    CHECK(plain->contentMinimumWidth() == 0);
+    auto const panel = harness.make<PanelImpl>(nullptr);
+    auto const inner = harness.make<BadgeImpl>(panel.get());
+    inner->setText("Out of spec");
+    CHECK(panel->contentMinimumWidth() == 13 + 2);
 }

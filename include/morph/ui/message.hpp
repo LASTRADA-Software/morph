@@ -46,14 +46,20 @@ enum class PluralCategory : std::uint8_t {
 
 namespace detail {
 
-/// @brief The decimal text of an exact value at a number of places: rounded half to even, then written with exactly
-///        that many fraction digits, through integer arithmetic only.
+/// @brief The decimal text of an exact value at a number of places: rounded once, half to even unless @p mode says
+///        otherwise, then written with exactly that many fraction digits, through integer arithmetic only.
 /// @param value  The exact value.
 /// @param places The number of fraction digits, at most `math::kMaxDecimalPlaces`.
-/// @return Canonical text `-?[0-9]+(\.[0-9]+)?`; no sign on a value that rounds to zero.
-[[nodiscard]] inline std::string decimalText(math::Rational const& value, std::uint32_t places) {
-    math::Rational const rounded =
-        math::roundToDecimalPlaces(value, math::DecimalPlaces{places}, math::RoundingMode::HalfEven);
+/// @param mode   The tie-breaking rule.
+/// @return Canonical text `-?[0-9]+(\.[0-9]+)?`, with no sign on a value that rounds to zero; empty when the rounded
+///         value does not fit a `Rational`, which the caller reports rather than show a clamped number.
+[[nodiscard]] inline std::optional<std::string> decimalText(math::Rational const& value, std::uint32_t places,
+                                                            math::RoundingMode mode = math::RoundingMode::HalfEven) {
+    auto const checked = math::checkedRoundToDecimalPlaces(value, math::DecimalPlaces{places}, mode);
+    if (!checked) {
+        return std::nullopt;
+    }
+    math::Rational const& rounded = *checked;
     std::uint64_t const magnitude = math::detail::absU64(rounded.numerator);
     auto const denominator = static_cast<std::uint64_t>(rounded.denominator);
     std::string out = rounded.numerator < 0 ? "-" : "";
@@ -93,14 +99,19 @@ namespace detail {
 /// @brief Formats a number for display in a locale: at its own places, rounded half to even.
 /// @param value   An `int`, `decimal` or `quantity` (its magnitude).
 /// @param numeric The locale's separators, sign and digits.
-/// @return The display text, or `std::nullopt` when @p value is not a number.
+/// @return The display text, or `std::nullopt` when @p value is not a number or its rounded value does not fit a
+///         `Rational` (an exact quotient at many places with a large numerator).
 [[nodiscard]] inline std::optional<std::string> formatNumber(Value const& value,
                                                              render::NumericLocale const& numeric) {
     auto const number = detail::numberOf(value);
     if (!number) {
         return std::nullopt;
     }
-    return render::formatCanonicalNumber(detail::decimalText(number->first, number->second), numeric);
+    auto const text = detail::decimalText(number->first, number->second);
+    if (!text) {
+        return std::nullopt;
+    }
+    return render::formatCanonicalNumber(*text, numeric);
 }
 
 namespace detail {
@@ -266,15 +277,20 @@ inline constexpr std::array<std::pair<std::string_view, PluralRule>, 13> kPlural
 /// @param locale A BCP 47 locale, such as `pl-PL`.
 /// @param value  The exact number.
 /// @param places The visible fraction digits.
-/// @return The category.
-[[nodiscard]] inline PluralCategory pluralCategory(std::string_view locale, math::Rational const& value,
-                                                   std::uint32_t places) {
+/// @return The category, or empty when @p value rounded at @p places does not fit a `Rational`, so it has no
+///         operands to select by.
+[[nodiscard]] inline std::optional<PluralCategory> pluralCategory(std::string_view locale, math::Rational const& value,
+                                                                  std::uint32_t places) {
     std::string language;
     for (char const chr : locale.substr(0, locale.find_first_of("-_"))) {
         language += static_cast<char>(std::tolower(static_cast<unsigned char>(chr)));
     }
-    math::Rational const shown =
-        math::roundToDecimalPlaces(value, math::DecimalPlaces{places}, math::RoundingMode::HalfEven);
+    auto const checked =
+        math::checkedRoundToDecimalPlaces(value, math::DecimalPlaces{places}, math::RoundingMode::HalfEven);
+    if (!checked) {
+        return std::nullopt;
+    }
+    math::Rational const& shown = *checked;
     detail::PluralOperands const operands{
         .integer = math::detail::absU64(shown.numerator) / static_cast<std::uint64_t>(shown.denominator),
         .whole = shown.denominator == 1,
@@ -709,15 +725,17 @@ namespace detail {
         exact.remove_prefix(1);
     }
     if (auto const wanted = parseExactKey(exact)) {
-        // An exact key compares by value with the number as shown, so `1` matches 1, 1.0 and 1.00.
-        math::Rational const shown = math::roundToDecimalPlaces(number->first, math::DecimalPlaces{number->second},
-                                                                math::RoundingMode::HalfEven);
-        if (shown == *wanted) {
+        // An exact key compares by value with the number as shown, so `1` matches 1, 1.0 and 1.00. A number that
+        // cannot be shown at its places matches no key but `*`.
+        auto const shown = math::checkedRoundToDecimalPlaces(number->first, math::DecimalPlaces{number->second},
+                                                             math::RoundingMode::HalfEven);
+        if (shown && *shown == *wanted) {
             return 0;
         }
         return std::nullopt;
     }
-    if (categoryName(pluralCategory(locale.locale, number->first, number->second)) == key) {
+    auto const category = pluralCategory(locale.locale, number->first, number->second);
+    if (category && categoryName(*category) == key) {
         return 1;
     }
     return std::nullopt;
@@ -755,10 +773,14 @@ inline void formatPattern(std::vector<MessagePart> const& pattern, ValueRecord c
             continue;
         }
         out.text += "{$" + part.variable + "}";
-        out.errors.push_back(found == args.end() || value.isNull()
-                                 ? "the argument `" + part.variable + "` is missing"
-                                 : "the argument `" + part.variable + "` is not a " +
-                                       (function == MessageFunction::Number ? "number" : "string or number"));
+        if (found == args.end() || value.isNull()) {
+            out.errors.push_back("the argument `" + part.variable + "` is missing");
+        } else if (numberOf(value)) {
+            out.errors.push_back("the argument `" + part.variable + "` overflows at its places");
+        } else {
+            out.errors.push_back("the argument `" + part.variable + "` is not a " +
+                                 (function == MessageFunction::Number ? "number" : "string or number"));
+        }
     }
 }
 

@@ -5,12 +5,14 @@
 #include <core/tui/InputEvent.hpp>
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Rect.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/view.hpp>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "tui/container_widgets.hpp"
@@ -112,6 +114,39 @@ TEST_CASE("tui dialog: an open dialog is a centred box over the tree, and takes 
                                  "         │ [ OK ]  │", "         └─────────┘"});
     CHECK(harness.focused(*scene.buttons.back()));
     scene.buttons.clear();
+}
+
+// Control: ignore setSheet in the overlay (the box stays centred at its content's size, and a press on its top row
+// dismisses nothing), or draw the footer after the content (the OK row is not the last one inside).
+TEST_CASE("tui dialog: a sheet fills the screen, its footer at the bottom, and its dismiss control dismisses",
+          "[tui][dialog]") {
+    Harness harness{30, 7};
+    Scene scene{harness, {}};
+    auto const text = harness.make<TextImpl>(scene.body.get());
+    text->setText("Sign?");
+    auto const ok = harness.make<ButtonImpl>(&scene.dialog->footer());
+    ok->setLabel("OK");
+    int dismissed = 0;
+    scene.dialog->setOnDismiss([&] { ++dismissed; });
+    scene.dialog->setSheet(true);
+    scene.dialog->setDismissLabel("Cancel");
+    scene.dialog->setOpen(true);
+    Rows const rows = harness.draw();
+    REQUIRE(rows.size() == 7);
+    CHECK(rows.front() == "┌─[Cancel]─Confirm───────────┐");
+    CHECK(rows.at(1) == "│ Sign?                      │");
+    CHECK(rows.at(5) == "│                     [ OK ] │");
+    CHECK(rows.back() == "└────────────────────────────┘");
+    // A press inside the box but off the control does nothing; a click on it dismisses once, and closes the sheet.
+    static_cast<void>(harness.click({.x = 20, .y = 0}));
+    CHECK(dismissed == 0);
+    static_cast<void>(harness.click({.x = 4, .y = 0}));
+    CHECK(dismissed == 1);
+    CHECK_FALSE(scene.dialog->isOpen());
+    // Turned off, the dialog is centred at its content's size again.
+    scene.dialog->setSheet(false);
+    scene.dialog->setOpen(true);
+    CHECK(harness.draw().front().starts_with("[ Behind ]"));
 }
 
 TEST_CASE("tui dialog: Esc anywhere inside calls onDismiss", "[tui][dialog]") {
@@ -998,4 +1033,51 @@ TEST_CASE("tui dialog: the footer is the bottom row, right-aligned, and stays af
     CHECK(harness.draw() == Rows{"[ Behind ]", "", "", "         ┌─Confirm─┐", "         │ Again   │",
                                  "         │  [ OK ] │", "         └─────────┘"});
     text.reset();
+}
+
+// Mutation: leave the content's areas where they start without a description (the first child overlaps the rule).
+TEST_CASE("tui dialog: a description takes the first row inside the frame, a rule the second, then the content",
+          "[tui][dialog]") {
+    Harness harness{40, 12};
+    Scene scene{harness, {}};
+    scene.dialog->setDescription("Sign the results");
+    auto const text = harness.make<TextImpl>(scene.body.get());
+    text->setText("Sure?");
+    scene.dialog->setOpen(true);
+    Rows const rows = harness.draw();
+    auto const at = [&rows](std::string_view needle) {
+        for (std::size_t row = 0; row < rows.size(); ++row) {
+            if (rows.at(row).contains(needle)) {
+                return static_cast<int>(row);
+            }
+        }
+        return -1;
+    };
+    int const title = at("Confirm");
+    REQUIRE(title >= 0);
+    CHECK(at("Sign the results") == title + 1);
+    CHECK(rows.at(static_cast<std::size_t>(title) + 2).contains("──"));
+    CHECK(at("Sure?") == title + 3);
+    CHECK(scene.dialog->accessibleDescription() == "Sign the results");
+}
+
+// Mutation: drop the runs (the description row shows only the plain text), or read the runs' tone as none.
+TEST_CASE("tui dialog: a description given as runs draws them on its row and reads as their characters",
+          "[tui][dialog]") {
+    Harness harness{50, 12};
+    Scene scene{harness, {}};
+    scene.dialog->setDescriptionSpans(
+        {{.text = "Impurity B: "}, {.text = "0.21 %", .strong = true, .tone = ui::Tone::Err}});
+    scene.dialog->setOpen(true);
+    Rows const rows = harness.draw();
+    std::size_t row = 0;
+    while (row < rows.size() && !rows.at(row).contains("Impurity B: 0.21 %")) {
+        ++row;
+    }
+    REQUIRE(row < rows.size());
+    auto const column = static_cast<int>(rows.at(row).find("0.21"));
+    auto const& buffer = harness.screen().renderedBuffer();
+    CHECK(buffer.at(static_cast<int>(row), column).style.bold);
+    CHECK(buffer.at(static_cast<int>(row), column).style.fg == harness.screen().theme().error.fg);
+    CHECK(scene.dialog->accessibleDescription() == "Impurity B: 0.21 %");
 }

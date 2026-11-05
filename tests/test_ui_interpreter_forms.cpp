@@ -576,6 +576,20 @@ TEST_CASE("form node: a component writing a base64 member is held to the inline 
     CHECK(readJson(*screen, R"({"ref":"att.sheet.value"})") == R"("AQID")");
 }
 
+// Mutation: drop the caption width in presentForm (the label column stays 16 units).
+TEST_CASE("form and wizard nodes: captionWidth sets the inline caption column", "[ui][interpreter][forms]") {
+    for (auto const& [source, anchor] : {std::pair{std::string_view{kCapture}, std::string_view{R"("prefill")"}},
+                                         std::pair{std::string_view{kCaptureFlow}, std::string_view{R"("model")"}}}) {
+        std::string document{source};
+        document.replace(document.find(anchor), 0, R"("fieldLayout": "inline", "captionWidth": 20, )");
+        Harness h;
+        auto const screen = h.mount(document);
+        INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+        REQUIRE(h.diagnostics.empty());
+        CHECK(h.backend.prop(h.byTestId("Text", "label_sampleId"), "layout") == "fixed(20)/content");
+    }
+}
+
 // Mutation: drop the field layout in presentForm (each cell stays a column).
 TEST_CASE("form and wizard nodes: fieldLayout inline puts every label beside its control",
           "[ui][interpreter][forms]") {

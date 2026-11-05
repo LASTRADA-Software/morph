@@ -76,6 +76,34 @@ TEST_CASE("tui::layout::distribute", "[tui][layout]") {
     CHECK(layout::distribute(testCase.items, testCase.track) == testCase.expected);
 }
 
+// Mutation: read Percent as Content in requestOf (the first case gives its natural 5, not 30).
+TEST_CASE("tui::layout::distribute gives a percent item that share of the track", "[tui][layout]") {
+    auto const testCase = GENERATE(values<DistributeCase>({
+        {"a percent item beside a stretch one; the gap is not taken off first",
+         {{Sizing::percent(30), 5}, {Sizing::stretch(1), 0}},
+         {.length = 100, .gap = 2},
+         {30, 68}},
+        {"a percent item stops at its maximum",
+         {{Sizing::percent(30), 5, 0, 20}, {Sizing::stretch(1), 0}},
+         {.length = 100, .gap = 2},
+         {20, 78}},
+        {"a share is rounded down",
+         {{Sizing::percent(33), 5}, {Sizing::stretch(1), 0}},
+         {.length = 10, .gap = 0},
+         {3, 7}},
+        {"a share below the minimum is raised to it",
+         {{Sizing::percent(10), 5, 8}, {Sizing::stretch(1), 0}},
+         {.length = 40, .gap = 0},
+         {8, 32}},
+        {"two shares that do not fit shrink from the last",
+         {{Sizing::percent(70), 0}, {Sizing::percent(70), 0}},
+         {.length = 10, .gap = 0},
+         {7, 3}},
+    }));
+    INFO(testCase.name);
+    CHECK(layout::distribute(testCase.items, testCase.track) == testCase.expected);
+}
+
 // Mutation: drop the bounds in distribute (the capped item takes its whole share, the minimum shrinks away).
 TEST_CASE("tui::layout::distribute within bounds", "[tui][layout]") {
     auto const testCase = GENERATE(values<DistributeCase>({
@@ -97,6 +125,22 @@ TEST_CASE("tui::layout::distribute within bounds", "[tui][layout]") {
          {{Sizing::stretch(1), 0, 8}, {Sizing::stretch(3), 0}},
          {.length = 12, .gap = 0},
          {8, 4}},
+        {"a share held at its minimum leaves the others to share the rest",
+         {{Sizing::stretch(1), 0, 50}, {Sizing::stretch(1), 0}, {Sizing::stretch(1), 0}},
+         {.length = 90, .gap = 0},
+         {50, 20, 20}},
+        {"a share held at its maximum and one at its minimum are re-shared among the rest",
+         {{Sizing::stretch(1), 0, 40}, {Sizing::stretch(1), 0, 0, 10}, {Sizing::stretch(1), 0}},
+         {.length = 90, .gap = 0},
+         {40, 10, 40}},
+        {"a raise and a cut of equal length hold every stretch item at its clamp",
+         {{Sizing::stretch(1), 0, 40}, {Sizing::stretch(1), 0, 0, 20}},
+         {.length = 60, .gap = 0},
+         {40, 20}},
+        {"minimums beyond the room hold each stretch item at its minimum, and the stack overflows",
+         {{Sizing::stretch(1), 0, 30}, {Sizing::stretch(1), 0, 30}},
+         {.length = 40, .gap = 0},
+         {30, 30}},
         {"an overflow stops at each item's minimum, and the stack overflows",
          {{Sizing::fixed(6), 0, 6}, {Sizing::content(), 6, 5}},
          {.length = 8, .gap = 0},
@@ -374,7 +418,10 @@ private:
     std::uint64_t _state = 0;
 };
 
-int requestOf(layout::Item const& item) {
+int requestOf(layout::Item const& item, int length) {
+    if (item.sizing.kind == Sizing::Kind::Percent) {
+        return static_cast<int>(std::int64_t{std::max(0, length)} * item.sizing.amount / 100);
+    }
     return std::max(0, item.sizing.kind == Sizing::Kind::Fixed ? item.sizing.amount : item.natural);
 }
 
@@ -396,7 +443,7 @@ std::string distributeViolation(std::vector<layout::Item> const& items, layout::
         if (item.sizing.kind == Sizing::Kind::Stretch) {
             weights += std::max(1, item.sizing.amount);
         } else {
-            requested += requestOf(item);
+            requested += requestOf(item, track.length);
         }
     }
     auto const total = std::accumulate(sizes.begin(), sizes.end(), std::int64_t{0});
@@ -412,7 +459,7 @@ std::string distributeViolation(std::vector<layout::Item> const& items, layout::
     auto size = sizes.begin();
     for (auto const& item : items) {
         bool const stretches = item.sizing.kind == Sizing::Kind::Stretch;
-        int const asked = stretches ? 0 : requestOf(item);
+        int const asked = stretches ? 0 : requestOf(item, track.length);
         if (fits && stretches) {
             auto const share = (room - requested) * std::max(1, item.sizing.amount) / weights;
             if (*size != share && *size != share + 1) {
@@ -482,11 +529,14 @@ TEST_CASE("tui::layout::distribute holds its invariants on random input", "[tui]
     for (int round = 0; round < 5'000; ++round) {
         std::vector<layout::Item> items(static_cast<std::size_t>(draws.between(0, 8)));
         for (auto& item : items) {
-            int const which = draws.between(0, 2);
+            int const which = draws.between(0, 3);
             int const amount = draws.between(-3, 20);
             item.sizing = which == 0 ? Sizing::fixed(amount) : Sizing::stretch(amount);
             if (which == 1) {
                 item.sizing = Sizing::content();
+            }
+            if (which == 3) {
+                item.sizing = Sizing::percent(draws.between(1, 100));
             }
             item.natural = draws.between(-3, 20);
         }
@@ -507,5 +557,172 @@ TEST_CASE("tui::layout::planGrid holds its invariants on random input", "[tui][l
         layout::Track const width{.length = draws.between(0, 60), .gap = draws.between(0, 2)};
         INFO("round " << round);
         CHECK(gridViolation(columns, cells, width, layout::planGrid(columns, cells, width, width.gap)).empty());
+    }
+}
+
+namespace {
+
+layout::Item contentItem(int natural) { return {.sizing = Sizing::content(), .natural = natural}; }
+
+}  // namespace
+
+// Mutation: break the line test (`used + gap + basis > length`, say by dropping the gap): the third item then
+// stays on line 0 at 30 columns.
+TEST_CASE("tui::layout::planWrap starts a line only when the next item does not fit", "[tui][layout]") {
+    std::vector<layout::Item> const items{contentItem(12), contentItem(12), contentItem(12)};
+    SECTION("all three fit at 3 x 12 plus two gaps") {
+        auto const plan = layout::planWrap(items, {.length = 38, .gap = 1});
+        CHECK(plan.lines == 1);
+        CHECK(plan.placed.at(2) == layout::WrapPlaced{.line = 0, .x = 26, .width = 12});
+    }
+    SECTION("two fit in 30 columns, and the third starts the next line at the left") {
+        auto const plan = layout::planWrap(items, {.length = 30, .gap = 1});
+        CHECK(plan.lines == 2);
+        CHECK(plan.placed.at(1) == layout::WrapPlaced{.line = 0, .x = 13, .width = 12});
+        CHECK(plan.placed.at(2) == layout::WrapPlaced{.line = 1, .x = 0, .width = 12});
+    }
+}
+
+// Mutation: take a stretch child's basis from its natural extent (30) in place of its minimum: the fixed child then
+// starts line 1 at 40 columns.
+TEST_CASE("tui::layout::planWrap gives a stretch item its line's spare length, and its minimum is its basis",
+          "[tui][layout]") {
+    std::vector<layout::Item> const items{
+        {.sizing = Sizing::stretch(), .natural = 30, .minimum = 10},
+        {.sizing = Sizing::fixed(12), .natural = 5},
+    };
+    auto const wide = layout::planWrap(items, {.length = 40, .gap = 1});
+    CHECK(wide.lines == 1);
+    CHECK(wide.placed.at(0) == layout::WrapPlaced{.line = 0, .x = 0, .width = 27});
+    CHECK(wide.placed.at(1) == layout::WrapPlaced{.line = 0, .x = 28, .width = 12});
+    auto const narrow = layout::planWrap(items, {.length = 20, .gap = 1});
+    CHECK(narrow.lines == 2);
+    CHECK(narrow.placed.at(0) == layout::WrapPlaced{.line = 0, .x = 0, .width = 20});
+    CHECK(narrow.placed.at(1) == layout::WrapPlaced{.line = 1, .x = 0, .width = 12});
+}
+
+// Mutation: leave the stretch item's minimum uncapped on its line: its 32 columns push the fixed item out of the 20.
+TEST_CASE("tui::layout::planWrap caps a stretch item's minimum at its natural extent on the line it fills",
+          "[tui][layout]") {
+    std::vector<layout::Item> const items{
+        {.sizing = Sizing::stretch(), .natural = 9, .minimum = 32},
+        {.sizing = Sizing::fixed(4), .natural = 4},
+    };
+    auto const plan = layout::planWrap(items, {.length = 20, .gap = 1});
+    CHECK(plan.lines == 1);
+    CHECK(plan.placed.at(0) == layout::WrapPlaced{.line = 0, .x = 0, .width = 15});
+    CHECK(plan.placed.at(1) == layout::WrapPlaced{.line = 0, .x = 16, .width = 4});
+}
+
+TEST_CASE("tui::layout::planWrap seats an overwide item alone, and an empty item takes no gap", "[tui][layout]") {
+    SECTION("an item wider than the line sits alone at the line's length") {
+        std::vector<layout::Item> const items{contentItem(5), contentItem(50), contentItem(5)};
+        auto const plan = layout::planWrap(items, {.length = 20, .gap = 1});
+        CHECK(plan.lines == 3);
+        CHECK(plan.placed.at(1) == layout::WrapPlaced{.line = 1, .x = 0, .width = 20});
+    }
+    SECTION("an item with no basis takes no gap and starts no line") {
+        std::vector<layout::Item> const items{contentItem(10), contentItem(0), contentItem(9)};
+        auto const plan = layout::planWrap(items, {.length = 20, .gap = 1});
+        CHECK(plan.lines == 1);
+        CHECK(plan.placed.at(1).width == 0);
+        CHECK(plan.placed.at(2) == layout::WrapPlaced{.line = 0, .x = 11, .width = 9});
+    }
+    SECTION("a line without a stretch item is placed by justify") {
+        std::vector<layout::Item> const items{contentItem(5), contentItem(5)};
+        auto const plan = layout::planWrap(items, {.length = 20, .gap = 1}, morph::ui::Justify::End);
+        CHECK(plan.placed.at(0).x == 9);
+        CHECK(plan.placed.at(1).x == 15);
+    }
+}
+
+namespace {
+
+layout::ColumnItem stretchColumn(int natural, int least, int floor, bool shrinks = false, int weight = 1) {
+    return layout::ColumnItem{.sizing = Sizing::stretch(weight),
+                              .natural = natural,
+                              .least = least,
+                              .floor = floor,
+                              .minimum = floor,
+                              .shrinks = shrinks};
+}
+
+}  // namespace
+
+// Mutation: ignore `natural` in `planColumns` (the stretch columns share the whole length by weight, [8, 22]).
+TEST_CASE("tui::layout::planColumns shares only the spare by weight when every column fits", "[tui][layout]") {
+    std::vector<layout::ColumnItem> const items{stretchColumn(10, 10, 4, false, 1),
+                                                stretchColumn(10, 10, 4, false, 3)};
+    CHECK(layout::planColumns(items, {.length = 30, .gap = 0}) == std::vector<int>{13, 17});
+}
+
+// Mutation: skip step 2 (the wrapping column keeps its natural width and the other column gives first, [30, 0]).
+TEST_CASE("tui::layout::planColumns narrows a column that can wrap before one that cannot", "[tui][layout]") {
+    std::vector<layout::ColumnItem> const items{stretchColumn(30, 8, 4), stretchColumn(12, 12, 4)};
+    CHECK(layout::planColumns(items, {.length = 30, .gap = 0}) == std::vector<int>{18, 12});
+}
+
+// Mutation: take the deficit proportionally or from the first column (the last column keeps its natural width).
+TEST_CASE("tui::layout::planColumns takes a deficit from the shrinking columns, last first", "[tui][layout]") {
+    std::vector<layout::ColumnItem> const three{stretchColumn(12, 12, 4), stretchColumn(12, 12, 4, true),
+                                                stretchColumn(12, 12, 4, true)};
+    CHECK(layout::planColumns(three, {.length = 30, .gap = 0}) == std::vector<int>{12, 12, 6});
+    std::vector<layout::ColumnItem> const two{stretchColumn(12, 12, 4, true), stretchColumn(12, 12, 4)};
+    CHECK(layout::planColumns(two, {.length = 20, .gap = 0}) == std::vector<int>{8, 12});
+    // The deficit passes on to the columns that do not shrink once the ones that do are at their floors.
+    std::vector<layout::ColumnItem> const spent{stretchColumn(12, 12, 10, true), stretchColumn(12, 12, 4)};
+    CHECK(layout::planColumns(spent, {.length = 17, .gap = 0}) == std::vector<int>{10, 7});
+}
+
+TEST_CASE("tui::layout::planColumns falls back to the floors, then squeezes from the last column", "[tui][layout]") {
+    layout::ColumnItem first = stretchColumn(20, 20, 10);
+    layout::ColumnItem second = stretchColumn(20, 20, 10);
+    first.minimum = 4;
+    second.minimum = 4;
+    std::vector<layout::ColumnItem> const items{first, second};
+    CHECK(layout::planColumns(items, {.length = 15, .gap = 0}) == std::vector<int>{10, 5});
+}
+
+TEST_CASE("tui::layout::planColumns keeps the gaps and the columns that do not stretch out of the share",
+          "[tui][layout]") {
+    std::vector<layout::ColumnItem> const items{
+        layout::ColumnItem{.sizing = Sizing::fixed(5), .natural = 5, .least = 5, .floor = 5, .minimum = 5},
+        stretchColumn(6, 6, 4), stretchColumn(6, 6, 4)};
+    // 40 less two gaps and the fixed 5 leaves 33 for two columns of 6.
+    CHECK(layout::planColumns(items, {.length = 40, .gap = 1}) == std::vector<int>{5, 17, 16});
+}
+
+TEST_CASE("tui::layout::planColumns holds its invariants on random input", "[tui][layout]") {
+    Draws draws;
+    for (int round = 0; round < 3'000; ++round) {
+        std::vector<layout::ColumnItem> items;
+        int const count = draws.between(1, 6);
+        for (int index = 0; index < count; ++index) {
+            int const floor = draws.between(0, 6);
+            int const least = floor + draws.between(0, 8);
+            int const natural = least + draws.between(0, 12);
+            items.push_back(stretchColumn(natural, least, floor, draws.between(0, 1) == 1, draws.between(1, 4)));
+        }
+        int const gap = draws.between(0, 2);
+        int const floors = std::accumulate(items.begin(), items.end(), 0,
+                                           [](int sum, layout::ColumnItem const& item) { return sum + item.floor; });
+        std::vector<int> previous(items.size(), 0);
+        for (int length = 0; length < 120; ++length) {
+            auto const widths = layout::planColumns(items, {.length = length, .gap = gap});
+            INFO("round " << round << ", length " << length);
+            REQUIRE(widths.size() == items.size());
+            int sum = 0;
+            for (std::size_t index = 0; index < items.size(); ++index) {
+                CHECK(widths.at(index) >= items.at(index).floor);
+                // Whole cells: a weighted share's remainder moves between columns as the spare grows, by one cell at
+                // most.
+                CHECK(widths.at(index) >= previous.at(index) - 1);
+                sum += widths.at(index);
+            }
+            if (length - (gap * (count - 1)) >= floors) {
+                CHECK(sum == length - (gap * (count - 1)));
+            }
+            previous = widths;
+        }
     }
 }

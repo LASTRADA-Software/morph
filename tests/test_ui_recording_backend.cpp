@@ -46,6 +46,22 @@ TEST_CASE("RecordingBackend: logs creation, setters, moves and destruction", "[u
     CHECK(backend.children(1) == std::vector<int>{3});
 }
 
+// Mutation: leave `Caption` out of `enumName(TextRole)` (it records as "unknown").
+TEST_CASE("RecordingBackend: a caption text records its role by name", "[ui]") {
+    RecordingBackend backend;
+    auto text = backend.createText(nullptr);
+    text->setRole(ui::TextRole::Caption);
+    CHECK(backend.log().back() == "set Text#1 role=Caption");
+}
+
+// Mutation: leave `Label` out of `enumName(TextRole)` (it records as "unknown").
+TEST_CASE("RecordingBackend: a label text records its role by name", "[ui]") {
+    RecordingBackend backend;
+    auto text = backend.createText(nullptr);
+    text->setRole(ui::TextRole::Label);
+    CHECK(backend.log().back() == "set Text#1 role=Label");
+}
+
 TEST_CASE("RecordingBackend: creation parameters are properties, a horizontal stack is a Row", "[ui]") {
     RecordingBackend backend;
     auto row = backend.createStack(nullptr, ui::Axis::Horizontal);
@@ -130,7 +146,7 @@ TEST_CASE("RecordingBackend: the interaction helpers call what the widget was gi
     auto choice = backend.createSelect(nullptr, ui::SelectStyle::Dropdown);
     choice->setOnSelect([&](ui::Key key) { chosen.push_back(std::move(key)); });
     choice->setOptions({{.key = intKey(5), .label = "Five"}});
-    auto menu = backend.createMenu(nullptr);
+    auto menu = backend.createMenu(nullptr, ui::MenuStyle::Bar);
     menu->setItems({{.label = "First"}, {.label = "Second"}});
     menu->setOnActivate([&](std::vector<std::size_t> const& path) { activated.push_back(path.back()); });
     auto panel = backend.createPanel(nullptr);
@@ -395,7 +411,7 @@ TEST_CASE("RecordingBackend: text in a value cannot pass for another line, field
     RecordingBackend backend;
     auto label = backend.createText(nullptr);
     label->setText("a\nText#9 b=c\\d");
-    auto menu = backend.createMenu(nullptr);
+    auto menu = backend.createMenu(nullptr, ui::MenuStyle::Bar);
     menu->setItems({{.label = "x,y"}, {.label = "[z]"}});
     auto choice = backend.createSelect(nullptr, ui::SelectStyle::Dropdown);
     choice->setOptions({{.key = ui::Key{std::string{"q\"r"}}, .label = "s:t"}});
@@ -418,7 +434,7 @@ TEST_CASE("RecordingBackend: every kind's setters show in the dump", "[ui]") {
     auto gap = backend.createSpacer(grid.get());
     auto row = backend.createStack(nullptr, ui::Axis::Horizontal);
     row->setGap(2);
-    auto menu = backend.createMenu(row.get());
+    auto menu = backend.createMenu(row.get(), ui::MenuStyle::Bar);
     menu->setItems({{.label = "Open"}, {.label = "Quit"}});
     auto busy = backend.createBusy(row.get());
     busy->setActive(true);
@@ -596,6 +612,8 @@ TEST_CASE("RecordingBackend: every enumerator has its name, and a value outside 
     CHECK(enumName(static_cast<ui::StepState>(kOutside)) == "unknown");
     CHECK(ui::testing::detail::formatSizing({.kind = static_cast<ui::Sizing::Kind>(kOutside), .amount = 1}) ==
           "unknown");
+    CHECK(ui::testing::detail::formatSizing(ui::Sizing::percent(28)) == "percent(28)");
+    CHECK(enumName(static_cast<ui::TextAlign>(kOutside)) == "Start");
     // NOLINTEND(clang-analyzer-optin.core.EnumCastOutOfRange)
 }
 
@@ -684,4 +702,51 @@ TEST_CASE("a backend that reports no hovering and loads no components keeps the 
     ui::IViewBackend& plain = backend;
     CHECK(plain.ui::IViewBackend::createCustom(
               nullptr, ui::CustomRequest{.name = "Chart", .props = {}, .minVersion = 1}) == nullptr);
+}
+
+TEST_CASE("ui backend: a width in units is compact below 80, medium below 108, expanded from 108", "[ui][backend]") {
+    CHECK(ui::widthClassOf(0) == "compact");
+    CHECK(ui::widthClassOf(79.5) == "compact");
+    CHECK(ui::widthClassOf(80) == "medium");
+    CHECK(ui::widthClassOf(107.5) == "medium");
+    CHECK(ui::widthClassOf(108) == "expanded");
+}
+
+// Mutation: call the listener from setOnWidthClass (it hears `expanded` first), or on every setWidthClass (it hears
+// `compact` twice).
+TEST_CASE("recording backend: the width class is expanded until set, and a change alone reaches the listener",
+          "[ui][backend]") {
+    RecordingBackend backend;
+    CHECK(backend.widthClass() == "expanded");
+    std::vector<std::string> heard;
+    backend.setOnWidthClass([&heard](std::string const& name) { heard.push_back(name); });
+    CHECK(heard.empty());
+    backend.setWidthClass("compact");
+    backend.setWidthClass("compact");
+    backend.setWidthClass("medium");
+    CHECK(backend.widthClass() == "medium");
+    CHECK(heard == std::vector<std::string>{"compact", "medium"});
+    backend.setOnWidthClass({});
+    backend.setWidthClass("expanded");
+    CHECK(heard.size() == 2);
+}
+
+// Mutation: leave `bleed` out of the layout string, or record `setPageInset` under another name.
+TEST_CASE("recording backend: a bleeding layout and a tabs node's page inset are recorded", "[ui][backend]") {
+    RecordingBackend backend;
+    auto label = backend.createText(nullptr);
+    label->setLayout({.width = ui::Sizing::stretch(), .bleed = true});
+    CHECK(backend.dump() == "Text#1 layout=stretch(1)/content bleed\n");
+    auto tabs = backend.createTabs(nullptr);
+    tabs->setInset(4);
+    tabs->setPageInset(0);
+    CHECK(backend.dump().contains("Tabs#2 inset=4 pageInset=0"));
+}
+
+// Mutation: leave `setPassesBleed` unrecorded, or record it under another name.
+TEST_CASE("recording backend: a holder column records that it passes bleed on", "[ui][backend]") {
+    RecordingBackend backend;
+    auto holder = backend.createStack(nullptr, ui::Axis::Vertical);
+    holder->setPassesBleed(true);
+    CHECK(backend.dump().contains("passesBleed=true"));
 }

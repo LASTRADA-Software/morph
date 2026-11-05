@@ -88,7 +88,7 @@ struct ReloadOutcome {
 /// `DocumentScreenHost::remount`, on every screen of @p mounted showing it, which keeps each state of the screen's own
 /// scope declared under the same name and type. A remount the interpreter refuses keeps that screen on the old
 /// document, and keeps the old document in @p documents. A changed id the bundle no longer holds, and the app
-/// document, which no `DocumentScreenHost` mounts, change nothing here.
+/// document, which is the session's root scope and not a screen (`DocumentScreenHost::mountApp`), change nothing here.
 /// @param changed   The ids of the changed documents (`changedDocuments`).
 /// @param bundle    The new bundle's documents.
 /// @param options   How the documents load: the catalog facts.

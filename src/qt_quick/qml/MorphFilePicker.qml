@@ -30,16 +30,18 @@ MorphField {
         // The path is the widget's node, declared as the text input's field declares it; the button beside it
         // is a node of its own.
         TextField {
-            font: Theme.bodyFont
+            font: Theme.controlFontOf(Font.Normal)
             id: pathField
             Layout.fillWidth: true
             color: root.scheme.text
-            placeholderTextColor: root.scheme.muted
+            placeholderTextColor: root.scheme.placeholderText
             leftPadding: Theme.spaceOf(3)
             rightPadding: Theme.spaceOf(3)
             background: MorphInputBackground {
+                tone: root.shownTone
                 scheme: root.scheme
                 focused: pathField.activeFocus
+                readOnly: root.readOnly
             }
             readOnly: true
             text: root.path
@@ -49,7 +51,7 @@ MorphField {
         }
 
         Button {
-            font: Theme.bodyFont
+            font: Theme.controlFontOf(Font.Normal)
             id: browse
             text: root.save ? qsTr("Save as…") : qsTr("Browse…")
             palette.buttonText: root.scheme.text

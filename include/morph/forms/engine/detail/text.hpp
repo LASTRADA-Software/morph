@@ -368,20 +368,21 @@ using Json = glz::generic_u64;
 }
 
 /// @brief Renders @p value as canonical decimal text, rounded half away from zero to @p places.
+///
+/// The value is scaled and rounded in 128 bits, so every digit is exact at any places, including a quotient whose
+/// rounded numerator would not fit an `int64`: `10/3` at 18 places is `3.333333333333333333`.
 /// @param value  The value.
 /// @param places Fraction digits; clamped to `math::kMaxDecimalPlaces`.
 /// @return E.g. `"-0.33"` for `-1/3` at two places; a value that rounds to zero has no sign.
 [[nodiscard]] inline std::string decimalText(math::Rational const& value, std::uint32_t places) {
     std::uint32_t const wanted = std::min(places, math::kMaxDecimalPlaces);
-    math::Rational const rounded =
-        math::roundToDecimalPlaces(value, math::DecimalPlaces{wanted}, math::RoundingMode::HalfAwayFromZero);
-    std::int64_t const scale = math::detail::powerOfTen(wanted);
-    std::string digits = multiplyDigits(std::to_string(math::detail::absU64(rounded.numerator)),
-                                        std::to_string(scale / rounded.denominator));
+    math::detail::ScaledRounding const rounded =
+        math::detail::roundScaled(value, wanted, math::RoundingMode::HalfAwayFromZero);
+    std::string digits = math::detail::decimalDigitsU128(rounded.magnitude);
     if (digits.size() <= wanted) {
         digits.insert(0, wanted + 1 - digits.size(), '0');
     }
-    std::string out = rounded.numerator < 0 ? "-" : "";
+    std::string out = rounded.negative ? "-" : "";
     out += std::string_view{digits}.substr(0, digits.size() - wanted);
     if (wanted > 0) {
         out += '.';
