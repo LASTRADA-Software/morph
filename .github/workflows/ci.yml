@@ -893,8 +893,24 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
+      # GCC with debug info takes about 6 GB on one heavy test file, and ninja
+      # runs four at once at the end of the build: some 24 GB on a runner with
+      # 16 GB and little swap. Running out shows only as the runner's "shutdown
+      # signal", exit 143, with no compiler error. Swap is used for those last
+      # few minutes; lowering -j would slow the whole build instead.
+      - name: Add swap for the build's heaviest compiles
+        run: |
+          sudo fallocate -l 12G /mnt/build-swap
+          sudo chmod 600 /mnt/build-swap
+          sudo mkswap /mnt/build-swap
+          sudo swapon /mnt/build-swap
+          free -m
+
       - name: Build
-        run: cmake --build --preset gcc-debug
+        run: |
+          cmake --build --preset gcc-debug
+          free -m
+          grep -E '^(pswpin|pswpout) ' /proc/vmstat
 
       # ── moc output that climbs out of the build tree ─────────────────
       # Runs here rather than alongside the repo's other lint gates because
