@@ -120,6 +120,27 @@ std::expected<ui::Value, std::string> save(std::filesystem::path const& director
     return ui::Value{target.string()};
 }
 
+/// The platform the client was built for, as `{"env": "platform"}` reads it.
+constexpr std::string_view platformName() noexcept {
+// `#elifdef` is C++23 preprocessor syntax that nothing else in the tree relies on, so this chain keeps `#elif
+// defined`.
+// NOLINTBEGIN(readability-use-concise-preprocessor-directives)
+#if defined(__EMSCRIPTEN__)
+    return "web";
+#elif defined(__ANDROID__)
+    return "android";
+#elif defined(__APPLE__)
+    return "macos";
+#elif defined(_WIN32)
+    return "windows";
+#elif defined(__linux__)
+    return "linux";
+#else
+    return "unknown";
+#endif
+    // NOLINTEND(readability-use-concise-preprocessor-directives)
+}
+
 class Shell final : public ui::MountedShell {
 public:
     Shell(ui::AppContext& context, ui::IViewBackend& backend, ShellOptions options)
@@ -177,6 +198,7 @@ public:
         sessionOptions.watcher = source.watcher();
         _session = std::make_unique<ui::Session>(_context->runtime(), std::move(sessionOptions));
         followWidthClass();
+        followConnection(source);
         listen(source);
         showPermitted();
         ui::DocumentScreenHostOptions hostOptions;
@@ -235,6 +257,24 @@ public:
                 });
             });
         }
+    }
+
+    /// Writes the client's platform, its source's backend name and its connection state into the session before the
+    /// first mount, then each change of the connection state, so `{"env": "platform"}`, `{"env": "backend"}` and
+    /// `{"env": "online"}` read what the client is. Registered once, like the source's other listeners.
+    void followConnection(Source& source) {
+        _session->setEnvironmentValue("platform", ui::Value{std::string{platformName()}});
+        _session->setEnvironmentValue("backend", ui::Value{source.backendName()});
+        _session->setEnvironmentValue("online", ui::Value{source.online()});
+        if (_followingConnection) {
+            return;
+        }
+        _followingConnection = true;
+        source.onOnline([this, alive = std::weak_ptr<bool>{_alive}](bool online) {
+            if (auto const live = alive.lock(); live != nullptr && *live && _session) {
+                _session->setEnvironmentValue("online", ui::Value{online});
+            }
+        });
     }
 
     /// Writes the backend's width class into the session before the first mount, then each change of it, so every
@@ -859,6 +899,8 @@ private:
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _generated;
     ui::ScreenHostRegistry _hosts;
     std::unique_ptr<ui::Session> _session;
+    // Whether the source's connection-state listener is registered.
+    bool _followingConnection = false;
     // Whether the source's connect and event listeners are registered.
     bool _listening = false;
     std::unique_ptr<ApplicationHost> _application;

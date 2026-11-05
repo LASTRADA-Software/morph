@@ -119,6 +119,11 @@ The shell sets `{"env": "widthClass"}` from its view backend: before the first m
 `setOnWidthClass` listener, which writes each change, so every open tab re-evaluates it; the shell clears the
 listener when it goes. The session belongs to the shell, and every screen of the client shares the value.
 
+Before the first mount the shell also writes `platform` (the platform the binary was built for), `backend`
+(`Source::backendName`: `local` or `remote`) and `online` (`Source::online`), and registers a `Source::onOnline`
+listener that writes each change of `online`. The source sets it from the backend's disconnect and connect hooks, on
+the owner. `locale` is the session's own: it follows `Session::setLocale`.
+
 The frame takes its compact form (`ShellFrame::setCompact`, [shell_frame.md](../ui/shell_frame.md#the-compact-form))
 below `expanded`: on `compact` and `medium`, when it is built and on each change the listener hears. The class stays
 the window's. Below `expanded` the sidebar is gone, so the page is nearly the window, and a document's class describes

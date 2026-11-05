@@ -20,7 +20,7 @@ MorphWidget {
     // The size the content needs, padding included: its minimum width and its natural height. A width shortfall
     // under 2 px is layout rounding, and a height one under half a pixel is too, not content that does not fit.
     readonly property real needX: column.Layout.minimumWidth + 2 * root.contentInset
-    readonly property real needY: column.implicitHeight + 2 * root.contentInset
+    readonly property real needY: column.naturalHeight + 2 * root.contentInset
     // A slot reports content that is wider than it, whether it scrolls sideways or cuts it off.
     needWidth: root.needX
     haveWidth: root.width
@@ -40,7 +40,7 @@ MorphWidget {
     property ScrollBar sideBarItem: null
 
     implicitWidth: column.implicitWidth + 2 * root.contentInset
-    implicitHeight: column.implicitHeight + 2 * root.contentInset
+    implicitHeight: column.naturalHeight + 2 * root.contentInset
     clip: scrolls
 
     // Whether a shown child stretches vertically. Without one, the column keeps its natural height and packs the
@@ -109,7 +109,7 @@ MorphWidget {
         ScrollBar.vertical: root.barItem
         ScrollBar.horizontal: root.sideBarItem
 
-        ColumnLayout {
+        MorphShareColumn {
             id: column
             // What a bleeding child reaches past: the page's padding, so it ends at the slot's own edges.
             readonly property real childBleedInset: root.contentInset
@@ -117,7 +117,7 @@ MorphWidget {
             y: root.contentInset
             width: (root.overX ? root.needX : flick.width) - 2 * root.contentInset
             height: root.stretchesDown ? Math.max(flick.height - 2 * root.contentInset, root.stretchFloor)
-                                       : implicitHeight
+                                       : naturalHeight
             spacing: 0
         }
     }

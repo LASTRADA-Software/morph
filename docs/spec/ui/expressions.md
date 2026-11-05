@@ -56,6 +56,18 @@ the first mount and updates it on a resize. The terminal counts its columns, so 
 Quick counts the window's width in `Theme.unitWidth`s. A document's breakpoints therefore sit at the same number of
 its own units on both frontends.
 
+The other four names, as the client sets them:
+
+| Name | Value | Source |
+|---|---|---|
+| `locale` | A BCP 47 string, `en` until changed | The session's formatting facts (`Session::setLocale`, `setFormatting`): every change of the facts' locale writes it, so `locale` and the dates, numbers and messages a document shows never disagree. A `Session` has it from construction, and `setEnvironment` keeps it |
+| `platform` | `linux`, `macos`, `windows`, `web`, `android` or `unknown` | The platform the client binary was built for |
+| `online` | `true` or `false` | The client's source: `false` from the moment its transport drops until it connects again; an in-process source has no transport to lose and stays `true`. A drop the transport does not report (a server that stops answering on a connection that stays open) is not seen |
+| `backend` | `primary`, `local` or `remote` | The client's source: `local` for a linked application run in process, `remote` for a server. A committed backend switch replaces it |
+
+A `Session` that no client drives (a test, or an application's own) reads `null` for `platform`, `online` and
+`backend` until its owner sets them with `setEnvironmentValue`.
+
 An expression object has one form key and only that form's companion keys (`fn` with `args`; `t`
 with `fallback` and `args`; `map` with `as` and `to`; `filter` with `as` and `where`; `sort` with
 `as`, `by` and `order`; `runs` with `as` and `by`; `get` with `path`). An array is not an expression

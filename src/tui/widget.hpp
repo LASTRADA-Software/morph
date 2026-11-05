@@ -594,20 +594,20 @@ struct StackSpec {
 
 /// The size @p widget asks its container for: its natural size, but a Fixed amount where its layout hints say so.
 [[nodiscard]] ::core::tui::Size requestedSize(WidgetBase const& widget);
-/// The size @p children ask for stacked along @p axis with @p gap between them (`requestedSize` each); hidden
-/// children count nothing.
-[[nodiscard]] ::core::tui::Size stackNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap);
-/// How @p child asks for room along a stack's main axis: its own sizing there, except that a content-sized child that
-/// expands by default (a spacer) counts as a stretch of weight 1. The solver and `weightedNaturalSize` read it, so a
-/// child stretches in the one exactly where it counts as stretching in the other.
-[[nodiscard]] ui::Sizing stretchSizingOf(WidgetBase const& child, bool vertical);
-/// The size @p children ask for stacked along @p axis with @p gap between them, as a stack that shares its room by
-/// weight asks for it: the children that do not stretch count their `requestedSize`, and the stretching ones, which
+/// The size @p children ask for stacked along @p axis with @p gap between them, as a container that shares its room
+/// by weight asks for it: the children that do not stretch count their `requestedSize`, and the stretching ones, which
 /// share what is left by weight from zero, ask together for `W * max(n / w)` cells, rounded up, where `n` is a
 /// child's requested size within its bounds (a spacer's is 0), `w` its weight and `W` the sum of the weights, so
 /// that every share is at least its child's natural size. With one stretching child that is its own size. Hidden
 /// children count nothing.
-[[nodiscard]] ::core::tui::Size weightedNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap);
+[[nodiscard]] ::core::tui::Size stackNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap);
+/// The sum of the children's `requestedSize` along @p axis with @p gap between them, a stretching child counted at its
+/// own size: for a container whose children's sizes are set apart from their weights (a splitter's panes).
+[[nodiscard]] ::core::tui::Size summedNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap);
+/// How @p child asks for room along a stack's main axis: its own sizing there, except that a content-sized child that
+/// expands by default (a spacer) counts as a stretch of weight 1. The solver and `stackNaturalSize` read it, so a
+/// child stretches in the one exactly where it counts as stretching in the other.
+[[nodiscard]] ui::Sizing stretchSizingOf(WidgetBase const& child, bool vertical);
 /// Where @p children go inside @p area: one area per child, in order, an empty one for a child that is not drawn.
 ///
 /// With no extents the layout solver sizes the shown children, and a hidden one takes no space. With extents every

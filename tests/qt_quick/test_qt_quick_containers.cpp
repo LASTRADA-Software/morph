@@ -3475,3 +3475,23 @@ TEST_CASE("qt_quick containers: a framed button ends the compact bar step 4 from
     scene.settle();
     CHECK(bar.right() - sceneRectOf("end_primary").right() == Catch::Approx(themeStep(scene, 1)).margin(0.5));
 }
+
+// Mutation: place the cells at the exact track edges (the second cell of an odd-width grid then lies on a half pixel).
+TEST_CASE("qt_quick containers: a grid's cells lie on whole pixels, so a clipping ancestor keeps their borders",
+          "[qt_quick][grid]") {
+    Scene scene;
+    for (int units = 40; units <= 70; ++units) {
+        GridInColumn shown{scene, 2, {"a", "b"}, {.width = ui::Sizing::fixed(units)}};
+        shown.grid->setGap(1);
+        scene.settle();
+        qreal const width = Scene::itemOf(*shown.grid).width();
+        // The columns share what the gap leaves, so without snapping one is half a pixel wide whenever that is odd.
+        for (auto const& cell : shown.cells) {
+            QQuickItem const& item = Scene::itemOf(*cell);
+            INFO(units << " units: x " << item.x() << ", width " << item.width());
+            CHECK(item.x() == std::round(item.x()));
+            CHECK(item.width() == std::round(item.width()));
+            CHECK(item.x() + item.width() <= std::ceil(width));
+        }
+    }
+}

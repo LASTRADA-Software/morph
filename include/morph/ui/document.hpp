@@ -176,6 +176,9 @@ struct StateDecl {
     std::string path;
     /// @brief The declared type; `any` when the document gives none.
     Type type;
+    /// @brief Whether the document names a type; a declared `any` is a type, and only a state with none takes its
+    ///        init's.
+    bool typeDeclared = false;
     /// @brief The initial value; `nullptr` starts `null`.
     ExprPtr init;
 };
@@ -1601,9 +1604,11 @@ private:
                 checkName(name, entryPath);
                 auto const& fields = objectOf(entry, entryPath, R"(a state declaration is {"init": e, "type": T})");
                 refuseMustUnderstand(fields, entryPath);
-                StateDecl stateDecl{.name = name, .path = entryPath, .type = Type::any(), .init = nullptr};
+                StateDecl stateDecl{
+                    .name = name, .path = entryPath, .type = Type::any(), .typeDeclared = false, .init = nullptr};
                 if (Json const* const type = member(fields, "type")) {
                     stateDecl.type = typeOf(*type, pointerAppend(entryPath, "type"));
+                    stateDecl.typeDeclared = true;
                 }
                 stateDecl.init = optionalExpr(fields, "init", entryPath);
                 decl.state.push_back(std::move(stateDecl));
@@ -2819,7 +2824,7 @@ private:
             entry.category = NameCategory::State;
             entry.path = state.path;
             entry.type = state.type;
-            entry.derivedFrom = state.type.isAny() ? state.init : nullptr;
+            entry.derivedFrom = state.typeDeclared ? nullptr : state.init;
             add(scope, state.name, std::move(entry));
         }
         for (LetDecl const& let : decl.lets) {

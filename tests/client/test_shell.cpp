@@ -9,11 +9,17 @@
 #include <morph/ui/value.hpp>
 // clang-format on
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <expected>
+#include <functional>
 #include <memory>
 #include <morph/client/shell.hpp>
 #include <morph/client/source.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/session/session.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <optional>
@@ -297,7 +303,137 @@ std::optional<std::string> shownWidth(ui::testing::RecordingBackend const& backe
     return backend.prop(*text, "text");
 }
 
+/// A public screen that shows the `env` values the shell writes besides the width class.
+constexpr std::string_view kEnvScreen = R"({
+  "vocab": "ui/1", "id": "probe.env",
+  "view": { "kind": "column", "children": [
+    { "kind": "text", "testId": "locale", "text": { "fn": "coalesce", "args": [ { "env": "locale" }, "null" ] } },
+    { "kind": "text", "testId": "platform", "text": { "fn": "coalesce", "args": [ { "env": "platform" }, "null" ] } },
+    { "kind": "text", "testId": "backend", "text": { "fn": "coalesce", "args": [ { "env": "backend" }, "null" ] } },
+    { "kind": "text", "testId": "online", "text": { "if": [ { "env": "online" }, "on", "off" ] } } ] } })";
+
+/// The bundle of that one screen.
+/// @return It, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> envBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    ui::CatalogEntry entry;
+    entry.id = "probe.env";
+    entry.isPublic = true;
+    if (auto added = served.addScreen(std::move(entry), std::string{kEnvScreen}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
+/// A local backend whose connect and disconnect hooks the test fires, as a transport does.
+class HookedBackend final : public morph::backend::LocalBackend {
+public:
+    using LocalBackend::LocalBackend;
+    void setConnectHandler(std::function<void()> const& handler) override { *connect = handler; }
+    void setDisconnectHandler(std::function<void()> const& handler) override { *disconnect = handler; }
+    std::shared_ptr<std::function<void()>> connect = std::make_shared<std::function<void()>>();
+    std::shared_ptr<std::function<void()>> disconnect = std::make_shared<std::function<void()>>();
+};
+
+/// The env screen's application behind a transport the test can drop and restore.
+class DroppingSource final : public client::Source {
+public:
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the test fires these.
+    std::shared_ptr<std::function<void()>> connectHook;
+    std::shared_ptr<std::function<void()>> disconnectHook;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
+
+    DroppingSource() = default;
+    ~DroppingSource() override { close(); }
+    DroppingSource(DroppingSource const&) = delete;
+    DroppingSource& operator=(DroppingSource const&) = delete;
+    DroppingSource(DroppingSource&&) = delete;
+    DroppingSource& operator=(DroppingSource&&) = delete;
+
+    /// @return `remote`, as a source over a network transport is.
+    [[nodiscard]] std::string backendName() const override { return "remote"; }
+
+protected:
+    [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& /*context*/) override {
+        auto served = envBundle();
+        REQUIRE(served.has_value());
+        _service = std::make_shared<ui::UiService>(std::move(*served), morph::model::detail::defaultDispatcher());
+        _workers = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
+        auto made = std::make_unique<HookedBackend>(*_workers);
+        connectHook = made->connect;
+        disconnectHook = made->disconnect;
+        return Transport{
+            .backend = std::move(made),
+            .exchange = [this](morph::wire::Envelope const& request,
+                               std::function<void(ui::ExchangeReply)> const& done) {
+                done(morph::wire::decode(_service->handle(request, *morph::session::allowAllAuthorizer())));
+            }};
+    }
+    void disconnect() override {
+        _workers.reset();
+        _service.reset();
+    }
+
+private:
+    std::shared_ptr<ui::UiService> _service;
+    std::unique_ptr<morph::exec::ThreadPoolExecutor> _workers;
+};
+
+/// The text a test id shows, or an empty string while it is not mounted.
+std::string shown(ui::testing::RecordingBackend const& backend, std::string_view testId) {
+    return propOf(backend, "Text", testId, "text").value_or("");
+}
+
 }  // namespace
+
+// Mutation: drop followConnection from the shell's start (every one of the four reads `null`).
+TEST_CASE("Client shell: a screen reads the client's locale, platform, backend and connection state",
+          "[client][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &envBundle}, client::LocalSetup{}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "probe.env"});
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return !shown(backend, "online").empty(); }));
+        CHECK(shown(backend, "locale") == "en");
+        CHECK(shown(backend, "backend") == "local");
+        CHECK(shown(backend, "online") == "on");
+        std::string const platform = shown(backend, "platform");
+        CHECK((platform == "linux" || platform == "macos" || platform == "windows" || platform == "web" ||
+               platform == "android"));
+    }
+    source.close();
+}
+
+// Mutation: drop the shell's onOnline listener (the screen keeps reading `on` after the drop).
+TEST_CASE("Client shell: env online follows the transport's drop and reconnect", "[client][shell]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    DroppingSource source;
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "probe.env"});
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return shown(backend, "online") == "on"; }));
+        CHECK(shown(backend, "backend") == "remote");
+        (*source.disconnectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return shown(backend, "online") == "off"; }));
+        CHECK_FALSE(source.online());
+        (*source.connectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return shown(backend, "online") == "on"; }));
+    }
+    source.close();
+}
 
 // Mutation: drop the shell's setEnvironmentValue calls (the screen reads an empty text).
 TEST_CASE("Client shell: a screen reads the backend's width class, and follows a change", "[client][shell]") {

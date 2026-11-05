@@ -628,7 +628,7 @@ void ContainerBase::childForgotten(WidgetBase& /*child*/) {}
     return size;
 }
 
-::core::tui::Size stackNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap) {
+::core::tui::Size summedNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap) {
     bool const vertical = axis == ui::Axis::Vertical;
     int along = 0;
     int across = 0;
@@ -658,7 +658,7 @@ ui::Sizing stretchSizingOf(WidgetBase const& child, bool vertical) {
     return sizing;
 }
 
-::core::tui::Size weightedNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap) {
+::core::tui::Size stackNaturalSize(std::span<WidgetBase* const> children, ui::Axis axis, int gap) {
     bool const vertical = axis == ui::Axis::Vertical;
     std::int64_t others = 0;
     std::int64_t weights = 0;

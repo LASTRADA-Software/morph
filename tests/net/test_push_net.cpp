@@ -333,6 +333,54 @@ TEST_CASE("net_connect_handler_fires_on_first_and_reconnect", "[push][channel]")
     CHECK(snapshot() == std::vector<std::string>{"connect", "connect", "reconnect"});
 }
 
+// Mutation: remove the disconnectHandler call from SocketBackend::Core::onDisconnected (the log has no "disconnect").
+TEST_CASE("net_disconnect_handler_fires_once_per_drop_before_the_reconnect", "[push][channel]") {
+    ::morph::exec::ThreadPoolExecutor pool{2};
+    auto const server = std::make_shared<::morph::backend::RemoteServer>(pool);
+    std::optional<::morph::net::SocketServer> first;
+    first.emplace(*server, 0);
+    REQUIRE(first->listen());
+    std::uint16_t const port = first->port();
+
+    std::mutex mtx;
+    std::vector<std::string> seen;
+    auto record = [&](std::string what) {
+        std::scoped_lock const lock{mtx};
+        seen.push_back(std::move(what));
+    };
+    auto snapshot = [&] {
+        std::scoped_lock const lock{mtx};
+        return seen;
+    };
+    ::morph::testing::WaitBudget const budget{10s};
+
+    ::morph::exec::IoLoop io;
+    std::promise<void> release;
+    io.post([held = release.get_future().share()] { held.wait(); });
+    ::morph::net::SocketBackend::Config cfg;
+    cfg.initialReconnectDelay = 20ms;
+    cfg.maxReconnectDelay = 100ms;
+    ::morph::net::SocketBackend backend{io, wsUrl(port), cfg};
+    backend.setConnectHandler([&] { record("connect"); });
+    backend.setDisconnectHandler([&] {
+        record("disconnect");
+        throw std::runtime_error("a disconnect handler that throws is logged");
+    });
+    release.set_value();
+
+    REQUIRE(::morph::testing::waitUntil([&] { return snapshot().size() == 1; }, budget));
+    first.reset();
+    REQUIRE(::morph::testing::waitUntil([&] { return snapshot().size() == 2; }, budget));
+    // Several retries fail while nothing listens; none of them is a drop.
+    std::this_thread::sleep_for(400ms);
+    CHECK(snapshot() == std::vector<std::string>{"connect", "disconnect"});
+
+    ::morph::net::SocketServer second{*server, port};
+    REQUIRE(second.listen());
+    REQUIRE(::morph::testing::waitUntil([&] { return snapshot().size() == 3; }, budget));
+    CHECK(snapshot() == std::vector<std::string>{"connect", "disconnect", "connect"});
+}
+
 TEST_CASE("net_counter_returns_to_zero", "[push][channel]") {
     // One connection's backlog, end to end on a socket pair: 100 replies,
     // counted as they are handed over, written, and read by the peer.

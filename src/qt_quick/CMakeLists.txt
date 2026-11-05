@@ -50,6 +50,8 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphDashedOutline.qml
         qml/MorphPopupBackground.qml
         qml/MorphPopupPlacement.qml
+        qml/MorphShares.js
+        qml/MorphShareColumn.qml
         qml/MorphStack.qml
         qml/MorphGrid.qml
         qml/MorphSpacer.qml

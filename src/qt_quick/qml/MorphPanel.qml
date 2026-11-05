@@ -114,7 +114,7 @@ MorphWidget {
                 }
             }
 
-            ColumnLayout {
+            MorphShareColumn {
                 id: column
                 // What a bleeding child reaches past: the panel's padding, so it ends at the frame's inner edges.
                 readonly property real childBleedInset: Theme.spaceOf(root.padding)

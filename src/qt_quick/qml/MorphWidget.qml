@@ -319,8 +319,17 @@ Item {
     function shareIn(stack, along: int): real {
         return stack && stack.shareOf !== undefined ? stack.shareOf(root, along) : -1
     }
-    readonly property real stretchWidth: shareIn(parent ? parent.parent : null, 1)
-    readonly property real stretchHeight: shareIn(parent ? parent.parent : null, 0)
+    // The share comes from the layout the widget is in when that is a share column (a container's content), else from
+    // the stack two levels up.
+    function sharerOf(): var {
+        return parent && root.dealsShares(parent) ? parent : parent ? parent.parent : null
+    }
+    // The parameter is untyped because only a share column declares `shareOf`.
+    function dealsShares(layout): bool {
+        return layout.shareOf !== undefined
+    }
+    readonly property real stretchWidth: shareIn(sharerOf(), 1)
+    readonly property real stretchHeight: shareIn(sharerOf(), 0)
     Layout.preferredWidth: widthKind === 1 ? widthAmount * Theme.unitWidth
                                            : widthKind === 3 ? shareWidth : stretchWidth
     Layout.preferredHeight: heightKind === 1 ? heightAmount * Theme.unitHeight : stretchHeight

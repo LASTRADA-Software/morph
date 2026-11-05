@@ -145,10 +145,14 @@ MorphWidget {
             if (track.kind === 2)
                 widths[t] = left * Math.max(1, track.amount) / weights
         }
+        // A track's edges are whole pixels: a cell at a half pixel is drawn with its far edge a pixel out, where a
+        // clipping ancestor cuts its border off, though the grid is exactly as wide as its columns need.
         const xs = []
+        const rights = []
         let x = 0
         for (let t = 0; t < count; ++t) {
-            xs.push(x)
+            xs.push(Math.round(x))
+            rights.push(Math.round(x + widths[t]))
             x += widths[t] + space
         }
 
@@ -168,9 +172,7 @@ MorphWidget {
         for (const placed of cells) {
             const cell = placed.item
             const widget = cell as MorphWidget
-            let room = space * (placed.span - 1)
-            for (let t = placed.column; t < placed.column + placed.span; ++t)
-                room += widths[t]
+            const room = rights[placed.column + placed.span - 1] - xs[placed.column]
             const across = tracks[placed.column].align
             let width = room
             if (widget && widget.fillsAcross === false)

@@ -256,7 +256,7 @@ std::vector<int> SplitterImpl::extentsBySizes(int room) const {
 }
 
 ::core::tui::Size SplitterImpl::naturalSize() const {
-    auto const content = stackNaturalSize(children(), _axis, 1);
+    auto const content = summedNaturalSize(children(), _axis, 1);
     if (_sizes.size() != children().size() || _sizes.empty()) {
         return content;
     }

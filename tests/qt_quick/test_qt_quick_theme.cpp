@@ -22,6 +22,8 @@
 #include <QTest>
 #include <QUrl>
 #include <QVariant>
+#include <algorithm>
+#include <array>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -2675,4 +2677,89 @@ TEST_CASE("qt_quick theme: a table's header draws a 1 px rule in color.table.hea
         REQUIRE(rule != nullptr);
         CHECK(rule->property("color").value<QColor>() == QColor{"#405060"});
     }
+}
+
+namespace {
+
+/// A colour's channels, each 0 to 1, and its opacity.
+struct Channels {
+    double red;
+    double green;
+    double blue;
+    double alpha;
+};
+
+Channels channelsOf(QColor const& color) {
+    return {.red = color.red() / 255.0,
+            .green = color.green() / 255.0,
+            .blue = color.blue() / 255.0,
+            .alpha = color.alpha() / 255.0};
+}
+
+/// A colour's WCAG relative luminance.
+double luminance(Channels const& color) {
+    auto const channel = [](double value) {
+        return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+    };
+    return (0.2126 * channel(color.red)) + (0.7152 * channel(color.green)) + (0.0722 * channel(color.blue));
+}
+
+/// The WCAG contrast ratio of two opaque colours.
+double contrastOf(Channels const& a, Channels const& b) {
+    double const high = std::max(luminance(a), luminance(b));
+    double const low = std::min(luminance(a), luminance(b));
+    return (high + 0.05) / (low + 0.05);
+}
+
+/// @p fill drawn over @p base, as the scene composites a translucent fill.
+Channels overColor(Channels const& fill, Channels const& base) {
+    auto const mix = [&fill](double top, double under) { return (top * fill.alpha) + (under * (1.0 - fill.alpha)); };
+    return {.red = mix(fill.red, base.red),
+            .green = mix(fill.green, base.green),
+            .blue = mix(fill.blue, base.blue),
+            .alpha = 1.0};
+}
+
+}  // namespace
+
+// Mutation: bind the sidebar scheme's error, info, success or warn back to the theme's (that tone falls below 3:1
+// on the sidebar and the sweep names it).
+TEST_CASE("qt_quick theme: every tone reads at 3:1 or more on every built-in surface, and on its own fill",
+          "[qt_quick]") {
+    Scene scene;
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    struct Tone {
+        char const* colour;
+        char const* fill;
+        char const* dot;
+    };
+    constexpr std::array<Tone, 4> tones = {Tone{.colour = "error", .fill = "errorBg", .dot = "errorDot"},
+                                           Tone{.colour = "info", .fill = "infoBg", .dot = "infoDot"},
+                                           Tone{.colour = "success", .fill = "successBg", .dot = "successDot"},
+                                           Tone{.colour = "warn", .fill = "warnBg", .dot = "warnDot"}};
+    std::size_t measured = 0;
+    for (QString const surface : {"", "page", "card", "sidebar", "toolbar", "bar", "toolbarJoined"}) {
+        QVariant found;
+        REQUIRE(QMetaObject::invokeMethod(theme, "schemeObject", Q_RETURN_ARG(QVariant, found),
+                                          Q_ARG(QVariant, QVariant{surface})));
+        auto* const scheme = found.value<QObject*>();
+        REQUIRE(scheme != nullptr);
+        Channels const ground = channelsOf(scheme->property("surface").value<QColor>());
+        for (Tone const& tone : tones) {
+            auto const named = scheme->property(tone.colour).value<QColor>();
+            Channels const colour = channelsOf(named);
+            Channels const dot = channelsOf(scheme->property(tone.dot).value<QColor>());
+            Channels const fill = overColor(channelsOf(scheme->property(tone.fill).value<QColor>()), ground);
+            INFO(surface.toStdString() << " " << tone.colour << " " << named.name().toStdString() << ": "
+                                       << contrastOf(colour, ground) << ":1 on the surface");
+            CHECK(contrastOf(colour, ground) >= 3.0);
+            CHECK(contrastOf(dot, ground) >= 3.0);
+            CHECK(contrastOf(colour, fill) >= 3.0);
+            ++measured;
+        }
+    }
+    // 7 surfaces x 4 tones: a sweep that found no scheme would pass vacuously.
+    CHECK(measured == 28);
 }
