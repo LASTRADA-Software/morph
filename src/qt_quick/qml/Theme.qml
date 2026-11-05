@@ -540,22 +540,22 @@ QtObject {
         controlBorder: "#3a4152"
         divider: "#2f3646"
         listSelectionFill: theme.listSelectionFill
-        error: theme.error
-        success: theme.success
-        info: theme.info
-        warn: theme.warn
-        successBg: theme.successBg
-        successBorder: theme.successBorder
-        successDot: theme.successDot
-        warnBg: theme.warnBg
-        warnBorder: theme.warnBorder
-        warnDot: theme.warnDot
-        errorBg: theme.errorBg
-        errorBorder: theme.errorBorder
-        errorDot: theme.errorDot
-        infoBg: theme.infoBg
-        infoBorder: theme.infoBorder
-        infoDot: theme.infoDot
+        error: "#ef5350"
+        success: "#66bb6a"
+        info: "#64a8ff"
+        warn: "#ffb74d"
+        successBg: "#2666bb6a"
+        successBorder: "#66bb6a"
+        successDot: "#66bb6a"
+        warnBg: "#26ffb74d"
+        warnBorder: "#ffb74d"
+        warnDot: "#ffb74d"
+        errorBg: "#26ef5350"
+        errorBorder: "#ef5350"
+        errorDot: "#ef5350"
+        infoBg: "#2664a8ff"
+        infoBorder: "#64a8ff"
+        infoDot: "#64a8ff"
         tableHeader: theme.tableHeader
         tableHeaderRule: theme.tableHeaderRule
         chart1: theme.chart1
