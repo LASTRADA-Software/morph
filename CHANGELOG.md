@@ -1032,6 +1032,20 @@ API surface).
 
 ### Fixed
 
+- **Stretch children share by weight in every container.** A panel, collapsible,
+  scroll, slot, tab page, dialog and drawer now give stretch-height children a
+  share of their height by weight from zero on Qt Quick, as a stack does, and a
+  content-sized one is tall enough for each child's content on both frontends.
+- **`{"env": ...}` values are set under `morph::client`.** `locale`, `platform`,
+  `online` and `backend` no longer read `null`. `net::SocketBackend` now calls
+  the disconnect handler, which `online` relies on.
+- **A state declared `"any"` with an `init` stays `any`**, so a `set` of another
+  type loads.
+- **A grid's tracks sit on whole pixels on Qt Quick**, so a clipping ancestor no
+  longer cuts off the border of a control in a grid's last column.
+- **The default `sidebar` surface has its own tone colours**, each at least
+  3:1 on it. A theme that recolours a tone for the sidebar now declares it in a
+  `sidebar` surface.
 - **A field's `label` is its accessible name.** A document's `textInput`,
   `select`, `slider`, `dateTimeInput` and `filePicker` accepted a `label`, and
   registration counted it as naming the field, but the interpreter dropped it,
