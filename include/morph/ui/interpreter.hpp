@@ -901,7 +901,7 @@ public:
           _options{checkedOptions(std::move(options))},
           _permitted{runtime},
           _format{runtime, std::make_shared<FormatContext const>()},
-          _env{runtime},
+          _env{runtime, ValueRecord{{"locale", Value{FormatContext{}.locale}}}},
           _sessionValues{runtime},
           _hostValues{runtime},
           _hostCommandNames{runtime} {}
@@ -938,9 +938,16 @@ public:
         return _permitted.get().contains(action);
     }
 
-    /// @brief Replaces the formatting facts; every `t` and display function re-evaluates.
+    /// @brief Replaces the formatting facts; every `t` and display function re-evaluates. `{"env": "locale"}` follows
+    ///        the facts' locale.
     /// @param format The facts.
-    void setFormatting(FormatContext format) { _format.set(std::make_shared<FormatContext const>(std::move(format))); }
+    void setFormatting(FormatContext format) {
+        // One batch, so an effect never sees the new `env.locale` beside the old facts, and runs once.
+        _runtime->batch([this, &format] {
+            setEnvironmentValue("locale", Value{format.locale});
+            _format.set(std::make_shared<FormatContext const>(std::move(format)));
+        });
+    }
 
     /// @brief The formatting facts. A tracked read.
     /// @return They.
@@ -977,9 +984,13 @@ public:
         setFormatting(std::move(next));
     }
 
-    /// @brief Sets the `env` values (`widthClass`, `locale`, `platform`, `online`, `backend`).
+    /// @brief Sets the `env` values (`widthClass`, `platform`, `online`, `backend`). `locale` is the formatting
+    ///        facts' locale and is always present: a `locale` in @p values is replaced by it.
     /// @param values The values.
-    void setEnvironment(ValueRecord values) { _env.set(std::move(values)); }
+    void setEnvironment(ValueRecord values) {
+        values.insert_or_assign("locale", Value{_format.peek()->locale});
+        _env.set(std::move(values));
+    }
 
     /// @brief Sets one `env` value and keeps the others, so a client that learns its width class does not drop the
     ///        `backend` a switch set, nor a switch the width class.

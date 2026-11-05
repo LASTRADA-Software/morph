@@ -9,7 +9,9 @@
 #include <cstddef>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include "test_support.hpp"
 #include "ui_interpreter_support.hpp"
 
 namespace ui = morph::ui;
@@ -1111,4 +1113,38 @@ TEST_CASE("interpreter control: a dialog's sheet follows the width class, and it
     h.session.setEnvironmentValue("widthClass", ui::Value{"expanded"});
     h.settle();
     CHECK(h.backend.prop(dialog, "sheet") == "false");
+}
+
+// Mutation: leave the env write out of Session::setFormatting (the screen keeps reading the first locale), or the
+// seed out of the constructor (it reads the fallback before any change).
+TEST_CASE("interpreter control: env locale is the formatting locale, and follows setLocale", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "loc",
+      "view": { "kind": "text", "testId": "locale",
+                "text": { "fn": "coalesce", "args": [ { "env": "locale" }, "none" ] } } })");
+    CHECK(h.text("locale") == h.session.formattingNow().locale);
+    h.session.setLocale("de-DE");
+    h.settle();
+    CHECK(h.text("locale") == "de-DE");
+    // A replaced env record keeps the locale: it is the formatting's, not the caller's.
+    h.session.setEnvironment({{"widthClass", ui::Value{"compact"}}});
+    h.settle();
+    CHECK(h.text("locale") == "de-DE");
+}
+
+// Mutation: drop the batch around Session::setFormatting's two writes (on an owner that runs its posts inline, the
+// effect runs twice, once with the new `env.locale` beside the old facts).
+TEST_CASE("interpreter control: setLocale updates env locale and the facts in one flush", "[ui][interpreter]") {
+    morph::testing::InlineExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    ui::Session session{runtime};
+    std::vector<std::string> seen;
+    morph::reactive::Effect const effect{runtime, [&] {
+                                             seen.push_back(session.formatting().locale + "/" +
+                                                            *session.client(ui::ExprKind::Env, "locale").asString());
+                                         }};
+    seen.clear();
+    session.setLocale("de-DE");
+    CHECK(seen == std::vector<std::string>{"de-DE/de-DE"});
 }

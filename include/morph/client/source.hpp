@@ -161,6 +161,20 @@ public:
     /// @param listener Called on the owner; it must stay callable while the source is open.
     void onConnected(std::function<void()> const& listener) final;
 
+    /// @brief Whether the source's transport is connected now: false from the moment the transport drops until it
+    ///        connects again. An in-process source has no transport to lose and stays true.
+    /// @return The state.
+    [[nodiscard]] bool online() const noexcept { return _online; }
+
+    /// @brief Adds a listener called on the owner each time `online` changes.
+    /// @param listener Called with the new state; it must stay callable while the source is open.
+    void onOnline(std::function<void(bool online)> listener);
+
+    /// @brief The name of the backend this source's models run on, which `{"env": "backend"}` reads: the
+    ///        application's `ui::Backend` names are `primary`, `local` and `remote`.
+    /// @return The name; `primary` unless a concrete source says otherwise.
+    [[nodiscard]] virtual std::string backendName() const { return "primary"; }
+
     /// @brief Adds a listener for the events the server sends: what a shell hands to `Session::deliverEvent`.
     /// @param listener Called on the owner, once per event, in the order they arrived.
     void onEvent(std::function<void(wire::EventBody const&)> listener);
@@ -234,6 +248,11 @@ private:
     // Called after each connect, and with each event.
     std::vector<std::function<void()>> _connectListeners;
     std::vector<std::function<void(wire::EventBody const&)>> _eventListeners;
+    // Whether the transport is connected: set by the backend's connect and disconnect hooks.
+    bool _online = true;
+    std::vector<std::function<void(bool)>> _onlineListeners;
+    // Records a change of connection state on the owner and tells the listeners when it differs.
+    void setOnline(bool online);
     // A connect, on the owner: `ui-hello` again once the first bundle loaded, then the listeners.
     void connected();
     // Fetches the schemas of every model type the catalog names, then calls @p done; nothing after `close`.
@@ -271,6 +290,10 @@ public:
     /// @param timeout How long to wait for the bundle before reporting the server unreachable.
     explicit RemoteSource(std::string url, std::chrono::milliseconds timeout = std::chrono::seconds{10});
 
+    /// @brief The backend a remote source runs on.
+    /// @return `remote`.
+    [[nodiscard]] std::string backendName() const override { return "remote"; }
+
 protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& context) override;
     [[nodiscard]] std::chrono::milliseconds openTimeout() const override { return _timeout; }
@@ -297,6 +320,10 @@ public:
     /// @brief The development user, from `--user`.
     /// @return It.
     [[nodiscard]] std::string signedOutPrincipal() const override { return _setup.user; }
+
+    /// @brief The backend a linked application runs on.
+    /// @return `local`.
+    [[nodiscard]] std::string backendName() const override { return "local"; }
 
 protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& context) override;

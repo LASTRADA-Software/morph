@@ -229,6 +229,7 @@ void Source::loadSchemas(std::shared_ptr<bool> const& alive, std::function<void(
 
 void Source::open(ui::AppContext& context, std::function<void(std::expected<ui::Bundle, ui::ConnectError>)> ready) {
     close();
+    _online = true;
     auto const alive = std::make_shared<bool>(true);
     _alive = alive;
     auto transport = connect(context);
@@ -252,7 +253,15 @@ void Source::open(ui::AppContext& context, std::function<void(std::expected<ui::
     transport->backend->setConnectHandler([this, alive, &owner] {
         owner.post([this, alive] {
             if (*alive) {
+                setOnline(true);
                 connected();
+            }
+        });
+    });
+    transport->backend->setDisconnectHandler([this, alive, &owner] {
+        owner.post([this, alive] {
+            if (*alive) {
+                setOnline(false);
             }
         });
     });
@@ -407,6 +416,19 @@ void Source::connected() {
         }
     });
 }
+
+void Source::setOnline(bool online) {
+    if (_online == online) {
+        return;
+    }
+    _online = online;
+    std::vector<std::function<void(bool)>> const listeners = _onlineListeners;
+    for (auto const& listener : listeners) {
+        listener(online);
+    }
+}
+
+void Source::onOnline(std::function<void(bool online)> listener) { _onlineListeners.push_back(std::move(listener)); }
 
 void Source::onConnected(std::function<void()> const& listener) { _connectListeners.push_back(listener); }
 
