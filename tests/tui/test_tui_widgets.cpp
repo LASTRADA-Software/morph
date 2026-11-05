@@ -1088,7 +1088,7 @@ int stretchNaturalOf(std::vector<int> const& naturals, std::vector<int> const& w
 
 }  // namespace
 
-// Mutation: sum the stretching children's naturals in `weightedNaturalSize` (a row of two stretch texts asks for
+// Mutation: sum the stretching children's naturals in `stackNaturalSize` (a row of two stretch texts asks for
 // less than every share needs, so the first case's 20 is 11).
 TEST_CASE("tui widgets: a row of stretch children asks for the weights' sum times the largest natural per weight",
           "[tui][widgets]") {

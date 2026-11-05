@@ -149,11 +149,10 @@ to their maximum when it removed length, and every child when it changed nothing
 child. Three Stretch children of weight 1 in 90 cells, the first with a minimum of 50, get 50, 20 and 20. Minimums
 beyond the length are taken from the last child first, down to each child's minimum, and then the stack overflows
 and clips. A content-sized spacer counts as a Stretch child of weight 1 and no natural extent (`stretchSizingOf`).
-A row's or column's natural extent (`weightedNaturalSize`, which only `StackImpl` calls) is the other children's and
+A container's natural extent along its axis (`stackNaturalSize`, which a stack, a scroll, a slot, a panel, a collapsible, a footer, a tab list, an overlay and a drop zone call) is the other children's and
 the gaps plus, for the Stretch children together, `W * max(n / w)` rounded up (`W` the sum of the weights, `n` a
 child's requested extent): each share is then at least its child's natural, and one Stretch child asks for its own.
-Every other container (a scroll, a slot, a panel, a footer, a tab list, an overlay) sums its children's naturals
-(`stackNaturalSize`). A push button's minimum width is its natural width, as a badge's is; a list item has none. A grid places cells
+A splitter sums its panes' naturals (`summedNaturalSize`): their sizes are its own. A push button's minimum width is its natural width, as a badge's is; a list item has none. A grid places cells
 row-major in equal columns, or in columns its tracks size: `layout::planGrid` gives each track to `distribute` as a
 stack item, a content track's natural width its widest cell that spans only it. A wrapping row
 (`setWrap`) fills lines with `layout::planWrap`: each child's basis is its natural extent, a Fixed child's amount, or a
